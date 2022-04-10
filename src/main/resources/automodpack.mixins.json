@@ -1,12 +1,12 @@
 {
-  "required": true,
+  "required": false,
   "minVersion": "0.8",
-  "package": "net.fabricmc.example.mixin",
+  "package": "pl.skidam.automodpack.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
   ],
   "client": [
-    "ExampleMixin"
+    "pl.skidam.automodpack.mixin.ExampleMixin"
   ],
   "injectors": {
     "defaultRequire": 1
