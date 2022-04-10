@@ -1,5 +1,6 @@
 plugins {
 	id 'fabric-loom' version '0.11-SNAPSHOT'
+	id 'java'
 	id 'maven-publish'
 }
 
@@ -11,6 +12,14 @@ version = project.mod_version
 group = project.maven_group
 
 repositories {
+
+	mavenCentral()
+	mavenLocal()
+	maven { url = "https://maven.fabricmc.net/" }
+	maven { url = "https://repo.maven.apache.org/maven2/" }
+	maven { url = "https://jitpack.io" }
+
+
 	// Add repositories to retrieve artifacts from in here.
 	// You should only use this when depending on other mods because
 	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
@@ -26,6 +35,10 @@ dependencies {
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+
+	implementation 'net.lingala.zip4j:zip4j:2.10.0'
+	modImplementation 'net.lingala.zip4j:zip4j:2.10.0'
 }
 
 processResources {
@@ -57,10 +70,11 @@ jar {
 // configure the maven publication
 publishing {
 	publications {
-		mavenJava(MavenPublication) {
+		maven(MavenPublication) {
 			from components.java
 		}
 	}
+
 
 	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
 	repositories {
@@ -69,4 +83,9 @@ publishing {
 		// The repositories here will be used for publishing your artifact, not for
 		// retrieving dependencies.
 	}
+
+}
+
+tasks.withType(JavaCompile) {
+	options.encoding = 'UTF-8'
 }

@@ -22,9 +22,11 @@ public class CurrentMods implements Runnable {
                 return name.endsWith(".jar");
             }
         });
+
+        System.out.println("CURRENT --  " + fileList);
+
         return fileList;
     }
 }
 
 
-// System.out.println("CURRENT --  " + mods);
