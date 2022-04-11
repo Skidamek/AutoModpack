@@ -1,1 +1,1 @@
-# Lets go!
+# Just automatic updating and downloading modpacks!
