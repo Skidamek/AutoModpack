@@ -36,9 +36,7 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-
-	implementation 'net.lingala.zip4j:zip4j:2.10.0'
-	modImplementation 'net.lingala.zip4j:zip4j:2.10.0'
+	include(implementation('net.lingala.zip4j:zip4j:2.10.0'))
 }
 
 processResources {
