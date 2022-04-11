@@ -4,7 +4,7 @@
   "version": "${version}",
 
   "name": "AutoModpack",
-  "description": "This is an example description! Tell everyone what your mod is about!",
+  "description": "Just automatic updating and downloading modpacks!",
   "authors": [
     "Skidam"
   ],
@@ -28,8 +28,8 @@
 
   "depends": {
     "fabricloader": ">=0.13.3",
-    "minecraft": "1.18.x",
-    "java": ">=17"
+    "minecraft": ">=1.14",
+    "java": ">=8"
   },
   "suggests": {
     "another-mod": "*"

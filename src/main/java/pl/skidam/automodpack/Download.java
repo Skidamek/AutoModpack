@@ -39,7 +39,7 @@ public class Download implements Runnable {
                 // if lastPercent != percent
                 if (!Objects.equals(lastPercent, percent)) {
                     percent = (String.format("%.0f", percentDownloaded));
-                    System.out.println("Downloaded " + percent + "%");
+                    System.out.println("AutoModpack -- Downloaded " + percent + "%");
                     lastPercent = percent;
 
                 // if lastPercent == percent
@@ -49,7 +49,7 @@ public class Download implements Runnable {
             }
             bout.close();
             in.close();
-            System.out.println("Successful downloaded!");
+            System.out.println("AutoModpack -- Successful downloaded!");
             new Thread(new UnZip()).start();
 
         } catch(IOException ex) {
