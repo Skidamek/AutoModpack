@@ -29,20 +29,20 @@ public class Download implements Runnable {
             double downloaded = 0.00;
             int read;
             double percentDownloaded;
-            String lastpercent = null;
+            String lastPercent = null;
             String percent = null;
             while ((read = in.read(buffer, 0, 1024)) >= 0 ) {
                 bout.write(buffer, 0, read);
                 downloaded += read;
                 percentDownloaded = (downloaded*100)/fileSize;
 
-                // if lastpercent != percent
-                if (!Objects.equals(lastpercent, percent)) {
+                // if lastPercent != percent
+                if (!Objects.equals(lastPercent, percent)) {
                     percent = (String.format("%.0f", percentDownloaded));
                     System.out.println("Downloaded " + percent + "%");
-                    lastpercent = percent;
+                    lastPercent = percent;
 
-                // if lastpercent == percent
+                // if lastPercent == percent
                 } else {
                     percent = (String.format("%.0f", percentDownloaded));
                 }

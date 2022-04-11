@@ -20,7 +20,7 @@ public class AutoModpack implements ModInitializer {
         new Thread(new LatestMods()).start();
 
 
-        String link = "http://130.61.233.54/download/update%205%20mods+config.zip";
+        String link = "http://130.61.233.54/download/update-latest.zip";
 
         File out = new File( "./mods/modpack.zip");
 
