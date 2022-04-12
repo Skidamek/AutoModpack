@@ -1,1 +1,2 @@
-# Just automatic updating and downloading modpacks!
+# Auto update and download modpacks!
+Simply...
