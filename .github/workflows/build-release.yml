@@ -48,6 +48,21 @@ jobs:
           name: Artifacts
           path: build/libs/
           
+        if: ${{ github.event.inputs.release }} == Prerelease
+      - name: Create Release
+        id: create_prerelease
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          release_name: AutoModpack
+          body: |
+            AutoModpack
+          draft: false
+          prerelease: true
+          
+        if: ${{ github.event.inputs.release }} == Release
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -59,9 +74,6 @@ jobs:
           body: |
             AutoModpack
           draft: false
-          if: ${{ github.event.inputs.release }} == Prerelease
-          prerelease: true
-          if: ${{ github.event.inputs.release }} == Release
           prerelease: false
           
           
