@@ -17,8 +17,8 @@ on:
 permissions:
   write-all
 
-env:
-  type: ''
+# env:
+#   type: ''
 
 jobs:
 
@@ -27,14 +27,16 @@ jobs:
     if: ${{ github.event.inputs.release }} == PreRelease
     steps:
     - name: typeSet
-      run: ${{ env.type }} = true
+      run: |
+        echo "${{ env.type }}={true}" >> $GITHUB_ENV
       
   typeSetRelease:
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.release }} == Release
     steps:
     - name: typeSet
-      run: ${{ env.type }} = false
+      run: |
+        echo "${{ env.type }}={false}" >> $GITHUB_ENV
 
 
   build:
