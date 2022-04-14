@@ -17,21 +17,15 @@ permissions:
   contents: read
 
 jobs:
-  printInputs:
-    runs-on: ubuntu-latest
-    steps:
-    - run: |
-        echo "Release type: ${{ github.event.inputs.releaseType }}"
-        echo "Version: ${{ github.event.inputs.version }}" 
-
-
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Inputs
+        run: echo "Release type - ${{ github.event.inputs.releaseType }}\n Version - ${{ github.event.inputs.version }}";
       - name: checkout repository
         uses: actions/checkout@v2.4.1
       - name: validate gradle wrapper
-        uses: gradle/wrapper-validation-action@v1.04
+        uses: gradle/wrapper-validation-action@v1.0.4
       - name: setup jdk 17
         uses: actions/setup-java@v3.1.1
         with:
