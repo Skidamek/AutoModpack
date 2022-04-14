@@ -17,7 +17,26 @@ on:
 permissions:
   write-all
 
+env:
+  type: ''
+
 jobs:
+
+  typeSetPreRelease:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.release }} == PreRelease
+    steps:
+    - name: typeSet
+      run: type = true
+      
+  typeSetRelease:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.release }} == Release
+    steps:
+    - name: typeSet
+      run: type = false
+
+
   build:
     runs-on: ubuntu-latest
     
@@ -51,32 +70,48 @@ jobs:
           name: Artifacts
           path: build/libs/
           
-  Create-prerelease:
-    runs-on: ubuntu-latest
-    
-    if: ${{ github.event.inputs.release }} == PreRelease
-    steps:
-      - name: prerelease
+      - name: Create release/pre-release
+        
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "latest"
-          prerelease: true
+          prerelease: ${{ env.type }}
           title: "AutoModpack ${{ github.event.inputs.version }}"
           files: |
             ./build/libs/*.jar
+          
+          
+
+    
+    
+    
+#   Create-prerelease:
+#     runs-on: ubuntu-latest
+    
+#     if: ${{ github.event.inputs.release }} == PreRelease
+#     steps:
+#       - name: prerelease
+#         uses: "marvinpinto/action-automatic-releases@latest"
+#         with:
+#           repo_token: "${{ secrets.GITHUB_TOKEN }}"
+#           automatic_release_tag: "latest"
+#           prerelease: true
+#           title: "AutoModpack ${{ github.event.inputs.version }}"
+#           files: |
+#             ./build/libs/*.jar
       
-  Create-release:
-    runs-on: ubuntu-latest
+#   Create-release:
+#     runs-on: ubuntu-latest
     
-    if: ${{ github.event.inputs.release }} == Release
-    steps:
-      - name: release
-        uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
-          prerelease: false
-          title: "AutoModpack ${{ github.event.inputs.version }}"
-          files: |
-            ./build/libs/*.jar
+#     if: ${{ github.event.inputs.release }} == Release
+#     steps:
+#       - name: release
+#         uses: "marvinpinto/action-automatic-releases@latest"
+#         with:
+#           repo_token: "${{ secrets.GITHUB_TOKEN }}"
+#           automatic_release_tag: "latest"
+#           prerelease: false
+#           title: "AutoModpack ${{ github.event.inputs.version }}"
+#           files: |
+#             ./build/libs/*.jar
