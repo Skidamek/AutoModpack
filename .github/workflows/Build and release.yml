@@ -17,8 +17,8 @@ on:
 permissions:
   write-all
 
-# env:
-#   type: ''
+env:
+  type: 'null'
 
 jobs:
 
