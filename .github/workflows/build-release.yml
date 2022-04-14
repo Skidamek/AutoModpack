@@ -63,7 +63,7 @@ jobs:
           body: |
             AutoModpack
           draft: false
-          prerelease: ${{ type }}
+          prerelease: ${{ env.type }}
           
           
           
