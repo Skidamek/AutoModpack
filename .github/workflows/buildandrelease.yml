@@ -55,26 +55,23 @@ jobs:
       - name: Create PreRelease
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          automatic_release_tag: "latest"
-          title: AutoModpack ${{ github.event.inputs.version }}
-          body: |
-            AutoModpack
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
           prerelease: true
+          title: "AutoModpack ${{ github.event.inputs.version }}"
+          files: |
+            ./build/libs/*.jar
           
         if: ${{ github.event.inputs.release }} == Release
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          tag_name: ${{ github.event.inputs.version }}
-          release_name: AutoModpack ${{ github.event.inputs.version }}
-          body: |
-            AutoModpack
-          draft: false
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
           prerelease: false
+          title: "AutoModpack ${{ github.event.inputs.version }}"
+          files: |
+            ./build/libs/*.jar
           
           
           
