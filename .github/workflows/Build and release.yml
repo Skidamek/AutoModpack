@@ -28,7 +28,7 @@ jobs:
     steps:
     - name: typeSet
       run: |
-        echo "${{ env.type }}={true}" >> $GITHUB_ENV
+        echo "${{ env.type }}={true}" >> ${{ env.type }}
       
   typeSetRelease:
     runs-on: ubuntu-latest
@@ -36,7 +36,7 @@ jobs:
     steps:
     - name: typeSet
       run: |
-        echo "${{ env.type }}={false}" >> $GITHUB_ENV
+        echo "${{ env.type }}={false}" >> ${{ env.type }}
 
 
   build:
