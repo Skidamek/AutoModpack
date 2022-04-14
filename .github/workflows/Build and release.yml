@@ -37,7 +37,7 @@ jobs:
         uses: actions/setup-java@v1
         with:
           java-version: 17
-#           distribution: 'temurin'
+          distribution: 'temurin'
           
       - name: Make gradle wrapper executable
         run: chmod +x ./gradlew
@@ -51,8 +51,10 @@ jobs:
           name: Artifacts
           path: build/libs/
           
+      - name: Create prerelease
+      
         if: ${{ github.event.inputs.release }} == PreRelease
-      - name: Create PreRelease
+
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -61,9 +63,10 @@ jobs:
           title: "AutoModpack ${{ github.event.inputs.version }}"
           files: |
             ./build/libs/*.jar
+      
+      - name: Create release
           
         if: ${{ github.event.inputs.release }} == Release
-      - name: Create Release
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -72,11 +75,3 @@ jobs:
           title: "AutoModpack ${{ github.event.inputs.version }}"
           files: |
             ./build/libs/*.jar
-          
-          
-          
-#       - name: Create Release
-#         uses: softprops/action-gh-release@v0.1.14
-
-          
-          
