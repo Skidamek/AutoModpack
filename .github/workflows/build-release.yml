@@ -25,7 +25,7 @@ jobs:
         shell: python
         run: |
           print("📝 Release type: ${{ github.event.inputs.release }}\n🦿 Version: ${{ github.event.inputs.version }}");
-          if ${{ github.event.inputs.release }} == "Release" or ${{ github.event.inputs.release }} == Release:
+          if ${{ github.event.inputs.release }} === "Release":
             type = false
           else:
             type = true
