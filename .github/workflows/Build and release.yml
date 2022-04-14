@@ -29,6 +29,8 @@ jobs:
     - name: typeSet
       run: |
         echo "${{ env.type }}={true}" >> ${{ env.type }}
+        ${{env.type}} = true
+        ${{env.type}} = {true}
       
   typeSetRelease:
     runs-on: ubuntu-latest
@@ -37,7 +39,8 @@ jobs:
     - name: typeSet
       run: |
         echo "${{ env.type }}={false}" >> ${{ env.type }}
-
+        ${{env.type}} = false
+        ${{env.type}} = {false}
 
   build:
     runs-on: ubuntu-latest
