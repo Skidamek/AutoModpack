@@ -51,10 +51,12 @@ jobs:
           name: Artifacts
           path: build/libs/
           
-      - name: Create prerelease
-      
-        if: ${{ github.event.inputs.release }} == PreRelease
-
+  Create-prerelease:
+    runs-on: ubuntu-latest
+    
+    if: ${{ github.event.inputs.release }} == PreRelease
+    steps:
+      - name: prerelease
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -64,9 +66,12 @@ jobs:
           files: |
             ./build/libs/*.jar
       
-      - name: Create release
-          
-        if: ${{ github.event.inputs.release }} == Release
+  Create-release:
+    runs-on: ubuntu-latest
+    
+    if: ${{ github.event.inputs.release }} == Release
+    steps:
+      - name: release
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
