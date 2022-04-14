@@ -27,14 +27,14 @@ jobs:
     if: ${{ github.event.inputs.release }} == PreRelease
     steps:
     - name: typeSet
-      run: type = true
+      run: ${{ env.type }} = true
       
   typeSetRelease:
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.release }} == Release
     steps:
     - name: typeSet
-      run: type = false
+      run: ${{ env.type }} = false
 
 
   build:
