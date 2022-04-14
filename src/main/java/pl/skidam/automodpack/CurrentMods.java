@@ -10,7 +10,7 @@ public class CurrentMods implements Runnable {
         File[] fileList = getFileList("./mods");
 
         for(File file : fileList) {
-            System.out.println(file.getName());
+            System.out.println("CURRENT --  " + file.getName());
         }
     }
 
@@ -22,8 +22,6 @@ public class CurrentMods implements Runnable {
                 return name.endsWith(".jar");
             }
         });
-
-        System.out.println("CURRENT --  " + fileList);
 
         return fileList;
     }

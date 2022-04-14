@@ -31,3 +31,6 @@ bin/
 # fabric
 
 run/
+/AutoPlug-Uploader.jar
+/config.yml
+/Skidamek/
