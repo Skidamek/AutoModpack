@@ -7,8 +7,8 @@ on:
         required: true
         type: choice
         options:
+        - Prerelease
         - Release
-        - Pre-release
       version:
         description: 'Version'
         required: true
@@ -24,7 +24,7 @@ jobs:
       - name: Inputs
         shell: python
         run: |
-          print("Release type: ${{ github.event.inputs.release }}\n Version: ${{ github.event.inputs.version }}");
+          print("📝 Release type: ${{ github.event.inputs.release }}\n🦿 Version: ${{ github.event.inputs.version }}");
           if ${{ github.event.inputs.release }} == "Release" or ${{ github.event.inputs.release }} == Release:
             type = false
           else:
