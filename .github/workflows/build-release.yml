@@ -19,9 +19,17 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    
     steps:
       - name: Inputs
-        run: echo "Release type - ${{ github.event.inputs.releaseType }}\n Version - ${{ github.event.inputs.version }}";
+        shell: python
+        run: |
+          print("Release type: ${{ github.event.inputs.release }}\n Version: ${{ github.event.inputs.version }}");
+          if ${{ github.event.inputs.release }} == "Release" || ${{ github.event.inputs.release }} == Release:
+            type = false
+          else:
+            type = true
+            
       - name: checkout repository
         uses: actions/checkout@v2.4.1
       - name: validate gradle wrapper
@@ -55,7 +63,9 @@ jobs:
           body: |
             AutoModpack
           draft: false
-          prerelease: ${{ github.event.inputs.releaseType }}
+          prerelease: ${{ type }}
+          
+          
           
 #       - name: Create Release
 #         uses: softprops/action-gh-release@v0.1.14
