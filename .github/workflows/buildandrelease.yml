@@ -53,17 +53,14 @@ jobs:
           
         if: ${{ github.event.inputs.release }} == PreRelease
       - name: Create PreRelease
-        id: create_prerelease
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        uses: "marvinpinto/action-automatic-releases@latest"
         with:
           tag_name: ${{ github.event.inputs.version }}
           release_name: AutoModpack ${{ github.event.inputs.version }}
           body: |
             AutoModpack
-          draft: false
-          prerelease: true
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          prerelease: false
           
         if: ${{ github.event.inputs.release }} == Release
       - name: Create Release
