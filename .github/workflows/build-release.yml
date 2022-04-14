@@ -25,10 +25,6 @@ jobs:
         shell: python
         run: |
           print("📝 Release type: ${{ github.event.inputs.release }}\n🦿 Version: ${{ github.event.inputs.version }}");
-          if ${{ github.event.inputs.release }} == Release:
-            type = false
-          else:
-            type = true
             
       - name: checkout repository
         uses: actions/checkout@v2.4.1
@@ -63,7 +59,10 @@ jobs:
           body: |
             AutoModpack
           draft: false
-          prerelease: ${{ env.type }}
+          if: ${{ github.event.inputs.release }} == Prerelease
+          prerelease: true
+          if: ${{ github.event.inputs.release }} == Release
+          prerelease: false
           
           
           
