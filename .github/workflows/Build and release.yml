@@ -17,9 +17,6 @@ on:
 permissions:
   write-all
 
-env:
-  type: 'null'
-
 jobs:
 
   typeSetPreRelease:
@@ -28,9 +25,7 @@ jobs:
     steps:
     - name: typeSet
       run: |
-        echo "${{ env.type }}={true}" >> ${{ env.type }}
-        ${{env.type}} = true
-        ${{env.type}} = {true}
+        echo "type_state=true" >> $GITHUB_ENV
       
   typeSetRelease:
     runs-on: ubuntu-latest
@@ -38,9 +33,7 @@ jobs:
     steps:
     - name: typeSet
       run: |
-        echo "${{ env.type }}={false}" >> ${{ env.type }}
-        ${{env.type}} = false
-        ${{env.type}} = {false}
+        echo "type_state=false" >> $GITHUB_ENV
 
   build:
     runs-on: ubuntu-latest
@@ -81,7 +74,7 @@ jobs:
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "latest"
-          prerelease: ${{ env.type }}
+          prerelease: ${{ env.type_state }}
           title: "AutoModpack ${{ github.event.inputs.version }}"
           files: |
             ./build/libs/*.jar
