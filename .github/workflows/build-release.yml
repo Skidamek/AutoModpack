@@ -3,9 +3,12 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: 'Pre-release'
-        required: false
-        default: 'true'
+        description: 'Release type'
+        required: true
+        type: choice
+        options:
+        - Release
+        - Pre-release
       version:
         description: 'Version'
         required: true
@@ -18,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - run: |
-        echo "Release level: ${{ github.event.inputs.releaseLevel }}"
+        echo "Release type: ${{ github.event.inputs.releaseType }}"
         echo "Version: ${{ github.event.inputs.version }}" 
 
 
@@ -58,7 +61,7 @@ jobs:
           body: |
             AutoModpack
           draft: false
-          prerelease: ${{ github.event.inputs.releaseLevel }}
+          prerelease: ${{ github.event.inputs.releaseType }}
           
 #       - name: Create Release
 #         uses: softprops/action-gh-release@v0.1.14
