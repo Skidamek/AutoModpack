@@ -55,12 +55,12 @@ jobs:
       - name: Create PreRelease
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          tag_name: ${{ github.event.inputs.version }}
-          release_name: AutoModpack ${{ github.event.inputs.version }}
+          automatic_release_tag: "latest"
+          title: AutoModpack ${{ github.event.inputs.version }}
           body: |
             AutoModpack
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: false
+          prerelease: true
           
         if: ${{ github.event.inputs.release }} == Release
       - name: Create Release
