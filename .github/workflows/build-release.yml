@@ -24,8 +24,6 @@ jobs:
         with:
           java-version: 17
           distribution: 'temurin'
-          server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
-          settings-path: ${{ github.workspace }} # location for the settings.xml file
           
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
@@ -47,7 +45,8 @@ jobs:
         with:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
-          body: AutoModpack
+          body: |
+            AutoModpack
           draft: false
           prerelease: false
           
