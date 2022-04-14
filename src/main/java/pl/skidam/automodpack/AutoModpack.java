@@ -13,7 +13,7 @@ public class AutoModpack implements ModInitializer {
     @Override
     public void onInitialize() {
 
-        LOGGER.info("Hello Fabric world!");
+        LOGGER.info("Hello Fabric world!1!!");
 
         // TODO check internet connection while internet isn't available, wait. 2
 
