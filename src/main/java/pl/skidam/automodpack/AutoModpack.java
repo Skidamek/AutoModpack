@@ -21,7 +21,7 @@ public class AutoModpack implements ModInitializer {
 
         // TODO check if AutoModpack is on latest version if not download latest version. 1
 
-//        new Thread(new SelfUpdater()).start();
+        new Thread(new SelfUpdater()).start();
 
         // TODO check what mods are installed. 3
 
@@ -33,7 +33,7 @@ public class AutoModpack implements ModInitializer {
 
         // TODO if latestmods is not same as currentmods download new mods. 5
 
-        String link = "http://130.61.233.54/download/kloce.zip";
+        String link = "http://130.61.38.166:777/Download/modpack.zip";
         File out = new File( "./mods/AutoModpack.zip");
         new Thread(new Download(link, out)).start();
 
