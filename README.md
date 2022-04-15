@@ -1,3 +1,4 @@
 # Auto update and download modpacks!
 Simply...
-Mod is begin very early stage of development
+
+Mod is at a very early stage of development
