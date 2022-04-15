@@ -7,10 +7,12 @@ on:
         required: true
         type: choice
         options:
-        - PreRelease
         - Release
+        - PreRelease
       version:
         description: 'Version'
+        required: true
+      automatic_release_tag:
         required: true
 
 
@@ -26,7 +28,7 @@ jobs:
       - name: Inputs
         shell: python
         run: |
-          print("📝 Release type: ${{ github.event.inputs.release }}\n🦿 Version: ${{ github.event.inputs.version }}");
+          print("📝 Release type: ${{ github.event.inputs.release }}\n🦿 Version: ${{ github.event.inputs.version }}\n🏷️ Automatic release tag: ${{ github.event.inputs.automatic_release_tag }}");
 
   Prerelease:
     runs-on: ubuntu-latest
@@ -61,7 +63,7 @@ jobs:
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
+          automatic_release_tag: "${{ github.event.inputs.automatic_release_tag }}"
           prerelease: true
           title: "AutoModpack ${{ github.event.inputs.version }}"
           files: |
@@ -96,11 +98,11 @@ jobs:
           name: Artifacts
           path: build/libs/
 
-      - name: prerelease
+      - name: release
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "latest"
+          automatic_release_tag: "${{ github.event.inputs.automatic_release_tag }}"
           prerelease: false
           title: "AutoModpack ${{ github.event.inputs.version }}"
           files: |
