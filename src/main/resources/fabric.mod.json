@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "automodpack",
-  "version": "${version}",
+  "version": "1.0.1",
 
   "name": "AutoModpack",
   "description": "Just automatic updating and downloading modpacks!",
@@ -10,11 +10,12 @@
   ],
   "contact": {
     "homepage": "http://130.61.233.54/",
-    "sources": "https://github.com/Skidamek/AutoModpack/"
+    "sources": "https://github.com/Skidamek/AutoModpack/",
+    "issues": "https://github.com/Skidamek/AutoModpack/issues/"
   },
 
   "license": "CC0-1.0",
-  "icon": "assets/automodpack/icon.png",
+  "icon": "icon.png",
 
   "environment": "*",
   "entrypoints": {

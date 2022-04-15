@@ -15,6 +15,8 @@ public class AutoModpack implements ModInitializer {
 
         LOGGER.info("Hello Fabric world!");
 
+
+
         // TODO check internet connection while internet isn't available, wait. 2
 
 //        checkInternetAccess();
