@@ -21,7 +21,9 @@ public class AutoModpack implements ModInitializer {
 
         // TODO check if AutoModpack is on latest version if not download latest version. 1
 
-        new Thread(new SelfUpdater()).start();
+        String selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";
+        File selfOut = new File( "./mods/AutoModpack.jar");
+        new Thread(new SelfUpdater(selfLink, selfOut)).start();
 
         // TODO check what mods are installed. 3
 

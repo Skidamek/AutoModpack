@@ -1,5 +1,7 @@
 package pl.skidam.automodpack;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -8,23 +10,30 @@ import java.util.Objects;
 public class SelfUpdater implements Runnable {
 
 
-    String link;
-    File out;
+    String selfLink;
+    File selfOut;
 
-//    public SelfUpdater(String link, File out) {
-//        this.link = link;
-//        this.out = out;
-//    }
+    public SelfUpdater(String link, File out) {
+        this.selfLink = link;
+        this.selfOut = out;
+    }
 
     @Override
     public void run() {
 
+//        System.out.println("AutoModpack -- Deleting old files...");
+//        try {
+//            FileUtils.delete(new File("./mods/AutoModpack.jar"));
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+
         try {
-            URL url = new URL(link);
+            URL url = new URL(selfLink);
             HttpURLConnection http = (HttpURLConnection)url.openConnection();
             double fileSize = (double)http.getContentLengthLong();
             BufferedInputStream in = new BufferedInputStream(http.getInputStream());
-            FileOutputStream fos = new FileOutputStream(this.out);
+            FileOutputStream fos = new FileOutputStream(this.selfOut);
             BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
             byte[] buffer = new byte[1024];
             double downloaded = 0.00;
@@ -40,7 +49,7 @@ public class SelfUpdater implements Runnable {
                 // if lastPercent != percent
                 if (!Objects.equals(lastPercent, percent)) {
                     percent = (String.format("%.0f", percentDownloaded));
-                    System.out.println("AutoModpack -- Downloaded " + percent + "%");
+                    System.out.println("AutoModpack -- Self update " + percent + "%");
                     lastPercent = percent;
 
                     // if lastPercent == percent
@@ -50,8 +59,7 @@ public class SelfUpdater implements Runnable {
             }
             bout.close();
             in.close();
-            System.out.println("AutoModpack -- Successful downloaded!");
-            new Thread(new UnZip()).start();
+            System.out.println("AutoModpack -- Successful slef updated!");
 
         } catch(IOException ex) {
             ex.printStackTrace();

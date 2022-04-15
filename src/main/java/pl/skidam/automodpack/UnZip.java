@@ -13,11 +13,13 @@ public class UnZip implements Runnable {
 
         // Unzip
         System.out.println("AutoModpack -- Unzipping!");
+
         try {
             new ZipFile("./mods/AutoModpack.zip").extractAll("./");
         } catch (ZipException e) {
-            e.printStackTrace();
+            throw new RuntimeException(e);
         }
+
         System.out.println("AutoModpack -- Successful unzipped!");
 
 
