@@ -3,6 +3,8 @@ package pl.skidam.automodpack;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -20,16 +22,11 @@ public class SelfUpdater implements Runnable {
     @Override
     public void run() {
 
-//        System.out.println("AutoModpack -- Deleting old files...");
-//        try {
-//            FileUtils.delete(new File("./mods/AutoModpack.jar"));
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-
         // delay for 5 seconds
         try {
             TimeUnit.SECONDS.sleep(5);
+
+            System.out.println("AutoModpack -- Self updating...");
 
             try {
                 URL url = new URL(selfLink);
@@ -62,7 +59,11 @@ public class SelfUpdater implements Runnable {
                 }
                 bout.close();
                 in.close();
+
+                Files.copy(selfOut.toPath(), new File("./mods/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
+
                 System.out.println("AutoModpack -- Successful slef updated!");
+
 
             } catch (IOException ex) {
                 ex.printStackTrace();

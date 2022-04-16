@@ -2,7 +2,6 @@ package pl.skidam.automodpack;
 
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
-import org.apache.commons.io.FileUtils;
 
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -73,7 +72,7 @@ public class Download implements Runnable {
 
 
         try {
-            new ZipFile("./mods/AutoModpack.zip").extractAll("./");
+            new ZipFile("./mods/downloads/AutoModpack.zip").extractAll("./");
         } catch (ZipException e) {
             throw new RuntimeException(e);
         }
@@ -81,15 +80,16 @@ public class Download implements Runnable {
 
         System.out.println("AutoModpack -- Successful unzipped!");
 
+        new Thread(new DeleteOldMods()).start();
+
 
         // Delete unless zip
-        System.out.println("AutoModpack -- Deliting temporary files!");
-        try {
-            FileUtils.delete(new File("./mods/AutoModpack.zip"));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        System.out.println("AutoModpack -- Here you are!");
+//        System.out.println("AutoModpack -- Deliting temporary files!");
+//        try {
+//            FileUtils.delete(new File("./mods/downloads/AutoModpack.zip"));
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
 
     }
 }

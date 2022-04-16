@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "automodpack",
-  "version": "1.0.1",
+  "version": "1.1.1",
 
   "name": "AutoModpack",
   "description": "Just automatic updating and downloading modpacks!",
@@ -31,8 +31,5 @@
     "fabricloader": ">=0.13.3",
     "minecraft": ">=1.14",
     "java": ">=8"
-  },
-  "suggests": {
-    "another-mod": "*"
   }
 }
