@@ -60,15 +60,17 @@ public class SelfUpdater implements Runnable {
                 bout.close();
                 in.close();
 
-                Files.copy(selfOut.toPath(), new File("./mods/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(selfOut.toPath(), new File("./mods/downloads/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
 
                 System.out.println("AutoModpack -- Successful slef updated!");
 
 
             } catch (IOException ex) {
+                System.out.println("AutoModpack -- Failed to update self!");
                 ex.printStackTrace();
             }
         } catch (InterruptedException e) {
+            e.printStackTrace();
             throw new RuntimeException(e);
         }
     }

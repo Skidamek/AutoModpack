@@ -60,9 +60,11 @@ public class Download implements Runnable {
                 System.out.println("AutoModpack -- Successful downloaded!");
 
             } catch(IOException ex) {
+                System.out.println("AutoModpack -- Error downloading modpack!");
                 ex.printStackTrace();
             }
         } catch (InterruptedException e) {
+            e.printStackTrace();
             throw new RuntimeException(e);
         }
 
@@ -74,6 +76,7 @@ public class Download implements Runnable {
         try {
             new ZipFile("./mods/downloads/AutoModpack.zip").extractAll("./");
         } catch (ZipException e) {
+            e.printStackTrace();
             throw new RuntimeException(e);
         }
 
