@@ -17,7 +17,7 @@ public class DeleteOldMods implements Runnable {
         String[] oldModsList = oldMods.list();
         if (oldMods.exists()) {
             for (String name : oldModsList) {
-                System.out.println("AutoModpack - Deleting: " + name);
+                System.out.println("AutoModpack -- Deleting: " + name);
                 try {
                     Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
                     FileUtils.forceDelete(new File("./mods/" + name));
