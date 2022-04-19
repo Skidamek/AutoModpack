@@ -22,9 +22,9 @@ public class SelfUpdater implements Runnable {
     @Override
     public void run() {
 
-        // delay for 5 seconds
+        // delay for 10 seconds
         try {
-            TimeUnit.SECONDS.sleep(5);
+            TimeUnit.SECONDS.sleep(10);
 
             System.out.println("AutoModpack -- Self updating...");
 

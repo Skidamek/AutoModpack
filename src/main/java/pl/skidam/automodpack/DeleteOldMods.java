@@ -26,6 +26,13 @@ public class DeleteOldMods implements Runnable {
                     e.printStackTrace();
                 }
             }
+
+            try {
+                FileUtils.forceDelete(oldMods);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+
         }
 
         System.out.println("AutoModpack -- Here you are!");

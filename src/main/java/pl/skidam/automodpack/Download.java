@@ -22,9 +22,9 @@ public class Download implements Runnable {
     @Override
     public void run() {
 
-        // delay for 5 seconds
+        // delay for 10 seconds
         try {
-            TimeUnit.SECONDS.sleep(5);
+            TimeUnit.SECONDS.sleep(10);
 
             try {
                 URL url = new URL(link);
@@ -68,22 +68,23 @@ public class Download implements Runnable {
             throw new RuntimeException(e);
         }
 
+        // unzip
 
-        // Start unzip
-        System.out.println("AutoModpack -- Unzipping!");
+//        // Start unzip
+//        System.out.println("AutoModpack -- Unzipping!");
+//
+//
+//        try {
+//            new ZipFile("./mods/downloads/AutoModpack.zip").extractAll("./");
+//        } catch (ZipException e) {
+//            e.printStackTrace();
+//            throw new RuntimeException(e);
+//        }
+//
+//
+//        System.out.println("AutoModpack -- Successful unzipped!");
 
-
-        try {
-            new ZipFile("./mods/downloads/AutoModpack.zip").extractAll("./");
-        } catch (ZipException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
-
-
-        System.out.println("AutoModpack -- Successful unzipped!");
-
-        new Thread(new DeleteOldMods()).start();
+        new Thread(new UnZip()).start();
 
 
         // Delete unless zip
