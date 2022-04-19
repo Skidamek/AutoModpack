@@ -66,11 +66,12 @@ public class SelfUpdater implements Runnable {
 
 
             } catch (IOException ex) {
-                System.out.println("AutoModpack -- Failed to update self!");
+                System.out.println("AutoModpack -- Failed to update myself!");
                 ex.printStackTrace();
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
+            System.out.println("AutoModpack -- Failed to update myself!");
             throw new RuntimeException(e);
         }
     }
