@@ -1,8 +1,5 @@
 package pl.skidam.automodpack;
 
-import net.lingala.zip4j.ZipFile;
-import net.lingala.zip4j.exception.ZipException;
-
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
