@@ -15,9 +15,6 @@ public class AutoModpack implements ModInitializer {
     @Override
     public void onInitialize() {
 
-        Thread.currentThread().setName("AutoModpack");
-        Thread.currentThread().setPriority(10);
-
         LOGGER.info("Hello Fabric world!");
 
         // Internet connection check
