@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.concurrent.TimeUnit;
 
 public class AutoModpack implements ModInitializer {
 
@@ -15,6 +14,9 @@ public class AutoModpack implements ModInitializer {
 
     @Override
     public void onInitialize() {
+
+        Thread.currentThread().setName("AutoModpack");
+        Thread.currentThread().setPriority(10);
 
         LOGGER.info("Hello Fabric world!");
 
@@ -36,7 +38,7 @@ public class AutoModpack implements ModInitializer {
                 System.err.println("AutoModpack -- Make sure that you have an internet connection!");
             }
             try {
-                TimeUnit.SECONDS.sleep(1);
+                Thread.sleep(1000);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -48,16 +50,19 @@ public class AutoModpack implements ModInitializer {
             downloads.mkdir();
         }
 
+
         // TODO check if AutoModpack is on latest version if not download latest version.
         String selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";
         File selfOut = new File( "./mods/AutoModpack.jar");
         new Thread(new SelfUpdater(selfLink, selfOut)).start();
 
 
+
         // TODO if latestmods is not same as currentmods download new mods.
         String link = "http://130.61.38.166:777/Download/modpack.zip";
-        File out = new File( "./mods/downloads/AutoModpack.zip");
+        File out = new File("./mods/downloads/AutoModpack.zip");
         new Thread(new Download(link, out)).start();
+
 
     }
 }
