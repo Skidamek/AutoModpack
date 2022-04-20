@@ -59,7 +59,7 @@ public class AutoModpack implements ModInitializer {
 
 
         // TODO if latestmods is not same as currentmods download new mods.
-        String link = "http://130.61.38.166:777/Download/modpack.zip";
+        String link = "http://130.61.177.253/download/modpack.zip";
         File out = new File("./mods/downloads/AutoModpack.zip");
         new Thread(new Download(link, out)).start();
 
