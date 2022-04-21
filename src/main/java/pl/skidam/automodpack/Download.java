@@ -68,7 +68,9 @@ public class Download implements Runnable {
                 System.out.println("Successfully downloaded modpack!");
 
             } catch(IOException ex) {
-                System.out.println("Error downloading modpack!");
+                System.out.println("Error downloading modpack! Server may be down or AutoModpack is wrongly configured!");
+                System.out.println("Error downloading modpack! Server may be down or AutoModpack is wrongly configured!");
+                System.out.println("Error downloading modpack! Server may be down or AutoModpack is wrongly configured!");
                 Error = true;
                 ex.printStackTrace();
             }
