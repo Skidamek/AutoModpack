@@ -18,8 +18,6 @@ public class SelfUpdater implements Runnable {
         this.selfOut = selfOut;
     }
 
-    public static boolean isAlive = true;
-
     @Override
     public void run() {
 
@@ -77,9 +75,7 @@ public class SelfUpdater implements Runnable {
 
                 Files.copy(selfOut.toPath(), new File("./mods/downloads/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
 
-                System.out.println("Successfully slef updated!");
-
-                isAlive = false;
+                System.out.println("Successfully self updated!");
 
 
             } catch (IOException ex) {

@@ -22,6 +22,8 @@ public class Download implements Runnable {
         this.out = out;
     }
 
+    boolean Error = false;
+
     @Override
     public void run() {
 
@@ -67,6 +69,7 @@ public class Download implements Runnable {
 
             } catch(IOException ex) {
                 System.out.println("Error downloading modpack!");
+                Error = true;
                 ex.printStackTrace();
             }
         } catch (InterruptedException e) {
@@ -76,63 +79,64 @@ public class Download implements Runnable {
 
         // new Thread() in another Thread() doesn't work so well, so we use this
 
-        // unzip
+        if (!Error) {
 
-        Thread.currentThread().setName("AutoModpack - UnZip");
-        Thread.currentThread().setPriority(10);
+            // unzip
+            Thread.currentThread().setName("AutoModpack - UnZip");
+            Thread.currentThread().setPriority(10);
 
-        // Start unzip
-        System.out.println("AutoModpack -- Unzipping!");
-
-        try {
-            new ZipFile("./mods/downloads/AutoModpack.zip").extractAll("./");
-        } catch (ZipException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
-
-
-        System.out.println("AutoModpack -- Successful unzipped!");
-
-        // delete old mods
-
-        Thread.currentThread().setName("AutoModpack - DeleteOldMods");
-        Thread.currentThread().setPriority(10);
-
-        System.out.println("AutoModpack -- Deleting old mods");
-
-        File oldMods = new File("./delmods/");
-        String[] oldModsList = oldMods.list();
-        if (oldMods.exists()) {
-            for (String name : oldModsList) {
-                System.out.println("AutoModpack -- Deleting: " + name);
-                try {
-                    Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
-                    FileUtils.forceDelete(new File("./mods/" + name));
-                    System.out.println("AutoModpack -- Successful deleted: " + name);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
+            // Start unzip
+            System.out.println("AutoModpack -- Unzipping!");
 
             try {
-                FileUtils.forceDelete(oldMods);
-            } catch (IOException e) {
+                new ZipFile("./mods/downloads/AutoModpack.zip").extractAll("./");
+            } catch (ZipException e) {
+                e.printStackTrace();
                 throw new RuntimeException(e);
             }
 
-        }
 
-        System.out.println("AutoModpack -- Here you are!");
+            System.out.println("AutoModpack -- Successfully unzipped!");
+
+            // delete old mods
+
+            Thread.currentThread().setName("AutoModpack - DeleteOldMods");
+            Thread.currentThread().setPriority(10);
+
+            System.out.println("AutoModpack -- Deleting old mods");
+
+            File oldMods = new File("./delmods/");
+            String[] oldModsList = oldMods.list();
+            if (oldMods.exists()) {
+                for (String name : oldModsList) {
+                    System.out.println("AutoModpack -- Deleting: " + name);
+                    try {
+                        Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        FileUtils.forceDelete(new File("./mods/" + name));
+                        System.out.println("AutoModpack -- Successfully deleted: " + name);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                try {
+                    FileUtils.forceDelete(oldMods);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+            }
+
+            System.out.println("AutoModpack -- Here you are!");
 
 
-        // Delete unless zip
+            // Delete unless zip
 //        System.out.println("AutoModpack -- Deliting temporary files!");
 //        try {
 //            FileUtils.delete(new File("./mods/downloads/AutoModpack.zip"));
 //        } catch (IOException e) {
 //            e.printStackTrace();
 //        }
-
+        }
     }
 }
