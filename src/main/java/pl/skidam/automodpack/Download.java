@@ -14,7 +14,6 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 import java.util.Scanner;
-import java.util.concurrent.TimeUnit;
 
 public class Download implements Runnable {
 
@@ -35,9 +34,11 @@ public class Download implements Runnable {
         Thread.currentThread().setName("AutoModpack - ModpackVersionCheck");
         Thread.currentThread().setPriority(10);
 
+        // if latest modpack is not same as current modpack download new mods.
         // Check how big the Modpack file is
-        File ModpackCheck = new File("./mods/downloads/ModpackVersionCheck.txt/");
+        File ModpackCheck = new File("./AutoModpack/ModpackVersionCheck.txt");
         if (ModpackCheck.exists()) {
+            System.out.println("Checking if modpack is up to date...");
             try {
                 FileReader fr = new FileReader(ModpackCheck);
                 Scanner inFile = new Scanner(fr);
@@ -46,16 +47,14 @@ public class Download implements Runnable {
 
                 // Read the first line from the file.
                 line = inFile.nextLine();
-//                System.out.println("ModpackCheck" + " " + line + " " + "bytes");
-//                System.out.println("webfileSize" + " " + webfileSize(link) + " " + "bytes");
-                int currentSize = Integer.parseInt(line);
-                int latestSize = Integer.parseInt(webfileSize(link));
-//                System.out.println("ModpackCheck" + " " + currentSize + " " + "bytes (int)");
-//                System.out.println("webfileSize" + " " + latestSize + " " + "bytes (int)");
+
+                long currentSize = Long.parseLong(line);
+                long latestSize = Long.parseLong(webfileSize(link));
+
                 if (currentSize != latestSize) {
-                    System.out.println("Modpack file size is different from the one on the server. Downloading new one.");
+                    System.out.println("Update found! Downloading new mods!");
                 } else {
-                    System.out.println("Modpack file size is same as from the one on the server. Skipping downloading Modpack.");
+                    System.out.println("Didn't find any updates for modpack!");
                     LatestVersion = true;
                 }
 
@@ -67,15 +66,16 @@ public class Download implements Runnable {
             }
         }
 
+        File modsFolder = new File("./mods");
+
         //If the file don't exist, skip the check and download the Modpack
 
-        // delay for 5 seconds
-
-        if (!LatestVersion || !ModpackCheck.exists()) {
+        if (!LatestVersion || !ModpackCheck.exists() || modsFolder.listFiles().length < 2) {
 
             Thread.currentThread().setName("AutoModpack - Downloader");
             Thread.currentThread().setPriority(10);
 
+            // delay for 5 seconds
             try {
                 Thread.sleep(5000);
 
@@ -84,7 +84,7 @@ public class Download implements Runnable {
                     HttpURLConnection http = (HttpURLConnection) url.openConnection();
                     double fileSize = (double) http.getContentLengthLong();
                     BufferedInputStream in = new BufferedInputStream(http.getInputStream());
-                    FileOutputStream fos = new FileOutputStream(this.out);
+                    FileOutputStream fos = new FileOutputStream(out);
                     BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
                     byte[] buffer = new byte[1024];
                     double downloaded = 0.00;
@@ -113,7 +113,7 @@ public class Download implements Runnable {
                     System.out.println("Successfully downloaded modpack!");
 
                     // Write the Modpack file size to a file
-                    String ModpackZip = ("./mods/downloads/AutoModpack.zip");
+                    String ModpackZip = (out.toPath().toString());
                     printFileSizeNIO(ModpackZip);
 
                 } catch (IOException ex) {
@@ -142,7 +142,7 @@ public class Download implements Runnable {
                 System.out.println("AutoModpack -- Unzipping!");
 
                 try {
-                    new ZipFile("./mods/downloads/AutoModpack.zip").extractAll("./");
+                    new ZipFile(out).extractAll("./");
                 } catch (ZipException e) {
                     e.printStackTrace();
                     throw new RuntimeException(e);
@@ -182,14 +182,13 @@ public class Download implements Runnable {
 
                 System.out.println("AutoModpack -- Here you are!");
 
-
-                // Delete unless zip
-    //        System.out.println("AutoModpack -- Deliting temporary files!");
-    //        try {
-    //            FileUtils.delete(new File("./mods/downloads/AutoModpack.zip"));
-    //        } catch (IOException e) {
-    //            e.printStackTrace();
-    //        }
+////              Delete unless zip
+//                System.out.println("AutoModpack -- Deliting temporary files!");
+//                try {
+//                    FileUtils.delete(new File("./AutoModpack/AutoModpack.zip"));
+//                } catch (IOException e) {
+//                    e.printStackTrace();
+//                }
             }
         }
     }
@@ -211,7 +210,7 @@ public class Download implements Runnable {
     private void printFileSizeNIO(String ModpackZip) {
         Path path = Paths.get(ModpackZip);
 
-        try (FileWriter writer = new FileWriter("./mods/downloads/ModpackVersionCheck.txt")) {
+        try (FileWriter writer = new FileWriter("./AutoModpack/ModpackVersionCheck.txt")) {
             long bytes = Files.size(path);
             writer.write(String.format("%d", bytes));
             writer.flush();

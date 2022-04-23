@@ -17,6 +17,8 @@ public class AutoModpack implements ModInitializer {
 
         LOGGER.info("Hello Fabric world!");
 
+        new Thread(new OldConvertToNew()).start();
+
         // Internet connection check
         boolean internet = false;
         while (!internet) {
@@ -41,10 +43,10 @@ public class AutoModpack implements ModInitializer {
             }
         }
 
-        // Check if AutoModpack Downloads folder exists and create it if it doesn't
-        File downloads = new File("./mods/downloads/");
-        if (!downloads.exists()) {
-            downloads.mkdir();
+        // Check if AutoModpack Path folder exists and create it if it doesn't
+        File AutoModpackPath = new File("./AutoModpack/");
+        if (!AutoModpackPath.exists()) {
+            AutoModpackPath.mkdir();
         }
 
 
@@ -54,10 +56,8 @@ public class AutoModpack implements ModInitializer {
         new Thread(new SelfUpdater(selfLink, selfOut)).start();
 
 
-
-        // TODO if latestmods is not same as currentmods download new mods.
         String link = "http://130.61.177.253/download/modpack.zip";
-        File out = new File("./mods/downloads/AutoModpack.zip");
+        File out = new File("./AutoModpack/modpack.zip");
         new Thread(new Download(link, out)).start();
 
 
