@@ -54,7 +54,7 @@ public class Download implements Runnable {
                 if (currentSize != latestSize) {
                     System.out.println("Update found! Downloading new mods!");
                 } else {
-                    System.out.println("Didn't find any updates for modpack!");
+                    System.out.println("Didn't found any updates for modpack!");
                     LatestVersion = true;
                 }
 
