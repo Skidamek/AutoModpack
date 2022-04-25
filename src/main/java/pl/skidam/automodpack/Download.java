@@ -32,8 +32,10 @@ public class Download implements Runnable {
     @Override
     public void run() {
 
-        // delay for 10 seconds
-        wait(10000);
+        After();
+
+        // delay for 5 seconds
+        wait(5000);
 
         CheckModpack();
 
@@ -84,8 +86,9 @@ public class Download implements Runnable {
                 After();
             }
 
-        } else {
-            DownloadModpack();
+//        Moved to After()
+//        } else {
+//            DownloadModpack();
         }
     }
 
@@ -147,17 +150,16 @@ public class Download implements Runnable {
         // TODO make functions instanced of Threads for example Download();
         // Repeat this function every restart if modpack is up-to-date
         if (!Error) {
-
-            // unzip
-            Thread.currentThread().setName("AutoModpack - UnZip");
-            Thread.currentThread().setPriority(10);
-
-            // Start unzip
-            System.out.println("AutoModpack -- Unzipping!");
-
-
             File ModpackZip = new File(out.toPath().toString());
             if (ModpackZip.exists()) {
+
+                // unzip
+                Thread.currentThread().setName("AutoModpack - UnZip");
+                Thread.currentThread().setPriority(10);
+
+                // Start unzip
+                System.out.println("AutoModpack -- Unzipping!");
+
                 try {
                     new ZipFile(out).extractAll("./");
                 } catch (ZipException e) {
@@ -221,24 +223,61 @@ public class Download implements Runnable {
 
                                 // The process cannot access the file because it is being used by another process
                                 // So we need to delete it manually
-                                FileUtils.forceDelete(oldMod);
-                                System.out.println("AutoModpack -- 1");
-                                FileUtils.forceDelete(new File("./mods/" + name));
-                                System.out.println("AutoModpack -- 2");
-                                FileDeleteStrategy.FORCE.delete(new File("./mods/" + name));
-                                System.out.println("AutoModpack -- 3");
-                                FileDeleteStrategy.FORCE.delete(oldMod);
-                                System.out.println("AutoModpack -- 4");
 
-                                Files.move(new File("./mods/" + name).toPath(), new File("./delmods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
-                                System.out.println("AutoModpack -- 5");
 
-                                System.out.println("AutoModpack -- Successfully deleted: " + name);
+
+
+
                             } catch (IOException e) {
-                                System.out.println("AutoModpack -- dupa 6");
+                                System.out.println("AutoModpack -- dupa 0");
                                 e.printStackTrace();
                             }
-                        }
+
+                            try {
+                                FileUtils.forceDelete(oldMod);
+                                System.out.println("AutoModpack -- 1");
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+
+                            try {
+                                FileUtils.forceDelete(new File("./mods/" + name));
+                                System.out.println("AutoModpack -- 2");
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+
+                            try {
+                                FileDeleteStrategy.FORCE.delete(new File("./mods/" + name));
+                                System.out.println("AutoModpack -- 3");
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+
+                            try {
+                                FileDeleteStrategy.FORCE.delete(oldMod);
+                                System.out.println("AutoModpack -- 4");
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+
+                            try {
+                                Files.move(new File("./mods/" + name).toPath(), new File("./delmods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
+                                System.out.println("AutoModpack -- 5");
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+
+                            try {
+                                Files.move(oldMod.toPath(), new File("./delmods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
+                                System.out.println("AutoModpack -- 6");
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+
+
+                            }
+                        System.out.println("AutoModpack -- Successfully deleted: " + name);
                     }
                 }
 
@@ -254,6 +293,7 @@ public class Download implements Runnable {
 
                 System.out.println("AutoModpack -- Here you are!");
             } else {
+                wait(5000);
                 DownloadModpack();
             }
         }
