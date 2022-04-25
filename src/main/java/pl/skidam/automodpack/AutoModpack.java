@@ -49,8 +49,8 @@ public class AutoModpack implements ModInitializer {
             AutoModpackPath.mkdir();
         }
 
+        // TODO add buttons in the GUI to download the mods or update the mods or check for updates
 
-        // TODO check if AutoModpack is on latest version if not download latest version.
         String selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";
         File selfOut = new File( "./mods/AutoModpack.jar");
         new Thread(new SelfUpdater(selfLink, selfOut)).start();
@@ -59,6 +59,9 @@ public class AutoModpack implements ModInitializer {
         String link = "http://130.61.177.253/download/modpack.zip";
         File out = new File("./AutoModpack/modpack.zip");
         new Thread(new Download(link, out)).start();
+
+
+        // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server
 
 
     }
