@@ -269,23 +269,26 @@ public class Download implements Runnable {
                     }
                 }
 
-                if (oldMods.exists()) {
-                    try {
-                        FileUtils.forceDelete(oldMods);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-
-                Thread.currentThread().setName("AutoModpack");
-                Thread.currentThread().setPriority(10);
-
-                System.out.println("AutoModpack -- Here you are!");
 //            Moved to Download
 //            } else {
 //                wait(5000);
 //                DownloadModpack();
             }
+
+            File oldMods = new File("./delmods/");
+
+            if (oldMods.exists()) {
+                try {
+                    FileUtils.forceDelete(oldMods);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            Thread.currentThread().setName("AutoModpack");
+            Thread.currentThread().setPriority(10);
+
+            System.out.println("AutoModpack -- Here you are!");
         }
     }
 
