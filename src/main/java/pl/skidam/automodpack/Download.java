@@ -93,6 +93,8 @@ public class Download implements Runnable {
                 After();
             }
 
+        } else {
+            DownloadModpack();
         }
     }
 
@@ -223,6 +225,7 @@ public class Download implements Runnable {
                         if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
                             System.out.println("AutoModpack -- Deleting: " + name);
                             try {
+                                Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
                                 Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
 //                                FileUtils.forceDelete(new File("./mods/" + name));
                                 FileDeleteStrategy.FORCE.delete(new File("./mods/" + name));
