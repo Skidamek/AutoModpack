@@ -226,11 +226,27 @@ public class Download implements Runnable {
                             System.out.println("AutoModpack -- Deleting: " + name);
                             try {
                                 Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
-                                Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
 //                                FileUtils.forceDelete(new File("./mods/" + name));
-                                FileDeleteStrategy.FORCE.delete(new File("./mods/" + name));
+
+                                // The process cannot access the file because it is being used by another process
+                                // So we need to delete it manually
+                                FileUtils.forceDelete(oldMod);
+                                System.out.println("AutoModpack -- 1");
+                                if (oldMod.exists()) {
+                                    FileUtils.forceDelete(new File("./mods/" + name));
+                                    System.out.println("AutoModpack -- 2");
+                                }
+                                if (oldMod.exists()) {
+                                    FileDeleteStrategy.FORCE.delete(new File("./mods/" + name));
+                                    System.out.println("AutoModpack -- 3");
+                                }
+                                if (oldMod.exists()) {
+                                    FileDeleteStrategy.FORCE.delete(oldMod);
+                                    System.out.println("AutoModpack -- 4");
+                                }
                                 System.out.println("AutoModpack -- Successfully deleted: " + name);
                             } catch (IOException e) {
+                                System.out.println("AutoModpack -- dupa 5");
                                 e.printStackTrace();
                             }
                         }
