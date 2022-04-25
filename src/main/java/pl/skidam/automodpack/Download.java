@@ -32,8 +32,6 @@ public class Download implements Runnable {
     @Override
     public void run() {
 
-        After();
-
         // delay for 5 seconds
         wait(5000);
 
@@ -86,9 +84,9 @@ public class Download implements Runnable {
                 After();
             }
 
-//        Moved to After()
-//        } else {
-//            DownloadModpack();
+//        Moved to After() -- no
+        } else {
+            DownloadModpack();
         }
     }
 
@@ -281,9 +279,10 @@ public class Download implements Runnable {
                 Thread.currentThread().setPriority(10);
 
                 System.out.println("AutoModpack -- Here you are!");
-            } else {
-                wait(5000);
-                DownloadModpack();
+//            Moved to Download
+//            } else {
+//                wait(5000);
+//                DownloadModpack();
             }
         }
     }
