@@ -267,13 +267,15 @@ public class Download implements Runnable {
 
                         }
                     }
+                }
+
+                if (oldMods.exists()) {
                     try {
                         FileUtils.forceDelete(oldMods);
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
                 }
-
 
                 Thread.currentThread().setName("AutoModpack");
                 Thread.currentThread().setPriority(10);

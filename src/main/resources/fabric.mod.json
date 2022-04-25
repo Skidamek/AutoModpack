@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "automodpack",
-  "version": "1.2.12",
+  "version": "1.2.13",
 
   "name": "AutoModpack",
   "description": "Just automatic updating and downloading modpacks!",
