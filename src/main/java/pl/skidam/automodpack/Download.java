@@ -32,7 +32,19 @@ public class Download implements Runnable {
     @Override
     public void run() {
 
-        CheckModpack();
+        // delay for 5 seconds
+        try {
+            Thread.sleep(5000);
+
+
+
+            CheckModpack();
+
+
+
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
     }
 
@@ -91,54 +103,46 @@ public class Download implements Runnable {
         Thread.currentThread().setName("AutoModpack - Downloader");
         Thread.currentThread().setPriority(10);
 
-        // delay for 5 seconds
         try {
-            Thread.sleep(5000);
+            URL url = new URL(link);
+            HttpURLConnection http = (HttpURLConnection) url.openConnection();
+            double fileSize = (double) http.getContentLengthLong();
+            BufferedInputStream in = new BufferedInputStream(http.getInputStream());
+            FileOutputStream fos = new FileOutputStream(out);
+            BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
+            byte[] buffer = new byte[1024];
+            double downloaded = 0.00;
+            int read;
+            double percentDownloaded;
+            String lastPercent = null;
+            String percent = null;
+            while ((read = in.read(buffer, 0, 1024)) >= 0) {
+                bout.write(buffer, 0, read);
+                downloaded += read;
+                percentDownloaded = (downloaded * 100) / fileSize;
 
-            try {
-                URL url = new URL(link);
-                HttpURLConnection http = (HttpURLConnection) url.openConnection();
-                double fileSize = (double) http.getContentLengthLong();
-                BufferedInputStream in = new BufferedInputStream(http.getInputStream());
-                FileOutputStream fos = new FileOutputStream(out);
-                BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
-                byte[] buffer = new byte[1024];
-                double downloaded = 0.00;
-                int read;
-                double percentDownloaded;
-                String lastPercent = null;
-                String percent = null;
-                while ((read = in.read(buffer, 0, 1024)) >= 0) {
-                    bout.write(buffer, 0, read);
-                    downloaded += read;
-                    percentDownloaded = (downloaded * 100) / fileSize;
+                // if lastPercent != percent
+                if (!Objects.equals(lastPercent, percent)) {
+                    percent = (String.format("%.0f", percentDownloaded));
+                    System.out.println(percent + "%");
+                    lastPercent = percent;
 
-                    // if lastPercent != percent
-                    if (!Objects.equals(lastPercent, percent)) {
-                        percent = (String.format("%.0f", percentDownloaded));
-                        System.out.println(percent + "%");
-                        lastPercent = percent;
-
-                            // if lastPercent == percent
-                    } else {
-                        percent = (String.format("%.0f", percentDownloaded));
-                    }
+                    // if lastPercent == percent
+                } else {
+                    percent = (String.format("%.0f", percentDownloaded));
                 }
-                bout.close();
-                in.close();
-                System.out.println("Successfully downloaded modpack!");
-
-                // Write the Modpack file size to a file
-                String ModpackZip = (out.toPath().toString());
-                printFileSizeNIO(ModpackZip);
-
-            } catch (IOException ex) {
-                Error();
-                ex.printStackTrace();
             }
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e);
+            bout.close();
+            in.close();
+            System.out.println("Successfully downloaded modpack!");
+
+            // Write the Modpack file size to a file
+            String ModpackZip = (out.toPath().toString());
+            printFileSizeNIO(ModpackZip);
+
+        } catch (IOException ex) {
+            Error();
+            ex.printStackTrace();
         }
 
         After();
