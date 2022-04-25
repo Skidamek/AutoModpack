@@ -198,13 +198,14 @@ public class Download implements Runnable {
                     } catch (FileNotFoundException e) {
                         throw new RuntimeException(e);
                     }
+
+                    try {
+                        FileUtils.forceDelete(oldModsTxt);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
 
-                try {
-                    FileUtils.forceDelete(oldModsTxt);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
 
                 // Delete old mods by deleting the folder
                 File oldMods = new File("./delmods/");
@@ -268,12 +269,11 @@ public class Download implements Runnable {
 
                         }
                     }
-                }
-
-                try {
-                    FileUtils.forceDelete(oldMods);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    try {
+                        FileUtils.forceDelete(oldMods);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
 
 
