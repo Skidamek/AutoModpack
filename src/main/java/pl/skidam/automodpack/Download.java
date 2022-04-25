@@ -223,21 +223,19 @@ public class Download implements Runnable {
                                 // So we need to delete it manually
                                 FileUtils.forceDelete(oldMod);
                                 System.out.println("AutoModpack -- 1");
-                                if (oldMod.exists()) {
-                                    FileUtils.forceDelete(new File("./mods/" + name));
-                                    System.out.println("AutoModpack -- 2");
-                                }
-                                if (oldMod.exists()) {
-                                    FileDeleteStrategy.FORCE.delete(new File("./mods/" + name));
-                                    System.out.println("AutoModpack -- 3");
-                                }
-                                if (oldMod.exists()) {
-                                    FileDeleteStrategy.FORCE.delete(oldMod);
-                                    System.out.println("AutoModpack -- 4");
-                                }
+                                FileUtils.forceDelete(new File("./mods/" + name));
+                                System.out.println("AutoModpack -- 2");
+                                FileDeleteStrategy.FORCE.delete(new File("./mods/" + name));
+                                System.out.println("AutoModpack -- 3");
+                                FileDeleteStrategy.FORCE.delete(oldMod);
+                                System.out.println("AutoModpack -- 4");
+
+                                Files.move(new File("./mods/" + name).toPath(), new File("./delmods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
+                                System.out.println("AutoModpack -- 5");
+
                                 System.out.println("AutoModpack -- Successfully deleted: " + name);
                             } catch (IOException e) {
-                                System.out.println("AutoModpack -- dupa 5");
+                                System.out.println("AutoModpack -- dupa 6");
                                 e.printStackTrace();
                             }
                         }
