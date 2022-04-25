@@ -187,7 +187,7 @@ public class Download implements Runnable {
                         while (inFile.hasNextLine()) {
                             File DelMod = new File("./delmods/" + line);
                             if (!DelMod.exists()) {
-                                DelMod.mkdir();
+                                DelMod.createNewFile();
                             }
                             line = inFile.nextLine();
                         }
@@ -195,7 +195,7 @@ public class Download implements Runnable {
                         // Close the file.
                         inFile.close();
 
-                    } catch (FileNotFoundException e) {
+                    } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
 
