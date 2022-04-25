@@ -2,6 +2,7 @@ package pl.skidam.automodpack;
 
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
+import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
 
 import java.io.*;
@@ -174,6 +175,7 @@ public class Download implements Runnable {
                 Thread.currentThread().setPriority(10);
 
                 // Add old mods by txt file to delmods folder/list
+                // TODO FIX IT
                 File oldModsTxt = new File("./delmods.txt");
                 if (oldModsTxt.exists()) {
                     try {
@@ -199,12 +201,12 @@ public class Download implements Runnable {
                     } catch (FileNotFoundException e) {
                         throw new RuntimeException(e);
                     }
+                }
 
-                    try {
-                        FileUtils.forceDelete(oldModsTxt);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+                try {
+                    FileDeleteStrategy.FORCE.delete(new File("./delmods.txt"));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
                 }
 
                 // Delete old mods by deleting the folder
@@ -212,26 +214,26 @@ public class Download implements Runnable {
                 String[] oldModsList = oldMods.list();
                 if (oldMods.exists()) {
                     assert oldModsList != null;
-                    System.out.println("AutoModpack -- Deleting old mods");
                     for (String name : oldModsList) {
                         File oldMod = new File("./mods/" + name);
                         if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
                             System.out.println("AutoModpack -- Deleting: " + name);
                             try {
                                 Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
-                                FileUtils.forceDelete(new File("./mods/" + name));
+//                                FileUtils.forceDelete(new File("./mods/" + name));
+                                FileDeleteStrategy.FORCE.delete(new File("./mods/" + name));
                                 System.out.println("AutoModpack -- Successfully deleted: " + name);
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
                         }
                     }
+                }
 
-                    try {
-                        FileUtils.forceDelete(oldMods);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+                try {
+                    FileDeleteStrategy.FORCE.delete(new File("./delmods/"));
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
                 }
 
 
