@@ -85,59 +85,52 @@ public class SelfUpdater implements Runnable {
 
 
             // delay for 5 seconds
+            wait(5000);
+
             try {
-                Thread.sleep(5000);
+                URL url = new URL(selfLink);
+                HttpURLConnection http = (HttpURLConnection) url.openConnection();
+                double fileSize = (double) http.getContentLengthLong();
+                BufferedInputStream in = new BufferedInputStream(http.getInputStream());
+                FileOutputStream fos = new FileOutputStream(selfOut);
+                BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
+                byte[] buffer = new byte[1024];
+                double downloaded = 0.00;
+                int read;
+                double percentDownloaded;
+                String lastPercent = null;
+                String percent = null;
 
-                try {
-                    URL url = new URL(selfLink);
-                    HttpURLConnection http = (HttpURLConnection) url.openConnection();
-                    double fileSize = (double) http.getContentLengthLong();
-                    BufferedInputStream in = new BufferedInputStream(http.getInputStream());
-                    FileOutputStream fos = new FileOutputStream(selfOut);
-                    BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
-                    byte[] buffer = new byte[1024];
-                    double downloaded = 0.00;
-                    int read;
-                    double percentDownloaded;
-                    String lastPercent = null;
-                    String percent = null;
+                while ((read = in.read(buffer, 0, 1024)) >= 0) {
+                    bout.write(buffer, 0, read);
+                    downloaded += read;
+                    percentDownloaded = (downloaded * 100) / fileSize;
 
-                    while ((read = in.read(buffer, 0, 1024)) >= 0) {
-                        bout.write(buffer, 0, read);
-                        downloaded += read;
-                        percentDownloaded = (downloaded * 100) / fileSize;
+                    // if lastPercent != percent
+                    if (!Objects.equals(lastPercent, percent)) {
+                        percent = (String.format("%.0f", percentDownloaded));
+                        System.out.println(percent + "%");
+                        lastPercent = percent;
 
-                        // if lastPercent != percent
-                        if (!Objects.equals(lastPercent, percent)) {
-                            percent = (String.format("%.0f", percentDownloaded));
-                            System.out.println(percent + "%");
-                            lastPercent = percent;
-
-                            // if lastPercent == percent
-                        } else {
-                            percent = (String.format("%.0f", percentDownloaded));
-                        }
+                        // if lastPercent == percent
+                    } else {
+                        percent = (String.format("%.0f", percentDownloaded));
                     }
-                    bout.close();
-                    in.close();
-
-                    Files.copy(selfOut.toPath(), new File("./AutoModpack/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
-
-                    System.out.println("Successfully self updated!");
-
-                    // Write the AutoModpack file size to a file
-                    String AutoModpack = (selfOut.toPath().toString());
-                    printFileSizeNIO(AutoModpack);
-
-
-                } catch (IOException ex) {
-                    System.out.println("Failed to update myself!");
-                    ex.printStackTrace();
                 }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+                bout.close();
+                in.close();
+
+                Files.copy(selfOut.toPath(), new File("./AutoModpack/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+                System.out.println("Successfully self updated!");
+
+                // Write the AutoModpack file size to a file
+                String AutoModpack = (selfOut.toPath().toString());
+                printFileSizeNIO(AutoModpack);
+
+            } catch (IOException ex) {
                 System.out.println("Failed to update myself!");
-                throw new RuntimeException(e);
+                ex.printStackTrace();
             }
         }
     }
@@ -166,4 +159,17 @@ public class SelfUpdater implements Runnable {
             e.printStackTrace();
         }
     }
+
+    public static void wait(int ms)
+    {
+        try
+        {
+            Thread.sleep(ms);
+        }
+        catch(InterruptedException ex)
+        {
+            Thread.currentThread().interrupt();
+        }
+    }
+
 }

@@ -32,19 +32,10 @@ public class Download implements Runnable {
     @Override
     public void run() {
 
-        // delay for 5 seconds
-        try {
-            Thread.sleep(5000);
+        // delay for 10 seconds
+        wait(10000);
 
-
-
-            CheckModpack();
-
-
-
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        CheckModpack();
 
     }
 
@@ -304,6 +295,18 @@ public class Download implements Runnable {
             writer.flush();
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    public static void wait(int ms)
+    {
+        try
+        {
+            Thread.sleep(ms);
+        }
+        catch(InterruptedException ex)
+        {
+            Thread.currentThread().interrupt();
         }
     }
 }
