@@ -146,8 +146,6 @@ public class Download implements Runnable {
 
     public void After() {
 
-        // new Thread() in another Thread() doesn't work so well, so we use this
-        // TODO make functions instanced of Threads for example Download();
         // Repeat this function every restart if modpack is up-to-date
         if (!Error) {
             File ModpackZip = new File(out.toPath().toString());
@@ -203,7 +201,7 @@ public class Download implements Runnable {
                 }
 
                 try {
-                    FileDeleteStrategy.FORCE.delete(new File("./delmods.txt"));
+                    FileUtils.forceDelete(oldModsTxt);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -219,15 +217,6 @@ public class Download implements Runnable {
                             System.out.println("AutoModpack -- Deleting: " + name);
                             try {
                                 Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
-//                                FileUtils.forceDelete(new File("./mods/" + name));
-
-                                // The process cannot access the file because it is being used by another process
-                                // So we need to delete it manually
-
-
-
-
-
                             } catch (IOException e) {
                                 System.out.println("AutoModpack -- dupa 0");
                                 e.printStackTrace();
@@ -275,14 +264,14 @@ public class Download implements Runnable {
                                 throw new RuntimeException(e);
                             }
 
+                            System.out.println("AutoModpack -- Successfully deleted: " + name);
 
-                            }
-                        System.out.println("AutoModpack -- Successfully deleted: " + name);
+                        }
                     }
                 }
 
                 try {
-                    FileDeleteStrategy.FORCE.delete(new File("./delmods/"));
+                    FileUtils.forceDelete(oldMods);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
