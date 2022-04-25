@@ -53,6 +53,8 @@ public class Download implements Runnable {
 
                 if (currentSize != latestSize) {
                     System.out.println("Update found! Downloading new mods!");
+                } else if (currentSize == 0) {
+                    Error();
                 } else {
                     System.out.println("Didn't found any updates for modpack!");
                     LatestVersion = true;
@@ -66,11 +68,9 @@ public class Download implements Runnable {
             }
         }
 
-        File modsFolder = new File("./mods");
-
         //If the file don't exist, skip the check and download the Modpack
 
-        if (!LatestVersion || !ModpackCheck.exists() || modsFolder.listFiles().length < 2) {
+        if (!LatestVersion || !ModpackCheck.exists()) {
 
             Thread.currentThread().setName("AutoModpack - Downloader");
             Thread.currentThread().setPriority(10);
@@ -117,81 +117,114 @@ public class Download implements Runnable {
                     printFileSizeNIO(ModpackZip);
 
                 } catch (IOException ex) {
-                    System.out.println("Error downloading modpack! Download server may be down or AutoModpack is wrongly configured!");
-                    System.out.println("Error downloading modpack! Download server may be down or AutoModpack is wrongly configured!");
-                    System.out.println("Error downloading modpack! Download server may be down or AutoModpack is wrongly configured!");
-                    System.out.println("Error downloading modpack! Download server may be down or AutoModpack is wrongly configured!");
-                    System.out.println("Error downloading modpack! Download server may be down or AutoModpack is wrongly configured!");
-                    Error = true;
+                    Error();
                     ex.printStackTrace();
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
                 throw new RuntimeException(e);
             }
+        }
 
-            // new Thread() in another Thread() doesn't work so well, so we use this
+        // new Thread() in another Thread() doesn't work so well, so we use this
+        // Repeat this function every restart if modpack is up-to-date
+        if (!Error) {
 
-            if (!Error) {
+            // unzip
+            Thread.currentThread().setName("AutoModpack - UnZip");
+            Thread.currentThread().setPriority(10);
 
-                // unzip
-                Thread.currentThread().setName("AutoModpack - UnZip");
-                Thread.currentThread().setPriority(10);
+            // Start unzip
+            System.out.println("AutoModpack -- Unzipping!");
 
-                // Start unzip
-                System.out.println("AutoModpack -- Unzipping!");
+            try {
+                new ZipFile(out).extractAll("./");
+            } catch (ZipException e) {
+                e.printStackTrace();
+                throw new RuntimeException(e);
+            }
 
+            System.out.println("AutoModpack -- Successfully unzipped!");
+
+            // delete old mods
+            Thread.currentThread().setName("AutoModpack - DeleteOldMods");
+            Thread.currentThread().setPriority(10);
+
+            System.out.println("AutoModpack -- Deleting old mods");
+
+            // Add old mods by txt file to delmods folder/list
+            File oldModsTxt = new File("./delmods.txt");
+            if (oldModsTxt.exists()) {
                 try {
-                    new ZipFile(out).extractAll("./");
-                } catch (ZipException e) {
-                    e.printStackTrace();
-                    throw new RuntimeException(e);
-                }
+                    FileReader fr = new FileReader(oldModsTxt);
+                    Scanner inFile = new Scanner(fr);
 
+                    String line;
 
-                System.out.println("AutoModpack -- Successfully unzipped!");
+                    // Read the first line from the file.
+                    line = inFile.nextLine();
 
-                // delete old mods
-
-                Thread.currentThread().setName("AutoModpack - DeleteOldMods");
-                Thread.currentThread().setPriority(10);
-
-                System.out.println("AutoModpack -- Deleting old mods");
-
-                File oldMods = new File("./delmods/");
-                String[] oldModsList = oldMods.list();
-                if (oldMods.exists()) {
-                    for (String name : oldModsList) {
-                        System.out.println("AutoModpack -- Deleting: " + name);
+                    while (inFile.hasNextLine()) {
                         try {
-                            Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
-                            FileUtils.forceDelete(new File("./mods/" + name));
-                            System.out.println("AutoModpack -- Successfully deleted: " + name);
+                            Files.createFile(new File( "./delmods/" + line).toPath());
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
+                        line = inFile.nextLine();
                     }
 
-                    try {
-                        FileUtils.forceDelete(oldMods);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+                    // Close the file.
+                    inFile.close();
 
+                } catch (FileNotFoundException e) {
+                    throw new RuntimeException(e);
                 }
 
-                System.out.println("AutoModpack -- Here you are!");
-
-////              Delete unless zip
-//                System.out.println("AutoModpack -- Deliting temporary files!");
-//                try {
-//                    FileUtils.delete(new File("./AutoModpack/AutoModpack.zip"));
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
+                try {
+                    FileUtils.forceDelete(oldModsTxt);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
             }
+
+            // Delete old mods by deleting the folder
+            File oldMods = new File("./delmods/");
+            String[] oldModsList = oldMods.list();
+            if (oldMods.exists()) {
+                assert oldModsList != null;
+                for (String name : oldModsList) {
+                    System.out.println("AutoModpack -- Deleting: " + name);
+                    try {
+                        Files.copy(oldMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        FileUtils.forceDelete(new File("./mods/" + name));
+                        System.out.println("AutoModpack -- Successfully deleted: " + name);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                try {
+                    FileUtils.forceDelete(oldMods);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+
+
+            System.out.println("AutoModpack -- Here you are!");
         }
     }
+
+    private void Error() {
+        System.out.println("Error! Download server may be down or AutoModpack is wrongly configured!");
+        System.out.println("Error! Download server may be down or AutoModpack is wrongly configured!");
+        System.out.println("Error! Download server may be down or AutoModpack is wrongly configured!");
+        System.out.println("Error! Download server may be down or AutoModpack is wrongly configured!");
+        System.out.println("Error! Download server may be down or AutoModpack is wrongly configured!");
+        Error = true;
+    }
+
 
     // GITHUB COPILOT, I LOVE YOU!!!
     private String webfileSize(String link) {
