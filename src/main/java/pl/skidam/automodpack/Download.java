@@ -186,10 +186,9 @@ public class Download implements Runnable {
                         line = inFile.nextLine();
 
                         while (inFile.hasNextLine()) {
-                            try {
-                                Files.createFile(new File("./delmods/" + line).toPath());
-                            } catch (IOException e) {
-                                e.printStackTrace();
+                            File DelMod = new File("./delmods/" + line);
+                            if (!DelMod.exists()) {
+                                DelMod.mkdir();
                             }
                             line = inFile.nextLine();
                         }
