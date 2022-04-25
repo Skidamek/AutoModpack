@@ -72,10 +72,15 @@ public class SelfUpdater implements Runnable {
             if (!oldAM.exists()) {
                 oldAM.mkdir();
             }
-            try {
-                Files.copy(selfOut.toPath(), new File("./AutoModpack/OldAutoModpack/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+            File selfOutFile = new File("./mods/AutoModpack.jar");
+            if (selfOutFile.exists()) {
+                try {
+                    Files.copy(selfOut.toPath(), new File("./AutoModpack/OldAutoModpack/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            } else {
+                System.out.println("LoL how did you get here? You should have the AutoModpack.jar in your mods folder.");
             }
 
 
