@@ -3,6 +3,7 @@ package pl.skidam.automodpack;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import pl.skidam.automodpack.Modpack.Modpack;
 
 import java.io.File;
 import java.net.HttpURLConnection;
@@ -58,7 +59,7 @@ public class AutoModpack implements ModInitializer {
 
         String link = "http://130.61.177.253/download/modpack.zip";
         File out = new File("./AutoModpack/modpack.zip");
-        new Thread(new Download(link, out)).start();
+        new Thread(new Modpack(link, out)).start();
 
 
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server
