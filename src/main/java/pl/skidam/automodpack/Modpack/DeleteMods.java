@@ -4,18 +4,14 @@ import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.Finished;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+import java.util.Date;
 import java.util.Scanner;
 
 public class DeleteMods {
 
-    boolean AllDone = false;
-    boolean DelModsTxtDone = false;
     public DeleteMods() {
 
         Thread.currentThread().setName("AutoModpack - DeleteOldMods");
@@ -23,13 +19,6 @@ public class DeleteMods {
 
         DelModsTxt();
 
-        while (DelModsTxtDone != false) {
-            DelMods();
-        }
-
-        while (AllDone != false) {
-            new Finished();
-        }
     }
 
     public void DelModsTxt() {
@@ -67,7 +56,7 @@ public class DeleteMods {
             }
         }
 
-        DelModsTxtDone = true;
+        DelMods();
     }
 
     public void DelMods() {
@@ -82,18 +71,18 @@ public class DeleteMods {
                 if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
                     System.out.println("AutoModpack -- Deleting: " + name);
 
-                    try {
-                        Files.copy(delMods.toPath(), new File("./mods/" + name).toPath(), StandardCopyOption.REPLACE_EXISTING);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+                    //Create some files here
+                    File sourceFile = new File(delMods.getPath() + "/" + name);
+                    File fileToCopy = new File("./mods/" + name);
 
                     try {
+                        FileUtils.writeStringToFile(sourceFile, "Deleted by AutoModpack on " + new Date() + " ~Skidam");
+                        FileUtils.copyFile(sourceFile, fileToCopy);
+                        FileUtils.deleteQuietly(sourceFile);
                         FileDeleteStrategy.FORCE.delete(oldMod);
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
-
 
                     System.out.println("AutoModpack -- Successfully deleted: " + name);
                 }
@@ -108,6 +97,6 @@ public class DeleteMods {
             }
         }
 
-        AllDone = true;
+        new Finished();
     }
 }

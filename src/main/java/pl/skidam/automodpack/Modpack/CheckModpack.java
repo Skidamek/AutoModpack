@@ -57,7 +57,7 @@ public class CheckModpack {
                 // Close the file.
                 inFile.close();
 
-            } catch (FileNotFoundException e) {
+            } catch (IOException e) {
                 throw new RuntimeException(e);
             }
 //        } else if (!Modpack.exists()) {
