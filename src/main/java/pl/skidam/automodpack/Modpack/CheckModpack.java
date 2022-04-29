@@ -23,6 +23,7 @@ public class CheckModpack {
         // if latest modpack is not same as current modpack download new mods.
         // Check how big the Modpack file is
         File ModpackCheck = new File("./AutoModpack/ModpackVersionCheck.txt");
+        File Modpack = new File("./AutoModpack/modpack.zip");
         if (ModpackCheck.exists()) {
             System.out.println("Checking if modpack is up to date...");
             try {
@@ -44,9 +45,13 @@ public class CheckModpack {
                     new Error();
                     Error = true;
                 } else {
-                    System.out.println("Didn't found any updates for modpack!");
-                    LatestVersion = true;
-                    new UnZip(out, Error);
+                    if (Modpack.exists()) {
+                        System.out.println("Didn't found any updates for modpack!");
+                        LatestVersion = true;
+                        new UnZip(out, Error);
+                    } else {
+                        new DownloadModpack(link, out);
+                    }
                 }
 
                 // Close the file.
@@ -55,6 +60,8 @@ public class CheckModpack {
             } catch (FileNotFoundException e) {
                 throw new RuntimeException(e);
             }
+//        } else if (!Modpack.exists()) {
+//            new DownloadModpack(link, out);
         } else {
             System.out.println("Downloading new mods!");
             new DownloadModpack(link, out);

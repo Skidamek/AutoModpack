@@ -8,14 +8,6 @@ import java.nio.file.StandardCopyOption;
 public class OldConvertToNew implements Runnable {
     @Override
     public void run() {
-        File AMzip = new File("./mods/downloads/AutoModpack.zip");
-        if (AMzip.exists()) {
-            AMzip.renameTo(new File("./mods/downloads/modpack.zip"));
-        }
-        File AMjar = new File("./mods/downloads/OldAutoModpack/OldAutoModpack.jar");
-        if (AMjar.exists()) {
-            AMzip.renameTo(new File("./mods/downloads/OldAutoModpack/AutoModpack.jar"));
-        }
 
         File AMdir = new File("./mods/downloads");
         if (AMdir.exists()) {
@@ -24,6 +16,20 @@ public class OldConvertToNew implements Runnable {
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
+        }
+
+        File AMzip = new File("./mods/downloads/AutoModpack.zip");
+        if (AMzip.exists()) {
+            AMzip.renameTo(new File("./AutoModpack/modpack.zip"));
+        }
+        File AMdowjar = new File("./mods/downloads/OldAutoModpack/OldAutoModpack.jar");
+        if (AMdowjar.exists()) {
+            AMzip.renameTo(new File("./AutoModpack/OldAutoModpack/AutoModpack.jar"));
+        }
+
+        File AMjar = new File("./AutoModpack/OldAutoModpack/OldAutoModpack.jar");
+        if (AMjar.exists()) {
+            AMzip.renameTo(new File("./AutoModpack/OldAutoModpack/AutoModpack.jar"));
         }
 
         try {
