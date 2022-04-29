@@ -10,26 +10,43 @@ public class OldConvertToNew implements Runnable {
     public void run() {
 
         File AMdir = new File("./mods/downloads");
+        File AMdirOut = new File("./AutoModpack/");
         if (AMdir.exists()) {
             try {
-                Files.move(AMdir.toPath(), new File("./AutoModpack/" ).toPath(), StandardCopyOption.REPLACE_EXISTING);
+                Files.move(AMdir.toPath(), AMdirOut.toPath(), StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
         }
 
         File AMzip = new File("./mods/downloads/AutoModpack.zip");
+        File AMzipOut = new File("./AutoModpack/modpack.zip");
         if (AMzip.exists()) {
-            AMzip.renameTo(new File("./AutoModpack/modpack.zip"));
+            try {
+                Files.move(AMzip.toPath(), AMzipOut.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
+
         File AMdowjar = new File("./mods/downloads/OldAutoModpack/OldAutoModpack.jar");
+        File AMdowOut = new File("./AutoModpack/OldAutoModpack/AutoModpack.jar");
         if (AMdowjar.exists()) {
-            AMzip.renameTo(new File("./AutoModpack/OldAutoModpack/AutoModpack.jar"));
+            try {
+                Files.move(AMdowjar.toPath(), AMdowOut.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         File AMjar = new File("./AutoModpack/OldAutoModpack/OldAutoModpack.jar");
+        File AMjarOut = new File("./AutoModpack/OldAutoModpack/AutoModpack.jar");
         if (AMjar.exists()) {
-            AMzip.renameTo(new File("./AutoModpack/OldAutoModpack/AutoModpack.jar"));
+            try {
+                Files.move(AMjar.toPath(), AMjarOut.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         try {
