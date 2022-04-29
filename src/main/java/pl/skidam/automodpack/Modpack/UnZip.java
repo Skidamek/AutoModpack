@@ -36,11 +36,9 @@ public class UnZip {
 
                 System.out.println("AutoModpack -- Successfully unzipped!");
 
+                // delete old mods
+                new DeleteMods();
             }
-
-            // delete old mods
-            new DeleteMods();
-
         }
     }
 }
