@@ -19,6 +19,8 @@ public class DeleteMods {
 
         DelModsTxt();
 
+        //TODO make it better
+
     }
 
     public void DelModsTxt() {

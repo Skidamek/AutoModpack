@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.skidam.automodpack.Modpack.Modpack;
 
+
 import java.io.File;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -52,18 +53,12 @@ public class AutoModpack implements ModInitializer {
 
         // TODO add buttons in the GUI to download the mods or update the mods or check for updates
 
-        String selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";
-        File selfOut = new File( "./mods/AutoModpack.jar");
-        new Thread(new SelfUpdater(selfLink, selfOut)).start();
 
+        new Start();
 
-        String link = "http://130.61.177.253/download/modpack.zip";
-        File out = new File("./AutoModpack/modpack.zip");
-        new Thread(new Modpack(link, out)).start();
 
 
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server
-
 
     }
 }

@@ -6,7 +6,7 @@
   "mixins": [
   ],
   "client": [
-    "pl.skidam.automodpack.mixin.ExampleMixin"
+    "TitleScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

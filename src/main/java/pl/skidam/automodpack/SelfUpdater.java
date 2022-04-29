@@ -16,9 +16,9 @@ public class SelfUpdater implements Runnable {
     String selfLink;
     File selfOut;
 
-    public SelfUpdater(String selfLink, File selfOut) {
-        this.selfLink = selfLink;
-        this.selfOut = selfOut;
+    public SelfUpdater() {
+        this.selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";;
+        this.selfOut = new File( "./mods/AutoModpack.jar");;
     }
 
     boolean LatestVersion = false;
@@ -82,10 +82,6 @@ public class SelfUpdater implements Runnable {
             } else {
                 System.out.println("LoL how did you get here? You should have the AutoModpack.jar in your mods folder.");
             }
-
-
-            // delay for 5 seconds
-            wait(5000);
 
             try {
                 URL url = new URL(selfLink);
@@ -159,17 +155,4 @@ public class SelfUpdater implements Runnable {
             e.printStackTrace();
         }
     }
-
-    public static void wait(int ms)
-    {
-        try
-        {
-            Thread.sleep(ms);
-        }
-        catch(InterruptedException ex)
-        {
-            Thread.currentThread().interrupt();
-        }
-    }
-
 }

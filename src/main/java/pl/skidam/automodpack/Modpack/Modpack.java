@@ -7,30 +7,15 @@ public class Modpack implements Runnable {
     String link;
     File out;
 
-    public Modpack(String link, File out) {
-        this.link = link;
-        this.out = out;
+    public Modpack() {
+        this.link = "http://130.61.177.253/download/modpack.zip";
+        this.out = new File("./AutoModpack/modpack.zip");
     }
 
     @Override
     public void run() {
 
-        // delay for 5 seconds
-        wait(5000);
-
         new CheckModpack(link, out);
 
-    }
-
-    public static void wait(int ms)
-    {
-        try
-        {
-            Thread.sleep(ms);
-        }
-        catch(InterruptedException ex)
-        {
-            Thread.currentThread().interrupt();
-        }
     }
 }
