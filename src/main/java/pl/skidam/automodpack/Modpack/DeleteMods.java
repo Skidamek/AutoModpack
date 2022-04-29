@@ -10,14 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Scanner;
 
-public class DeleteMods implements Runnable{
-
+public class DeleteMods {
     public DeleteMods() {
-    }
-
-    @Override
-    public void run() {
-
 
         Thread.currentThread().setName("AutoModpack - DeleteOldMods");
         Thread.currentThread().setPriority(10);

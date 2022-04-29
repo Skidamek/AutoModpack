@@ -8,7 +8,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Objects;
 
-public class DownloadModpack implements Runnable {
+public class DownloadModpack {
 
     String link;
     File out;
@@ -16,16 +16,14 @@ public class DownloadModpack implements Runnable {
     public DownloadModpack(String link, File out) {
         this.link = link;
         this.out = out;
-    }
 
-    boolean Error = false;
+        boolean Error = false;
 
-    @Override
-    public void run() {
         //If the file don't exist, skip the check and download the Modpack
 
         Thread.currentThread().setName("AutoModpack - Downloader");
         Thread.currentThread().setPriority(10);
+        System.out.println("Downloading Modpack...");
 
         try {
             URL url = new URL(link);

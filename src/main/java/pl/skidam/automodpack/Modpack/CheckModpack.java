@@ -5,7 +5,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.util.Scanner;
 
-public class CheckModpack implements Runnable {
+public class CheckModpack {
 
     String link;
     File out;
@@ -13,14 +13,9 @@ public class CheckModpack implements Runnable {
     public CheckModpack(String link, File out) {
         this.link = link;
         this.out = out;
-    }
 
-    boolean Error = false;
-    boolean LatestVersion = false;
-
-    @Override
-    public void run() {
-
+        boolean Error = false;
+        boolean LatestVersion = false;
 
         Thread.currentThread().setName("AutoModpack - ModpackVersionCheck");
         Thread.currentThread().setPriority(10);
@@ -61,6 +56,7 @@ public class CheckModpack implements Runnable {
                 throw new RuntimeException(e);
             }
         } else {
+            System.out.println("Downloading new mods!");
             new DownloadModpack(link, out);
         }
     }

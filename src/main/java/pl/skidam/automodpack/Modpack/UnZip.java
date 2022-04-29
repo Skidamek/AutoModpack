@@ -5,7 +5,7 @@ import net.lingala.zip4j.exception.ZipException;
 
 import java.io.File;
 
-public class UnZip implements Runnable {
+public class UnZip {
 
     File out;
     boolean Error;
@@ -13,10 +13,6 @@ public class UnZip implements Runnable {
     public UnZip(File out, boolean Error) {
         this.out = out;
         this.Error = Error;
-    }
-
-    @Override
-    public void run() {
 
         // Repeat this function every restart if modpack is up-to-date
 
