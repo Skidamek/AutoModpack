@@ -87,5 +87,10 @@ public class DeleteMods {
                 throw new RuntimeException(e);
             }
         }
+
+        Thread.currentThread().setName("AutoModpack");
+        Thread.currentThread().setPriority(10);
+
+        System.out.println("AutoModpack -- Here you are!");
     }
 }

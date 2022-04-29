@@ -36,14 +36,11 @@ public class UnZip {
 
                 System.out.println("AutoModpack -- Successfully unzipped!");
 
-                // delete old mods
-                new DeleteMods();
             }
 
-            Thread.currentThread().setName("AutoModpack");
-            Thread.currentThread().setPriority(10);
+            // delete old mods
+            new DeleteMods();
 
-            System.out.println("AutoModpack -- Here you are!");
         }
     }
 }
