@@ -29,10 +29,15 @@ public class DeleteMods {
         File delModsTxt = new File("./delmods.txt");
         if (delModsTxt.exists()) {
             try {
-                FileReader fr = new FileReader(delModsTxt);
-                Scanner inFile = new Scanner(fr);
-
                 if (delModsTxt.length() != 0) {
+
+                    File delModsFile = new File("./delmods/");
+                    if (!delModsFile.exists()) {
+                        delModsFile.mkdir();
+                    }
+
+                    FileReader fr = new FileReader(delModsTxt);
+                    Scanner inFile = new Scanner(fr);
 
                     while (inFile.hasNextLine()) {
                         // Read the first line from the file.
@@ -41,24 +46,24 @@ public class DeleteMods {
                         File DelMod = new File("./delmods/" + line);
                         if (!DelMod.exists()) {
                             DelMod.createNewFile();
-                        }
+}
                     }
+                    // Close the file.
+                    inFile.close();
                 }
-                // Close the file.
-                inFile.close();
 
             } catch (IOException e) {
                 System.out.println("Error while reading delmods.txt");
             }
 
             try {
-                FileDeleteStrategy.FORCE.delete(delModsTxt);
+                FileUtils.writeStringToFile(delModsTxt, "");
+                FileUtils.deleteQuietly(delModsTxt);
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
+            DelMods();
         }
-
-        DelMods();
     }
 
     public void DelMods() {

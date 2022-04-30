@@ -15,8 +15,10 @@ public class SelfUpdater implements Runnable {
 
     String selfLink;
     File selfOut;
+    int delay;
 
-    public SelfUpdater() {
+    public SelfUpdater(int delay) {
+        this.delay = delay;
         this.selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";;
         this.selfOut = new File( "./mods/AutoModpack.jar");;
     }
@@ -25,6 +27,8 @@ public class SelfUpdater implements Runnable {
 
     @Override
     public void run() {
+
+        wait(delay);
 
         Thread.currentThread().setName("AutoModpack - SelfUpdaterVersionCheck");
         Thread.currentThread().setPriority(10);
@@ -153,6 +157,17 @@ public class SelfUpdater implements Runnable {
             writer.flush();
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private static void wait(int ms) {
+        try
+        {
+            Thread.sleep(ms);
+        }
+        catch(InterruptedException ex)
+        {
+            Thread.currentThread().interrupt();
         }
     }
 }
