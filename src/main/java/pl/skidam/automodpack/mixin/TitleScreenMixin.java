@@ -26,7 +26,8 @@ public abstract class TitleScreenMixin extends Screen {
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 205, y, 100, 20, Button, (button) -> {
             new Thread(new Modpack(0)).start();
             new Thread(new SelfUpdater(0)).start();
-            Button = Text.of("Checking...");
+//            Button = Text.of("Checking...");
+//            napis taktyczny
         }));
     }
 }
