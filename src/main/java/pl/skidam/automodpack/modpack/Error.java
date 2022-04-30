@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.Modpack;
+package pl.skidam.automodpack.modpack;
 
 public class Error {
 

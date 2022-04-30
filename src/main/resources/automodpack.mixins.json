@@ -6,7 +6,7 @@
   "mixins": [
   ],
   "client": [
-    "TitleScreenMixin"
+    "UpdateButtonMixin"
   ],
   "injectors": {
     "defaultRequire": 1

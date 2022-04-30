@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.Modpack;
+package pl.skidam.automodpack.modpack;
 
 import java.io.*;
 import java.net.HttpURLConnection;

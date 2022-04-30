@@ -1,10 +1,10 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.api.ModInitializer;
+import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import pl.skidam.automodpack.Modpack.Modpack;
-
+import pl.skidam.automodpack.modpack.Modpack;
 
 import java.io.File;
 import java.net.HttpURLConnection;
@@ -13,6 +13,8 @@ import java.net.URL;
 public class AutoModpack implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
+
+    public static final Identifier TEXTURE = new Identifier("automodpack", "textures/gui/icon.png");
 
     @Override
     public void onInitialize() {

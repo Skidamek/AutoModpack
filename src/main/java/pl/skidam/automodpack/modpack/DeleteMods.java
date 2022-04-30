@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.Modpack;
+package pl.skidam.automodpack.modpack;
 
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
