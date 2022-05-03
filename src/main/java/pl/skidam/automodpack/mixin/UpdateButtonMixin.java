@@ -9,7 +9,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.SelfUpdater;
+import pl.skidam.automodpack.ToastExecutor;
 import pl.skidam.automodpack.modpack.Modpack;
+
 
 @Mixin(TitleScreen.class)
 
@@ -27,6 +29,8 @@ public abstract class UpdateButtonMixin extends Screen {
             new Thread(new SelfUpdater(0)).start();
 //            Button = Text.of("Checking...");
 //            napis taktyczny
+            new ToastExecutor();
         }));
     }
+
 }
