@@ -29,7 +29,7 @@ public abstract class UpdateButtonMixin extends Screen {
             new Thread(new SelfUpdater(0)).start();
 //            Button = Text.of("Checking...");
 //            napis taktyczny
-            new ToastExecutor();
+            new ToastExecutor(0);
         }));
     }
 
