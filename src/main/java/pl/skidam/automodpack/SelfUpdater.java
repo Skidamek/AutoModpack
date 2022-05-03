@@ -52,8 +52,10 @@ public class SelfUpdater implements Runnable {
 
                 if (currentSize != latestSize) {
                     System.out.println("Update found! Updating!");
+                    new ToastExecutor(2);
                 } else {
                     System.out.println("Didn't found any updates for AutoModpack!");
+                    new ToastExecutor(4);
                     LatestVersion = true;
                 }
 

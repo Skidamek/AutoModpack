@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.modpack;
 
+import pl.skidam.automodpack.ToastExecutor;
+
 import java.io.*;
 import java.net.URL;
 import java.net.URLConnection;
@@ -40,6 +42,7 @@ public class CheckModpack {
 
                 if (currentSize != latestSize) {
                     System.out.println("Update found! Downloading new mods!");
+                    new ToastExecutor(1);
                     new DownloadModpack(link, out);
                 } else if (latestSize == 0) {
                     new Error();
@@ -47,6 +50,7 @@ public class CheckModpack {
                 } else {
                     if (Modpack.exists()) {
                         System.out.println("Didn't found any updates for modpack!");
+                        new ToastExecutor(3);
                         LatestVersion = true;
                         new UnZip(out, Error);
                     } else {
