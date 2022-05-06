@@ -14,7 +14,6 @@ import pl.skidam.automodpack.modpack.Modpack;
 
 
 @Mixin(TitleScreen.class)
-
 public abstract class UpdateButtonMixin extends Screen {
 
     protected UpdateButtonMixin(Text title) {
@@ -27,10 +26,7 @@ public abstract class UpdateButtonMixin extends Screen {
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y, 100, 20, Button, (button) -> {
             new Thread(new Modpack(0)).start();
             new Thread(new SelfUpdater(0)).start();
-//            Button = Text.of("Checking...");
-//            napis taktyczny
             new ToastExecutor(0);
         }));
     }
-
 }

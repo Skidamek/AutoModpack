@@ -5,7 +5,6 @@ import pl.skidam.automodpack.ToastExecutor;
 import java.io.*;
 import java.net.URL;
 import java.net.URLConnection;
-import java.util.Scanner;
 
 public class CheckModpack {
 
@@ -24,46 +23,31 @@ public class CheckModpack {
 
         // if latest modpack is not same as current modpack download new mods.
         // Check how big the Modpack file is
-        File ModpackCheck = new File("./AutoModpack/ModpackVersionCheck.txt");
         File Modpack = new File("./AutoModpack/modpack.zip");
-        if (ModpackCheck.exists()) {
+        if (Modpack.exists()) {
             System.out.println("Checking if modpack is up to date...");
-            try {
-                FileReader fr = new FileReader(ModpackCheck);
-                Scanner inFile = new Scanner(fr);
 
-                String line;
+            long currentSize = Modpack.length();
+            long latestSize = Long.parseLong(webfileSize());
 
-                // Read the first line from the file.
-                line = inFile.nextLine();
-
-                long currentSize = Long.parseLong(line);
-                long latestSize = Long.parseLong(webfileSize(link));
-
-                if (currentSize != latestSize) {
-                    System.out.println("Update found! Downloading new mods!");
-                    new ToastExecutor(1);
-                    new DownloadModpack(link, out);
-                } else if (latestSize == 0) {
-                    new Error();
-                    Error = true;
+            if (currentSize != latestSize) {
+                System.out.println("Update found! Downloading new mods!");
+                new ToastExecutor(1);
+                new DownloadModpack(link, out);
+            } else if (latestSize == 0) {
+                new Error();
+                Error = true;
+            } else {
+                if (Modpack.exists()) {
+                    System.out.println("Didn't found any updates for modpack!");
+                    new ToastExecutor(3);
+                    LatestVersion = true;
+                    new UnZip(out, Error);
                 } else {
-                    if (Modpack.exists()) {
-                        System.out.println("Didn't found any updates for modpack!");
-                        new ToastExecutor(3);
-                        LatestVersion = true;
-                        new UnZip(out, Error);
-                    } else {
-                        new DownloadModpack(link, out);
-                    }
+                    new DownloadModpack(link, out);
                 }
-
-                // Close the file.
-                inFile.close();
-
-            } catch (IOException e) {
-                throw new RuntimeException(e);
             }
+
 //        } else if (!Modpack.exists()) {
 //            new DownloadModpack(link, out);
         } else {
@@ -74,7 +58,7 @@ public class CheckModpack {
 
 
     // GITHUB COPILOT, I LOVE YOU!!!
-    public String webfileSize(String link) {
+    public String webfileSize() {
         String size = "";
         try {
             URL url = new URL(link);

@@ -7,7 +7,6 @@ import pl.skidam.automodpack.Finished;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.Date;
 import java.util.Scanner;
 
 public class DeleteMods {
@@ -48,20 +47,21 @@ public class DeleteMods {
                             DelMod.createNewFile();
 }
                     }
-                    // Close the file.
+                    // Close the file
                     inFile.close();
+
+                    // Delete the file
+                    try {
+                        FileDeleteStrategy.FORCE.delete(delModsTxt);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
 
             } catch (IOException e) {
                 System.out.println("Error while reading delmods.txt");
             }
 
-            try {
-                FileUtils.writeStringToFile(delModsTxt, "");
-                FileUtils.deleteQuietly(delModsTxt);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
             DelMods();
         }
     }
@@ -77,15 +77,14 @@ public class DeleteMods {
                 File oldMod = new File("./mods/" + name);
                 if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
                     System.out.println("AutoModpack -- Deleting: " + name);
-
-                    //Create some files here
-                    File sourceFile = new File(delMods.getPath() + "/" + name);
-                    File fileToCopy = new File("./mods/" + name);
-
                     try {
-                        FileUtils.writeStringToFile(sourceFile, "Deleted by AutoModpack on " + new Date() + " ~Skidam");
-                        FileUtils.copyFile(sourceFile, fileToCopy);
-                        FileUtils.deleteQuietly(sourceFile);
+                        FileReader fr = new FileReader(oldMod);
+                        Scanner inFile = new Scanner(fr);
+
+                        // Unload mod from modloader to delete it
+
+                        inFile.close();
+
                         FileDeleteStrategy.FORCE.delete(oldMod);
                     } catch (IOException e) {
                         throw new RuntimeException(e);

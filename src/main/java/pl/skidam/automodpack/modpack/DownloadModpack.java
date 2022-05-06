@@ -3,9 +3,6 @@ package pl.skidam.automodpack.modpack;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Objects;
 
 public class DownloadModpack {
@@ -58,10 +55,6 @@ public class DownloadModpack {
             in.close();
             System.out.println("Successfully downloaded modpack!");
 
-            // Write the Modpack file size to a file
-            String ModpackZip = (out.toPath().toString());
-            printFileSizeNIO(ModpackZip);
-
         } catch (IOException ex) {
             new Error();
             Error = true;
@@ -69,18 +62,5 @@ public class DownloadModpack {
         }
 
         new UnZip(out, Error);
-    }
-
-
-    private void printFileSizeNIO(String ModpackZip) {
-        Path path = Paths.get(ModpackZip);
-
-        try (FileWriter writer = new FileWriter("./AutoModpack/ModpackVersionCheck.txt")) {
-            long bytes = Files.size(path);
-            writer.write(String.format("%d", bytes));
-            writer.flush();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 }

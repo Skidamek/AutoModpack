@@ -1,27 +1,23 @@
 package pl.skidam.automodpack;
 
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLConnection;
+import java.net.*;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
-import java.util.Scanner;
 
 public class SelfUpdater implements Runnable {
 
-    String selfLink;
-    File selfOut;
+    String selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";
+    File selfOut = new File( "./mods/AutoModpack.jar");
     int delay;
 
     public SelfUpdater(int delay) {
         this.delay = delay;
-        this.selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";;
-        this.selfOut = new File( "./mods/AutoModpack.jar");;
     }
+
+    File selfBackup = new File("./AutoModpack/AutoModpack.jar");
+    File oldAutoModpack = new File("./AutoModpack/OldAutoModpack/AutoModpack.jar");
 
     boolean LatestVersion = false;
 
@@ -35,40 +31,24 @@ public class SelfUpdater implements Runnable {
 
         // if latest mod is not same as current mod download new mod.
         // Check how big the mod file is
-        File SelfUpdaterCheck = new File("./AutoModpack/SelfUpdaterVersionCheck.txt");
-        if (SelfUpdaterCheck.exists()) {
+        if (selfBackup.exists()) {
             System.out.println("Checking if AutoModpack is up to date...");
-            try {
-                FileReader fr = new FileReader(SelfUpdaterCheck);
-                Scanner inFile = new Scanner(fr);
 
-                String line;
+            long currentSize = selfBackup.length();
+            long latestSize = Long.parseLong(webfileSize());
 
-                // Read the first line from the file.
-                line = inFile.nextLine();
-
-                long currentSize = Long.parseLong(line);
-                long latestSize = Long.parseLong(webfileSize(selfLink));
-
-                if (currentSize != latestSize) {
-                    System.out.println("Update found! Updating!");
-                    new ToastExecutor(2);
-                } else {
-                    System.out.println("Didn't found any updates for AutoModpack!");
-                    new ToastExecutor(4);
-                    LatestVersion = true;
-                }
-
-                // Close the file.
-                inFile.close();
-
-            } catch (Exception e) {
-                e.printStackTrace();
+            if (currentSize != latestSize) {
+                System.out.println("Update found! Updating!");
+                new ToastExecutor(2);
+            } else {
+                System.out.println("Didn't found any updates for AutoModpack!");
+                new ToastExecutor(4);
+                LatestVersion = true;
             }
         }
 
 
-        if (!LatestVersion || !SelfUpdaterCheck.exists()) {
+        if (!LatestVersion || !selfBackup.exists()) {
 
             Thread.currentThread().setName("AutoModpack - SelfUpdater");
             Thread.currentThread().setPriority(10);
@@ -81,7 +61,7 @@ public class SelfUpdater implements Runnable {
             File selfOutFile = new File("./mods/AutoModpack.jar");
             if (selfOutFile.exists()) {
                 try {
-                    Files.copy(selfOut.toPath(), new File("./AutoModpack/OldAutoModpack/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
+                    Files.copy(selfOut.toPath(), oldAutoModpack.toPath(), StandardCopyOption.REPLACE_EXISTING);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -122,13 +102,9 @@ public class SelfUpdater implements Runnable {
                 bout.close();
                 in.close();
 
-                Files.copy(selfOut.toPath(), new File("./AutoModpack/AutoModpack.jar").toPath(), StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
                 System.out.println("Successfully self updated!");
-
-                // Write the AutoModpack file size to a file
-                String AutoModpack = (selfOut.toPath().toString());
-                printFileSizeNIO(AutoModpack);
 
             } catch (IOException ex) {
                 System.out.println("Failed to update myself!");
@@ -137,29 +113,17 @@ public class SelfUpdater implements Runnable {
         }
     }
 
-    private String webfileSize(String selfLink) {
-        String size = "";
+    private String webfileSize() {
+        String webfileSize = "";
         try {
             URL url = new URL(selfLink);
             URLConnection conn = url.openConnection();
-            size = conn.getHeaderField("Content-Length");
+            webfileSize = conn.getHeaderField("Content-Length");
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        return size;
-    }
-
-    private void printFileSizeNIO(String AutoModpack) {
-        Path path = Paths.get(AutoModpack);
-
-        try (FileWriter writer = new FileWriter("./AutoModpack/SelfUpdaterVersionCheck.txt")) {
-            long bytes = Files.size(path);
-            writer.write(String.format("%d", bytes));
-            writer.flush();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        return webfileSize;
     }
 
     private static void wait(int ms) {

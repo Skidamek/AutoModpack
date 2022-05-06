@@ -31,7 +31,6 @@ public class UnZip {
                     new ZipFile(out).extractAll("./");
                 } catch (ZipException e) {
                     e.printStackTrace();
-                    throw new RuntimeException(e);
                 }
 
                 System.out.println("AutoModpack -- Successfully unzipped!");

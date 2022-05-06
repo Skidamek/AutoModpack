@@ -4,14 +4,12 @@ import java.io.*;
 
 public class Modpack implements Runnable {
 
-    String link;
-    File out;
+    String link = "http://130.61.177.253/download/modpack.zip";
+    File out = new File("./AutoModpack/modpack.zip");
     int delay;
 
     public Modpack(int delay) {
         this.delay = delay;
-        this.link = "http://130.61.177.253/download/modpack.zip";
-        this.out = new File("./AutoModpack/modpack.zip");
     }
 
     @Override

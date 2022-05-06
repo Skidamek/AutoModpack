@@ -54,5 +54,15 @@ public class OldConvertToNew implements Runnable {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+
+        File AMvercheck = new File("./AutoModpack/SelfUpdaterVersionCheck.txt");
+        File Mvercheck = new File("./AutoModpack/ModpackVersionCheck.txt");
+
+        try {
+            Files.deleteIfExists(AMvercheck.toPath());
+            Files.deleteIfExists(Mvercheck.toPath());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

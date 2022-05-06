@@ -16,6 +16,12 @@ public class ToastExecutor {
     // 6 == Error
 
     public ToastExecutor(int WhoAreYou) {
+
+        // If game still loading toast won't show
+        if (MinecraftClient.getInstance().currentScreen == null) {
+            return;
+        }
+
         SystemToast toast = null;
         if (WhoAreYou == 0) {
             toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.0"), new TranslatableText("gui.automodpack.toast.down.0"));
@@ -40,5 +46,6 @@ public class ToastExecutor {
         }
 
         MinecraftClient.getInstance().getToastManager().add(toast);
+
     }
 }
