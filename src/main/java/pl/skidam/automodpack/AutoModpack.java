@@ -52,8 +52,8 @@ public class AutoModpack implements ModInitializer {
             AutoModpackPath.mkdir();
         }
 
-        new Thread(new SelfUpdater(5000)).start();
-        new Thread(new Modpack(5000)).start();
+        new Thread(new SelfUpdater(10000)).start();
+        new Thread(new Modpack(10000)).start();
 
 
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server
