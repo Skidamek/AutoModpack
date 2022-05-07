@@ -52,7 +52,7 @@ public class AutoModpack implements ModInitializer {
             AutoModpackPath.mkdir();
         }
 
-        new Thread(new SelfUpdater(10000)).start();
+//        new Thread(new SelfUpdater(10000)).start();
         new Thread(new Modpack(10000)).start();
 
 

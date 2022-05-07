@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "automodpack",
-  "version": "1.5.1",
+  "version": "1.5.2",
 
   "name": "AutoModpack",
   "description": "Just automatic updating and downloading modpacks!",
@@ -21,6 +21,9 @@
   "entrypoints": {
     "main": [
       "pl.skidam.automodpack.AutoModpack"
+    ],
+    "preLaunch": [
+      "pl.skidam.automodpack.PreLaunch"
     ]
   },
   "mixins": [

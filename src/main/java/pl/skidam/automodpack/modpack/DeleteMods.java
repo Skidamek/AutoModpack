@@ -86,20 +86,11 @@ public class DeleteMods {
                         inFile.close();
 
                         FileDeleteStrategy.FORCE.delete(oldMod);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+                    } catch (IOException e) { // ignore it
                     }
 
                     System.out.println("AutoModpack -- Successfully deleted: " + name);
                 }
-            }
-        }
-
-        if (delMods.exists()) {
-            try {
-                FileUtils.forceDelete(delMods);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
             }
         }
 
