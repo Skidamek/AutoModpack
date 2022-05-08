@@ -1,6 +1,7 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.api.ModInitializer;
+import net.minecraft.client.MinecraftClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.skidam.automodpack.modpack.Modpack;
@@ -55,6 +56,7 @@ public class AutoModpack implements ModInitializer {
 //        new Thread(new SelfUpdater(10000)).start();
         new Thread(new Modpack(10000)).start();
 
+        // TODO make example mod by delmod
 
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server
 

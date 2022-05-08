@@ -1,15 +1,26 @@
-package pl.skidam.automodpack.modpack;
+package pl.skidam.automodpack.delmods;
 
+import net.lingala.zip4j.ZipFile;
+import net.lingala.zip4j.exception.ZipException;
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.skidam.automodpack.Finished;
 
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Scanner;
 
-public class DeleteMods {
+public class DeleteMods implements Runnable {
+
+    public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
 
     public DeleteMods() {
 
@@ -45,7 +56,7 @@ public class DeleteMods {
                         File DelMod = new File("./delmods/" + line);
                         if (!DelMod.exists()) {
                             DelMod.createNewFile();
-}
+                        }
                     }
                     // Close the file
                     inFile.close();
@@ -53,17 +64,16 @@ public class DeleteMods {
                     // Delete the file
                     try {
                         FileDeleteStrategy.FORCE.delete(delModsTxt);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+                    } catch (IOException e) { // ignore it
                     }
                 }
 
             } catch (IOException e) {
                 System.out.println("Error while reading delmods.txt");
+                DelMods();
             }
-
-            DelMods();
         }
+        DelMods();
     }
 
     public void DelMods() {
@@ -73,27 +83,47 @@ public class DeleteMods {
         String[] oldModsList = delMods.list();
         if (delMods.exists()) {
             assert oldModsList != null;
+            try {
+                new ZipFile("./AutoModpack/TrashMod.jar").extractAll("./AutoModpack/TrashMod/");
+            } catch (ZipException e) {
+                throw new RuntimeException(e);
+            }
             for (String name : oldModsList) {
                 File oldMod = new File("./mods/" + name);
                 if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
-                    System.out.println("AutoModpack -- Deleting: " + name);
+                    LOGGER.info("AutoModpack -- Deleting: " + name);
                     try {
-                        FileReader fr = new FileReader(oldMod);
-                        Scanner inFile = new Scanner(fr);
-
-                        // Unload mod from modloader to delete it
-
+                        Scanner inFile = new Scanner(new FileReader(oldMod));
                         inFile.close();
 
-                        FileDeleteStrategy.FORCE.delete(oldMod);
+                        new ZipFile(oldMod).extractAll("./" + name);
+
+                        for (File file : new File("./AutoModpack/delfiles/" + name).listFiles()) {
+                            new ZipFile(oldMod).removeFile(file.getAbsolutePath());
+                        }
+
+                        for (File TMfile : new File("./AutoModpack/TrashMod/").listFiles()) {
+                            if (TMfile.isFile()) {
+                                new ZipFile(oldMod).addFile(TMfile.getAbsolutePath());
+                            } else {
+                                new ZipFile(oldMod).addFolder(new File(TMfile.getAbsolutePath()));
+                            }
+                        }
+
                     } catch (IOException e) { // ignore it
+                        System.out.println(e.getMessage());
                     }
 
-                    System.out.println("AutoModpack -- Successfully deleted: " + name);
+                    LOGGER.info("AutoModpack -- Successfully deleted: " + name);
                 }
             }
         }
 
-        new Finished();
+//        new Finished();
+    }
+
+    @Override
+    public void run() {
+        new DeleteMods();
     }
 }

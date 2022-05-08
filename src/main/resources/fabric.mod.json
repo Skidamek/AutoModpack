@@ -23,7 +23,7 @@
       "pl.skidam.automodpack.AutoModpack"
     ],
     "preLaunch": [
-      "pl.skidam.automodpack.PreLaunch"
+      "pl.skidam.automodpack.delmods.PreLoadHook"
     ]
   },
   "mixins": [
