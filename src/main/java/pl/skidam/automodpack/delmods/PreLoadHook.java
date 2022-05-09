@@ -22,7 +22,7 @@ public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
             }
         }
 
-        new Thread(new DeleteMods()).start();
+        new Thread(new DeleteMods(true)).start();
 
     }
 }

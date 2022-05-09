@@ -53,11 +53,10 @@ public class AutoModpack implements ModInitializer {
             AutoModpackPath.mkdir();
         }
 
-//        new Thread(new SelfUpdater(10000)).start();
+        new Thread(new SelfUpdater(10000)).start();
         new Thread(new Modpack(10000)).start();
 
-        // TODO make example mod by delmod
-
+        // TODO clean up this trash code!!!!
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server
 
     }

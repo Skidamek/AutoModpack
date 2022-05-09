@@ -10,33 +10,40 @@ import pl.skidam.automodpack.Finished;
 
 import java.io.File;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.Scanner;
 
 public class DeleteMods implements Runnable {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
 
-    public DeleteMods() {
+    File delModsTxt = new File("./delmods.txt");
+    boolean preload;
+
+    public DeleteMods(boolean preload) {
 
         Thread.currentThread().setName("AutoModpack - DeleteOldMods");
         Thread.currentThread().setPriority(10);
 
+        if (preload) {
+            this.preload = true;
+            if (!delModsTxt.exists()) {
+                try {
+                    new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods.txt", "./");
+                    new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods", "./");
+                } catch (ZipException e) { // ignore it
+                }
+            }
+            //TODO make it better
+        }
+        this.preload = false;
+
         DelModsTxt();
-
-        //TODO make it better
-
     }
 
     public void DelModsTxt() {
 
         // Add old mods by txt file to delmods folder/list
-        File delModsTxt = new File("./delmods.txt");
         if (delModsTxt.exists()) {
             try {
                 if (delModsTxt.length() != 0) {
@@ -92,38 +99,63 @@ public class DeleteMods implements Runnable {
                 File oldMod = new File("./mods/" + name);
                 if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
                     LOGGER.info("AutoModpack -- Deleting: " + name);
+
                     try {
-                        Scanner inFile = new Scanner(new FileReader(oldMod));
-                        inFile.close();
-
-                        new ZipFile(oldMod).extractAll("./" + name);
-
-                        for (File file : new File("./AutoModpack/delfiles/" + name).listFiles()) {
-                            new ZipFile(oldMod).removeFile(file.getAbsolutePath());
-                        }
-
-                        for (File TMfile : new File("./AutoModpack/TrashMod/").listFiles()) {
-                            if (TMfile.isFile()) {
-                                new ZipFile(oldMod).addFile(TMfile.getAbsolutePath());
-                            } else {
-                                new ZipFile(oldMod).addFolder(new File(TMfile.getAbsolutePath()));
-                            }
-                        }
-
+                        FileDeleteStrategy.FORCE.delete(oldMod);
                     } catch (IOException e) { // ignore it
-                        System.out.println(e.getMessage());
+                    }
+
+                    if (oldMod.exists()) {
+
+                        try {
+                            Scanner inFile = new Scanner(new FileReader(oldMod));
+                            inFile.close();
+
+                            new ZipFile(oldMod).extractAll("./AutoModpack/delfiles/" + name);
+
+                            for (File file : new File("./AutoModpack/delfiles/" + name).listFiles()) {
+                                new ZipFile(oldMod).removeFile(file.getAbsolutePath());
+                            }
+
+                            for (File TMfile : new File("./AutoModpack/TrashMod/").listFiles()) {
+                                if (TMfile.isFile()) {
+                                    new ZipFile(oldMod).addFile(TMfile.getAbsolutePath());
+                                } else {
+                                    new ZipFile(oldMod).addFolder(new File(TMfile.getAbsolutePath()));
+                                }
+                            }
+
+                            // Delete mod file
+                            FileDeleteStrategy.FORCE.delete(oldMod);
+
+                        } catch (IOException e) { // ignore it
+                        }
                     }
 
                     LOGGER.info("AutoModpack -- Successfully deleted: " + name);
+
+                    // delete delfiles folder
+                    File delfiles = new File("./AutoModpack/delfiles/");
+                    if (delfiles.exists()) {
+                        try {
+                            FileUtils.deleteDirectory(new File(String.valueOf(delfiles)));
+                        } catch (IOException e) {
+                            System.out.println(e.getMessage());
+                        }
+                    }
+                    LOGGER.info("AutoModpack -- Finished deleting old mods");
                 }
             }
         }
 
-//        new Finished();
+        if (preload) {
+            new Finished();
+        }
+
     }
 
     @Override
     public void run() {
-        new DeleteMods();
+        new DeleteMods(true);
     }
 }

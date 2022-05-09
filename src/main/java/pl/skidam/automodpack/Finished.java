@@ -1,11 +1,15 @@
 package pl.skidam.automodpack;
 
 import org.apache.commons.io.FileDeleteStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 
 public class Finished {
+
+    public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
 
     public Finished() {
         Thread.currentThread().setName("AutoModpack");
@@ -17,7 +21,7 @@ public class Finished {
         } catch (IOException e) { // ignore it
         }
 
-        System.out.println("AutoModpack -- Here you are!");
+        LOGGER.info("AutoModpack -- Here you are!");
 
         new ToastExecutor(5);
     }
