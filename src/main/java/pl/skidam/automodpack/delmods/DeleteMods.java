@@ -10,6 +10,7 @@ import pl.skidam.automodpack.Finished;
 
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Scanner;
 
@@ -114,12 +115,32 @@ public class DeleteMods implements Runnable {
                             Scanner inFile = new Scanner(new FileReader(oldMod));
                             inFile.close();
 
-                            new ZipFile(oldMod).extractAll("./AutoModpack/delfiles/" + name);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
 
-                            for (File file : new File("./AutoModpack/delfiles/" + name).listFiles()) {
-                                new ZipFile(oldMod).removeFile(file.getAbsolutePath());
-                            }
+                        // write lol to oldmod
+                        try {
+                            FileWriter fw = new FileWriter(oldMod);
+                            fw.write("");
+                            fw.close();
+                            FileUtils.
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
 
+//                        try {
+//                            new ZipFile(oldMod).extractAll("./AutoModpack/delfiles/" + name);
+//
+//                            for (File file : new File("./AutoModpack/delfiles/" + name).listFiles()) {
+//                                new ZipFile(oldMod).removeFile(file.getName());
+//                            }
+//
+//                        } catch (IOException e) {
+//                            throw new RuntimeException(e);
+//                        }
+
+                        try {
                             for (File TMfile : new File("./AutoModpack/TrashMod/").listFiles()) {
                                 if (TMfile.isFile()) {
                                     new ZipFile(oldMod).addFile(TMfile.getAbsolutePath());
@@ -127,10 +148,12 @@ public class DeleteMods implements Runnable {
                                     new ZipFile(oldMod).addFolder(new File(TMfile.getAbsolutePath()));
                                 }
                             }
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
 
-                            // Delete mod file
+                        try {
                             FileDeleteStrategy.FORCE.delete(oldMod);
-
                         } catch (IOException e) { // ignore it
                         }
                     }
