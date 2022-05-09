@@ -27,6 +27,7 @@ public class DeleteMods implements Runnable {
 
         if (preload) {
             this.preload = true;
+            wait(500);
             if (!delModsTxt.exists()) {
                 try {
                     new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods.txt", "./");
@@ -36,7 +37,9 @@ public class DeleteMods implements Runnable {
             }
             //TODO make it better
         }
-        this.preload = false;
+        if (!preload) {
+            this.preload = false;
+        }
 
         DelModsTxt();
     }
@@ -76,10 +79,10 @@ public class DeleteMods implements Runnable {
                 }
 
             } catch (IOException e) {
-                System.out.println("Error while reading delmods.txt");
-                DelMods();
+                LOGGER.error("Error while reading delmods.txt");
             }
         }
+
         DelMods();
     }
 
@@ -146,9 +149,13 @@ public class DeleteMods implements Runnable {
                     LOGGER.info("AutoModpack -- Finished deleting old mods");
                 }
             }
+            try {
+                FileDeleteStrategy.FORCE.delete(new File("./delmods/"));
+            } catch (IOException e) { // ignore it
+            }
         }
 
-        if (preload) {
+        if (!preload) {
             new Finished();
         }
 
@@ -156,6 +163,17 @@ public class DeleteMods implements Runnable {
 
     @Override
     public void run() {
-        new DeleteMods(true);
+
+    }
+
+    private static void wait(int ms) {
+        try
+        {
+            Thread.sleep(ms);
+        }
+        catch(InterruptedException ex)
+        {
+            Thread.currentThread().interrupt();
+        }
     }
 }

@@ -1,7 +1,6 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.api.ModInitializer;
-import net.minecraft.client.MinecraftClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.skidam.automodpack.modpack.Modpack;
