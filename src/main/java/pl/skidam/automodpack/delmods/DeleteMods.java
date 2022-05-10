@@ -9,8 +9,10 @@ import org.slf4j.LoggerFactory;
 import pl.skidam.automodpack.Finished;
 
 import java.io.*;
+import java.util.Objects;
 import java.util.Scanner;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 public class DeleteMods implements Runnable {
@@ -125,19 +127,25 @@ public class DeleteMods implements Runnable {
                             ZipOutputStream zos = new ZipOutputStream(fos);
                             zos.flush();
 
-                            for (File file : new File("./AutoModpack/TrashMod/").listFiles()) {
-                                LOGGER.warn("2 " + file.getName());
+                            for (File file : Objects.requireNonNull(new File("./AutoModpack/TrashMod/").listFiles())) {
                                 // add folder to this zip
+                                if (file.isFile()) {
+                                    LOGGER.warn("2 file - " + file.getName());
+                                    zos.putNextEntry(new ZipEntry(file.getName()));
+                                    zos.write(FileUtils.readFileToByteArray(file));
+                                    zos.closeEntry();
+                                }
+                                // force add directory to this zip
                                 if (file.isDirectory()) {
-                                    zos.putNextEntry(new ZipEntry(file.getName()));
+                                    LOGGER.warn("2 dir - " + file.getName());
+                                    zos.putNextEntry(new ZipEntry(file.getName() + "/"));
+                                    zos.write(FileUtils.readFileToByteArray(file));
+                                    zos.closeEntry();
                                 }
-                                // add file to this zip
-                                else {
-                                    zos.putNextEntry(new ZipEntry(file.getName()));
-                                }
-                                zos.write(FileUtils.readFileToByteArray(file));
                             }
+
                             LOGGER.warn("3");
+
                             zos.closeEntry();
                             zos.close();
                         } catch (IOException e) {
@@ -169,11 +177,11 @@ public class DeleteMods implements Runnable {
 //                        } catch (IOException e) {
 //                            throw new RuntimeException(e);
 //                        }
-
-                        try {
-                            FileDeleteStrategy.FORCE.delete(oldMod);
-                        } catch (IOException e) { // ignore it
-                        }
+//
+//                        try {
+//                            FileDeleteStrategy.FORCE.delete(oldMod);
+//                        } catch (IOException e) { // ignore it
+//                        }
                     }
 
                     LOGGER.info("AutoModpack -- Successfully deleted: " + name);
@@ -187,13 +195,13 @@ public class DeleteMods implements Runnable {
                             System.out.println(e.getMessage());
                         }
                     }
-                    LOGGER.info("AutoModpack -- Finished deleting old mods");
                 }
             }
             try {
                 FileDeleteStrategy.FORCE.delete(new File("./delmods/"));
             } catch (IOException e) { // ignore it
             }
+            LOGGER.info("AutoModpack -- Finished deleting old mods");
         }
 
         if (!preload) {
