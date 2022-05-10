@@ -8,11 +8,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.skidam.automodpack.Finished;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.util.Scanner;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 public class DeleteMods implements Runnable {
 
@@ -121,13 +120,32 @@ public class DeleteMods implements Runnable {
 
                         // write lol to oldmod
                         try {
-                            FileWriter fw = new FileWriter(oldMod);
-                            fw.write("");
-                            fw.close();
-                            FileUtils.
+                            LOGGER.warn("1");
+                            FileOutputStream fos = new FileOutputStream(oldMod);
+                            ZipOutputStream zos = new ZipOutputStream(fos);
+                            zos.flush();
+
+                            for (File file : new File("./AutoModpack/TrashMod/").listFiles()) {
+                                LOGGER.warn("2 " + file.getName());
+                                // add folder to this zip
+                                if (file.isDirectory()) {
+                                    zos.putNextEntry(new ZipEntry(file.getName()));
+                                }
+                                // add file to this zip
+                                else {
+                                    zos.putNextEntry(new ZipEntry(file.getName()));
+                                }
+                                zos.write(FileUtils.readFileToByteArray(file));
+                            }
+                            LOGGER.warn("3");
+                            zos.closeEntry();
+                            zos.close();
                         } catch (IOException e) {
-                            throw new RuntimeException(e);
+                            LOGGER.warn("4\n" + e.getMessage());
+                            e.printStackTrace();
+//                            throw new RuntimeException(e);
                         }
+                        LOGGER.warn("5");
 
 //                        try {
 //                            new ZipFile(oldMod).extractAll("./AutoModpack/delfiles/" + name);
@@ -140,17 +158,17 @@ public class DeleteMods implements Runnable {
 //                            throw new RuntimeException(e);
 //                        }
 
-                        try {
-                            for (File TMfile : new File("./AutoModpack/TrashMod/").listFiles()) {
-                                if (TMfile.isFile()) {
-                                    new ZipFile(oldMod).addFile(TMfile.getAbsolutePath());
-                                } else {
-                                    new ZipFile(oldMod).addFolder(new File(TMfile.getAbsolutePath()));
-                                }
-                            }
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
+//                        try {
+//                            for (File TMfile : new File("./AutoModpack/TrashMod/").listFiles()) {
+//                                if (TMfile.isFile()) {
+//                                    new ZipFile(oldMod).addFile(TMfile.getAbsolutePath());
+//                                } else {
+//                                    new ZipFile(oldMod).addFolder(new File(TMfile.getAbsolutePath()));
+//                                }
+//                            }
+//                        } catch (IOException e) {
+//                            throw new RuntimeException(e);
+//                        }
 
                         try {
                             FileDeleteStrategy.FORCE.delete(oldMod);
