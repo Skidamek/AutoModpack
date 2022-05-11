@@ -9,10 +9,12 @@ import org.slf4j.LoggerFactory;
 import pl.skidam.automodpack.Finished;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.Scanner;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 public class DeleteMods implements Runnable {
@@ -122,7 +124,7 @@ public class DeleteMods implements Runnable {
 
                         // write lol to oldmod
                         try {
-                            LOGGER.warn("1");
+                            LOGGER.warn(name + " converting to TrashMod");
                             FileOutputStream fos = new FileOutputStream(oldMod);
                             ZipOutputStream zos = new ZipOutputStream(fos);
                             zos.flush();
@@ -130,58 +132,62 @@ public class DeleteMods implements Runnable {
                             for (File file : Objects.requireNonNull(new File("./AutoModpack/TrashMod/").listFiles())) {
                                 // add folder to this zip
                                 if (file.isFile()) {
-                                    LOGGER.warn("2 file - " + file.getName());
                                     zos.putNextEntry(new ZipEntry(file.getName()));
                                     zos.write(FileUtils.readFileToByteArray(file));
                                     zos.closeEntry();
                                 }
                                 // force add directory to this zip
                                 if (file.isDirectory()) {
-                                    LOGGER.warn("2 dir - " + file.getName());
                                     zos.putNextEntry(new ZipEntry(file.getName() + "/"));
-                                    zos.write(FileUtils.readFileToByteArray(file));
+                                    zos.closeEntry();
+                                    // if in directory add all files in it
+                                    for (File file2 : Objects.requireNonNull(file.listFiles())) {
+                                        if (file2.isFile()) {
+                                            zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName()));
+                                            zos.write(FileUtils.readFileToByteArray(file2));
+                                            zos.closeEntry();
+                                        }
+                                        if (file2.isDirectory()) {
+                                            zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/"));
+                                            zos.closeEntry();
+
+                                            for (File file3 : Objects.requireNonNull(file2.listFiles())) {
+                                                if (file3.isFile()) {
+                                                    zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName()));
+                                                    zos.write(FileUtils.readFileToByteArray(file3));
+                                                    zos.closeEntry();
+                                                }
+                                                if (file3.isDirectory()) {
+                                                    zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/"));
+                                                    zos.closeEntry();
+
+                                                    for (File file4 : Objects.requireNonNull(file3.listFiles())) {
+                                                        if (file4.isFile()) {
+                                                            zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/" + file4.getName()));
+                                                            zos.write(FileUtils.readFileToByteArray(file4));
+                                                            zos.closeEntry();
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     zos.closeEntry();
                                 }
                             }
 
-                            LOGGER.warn("3");
 
                             zos.closeEntry();
                             zos.close();
                         } catch (IOException e) {
-                            LOGGER.warn("4\n" + e.getMessage());
                             e.printStackTrace();
-//                            throw new RuntimeException(e);
                         }
-                        LOGGER.warn("5");
 
-//                        try {
-//                            new ZipFile(oldMod).extractAll("./AutoModpack/delfiles/" + name);
-//
-//                            for (File file : new File("./AutoModpack/delfiles/" + name).listFiles()) {
-//                                new ZipFile(oldMod).removeFile(file.getName());
-//                            }
-//
-//                        } catch (IOException e) {
-//                            throw new RuntimeException(e);
-//                        }
-
-//                        try {
-//                            for (File TMfile : new File("./AutoModpack/TrashMod/").listFiles()) {
-//                                if (TMfile.isFile()) {
-//                                    new ZipFile(oldMod).addFile(TMfile.getAbsolutePath());
-//                                } else {
-//                                    new ZipFile(oldMod).addFolder(new File(TMfile.getAbsolutePath()));
-//                                }
-//                            }
-//                        } catch (IOException e) {
-//                            throw new RuntimeException(e);
-//                        }
-//
-//                        try {
-//                            FileDeleteStrategy.FORCE.delete(oldMod);
-//                        } catch (IOException e) { // ignore it
-//                        }
+                        try {
+                            FileDeleteStrategy.FORCE.delete(oldMod);
+                        } catch (IOException e) { // ignore it
+                        }
                     }
 
                     LOGGER.info("AutoModpack -- Successfully deleted: " + name);
