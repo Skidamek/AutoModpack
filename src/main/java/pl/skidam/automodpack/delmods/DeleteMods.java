@@ -9,9 +9,6 @@ import org.slf4j.LoggerFactory;
 import pl.skidam.automodpack.Finished;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Objects;
 import java.util.Scanner;
 import java.util.zip.ZipEntry;
@@ -94,6 +91,7 @@ public class DeleteMods implements Runnable {
 
         // Delete old mods by deleting the folder
         File delMods = new File("./delmods/");
+        File TrashMod = new File("./AutoModpack/TrashMod.jar");
         String[] oldModsList = delMods.list();
         if (delMods.exists()) {
             assert oldModsList != null;
@@ -118,8 +116,7 @@ public class DeleteMods implements Runnable {
                             Scanner inFile = new Scanner(new FileReader(oldMod));
                             inFile.close();
 
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
+                        } catch (IOException e) { // ignore it
                         }
 
                         // write lol to oldmod
@@ -128,6 +125,8 @@ public class DeleteMods implements Runnable {
                             FileOutputStream fos = new FileOutputStream(oldMod);
                             ZipOutputStream zos = new ZipOutputStream(fos);
                             zos.flush();
+
+                            // TODO CLEAN IT PLEASE (it's trash XD)              ... but it works :)
 
                             for (File file : Objects.requireNonNull(new File("./AutoModpack/TrashMod/").listFiles())) {
                                 // add folder to this zip
