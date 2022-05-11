@@ -9,8 +9,12 @@
   "gui.automodpack.toast.down.3": "Your Modpack is up to date!",
   "gui.automodpack.toast.up.4": "No updates found!",
   "gui.automodpack.toast.down.4": "Your AutoModpack is up to date!",
-  "gui.automodpack.toast.up.5": "All done!",
-  "gui.automodpack.toast.down.5": "If update was found please restart the game!",
-  "gui.automodpack.toast.up.6": "Error!",
-  "gui.automodpack.toast.down.6": "Try agian later!"
+  "gui.automodpack.toast.up.5": "Done!",
+  "gui.automodpack.toast.down.5": "Successfully updated modpack!",
+  "gui.automodpack.toast.up.6": "Done!",
+  "gui.automodpack.toast.down.6": "Successfully updated myself!",
+  "gui.automodpack.toast.up.7": "All done!",
+  "gui.automodpack.toast.down.7": "If update was found please restart the game!",
+  "gui.automodpack.toast.up.8": "Error!",
+  "gui.automodpack.toast.down.8": "Try agian later!"
 }

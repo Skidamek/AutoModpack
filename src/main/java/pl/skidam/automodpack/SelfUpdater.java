@@ -105,9 +105,11 @@ public class SelfUpdater implements Runnable {
                 Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
                 System.out.println("Successfully self updated!");
+                new ToastExecutor(6);
 
             } catch (IOException ex) {
                 System.out.println("Failed to update myself!");
+                new ToastExecutor(8);
                 ex.printStackTrace();
             }
         }

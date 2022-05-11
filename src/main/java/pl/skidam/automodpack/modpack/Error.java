@@ -6,7 +6,7 @@ public class Error {
 
     public Error() {
 
-        new ToastExecutor(9);
+        new ToastExecutor(8);
 
         System.out.println("Error! Download server may be down or AutoModpack is wrongly configured!");
         System.out.println("Error! Download server may be down or AutoModpack is wrongly configured!");

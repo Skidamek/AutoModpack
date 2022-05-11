@@ -13,6 +13,6 @@ public class Finished {
 
         LOGGER.info("AutoModpack -- Here you are!");
 
-        new ToastExecutor(5);
+        new ToastExecutor(7);
     }
 }

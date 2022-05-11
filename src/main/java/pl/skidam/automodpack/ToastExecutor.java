@@ -12,8 +12,10 @@ public class ToastExecutor {
     // 2 == Found Update to AutoModpack (mod)
     // 3 == No updates found to Modpack
     // 4 == No updates found to AutoModpack (mod)
-    // 5 == Here you are!
-    // 6 == Error
+    // 5 == Successfully updated Modpack
+    // 6 == Successfully updated AutoModpack (mod)
+    // 7 == Here you are!
+    // 8 == Error
 
     public ToastExecutor(int WhoAreYou) {
 
@@ -43,6 +45,12 @@ public class ToastExecutor {
         }
         if (WhoAreYou == 6) {
             toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.6"), new TranslatableText("gui.automodpack.toast.down.6"));
+        }
+        if (WhoAreYou == 7) {
+            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.7"), new TranslatableText("gui.automodpack.toast.down.7"));
+        }
+        if (WhoAreYou == 8) {
+            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.8"), new TranslatableText("gui.automodpack.toast.down.8"));
         }
 
         MinecraftClient.getInstance().getToastManager().add(toast);

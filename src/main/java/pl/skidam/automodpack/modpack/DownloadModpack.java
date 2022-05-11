@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.modpack;
 
+import pl.skidam.automodpack.ToastExecutor;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -54,6 +56,7 @@ public class DownloadModpack {
             bout.close();
             in.close();
             System.out.println("Successfully downloaded modpack!");
+            new ToastExecutor(5);
 
         } catch (IOException ex) {
             new Error();
