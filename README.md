@@ -3,7 +3,7 @@ Simply...
 Mod is at a ~~very~~ early stage of development
 
   
- ​<p align="center"><img src="https://i.imgur.com/SXaePW6.png" alt="Logo" width="200"></p> 
+ ​<p align="center"><img src="https://github.com/Skidamek/AutoModpack/blob/Pipel/src/main/resources/assets/automodpack/icon.png" alt="Logo" width="200"></p> 
  ​<h1 align="center">AutoModpack  <br>
  ​    <a href="https://fabricmc.net/"><img 
  ​        src="https://cdn.discordapp.com/attachments/705864145169416313/969720133998239794/fabric_supported.png" 
