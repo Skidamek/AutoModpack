@@ -91,7 +91,6 @@ public class DeleteMods implements Runnable {
 
         // Delete old mods by deleting the folder
         File delMods = new File("./delmods/");
-        File TrashMod = new File("./AutoModpack/TrashMod.jar");
         String[] oldModsList = delMods.list();
         if (delMods.exists()) {
             assert oldModsList != null;
@@ -102,6 +101,27 @@ public class DeleteMods implements Runnable {
             }
             for (String name : oldModsList) {
                 File oldMod = new File("./mods/" + name);
+
+                // check if the oldMod is in the trashedmods.txt
+                boolean TrashedMod = false;
+                File trashedMods = new File("./AutoModpack/trashedmods.txt");
+                if (trashedMods.exists()) {
+                    try {
+                        Scanner inFile = new Scanner(new FileReader(trashedMods));
+                        while (inFile.hasNextLine()) {
+                            // Read the first line from the file.
+                            String line = inFile.nextLine();
+                            if (line.equals(oldMod.getName())) {
+                                // Trashed Mod
+                                TrashedMod = true;
+                                break;
+
+                            }
+                        }
+                    } catch (IOException e) { // ignore it
+                    }
+                }
+
                 if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
                     LOGGER.info("AutoModpack -- Deleting: " + name);
 
@@ -119,68 +139,81 @@ public class DeleteMods implements Runnable {
                         } catch (IOException e) { // ignore it
                         }
 
-                        // write lol to oldmod
-                        try {
-                            LOGGER.warn(name + " converting to TrashMod");
-                            FileOutputStream fos = new FileOutputStream(oldMod);
-                            ZipOutputStream zos = new ZipOutputStream(fos);
-                            zos.flush();
+                        if (!TrashedMod) {
 
-                            // TODO CLEAN IT PLEASE (it's trash XD)              ... but it works :)
+                            // If you can't delete it, convert to the trash mod :))
+                            try {
+                                LOGGER.warn(name + " converting to TrashMod");
+                                FileOutputStream fos = new FileOutputStream(oldMod);
+                                ZipOutputStream zos = new ZipOutputStream(fos);
+                                zos.flush();
 
-                            for (File file : Objects.requireNonNull(new File("./AutoModpack/TrashMod/").listFiles())) {
-                                // add folder to this zip
-                                if (file.isFile()) {
-                                    zos.putNextEntry(new ZipEntry(file.getName()));
-                                    zos.write(FileUtils.readFileToByteArray(file));
-                                    zos.closeEntry();
-                                }
-                                // force add directory to this zip
-                                if (file.isDirectory()) {
-                                    zos.putNextEntry(new ZipEntry(file.getName() + "/"));
-                                    zos.closeEntry();
-                                    // if in directory add all files in it
-                                    for (File file2 : Objects.requireNonNull(file.listFiles())) {
-                                        if (file2.isFile()) {
-                                            zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName()));
-                                            zos.write(FileUtils.readFileToByteArray(file2));
-                                            zos.closeEntry();
-                                        }
-                                        if (file2.isDirectory()) {
-                                            zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/"));
-                                            zos.closeEntry();
+                                // TODO CLEAN IT PLEASE (it's trash XD)              ... but it works :)
 
-                                            for (File file3 : Objects.requireNonNull(file2.listFiles())) {
-                                                if (file3.isFile()) {
-                                                    zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName()));
-                                                    zos.write(FileUtils.readFileToByteArray(file3));
-                                                    zos.closeEntry();
-                                                }
-                                                if (file3.isDirectory()) {
-                                                    zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/"));
-                                                    zos.closeEntry();
+                                for (File file : Objects.requireNonNull(new File("./AutoModpack/TrashMod/").listFiles())) {
+                                    // add folder to this zip
+                                    if (file.isFile()) {
+                                        zos.putNextEntry(new ZipEntry(file.getName()));
+                                        zos.write(FileUtils.readFileToByteArray(file));
+                                        zos.closeEntry();
+                                    }
+                                    // force add directory to this zip
+                                    if (file.isDirectory()) {
+                                        zos.putNextEntry(new ZipEntry(file.getName() + "/"));
+                                        zos.closeEntry();
+                                        // if in directory add all files in it
+                                        for (File file2 : Objects.requireNonNull(file.listFiles())) {
+                                            if (file2.isFile()) {
+                                                zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName()));
+                                                zos.write(FileUtils.readFileToByteArray(file2));
+                                                zos.closeEntry();
+                                            }
+                                            if (file2.isDirectory()) {
+                                                zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/"));
+                                                zos.closeEntry();
 
-                                                    for (File file4 : Objects.requireNonNull(file3.listFiles())) {
-                                                        if (file4.isFile()) {
-                                                            zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/" + file4.getName()));
-                                                            zos.write(FileUtils.readFileToByteArray(file4));
-                                                            zos.closeEntry();
+                                                for (File file3 : Objects.requireNonNull(file2.listFiles())) {
+                                                    if (file3.isFile()) {
+                                                        zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName()));
+                                                        zos.write(FileUtils.readFileToByteArray(file3));
+                                                        zos.closeEntry();
+                                                    }
+                                                    if (file3.isDirectory()) {
+                                                        zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/"));
+                                                        zos.closeEntry();
+
+                                                        for (File file4 : Objects.requireNonNull(file3.listFiles())) {
+                                                            if (file4.isFile()) {
+                                                                zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/" + file4.getName()));
+                                                                zos.write(FileUtils.readFileToByteArray(file4));
+                                                                zos.closeEntry();
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
                                         }
+
+                                        zos.closeEntry();
                                     }
-
-                                    zos.closeEntry();
                                 }
+
+
+                                zos.closeEntry();
+                                zos.close();
+
+                                // add mod to the trashed mod list
+                                File trashedMod = new File("./AutoModpack/trashedmods.txt");
+                                if (!trashedMod.exists()) {
+                                    trashedMod.createNewFile();
+                                }
+                                FileWriter fw = new FileWriter(trashedMod, true);
+                                fw.write(name + "\n");
+                                fw.close();
+
+                            } catch (IOException e) {
+                                e.printStackTrace();
                             }
-
-
-                            zos.closeEntry();
-                            zos.close();
-                        } catch (IOException e) {
-                            e.printStackTrace();
                         }
 
                         try {
@@ -189,7 +222,11 @@ public class DeleteMods implements Runnable {
                         }
                     }
 
-                    LOGGER.info("AutoModpack -- Successfully deleted: " + name);
+                    if (!TrashedMod) {
+                        LOGGER.info("AutoModpack -- Successfully deleted: " + name);
+                    } else {
+                        LOGGER.warn("AutoModpack -- Trashed mod: " + name + " Skiping...");
+                    }
 
                     // delete delfiles folder
                     File delfiles = new File("./AutoModpack/delfiles/");
