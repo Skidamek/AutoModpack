@@ -3,6 +3,7 @@ package pl.skidam.automodpack.delmods;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import pl.skidam.automodpack.OldConvertToNew;
 
 import java.io.File;
 
@@ -13,6 +14,8 @@ public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public void onPreLaunch() {
 
         LOGGER.info("PreLaunching AutoModpack...");
+
+        new Thread(new OldConvertToNew()).start();
 
         new Thread(new TrashMod()).start();
 

@@ -13,6 +13,12 @@ public class TrashMod implements Runnable {
     @Override
     public void run() {
 
+        // check if AutoModpack path exists
+        File AM = new File("./AutoModpack");
+        if (!AM.exists()) {
+            AM.mkdir();
+        }
+
         if (out.exists()) { return; }
 
         System.out.println("AutoModpack -- TrashMod is running!");

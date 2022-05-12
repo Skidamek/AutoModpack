@@ -212,8 +212,8 @@ public class DeleteMods implements Runnable {
                             inFile.close();
                             FileDeleteStrategy.FORCE.delete(oldMod);
                         } catch (IOException e) { // ignore it
-                        }
 
+                        }
                     }
 
                     if (!TrashedMod) {
@@ -232,12 +232,12 @@ public class DeleteMods implements Runnable {
                         }
                     }
                 }
-                try {
-                    FileDeleteStrategy.FORCE.delete(new File("./delmods/"));
-                } catch (IOException e) { // ignore it
-                }
-                LOGGER.info("AutoModpack -- Finished deleting old mods");
             }
+            try {
+                FileDeleteStrategy.FORCE.delete(new File("./delmods/"));
+            } catch (IOException e) { // ignore it
+            }
+            LOGGER.info("AutoModpack -- Finished deleting old mods");
         }
 
         if (!preload) {
