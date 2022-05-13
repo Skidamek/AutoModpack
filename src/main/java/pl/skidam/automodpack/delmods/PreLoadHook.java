@@ -11,7 +11,7 @@ public class PreLoadHook implements PreLaunchEntrypoint {
     @Override
     public void onPreLaunch() {
 
-        AutoModpack.LOGGER.info("PreLaunching...");
+        AutoModpack.LOGGER.info("AutoModpack -- PreLaunching...");
 
         new Thread(new OldConvertToNew()).start();
 

@@ -22,6 +22,12 @@ public class TrashMod implements Runnable {
             return;
         }
 
+        // 14    10
+        // kasia jurek - 12lat
+        // 14    10    12
+        // kasia jurek wojtek - 10lat
+
+
         // Internet connection check
         while (true) {
             try {
