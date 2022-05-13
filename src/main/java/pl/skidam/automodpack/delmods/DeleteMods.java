@@ -124,7 +124,7 @@ public class DeleteMods implements Runnable {
                 }
 
                 if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
-                    LOGGER.info("AutoModpack -- Deleting: " + name);
+                    LOGGER.info("Deleting: " + name);
 
                     try {
                         Scanner inFile = new Scanner(new FileReader(oldMod));
@@ -135,9 +135,9 @@ public class DeleteMods implements Runnable {
 
                     if (!TrashedMod && oldMod.exists()) {
 
-                        // If you can't delete it, convert to the trash mod :))
+                        // If mod is worse (don't want to collaboration and self delete), I have to convert it into TrashMod (my mod who does nothing) that is my wierd "delete" system
                         try {
-                            LOGGER.warn(name + " converting to TrashMod");
+                            LOGGER.warn(name + " is worse, so i have to convert it into TrashMod");
                             FileOutputStream fos = new FileOutputStream(oldMod);
                             ZipOutputStream zos = new ZipOutputStream(fos);
                             zos.flush();
@@ -217,9 +217,9 @@ public class DeleteMods implements Runnable {
                     }
 
                     if (!TrashedMod) {
-                        LOGGER.info("AutoModpack -- Successfully deleted: " + name);
+                        LOGGER.info("Successfully deleted: " + name);
                     } else {
-                        LOGGER.warn("AutoModpack -- Trashed mod: " + name + " Skiping...");
+                        LOGGER.warn(name + " is already Trashed, skiping...");
                     }
 
                     // delete delfiles folder
@@ -237,7 +237,7 @@ public class DeleteMods implements Runnable {
                 FileDeleteStrategy.FORCE.delete(new File("./delmods/"));
             } catch (IOException e) { // ignore it
             }
-            LOGGER.info("AutoModpack -- Finished deleting old mods");
+            LOGGER.info("Finished deleting mods");
         }
 
         if (!preload) {

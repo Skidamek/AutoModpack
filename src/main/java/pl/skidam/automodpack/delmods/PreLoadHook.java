@@ -7,8 +7,9 @@ import pl.skidam.automodpack.OldConvertToNew;
 
 import java.io.File;
 
-public final class PreLoadHook implements PreLaunchEntrypoint {
-public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
+public class PreLoadHook implements PreLaunchEntrypoint {
+
+public static Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
 
     @Override
     public void onPreLaunch() {
