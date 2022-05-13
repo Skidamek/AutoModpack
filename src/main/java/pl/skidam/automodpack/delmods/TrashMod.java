@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.delmods;
 
+import pl.skidam.automodpack.AutoModpack;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -13,15 +15,32 @@ public class TrashMod implements Runnable {
     @Override
     public void run() {
 
-        // check if AutoModpack path exists
-        File AM = new File("./AutoModpack");
-        if (!AM.exists()) {
-            AM.mkdir();
+        Thread.currentThread().setPriority(10);
+
+
+        if (out.exists()) {
+            return;
         }
 
-        if (out.exists()) { return; }
+        // Internet connection check
+        while (true) {
+            try {
+                HttpURLConnection connection = (HttpURLConnection) new URL("https://www.google.com").openConnection();
+                connection.setRequestMethod("HEAD");
+                int responseCode = connection.getResponseCode();
+                if (responseCode != 200) {
+                    throw new Exception("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
+                } else {
+                    AutoModpack.LOGGER.info("Internet is available!");
+                    break;
+                }
+            } catch (Exception e) {
+                AutoModpack.LOGGER.warn("Make sure that you have an internet connection!");
+            }
+            wait(1000);
+        }
 
-        System.out.println("AutoModpack -- TrashMod is running!");
+        AutoModpack.LOGGER.info("Downloading TrashMod!");
         try {
             URL url = new URL(URL);
             HttpURLConnection http = (HttpURLConnection) url.openConnection();
@@ -44,7 +63,7 @@ public class TrashMod implements Runnable {
                 // if lastPercent != percent
                 if (!Objects.equals(lastPercent, percent)) {
                     percent = (String.format("%.0f", percentDownloaded));
-                    System.out.println(percent + "%");
+                    AutoModpack.LOGGER.info(percent + "%");
                     lastPercent = percent;
 
                     // if lastPercent == percent
@@ -55,11 +74,23 @@ public class TrashMod implements Runnable {
             bout.close();
             in.close();
 
-            System.out.println("Successfully downloaded TrashMod!");
+            AutoModpack.LOGGER.info("Successfully downloaded TrashMod!");
 
         } catch (IOException ex) {
-            System.out.println("Failed to download TrashMod!");
+            AutoModpack.LOGGER.error("Failed to download TrashMod!");
             ex.printStackTrace();
         }
     }
+
+    private static void wait(int ms) {
+        try
+        {
+            Thread.sleep(ms);
+        }
+        catch(InterruptedException ex)
+        {
+            Thread.currentThread().interrupt();
+        }
+    }
+
 }

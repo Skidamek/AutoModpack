@@ -1,0 +1,21 @@
+{
+  "gui.automodpack.toast.up.0": "Sprawdzanie aktualizacji...",
+  "gui.automodpack.toast.down.0": "",
+  "gui.automodpack.toast.up.1": "Znaleziono aktualizacje!",
+  "gui.automodpack.toast.down.1": "Pobieranie aktualizacji modpacka...",
+  "gui.automodpack.toast.up.2": "Znaleziono aktualizacje!",
+  "gui.automodpack.toast.down.2": "Pobieranie aktualizacji AutoModpacka...",
+  "gui.automodpack.toast.up.3": "Nie znaleziono aktualizacji!",
+  "gui.automodpack.toast.down.3": "Twój modpack jest aktualny!",
+  "gui.automodpack.toast.up.4": "Nie znaleziono aktualizacji!",
+  "gui.automodpack.toast.down.4": "Twój AutoModpack jest aktualny!",
+  "gui.automodpack.toast.up.5": "Gotowe!",
+  "gui.automodpack.toast.down.5": "Poprawnie zaktualizowano modpack!",
+  "gui.automodpack.toast.up.6": "Gotowe!",
+  "gui.automodpack.toast.down.6": "Poprawnie zaktualizowałem się! :)",
+  "gui.automodpack.toast.up.7": "Wszystko gotowe!",
+  "gui.automodpack.toast.down.7": "Jeśli aktualizacja została znaleziona, zrestartuj grę!",
+  "gui.automodpack.toast.up.8": "Error!",
+  "gui.automodpack.toast.down.8": "Spróbuj ponownie później!",
+  "gui.automodpack.button.update": "Sprawdź aktualizacje!"
+}

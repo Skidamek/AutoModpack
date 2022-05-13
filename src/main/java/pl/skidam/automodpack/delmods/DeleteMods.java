@@ -4,8 +4,7 @@ import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Finished;
 
 import java.io.*;
@@ -16,14 +15,11 @@ import java.util.zip.ZipOutputStream;
 
 public class DeleteMods implements Runnable {
 
-    public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
-
     File delModsTxt = new File("./delmods.txt");
     boolean preload;
 
     public DeleteMods(boolean preload) {
 
-        Thread.currentThread().setName("AutoModpack - DeleteOldMods");
         Thread.currentThread().setPriority(10);
 
         if (preload) {
@@ -80,7 +76,7 @@ public class DeleteMods implements Runnable {
                 }
 
             } catch (IOException e) {
-                LOGGER.error("Error while reading delmods.txt");
+                AutoModpack.LOGGER.error("Error while reading delmods.txt");
             }
         }
 
@@ -124,7 +120,7 @@ public class DeleteMods implements Runnable {
                 }
 
                 if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
-                    LOGGER.info("Deleting: " + name);
+                    AutoModpack.LOGGER.info("Deleting: " + name);
 
                     try {
                         Scanner inFile = new Scanner(new FileReader(oldMod));
@@ -137,7 +133,7 @@ public class DeleteMods implements Runnable {
 
                         // If mod is worse (don't want to collaboration and self delete), I have to convert it into TrashMod (my mod who does nothing) that is my wierd "delete" system
                         try {
-                            LOGGER.warn(name + " is worse, so i have to convert it into TrashMod");
+                            AutoModpack.LOGGER.warn(name + " is worse, so i have to convert it into TrashMod");
                             FileOutputStream fos = new FileOutputStream(oldMod);
                             ZipOutputStream zos = new ZipOutputStream(fos);
                             zos.flush();
@@ -217,9 +213,9 @@ public class DeleteMods implements Runnable {
                     }
 
                     if (!TrashedMod) {
-                        LOGGER.info("Successfully deleted: " + name);
+                        AutoModpack.LOGGER.info("Successfully deleted: " + name);
                     } else {
-                        LOGGER.warn(name + " is already Trashed, skiping...");
+                        AutoModpack.LOGGER.info(name + " is already Trashed, skiping...");
                     }
 
                     // delete delfiles folder
@@ -237,7 +233,7 @@ public class DeleteMods implements Runnable {
                 FileDeleteStrategy.FORCE.delete(new File("./delmods/"));
             } catch (IOException e) { // ignore it
             }
-            LOGGER.info("Finished deleting mods");
+            AutoModpack.LOGGER.info("Finished deleting mods!");
         }
 
         if (!preload) {

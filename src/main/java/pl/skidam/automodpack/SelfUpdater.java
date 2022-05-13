@@ -1,5 +1,8 @@
 package pl.skidam.automodpack;
 
+import net.minecraft.client.MinecraftClient;
+import pl.skidam.automodpack.modpack.Error;
+
 import java.io.*;
 import java.net.*;
 import java.nio.file.Files;
@@ -24,24 +27,35 @@ public class SelfUpdater implements Runnable {
     @Override
     public void run() {
 
+        while (MinecraftClient.getInstance().currentScreen == null) {
+            wait(100);
+        }
+
         wait(delay);
 
-        Thread.currentThread().setName("AutoModpack - SelfUpdaterVersionCheck");
         Thread.currentThread().setPriority(10);
 
         // if latest mod is not same as current mod download new mod.
         // Check how big the mod file is
         if (selfBackup.exists()) {
-            System.out.println("Checking if AutoModpack is up to date...");
+            AutoModpack.LOGGER.info("Checking if AutoModpack is up-to-date...");
 
             long currentSize = selfBackup.length();
-            long latestSize = Long.parseLong(webfileSize());
+            long latestSize = 0;
+            try {
+                latestSize = Long.parseLong(webfileSize());
+            } catch (Exception e) {
+                AutoModpack.LOGGER.error("Make sure that you have an internet connection!");
+                new Error();
+                return;
+            }
 
             if (currentSize != latestSize) {
-                System.out.println("Update found! Updating!");
+                AutoModpack.LOGGER.info("Update found! Updating!");
                 new ToastExecutor(2);
+
             } else {
-                System.out.println("Didn't found any updates for AutoModpack!");
+                AutoModpack.LOGGER.info("Didn't found any updates for AutoModpack!");
                 new ToastExecutor(4);
                 LatestVersion = true;
             }
@@ -49,10 +63,6 @@ public class SelfUpdater implements Runnable {
 
 
         if (!LatestVersion || !selfBackup.exists()) {
-
-            Thread.currentThread().setName("AutoModpack - SelfUpdater");
-            Thread.currentThread().setPriority(10);
-
 
             File oldAM = new File("./AutoModpack/OldAutoModpack/");
             if (!oldAM.exists()) {
@@ -66,7 +76,7 @@ public class SelfUpdater implements Runnable {
                     throw new RuntimeException(e);
                 }
             } else {
-                System.out.println("LoL how did you get here? You should have the AutoModpack.jar in your mods folder.");
+                AutoModpack.LOGGER.error("LoL how did you get here? You should have the AutoModpack.jar in your mods folder.");
             }
 
             try {
@@ -91,7 +101,7 @@ public class SelfUpdater implements Runnable {
                     // if lastPercent != percent
                     if (!Objects.equals(lastPercent, percent)) {
                         percent = (String.format("%.0f", percentDownloaded));
-                        System.out.println(percent + "%");
+                        AutoModpack.LOGGER.info(percent + "%");
                         lastPercent = percent;
 
                         // if lastPercent == percent
@@ -104,11 +114,11 @@ public class SelfUpdater implements Runnable {
 
                 Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
-                System.out.println("Successfully self updated!");
+                AutoModpack.LOGGER.info("Successfully self updated!");
                 new ToastExecutor(6);
 
             } catch (IOException ex) {
-                System.out.println("Failed to update myself!");
+                AutoModpack.LOGGER.error("Failed to update myself!");
                 new ToastExecutor(8);
                 ex.printStackTrace();
             }

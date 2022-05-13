@@ -1,20 +1,17 @@
 package pl.skidam.automodpack.delmods;
 
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.OldConvertToNew;
 
 import java.io.File;
 
 public class PreLoadHook implements PreLaunchEntrypoint {
 
-public static Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
-
     @Override
     public void onPreLaunch() {
 
-        LOGGER.info("PreLaunching AutoModpack...");
+        AutoModpack.LOGGER.info("PreLaunching...");
 
         new Thread(new OldConvertToNew()).start();
 

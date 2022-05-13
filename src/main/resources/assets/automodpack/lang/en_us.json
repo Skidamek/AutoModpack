@@ -1,6 +1,6 @@
 {
-  "gui.automodpack.toast.up.0": "Check for updates!",
-  "gui.automodpack.toast.down.0": "Checking for updates...",
+  "gui.automodpack.toast.up.0": "Checking for updates...",
+  "gui.automodpack.toast.down.0": "",
   "gui.automodpack.toast.up.1": "Update Found!",
   "gui.automodpack.toast.down.1": "Downloading Modpack update...",
   "gui.automodpack.toast.up.2": "Update Found!",
@@ -12,9 +12,10 @@
   "gui.automodpack.toast.up.5": "Done!",
   "gui.automodpack.toast.down.5": "Successfully updated modpack!",
   "gui.automodpack.toast.up.6": "Done!",
-  "gui.automodpack.toast.down.6": "Successfully updated myself!",
+  "gui.automodpack.toast.down.6": "Successfully updated myself! :)",
   "gui.automodpack.toast.up.7": "All done!",
   "gui.automodpack.toast.down.7": "If update was found please restart the game!",
   "gui.automodpack.toast.up.8": "Error!",
-  "gui.automodpack.toast.down.8": "Try agian later!"
+  "gui.automodpack.toast.down.8": "Try agian later!",
+  "gui.automodpack.button.update": "Check updates!"
 }

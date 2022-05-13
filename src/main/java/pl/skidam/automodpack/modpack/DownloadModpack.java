@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.modpack;
 
+import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.ToastExecutor;
 
 import java.io.*;
@@ -18,11 +19,8 @@ public class DownloadModpack {
 
         boolean Error = false;
 
-        //If the file don't exist, skip the check and download the Modpack
-
-        Thread.currentThread().setName("AutoModpack - Downloader");
         Thread.currentThread().setPriority(10);
-        System.out.println("Downloading Modpack...");
+        AutoModpack.LOGGER.info("Downloading Modpack...");
 
         try {
             URL url = new URL(link);
@@ -45,7 +43,7 @@ public class DownloadModpack {
                 // if lastPercent != percent
                 if (!Objects.equals(lastPercent, percent)) {
                     percent = (String.format("%.0f", percentDownloaded));
-                    System.out.println(percent + "%");
+                    AutoModpack.LOGGER.info(percent + "%");
                     lastPercent = percent;
 
                     // if lastPercent == percent
@@ -55,7 +53,7 @@ public class DownloadModpack {
             }
             bout.close();
             in.close();
-            System.out.println("Successfully downloaded modpack!");
+            AutoModpack.LOGGER.info("Successfully downloaded modpack!");
             new ToastExecutor(5);
 
         } catch (IOException ex) {

@@ -19,6 +19,9 @@ public class OldConvertToNew implements Runnable {
             }
         }
 
+        // check if AutoModpack path exists
+        if (!AMdirOut.exists()) { AMdirOut.mkdir();}
+
         File AMzip = new File("./mods/downloads/AutoModpack.zip");
         File AMzipOut = new File("./AutoModpack/modpack.zip");
         if (AMzip.exists()) {
