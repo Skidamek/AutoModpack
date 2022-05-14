@@ -8,11 +8,17 @@ public class Finished {
     boolean ModpackUpdated;
     boolean Done;
 
+
+    // TODO try make boolens public and use them there but call this class by AutoModpack.java
+
+
     public Finished(boolean Done, boolean AutoModpackUpdated, boolean ModpackUpdated) {
 
         this.AutoModpackUpdated = AutoModpackUpdated;
         this.ModpackUpdated = ModpackUpdated;
         this.Done = Done;
+
+        AutoModpack.LOGGER.info("\n\nFinished!\n\n");
 
         if (Done) {
             Thread.currentThread().setPriority(10);
@@ -39,9 +45,10 @@ public class Finished {
             return;
         }
 
-//        wait(10000);
-//
-//        MinecraftClient.getInstance().setScreen(new ConfirmScreen());
+        wait(10000);
+
+        MinecraftClient.getInstance().setScreen(new ConfirmScreen());
+
     }
 
     private static void wait(int ms) {

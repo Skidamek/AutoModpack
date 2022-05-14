@@ -16,9 +16,9 @@ import pl.skidam.automodpack.ToastExecutor;
 import pl.skidam.automodpack.modpack.Modpack;
 
 @Mixin(TitleScreen.class)
-public abstract class UpdateButtonMixin extends Screen {
+public class UpdateButtonMixin extends Screen {
 
-    protected UpdateButtonMixin(Text title) {
+    public UpdateButtonMixin(Text title) {
         super(title);
     }
     public Text Button = new TranslatableText("gui.automodpack.button.update");
