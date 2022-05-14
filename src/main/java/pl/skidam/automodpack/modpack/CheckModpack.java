@@ -39,7 +39,7 @@ public class CheckModpack {
         } catch (Exception e) {
             AutoModpack.LOGGER.error("Make sure that you have an internet connection!");
             new Error();
-            new UnZip(out, Error);
+            new UnZip(out, Error, false);
             return;
         }
 
@@ -59,7 +59,7 @@ public class CheckModpack {
         AutoModpack.LOGGER.info("Didn't found any updates for modpack!");
         new ToastExecutor(3);
         LatestVersion = true;
-        new UnZip(out, Error);
+        new UnZip(out, Error, false);
     }
 
 

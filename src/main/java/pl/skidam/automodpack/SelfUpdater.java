@@ -116,6 +116,7 @@ public class SelfUpdater implements Runnable {
 
                 AutoModpack.LOGGER.info("Successfully self updated!");
                 new ToastExecutor(6);
+                new Finished(false, true, false);
 
             } catch (IOException ex) {
                 AutoModpack.LOGGER.error("Failed to update myself!");

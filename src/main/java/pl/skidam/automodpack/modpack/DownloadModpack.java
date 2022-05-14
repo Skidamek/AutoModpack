@@ -62,6 +62,6 @@ public class DownloadModpack {
             ex.printStackTrace();
         }
 
-        new UnZip(out, Error);
+        new UnZip(out, Error, true);
     }
 }

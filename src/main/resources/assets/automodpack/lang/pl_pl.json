@@ -17,5 +17,10 @@
   "gui.automodpack.toast.down.7": "Jeśli aktualizacja została znaleziona, zrestartuj grę!",
   "gui.automodpack.toast.up.8": "Error!",
   "gui.automodpack.toast.down.8": "Spróbuj ponownie później!",
-  "gui.automodpack.button.update": "Sprawdź aktualizacje!"
+  "gui.automodpack.button.update": "Sprawdź aktualizacje!",
+  "gui.automodpack.screen.title": "Znaleziono aktualizacje!",
+  "gui.automodpack.screen.description": "Jeśli chcesz dokończyć proces aktualizacji, musisz zrestartować grę.",
+  "gui.automodpack.screen.secDescription": "Chcesz zrestartować teraz?",
+  "gui.automodpack.screen.button.quit": "Tak (Wyjdź z gry)",
+  "gui.automodpack.screen.button.cancel": "Nie (Wróć do gry)"
 }

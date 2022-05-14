@@ -11,10 +11,13 @@ public class UnZip {
 
     File out;
     boolean Error;
+    boolean ModpackUpdated;
 
-    public UnZip(File out, boolean Error) {
+
+    public UnZip(File out, boolean Error, boolean ModpackUpdated) {
         this.out = out;
         this.Error = Error;
+        this.ModpackUpdated = ModpackUpdated;
 
         // Repeat this function every restart if modpack is up-to-date
 
@@ -37,7 +40,7 @@ public class UnZip {
                 AutoModpack.LOGGER.info("Successfully unzipped!");
 
                 // delete old mods
-                new DeleteMods(false);
+                new DeleteMods(false, ModpackUpdated);
             }
         }
     }

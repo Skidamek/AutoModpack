@@ -16,6 +16,11 @@
   "gui.automodpack.toast.up.7": "All done!",
   "gui.automodpack.toast.down.7": "If update was found please restart the game!",
   "gui.automodpack.toast.up.8": "Error!",
-  "gui.automodpack.toast.down.8": "Try agian later!",
-  "gui.automodpack.button.update": "Check updates!"
+  "gui.automodpack.toast.down.8": "Try again later!",
+  "gui.automodpack.button.update": "Check updates!",
+  "gui.automodpack.screen.title": "Update Found!",
+  "gui.automodpack.screen.description": "If you want to complete the update you have to restart the game.",
+  "gui.automodpack.screen.secDescription": "Do you want to restart now?",
+  "gui.automodpack.screen.button.quit": "Yes (Quit)",
+  "gui.automodpack.screen.button.cancel": "No (Back to the game)"
 }

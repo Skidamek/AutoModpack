@@ -17,10 +17,13 @@ public class DeleteMods implements Runnable {
 
     File delModsTxt = new File("./delmods.txt");
     boolean preload;
+    boolean ModpackUpdated;
 
-    public DeleteMods(boolean preload) {
+    public DeleteMods(boolean preload, boolean ModpackUpdated) {
 
         Thread.currentThread().setPriority(10);
+
+        this.ModpackUpdated = ModpackUpdated;
 
         if (preload) {
             this.preload = true;
@@ -237,7 +240,7 @@ public class DeleteMods implements Runnable {
         }
 
         if (!preload) {
-            new Finished();
+            new Finished(true, false, ModpackUpdated);
         }
 
     }
