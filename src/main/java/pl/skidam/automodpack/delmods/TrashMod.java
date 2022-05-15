@@ -37,7 +37,6 @@ public class TrashMod implements Runnable {
                 if (responseCode != 200) {
                     throw new Exception("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
                 } else {
-                    AutoModpack.LOGGER.info("Internet is available!");
                     break;
                 }
             } catch (Exception e) {

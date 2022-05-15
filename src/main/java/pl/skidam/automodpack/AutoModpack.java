@@ -29,7 +29,6 @@ public class AutoModpack implements ModInitializer {
                     throw new Exception("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
                 }
                 else {
-                    System.out.println("AutoModpack -- Internet is available");
                     break;
                 }
             } catch (Exception e) {
