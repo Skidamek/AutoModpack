@@ -27,7 +27,7 @@ public class Finished {
 
         }
 
-        if (!AutoModpackUpdated || !ModpackUpdated) {
+        if (!AutoModpackUpdated && !ModpackUpdated) {
             return;
         }
 
