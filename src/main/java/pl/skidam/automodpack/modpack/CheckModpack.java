@@ -26,8 +26,10 @@ public class CheckModpack {
         File Modpack = new File("./AutoModpack/modpack.zip");
 
         if (!Modpack.exists()) {
-            AutoModpack.LOGGER.info("Downloading new mods!");
+            AutoModpack.LOGGER.info("Didn't found modpack, downloading modpack!");
+            new ToastExecutor(1);
             new DownloadModpack(link, out);
+            return;
         }
 
         AutoModpack.LOGGER.info("Checking if modpack is up-to-date...");
@@ -39,7 +41,7 @@ public class CheckModpack {
         } catch (Exception e) {
             AutoModpack.LOGGER.error("Make sure that you have an internet connection!");
             new Error();
-            new UnZip(out, Error, false);
+            new UnZip(out, Error, "false");
             return;
         }
 
@@ -59,7 +61,7 @@ public class CheckModpack {
         AutoModpack.LOGGER.info("Didn't found any updates for modpack!");
         new ToastExecutor(3);
         LatestVersion = true;
-        new UnZip(out, Error, false);
+        new UnZip(out, Error, "false");
     }
 
 

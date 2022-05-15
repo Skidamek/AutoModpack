@@ -11,6 +11,8 @@ import java.net.URL;
 public class AutoModpack implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
+    public static String AutoModpackUpdated;
+    public static String ModpackUpdated;
 
     @Override
     public void onInitialize() {
@@ -46,6 +48,9 @@ public class AutoModpack implements ModInitializer {
 
         // TODO clean up this trash code!!!!
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server
+
+
+        new Thread(new FinishCheck()).start();
 
     }
 }

@@ -23,6 +23,6 @@ public class PreLoadHook implements PreLaunchEntrypoint {
             }
         }
 
-        new Thread(new DeleteMods(true, false)).start();
+        new Thread(new DeleteMods(true, "false")).start();
     }
 }

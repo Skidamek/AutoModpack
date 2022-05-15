@@ -17,6 +17,8 @@ public class ToastExecutor {
     // 7 == Here you are!
     // 8 == Error
 
+    // TODO delete 5,6,7
+
     public ToastExecutor(int WhoAreYou) {
 
         // If game still loading toast won't show
@@ -40,15 +42,15 @@ public class ToastExecutor {
         if (WhoAreYou == 4) {
             toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.4"), new TranslatableText("gui.automodpack.toast.down.4"));
         }
-        if (WhoAreYou == 5) {
-            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.5"), new TranslatableText("gui.automodpack.toast.down.5"));
-        }
-        if (WhoAreYou == 6) {
-            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.6"), new TranslatableText("gui.automodpack.toast.down.6"));
-        }
-        if (WhoAreYou == 7) {
-            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.7"), new TranslatableText("gui.automodpack.toast.down.7"));
-        }
+//        if (WhoAreYou == 5) {
+//            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.5"), new TranslatableText("gui.automodpack.toast.down.5"));
+//        }
+//        if (WhoAreYou == 6) {
+//            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.6"), new TranslatableText("gui.automodpack.toast.down.6"));
+//        }
+//        if (WhoAreYou == 7) {
+//            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.7"), new TranslatableText("gui.automodpack.toast.down.7"));
+//        }
         if (WhoAreYou == 8) {
             toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.8"), new TranslatableText("gui.automodpack.toast.down.8"));
         }

@@ -5,7 +5,6 @@ import net.lingala.zip4j.exception.ZipException;
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.AutoModpack;
-import pl.skidam.automodpack.Finished;
 
 import java.io.*;
 import java.util.Objects;
@@ -17,9 +16,9 @@ public class DeleteMods implements Runnable {
 
     File delModsTxt = new File("./delmods.txt");
     boolean preload;
-    boolean ModpackUpdated;
+    String ModpackUpdated;
 
-    public DeleteMods(boolean preload, boolean ModpackUpdated) {
+    public DeleteMods(boolean preload, String ModpackUpdated) {
 
         Thread.currentThread().setPriority(10);
 
@@ -240,7 +239,7 @@ public class DeleteMods implements Runnable {
         }
 
         if (!preload) {
-            new Finished(true, false, ModpackUpdated);
+            AutoModpack.ModpackUpdated = ModpackUpdated;
         }
 
     }

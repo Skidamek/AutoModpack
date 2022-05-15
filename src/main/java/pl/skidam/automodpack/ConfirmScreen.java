@@ -5,6 +5,7 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
 
@@ -12,8 +13,8 @@ import net.minecraft.util.Formatting;
 public class ConfirmScreen extends Screen {
     private Screen parent;
 
-    public ConfirmScreen() {
-        super(new TranslatableText("gui.automodpack.screen.title").formatted(Formatting.BOLD));
+    public ConfirmScreen(Text title) {
+        super(title);
     }
 
     @Override

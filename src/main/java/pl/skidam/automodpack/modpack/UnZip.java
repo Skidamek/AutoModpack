@@ -11,10 +11,10 @@ public class UnZip {
 
     File out;
     boolean Error;
-    boolean ModpackUpdated;
+    String ModpackUpdated;
 
 
-    public UnZip(File out, boolean Error, boolean ModpackUpdated) {
+    public UnZip(File out, boolean Error, String ModpackUpdated) {
         this.out = out;
         this.Error = Error;
         this.ModpackUpdated = ModpackUpdated;

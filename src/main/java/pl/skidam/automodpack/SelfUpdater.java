@@ -37,6 +37,7 @@ public class SelfUpdater implements Runnable {
 
         // if latest mod is not same as current mod download new mod.
         // Check how big the mod file is
+        if (!selfBackup.exists()) { new ToastExecutor(2); }
         if (selfBackup.exists()) {
             AutoModpack.LOGGER.info("Checking if AutoModpack is up-to-date...");
 
@@ -45,6 +46,7 @@ public class SelfUpdater implements Runnable {
             try {
                 latestSize = Long.parseLong(webfileSize());
             } catch (Exception e) {
+                AutoModpack.AutoModpackUpdated = "false";
                 AutoModpack.LOGGER.error("Make sure that you have an internet connection!");
                 new Error();
                 return;
@@ -58,6 +60,7 @@ public class SelfUpdater implements Runnable {
                 AutoModpack.LOGGER.info("Didn't found any updates for AutoModpack!");
                 new ToastExecutor(4);
                 LatestVersion = true;
+                AutoModpack.AutoModpackUpdated = "false";
             }
         }
 
@@ -115,14 +118,17 @@ public class SelfUpdater implements Runnable {
                 Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
                 AutoModpack.LOGGER.info("Successfully self updated!");
-                new ToastExecutor(6);
-                new Finished(false, true, false);
+//                new ToastExecutor(6);
+                AutoModpack.AutoModpackUpdated = "true";
 
             } catch (IOException ex) {
                 AutoModpack.LOGGER.error("Failed to update myself!");
                 new ToastExecutor(8);
+                AutoModpack.AutoModpackUpdated = "false";
                 ex.printStackTrace();
             }
+        } else {
+            AutoModpack.AutoModpackUpdated = "false";
         }
     }
 

@@ -54,7 +54,7 @@ public class DownloadModpack {
             bout.close();
             in.close();
             AutoModpack.LOGGER.info("Successfully downloaded modpack!");
-            new ToastExecutor(5);
+//            new ToastExecutor(5);
 
         } catch (IOException ex) {
             new Error();
@@ -62,6 +62,6 @@ public class DownloadModpack {
             ex.printStackTrace();
         }
 
-        new UnZip(out, Error, true);
+        new UnZip(out, Error, "true");
     }
 }
