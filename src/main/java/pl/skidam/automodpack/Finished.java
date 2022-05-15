@@ -18,8 +18,6 @@ public class Finished {
         this.ModpackUpdated = ModpackUpdated;
         this.Done = Done;
 
-        AutoModpack.LOGGER.info("\n\nFinished!\n\n");
-
         if (Done) {
             Thread.currentThread().setPriority(10);
 
@@ -29,9 +27,9 @@ public class Finished {
 
         }
 
-//        if (!AutoModpackUpdated || !ModpackUpdated) {
-//            return;
-//        }
+        if (!AutoModpackUpdated || !ModpackUpdated) {
+            return;
+        }
 
         if (AutoModpackUpdated) {
             AutoModpack.LOGGER.info("AutoModpack updated!");
@@ -45,20 +43,9 @@ public class Finished {
             return;
         }
 
-        wait(10000);
+        MinecraftClient.getInstance().execute(() -> {
+            MinecraftClient.getInstance().setScreen(new ConfirmScreen());
+        });
 
-        MinecraftClient.getInstance().setScreen(new ConfirmScreen());
-
-    }
-
-    private static void wait(int ms) {
-        try
-        {
-            Thread.sleep(ms);
-        }
-        catch(InterruptedException ex)
-        {
-            Thread.currentThread().interrupt();
-        }
     }
 }

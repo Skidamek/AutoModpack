@@ -18,20 +18,20 @@ public class ConfirmScreen extends Screen {
 
     @Override
     protected void init() {
-        client.setScreen(parent);
-        addDrawableChild(new ButtonWidget(width / 2 - 155, height / 6 + 48 - 6 + 75, 150, 20, new TranslatableText("gui.automodpack.screen.button.cancel").formatted(Formatting.GREEN), (button) -> {
-            client.setScreen(parent);
+        super.init();
+        this.addDrawableChild(new ButtonWidget(this.width / 2 - 155, this.height / 6 + 48 - 6 + 75, 150, 20, new TranslatableText("gui.automodpack.screen.button.cancel").formatted(Formatting.GREEN), (button) -> {
+            this.client.setScreen(parent);
         }));
-        addDrawableChild(new ButtonWidget(width / 2 + 5, height / 6 + 48 - 6 + 75, 150, 20, new TranslatableText("gui.automodpack.screen.button.quit").formatted(Formatting.RED), (button) -> {
-            client.scheduleStop();
+        this.addDrawableChild(new ButtonWidget(this.width / 2 + 5, this.height / 6 + 48 - 6 + 75, 150, 20, new TranslatableText("gui.automodpack.screen.button.quit").formatted(Formatting.RED), (button) -> {
+            this.client.scheduleStop();
         }));
     }
 
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
-        renderBackground(matrices);
-        drawCenteredText(matrices, textRenderer, title, width / 2, 55, 16777215);
-        drawCenteredText(matrices, textRenderer, new TranslatableText("gui.automodpack.screen.description"), width / 2, 80, 16777215);
-        drawCenteredText(matrices, textRenderer, new TranslatableText("gui.automodpack.screen.secDescription"), width / 2, 90, 16777215);
+        this.renderBackground(matrices);
+        drawCenteredText(matrices, this.textRenderer, this.title, this.width / 2, 55, 16777215);
+        drawCenteredText(matrices, this.textRenderer, new TranslatableText("gui.automodpack.screen.description"), this.width / 2, 80, 16777215);
+        drawCenteredText(matrices, this.textRenderer, new TranslatableText("gui.automodpack.screen.secDescription"), this.width / 2, 90, 16777215);
         super.render(matrices, mouseX, mouseY, delta);
     }
 }

@@ -29,8 +29,6 @@ public class UpdateButtonMixin extends Screen {
             new Thread(new Modpack(0)).start();
             new Thread(new SelfUpdater(0)).start();
             new ToastExecutor(0);
-//            this.client.setScreen(new ConfirmScreen(Button));
-            this.client.setScreen(new ConfirmScreen());
         }));
 
     }
