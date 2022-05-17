@@ -13,6 +13,7 @@ public class AutoModpack implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
+    public static boolean Checking;
 
     @Override
     public void onInitialize() {

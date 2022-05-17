@@ -10,7 +10,7 @@ public class Error {
         AutoModpack.AutoModpackUpdated = null;
         AutoModpack.ModpackUpdated = null;
 
-        new ToastExecutor(8);
+        new ToastExecutor(5);
 
         AutoModpack.LOGGER.error("Error! Download server may be down or AutoModpack is wrongly configured!");
         AutoModpack.LOGGER.error("Error! Download server may be down or AutoModpack is wrongly configured!");

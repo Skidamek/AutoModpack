@@ -123,7 +123,7 @@ public class SelfUpdater implements Runnable {
 
             } catch (IOException ex) {
                 AutoModpack.LOGGER.error("Failed to update myself!");
-                new ToastExecutor(8);
+                new ToastExecutor(5);
                 AutoModpack.AutoModpackUpdated = "false";
                 ex.printStackTrace();
             }

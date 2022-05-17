@@ -5,9 +5,6 @@ import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
 
-import static pl.skidam.automodpack.AutoModpack.AutoModpackUpdated;
-import static pl.skidam.automodpack.AutoModpack.ModpackUpdated;
-
 public class Finished {
 
     String AutoModpackUpdated;

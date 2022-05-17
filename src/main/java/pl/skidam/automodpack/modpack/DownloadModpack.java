@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.modpack;
 
 import pl.skidam.automodpack.AutoModpack;
-import pl.skidam.automodpack.ToastExecutor;
 
 import java.io.*;
 import java.net.HttpURLConnection;

@@ -7,9 +7,11 @@ public class FinishCheck implements Runnable {
 
     @Override
     public void run() {
+        AutoModpack.Checking = true;
         while (true) {
             if (AutoModpackUpdated != null && ModpackUpdated != null) {
                 new Finished(true, AutoModpackUpdated, ModpackUpdated);
+                AutoModpack.Checking = false;
                 break;
             }
 
