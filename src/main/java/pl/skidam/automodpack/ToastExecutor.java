@@ -12,12 +12,7 @@ public class ToastExecutor {
     // 2 == Found Update to AutoModpack (mod)
     // 3 == No updates found to Modpack
     // 4 == No updates found to AutoModpack (mod)
-    // 5 == Successfully updated Modpack
-    // 6 == Successfully updated AutoModpack (mod)
-    // 7 == Here you are!
-    // 8 == Error
-
-    // TODO delete 5,6,7
+    // 5 == Error
 
     public ToastExecutor(int WhoAreYou) {
 

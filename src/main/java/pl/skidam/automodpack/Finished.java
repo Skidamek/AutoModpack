@@ -12,9 +12,6 @@ public class Finished {
     boolean Done;
 
 
-    // TODO try make boolens public and use them there but call this class by AutoModpack.java
-
-
     public Finished(boolean Done, String AutoModpackUpdated, String ModpackUpdated) {
 
         this.AutoModpackUpdated = AutoModpackUpdated;
@@ -54,5 +51,6 @@ public class Finished {
 
         AutoModpack.AutoModpackUpdated = null;
         AutoModpack.ModpackUpdated = null;
+        AutoModpack.Checking = false;
     }
 }
