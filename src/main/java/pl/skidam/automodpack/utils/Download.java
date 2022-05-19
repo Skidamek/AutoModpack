@@ -41,7 +41,7 @@ public class Download {
             }
             bout.close();
             in.close();
-            return true;
+            return false;
 
         } catch (IOException ex) {
             AutoModpackClient.LOGGER.error("Failed to update/download!");

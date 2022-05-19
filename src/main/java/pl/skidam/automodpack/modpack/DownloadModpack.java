@@ -13,8 +13,15 @@ public class DownloadModpack {
         Thread.currentThread().setPriority(10);
         AutoModpackClient.LOGGER.info("Downloading Modpack...");
 
-        Download.Download(link, out);
-        AutoModpackClient.LOGGER.info("Successfully downloaded modpack!");
+        // Download and check if download is successful *magic*
+
+        // TODO
+        boolean Check = true;
+        if (Check != Download.Download(link, out)) {
+            AutoModpackClient.LOGGER.info("Failed downloaded modpack!" + Check);
+        }
+        AutoModpackClient.LOGGER.info("Successfully downloaded modpack!" + Check);
+
 
         new UnZip(out, Error, "true");
     }

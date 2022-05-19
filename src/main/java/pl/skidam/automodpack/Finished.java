@@ -41,6 +41,6 @@ public class Finished {
 
         AutoModpackUpdated = null;
         ModpackUpdated = null;
-        AutoModpackClient.Checking = false;
+        Checking = false;
     }
 }
