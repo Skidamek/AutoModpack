@@ -1,4 +1,4 @@
-package pl.skidam.automodpack;
+package pl.skidam.automodpack.ui;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;

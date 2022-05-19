@@ -1,13 +1,12 @@
-package pl.skidam.automodpack;
+package pl.skidam.automodpack.utils;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 
-public class OldConvertToNew implements Runnable {
-    @Override
-    public void run() {
+public class OldConvertToNew {
+    public OldConvertToNew() {
 
         File AMdir = new File("./mods/downloads");
         File AMdirOut = new File("./AutoModpack/");

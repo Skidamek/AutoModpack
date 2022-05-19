@@ -1,21 +1,24 @@
 package pl.skidam.automodpack.delmods;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
-import pl.skidam.automodpack.AutoModpack;
-import pl.skidam.automodpack.OldConvertToNew;
+import pl.skidam.automodpack.AutoModpackClient;
+import pl.skidam.automodpack.utils.OldConvertToNew;
 
 import java.io.File;
 
+@Environment(EnvType.CLIENT)
 public class PreLoadHook implements PreLaunchEntrypoint {
 
     @Override
     public void onPreLaunch() {
 
-        AutoModpack.LOGGER.info("AutoModpack -- PreLaunching...");
+        AutoModpackClient.LOGGER.info("AutoModpack -- PreLaunching...");
 
-        new Thread(new OldConvertToNew()).start();
+        new OldConvertToNew();
 
-        new Thread(new TrashMod()).start();
+        new TrashMod();
 
         while (true) {
             if (new File("./AutoModpack/TrashMod.jar").exists()) {
@@ -23,6 +26,6 @@ public class PreLoadHook implements PreLaunchEntrypoint {
             }
         }
 
-        new Thread(new DeleteMods(true, "false")).start();
+        new DeleteMods(true, "false");
     }
 }

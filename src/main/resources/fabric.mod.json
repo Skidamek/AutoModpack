@@ -19,8 +19,11 @@
 
   "environment": "*",
   "entrypoints": {
-    "main": [
-      "pl.skidam.automodpack.AutoModpack"
+    "client": [
+      "pl.skidam.automodpack.AutoModpackClient"
+    ],
+    "server": [
+      "pl.skidam.automodpack.AutoModpackServer"
     ],
     "preLaunch": [
       "pl.skidam.automodpack.delmods.PreLoadHook"

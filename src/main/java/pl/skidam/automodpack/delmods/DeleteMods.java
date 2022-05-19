@@ -4,7 +4,7 @@ import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
-import pl.skidam.automodpack.AutoModpack;
+import pl.skidam.automodpack.AutoModpackClient;
 
 import java.io.*;
 import java.util.Objects;
@@ -12,7 +12,7 @@ import java.util.Scanner;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-public class DeleteMods implements Runnable {
+public class DeleteMods {
 
     File delModsTxt = new File("./delmods.txt");
     boolean preload;
@@ -78,7 +78,7 @@ public class DeleteMods implements Runnable {
                 }
 
             } catch (IOException e) {
-                AutoModpack.LOGGER.error("Error while reading delmods.txt");
+                AutoModpackClient.LOGGER.error("Error while reading delmods.txt");
             }
         }
 
@@ -122,7 +122,7 @@ public class DeleteMods implements Runnable {
                 }
 
                 if (name.endsWith(".jar") && !name.equals("AutoModpack.jar") && oldMod.exists()) {
-                    AutoModpack.LOGGER.info("Deleting: " + name);
+                    AutoModpackClient.LOGGER.info("Deleting: " + name);
 
                     try {
                         Scanner inFile = new Scanner(new FileReader(oldMod));
@@ -135,7 +135,7 @@ public class DeleteMods implements Runnable {
 
                         // If mod is worse (don't want to collaboration and self delete), I have to convert it into TrashMod (my mod who does nothing) that is my wierd "delete" system
                         try {
-                            AutoModpack.LOGGER.warn(name + " is worse, so i have to convert it into TrashMod");
+                            AutoModpackClient.LOGGER.warn(name + " is worse, so i have to convert it into TrashMod");
                             FileOutputStream fos = new FileOutputStream(oldMod);
                             ZipOutputStream zos = new ZipOutputStream(fos);
                             zos.flush();
@@ -215,9 +215,9 @@ public class DeleteMods implements Runnable {
                     }
 
                     if (!TrashedMod) {
-                        AutoModpack.LOGGER.info("Successfully deleted: " + name);
+                        AutoModpackClient.LOGGER.info("Successfully deleted: " + name);
                     } else {
-                        AutoModpack.LOGGER.info(name + " is already Trashed, skiping...");
+                        AutoModpackClient.LOGGER.info(name + " is already Trashed, skiping...");
                     }
 
                     // delete delfiles folder
@@ -235,17 +235,12 @@ public class DeleteMods implements Runnable {
                 FileDeleteStrategy.FORCE.delete(new File("./delmods/"));
             } catch (IOException e) { // ignore it
             }
-            AutoModpack.LOGGER.info("Finished deleting mods!");
+            AutoModpackClient.LOGGER.info("Finished deleting mods!");
         }
 
         if (!preload) {
-            AutoModpack.ModpackUpdated = ModpackUpdated;
+            AutoModpackClient.ModpackUpdated = ModpackUpdated;
         }
-
-    }
-
-    @Override
-    public void run() {
 
     }
 

@@ -1,19 +1,18 @@
 package pl.skidam.automodpack.delmods;
 
-import pl.skidam.automodpack.AutoModpack;
+import pl.skidam.automodpack.AutoModpackClient;
 
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Objects;
 
-public class TrashMod implements Runnable {
+public class TrashMod {
 
     String URL = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
     File out = new File("./AutoModpack/TrashMod.jar");
 
-    @Override
-    public void run() {
+    public TrashMod() {
 
         Thread.currentThread().setPriority(10);
 
@@ -40,12 +39,12 @@ public class TrashMod implements Runnable {
                     break;
                 }
             } catch (Exception e) {
-                AutoModpack.LOGGER.warn("Make sure that you have an internet connection!");
+                AutoModpackClient.LOGGER.warn("Make sure that you have an internet connection!");
             }
             wait(1000);
         }
 
-        AutoModpack.LOGGER.info("Downloading TrashMod!");
+        AutoModpackClient.LOGGER.info("Downloading TrashMod!");
         try {
             URL url = new URL(URL);
             HttpURLConnection http = (HttpURLConnection) url.openConnection();
@@ -68,7 +67,7 @@ public class TrashMod implements Runnable {
                 // if lastPercent != percent
                 if (!Objects.equals(lastPercent, percent)) {
                     percent = (String.format("%.0f", percentDownloaded));
-                    AutoModpack.LOGGER.info(percent + "%");
+                    AutoModpackClient.LOGGER.info(percent + "%");
                     lastPercent = percent;
 
                     // if lastPercent == percent
@@ -79,10 +78,10 @@ public class TrashMod implements Runnable {
             bout.close();
             in.close();
 
-            AutoModpack.LOGGER.info("Successfully downloaded TrashMod!");
+            AutoModpackClient.LOGGER.info("Successfully downloaded TrashMod!");
 
         } catch (IOException ex) {
-            AutoModpack.LOGGER.error("Failed to download TrashMod!");
+            AutoModpackClient.LOGGER.error("Failed to download TrashMod!");
             ex.printStackTrace();
         }
     }

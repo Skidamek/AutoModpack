@@ -2,7 +2,7 @@ package pl.skidam.automodpack.modpack;
 
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
-import pl.skidam.automodpack.AutoModpack;
+import pl.skidam.automodpack.AutoModpackClient;
 import pl.skidam.automodpack.delmods.DeleteMods;
 
 import java.io.File;
@@ -29,7 +29,7 @@ public class UnZip {
                 Thread.currentThread().setPriority(10);
 
                 // Start unzip
-                AutoModpack.LOGGER.info("Unzipping!");
+                AutoModpackClient.LOGGER.info("Unzipping!");
 
                 try {
                     new ZipFile(out).extractAll("./");
@@ -37,7 +37,7 @@ public class UnZip {
                     e.printStackTrace();
                 }
 
-                AutoModpack.LOGGER.info("Successfully unzipped!");
+                AutoModpackClient.LOGGER.info("Successfully unzipped!");
 
                 // delete old mods
                 new DeleteMods(false, ModpackUpdated);

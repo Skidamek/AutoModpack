@@ -1,4 +1,4 @@
-package pl.skidam.automodpack;
+package pl.skidam.automodpack.utils;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.toast.SystemToast;

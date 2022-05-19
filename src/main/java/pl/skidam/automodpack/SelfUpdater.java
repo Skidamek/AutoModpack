@@ -1,7 +1,7 @@
 package pl.skidam.automodpack;
 
-import net.minecraft.client.MinecraftClient;
-import pl.skidam.automodpack.modpack.Error;
+import pl.skidam.automodpack.utils.Error;
+import pl.skidam.automodpack.utils.ToastExecutor;
 
 import java.io.*;
 import java.net.*;
@@ -9,58 +9,42 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 
-public class SelfUpdater implements Runnable {
+import static pl.skidam.automodpack.AutoModpackClient.*;
 
-    String selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";
-    File selfOut = new File( "./mods/AutoModpack.jar");
-    int delay;
-
-    public SelfUpdater(int delay) {
-        this.delay = delay;
-    }
+public class SelfUpdater {
 
     File selfBackup = new File("./AutoModpack/AutoModpack.jar");
     File oldAutoModpack = new File("./AutoModpack/OldAutoModpack/AutoModpack.jar");
-
     boolean LatestVersion = false;
 
-    @Override
-    public void run() {
-
-        while (MinecraftClient.getInstance().currentScreen == null) {
-            wait(100);
-        }
-
-        wait(delay);
-
-        Thread.currentThread().setPriority(10);
+    public SelfUpdater() {
 
         // if latest mod is not same as current mod download new mod.
         // Check how big the mod file is
         if (!selfBackup.exists()) { new ToastExecutor(2); }
         if (selfBackup.exists()) {
-            AutoModpack.LOGGER.info("Checking if AutoModpack is up-to-date...");
+            AutoModpackClient.LOGGER.info("Checking if AutoModpack is up-to-date...");
 
             long currentSize = selfBackup.length();
             long latestSize = 0;
             try {
                 latestSize = Long.parseLong(webfileSize());
             } catch (Exception e) {
-                AutoModpack.AutoModpackUpdated = "false";
-                AutoModpack.LOGGER.error("Make sure that you have an internet connection!");
+                AutoModpackClient.AutoModpackUpdated = "false";
+                AutoModpackClient.LOGGER.error("Make sure that you have an internet connection!");
                 new Error();
                 return;
             }
 
             if (currentSize != latestSize) {
-                AutoModpack.LOGGER.info("Update found! Updating!");
+                AutoModpackClient.LOGGER.info("Update found! Updating!");
                 new ToastExecutor(2);
 
             } else {
-                AutoModpack.LOGGER.info("Didn't found any updates for AutoModpack!");
+                AutoModpackClient.LOGGER.info("Didn't found any updates for AutoModpack!");
                 new ToastExecutor(4);
                 LatestVersion = true;
-                AutoModpack.AutoModpackUpdated = "false";
+                AutoModpackClient.AutoModpackUpdated = "false";
             }
         }
 
@@ -79,8 +63,10 @@ public class SelfUpdater implements Runnable {
                     throw new RuntimeException(e);
                 }
             } else {
-                AutoModpack.LOGGER.error("LoL how did you get here? You should have the AutoModpack.jar in your mods folder.");
+                AutoModpackClient.LOGGER.error("LoL how did you get here? You should have the AutoModpack.jar in your mods folder.");
             }
+
+//            new Download(selfLink, selfOut);
 
             try {
                 URL url = new URL(selfLink);
@@ -104,7 +90,7 @@ public class SelfUpdater implements Runnable {
                     // if lastPercent != percent
                     if (!Objects.equals(lastPercent, percent)) {
                         percent = (String.format("%.0f", percentDownloaded));
-                        AutoModpack.LOGGER.info(percent + "%");
+                        AutoModpackClient.LOGGER.info(percent + "%");
                         lastPercent = percent;
 
                         // if lastPercent == percent
@@ -117,18 +103,18 @@ public class SelfUpdater implements Runnable {
 
                 Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
-                AutoModpack.LOGGER.info("Successfully self updated!");
+                AutoModpackClient.LOGGER.info("Successfully self updated!");
 //                new ToastExecutor(6);
-                AutoModpack.AutoModpackUpdated = "true";
+                AutoModpackClient.AutoModpackUpdated = "true";
 
             } catch (IOException ex) {
-                AutoModpack.LOGGER.error("Failed to update myself!");
+                AutoModpackClient.LOGGER.error("Failed to update myself!");
                 new ToastExecutor(5);
-                AutoModpack.AutoModpackUpdated = "false";
+                AutoModpackClient.AutoModpackUpdated = "false";
                 ex.printStackTrace();
             }
         } else {
-            AutoModpack.AutoModpackUpdated = "false";
+            AutoModpackClient.AutoModpackUpdated = "false";
         }
     }
 

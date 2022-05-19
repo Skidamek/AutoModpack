@@ -4,32 +4,22 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
+import pl.skidam.automodpack.ui.ConfirmScreen;
+
+import static pl.skidam.automodpack.AutoModpackClient.*;
 
 public class Finished {
 
-    String AutoModpackUpdated;
-    String ModpackUpdated;
-    boolean Done;
-
-
-    public Finished(boolean Done, String AutoModpackUpdated, String ModpackUpdated) {
-
-        this.AutoModpackUpdated = AutoModpackUpdated;
-        this.ModpackUpdated = ModpackUpdated;
-        this.Done = Done;
+    public Finished() {
 
         Text bothUpdates = new TranslatableText("gui.automodpack.screen.title.all").formatted(Formatting.BOLD);
         Text modpackUpdate = new TranslatableText("gui.automodpack.screen.title.modpack").formatted(Formatting.BOLD);
         Text automodpackUpdate = new TranslatableText("gui.automodpack.screen.title.automodpack").formatted(Formatting.BOLD);
 
-        if (Done) {
-            Thread.currentThread().setPriority(10);
+        Thread.currentThread().setPriority(10);
 
-            AutoModpack.LOGGER.info("Here you are!");
+        AutoModpackClient.LOGGER.info("Here you are!");
 
-//            new ToastExecutor(7);
-
-        }
 
         if (AutoModpackUpdated == "true" && ModpackUpdated == "true") {
             MinecraftClient.getInstance().execute(() -> {
@@ -49,8 +39,8 @@ public class Finished {
             });
         }
 
-        AutoModpack.AutoModpackUpdated = null;
-        AutoModpack.ModpackUpdated = null;
-        AutoModpack.Checking = false;
+        AutoModpackUpdated = null;
+        ModpackUpdated = null;
+        AutoModpackClient.Checking = false;
     }
 }

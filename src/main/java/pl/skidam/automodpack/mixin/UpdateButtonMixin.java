@@ -10,7 +10,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.*;
-import pl.skidam.automodpack.modpack.Modpack;
+import pl.skidam.automodpack.StartAndCheck;
+import pl.skidam.automodpack.utils.ToastExecutor;
 
 @Mixin(TitleScreen.class)
 public class UpdateButtonMixin extends Screen {
@@ -24,10 +25,8 @@ public class UpdateButtonMixin extends Screen {
     private void AutoModpackUpdateButton(int y, int spacingY, CallbackInfo ci) {
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y, 115, 20, Button, (button) -> {
             new ToastExecutor(0);
-            if (!AutoModpack.Checking) {
-                new Thread(new FinishCheck()).start();
-                new Thread(new Modpack(0)).start();
-                new Thread(new SelfUpdater(0)).start();
+            if (!AutoModpackClient.Checking) {
+                new Thread(new StartAndCheck(false)).start();
             }
         }));
 

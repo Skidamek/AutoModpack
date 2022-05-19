@@ -1,20 +1,18 @@
 package pl.skidam.automodpack.modpack;
 
-import pl.skidam.automodpack.AutoModpack;
-import pl.skidam.automodpack.ToastExecutor;
+import pl.skidam.automodpack.AutoModpackClient;
+import pl.skidam.automodpack.utils.Error;
+import pl.skidam.automodpack.utils.ToastExecutor;
 
 import java.io.*;
 import java.net.URL;
 import java.net.URLConnection;
 
+import static pl.skidam.automodpack.AutoModpackClient.*;
+
 public class CheckModpack {
 
-    String link;
-    File out;
-
-    public CheckModpack(String link, File out) {
-        this.link = link;
-        this.out = out;
+    public CheckModpack() {
 
         boolean Error = false;
         boolean LatestVersion = false;
@@ -26,29 +24,29 @@ public class CheckModpack {
         File Modpack = new File("./AutoModpack/modpack.zip");
 
         if (!Modpack.exists()) {
-            AutoModpack.LOGGER.info("Didn't found modpack, downloading modpack!");
+            AutoModpackClient.LOGGER.info("Didn't found modpack, downloading modpack!");
             new ToastExecutor(1);
-            new DownloadModpack(link, out);
+            new DownloadModpack();
             return;
         }
 
-        AutoModpack.LOGGER.info("Checking if modpack is up-to-date...");
+        AutoModpackClient.LOGGER.info("Checking if modpack is up-to-date...");
 
         long currentSize = Modpack.length();
         long latestSize = 0;
         try {
             latestSize = Long.parseLong(webfileSize());
         } catch (Exception e) {
-            AutoModpack.LOGGER.error("Make sure that you have an internet connection!");
+            AutoModpackClient.LOGGER.error("Make sure that you have an internet connection!");
             new Error();
             new UnZip(out, Error, "false");
             return;
         }
 
         if (currentSize != latestSize) {
-            AutoModpack.LOGGER.info("Update found! Downloading new mods!");
+            AutoModpackClient.LOGGER.info("Update found! Downloading new mods!");
             new ToastExecutor(1);
-            new DownloadModpack(link, out);
+            new DownloadModpack();
             return;
         }
 
@@ -58,7 +56,7 @@ public class CheckModpack {
             return;
         }
 
-        AutoModpack.LOGGER.info("Didn't found any updates for modpack!");
+        AutoModpackClient.LOGGER.info("Didn't found any updates for modpack!");
         new ToastExecutor(3);
         LatestVersion = true;
         new UnZip(out, Error, "false");
