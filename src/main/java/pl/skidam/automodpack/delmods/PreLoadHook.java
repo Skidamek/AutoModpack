@@ -5,6 +5,7 @@ import pl.skidam.automodpack.AutoModpackClient;
 import pl.skidam.automodpack.utils.OldConvertToNew;
 
 import java.io.File;
+
 public class PreLoadHook implements PreLaunchEntrypoint {
 
     @Override

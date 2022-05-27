@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLConnection;
 
-public class webfileSize {
+public class WebFileSize {
     // GITHUB COPILOT, I LOVE YOU!!!
     public static String webfileSize(String link) {
         String size = "";

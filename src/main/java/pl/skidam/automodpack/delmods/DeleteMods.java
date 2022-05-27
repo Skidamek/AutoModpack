@@ -5,6 +5,7 @@ import net.lingala.zip4j.exception.ZipException;
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.AutoModpackClient;
+import pl.skidam.automodpack.utils.Wait;
 
 import java.io.*;
 import java.util.Objects;
@@ -26,7 +27,7 @@ public class DeleteMods {
 
         if (preload) {
             this.preload = true;
-            wait(500);
+            Wait.wait(500);
             if (!delModsTxt.exists()) {
                 try {
                     new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods.txt", "./");
@@ -242,16 +243,5 @@ public class DeleteMods {
             AutoModpackClient.ModpackUpdated = ModpackUpdated;
         }
 
-    }
-
-    private static void wait(int ms) {
-        try
-        {
-            Thread.sleep(ms);
-        }
-        catch(InterruptedException ex)
-        {
-            Thread.currentThread().interrupt();
-        }
     }
 }

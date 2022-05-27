@@ -2,6 +2,7 @@ package pl.skidam.automodpack;
 
 import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.modpack.CheckModpack;
+import pl.skidam.automodpack.utils.Wait;
 
 import static pl.skidam.automodpack.AutoModpackClient.*;
 
@@ -16,10 +17,10 @@ public class StartAndCheck {
                 if (CurrentScreen.contains("net.minecraft.client.gui.screen")) {
                     break;
                 }
-                wait(50);
+                Wait.wait(50);
             }
             // wait to bypass most of the bugs
-            wait(5000);
+            Wait.wait(5000);
         }
         new SelfUpdater();
         new CheckModpack();
@@ -32,16 +33,7 @@ public class StartAndCheck {
                 new Finished();
                 break;
             }
-            wait(20);
-        }
-    }
-
-    private static void wait(int ms) {
-        try {
-            Thread.sleep(ms);
-        }
-        catch(InterruptedException ex) {
-            Thread.currentThread().interrupt();
+            Wait.wait(20);
         }
     }
 }

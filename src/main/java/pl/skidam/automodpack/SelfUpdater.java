@@ -3,7 +3,7 @@ package pl.skidam.automodpack;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.Error;
 import pl.skidam.automodpack.utils.ToastExecutor;
-import pl.skidam.automodpack.utils.webfileSize;
+import pl.skidam.automodpack.utils.WebFileSize;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -28,7 +28,7 @@ public class SelfUpdater {
             long currentSize = selfBackup.length();
             long latestSize;
             try {
-                latestSize = Long.parseLong(webfileSize.webfileSize(selfLink));
+                latestSize = Long.parseLong(WebFileSize.webfileSize(selfLink));
             } catch (Exception e) {
                 AutoModpackClient.AutoModpackUpdated = "false";
                 AutoModpackClient.LOGGER.error("Make sure that you have an internet connection!");

@@ -1,100 +1,29 @@
 package pl.skidam.automodpack.delmods;
 
 import pl.skidam.automodpack.AutoModpackClient;
+import pl.skidam.automodpack.utils.Download;
+import pl.skidam.automodpack.utils.InternetConnectionCheck;
 
-import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.Objects;
+import static pl.skidam.automodpack.AutoModpackClient.*;
 
 public class TrashMod {
 
-    String URL = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
-    File out = new File("./AutoModpack/TrashMod.jar");
-
     public TrashMod() {
 
-        Thread.currentThread().setPriority(10);
-
-
-        if (out.exists()) {
+        if (trashOut.exists()) {
             return;
         }
 
-        // 14    10
-        // kasia jurek - 12lat
-        // 14    10    12
-        // kasia jurek wojtek - 10lat
-
-
-        // Internet connection check
-        while (true) {
-            try {
-                HttpURLConnection connection = (HttpURLConnection) new URL("https://www.google.com").openConnection();
-                connection.setRequestMethod("HEAD");
-                int responseCode = connection.getResponseCode();
-                if (responseCode != 200) {
-                    throw new Exception("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
-                } else {
-                    break;
-                }
-            } catch (Exception e) {
-                AutoModpackClient.LOGGER.warn("Make sure that you have an internet connection!");
-            }
-            wait(1000);
-        }
+        InternetConnectionCheck.InternetConnectionCheck();
 
         AutoModpackClient.LOGGER.info("Downloading TrashMod!");
-        try {
-            URL url = new URL(URL);
-            HttpURLConnection http = (HttpURLConnection) url.openConnection();
-            double fileSize = (double) http.getContentLengthLong();
-            BufferedInputStream in = new BufferedInputStream(http.getInputStream());
-            FileOutputStream fos = new FileOutputStream(out);
-            BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
-            byte[] buffer = new byte[1024];
-            double downloaded = 0.00;
-            int read;
-            double percentDownloaded;
-            String lastPercent = null;
-            String percent = null;
 
-            while ((read = in.read(buffer, 0, 1024)) >= 0) {
-                bout.write(buffer, 0, read);
-                downloaded += read;
-                percentDownloaded = (downloaded * 100) / fileSize;
+        // Download and check if download is successful *magic*
 
-                // if lastPercent != percent
-                if (!Objects.equals(lastPercent, percent)) {
-                    percent = (String.format("%.0f", percentDownloaded));
-                    AutoModpackClient.LOGGER.info(percent + "%");
-                    lastPercent = percent;
-
-                    // if lastPercent == percent
-                } else {
-                    percent = (String.format("%.0f", percentDownloaded));
-                }
-            }
-            bout.close();
-            in.close();
-
-            AutoModpackClient.LOGGER.info("Successfully downloaded TrashMod!");
-
-        } catch (IOException ex) {
+        if (!Download.Download(trashLink, trashOut)) {
             AutoModpackClient.LOGGER.error("Failed to download TrashMod!");
-            ex.printStackTrace();
+            return;
         }
+        AutoModpackClient.LOGGER.info("Successfully downloaded TrashMod!");
     }
-
-    private static void wait(int ms) {
-        try
-        {
-            Thread.sleep(ms);
-        }
-        catch(InterruptedException ex)
-        {
-            Thread.currentThread().interrupt();
-        }
-    }
-
 }

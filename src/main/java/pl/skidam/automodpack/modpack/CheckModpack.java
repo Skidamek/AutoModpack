@@ -3,7 +3,7 @@ package pl.skidam.automodpack.modpack;
 import pl.skidam.automodpack.AutoModpackClient;
 import pl.skidam.automodpack.utils.Error;
 import pl.skidam.automodpack.utils.ToastExecutor;
-import pl.skidam.automodpack.utils.webfileSize;
+import pl.skidam.automodpack.utils.WebFileSize;
 
 import java.io.*;
 
@@ -31,7 +31,7 @@ public class CheckModpack {
         long currentSize = Modpack.length();
         long latestSize;
         try {
-            latestSize = Long.parseLong(webfileSize.webfileSize(link));
+            latestSize = Long.parseLong(WebFileSize.webfileSize(link));
         } catch (Exception e) {
             AutoModpackClient.LOGGER.error("Make sure that you have an internet connection!");
             new Error();
