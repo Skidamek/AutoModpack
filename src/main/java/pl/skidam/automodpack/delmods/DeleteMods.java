@@ -21,8 +21,6 @@ public class DeleteMods {
 
     public DeleteMods(boolean preload, String ModpackUpdated) {
 
-        Thread.currentThread().setPriority(10);
-
         this.ModpackUpdated = ModpackUpdated;
 
         if (preload) {

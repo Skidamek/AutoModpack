@@ -5,8 +5,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 
-public class OldConvertToNew {
-    public OldConvertToNew() {
+public class CreateFiles {
+    public CreateFiles() {
 
         File AMdir = new File("./mods/downloads");
         File AMdirOut = new File("./AutoModpack/");

@@ -16,8 +16,6 @@ public class Finished {
         Text modpackUpdate = new TranslatableText("gui.automodpack.screen.title.modpack").formatted(Formatting.BOLD);
         Text automodpackUpdate = new TranslatableText("gui.automodpack.screen.title.automodpack").formatted(Formatting.BOLD);
 
-        Thread.currentThread().setPriority(10);
-
         AutoModpackClient.LOGGER.info("Here you are!");
 
 

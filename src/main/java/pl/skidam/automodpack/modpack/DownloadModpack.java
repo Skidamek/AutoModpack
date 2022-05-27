@@ -10,7 +10,6 @@ public class DownloadModpack {
     public DownloadModpack() {
         boolean Error = false;
 
-        Thread.currentThread().setPriority(10);
         AutoModpackClient.LOGGER.info("Downloading Modpack...");
 
         // Download and check if download is successful *magic*

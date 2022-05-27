@@ -13,8 +13,6 @@ public class CheckModpack {
 
     public CheckModpack() {
 
-        Thread.currentThread().setPriority(10);
-
         // if latest modpack is not same as current modpack download new mods.
         // Check how big the Modpack file is
         File Modpack = new File("./AutoModpack/modpack.zip");

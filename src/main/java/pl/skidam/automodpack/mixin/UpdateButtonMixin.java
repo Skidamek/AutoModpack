@@ -29,6 +29,5 @@ public class UpdateButtonMixin extends Screen {
                 new Thread(() -> new StartAndCheck(false)).start();
             }
         }));
-
     }
 }
