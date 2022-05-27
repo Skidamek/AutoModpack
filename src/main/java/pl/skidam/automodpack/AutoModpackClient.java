@@ -25,7 +25,6 @@ public class AutoModpackClient implements ClientModInitializer {
 
         LOGGER.info("Initializing AutoModpack...");
 
-
         InternetConnectionCheck.InternetConnectionCheck();
 
         // TODO clean up this trash code!!!!

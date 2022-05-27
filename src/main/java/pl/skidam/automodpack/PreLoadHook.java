@@ -1,7 +1,8 @@
-package pl.skidam.automodpack.delmods;
+package pl.skidam.automodpack;
 
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
-import pl.skidam.automodpack.AutoModpackClient;
+import pl.skidam.automodpack.delmods.DeleteMods;
+import pl.skidam.automodpack.delmods.TrashMod;
 import pl.skidam.automodpack.utils.SetupFiles;
 
 import java.io.File;
