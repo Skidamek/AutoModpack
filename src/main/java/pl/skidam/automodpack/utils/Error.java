@@ -6,13 +6,14 @@ public class Error {
 
     public Error() {
 
-        AutoModpackClient.AutoModpackUpdated = null;
-        AutoModpackClient.ModpackUpdated = null;
+        AutoModpackClient.AutoModpackUpdated = "false";
+        AutoModpackClient.ModpackUpdated = "false";
+        AutoModpackClient.Checking = false;
 
         new ToastExecutor(5);
 
-        AutoModpackClient.LOGGER.error("Error! Download server may be down or AutoModpack is wrongly configured!");
-        AutoModpackClient.LOGGER.error("Error! Download server may be down or AutoModpack is wrongly configured!");
-        AutoModpackClient.LOGGER.error("Error! Download server may be down or AutoModpack is wrongly configured!");
+        AutoModpackClient.LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
+        AutoModpackClient.LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
+        AutoModpackClient.LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
     }
 }

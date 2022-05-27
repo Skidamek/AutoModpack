@@ -9,7 +9,6 @@ import static pl.skidam.automodpack.AutoModpackClient.*;
 public class StartAndCheck {
 
     public StartAndCheck(boolean isLoading) {
-//        Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
         // If minecraft is still loading wait for it to finish
         if (isLoading) {
             while (true) {

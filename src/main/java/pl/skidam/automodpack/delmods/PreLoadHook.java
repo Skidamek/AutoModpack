@@ -2,7 +2,7 @@ package pl.skidam.automodpack.delmods;
 
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 import pl.skidam.automodpack.AutoModpackClient;
-import pl.skidam.automodpack.utils.CreateFiles;
+import pl.skidam.automodpack.utils.SetupFiles;
 
 import java.io.File;
 
@@ -19,7 +19,7 @@ public class PreLoadHook implements PreLaunchEntrypoint {
 
         AutoModpackClient.LOGGER.info("AutoModpack -- PreLaunching...");
 
-        new CreateFiles();
+        new SetupFiles();
 
         new TrashMod();
 

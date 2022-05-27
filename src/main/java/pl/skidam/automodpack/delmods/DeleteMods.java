@@ -240,6 +240,5 @@ public class DeleteMods {
         if (!preload) {
             AutoModpackClient.ModpackUpdated = ModpackUpdated;
         }
-
     }
 }

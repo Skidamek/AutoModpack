@@ -25,7 +25,9 @@ public class UpdateButtonMixin extends Screen {
     private void AutoModpackUpdateButton(int y, int spacingY, CallbackInfo ci) {
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y, 115, 20, Button, (button) -> {
             new ToastExecutor(0);
+            AutoModpackClient.LOGGER.info("1" + AutoModpackClient.Checking);
             if (!AutoModpackClient.Checking) {
+                AutoModpackClient.LOGGER.info("2" + AutoModpackClient.Checking);
                 new Thread(() -> new StartAndCheck(false)).start();
             }
         }));

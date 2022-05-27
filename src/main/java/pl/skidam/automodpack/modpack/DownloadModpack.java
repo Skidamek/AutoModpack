@@ -8,7 +8,6 @@ import static pl.skidam.automodpack.AutoModpackClient.*;
 public class DownloadModpack {
 
     public DownloadModpack() {
-        boolean Error = false;
 
         AutoModpackClient.LOGGER.info("Downloading Modpack...");
 
@@ -21,6 +20,6 @@ public class DownloadModpack {
 
         AutoModpackClient.LOGGER.info("Successfully downloaded modpack!");
 
-        new UnZip(out, Error, "true");
+        new UnZip(out, "true");
     }
 }

@@ -10,38 +10,35 @@ import java.io.File;
 public class UnZip {
 
     File out;
-    boolean Error;
     String ModpackUpdated;
 
 
-    public UnZip(File out, boolean Error, String ModpackUpdated) {
+    public UnZip(File out, String ModpackUpdated) {
         this.out = out;
-        this.Error = Error;
         this.ModpackUpdated = ModpackUpdated;
 
         // Repeat this function every restart if modpack is up-to-date
 
-        if (!Error) {
-            File ModpackZip = new File(out.toPath().toString());
-            if (ModpackZip.exists()) {
+        File ModpackZip = new File(out.toPath().toString());
+        if (ModpackZip.exists()) {
 
-                // unzip
-                Thread.currentThread().setPriority(10);
+            // unzip
+            Thread.currentThread().setPriority(10);
 
-                // Start unzip
-                AutoModpackClient.LOGGER.info("Unzipping!");
+            // Start unzip
+            AutoModpackClient.LOGGER.info("Unzipping!");
 
-                try {
-                    new ZipFile(out).extractAll("./");
-                } catch (ZipException e) {
-                    e.printStackTrace();
-                }
-
-                AutoModpackClient.LOGGER.info("Successfully unzipped!");
-
-                // delete old mods
-                new DeleteMods(false, ModpackUpdated);
+            try {
+                new ZipFile(out).extractAll("./");
+            } catch (ZipException e) {
+                e.printStackTrace();
             }
+
+            AutoModpackClient.LOGGER.info("Successfully unzipped!");
+
+            // delete old mods
+            new DeleteMods(false, ModpackUpdated);
+
         }
     }
 }
