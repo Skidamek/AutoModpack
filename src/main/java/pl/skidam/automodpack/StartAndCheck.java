@@ -5,23 +5,24 @@ import pl.skidam.automodpack.modpack.CheckModpack;
 
 import static pl.skidam.automodpack.AutoModpackClient.*;
 
-public class StartAndCheck implements Runnable {
+public class StartAndCheck {
 
     public StartAndCheck(boolean isLoading) {
-
-        Thread.currentThread().setPriority(10);
-
+//        Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
         // If minecraft is still loading wait for it to finish
         if (isLoading) {
-            while (MinecraftClient.getInstance().currentScreen == null) {
-                wait(20);
+            while (true) {
+                String CurrentScreen = String.valueOf(MinecraftClient.getInstance().currentScreen);
+                if (CurrentScreen.contains("net.minecraft.client.gui.screen")) {
+                    break;
+                }
+                wait(50);
             }
+            // wait to bypass most of the bugs
             wait(5000);
         }
-        else {
-            new CheckModpack();
-            new SelfUpdater();
-        }
+        new SelfUpdater();
+        new CheckModpack();
 
         // Checking loop
         AutoModpackClient.Checking = true;
@@ -33,10 +34,6 @@ public class StartAndCheck implements Runnable {
             }
             wait(20);
         }
-    }
-
-    @Override
-    public void run() {
     }
 
     private static void wait(int ms) {

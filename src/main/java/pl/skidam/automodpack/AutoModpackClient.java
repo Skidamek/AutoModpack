@@ -24,6 +24,7 @@ public class AutoModpackClient implements ClientModInitializer {
 
         LOGGER.info("Initializing AutoModpack...");
 
+
         // Internet connection check
         while (true) {
             try {
@@ -47,6 +48,6 @@ public class AutoModpackClient implements ClientModInitializer {
         // TODO clean up this trash code!!!!
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server
 
-        new Thread(new StartAndCheck(true)).start();
+        new Thread(() -> new StartAndCheck(true)).start();
     }
 }

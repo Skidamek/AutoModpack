@@ -15,13 +15,12 @@ public class DownloadModpack {
 
         // Download and check if download is successful *magic*
 
-        // TODO
-        boolean Check = true;
-        if (Check != Download.Download(link, out)) {
-            AutoModpackClient.LOGGER.info("Failed downloaded modpack!" + Check);
+        if (!Download.Download(link, out)) {
+            AutoModpackClient.LOGGER.info("Failed downloaded modpack!");
+            return;
         }
-        AutoModpackClient.LOGGER.info("Successfully downloaded modpack!" + Check);
 
+        AutoModpackClient.LOGGER.info("Successfully downloaded modpack!");
 
         new UnZip(out, Error, "true");
     }
