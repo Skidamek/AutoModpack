@@ -7,10 +7,12 @@ import pl.skidam.automodpack.utils.SetupFiles;
 
 import java.io.File;
 
+import static pl.skidam.automodpack.AutoModpackMain.*;
+
 public class AutoModpackServer implements DedicatedServerModInitializer {
     @Override
     public void onInitializeServer() {
-        System.out.println("Welcome to AutoModpack on Server!");
+        LOGGER.info("Welcome to AutoModpack on Server!");
 
         // TODO generate configs for the server
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server -- networking
@@ -21,7 +23,9 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
         File modpackDir = new File("./AutoModpack/modpack/");
 
-        if (modpackDir.length() != 0) {
+        LOGGER.info(modpackDir.listFiles().length + " folders in modpack folder");
+        LOGGER.info("Creating modpack zip");
+        if (modpackDir.listFiles().length != 0) {
             try {
                 new ZipFile("./AutoModpack/modpack.zip").addFolder(modpackDir);
             } catch (ZipException e) {
