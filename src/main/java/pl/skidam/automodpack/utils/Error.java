@@ -1,19 +1,19 @@
 package pl.skidam.automodpack.utils;
 
-import pl.skidam.automodpack.AutoModpackClient;
+import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class Error {
 
     public Error() {
 
-        AutoModpackClient.AutoModpackUpdated = "false";
-        AutoModpackClient.ModpackUpdated = "false";
-        AutoModpackClient.Checking = false;
+        AutoModpackUpdated = "false";
+        ModpackUpdated = "false";
+        Checking = false;
 
         new ToastExecutor(5);
 
-        AutoModpackClient.LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
-        AutoModpackClient.LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
-        AutoModpackClient.LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
+        LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
+        LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
+        LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
     }
 }

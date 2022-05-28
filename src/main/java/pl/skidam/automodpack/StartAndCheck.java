@@ -4,7 +4,7 @@ import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.modpack.CheckModpack;
 import pl.skidam.automodpack.utils.Wait;
 
-import static pl.skidam.automodpack.AutoModpackClient.*;
+import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class StartAndCheck {
 
@@ -25,10 +25,10 @@ public class StartAndCheck {
         new CheckModpack();
 
         // Checking loop
-        AutoModpackClient.Checking = true;
+        Checking = true;
         while (true) {
             if (AutoModpackUpdated != null && ModpackUpdated != null) {
-                AutoModpackClient.Checking = false;
+                Checking = false;
                 new Finished();
                 break;
             }

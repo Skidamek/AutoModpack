@@ -8,7 +8,7 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 
-import static pl.skidam.automodpack.AutoModpackClient.*;
+import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class SelfUpdater {
     File selfBackup = new File("./AutoModpack/AutoModpack.jar");
@@ -23,15 +23,15 @@ public class SelfUpdater {
             try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) {throw new RuntimeException(e);}
         }
 
-        AutoModpackClient.LOGGER.info("Checking if AutoModpack is up-to-date...");
+        LOGGER.info("Checking if AutoModpack is up-to-date...");
 
         long currentSize = selfBackup.length();
         long latestSize = Long.parseLong(WebFileSize.webfileSize(selfLink));
 
         if (currentSize == latestSize) {
-            AutoModpackClient.LOGGER.info("Didn't found any updates for AutoModpack!");
+            LOGGER.info("Didn't found any updates for AutoModpack!");
             new ToastExecutor(4);
-            AutoModpackClient.AutoModpackUpdated = "false";
+            AutoModpackUpdated = "false";
             return;
         }
         // Update found
@@ -44,18 +44,18 @@ public class SelfUpdater {
     }
 
     public void AutoModpackDownload() {
-        AutoModpackClient.LOGGER.info("Update found! Updating!");
+        LOGGER.info("Update found! Updating!");
         new ToastExecutor(2);
         // *magic* downloading
         if (!Download.Download(selfLink, selfOut)) {
-            AutoModpackClient.LOGGER.error("Failed to update myself!");
+            LOGGER.error("Failed to update myself!");
             new ToastExecutor(5);
-            AutoModpackClient.AutoModpackUpdated = "false";
+            AutoModpackUpdated = "false";
             return;
         }
 
         try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) {throw new RuntimeException(e);}
-        AutoModpackClient.LOGGER.info("Successfully self updated!");
-        AutoModpackClient.AutoModpackUpdated = "true";
+        LOGGER.info("Successfully self updated!");
+        AutoModpackUpdated = "true";
     }
 }

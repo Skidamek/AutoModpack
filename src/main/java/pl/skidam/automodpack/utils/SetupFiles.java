@@ -1,11 +1,11 @@
 package pl.skidam.automodpack.utils;
 
-import pl.skidam.automodpack.AutoModpackClient;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+
+import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class SetupFiles {
     public SetupFiles() {
@@ -28,8 +28,8 @@ public class SetupFiles {
     private void server() {
 
 
-
     }
+
     private void client() {
 
         File oldAM = new File("./AutoModpack/OldAutoModpack/");
@@ -46,7 +46,7 @@ public class SetupFiles {
             if (mod.endsWith(".jar")) {
                 File modFile = new File("./mods/" + mod);
                 if (mod.toLowerCase().contains("automodpack") && !mod.equalsIgnoreCase("AutoModpack.jar")) {
-                    AutoModpackClient.LOGGER.warn("Renaming " + modFile + " to AutoModpack.jar");
+                    LOGGER.warn("Renaming " + modFile + " to AutoModpack.jar");
                     try {
                         Files.move(modFile.toPath(), AutoModpackJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
                     } catch (IOException e) {

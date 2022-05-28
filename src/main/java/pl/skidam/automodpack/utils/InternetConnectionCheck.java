@@ -1,9 +1,9 @@
 package pl.skidam.automodpack.utils;
 
-import pl.skidam.automodpack.AutoModpackClient;
-
 import java.net.HttpURLConnection;
 import java.net.URL;
+
+import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class InternetConnectionCheck {
 
@@ -21,7 +21,7 @@ public class InternetConnectionCheck {
                     break;
                 }
             } catch (Exception e) {
-                AutoModpackClient.LOGGER.warn("Make sure that you have an internet connection!");
+                LOGGER.warn("Make sure that you have an internet connection!");
             }
             Wait.wait(1000);
         }

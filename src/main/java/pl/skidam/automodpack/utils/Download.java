@@ -1,11 +1,11 @@
 package pl.skidam.automodpack.utils;
 
-import pl.skidam.automodpack.AutoModpackClient;
-
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Objects;
+
+import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class Download {
     public static boolean Download(String link, File output) {
@@ -32,7 +32,7 @@ public class Download {
                 // if lastPercent != percent
                 if (!Objects.equals(lastPercent, percent)) {
                     percent = (String.format("%.0f", percentDownloaded));
-                    AutoModpackClient.LOGGER.info(percent + "%");
+                    LOGGER.info(percent + "%");
                     lastPercent = percent;
 
                     // if lastPercent == percent
@@ -45,7 +45,7 @@ public class Download {
             return true;
 
         } catch (IOException ex) {
-            AutoModpackClient.LOGGER.error("Failed to update/download!");
+            LOGGER.error("Failed to update/download!");
             new ToastExecutor(5);
             ex.printStackTrace();
             return false;
