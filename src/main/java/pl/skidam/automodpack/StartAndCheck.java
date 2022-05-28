@@ -16,7 +16,7 @@ public class StartAndCheck {
         if (isLoading) {
             while (true) {
                 String CurrentScreen = String.valueOf(MinecraftClient.getInstance().currentScreen);
-                if (CurrentScreen.contains("net.minecraft.client.gui.screen")) {
+                if (CurrentScreen.contains("net.minecraft")) {
                     break;
                 }
                 Wait.wait(50);
@@ -27,6 +27,7 @@ public class StartAndCheck {
 
         // Checking loop
         new Thread(() -> {
+            Thread.currentThread().setName("AutoModpack");
             Checking = true;
             while (true) {
                 if (AutoModpackUpdated != null && ModpackUpdated != null) {
