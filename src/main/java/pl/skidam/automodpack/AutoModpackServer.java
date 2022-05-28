@@ -26,5 +26,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         LOGGER.info("Creating modpack zip");
 
         new ShityCompressor(modpackDir, modpackZip);
+
+        LOGGER.info("Modpack zip created");
     }
 }

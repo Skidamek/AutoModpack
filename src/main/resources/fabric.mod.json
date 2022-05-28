@@ -26,7 +26,7 @@
       "pl.skidam.automodpack.AutoModpackServer"
     ],
     "preLaunch": [
-      "pl.skidam.automodpack.PreLoadHook"
+      "pl.skidam.automodpack.PreLoad"
     ],
     "main": [
       "pl.skidam.automodpack.AutoModpackMain"

@@ -9,7 +9,7 @@ import java.io.File;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
-public class PreLoadHook implements PreLaunchEntrypoint {
+public class PreLoad implements PreLaunchEntrypoint {
 
     @Override
     public void onPreLaunch() {
@@ -20,7 +20,7 @@ public class PreLoadHook implements PreLaunchEntrypoint {
             return;
         }
 
-        LOGGER.info("PreLaunching...");
+        LOGGER.info("Prelaunching...");
 
         new SetupFiles();
 
@@ -34,6 +34,6 @@ public class PreLoadHook implements PreLaunchEntrypoint {
 
         new DeleteMods(true, "false");
 
-        LOGGER.info("Successfully preLaunched!");
+        LOGGER.info("Successfully prelaunched!");
     }
 }
