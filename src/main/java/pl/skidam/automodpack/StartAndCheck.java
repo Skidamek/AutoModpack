@@ -4,13 +4,13 @@ import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.modpack.CheckModpack;
 import pl.skidam.automodpack.utils.Wait;
 
+import java.util.concurrent.CompletableFuture;
+
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class StartAndCheck {
 
     public StartAndCheck(boolean isLoading) {
-
-        Thread.currentThread().setName("AutoModpack");
 
         // If minecraft is still loading wait for it to finish
         if (isLoading) {
@@ -25,8 +25,8 @@ public class StartAndCheck {
             Wait.wait(5000);
         }
 
-        // Checking loop
-        new Thread(() -> {
+        CompletableFuture.runAsync(() -> {
+            // Checking loop
             Checking = true;
             while (true) {
                 if (AutoModpackUpdated != null && ModpackUpdated != null) {
@@ -34,11 +34,11 @@ public class StartAndCheck {
                     new Finished();
                     break;
                 }
-                Wait.wait(20);
+                Wait.wait(1000);
             }
-        }).start();
 
-        new SelfUpdater();
-        new CheckModpack();
+            new SelfUpdater();
+            new CheckModpack();
+        });
     }
 }

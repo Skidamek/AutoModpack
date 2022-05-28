@@ -20,9 +20,6 @@ public class UnZip {
         File ModpackZip = new File(out.toPath().toString());
         if (ModpackZip.exists()) {
 
-            // unzip
-            Thread.currentThread().setPriority(10);
-
             // Start unzip
             LOGGER.info("Unzipping!");
 

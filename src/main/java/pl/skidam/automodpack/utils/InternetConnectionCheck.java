@@ -8,7 +8,7 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 public class InternetConnectionCheck {
 
     public static boolean InternetConnectionCheck() {
-        Thread.currentThread().setPriority(10);
+//        Thread.currentThread().setPriority(10);
         // Internet connection check
         while (true) {
             try {
