@@ -19,22 +19,16 @@ public class Finished {
         LOGGER.info("Here you are!");
 
 
-        if (AutoModpackUpdated == "true" && ModpackUpdated == "true") {
-            MinecraftClient.getInstance().execute(() -> {
-                MinecraftClient.getInstance().setScreen(new ConfirmScreen(bothUpdates));
-            });
+        if (AutoModpackUpdated.equals("true") && ModpackUpdated.equals("true")) {
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new ConfirmScreen(bothUpdates)));
         }
 
-        if (AutoModpackUpdated == "true" && ModpackUpdated == "false") {
-            MinecraftClient.getInstance().execute(() -> {
-                MinecraftClient.getInstance().setScreen(new ConfirmScreen(automodpackUpdate));
-            });
+        if (AutoModpackUpdated.equals("true") && ModpackUpdated.equals("false")) {
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new ConfirmScreen(automodpackUpdate)));
         }
 
-        if (AutoModpackUpdated == "false" && ModpackUpdated == "true") {
-            MinecraftClient.getInstance().execute(() -> {
-                MinecraftClient.getInstance().setScreen(new ConfirmScreen(modpackUpdate));
-            });
+        if (AutoModpackUpdated.equals("false") && ModpackUpdated.equals("true")) {
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new ConfirmScreen(modpackUpdate)));
         }
 
         AutoModpackUpdated = null;

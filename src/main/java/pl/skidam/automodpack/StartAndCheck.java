@@ -4,13 +4,14 @@ import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.modpack.CheckModpack;
 import pl.skidam.automodpack.utils.Wait;
 
-import java.util.concurrent.CompletableFuture;
-
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class StartAndCheck {
 
     public StartAndCheck(boolean isLoading) {
+
+        Thread.currentThread().setName("AutoModpack");
+
         // If minecraft is still loading wait for it to finish
         if (isLoading) {
             while (true) {
