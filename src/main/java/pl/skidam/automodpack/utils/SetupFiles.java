@@ -11,12 +11,12 @@ public class SetupFiles {
     public SetupFiles() {
 
         File AMdir = new File("./AutoModpack/");
-        // check if AutoModpack path exists
+        // Check if AutoModpack path exists
         if (!AMdir.exists()) {
             AMdir.mkdir();
         }
 
-        // check if mod is loaded on client
+        // Check if mod is loaded on client. I know it's bad, but I don't know how to do it better
         File serverProperties = new File("./server.properties");
         if (serverProperties.exists()) {
             server();

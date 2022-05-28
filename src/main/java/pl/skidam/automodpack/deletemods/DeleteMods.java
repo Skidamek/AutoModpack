@@ -65,7 +65,7 @@ public class DeleteMods {
 
                     if (modName.exists()) { // if mod to delete still exists
                         // MAGIC TACTIC
-                        new ShityCompressor(new File("./AutoModpack/TrashMod/"),modName);
+                        new ShityCompressor(new File("./AutoModpack/TrashMod/"), modName);
                         LOGGER.warn("Successfully converted to TrashMod: " + modName);
                     }
 

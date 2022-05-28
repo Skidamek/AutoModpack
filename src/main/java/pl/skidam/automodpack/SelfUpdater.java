@@ -16,7 +16,7 @@ public class SelfUpdater {
 
     public SelfUpdater() {
 
-        // if latest mod is not same as current mod download new mod.
+        // If latest mod is not same as current mod download new mod.
         // Check how big the mod file is
 
         if (!selfBackup.exists()) {

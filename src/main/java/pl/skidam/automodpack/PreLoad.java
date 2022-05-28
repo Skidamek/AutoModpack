@@ -14,7 +14,7 @@ public class PreLoad implements PreLaunchEntrypoint {
     @Override
     public void onPreLaunch() {
 
-        // check if mod is loaded on client
+        // Check if mod is loaded on client. I know it's bad, but I don't know how to do it better
         File serverProperties = new File("./server.properties");
         if (serverProperties.exists()) {
             return;
