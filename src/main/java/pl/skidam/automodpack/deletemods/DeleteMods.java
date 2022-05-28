@@ -63,13 +63,13 @@ public class DeleteMods {
                         FileDeleteStrategy.FORCE.delete(modName);
                     }
 
-                    if (modName.exists()) { // if Delmods still exists
+                    if (modName.exists()) { // if mod to delete still exists
                         // MAGIC TACTIC
                         new ShityCompressor(new File("./AutoModpack/TrashMod/"),modName);
                         LOGGER.warn("Successfully converted to TrashMod: " + modName);
                     }
 
-                    if (modName.exists()) { // if Delmods still exists
+                    if (modName.exists()) { // if mod to delete still exists
                         // Try to delete it again
                         FileDeleteStrategy.FORCE.delete(modName);
                     }
