@@ -53,8 +53,7 @@ public class SetupFiles {
                     LOGGER.warn("Renaming " + modFile + " to AutoModpack.jar");
                     try {
                         Files.move(modFile.toPath(), AutoModpackJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+                    } catch (IOException e) { // ignore it
                     }
                 }
             }
