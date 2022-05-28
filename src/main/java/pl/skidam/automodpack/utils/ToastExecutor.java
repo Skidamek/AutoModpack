@@ -22,26 +22,21 @@ public class ToastExecutor {
         }
 
         SystemToast toast = null;
-        if (WhoAreYou == 0) {
-            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.0"), new TranslatableText("gui.automodpack.toast.down.0"));
-        }
-        if (WhoAreYou == 1) {
-            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.1"), new TranslatableText("gui.automodpack.toast.down.1"));
-        }
-        if (WhoAreYou == 2) {
-            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.2"), new TranslatableText("gui.automodpack.toast.down.2"));
-        }
-        if (WhoAreYou == 3) {
-            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.3"), new TranslatableText("gui.automodpack.toast.down.3"));
-        }
-        if (WhoAreYou == 4) {
-            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.4"), new TranslatableText("gui.automodpack.toast.down.4"));
-        }
-        if (WhoAreYou == 5) {
-            toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.8"), new TranslatableText("gui.automodpack.toast.down.8"));
+        switch (WhoAreYou) {
+            case 0:
+                toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.0"), new TranslatableText("gui.automodpack.toast.down.0"));
+            case 1:
+                toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.1"), new TranslatableText("gui.automodpack.toast.down.1"));
+            case 2:
+                toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.2"), new TranslatableText("gui.automodpack.toast.down.2"));
+            case 3:
+                toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.3"), new TranslatableText("gui.automodpack.toast.down.3"));
+            case 4:
+                toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.4"), new TranslatableText("gui.automodpack.toast.down.4"));
+            case 5:
+                toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up.5"), new TranslatableText("gui.automodpack.toast.down.5"));
         }
 
         MinecraftClient.getInstance().getToastManager().add(toast);
-
     }
 }

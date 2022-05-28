@@ -9,7 +9,7 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class Download {
     public static boolean Download(String link, File output) {
-//        Thread.currentThread().setPriority(10);
+        Thread.currentThread().setPriority(10);
         try {
             URL url = new URL(link);
             HttpURLConnection http = (HttpURLConnection) url.openConnection();

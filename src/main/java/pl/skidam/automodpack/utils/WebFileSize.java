@@ -9,7 +9,7 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 public class WebFileSize {
     // GITHUB COPILOT, I LOVE YOU!!!
     public static String webfileSize(String link) {
-//        Thread.currentThread().setPriority(10);
+        Thread.currentThread().setPriority(10);
         String size = "";
         try {
             URL url = new URL(link);

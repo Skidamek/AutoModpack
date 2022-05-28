@@ -31,7 +31,6 @@ public class SetupFiles {
         if (!modsDir.exists()) {
             modsDir.mkdir();
         }
-
     }
 
     private void client() {
@@ -58,6 +57,5 @@ public class SetupFiles {
                 }
             }
         }
-
     }
 }
