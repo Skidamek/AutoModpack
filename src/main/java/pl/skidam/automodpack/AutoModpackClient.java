@@ -14,6 +14,6 @@ public class AutoModpackClient implements ClientModInitializer {
 
         InternetConnectionCheck.InternetConnectionCheck();
 
-        CompletableFuture.runAsync(() -> new StartAndCheck(true));
+        new Thread(() -> new StartAndCheck(true)).start();
     }
 }

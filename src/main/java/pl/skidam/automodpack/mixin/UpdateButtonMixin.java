@@ -27,7 +27,7 @@ public class UpdateButtonMixin extends Screen {
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y, 115, 20, Button, (button) -> {
             new ToastExecutor(0);
             if (!Checking) {
-                new StartAndCheck(false);
+                new Thread(() -> new StartAndCheck(false)).start();
             }
         }));
     }
