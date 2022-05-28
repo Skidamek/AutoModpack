@@ -27,7 +27,6 @@ public class StartAndCheck {
 
         // Checking loop
         new Thread(() -> {
-            Thread.currentThread().setName("AutoModpack");
             Checking = true;
             while (true) {
                 if (AutoModpackUpdated != null && ModpackUpdated != null) {
