@@ -27,6 +27,10 @@ public class SetupFiles {
 
     private void server() {
 
+        File modsDir = new File("./AutoModpack/modpack/");
+        if (!modsDir.exists()) {
+            modsDir.mkdir();
+        }
 
     }
 

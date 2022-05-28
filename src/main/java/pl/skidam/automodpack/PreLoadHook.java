@@ -35,6 +35,5 @@ public class PreLoadHook implements PreLaunchEntrypoint {
         new DeleteMods(true, "false");
 
         LOGGER.info("Successfully preLaunched!");
-
     }
 }

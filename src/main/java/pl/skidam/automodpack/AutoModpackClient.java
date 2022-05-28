@@ -12,9 +12,6 @@ public class AutoModpackClient implements ClientModInitializer {
 
         InternetConnectionCheck.InternetConnectionCheck();
 
-        // TODO clean up this trash code!!!!
-        // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server
-
         new Thread(() -> new StartAndCheck(true)).start();
     }
 }
