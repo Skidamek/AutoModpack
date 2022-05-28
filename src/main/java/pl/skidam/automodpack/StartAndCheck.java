@@ -27,6 +27,9 @@ public class StartAndCheck {
         CompletableFuture.runAsync(() -> {
             // method call or code to be async.
 
+            new SelfUpdater();
+            new CheckModpack();
+
             // Checking loop
             Checking = true;
             while (true) {
@@ -37,9 +40,6 @@ public class StartAndCheck {
                 }
                 Wait.wait(20);
             }
-
-            new SelfUpdater();
-            new CheckModpack();
         });
     }
 }
