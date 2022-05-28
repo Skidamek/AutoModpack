@@ -20,7 +20,11 @@ public class SelfUpdater {
         // Check how big the mod file is
 
         if (!selfBackup.exists()) {
-            try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) {throw new RuntimeException(e);}
+            try {
+                Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         LOGGER.info("Checking if AutoModpack is up-to-date...");
@@ -37,7 +41,11 @@ public class SelfUpdater {
         // Update found
 
         // Backup old AutoModpack
-        try { Files.copy(selfOut.toPath(), oldAutoModpack.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) {throw new RuntimeException(e);}
+        try {
+            Files.copy(selfOut.toPath(), oldAutoModpack.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
 
         // Download update
         AutoModpackDownload();

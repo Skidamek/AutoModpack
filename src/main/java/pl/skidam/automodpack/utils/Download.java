@@ -46,7 +46,7 @@ public class Download {
 
         } catch (IOException ex) {
             LOGGER.error("Failed to update/download!");
-            new ToastExecutor(5);
+            new Error();
             ex.printStackTrace();
             return false;
         }
