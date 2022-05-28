@@ -4,6 +4,8 @@ import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.modpack.CheckModpack;
 import pl.skidam.automodpack.utils.Wait;
 
+import java.util.concurrent.CompletableFuture;
+
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class StartAndCheck {
@@ -22,18 +24,22 @@ public class StartAndCheck {
             Wait.wait(5000);
         }
 
-        new SelfUpdater();
-        new CheckModpack();
+        CompletableFuture.runAsync(() -> {
+            // method call or code to be async.
 
-        // Checking loop
-        Checking = true;
-        while (true) {
-            if (AutoModpackUpdated != null && ModpackUpdated != null) {
-                Checking = false;
-                new Finished();
-                break;
+            // Checking loop
+            Checking = true;
+            while (true) {
+                if (AutoModpackUpdated != null && ModpackUpdated != null) {
+                    Checking = false;
+                    new Finished();
+                    break;
+                }
+                Wait.wait(20);
             }
-            Wait.wait(20);
-        }
+
+            new SelfUpdater();
+            new CheckModpack();
+        });
     }
 }
