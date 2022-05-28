@@ -21,6 +21,7 @@ public class StartAndCheck {
             // wait to bypass most of the bugs
             Wait.wait(5000);
         }
+
         new SelfUpdater();
         new CheckModpack();
 

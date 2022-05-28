@@ -82,13 +82,9 @@ public class DeleteMods {
             inFile.close();
 
             // Delete the file
-            try {
-                FileDeleteStrategy.FORCE.delete(delModsTxt);
-            } catch (IOException e) { // ignore it
-            }
+            FileDeleteStrategy.FORCE.delete(delModsTxt);
 
-        } catch (IOException e) {
-            LOGGER.error("Error while reading delmods.txt");
+        } catch (IOException e) { // ignore it
         }
 
         LOGGER.info("Finished deleting mods!");
