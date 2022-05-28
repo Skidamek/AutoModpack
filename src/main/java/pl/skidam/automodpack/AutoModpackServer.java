@@ -19,9 +19,11 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
         new SetupFiles();
 
-        if (new File("./AutoModpack/modpack/").length() != 0) {
+        File modpackDir = new File("./AutoModpack/modpack/");
+
+        if (modpackDir.length() != 0) {
             try {
-                new ZipFile("./AutoModpack/modpack.zip").extractAll("./AutoModpack/modpack/");
+                new ZipFile("./AutoModpack/modpack.zip").addFolder(modpackDir);
             } catch (ZipException e) {
                 e.printStackTrace();
             }
