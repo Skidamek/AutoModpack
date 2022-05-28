@@ -2,7 +2,7 @@ package pl.skidam.automodpack;
 
 import net.fabricmc.api.DedicatedServerModInitializer;
 import pl.skidam.automodpack.utils.SetupFiles;
-import pl.skidam.automodpack.utils.ShityCompresor;
+import pl.skidam.automodpack.utils.ShityCompressor;
 
 import java.io.*;
 
@@ -25,6 +25,6 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
         LOGGER.info("Creating modpack zip");
 
-        new ShityCompresor(modpackDir, modpackZip);
+        new ShityCompressor(modpackDir, modpackZip);
     }
 }

@@ -4,7 +4,7 @@ import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import org.apache.commons.io.FileDeleteStrategy;
 import pl.skidam.automodpack.AutoModpackMain;
-import pl.skidam.automodpack.utils.ShityCompresor;
+import pl.skidam.automodpack.utils.ShityCompressor;
 import pl.skidam.automodpack.utils.Wait;
 
 import java.io.*;
@@ -65,7 +65,7 @@ public class DeleteMods {
 
                     if (modName.exists()) { // if Delmods still exists
                         // MAGIC TACTIC
-                        new ShityCompresor(new File("./AutoModpack/TrashMod/"),modName);
+                        new ShityCompressor(new File("./AutoModpack/TrashMod/"),modName);
                         LOGGER.warn("Successfully converted to TrashMod: " + modName);
                     }
 

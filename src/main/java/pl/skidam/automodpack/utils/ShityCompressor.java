@@ -9,9 +9,9 @@ import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-public class ShityCompresor { // by skidam
+public class ShityCompressor { // by skidam
 
-    public ShityCompresor(File unzipedInput, File zipOut) {
+    public ShityCompressor(File unzipedInput, File zipOut) {
 
         try {
             FileOutputStream fos = new FileOutputStream(zipOut);
