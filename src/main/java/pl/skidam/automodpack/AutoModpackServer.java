@@ -1,11 +1,10 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.api.DedicatedServerModInitializer;
-import net.lingala.zip4j.ZipFile;
-import net.lingala.zip4j.exception.ZipException;
 import pl.skidam.automodpack.utils.SetupFiles;
+import pl.skidam.automodpack.utils.ShityCompresor;
 
-import java.io.File;
+import java.io.*;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
@@ -22,15 +21,10 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         new SetupFiles();
 
         File modpackDir = new File("./AutoModpack/modpack/");
+        File modpackZip = new File("./AutoModpack/modpack.zip");
 
-        LOGGER.info(modpackDir.listFiles().length + " folders in modpack folder");
         LOGGER.info("Creating modpack zip");
-        if (modpackDir.listFiles().length != 0) {
-            try {
-                new ZipFile("./AutoModpack/modpack.zip").addFolder(modpackDir);
-            } catch (ZipException e) {
-                e.printStackTrace();
-            }
-        }
+
+        new ShityCompresor(modpackDir, modpackZip);
     }
 }
