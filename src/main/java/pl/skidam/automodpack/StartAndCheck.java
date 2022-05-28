@@ -36,9 +36,9 @@ public class StartAndCheck {
                 }
                 Wait.wait(1000);
             }
-        });
 
-        new SelfUpdater();
-        new CheckModpack();
+            new SelfUpdater();
+            new CheckModpack();
+        });
     }
 }
