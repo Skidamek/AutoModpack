@@ -22,5 +22,6 @@ public class AutoModpackMain implements ModInitializer {
     @Override
     public void onInitialize() {
 
+
     }
 }

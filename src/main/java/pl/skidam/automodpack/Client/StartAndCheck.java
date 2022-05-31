@@ -1,8 +1,10 @@
-package pl.skidam.automodpack;
+package pl.skidam.automodpack.Client;
 
 import net.minecraft.client.MinecraftClient;
-import pl.skidam.automodpack.modpack.CheckModpack;
+import pl.skidam.automodpack.Client.modpack.CheckModpack;
 import pl.skidam.automodpack.utils.Wait;
+
+import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
@@ -12,18 +14,14 @@ public class StartAndCheck {
 
         // If minecraft is still loading wait for it to finish
         if (isLoading) {
-            while (true) {
-                String CurrentScreen = String.valueOf(MinecraftClient.getInstance().currentScreen);
-                if (CurrentScreen.contains("net.minecraft")) {
-                    break;
-                }
+            while (MinecraftClient.getInstance().currentScreen == null) {
                 Wait.wait(50);
             }
             // wait to bypass most of the bugs
             Wait.wait(5000);
         }
 
-        new Thread(() -> {
+        CompletableFuture.runAsync(() -> {
             // Checking loop
             Checking = true;
             while (true) {
@@ -33,10 +31,10 @@ public class StartAndCheck {
                     break;
                 }
                 Wait.wait(1000);
-            }}).start();
+            }
+        });
 
         new SelfUpdater();
         new CheckModpack();
-
     }
 }

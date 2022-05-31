@@ -1,4 +1,4 @@
-package pl.skidam.automodpack;
+package pl.skidam.automodpack.Client;
 
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.ToastExecutor;

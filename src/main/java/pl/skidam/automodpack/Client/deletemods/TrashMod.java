@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.deletemods;
+package pl.skidam.automodpack.Client.deletemods;
 
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;

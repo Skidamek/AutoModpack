@@ -1,5 +1,8 @@
 package pl.skidam.automodpack.utils;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,13 +19,12 @@ public class SetupFiles {
             AMdir.mkdir();
         }
 
-        // Check if mod is loaded on client. I know it's bad, but I don't know how to do it better
-        File serverProperties = new File("./server.properties");
-        if (serverProperties.exists()) {
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
             server();
             return;
         }
         client();
+
     }
 
     private void server() {

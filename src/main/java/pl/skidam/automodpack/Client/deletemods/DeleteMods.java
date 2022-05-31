@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.deletemods;
+package pl.skidam.automodpack.Client.deletemods;
 
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;

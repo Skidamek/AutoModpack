@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.modpack;
+package pl.skidam.automodpack.Client.modpack;
 
 import pl.skidam.automodpack.utils.Download;
 

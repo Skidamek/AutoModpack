@@ -1,24 +1,19 @@
-package pl.skidam.automodpack.modpack;
+package pl.skidam.automodpack.Client.modpack;
 
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
-import pl.skidam.automodpack.deletemods.DeleteMods;
+import pl.skidam.automodpack.Client.deletemods.DeleteMods;
 
 import java.io.File;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class UnZip {
-    File out;
-    String ModpackUpdated;
 
     public UnZip(File out, String ModpackUpdated) {
-        this.out = out;
-        this.ModpackUpdated = ModpackUpdated;
 
         // Repeat this function every restart if modpack is up-to-date
-        File ModpackZip = new File(out.toPath().toString());
-        if (ModpackZip.exists()) {
+        if (out.exists()) {
 
             // Start unzip
             LOGGER.info("Unzipping!");

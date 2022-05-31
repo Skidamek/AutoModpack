@@ -1,9 +1,8 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.api.ClientModInitializer;
+import pl.skidam.automodpack.Client.StartAndCheck;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
-
-import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 public class AutoModpackClient implements ClientModInitializer {
@@ -13,6 +12,7 @@ public class AutoModpackClient implements ClientModInitializer {
         LOGGER.info("Initializing AutoModpack...");
 
         InternetConnectionCheck.InternetConnectionCheck();
+
 
         new Thread(() -> new StartAndCheck(true)).start();
     }

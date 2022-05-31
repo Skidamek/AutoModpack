@@ -65,10 +65,29 @@ public class ShityCompressor { // by Skidam
                                                     zos.write(FileUtils.readFileToByteArray(file5));
                                                     zos.closeEntry();
                                                 }
-                                                if (file4.isDirectory()) {
+                                                if (file5.isDirectory()) {
                                                     zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/" + file4.getName() + "/" + file5.getName() + "/"));
                                                     zos.closeEntry();
 
+                                                    for (File file6 : Objects.requireNonNull(file5.listFiles())) {
+                                                        if (file6.isFile()) {
+                                                            zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/" + file4.getName() + "/" + file5.getName() + "/" + file6.getName()));
+                                                            zos.write(FileUtils.readFileToByteArray(file6));
+                                                            zos.closeEntry();
+                                                        }
+                                                        if (file6.isDirectory()) {
+                                                            zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/" + file4.getName() + "/" + file5.getName() + "/" + file6.getName() + "/"));
+                                                            zos.closeEntry();
+
+                                                            for (File file7 : Objects.requireNonNull(file6.listFiles())) {
+                                                                if (file7.isFile()) {
+                                                                    zos.putNextEntry(new ZipEntry(file.getName() + "/" + file2.getName() + "/" + file3.getName() + "/" + file4.getName() + "/" + file5.getName() + "/" + file6.getName() + "/" + file7.getName()));
+                                                                    zos.write(FileUtils.readFileToByteArray(file7));
+                                                                    zos.closeEntry();
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }

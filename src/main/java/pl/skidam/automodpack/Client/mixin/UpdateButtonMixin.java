@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.mixin;
+package pl.skidam.automodpack.Client.mixin;
 
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import pl.skidam.automodpack.StartAndCheck;
+import pl.skidam.automodpack.Client.StartAndCheck;
 import pl.skidam.automodpack.utils.ToastExecutor;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;

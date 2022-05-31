@@ -1,10 +1,10 @@
-package pl.skidam.automodpack;
+package pl.skidam.automodpack.Client;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
-import pl.skidam.automodpack.ui.ConfirmScreen;
+import pl.skidam.automodpack.Client.ui.ConfirmScreen;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 

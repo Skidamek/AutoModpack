@@ -1,8 +1,10 @@
 package pl.skidam.automodpack;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
-import pl.skidam.automodpack.deletemods.DeleteMods;
-import pl.skidam.automodpack.deletemods.TrashMod;
+import pl.skidam.automodpack.Client.deletemods.DeleteMods;
+import pl.skidam.automodpack.Client.deletemods.TrashMod;
 import pl.skidam.automodpack.utils.SetupFiles;
 
 import java.io.File;
@@ -14,9 +16,7 @@ public class PreLoad implements PreLaunchEntrypoint {
     @Override
     public void onPreLaunch() {
 
-        // Check if mod is loaded on client. I know it's bad, but I don't know how to do it better
-        File serverProperties = new File("./server.properties");
-        if (serverProperties.exists()) {
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
             return;
         }
 

@@ -23,10 +23,13 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         File modpackDir = new File("./AutoModpack/modpack/");
         File modpackZip = new File("./AutoModpack/modpack.zip");
 
-        LOGGER.info("Creating modpack zip");
+        if (modpackDir.length() > 0) {
+            LOGGER.info("Creating modpack zip");
+            new ShityCompressor(modpackDir, modpackZip);
+            LOGGER.info("Modpack zip created");
+        }
 
-        new ShityCompressor(modpackDir, modpackZip);
 
-        LOGGER.info("Modpack zip created");
+
     }
 }
