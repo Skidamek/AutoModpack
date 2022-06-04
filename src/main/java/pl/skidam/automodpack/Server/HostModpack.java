@@ -44,7 +44,7 @@ public class HostModpack implements HttpHandler {
                 server.setExecutor(threadPool);
                 server.start();
 
-                modpackIp = String.format("http://%s:%s/%s", serverIp, 24464, subUrl);
+                modpackIp = String.format("http://%s:%s/%s", serverIp, 30037, subUrl);
 
                 String hash = String.format("%040x", new BigInteger(1, MessageDigest
                         .getInstance("SHA-1")
