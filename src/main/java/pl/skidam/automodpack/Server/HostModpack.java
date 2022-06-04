@@ -51,8 +51,6 @@ public class HostModpack implements HttpHandler {
                         .digest(new FileInputStream(MODPACK_FILE.toString()).readAllBytes()))
                 );
 
-                minecraftServer.setResourcePack(modpackIp, hash);
-
                 LOGGER.info("Modpack host started at {} (Hash: {})", modpackIp, hash);
             } catch (Exception e) {
                 LOGGER.error("Failed to start the modpack server!", e);
