@@ -30,6 +30,16 @@ public class HostModpack implements HttpHandler {
 
     public static String modpackIp;
 
+    public static void stop() {
+        if (server != null) {
+            server.stop(0);
+        }
+        if (threadPool != null) {
+            threadPool.shutdownNow();
+        }
+    }
+
+
     public static void start(MinecraftServer minecraftServer) {
         threadPool = Executors.newFixedThreadPool(1, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Modpack-Host-%d").build());
 
@@ -63,11 +73,15 @@ public class HostModpack implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         if (Objects.equals(exchange.getRequestMethod(), "GET")) {
-            if (exchange.getRequestHeaders().getFirst("X-Minecraft-Username") != null) {
-                LOGGER.info("Supplying modpack for Minecraft player: {}", exchange.getRequestHeaders().getFirst("X-Minecraft-Username"));
-            } else {
-                LOGGER.info("Supplying modpack to a non-Minecraft client");
-            }
+//            LOGGER.error(exchange.getRequestURI().toString());
+//            LOGGER.error(exchange.getRequestHeaders().toString());
+//            if (exchange.getRequestHeaders().getFirst("X-Minecraft-Username") != null) {
+//                LOGGER.info("Supplying modpack for Minecraft player: {}", exchange.getRequestHeaders().getFirst("X-Minecraft-Username"));
+//            } else {
+//                LOGGER.info("Supplying modpack to a non-Minecraft client");
+//            }
+
+            LOGGER.info("Supplying modpack to the client");
 
             OutputStream outputStream = exchange.getResponseBody();
             File pack = MODPACK_FILE.toFile();
