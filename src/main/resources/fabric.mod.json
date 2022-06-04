@@ -19,18 +19,10 @@
 
   "environment": "*",
   "entrypoints": {
-    "client": [
-      "pl.skidam.automodpack.AutoModpackClient"
-    ],
-    "server": [
-      "pl.skidam.automodpack.AutoModpackServer"
-    ],
-    "preLaunch": [
-      "pl.skidam.automodpack.PreLoad"
-    ],
-    "main": [
-      "pl.skidam.automodpack.AutoModpackMain"
-    ]
+    "client": ["pl.skidam.automodpack.AutoModpackClient"],
+    "server": ["pl.skidam.automodpack.AutoModpackServer"],
+    "preLaunch": ["pl.skidam.automodpack.PreLoad"],
+    "main": ["pl.skidam.automodpack.AutoModpackMain"]
   },
   "mixins": [
     "automodpack.mixins.json"

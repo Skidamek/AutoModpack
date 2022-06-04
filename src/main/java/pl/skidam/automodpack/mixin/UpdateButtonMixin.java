@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.Client.mixin;
+package pl.skidam.automodpack.mixin;
 
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;

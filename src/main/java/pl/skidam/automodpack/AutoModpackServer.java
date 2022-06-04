@@ -1,6 +1,8 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.api.DedicatedServerModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import pl.skidam.automodpack.Server.HostModpack;
 import pl.skidam.automodpack.utils.SetupFiles;
 import pl.skidam.automodpack.utils.ShityCompressor;
 
@@ -23,13 +25,14 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         File modpackDir = new File("./AutoModpack/modpack/");
         File modpackZip = new File("./AutoModpack/modpack.zip");
 
-        if (modpackDir.length() > 0) {
+        if (modpackDir.exists() && modpackDir.getTotalSpace() > 1) {
             LOGGER.info("Creating modpack zip");
             new ShityCompressor(modpackDir, modpackZip);
             LOGGER.info("Modpack zip created");
         }
 
-
-
+        if (modpackZip.exists()) {
+            ServerLifecycleEvents.SERVER_STARTED.register(HostModpack::start);
+        }
     }
 }
