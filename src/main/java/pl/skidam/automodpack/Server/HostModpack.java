@@ -65,9 +65,9 @@ public class HostModpack implements HttpHandler {
     public void handle(HttpExchange exchange) throws IOException {
         if (Objects.equals(exchange.getRequestMethod(), "GET")) {
             if (exchange.getRequestHeaders().getFirst("X-Minecraft-Username") != null) {
-                LOGGER.info("Supplying resource pack for Minecraft player: {}", exchange.getRequestHeaders().getFirst("X-Minecraft-Username"));
+                LOGGER.info("Supplying modpack for Minecraft player: {}", exchange.getRequestHeaders().getFirst("X-Minecraft-Username"));
             } else {
-                LOGGER.info("Supplying resource pack to a non-Minecraft client");
+                LOGGER.info("Supplying modpack to a non-Minecraft client");
             }
 
             OutputStream outputStream = exchange.getResponseBody();
