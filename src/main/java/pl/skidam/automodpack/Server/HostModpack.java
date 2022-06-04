@@ -27,8 +27,10 @@ public class HostModpack implements HttpHandler {
     private static HttpServer server = null;
     private static ExecutorService threadPool = null;
 
+    public static String modpackIp = "";
+
     public static void start(MinecraftServer minecraftServer) {
-        HostModpack.threadPool = Executors.newFixedThreadPool(1, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Host-%d").build());
+        threadPool = Executors.newFixedThreadPool(1, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Modpack-Host-%d").build());
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -37,21 +39,21 @@ public class HostModpack implements HttpHandler {
                 String serverIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
 
-                HostModpack.server = HttpServer.create(new InetSocketAddress("0.0.0.0", 24464), 0);
-                HostModpack.server.createContext("/" + subUrl, new HostModpack());
-                HostModpack.server.setExecutor(HostModpack.threadPool);
-                HostModpack.server.start();
+                server = HttpServer.create(new InetSocketAddress("0.0.0.0", 24464), 0);
+                server.createContext("/" + subUrl, new HostModpack());
+                server.setExecutor(threadPool);
+                server.start();
 
-                String packIp = String.format("http://%s:%s/%s", serverIp, 24464, subUrl);
+                modpackIp = String.format("http://%s:%s/%s", serverIp, 24464, subUrl);
 
                 String hash = String.format("%040x", new BigInteger(1, MessageDigest
                         .getInstance("SHA-1")
                         .digest(new FileInputStream(MODPACK_FILE.toString()).readAllBytes()))
                 );
 
-                minecraftServer.setResourcePack(packIp, hash);
+                minecraftServer.setResourcePack(modpackIp, hash);
 
-                LOGGER.info("Modpack host started at {} (Hash: {})", packIp, hash);
+                LOGGER.info("Modpack host started at {} (Hash: {})", modpackIp, hash);
             } catch (Exception e) {
                 LOGGER.error("Failed to start the modpack server!", e);
             }
