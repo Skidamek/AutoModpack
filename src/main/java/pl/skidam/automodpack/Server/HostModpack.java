@@ -28,11 +28,11 @@ public class HostModpack implements HttpHandler {
     private static ExecutorService threadPool = null;
 
     public static void start(MinecraftServer minecraftServer) {
-        HostModpack.threadPool = Executors.newFixedThreadPool(1, new ThreadFactoryBuilder().setNameFormat("Polypack-Host-%d").build());
+        HostModpack.threadPool = Executors.newFixedThreadPool(1, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Host-%d").build());
 
         CompletableFuture.runAsync(() -> {
             try {
-                LOGGER.info("Starting AutoModpack modpack server...");;
+                LOGGER.info("Starting modpack server...");;
 
                 String serverIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
