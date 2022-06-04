@@ -30,12 +30,8 @@ public class HostModpack implements HttpHandler {
     public static String modpackHostIp;
 
     public static void stop() {
-        if (server != null) {
-            server.stop(0);
-        }
-        if (threadPool != null) {
-            threadPool.shutdownNow();
-        }
+        server.stop(0);
+        threadPool.shutdownNow();
     }
 
     public static void start(MinecraftServer minecraftServer) {
