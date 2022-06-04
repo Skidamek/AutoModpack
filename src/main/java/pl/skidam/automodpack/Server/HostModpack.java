@@ -18,7 +18,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
+import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class HostModpack implements HttpHandler {
 
@@ -26,9 +26,8 @@ public class HostModpack implements HttpHandler {
 
     private static HttpServer server = null;
     private static ExecutorService threadPool = null;
-    public static int port = 30037;
 
-    public static String modpackIp;
+    public static String modpackHostIp;
 
     public static void stop() {
         if (server != null) {
@@ -39,9 +38,8 @@ public class HostModpack implements HttpHandler {
         }
     }
 
-
     public static void start(MinecraftServer minecraftServer) {
-        threadPool = Executors.newFixedThreadPool(1, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Modpack-Host-%d").build());
+        threadPool = Executors.newFixedThreadPool(host_thread_count, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Modpack-Host-%d").build());
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -50,19 +48,19 @@ public class HostModpack implements HttpHandler {
                 String serverIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
 
-                server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+                server = HttpServer.create(new InetSocketAddress("0.0.0.0", host_port), 0);
                 server.createContext("/" + subUrl, new HostModpack());
                 server.setExecutor(threadPool);
                 server.start();
 
-                modpackIp = String.format("http://%s:%s/%s", serverIp, port, subUrl);
+                modpackHostIp = String.format("http://%s:%s/%s", serverIp, host_port, subUrl);
 
                 String hash = String.format("%040x", new BigInteger(1, MessageDigest
                         .getInstance("SHA-1")
                         .digest(new FileInputStream(MODPACK_FILE.toString()).readAllBytes()))
                 );
 
-                LOGGER.info("Modpack host started at {} (Hash: {})", modpackIp, hash);
+                LOGGER.info("Modpack host started at {} (Hash: {})", modpackHostIp, hash);
             } catch (Exception e) {
                 LOGGER.error("Failed to start the modpack server!", e);
             }

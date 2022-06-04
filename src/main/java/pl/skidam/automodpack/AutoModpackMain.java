@@ -9,6 +9,8 @@ import java.io.File;
 public class AutoModpackMain implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
+
+    // Client
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
     public static boolean Checking;
@@ -18,6 +20,12 @@ public class AutoModpackMain implements ModInitializer {
     public static final File selfOut = new File( "./mods/AutoModpack.jar");
     public static final String trashLink = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
     public static final File trashOut = new File("./AutoModpack/TrashMod.jar");
+
+    // Server
+    public static int host_port = 30037;
+    public static int host_thread_count = 1;
+    public static String host_external_ip = "";
+
 
     @Override
     public void onInitialize() {
