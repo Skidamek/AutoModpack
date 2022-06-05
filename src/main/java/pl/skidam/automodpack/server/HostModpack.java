@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.Server;
+package pl.skidam.automodpack.server;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sun.net.httpserver.HttpExchange;

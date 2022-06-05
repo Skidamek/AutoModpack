@@ -3,7 +3,7 @@ package pl.skidam.automodpack;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
-import pl.skidam.automodpack.Client.StartAndCheck;
+import pl.skidam.automodpack.client.StartAndCheck;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
 
 import java.io.*;

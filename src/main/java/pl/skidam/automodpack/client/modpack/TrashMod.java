@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.Client.modpack;
+package pl.skidam.automodpack.client.modpack;
 
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;

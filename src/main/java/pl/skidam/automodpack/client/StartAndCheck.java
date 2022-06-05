@@ -1,7 +1,7 @@
-package pl.skidam.automodpack.Client;
+package pl.skidam.automodpack.client;
 
 import net.minecraft.client.MinecraftClient;
-import pl.skidam.automodpack.Client.modpack.CheckModpack;
+import pl.skidam.automodpack.client.modpack.CheckModpack;
 import pl.skidam.automodpack.utils.Wait;
 
 import java.util.concurrent.CompletableFuture;

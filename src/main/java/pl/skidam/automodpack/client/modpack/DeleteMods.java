@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.Client.modpack;
+package pl.skidam.automodpack.client.modpack;
 
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;

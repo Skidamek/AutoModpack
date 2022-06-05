@@ -3,7 +3,7 @@ package pl.skidam.automodpack;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.*;
-import pl.skidam.automodpack.Server.HostModpack;
+import pl.skidam.automodpack.server.HostModpack;
 import pl.skidam.automodpack.utils.SetupFiles;
 import pl.skidam.automodpack.utils.ShityCompressor;
 
