@@ -8,6 +8,7 @@ import pl.skidam.automodpack.utils.InternetConnectionCheck;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 public class AutoModpackClient implements ClientModInitializer {
+
     @Override
     public void onInitializeClient() {
 
@@ -15,18 +16,17 @@ public class AutoModpackClient implements ClientModInitializer {
 
         InternetConnectionCheck.InternetConnectionCheck();
 
-
         ClientPlayNetworking.registerGlobalReceiver(AutoModpackMain.PACKET_S2C, (client, handler, buf, responseSender) -> {
             LOGGER.error("Received packet from server!");
 
-            client.execute(() -> {
-                ClientPlayNetworking.send(AutoModpackMain.PACKET_C2S, PacketByteBufs.empty());
-            });
-
-            LOGGER.error("Sent response to server!");
-
+            while (true) {
+                if (ClientPlayNetworking.canSend(AutoModpackMain.PACKET_C2S)) {
+                    ClientPlayNetworking.send(AutoModpackMain.PACKET_C2S, PacketByteBufs.empty());
+                    LOGGER.error("Sent response to server!");
+                    break;
+                }
+            }
         });
-
 
         new Thread(() -> new StartAndCheck(true)).start();
     }

@@ -30,11 +30,11 @@ public class WorldJoinMixin
                 Thread.sleep(1000);
 
                 if (PlayersHavingAM.contains(playerEntity.getName().asString())) {
-                    AutoModpackMain.LOGGER.error(playerEntity.getName().asString() + " is already have AutoModpack!");
+                    AutoModpackMain.LOGGER.info(playerEntity.getName().asString() + " has AutoModpack!");
                     PlayersHavingAM.remove(playerEntity.getName().asString());
                 } else {
                     Text DisconnectText = Text.of("You have to install \"AutoModpack\" mod to play on this server! https://github.com/Skidamek/AutoModpack/releases");
-                    AutoModpackMain.LOGGER.error(playerEntity.getName().asString() + " not have AutoModpack!");
+                    AutoModpackMain.LOGGER.info(playerEntity.getName().asString() + " has not AutoModpack! SO KICKED!");
                     playerEntity.networkHandler.disconnect(DisconnectText);
                 }
             } catch (InterruptedException e) {
