@@ -1,6 +1,7 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.api.ModInitializer;
+import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +22,11 @@ public class AutoModpackMain implements ModInitializer {
     public static final String trashLink = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
     public static final File trashOut = new File("./AutoModpack/TrashMod.jar");
 
+    public static final Identifier PACKET_S2C = new Identifier("servertick");
+
     // Server
+
+    public static final Identifier PACKET_C2S = new Identifier("servertick", "metrics/full");
     public static int host_port = 30037;
     public static int host_thread_count = 1;
     public static String host_external_ip = "";
@@ -32,4 +37,5 @@ public class AutoModpackMain implements ModInitializer {
 
 
     }
+
 }
