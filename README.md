@@ -16,6 +16,8 @@ Coming soon
 
 Download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/download/latest/AutoModpack.jar).
 
+You need also download the fabric api.
+
 Put it into the `mods` folder of your minecraft installation.
 
 Launch the game your game.
@@ -27,6 +29,8 @@ After join the server with modpack from this mod, mods will be automatically dow
 **Open port 30037 on your server!** (you will, can change it in the config, config coming soon)
 
 Download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/download/latest/AutoModpack.jar).
+
+You need also download the fabric api.
 
 Put it into the `mods` folder of your server installation.
 
