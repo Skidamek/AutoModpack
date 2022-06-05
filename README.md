@@ -45,6 +45,7 @@ No, you can use any launcher you want except for Feather Client its unsupported.
 <br>
 
 **Contributors are welcome.**
+[Click.](CONTRIBUTING.md)
   
 <p align="center"><img src="https://i.imgur.com/WQofabo.png" alt="Logo" width="200"></p>
 <h1 align="center">AutoModpack  <br>
