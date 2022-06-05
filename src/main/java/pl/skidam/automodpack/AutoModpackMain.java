@@ -16,7 +16,7 @@ public class AutoModpackMain implements ModInitializer {
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
     public static boolean Checking;
-    public static final String link = "http://192.168.0.113:30037/modpack";
+    public static String link = "null";
     public static final File out = new File("./AutoModpack/modpack.zip");
     public static final String selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";
     public static final File selfOut = new File( "./mods/AutoModpack.jar");
@@ -31,6 +31,7 @@ public class AutoModpackMain implements ModInitializer {
     public static int host_port = 30037;
     public static int host_thread_count = 1;
     public static String host_external_ip = "";
+    public static int time_out = 1250; // in milliseconds
 
 
     @Override

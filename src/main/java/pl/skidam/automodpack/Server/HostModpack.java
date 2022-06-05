@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
+import pl.skidam.automodpack.AutoModpackMain;
 
 import java.io.*;
 import java.math.BigInteger;
@@ -55,6 +56,8 @@ public class HostModpack implements HttpHandler {
                         .getInstance("SHA-1")
                         .digest(new FileInputStream(MODPACK_FILE.toString()).readAllBytes()))
                 );
+
+                AutoModpackMain.link = modpackHostIp;
 
                 LOGGER.info("Modpack host started at {} (Hash: {})", modpackHostIp, hash);
             } catch (Exception e) {

@@ -16,7 +16,7 @@ public class PreLoad implements PreLaunchEntrypoint {
     @Override
     public void onPreLaunch() {
 
-        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
+        if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) {
             return;
         }
 

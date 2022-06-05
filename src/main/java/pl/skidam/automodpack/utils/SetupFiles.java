@@ -59,5 +59,17 @@ public class SetupFiles {
                 }
             }
         }
+
+
+        File modpack_link = new File ("./AutoModpack/modpack-link.txt");
+
+        try {
+            if (!modpack_link.exists()) {
+                modpack_link.createNewFile();
+            }
+        } catch (IOException e) { // ignore
+        }
+
+
     }
 }

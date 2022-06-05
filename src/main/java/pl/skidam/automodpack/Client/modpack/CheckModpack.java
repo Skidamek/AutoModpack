@@ -14,6 +14,10 @@ public class CheckModpack {
         // if latest modpack is not same as current modpack download new mods.
         // Check how big the Modpack file is
 
+        if (link == null || link.equals("null")) {
+            return;
+        }
+
         LOGGER.info("Checking if modpack is up-to-date...");
 
         File Modpack = new File("./AutoModpack/modpack.zip");

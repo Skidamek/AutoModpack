@@ -4,8 +4,7 @@
   "package": "pl.skidam.automodpack.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
-    "UpdateButtonMixin",
-    "WorldJoinMixin"
+    "UpdateButtonMixin"
   ],
   "server": [
     "WorldJoinMixin"
