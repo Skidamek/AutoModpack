@@ -24,6 +24,8 @@ After join the server with modpack from this mod, mods will be automatically dow
 
 **- Server**
 
+**Open port 30037 on your server!** (you will, can change it in the config, config coming soon)
+
 Download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/download/Main/AutoModpack.jar).
 
 Put it into the `mods` folder of your server installation.
