@@ -31,7 +31,7 @@ public class HostModpack implements HttpHandler {
     public static String modpackHostIp;
 
     public static void stop() {
-        server.stop(0);
+        server.stop(1);
         threadPool.shutdownNow();
     }
 
@@ -45,7 +45,8 @@ public class HostModpack implements HttpHandler {
                 String serverIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
 
-                server = HttpServer.create(new InetSocketAddress("0.0.0.0", host_port), 0);
+                String ip = InetAddress.getLocalHost().getHostAddress();
+                server = HttpServer.create(new InetSocketAddress(ip, host_port), 0);
                 server.createContext("/" + subUrl, new HostModpack());
                 server.setExecutor(threadPool);
                 server.start();
