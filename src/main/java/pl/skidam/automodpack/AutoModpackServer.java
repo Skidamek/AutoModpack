@@ -8,22 +8,25 @@ import pl.skidam.automodpack.utils.SetupFiles;
 import pl.skidam.automodpack.utils.ShityCompressor;
 
 import java.io.*;
+import java.util.ArrayList;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
+
+    public static ArrayList<String> PlayersHavingAM = new ArrayList<>();
+
     @Override
     public void onInitializeServer() {
         LOGGER.info("Welcome to AutoModpack on Server!");
 
         // TODO generate configs for the server
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server -- networking
-        // TODO kick player if they don't have the AutoModpack
         // TODO add commands to gen modpack etc.
 
-
-
-        ServerPlayNetworking.registerGlobalReceiver(AutoModpackMain.PACKET_C2S, (minecraftServer, handler, buf, responseSender, client) -> {
+        //client did not respond in time, disconnect client 3 seconds after login
+        ServerPlayNetworking.registerGlobalReceiver(AutoModpackMain.PACKET_C2S, (server, player, handler, buf, sender) -> {
+            PlayersHavingAM.add(player.getName().asString());
             LOGGER.error("Received packet from client!");
         });
 
