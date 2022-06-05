@@ -1,6 +1,6 @@
 # Auto update and download modpacks!
 Simply...
-Mod is at an early stage of development
+
 <br></br>
   
 <p align="center"><img src="https://i.imgur.com/WQofabo.png" alt="Logo" width="200"></p>
