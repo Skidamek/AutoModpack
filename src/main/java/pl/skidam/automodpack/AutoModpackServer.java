@@ -24,7 +24,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         // TODO add chad integration to the server who when you join the server, it will download the mods and update the mods by ping the server -- networking
         // TODO add commands to gen modpack etc.
 
-        //client did not respond in time, disconnect client 3 seconds after login
+        //client did not respond in time, disconnect client 1 seconds after login
         ServerPlayNetworking.registerGlobalReceiver(AutoModpackMain.PACKET_C2S, (server, player, handler, buf, sender) -> {
             PlayersHavingAM.add(player.getName().asString());
             LOGGER.error("Received packet from client!");
