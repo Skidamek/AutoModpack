@@ -46,11 +46,8 @@ public class AutoModpackClient implements ClientModInitializer {
                 }
             });
 
-
             // log message from packet
-            String packetMessage = buf.readString(300);
-            LOGGER.error(packetMessage);
-            link = packetMessage;
+            link = buf.readString(300);
 
             try {
                 FileWriter fWriter = new FileWriter("./AutoModpack/modpack-link.txt");

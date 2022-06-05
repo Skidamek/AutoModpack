@@ -2,7 +2,6 @@ package pl.skidam.automodpack.Client.modpack;
 
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
-import pl.skidam.automodpack.Client.deletemods.DeleteMods;
 
 import java.io.File;
 

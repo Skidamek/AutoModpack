@@ -1,4 +1,4 @@
-package pl.skidam.automodpack.Client.deletemods;
+package pl.skidam.automodpack.Client.modpack;
 
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
@@ -28,7 +28,7 @@ public class DeleteMods {
                 try {
                     new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods.txt", "./");
                     new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods", "./");
-                } catch (ZipException e) { // ignore it
+                } catch (ZipException e) { // ignore
                 }
             }
         }
@@ -40,8 +40,12 @@ public class DeleteMods {
 
     private void Delete() {
 
-        if (!delModsTxt.exists()) { return; };
-        if (delModsTxt.length() == 0) { return; };
+        if (!delModsTxt.exists() || delModsTxt.length() == 0) {
+            if (preload) {
+                return;
+            }
+            AutoModpackMain.ModpackUpdated = this.ModpackUpdated;
+        }
 
         try {
             FileReader fr = new FileReader(delModsTxt);
@@ -84,7 +88,7 @@ public class DeleteMods {
             // Delete the file
             FileDeleteStrategy.FORCE.delete(delModsTxt);
 
-        } catch (IOException e) { // ignore it
+        } catch (IOException e) { // ignore
         }
 
         LOGGER.info("Finished deleting mods!");

@@ -15,6 +15,7 @@ public class CheckModpack {
         // Check how big the Modpack file is
 
         if (link == null || link.equals("null")) {
+            ModpackUpdated = "false";
             return;
         }
 

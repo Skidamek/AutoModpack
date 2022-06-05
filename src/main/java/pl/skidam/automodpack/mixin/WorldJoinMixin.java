@@ -34,7 +34,6 @@ public class WorldJoinMixin
                 Thread.sleep(time_out);
 
                 if (PlayersHavingAM.contains(playerEntity.getName().asString())) {
-                    AutoModpackMain.LOGGER.info(playerEntity.getName().asString() + " has AutoModpack!");
                     PlayersHavingAM.remove(playerEntity.getName().asString());
                 } else {
                     Text DisconnectText = Text.of("You have to install \"AutoModpack\" mod to play on this server! https://github.com/Skidamek/AutoModpack/releases");
