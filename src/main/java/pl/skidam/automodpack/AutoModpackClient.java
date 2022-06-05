@@ -32,6 +32,21 @@ public class AutoModpackClient implements ClientModInitializer {
 
         ClientPlayNetworking.registerGlobalReceiver(AutoModpackMain.PACKET_S2C, (client, handler, buf, responseSender) -> {
 
+
+            CompletableFuture.runAsync(() -> {
+                // log message from packet
+                link = buf.readString(200);
+
+                try {
+                    FileWriter fWriter = new FileWriter("./AutoModpack/modpack-link.txt");
+                    fWriter.flush();
+                    fWriter.write(link);
+                    fWriter.close();
+                } catch (IOException e) { // ignore
+                }
+            });
+
+
             CompletableFuture.runAsync(() -> {
                 while (true) {
                     try {
@@ -39,23 +54,12 @@ public class AutoModpackClient implements ClientModInitializer {
                             ClientPlayNetworking.send(AutoModpackMain.PACKET_C2S, PacketByteBufs.empty());
                             break;
                         }
-                        Thread.sleep(5);
+                        Thread.sleep(1);
                     } catch (Exception e) {
                         e.printStackTrace();
                     }
                 }
             });
-
-            // log message from packet
-            link = buf.readString(300);
-
-            try {
-                FileWriter fWriter = new FileWriter("./AutoModpack/modpack-link.txt");
-                fWriter.flush();
-                fWriter.write(link);
-                fWriter.close();
-            } catch (IOException e) { // igore
-            }
 
         });
 
