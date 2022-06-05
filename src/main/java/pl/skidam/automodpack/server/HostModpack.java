@@ -49,9 +49,8 @@ public class HostModpack implements HttpHandler {
 
                 String serverIp = "0.0.0.0";
                 try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
-                    System.out.println("My current IP address is " + s.next());
                     serverIp = s.next();
-                } catch (java.io.IOException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
 
