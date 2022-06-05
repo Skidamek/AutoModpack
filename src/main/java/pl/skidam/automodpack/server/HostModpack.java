@@ -40,13 +40,22 @@ public class HostModpack implements HttpHandler {
 
         CompletableFuture.runAsync(() -> {
             try {
-                LOGGER.info("Starting modpack server...");;
+                LOGGER.info("Starting modpack server...");
 
-                String serverIp = InetAddress.getLocalHost().getHostAddress();
+                // String serverIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
 
-                String ip = InetAddress.getLocalHost().getHostAddress();
-                server = HttpServer.create(new InetSocketAddress(ip, host_port), 0);
+                // get local ip
+
+                String serverIp = "0.0.0.0";
+                try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
+                    System.out.println("My current IP address is " + s.next());
+                    serverIp = s.next();
+                } catch (java.io.IOException e) {
+                    e.printStackTrace();
+                }
+
+                server = HttpServer.create(new InetSocketAddress(serverIp, host_port), 0);
                 server.createContext("/" + subUrl, new HostModpack());
                 server.setExecutor(threadPool);
                 server.start();
