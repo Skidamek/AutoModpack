@@ -18,7 +18,7 @@ public class AutoModpackMain implements ModInitializer {
     public static boolean Checking;
     public static String link = "null";
     public static final File out = new File("./AutoModpack/modpack.zip");
-    public static final String selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/pipel/AutoModpack.jar";
+    public static final String selfLink = "https://github.com/Skidamek/AutoModpack/releases/download/Main/AutoModpack.jar";
     public static final File selfOut = new File( "./mods/AutoModpack.jar");
     public static final String trashLink = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
     public static final File trashOut = new File("./AutoModpack/TrashMod.jar");

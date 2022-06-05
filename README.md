@@ -1,12 +1,13 @@
 # **Welcome to AutoModpack,**
 
 # Key features
-- Easy download/update modpack
+- Modpack hosting
+- Easy download/update modpack (add mods, delete mods, add configs whatever you want)
 - Your players no longer have to update mods.
-- After each client restart, auto check updates.
+- Update checker. (only for clients for now)
 
 Coming soon
-- Automation mods in modpack with mods installed on servers
+- Auto copy mods from mods installed on servers to modpack. 
 - Config
 
 # How to install
@@ -32,6 +33,11 @@ Launch the game your server.
 Add mods/configs what ever you want in your modpack to the `./AutoModpack/modpack/` directory.
 
 Restart server and you are good to go! Enjoy!
+
+**If you want to delete some mods from modpack** 
+- Go to `./AutoModpack/modpack/` directory on your server.
+- Create file `delmods.txt`.
+- Inside this file put names of mods you want to delete. (one name per line!)
 
 # FAQ
 - Which versions are supported?
