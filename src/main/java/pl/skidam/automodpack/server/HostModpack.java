@@ -74,7 +74,7 @@ public class HostModpack implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-        if (Objects.equals(exchange.getRequestMethod(), "GET")) {
+//        if (Objects.equals(exchange.getRequestMethod(), "GET")) {
 
             LOGGER.info("Supplying modpack to the client.");
 
@@ -92,8 +92,8 @@ public class HostModpack implements HttpHandler {
 
             outputStream.flush();
             outputStream.close();
-        } else {
-            exchange.sendResponseHeaders(400, 0);
-        }
+//        } else {
+//            exchange.sendResponseHeaders(400, 0);
+//        }
     }
 }

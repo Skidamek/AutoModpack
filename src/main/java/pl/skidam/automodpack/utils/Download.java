@@ -5,7 +5,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Objects;
 
-import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
 public class Download {
     public static boolean Download(String link, File output) {
