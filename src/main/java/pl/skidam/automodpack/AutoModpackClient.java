@@ -19,9 +19,10 @@ public class AutoModpackClient implements ClientModInitializer {
 
         try {
             BufferedReader br = new BufferedReader(new FileReader("./AutoModpack/modpack-link.txt"));
-            String line;
-            while ((line = br.readLine()) != null) {
-                link = line;
+            if (br.readLine() == null) {
+                link = br.readLine();
+            } else {
+                link = "null";
             }
             br.close();
         } catch (IOException e) {
