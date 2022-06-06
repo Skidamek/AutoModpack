@@ -49,20 +49,12 @@ public class AutoModpackClient implements ClientModInitializer {
             });
 
 
-            CompletableFuture.runAsync(() -> {
-                while (true) {
-                    try {
-                        if (ClientPlayNetworking.canSend(AutoModpackMain.PACKET_C2S)) {
-                            ClientPlayNetworking.send(AutoModpackMain.PACKET_C2S, PacketByteBufs.empty());
-                            break;
-                        }
-                        Thread.sleep(1);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+            while (true) {
+                if (ClientPlayNetworking.canSend(AutoModpackMain.PACKET_C2S)) {
+                    ClientPlayNetworking.send(AutoModpackMain.PACKET_C2S, PacketByteBufs.empty());
+                    break;
                 }
-            });
-
+            }
         });
 
         new Thread(() -> new StartAndCheck(true)).start();
