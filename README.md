@@ -12,29 +12,21 @@ Coming soon
 
 # How to install
 
-**- Client**
-
 Download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/download/latest/AutoModpack.jar).
 
-You need also download the fabric api.
+You need also download the fabric api if using fabric or Quilt Standard Libraries (QSL) if using quilt.
 
-Put it into the `mods` folder of your minecraft installation.
+Put it into the `mods` folder of your minecraft/server installation.
 
-Launch the game your game.
+Launch the game your game/server.
+
+**- Client**
 
 After join the server with modpack from this mod, mods will be automatically downloaded.
 
 **- Server**
 
-**Open port 30037 on your server! TCP/UDP** (you will, can change it in the config, config coming soon)
-
-Download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/download/latest/AutoModpack.jar).
-
-You need also download the fabric api.
-
-Put it into the `mods` folder of your server installation.
-
-Launch the game your server.
+**Open port 30037 on your server! TCP/UDP**
 
 Add mods/configs what ever you want in your modpack to the `./AutoModpack/modpack/` directory.
 
@@ -54,13 +46,17 @@ Restart server and you are good to go! Enjoy!
 
 No, you can use any launcher you want except for Feather Client its unsupported. (but launcher must be compatible with fabric/quilt modloader)
 
-<br>
+- Do I must install this mod on both sides?
 
-**Contributors are welcome.**
-[Click.](CONTRIBUTING.md)
+Yes, you need to install this mod on both sides.
+
+
+
+**Contributors are welcome**
+[**click.**](CONTRIBUTING.md)
   
 <p align="center"><img src="https://i.imgur.com/WQofabo.png" alt="Logo" width="200"></p>
-<h1 align="center">AutoModpack  <br>
+<h1 align="center">AutoModpack  <br><br>
     <a href="https://fabricmc.net/"><img
         src="https://cdn.discordapp.com/attachments/705864145169416313/969720133998239794/fabric_supported.png"
         alt="Supported on Fabric"
