@@ -56,13 +56,10 @@ public class HostModpack implements HttpHandler {
 
                 modpackHostIp = String.format("http://%s:%s/%s", serverIpForOthers, host_port, subUrl);
 
-                LOGGER.info("Modpack host ip: " + modpackHostIp + "\nServer ip: " + serverIp + "\nServer ip for others: " + serverIpForOthers);
-
-                server = HttpServer.create(new InetSocketAddress("0.0.0.0", host_port), 0);
+                server = HttpServer.create(new InetSocketAddress(serverIp, host_port), 0);
                 server.createContext("/" + subUrl, new HostModpack());
                 server.setExecutor(threadPool);
                 server.start();
-
 
                 AutoModpackMain.link = modpackHostIp;
 

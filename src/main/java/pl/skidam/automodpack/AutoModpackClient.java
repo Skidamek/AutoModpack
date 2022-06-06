@@ -44,6 +44,8 @@ public class AutoModpackClient implements ClientModInitializer {
                     fWriter.close();
                 } catch (IOException e) { // ignore
                 }
+
+                LOGGER.info("Modpack link received from server: {}. Saved to file.", link);
             });
 
 

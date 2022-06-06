@@ -6,7 +6,10 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.PlayerManager;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import org.slf4j.Logger;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -20,6 +23,8 @@ import static pl.skidam.automodpack.AutoModpackServer.PlayersHavingAM;
 @Mixin(PlayerManager.class)
 public class WorldJoinMixin
 {
+    @Shadow @Final private static Logger LOGGER;
+
     @Inject(at = @At("TAIL"), method = "onPlayerConnect(Lnet/minecraft/network/ClientConnection;Lnet/minecraft/server/network/ServerPlayerEntity;)V")
     public void onLoginStart(ClientConnection connection, ServerPlayerEntity playerEntity, CallbackInfo info)
     {
@@ -27,6 +32,8 @@ public class WorldJoinMixin
         buf.writeString(AutoModpackMain.link);
 
         ServerPlayNetworking.send(playerEntity, AutoModpackMain.PACKET_S2C, buf);
+
+        LOGGER.info("Sent modpack link to {}.", playerEntity.getName().asString());
 
         // kick player if he doesn't have AutoModpack
         CompletableFuture.runAsync(() -> {
