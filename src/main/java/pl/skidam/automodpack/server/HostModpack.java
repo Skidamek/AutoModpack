@@ -9,11 +9,9 @@ import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.AutoModpackMain;
 
 import java.io.*;
-import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
-import java.security.MessageDigest;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -46,33 +44,29 @@ public class HostModpack implements HttpHandler {
             try {
                 LOGGER.info("Starting modpack server...");
 
-                // String serverIp = InetAddress.getLocalHost().getHostAddress();
+                String serverIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
 
-                // get local ip
-
-                String serverIp = "0.0.0.0";
+                String serverIpForOthers = "0.0.0.0";
                 try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
-                    serverIp = s.next();
+                    serverIpForOthers = s.next();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
 
-                server = HttpServer.create(new InetSocketAddress(serverIp, host_port), 0);
+                modpackHostIp = String.format("http://%s:%s/%s", serverIpForOthers, host_port, subUrl);
+
+                LOGGER.info("Modpack host ip: " + modpackHostIp + "\nServer ip: " + serverIp + "\nServer ip for others: " + serverIpForOthers);
+
+                server = HttpServer.create(new InetSocketAddress("0.0.0.0", host_port), 0);
                 server.createContext("/" + subUrl, new HostModpack());
                 server.setExecutor(threadPool);
                 server.start();
 
-                modpackHostIp = String.format("http://%s:%s/%s", serverIp, host_port, subUrl);
-
-                String hash = String.format("%040x", new BigInteger(1, MessageDigest
-                        .getInstance("SHA-1")
-                        .digest(new FileInputStream(MODPACK_FILE.toString()).readAllBytes()))
-                );
 
                 AutoModpackMain.link = modpackHostIp;
 
-                LOGGER.info("Modpack host started at {} (Hash: {})", modpackHostIp, hash);
+                LOGGER.info("Modpack host started at {}", modpackHostIp);
             } catch (Exception e) {
                 LOGGER.error("Failed to start the modpack server!", e);
             }
@@ -83,13 +77,6 @@ public class HostModpack implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         if (Objects.equals(exchange.getRequestMethod(), "GET")) {
-//            LOGGER.error(exchange.getRequestURI().toString());
-//            LOGGER.error(exchange.getRequestHeaders().toString());
-//            if (exchange.getRequestHeaders().getFirst("X-Minecraft-Username") != null) {
-//                LOGGER.info("Supplying modpack for Minecraft player: {}", exchange.getRequestHeaders().getFirst("X-Minecraft-Username"));
-//            } else {
-//                LOGGER.info("Supplying modpack to a non-Minecraft client");
-//            }
 
             LOGGER.info("Supplying modpack to the client");
 
