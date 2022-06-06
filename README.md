@@ -10,9 +10,9 @@ Coming soon
 - Auto copy mods from mods installed on servers to modpack. 
 - Config
 
-# How to install
+# How to use
 
-Download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/download/latest/AutoModpack.jar).
+At first download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/download/latest/AutoModpack.jar).
 
 You need also download the fabric api if using fabric or Quilt Standard Libraries (QSL) if using quilt.
 
