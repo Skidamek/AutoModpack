@@ -58,7 +58,7 @@ public class HostModpack implements HttpHandler {
                 modpackHostIp = String.format("http://%s:%s/%s", serverIpForOthers, host_port, subUrl);
                 modpackHostIpForLocalPlayers = String.format("http://%s:%s/%s", serverIp, host_port, subUrl);
 
-                server = HttpServer.create(new InetSocketAddress(serverIp, host_port), 0);
+                server = HttpServer.create(new InetSocketAddress("0.0.0.0", host_port), 0);
                 server.createContext("/" + subUrl, new HostModpack());
                 server.setExecutor(threadPool);
                 server.start();
