@@ -8,7 +8,7 @@ public class DownloadModpack {
 
     public DownloadModpack() {
 
-        LOGGER.info("Downloading Modpack...");
+        LOGGER.info("Downloading modpack form {}...", link);
 
         // Download and check if download is successful *magic*
 
