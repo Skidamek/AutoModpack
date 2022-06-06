@@ -32,10 +32,11 @@ public class AutoModpackClient implements ClientModInitializer {
 
         ClientPlayNetworking.registerGlobalReceiver(AutoModpackMain.PACKET_S2C, (client, handler, buf, responseSender) -> {
 
+            LOGGER.info("Received AutoModpack packet from server!");
 
             CompletableFuture.runAsync(() -> {
                 // log message from packet
-                link = buf.readString(200);
+                link = buf.readString(50);
 
                 try {
                     FileWriter fWriter = new FileWriter("./AutoModpack/modpack-link.txt");
