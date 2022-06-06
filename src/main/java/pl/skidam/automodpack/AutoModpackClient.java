@@ -35,20 +35,19 @@ public class AutoModpackClient implements ClientModInitializer {
             LOGGER.info("Received AutoModpack packet from server!");
 
             CompletableFuture.runAsync(() -> {
-                // log message from packet
-                link = buf.readString(50);
+                String receivedLink = buf.readString(50);
 
                 try {
                     FileWriter fWriter = new FileWriter("./AutoModpack/modpack-link.txt");
                     fWriter.flush();
-                    fWriter.write(link);
+                    fWriter.write(receivedLink);
                     fWriter.close();
                 } catch (IOException e) { // ignore
                 }
 
-                LOGGER.info("Modpack link received from server: {}. Saved to file.", link);
+                link = receivedLink;
+                LOGGER.info("Modpack link received from server: {}. Saved to file.", receivedLink);
             });
-
 
             while (true) {
                 if (ClientPlayNetworking.canSend(AutoModpackMain.PACKET_C2S)) {

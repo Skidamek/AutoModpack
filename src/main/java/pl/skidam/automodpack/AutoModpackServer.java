@@ -9,6 +9,7 @@ import pl.skidam.automodpack.utils.ShityCompressor;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
@@ -27,19 +28,25 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             PlayersHavingAM.add(player.getName().asString());
         });
 
-
         new SetupFiles();
 
         File modpackDir = new File("./AutoModpack/modpack/");
         File modpackZip = new File("./AutoModpack/modpack.zip");
+        File modsDir = new File("./AutoModpack/modpack/mods/");
+        File confDir = new File("./AutoModpack/modpack/config/");
 
-        if (modpackDir.exists() && modpackDir.getTotalSpace() > 1) {
-            LOGGER.info("Creating modpack zip");
+        if (modpackDir.exists() && Objects.requireNonNull(modsDir.listFiles()).length >= 1 || Objects.requireNonNull(confDir.listFiles()).length >= 1) {
+            LOGGER.info("Creating modpack");
             new ShityCompressor(modpackDir, modpackZip);
-            LOGGER.info("Modpack zip created");
+            LOGGER.info("Modpack created");
         }
 
         if (modpackZip.exists()) {
+            if (Objects.requireNonNull(modsDir.listFiles()).length < 1 && Objects.requireNonNull(confDir.listFiles()).length < 1) {
+                LOGGER.info("Modpack found, but no mods or configs inside. Deleting modpack.");
+                modpackZip.delete();
+                return; // idk if it will work
+            }
             ServerLifecycleEvents.SERVER_STARTED.register(HostModpack::start);
             ServerLifecycleEvents.SERVER_STOPPING.register(server -> HostModpack.stop());
         }

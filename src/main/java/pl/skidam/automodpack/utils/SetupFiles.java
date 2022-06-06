@@ -24,14 +24,23 @@ public class SetupFiles {
             return;
         }
         client();
-
     }
 
     private void server() {
 
-        File modsDir = new File("./AutoModpack/modpack/");
+        File modpackDir = new File("./AutoModpack/modpack/");
+        if (!modpackDir.exists()) {
+            modpackDir.mkdir();
+        }
+
+        File modsDir = new File("./AutoModpack/modpack/mods/");
         if (!modsDir.exists()) {
             modsDir.mkdir();
+        }
+
+        File confDir = new File("./AutoModpack/modpack/config/");
+        if (!confDir.exists()) {
+            confDir.mkdir();
         }
     }
 

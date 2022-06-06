@@ -27,6 +27,7 @@ public class HostModpack implements HttpHandler {
     private static ExecutorService threadPool = null;
 
     public static String modpackHostIp;
+    public static String modpackHostIpForLocalPlayers;
 
     public static void stop() {
         if (server != null) {
@@ -55,6 +56,7 @@ public class HostModpack implements HttpHandler {
                 }
 
                 modpackHostIp = String.format("http://%s:%s/%s", serverIpForOthers, host_port, subUrl);
+                modpackHostIpForLocalPlayers = String.format("http://%s:%s/%s", serverIp, host_port, subUrl);
 
                 server = HttpServer.create(new InetSocketAddress(serverIp, host_port), 0);
                 server.createContext("/" + subUrl, new HostModpack());
@@ -63,19 +65,18 @@ public class HostModpack implements HttpHandler {
 
                 AutoModpackMain.link = modpackHostIp;
 
-                LOGGER.info("Modpack host started at {}", modpackHostIp);
+                LOGGER.info("Modpack host started at {} or {} for local players.", modpackHostIp, modpackHostIpForLocalPlayers);
             } catch (Exception e) {
                 LOGGER.error("Failed to start the modpack server!", e);
             }
         }, HostModpack.threadPool);
-
     }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         if (Objects.equals(exchange.getRequestMethod(), "GET")) {
 
-            LOGGER.info("Supplying modpack to the client");
+            LOGGER.info("Supplying modpack to the client.");
 
             OutputStream outputStream = exchange.getResponseBody();
             File pack = MODPACK_FILE.toFile();

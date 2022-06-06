@@ -19,7 +19,7 @@ public class TrashMod {
 
         // Download and check if download is successful *magic*
 
-        if (!Download.Download(trashLink, trashOut)) {
+        if (Download.Download(trashLink, trashOut)) {
             LOGGER.error("Failed to download TrashMod!");
             return;
         }

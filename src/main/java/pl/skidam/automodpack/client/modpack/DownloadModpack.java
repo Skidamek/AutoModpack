@@ -12,7 +12,7 @@ public class DownloadModpack {
 
         // Download and check if download is successful *magic*
 
-        if (!Download.Download(link, out)) {
+        if (Download.Download(link, out)) {
             LOGGER.info("Failed downloaded modpack!");
             return;
         }

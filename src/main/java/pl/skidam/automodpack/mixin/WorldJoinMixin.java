@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.AutoModpackMain;
+import pl.skidam.automodpack.server.HostModpack;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -28,8 +29,16 @@ public class WorldJoinMixin
     @Inject(at = @At("TAIL"), method = "onPlayerConnect(Lnet/minecraft/network/ClientConnection;Lnet/minecraft/server/network/ServerPlayerEntity;)V")
     public void onLoginStart(ClientConnection connection, ServerPlayerEntity playerEntity, CallbackInfo info)
     {
+        // get minecraft player ip if player is in local network give him local address to modpack
+        String playerIp = connection.getAddress().toString();
+
         PacketByteBuf buf = PacketByteBufs.create();
-        buf.writeString(AutoModpackMain.link);
+
+        if (playerIp.contains("127.0.0.1")) {
+            buf.writeString(HostModpack.modpackHostIpForLocalPlayers);
+        } else {
+            buf.writeString(AutoModpackMain.link);
+        }
 
         ServerPlayNetworking.send(playerEntity, AutoModpackMain.PACKET_S2C, buf);
 

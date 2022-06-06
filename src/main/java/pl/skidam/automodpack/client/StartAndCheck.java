@@ -15,7 +15,7 @@ public class StartAndCheck {
         // If minecraft is still loading wait for it to finish
         if (isLoading) {
             while (MinecraftClient.getInstance().currentScreen == null) {
-                Wait.wait(50);
+                Wait.wait(1000);
             }
             // wait to bypass most of the bugs
             Wait.wait(5000);

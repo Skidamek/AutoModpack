@@ -13,7 +13,6 @@ public class CheckModpack {
 
         // if latest modpack is not same as current modpack download new mods.
         // Check how big the Modpack file is
-
         if (link == null || link.equals("null")) {
             ModpackUpdated = "false";
             return;
@@ -25,7 +24,12 @@ public class CheckModpack {
         long currentSize = Modpack.length();
         long latestSize = Long.parseLong(WebFileSize.webfileSize(link));
 
-        if (!Modpack.exists() || currentSize != latestSize && latestSize != 0) {
+        if (latestSize == 0) {
+            ModpackUpdated = "false";
+            return;
+        }
+
+        if (!Modpack.exists() || currentSize != latestSize) {
             LOGGER.info("Downloading modpack!");
             new ToastExecutor(1);
             new DownloadModpack();

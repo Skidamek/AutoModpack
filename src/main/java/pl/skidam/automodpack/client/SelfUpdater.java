@@ -55,7 +55,7 @@ public class SelfUpdater {
         LOGGER.info("Update found! Updating!");
         new ToastExecutor(2);
         // *magic* downloading
-        if (!Download.Download(selfLink, selfOut)) {
+        if (Download.Download(selfLink, selfOut)) {
             LOGGER.error("Failed to update myself!");
             new ToastExecutor(5);
             AutoModpackUpdated = "false";
