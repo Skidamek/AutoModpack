@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "automodpack",
   "version": "1.9.6",
+
   "name": "AutoModpack",
   "description": "Just automatic updating and downloading modpacks!",
   "authors": [
@@ -29,7 +30,7 @@
 
   "depends": {
     "fabricloader": ">=0.13",
-    "minecraft": "1.19.x",
-    "java": ">=17"
+    "minecraft": "1.18.x",
+    "java": ">=8"
   }
 }
