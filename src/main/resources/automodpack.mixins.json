@@ -7,12 +7,11 @@
     "UpdateButtonMixin"
   ],
   "server": [
-    "WorldJoinMixin"
   ],
   "injectors": {
     "defaultRequire": 1
   },
   "mixins": [
-    "WorldJoinMixin"
+    "UpdateButtonMixin"
   ]
 }

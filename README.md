@@ -12,7 +12,7 @@ Coming soon
 
 # How to use
 
-At first download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/download/latest/AutoModpack.jar).
+At first download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/latest/download/AutoModpack.jar).
 
 You need also download the fabric api if using fabric or Quilt Standard Libraries (QSL) if using quilt.
 

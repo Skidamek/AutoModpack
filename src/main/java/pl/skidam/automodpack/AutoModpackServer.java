@@ -12,26 +12,17 @@ import pl.skidam.automodpack.utils.SetupFiles;
 import pl.skidam.automodpack.utils.ShityCompressor;
 
 import java.io.*;
-import java.util.ArrayList;
 import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
 
-    public static ArrayList<String> PlayersHavingAM = new ArrayList<>();
-
     @Override
     public void onInitializeServer() {
         LOGGER.info("Welcome to AutoModpack on Server!");
 
         // TODO add commands to gen modpack etc.
-
-        // client did not respond in time, disconnect client 1.25 second after login
-//        ServerPlayNetworking.registerGlobalReceiver(AutoModpackMain.PACKET_C2S, (server, player, handler, buf, sender) -> {
-//            PlayersHavingAM.add(player.getName().asString());
-//        });
-
 
         new SetupFiles();
 
@@ -58,14 +49,17 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
 
         // mod check
-        ServerLoginNetworking.registerGlobalReceiver(AutoModpackMain.AM_CHECK, this::onClientResponse);
+        ServerLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onClientResponse);
+        ServerLoginNetworking.registerGlobalReceiver(AM_LINK, this::onSuccess);
         ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
     }
 
+    private void onSuccess(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean b, PacketByteBuf packetByteBuf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
+        // Successfully sent link to client, client can join and play on server.
+    }
+
     private void onLoginStart(ServerLoginNetworkHandler serverLoginNetworkHandler, MinecraftServer minecraftServer, PacketSender sender, ServerLoginNetworking.LoginSynchronizer loginSynchronizer) {
-
         sender.sendPacket(AutoModpackMain.AM_CHECK, PacketByteBufs.empty());
-
     }
 
     private void onClientResponse(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
@@ -73,14 +67,20 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         if(!understood || buf.readInt() != 1) {
             serverLoginNetworkHandler.disconnect(Text.of("Install AM"));
         } else {
-            LOGGER.info("Client understood packet");
+            // get minecraft player ip if player is in local network give him local address to modpack
+            String playerIp = serverLoginNetworkHandler.getConnection().getAddress().toString();
+
+            PacketByteBuf outBuf = PacketByteBufs.create();
+
+            if (playerIp.contains("127.0.0.1")) {
+                outBuf.writeString(HostModpack.modpackHostIpForLocalPlayers);
+            } else {
+                outBuf.writeString(AutoModpackMain.link);
+            }
+
+            sender.sendPacket(AutoModpackMain.AM_LINK, outBuf);
+
+            LOGGER.info("Sent modpack link to client");
         }
     }
-
-
-//    private void onLoginStart(ServerLoginNetworkHandler serverLoginPacketListener, MinecraftServer server, PacketSender sender, ServerLoginNetworking.LoginSynchronizer sync)
-//    {
-//        //request the client to send its sit version number
-//        sender.sendPacket(PACKET_S2C, PacketByteBufs.empty());
-//    }
 }
