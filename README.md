@@ -40,7 +40,7 @@ Restart server and you are good to go! Enjoy!
 # FAQ
 - Which versions are supported?
 
-1.18.x on fabric/quilt modloader. (1.19 work in progress)
+1.18.x and 1.19.x on fabric/quilt modloader.
 
 - Do I must use official minecraft launcher?
 
