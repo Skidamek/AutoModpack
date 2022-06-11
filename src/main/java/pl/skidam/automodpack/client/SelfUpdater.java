@@ -22,8 +22,7 @@ public class SelfUpdater {
         if (!selfBackup.exists()) {
             try {
                 Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+            } catch (IOException e) { // ignore
             }
         }
 
@@ -43,8 +42,7 @@ public class SelfUpdater {
         // Backup old AutoModpack
         try {
             Files.copy(selfOut.toPath(), oldAutoModpack.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (IOException e) { // ignore
         }
 
         // Download update
