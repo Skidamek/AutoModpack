@@ -9,6 +9,9 @@ import java.io.File;
 
 public class AutoModpackMain implements ModInitializer {
 
+    // TODO make config for it
+
+
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
 
@@ -29,6 +32,7 @@ public class AutoModpackMain implements ModInitializer {
 
     // Server
 
+    public static boolean cloneMods = true; // Clone mods from mods loaded on server to modpack
     public static int host_port = 30037;
     public static int host_thread_count = 2;
     public static String host_external_ip = "";

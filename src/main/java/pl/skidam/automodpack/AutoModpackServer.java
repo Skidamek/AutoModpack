@@ -7,6 +7,7 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
+import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.server.HostModpack;
 import pl.skidam.automodpack.utils.SetupFiles;
 import pl.skidam.automodpack.utils.ShityCompressor;
@@ -28,17 +29,28 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
         File modpackDir = new File("./AutoModpack/modpack/");
         File modpackZip = new File("./AutoModpack/modpack.zip");
-        File modsDir = new File("./AutoModpack/modpack/mods/");
-        File confDir = new File("./AutoModpack/modpack/config/");
+        File modpackModsDir = new File("./AutoModpack/modpack/mods/");
+        File modpackConfDir = new File("./AutoModpack/modpack/config/");
+        File serverModsDir = new File("./mods/");
 
-        if (modpackDir.exists() && Objects.requireNonNull(modsDir.listFiles()).length >= 1 || Objects.requireNonNull(confDir.listFiles()).length >= 1) {
+        // Clone mods from mods loaded on server to modpack TODO add option to turn it on/off in config
+        if (cloneMods) {
+            LOGGER.info("Cloning mods from server to modpack");
+            try {
+                FileUtils.copyDirectory(serverModsDir, modpackModsDir);
+            } catch (IOException e) {
+                LOGGER.error("Error while cloning mods from server to modpack");
+                e.printStackTrace();
+            }
+        }
+        if (modpackDir.exists() && Objects.requireNonNull(modpackModsDir.listFiles()).length >= 1 || Objects.requireNonNull(modpackConfDir.listFiles()).length >= 1) {
             LOGGER.info("Creating modpack");
             new ShityCompressor(modpackDir, modpackZip);
             LOGGER.info("Modpack created");
         }
 
         if (modpackZip.exists()) {
-            if (Objects.requireNonNull(modsDir.listFiles()).length < 1 && Objects.requireNonNull(confDir.listFiles()).length < 1) {
+            if (Objects.requireNonNull(modpackModsDir.listFiles()).length < 1 && Objects.requireNonNull(modpackConfDir.listFiles()).length < 1) {
                 LOGGER.info("Modpack found, but no mods or configs inside. Deleting modpack.");
                 modpackZip.delete();
                 return; // idk if it will work

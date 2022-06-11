@@ -10,7 +10,7 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class StartAndCheck {
 
-    public StartAndCheck(boolean isLoading) {
+    public StartAndCheck(boolean isLoading, boolean onlyModpack) {
 
         // If minecraft is still loading wait for it to finish
         if (isLoading) {
@@ -34,7 +34,13 @@ public class StartAndCheck {
             }
         });
 
-        new CheckModpack();
+        if (onlyModpack) {
+            AutoModpackUpdated = "false";
+            new CheckModpack();
+            return;
+        }
+
+        new SelfUpdater();
         new SelfUpdater();
     }
 }
