@@ -27,7 +27,6 @@ public class DeleteMods {
             if (!delModsTxt.exists()) {
                 try {
                     new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods.txt", "./");
-                    new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods", "./");
                 } catch (ZipException e) { // ignore
                 }
             }

@@ -16,7 +16,6 @@ public class CheckModpack {
         if (link == null || link.equals("null")) {
 
             LOGGER.info("No modpack link found!");
-            // TODO
             ModpackUpdated = "false";
             return;
         }
