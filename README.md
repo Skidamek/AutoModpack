@@ -50,6 +50,9 @@ No, you can use any launcher you want except for Feather Client its unsupported.
 
 Yes, you need to install this mod on both sides.
 
+- Does it deleting existing mods which are not in modpack but the client has them?
+
+No, it doesn't. It will only delete mods which are written out in delmods.txt in your modpack.
 
 
 **Contributors are welcome**
