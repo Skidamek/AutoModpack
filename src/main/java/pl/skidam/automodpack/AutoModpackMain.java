@@ -12,6 +12,9 @@ public class AutoModpackMain implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
 
+    public static final Identifier AM_CHECK = new Identifier(MOD_ID, "check");
+    public static final Identifier AM_LINK = new Identifier(MOD_ID, "link");
+
     // Client
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
@@ -23,11 +26,9 @@ public class AutoModpackMain implements ModInitializer {
     public static final String trashLink = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
     public static final File trashOut = new File("./AutoModpack/TrashMod.jar");
 
-    public static final Identifier PACKET_S2C = new Identifier(MOD_ID, "link");
 
     // Server
 
-    public static final Identifier PACKET_C2S = new Identifier(MOD_ID, "accepted");
     public static int host_port = 30037;
     public static int host_thread_count = 2;
     public static String host_external_ip = "";

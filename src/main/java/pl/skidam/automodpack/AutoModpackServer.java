@@ -3,6 +3,10 @@ package pl.skidam.automodpack;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.*;
+import net.minecraft.network.PacketByteBuf;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerLoginNetworkHandler;
+import net.minecraft.text.Text;
 import pl.skidam.automodpack.server.HostModpack;
 import pl.skidam.automodpack.utils.SetupFiles;
 import pl.skidam.automodpack.utils.ShityCompressor;
@@ -24,9 +28,10 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         // TODO add commands to gen modpack etc.
 
         // client did not respond in time, disconnect client 1.25 second after login
-        ServerPlayNetworking.registerGlobalReceiver(AutoModpackMain.PACKET_C2S, (server, player, handler, buf, sender) -> {
-            PlayersHavingAM.add(player.getName().asString());
-        });
+//        ServerPlayNetworking.registerGlobalReceiver(AutoModpackMain.PACKET_C2S, (server, player, handler, buf, sender) -> {
+//            PlayersHavingAM.add(player.getName().asString());
+//        });
+
 
         new SetupFiles();
 
@@ -50,5 +55,32 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             ServerLifecycleEvents.SERVER_STARTED.register(HostModpack::start);
             ServerLifecycleEvents.SERVER_STOPPING.register(server -> HostModpack.stop());
         }
+
+
+        // mod check
+        ServerLoginNetworking.registerGlobalReceiver(AutoModpackMain.AM_CHECK, this::onClientResponse);
+        ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
     }
+
+    private void onLoginStart(ServerLoginNetworkHandler serverLoginNetworkHandler, MinecraftServer minecraftServer, PacketSender sender, ServerLoginNetworking.LoginSynchronizer loginSynchronizer) {
+
+        sender.sendPacket(AutoModpackMain.AM_CHECK, PacketByteBufs.empty());
+
+    }
+
+    private void onClientResponse(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
+
+        if(!understood || buf.readInt() != 1) {
+            serverLoginNetworkHandler.disconnect(Text.of("Install AM"));
+        } else {
+            LOGGER.info("Client understood packet");
+        }
+    }
+
+
+//    private void onLoginStart(ServerLoginNetworkHandler serverLoginPacketListener, MinecraftServer server, PacketSender sender, ServerLoginNetworking.LoginSynchronizer sync)
+//    {
+//        //request the client to send its sit version number
+//        sender.sendPacket(PACKET_S2C, PacketByteBufs.empty());
+//    }
 }

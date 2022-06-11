@@ -29,36 +29,36 @@ public class WorldJoinMixin
     @Inject(at = @At("TAIL"), method = "onPlayerConnect(Lnet/minecraft/network/ClientConnection;Lnet/minecraft/server/network/ServerPlayerEntity;)V")
     public void onLoginStart(ClientConnection connection, ServerPlayerEntity playerEntity, CallbackInfo info)
     {
-        // get minecraft player ip if player is in local network give him local address to modpack
-        String playerIp = connection.getAddress().toString();
-
-        PacketByteBuf buf = PacketByteBufs.create();
-
-        if (playerIp.contains("127.0.0.1")) {
-            buf.writeString(HostModpack.modpackHostIpForLocalPlayers);
-        } else {
-            buf.writeString(AutoModpackMain.link);
-        }
-
-        ServerPlayNetworking.send(playerEntity, AutoModpackMain.PACKET_S2C, buf);
-
-        LOGGER.info("Sent modpack link to {}.", playerEntity.getName().asString());
-
-        // kick player if he doesn't have AutoModpack
-        CompletableFuture.runAsync(() -> {
-            try {
-                Thread.sleep(time_out);
-
-                if (PlayersHavingAM.contains(playerEntity.getName().asString())) {
-                    PlayersHavingAM.remove(playerEntity.getName().asString());
-                } else {
-                    Text DisconnectText = Text.of("You have to install \"AutoModpack\" mod to play on this server! https://github.com/Skidamek/AutoModpack/releases");
-                    AutoModpackMain.LOGGER.info(playerEntity.getName().asString() + " has not AutoModpack! kicked!");
-                    playerEntity.networkHandler.disconnect(DisconnectText);
-                }
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        });
+//        // get minecraft player ip if player is in local network give him local address to modpack
+//        String playerIp = connection.getAddress().toString();
+//
+//        PacketByteBuf buf = PacketByteBufs.create();
+//
+//        if (playerIp.contains("127.0.0.1")) {
+//            buf.writeString(HostModpack.modpackHostIpForLocalPlayers);
+//        } else {
+//            buf.writeString(AutoModpackMain.link);
+//        }
+//
+//        ServerPlayNetworking.send(playerEntity, AutoModpackMain.PACKET_S2C, buf);
+//
+//        LOGGER.info("Sent modpack link to {}.", playerEntity.getName().asString());
+//
+//        // kick player if he doesn't have AutoModpack
+//        CompletableFuture.runAsync(() -> {
+//            try {
+//                Thread.sleep(time_out);
+//
+//                if (PlayersHavingAM.contains(playerEntity.getName().asString())) {
+//                    PlayersHavingAM.remove(playerEntity.getName().asString());
+//                } else {
+//                    Text DisconnectText = Text.of("You have to install \"AutoModpack\" mod to play on this server! https://github.com/Skidamek/AutoModpack/releases");
+//                    AutoModpackMain.LOGGER.info(playerEntity.getName().asString() + " has not AutoModpack! kicked!");
+//                    playerEntity.networkHandler.disconnect(DisconnectText);
+//                }
+//            } catch (InterruptedException e) {
+//                e.printStackTrace();
+//            }
+//        });
     }
 }
