@@ -7,7 +7,7 @@
 - Update checker. (only for clients for now)
 
 Coming soon
-- Auto copy mods from mods installed on servers to modpack. 
+- Auto copy mods from mods installed on servers to modpack.
 - Config
 
 # How to use
@@ -32,7 +32,7 @@ Add mods/configs what ever you want in your modpack to the `./AutoModpack/modpac
 
 Restart server and you are good to go! Enjoy!
 
-**If you want to delete some mods from modpack** 
+**If you want to delete some mods from modpack**
 - Go to `./AutoModpack/modpack/` directory on your server.
 - Create file `delmods.txt`.
 - Inside this file put names of mods you want to delete. (one name per line!)
@@ -40,7 +40,7 @@ Restart server and you are good to go! Enjoy!
 # FAQ
 - Which versions are supported?
 
-1.18.x on fabric/quilt modloader. (1.19 work in progress)
+1.18.x and 1.19.x on fabric/quilt modloader.
 
 - Do I must use official minecraft launcher?
 
@@ -57,7 +57,7 @@ No, it doesn't. It will only delete mods which are written out in delmods.txt in
 
 **Contributors are welcome**
 [**click.**](CONTRIBUTING.md)
-  
+
 <p align="center"><img src="https://i.imgur.com/WQofabo.png" alt="Logo" width="200"></p>
 <h1 align="center">AutoModpack  <br><br>
     <a href="https://fabricmc.net/"><img
