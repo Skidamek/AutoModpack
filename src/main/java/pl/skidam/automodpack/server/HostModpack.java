@@ -65,7 +65,7 @@ public class HostModpack implements HttpHandler {
 
                 AutoModpackMain.link = modpackHostIp;
 
-                LOGGER.info("Modpack host started at {} or {} for local players.", modpackHostIp, modpackHostIpForLocalPlayers);
+                LOGGER.info("Modpack host started at {} and {} for local players.", modpackHostIp, modpackHostIpForLocalPlayers);
             } catch (Exception e) {
                 LOGGER.error("Failed to start the modpack server!", e);
             }

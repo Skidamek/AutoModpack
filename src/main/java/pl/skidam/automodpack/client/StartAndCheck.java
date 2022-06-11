@@ -34,7 +34,7 @@ public class StartAndCheck {
             }
         });
 
-        new SelfUpdater();
         new CheckModpack();
+        new SelfUpdater();
     }
 }

@@ -24,17 +24,21 @@ public class AutoModpackClient implements ClientModInitializer {
 
         LOGGER.info("Initializing AutoModpack...");
 
+        // load saved link from ./AutoModpack/modpack-link.txt file
+        String savedLink = "";
         try {
             BufferedReader br = new BufferedReader(new FileReader("./AutoModpack/modpack-link.txt"));
-            if (br.readLine() == null) {
-                link = br.readLine();
-            } else {
-                link = "null";
-            }
+            savedLink = br.readLine();
             br.close();
-            LOGGER.info("Successfully loaded modpack link!");
         } catch (IOException e) {
             e.printStackTrace();
+        }
+
+        if (!savedLink.equals("")) {
+            link = savedLink;
+            LOGGER.info("Loaded saved link to modpack: " + link);
+        } else {
+            LOGGER.info("No modpack link found");
         }
 
         InternetConnectionCheck.InternetConnectionCheck();
