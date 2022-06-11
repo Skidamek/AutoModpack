@@ -2,7 +2,6 @@ package pl.skidam.automodpack.client;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
-import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.ui.ConfirmScreen;
 
@@ -12,9 +11,9 @@ public class Finished {
 
     public Finished() {
 
-        Text bothUpdates = new TranslatableText("gui.automodpack.screen.title.all").formatted(Formatting.BOLD);
-        Text modpackUpdate = new TranslatableText("gui.automodpack.screen.title.modpack").formatted(Formatting.BOLD);
-        Text automodpackUpdate = new TranslatableText("gui.automodpack.screen.title.automodpack").formatted(Formatting.BOLD);
+        Text bothUpdates = Text.translatable("gui.automodpack.screen.title.all").formatted(Formatting.BOLD);
+        Text modpackUpdate = Text.translatable("gui.automodpack.screen.title.modpack").formatted(Formatting.BOLD);
+        Text automodpackUpdate = Text.translatable("gui.automodpack.screen.title.automodpack").formatted(Formatting.BOLD);
 
         LOGGER.info("Here you are!");
 
