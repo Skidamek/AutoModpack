@@ -13,6 +13,7 @@ import pl.skidam.automodpack.client.StartAndCheck;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
 
 import java.io.*;
+import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -27,23 +28,24 @@ public class AutoModpackClient implements ClientModInitializer {
         // load saved link from ./AutoModpack/modpack-link.txt file
         String savedLink = "";
         try {
-            BufferedReader br = new BufferedReader(new FileReader("./AutoModpack/modpack-link.txt"));
-            savedLink = br.readLine();
-            br.close();
-        } catch (IOException e) {
-            e.printStackTrace();
+            File modpack_link = new File("./AutoModpack/modpack-link.txt");
+            FileReader fr = new FileReader(modpack_link);
+            Scanner inFile = new Scanner(fr);
+            if (inFile.hasNextLine()) {
+                savedLink = inFile.nextLine();
+            }
+            inFile.close();
+        } catch (Exception e) { // ignore
         }
 
         if (!savedLink.equals("")) {
             link = savedLink;
             LOGGER.info("Loaded saved link to modpack: " + link);
-        } else {
-            LOGGER.info("No modpack link found");
         }
 
         InternetConnectionCheck.InternetConnectionCheck();
 
-        ClientLoginNetworking.registerGlobalReceiver(AutoModpackMain.AM_CHECK, this::onServerRequest);
+        ClientLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onServerRequest);
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
         new Thread(() -> new StartAndCheck(true)).start();
