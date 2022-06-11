@@ -2,7 +2,7 @@ package pl.skidam.automodpack.utils;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.toast.SystemToast;
-import net.minecraft.text.TranslatableText;
+import net.minecraft.text.Text;
 
 public class ToastExecutor {
 
@@ -21,7 +21,7 @@ public class ToastExecutor {
             return;
         }
 
-        SystemToast toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, new TranslatableText("gui.automodpack.toast.up." + WhoAreYou), new TranslatableText("gui.automodpack.toast.down." + WhoAreYou));
+        SystemToast toast = SystemToast.create(MinecraftClient.getInstance(), SystemToast.Type.TUTORIAL_HINT, Text.translatable("gui.automodpack.toast.up." + WhoAreYou), Text.translatable("gui.automodpack.toast.down." + WhoAreYou));
 
         MinecraftClient.getInstance().getToastManager().add(toast);
     }

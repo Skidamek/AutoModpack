@@ -4,7 +4,6 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
-import net.minecraft.text.TranslatableText;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,7 +19,7 @@ public class UpdateButtonMixin extends Screen {
     public UpdateButtonMixin(Text title) {
         super(title);
     }
-    public Text Button = new TranslatableText("gui.automodpack.button.update");
+    public Text Button = Text.translatable("gui.automodpack.button.update");
 
     @Inject(at = @At("RETURN"), method = "initWidgetsNormal" )
     private void AutoModpackUpdateButton(int y, int spacingY, CallbackInfo ci) {
