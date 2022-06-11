@@ -7,12 +7,12 @@
 - Update checker. (only for clients for now)
 
 Coming soon
-- Auto copy mods from mods installed on servers to modpack.
+- Auto copy mods from mods installed on servers to modpack. 
 - Config
 
 # How to use
 
-At first download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/latest/download/AutoModpack.jar).
+At first download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/latest/).
 
 You need also download the fabric api if using fabric or Quilt Standard Libraries (QSL) if using quilt.
 
@@ -32,7 +32,7 @@ Add mods/configs what ever you want in your modpack to the `./AutoModpack/modpac
 
 Restart server and you are good to go! Enjoy!
 
-**If you want to delete some mods from modpack**
+**If you want to delete some mods from modpack** 
 - Go to `./AutoModpack/modpack/` directory on your server.
 - Create file `delmods.txt`.
 - Inside this file put names of mods you want to delete. (one name per line!)
@@ -57,7 +57,7 @@ No, it doesn't. It will only delete mods which are written out in delmods.txt in
 
 **Contributors are welcome**
 [**click.**](CONTRIBUTING.md)
-
+  
 <p align="center"><img src="https://i.imgur.com/WQofabo.png" alt="Logo" width="200"></p>
 <h1 align="center">AutoModpack  <br><br>
     <a href="https://fabricmc.net/"><img
