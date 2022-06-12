@@ -48,7 +48,7 @@ public class AutoModpackClient implements ClientModInitializer {
         ClientLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onServerRequest);
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
-        new Thread(() -> new StartAndCheck(true, false)).start();
+        new StartAndCheck(true, false);
     }
 
     private CompletableFuture<PacketByteBuf> onServerRequest(MinecraftClient minecraftClient, ClientLoginNetworkHandler clientLoginNetworkHandler, PacketByteBuf inBuf, Consumer<GenericFutureListener<? extends Future<? super Void>>> consumer) {
@@ -69,7 +69,7 @@ public class AutoModpackClient implements ClientModInitializer {
         } catch (IOException e) { // ignore
         }
         LOGGER.info("Link received from server: {}. Saved to file.", receivedLink);
-        new Thread(() -> new StartAndCheck(false, true)).start();
+        new StartAndCheck(false, true);
         return CompletableFuture.completedFuture(PacketByteBufs.empty());
     }
 }
