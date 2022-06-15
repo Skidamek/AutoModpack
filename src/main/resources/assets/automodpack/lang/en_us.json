@@ -11,12 +11,32 @@
   "gui.automodpack.toast.down.4": "Your AutoModpack is up to date!",
   "gui.automodpack.toast.up.5": "Error!",
   "gui.automodpack.toast.down.5": "Try again later!",
+
   "gui.automodpack.button.update": "Check updates!",
-  "gui.automodpack.screen.title.all": "Downloaded updates for your Modpack and \"AutoModpack\" (this mod)!",
-  "gui.automodpack.screen.title.modpack": "An update has been downloaded for your Modpack!",
-  "gui.automodpack.screen.title.automodpack": "An update has been downloaded for \"AutoModpack\" (this mod)!",
-  "gui.automodpack.screen.description": "If you want to complete the update you have to restart the game.",
-  "gui.automodpack.screen.secDescription": "Do you want to restart now?",
-  "gui.automodpack.screen.button.quit": "Yes (Quit)",
-  "gui.automodpack.screen.button.cancel": "No (Back to the game)"
+
+  "gui.automodpack.screen.confirm.title.all": "Downloaded updates for your Modpack and \"AutoModpack\" (this mod)!",
+  "gui.automodpack.screen.confirm.title.modpack": "An update has been downloaded for your Modpack!",
+  "gui.automodpack.screen.confirm.title.automodpack": "An update has been downloaded for \"AutoModpack\" (this mod)!",
+  "gui.automodpack.screen.confirm.description": "If you want to complete the update you have to restart the game.",
+  "gui.automodpack.screen.confirm.secDescription": "Do you want to restart now?",
+  "gui.automodpack.screen.confirm.button.quit": "Yes (Quit)",
+  "gui.automodpack.screen.confirm.button.cancel": "No (Back to the game)",
+
+  "gui.automodpack.screen.danger.title": "Attention! Modpack found!",
+  "gui.automodpack.screen.danger.description": "Do you want to download update to it?",
+  "gui.automodpack.screen.danger.secDescription": "Or if you don't have it yet, download it?",
+  "gui.automodpack.screen.danger.button.accept": "Download",
+  "gui.automodpack.screen.danger.button.dontshowagain": "Download and don't show it again",
+  "gui.automodpack.screen.danger.button.cancel": "Don't download",
+
+  "text.autoconfig.automodpack.title": "AutoModpack Settings",
+  "text.autoconfig.automodpack.category.CLIENT SIDE": "Settings for client",
+  "text.autoconfig.automodpack.category.SERVER SIDE": "Settings for server",
+  "text.autoconfig.automodpack.option.danger_screen": "Enable danger screen",
+  "text.autoconfig.automodpack.option.check_updates_button": "Show \"Check updates\" button",
+  "text.autoconfig.automodpack.option.clone_mods": "Clone mods",
+  "text.autoconfig.automodpack.option.sync_mods": "Sync mods",
+  "text.autoconfig.automodpack.option.host_port": "Host port to modpack http server",
+  "text.autoconfig.automodpack.option.host_thread_count": "How many threads to handle modpack http server",
+  "text.autoconfig.automodpack.option.host_external_ip": "Optional external ip to modpack http server"
 }

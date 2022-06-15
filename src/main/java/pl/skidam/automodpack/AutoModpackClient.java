@@ -3,6 +3,8 @@ package pl.skidam.automodpack;
 import io.netty.buffer.Unpooled;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
+import me.shedaniel.autoconfig.AutoConfig;
+import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -10,6 +12,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.client.StartAndCheck;
+import pl.skidam.automodpack.config.AutoModpackConfig;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
 
 import java.io.*;
@@ -20,10 +23,14 @@ import java.util.function.Consumer;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 public class AutoModpackClient implements ClientModInitializer {
 
+    public static boolean isOnServer;
+
     @Override
     public void onInitializeClient() {
 
         LOGGER.info("Initializing AutoModpack...");
+
+        isOnServer = false;
 
         // load saved link from ./AutoModpack/modpack-link.txt file
         String savedLink = "";
@@ -49,6 +56,22 @@ public class AutoModpackClient implements ClientModInitializer {
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
         new StartAndCheck(true, false);
+
+        new Thread(() -> {
+            try {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+            while (true) {
+                LOGGER.warn(MinecraftClient.getInstance().currentScreen.toString());
+
+                try {
+                    Thread.sleep(750);
+                } catch (Exception e) { // ignore
+                }
+            }
+        }).start();
     }
 
     private CompletableFuture<PacketByteBuf> onServerRequest(MinecraftClient minecraftClient, ClientLoginNetworkHandler clientLoginNetworkHandler, PacketByteBuf inBuf, Consumer<GenericFutureListener<? extends Future<? super Void>>> consumer) {

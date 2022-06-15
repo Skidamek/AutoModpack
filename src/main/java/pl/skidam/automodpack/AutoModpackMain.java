@@ -1,24 +1,25 @@
 package pl.skidam.automodpack;
 
+import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import me.shedaniel.autoconfig.AutoConfig;
+import pl.skidam.automodpack.config.AutoModpackConfig;
+import pl.skidam.automodpack.server.Commands;
 
 import java.io.File;
+import java.util.concurrent.CompletableFuture;
 
 public class AutoModpackMain implements ModInitializer {
 
-    // TODO make config for it
-
-
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
-
     public static final Identifier AM_CHECK = new Identifier(MOD_ID, "check");
     public static final Identifier AM_LINK = new Identifier(MOD_ID, "link");
-
-    // Client
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
     public static boolean Checking;
@@ -29,20 +30,14 @@ public class AutoModpackMain implements ModInitializer {
     public static final String trashLink = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
     public static final File trashOut = new File("./AutoModpack/TrashMod.jar");
 
-
-    // Server
-
-    public static boolean cloneMods = true; // Clone mods from mods loaded on server to modpack
-    public static int host_port = 30037;
-    public static int host_thread_count = 2;
-    public static String host_external_ip = "";
-    public static int time_out = 1250; // in milliseconds
-
+    public static String VERSION = FabricLoader.getInstance().getModContainer("automodpack").get().getMetadata().getVersion().getFriendlyString();
 
     @Override
     public void onInitialize() {
 
+        // Initialize AutoConfig
+        AutoConfig.register(AutoModpackConfig.class, JanksonConfigSerializer::new);
 
+        Commands.register();
     }
-
 }

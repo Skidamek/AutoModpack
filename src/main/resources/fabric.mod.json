@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "automodpack",
-  "version": "1.9.7",
+  "version": "2.0.0",
 
   "name": "AutoModpack",
   "description": "Just automatic updating and downloading modpacks!",
@@ -22,7 +22,8 @@
     "client": ["pl.skidam.automodpack.AutoModpackClient"],
     "server": ["pl.skidam.automodpack.AutoModpackServer"],
     "preLaunch": ["pl.skidam.automodpack.PreLoad"],
-    "main": ["pl.skidam.automodpack.AutoModpackMain"]
+    "main": ["pl.skidam.automodpack.AutoModpackMain"],
+    "modmenu": [ "pl.skidam.automodpack.config.ModMenuIntegration" ]
   },
   "mixins": [
     "automodpack.mixins.json"

@@ -34,7 +34,7 @@ public class CheckModpack {
         if (!Modpack.exists() || currentSize != latestSize) {
             LOGGER.info("Downloading modpack!");
             new ToastExecutor(1);
-            new DownloadModpack();
+            new DownloadModpack.prepare();
             return;
         }
 

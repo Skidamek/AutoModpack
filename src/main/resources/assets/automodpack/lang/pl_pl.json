@@ -11,12 +11,32 @@
   "gui.automodpack.toast.down.4": "Twój AutoModpack jest aktualny!",
   "gui.automodpack.toast.up.5": "Error!",
   "gui.automodpack.toast.down.5": "Spróbuj ponownie później!",
+
   "gui.automodpack.button.update": "Sprawdź aktualizacje!",
-  "gui.automodpack.screen.title.all": "Pobrano aktualizacje dla twojego Modpacka i \"AutoModpacka\" (ten mod)!",
-  "gui.automodpack.screen.title.modpack": "Pobrano aktualizację dla twojego Modpacka!",
-  "gui.automodpack.screen.title.automodpack": "Pobrano aktualizację dla \"AutoModpacka\" (ten mod)!",
-  "gui.automodpack.screen.description": "Jeśli chcesz dokończyć proces aktualizacji, musisz zrestartować grę.",
-  "gui.automodpack.screen.secDescription": "Chcesz zrestartować teraz?",
-  "gui.automodpack.screen.button.quit": "Tak (Wyjdź z gry)",
-  "gui.automodpack.screen.button.cancel": "Nie (Wróć do gry)"
+
+  "gui.automodpack.screen.confirm.title.all": "Pobrano aktualizacje dla twojego Modpacka i \"AutoModpacka\" (ten mod)!",
+  "gui.automodpack.screen.confirm.title.modpack": "Pobrano aktualizację dla twojego Modpacka!",
+  "gui.automodpack.screen.confirm.title.automodpack": "Pobrano aktualizację dla \"AutoModpacka\" (ten mod)!",
+  "gui.automodpack.screen.confirm.description": "Jeśli chcesz dokończyć proces aktualizacji, musisz zrestartować grę.",
+  "gui.automodpack.screen.confirm.secDescription": "Chcesz zrestartować teraz?",
+  "gui.automodpack.screen.confirm.button.quit": "Tak (Wyjdź z gry)",
+  "gui.automodpack.screen.confirm.button.cancel": "Nie (Wróć do gry)",
+
+  "gui.automodpack.screen.danger.title": "Uwaga! Znaleziono modpacka!",
+  "gui.automodpack.screen.danger.description": "Czy chcesz pobrać aktualizację do niego?",
+  "gui.automodpack.screen.danger.secDescription": "Lub jeśli go jeszcze nie masz to pobrać?",
+  "gui.automodpack.screen.danger.button.accept": "Pobierz",
+  "gui.automodpack.screen.danger.button.dontshowagain": "Pobierz i nie pokazuj tego ponownie",
+  "gui.automodpack.screen.danger.button.cancel": "Nie pobieraj",
+
+  "text.autoconfig.automodpack.title": "Ustawienia AutoModpacka",
+  "text.autoconfig.automodpack.category.CLIENT SIDE": "Ustawienia dla klienta",
+  "text.autoconfig.automodpack.category.SERVER SIDE": "Ustawienia dla serwera",
+  "text.autoconfig.automodpack.option.danger_screen": "Włącz ekran zagrożenia",
+  "text.autoconfig.automodpack.option.check_updates_button": "Pokazuj guzior \"Sprawdź aktualizacje!\"",
+  "text.autoconfig.automodpack.option.clone_mods": "Klonowanie modów",
+  "text.autoconfig.automodpack.option.sync_mods": "Synchronizacja modów",
+  "text.autoconfig.automodpack.option.host_port": "Port hosta do serwera http z modpackiem",
+  "text.autoconfig.automodpack.option.host_thread_count": "Ile wątków przydzielić na serwer http modpacka",
+  "text.autoconfig.automodpack.option.host_external_ip": "Opcjonalny zewnętrzny adres IP do serwera http dla modpacka"
 }

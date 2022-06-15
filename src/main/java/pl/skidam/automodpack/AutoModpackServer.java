@@ -16,6 +16,7 @@ import java.io.*;
 import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.utils.Others.config;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
 
@@ -23,26 +24,46 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public void onInitializeServer() {
         LOGGER.info("Welcome to AutoModpack on Server!");
 
-        // TODO add commands to gen modpack etc.
-
         new SetupFiles();
+        genModpack();
 
+        // mod check
+        ServerLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onClientResponse);
+        ServerLoginNetworking.registerGlobalReceiver(AM_LINK, this::onSuccess);
+        ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
+    }
+
+    public static void genModpack() {
         File modpackDir = new File("./AutoModpack/modpack/");
         File modpackZip = new File("./AutoModpack/modpack.zip");
         File modpackModsDir = new File("./AutoModpack/modpack/mods/");
         File modpackConfDir = new File("./AutoModpack/modpack/config/");
         File serverModsDir = new File("./mods/");
 
-        // Clone mods from mods loaded on server to modpack TODO add option to turn it on/off in config
-        if (cloneMods) {
-            LOGGER.info("Cloning mods from server to modpack");
+        // sync mods
+        if (config.sync_mods) {
             try {
-                FileUtils.copyDirectory(serverModsDir, modpackModsDir);
+                FileUtils.deleteDirectory(modpackModsDir);
             } catch (IOException e) {
-                LOGGER.error("Error while cloning mods from server to modpack");
-                e.printStackTrace();
+                throw new RuntimeException(e);
             }
         }
+
+        // clone every mod except for the AutoModpack mod
+        if (config.clone_mods || config.sync_mods) {
+            LOGGER.info("Cloning mods from server to modpack");
+            for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
+                if (!file.getName().toLowerCase().contains("automodpack")) {
+                    try {
+                        FileUtils.copyFileToDirectory(file, modpackModsDir);
+                    } catch (IOException e) {
+                        LOGGER.error("Error while cloning mods from server to modpack");
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+
         if (modpackDir.exists() && Objects.requireNonNull(modpackModsDir.listFiles()).length >= 1 || Objects.requireNonNull(modpackConfDir.listFiles()).length >= 1) {
             LOGGER.info("Creating modpack");
             new ShityCompressor(modpackDir, modpackZip);
@@ -53,17 +74,12 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             if (Objects.requireNonNull(modpackModsDir.listFiles()).length < 1 && Objects.requireNonNull(modpackConfDir.listFiles()).length < 1) {
                 LOGGER.info("Modpack found, but no mods or configs inside. Deleting modpack.");
                 modpackZip.delete();
-                return; // idk if it will work
+                return;
             }
+
             ServerLifecycleEvents.SERVER_STARTED.register(HostModpack::start);
             ServerLifecycleEvents.SERVER_STOPPING.register(server -> HostModpack.stop());
         }
-
-
-        // mod check
-        ServerLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onClientResponse);
-        ServerLoginNetworking.registerGlobalReceiver(AM_LINK, this::onSuccess);
-        ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
     }
 
     private void onSuccess(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean b, PacketByteBuf packetByteBuf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
@@ -77,7 +93,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     private void onClientResponse(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
 
         if(!understood || buf.readInt() != 1) {
-            serverLoginNetworkHandler.disconnect(Text.of("You have to install \\\"AutoModpack\\\" mod to play on this server! https://github.com/Skidamek/AutoModpack/releases"));
+            serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://github.com/Skidamek/AutoModpack/releases"));
         } else {
             // get minecraft player ip if player is in local network give him local address to modpack
             String playerIp = serverLoginNetworkHandler.getConnection().getAddress().toString();

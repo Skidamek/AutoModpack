@@ -11,9 +11,9 @@ public class Finished {
 
     public Finished() {
 
-        Text bothUpdates = Text.translatable("gui.automodpack.screen.title.all").formatted(Formatting.BOLD);
-        Text modpackUpdate = Text.translatable("gui.automodpack.screen.title.modpack").formatted(Formatting.BOLD);
-        Text automodpackUpdate = Text.translatable("gui.automodpack.screen.title.automodpack").formatted(Formatting.BOLD);
+        Text bothUpdates = Text.translatable("gui.automodpack.screen.confirm.title.all").formatted(Formatting.BOLD);
+        Text modpackUpdate = Text.translatable("gui.automodpack.screen.confirm.title.modpack").formatted(Formatting.BOLD);
+        Text automodpackUpdate = Text.translatable("gui.automodpack.screen.confirm.title.automodpack").formatted(Formatting.BOLD);
 
         LOGGER.info("Here you are!");
 

@@ -12,22 +12,21 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.utils.Others.config;
 
 public class HostModpack implements HttpHandler {
 
     private static final Path MODPACK_FILE = Path.of(FabricLoader.getInstance().getGameDir().toFile() + "/AutoModpack/modpack.zip");
-
     private static HttpServer server = null;
     private static ExecutorService threadPool = null;
-
     public static String modpackHostIp;
     public static String modpackHostIpForLocalPlayers;
+
 
     public static void stop() {
         if (server != null) {
@@ -39,26 +38,32 @@ public class HostModpack implements HttpHandler {
     }
 
     public static void start(MinecraftServer minecraftServer) {
-        threadPool = Executors.newFixedThreadPool(host_thread_count, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Modpack-Host-%d").build());
+        threadPool = Executors.newFixedThreadPool(config.host_thread_count, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Modpack-Host-%d").build());
 
         CompletableFuture.runAsync(() -> {
             try {
                 LOGGER.info("Starting modpack server...");
 
-                String serverIp = InetAddress.getLocalHost().getHostAddress();
+                String localIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
 
                 String serverIpForOthers = "0.0.0.0";
-                try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
-                    serverIpForOthers = s.next();
-                } catch (Exception e) {
-                    e.printStackTrace();
+
+                if (!config.host_external_ip.isEmpty() && !config.host_external_ip.equals(localIp) && !config.host_external_ip.equals("0.0.0.0") && !config.host_external_ip.equals("localhost")) {
+                    serverIpForOthers = config.host_external_ip;
+                    LOGGER.info("Using external IP: " + serverIpForOthers);
+                } else {
+                    try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
+                        serverIpForOthers = s.next();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
 
-                modpackHostIp = String.format("http://%s:%s/%s", serverIpForOthers, host_port, subUrl);
-                modpackHostIpForLocalPlayers = String.format("http://%s:%s/%s", serverIp, host_port, subUrl);
+                modpackHostIp = String.format("http://%s:%s/%s", serverIpForOthers, config.host_port, subUrl);
+                modpackHostIpForLocalPlayers = String.format("http://%s:%s/%s", localIp, config.host_port, subUrl);
 
-                server = HttpServer.create(new InetSocketAddress("0.0.0.0", host_port), 0);
+                server = HttpServer.create(new InetSocketAddress("0.0.0.0", config.host_port), 0);
                 server.createContext("/" + subUrl, new HostModpack());
                 server.setExecutor(threadPool);
                 server.start();
