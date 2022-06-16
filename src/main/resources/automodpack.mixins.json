@@ -4,6 +4,7 @@
   "package": "pl.skidam.automodpack.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
+    "ClientPlayNetworkHandlerMixin",
     "UpdateButtonMixin"
   ],
   "server": [
@@ -12,6 +13,5 @@
     "defaultRequire": 1
   },
   "mixins": [
-    "UpdateButtonMixin"
   ]
 }

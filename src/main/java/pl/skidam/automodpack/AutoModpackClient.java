@@ -6,7 +6,9 @@ import io.netty.util.concurrent.GenericFutureListener;
 import me.shedaniel.autoconfig.AutoConfig;
 import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
@@ -56,22 +58,6 @@ public class AutoModpackClient implements ClientModInitializer {
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
         new StartAndCheck(true, false);
-
-        new Thread(() -> {
-            try {
-                Thread.sleep(5000);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            while (true) {
-                LOGGER.warn(MinecraftClient.getInstance().currentScreen.toString());
-
-                try {
-                    Thread.sleep(750);
-                } catch (Exception e) { // ignore
-                }
-            }
-        }).start();
     }
 
     private CompletableFuture<PacketByteBuf> onServerRequest(MinecraftClient minecraftClient, ClientLoginNetworkHandler clientLoginNetworkHandler, PacketByteBuf inBuf, Consumer<GenericFutureListener<? extends Future<? super Void>>> consumer) {

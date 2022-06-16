@@ -30,9 +30,11 @@ public class DangerScreen extends Screen {
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height / 6 + 96, 190, 20, Text.translatable("gui.automodpack.screen.danger.button.dontshowagain").formatted(Formatting.GRAY), (button) -> {
             AutoModpackConfig.danger_screen = false;
             new DownloadModpack();
+            this.client.setScreen(parent);
         }));
         this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height / 6 + 96, 120, 20, Text.translatable("gui.automodpack.screen.danger.button.accept").formatted(Formatting.RED), (button) -> {
             new DownloadModpack();
+            this.client.setScreen(parent);
         }));
     }
 

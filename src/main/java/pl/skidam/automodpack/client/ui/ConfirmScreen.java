@@ -11,7 +11,6 @@ import net.minecraft.util.Formatting;
 @Environment(EnvType.CLIENT)
 public class ConfirmScreen extends Screen {
     private Screen parent;
-
     public ConfirmScreen(Text title) {
         super(title);
     }
