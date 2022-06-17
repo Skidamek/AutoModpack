@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.modpack;
 
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 
 import pl.skidam.automodpack.client.ui.DangerScreen;
@@ -28,42 +30,60 @@ public class DownloadModpack {
     }
 
     public static class prepare {
+
+        public static boolean DangerScreenWasShown = false;
+
         public prepare() {
-            LOGGER.error("0");
 
-            if (AutoModpackConfig.danger_screen) {
-                LOGGER.error("1");
-                while (true) {
-                    assert MinecraftClient.getInstance().currentScreen != null;
-                    if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("title") || MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("multi") || MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("options")) {
-                        LOGGER.error("2");
-                        break;
-                    }
-
-                    if (isOnServer) {
-                        LOGGER.error("3");
-                        MinecraftClient.getInstance().execute(() -> {
-                            assert MinecraftClient.getInstance().world != null;
-                            MinecraftClient.getInstance().world.disconnect();
-                        });
-                        isOnServer = false;
-                        while (true) {
-                            if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("disconnected")) {
-                                LOGGER.error("4");
-                                break;
-                            }
-                        }
-                        break;
-                    }
-                }
-
-                LOGGER.error("4.5");
-                MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new DangerScreen()));
+            if (!AutoModpackConfig.danger_screen) {
+                new DownloadModpack();
                 return;
             }
 
-            LOGGER.error("5");
-            new DownloadModpack();
+            while (true) {
+                assert MinecraftClient.getInstance().currentScreen != null;
+                String currentScreen = MinecraftClient.getInstance().currentScreen.toString().toLowerCase();
+                // dev env
+//                    if (currentScreen.contains("title") || currentScreen.contains("multi") || currentScreen.contains("options" || currentScreen.contains("modsscreen")) {
+//                        break;
+//                    }
+                // prod env
+                if (currentScreen.contains("442") || currentScreen.contains("500") || currentScreen.contains("429") || currentScreen.contains("526") || currentScreen.contains("525") || currentScreen.contains("424") || currentScreen.contains("modsscreen")) {
+                    DangerScreenWasShown = true;
+                    break;
+                }
+
+                if (isOnServer) {
+                    while (true) {
+                        if (ClientPlayNetworking.canSend(AM_KICK)) {
+                            // TODO change it to ClientLoginNetwork
+                            ClientPlayNetworking.send(AM_KICK, PacketByteBufs.empty());
+                            LOGGER.error("sent kick packet 1");
+                            break;
+                        }
+                        LOGGER.error("sent kick packet 2");
+                    }
+                    LOGGER.error("sent kick packet 3");
+                    while (true) {
+                        LOGGER.error("Waiting for server to kick...");
+                        assert MinecraftClient.getInstance().currentScreen != null;
+                        String currentScreenGO = MinecraftClient.getInstance().currentScreen.toString().toLowerCase();
+                        // dev env
+//                            if (currentScreen.contains("disconnected")) {
+//                                break;
+//                            }
+                        // prod env
+                        if (currentScreenGO.contains("419")) {
+                            LOGGER.error("Server kicked us!");
+                            isOnServer = false;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new DangerScreen()));
         }
     }
 }

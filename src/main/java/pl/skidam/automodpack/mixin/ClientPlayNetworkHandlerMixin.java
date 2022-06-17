@@ -7,18 +7,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
 
-
 @Mixin(ClientPlayNetworkHandler.class)
-public abstract class ClientPlayNetworkHandlerMixin {
+public class ClientPlayNetworkHandlerMixin {
     @Inject(method = "onGameJoin", at = @At("HEAD"))
     public void onGameJoin(CallbackInfo ci) {
-        new Thread(() -> {
-            try {
-                Thread.sleep(1500);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            isOnServer = true;
-        }).start();
+        isOnServer = true;
     }
 }

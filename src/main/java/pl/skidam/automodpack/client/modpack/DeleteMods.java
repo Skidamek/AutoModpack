@@ -4,6 +4,7 @@ import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.exception.ZipException;
 import org.apache.commons.io.FileDeleteStrategy;
 import pl.skidam.automodpack.AutoModpackMain;
+import pl.skidam.automodpack.client.StartAndCheck;
 import pl.skidam.automodpack.utils.ShityCompressor;
 import pl.skidam.automodpack.utils.Wait;
 

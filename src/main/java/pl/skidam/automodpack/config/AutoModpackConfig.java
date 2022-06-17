@@ -29,4 +29,8 @@ public class AutoModpackConfig implements ConfigData {
     @ConfigEntry.Category("SERVER SIDE")
     @Comment("External IP to host http server for modpack on server NOTE: If you dont know what this is, leave it empty")
     public String host_external_ip = "";
+
+    @ConfigEntry.Category("SERVER SIDE")
+    @Comment("External modpack host server (if you put something there modpack host will be auto disabled)")
+    public String external_host_server = ""; // TODO: add support for external host server
 }

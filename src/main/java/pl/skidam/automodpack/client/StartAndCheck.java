@@ -2,7 +2,6 @@ package pl.skidam.automodpack.client;
 
 import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.client.modpack.CheckModpack;
-import pl.skidam.automodpack.utils.Wait;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -16,32 +15,46 @@ public class StartAndCheck {
             // If minecraft is still loading wait for it to finish
             if (isLoading) {
                 while (MinecraftClient.getInstance().currentScreen == null) {
-                    Wait.wait(1000);
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
                 // wait to bypass most of the bugs
-                Wait.wait(5000);
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
 
             CompletableFuture.runAsync(() -> {
                 // Checking loop
                 Checking = true;
                 while (true) {
+                    LOGGER.error("AutoModpack updated? " + AutoModpackUpdated);
+                    LOGGER.error("Modpack updated? " + ModpackUpdated);
                     if (AutoModpackUpdated != null && ModpackUpdated != null) {
                         Checking = false;
                         new Finished();
                         break;
                     }
-                    Wait.wait(1000);
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
             });
 
-            new CheckModpack();
-
             if (onlyModpack) {
                 AutoModpackUpdated = "false";
+                new CheckModpack();
                 return;
             }
 
+            new CheckModpack();
             new SelfUpdater();
         }).start();
     }

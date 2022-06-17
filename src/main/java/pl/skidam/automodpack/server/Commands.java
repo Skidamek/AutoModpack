@@ -7,6 +7,8 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.AutoModpackServer;
 
+import java.util.concurrent.CompletableFuture;
+
 import static net.minecraft.server.command.CommandManager.literal;
 public class Commands {
     public static void register() {
@@ -33,13 +35,15 @@ public class Commands {
     }
 
     public static int generateModpack(CommandContext<ServerCommandSource> context) {
-        context.getSource().sendFeedback(Text.literal("Generating Modpack...")
-                .formatted(Formatting.GREEN),
-                true);
-        AutoModpackServer.genModpack();
-        context.getSource().sendFeedback(Text.literal("Modpack generated!.")
-                .formatted(Formatting.GREEN),
-                true);
+        CompletableFuture.runAsync(() -> {
+            context.getSource().sendFeedback(Text.literal("Generating Modpack...")
+                    .formatted(Formatting.GREEN),
+                    true);
+            AutoModpackServer.genModpack();
+            context.getSource().sendFeedback(Text.literal("Modpack generated!")
+                    .formatted(Formatting.GREEN),
+                    true);
+        });
         return 0;
     }
 }

@@ -10,6 +10,8 @@ import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.modpack.DownloadModpack;
 import pl.skidam.automodpack.config.AutoModpackConfig;
 
+import java.util.concurrent.CompletableFuture;
+
 import static pl.skidam.automodpack.AutoModpackMain.ModpackUpdated;
 
 @Environment(EnvType.CLIENT)
@@ -23,18 +25,23 @@ public class DangerScreen extends Screen {
     @Override
     protected void init() {
         super.init();
+        assert this.client != null;
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height / 6 + 96, 120, 20, Text.translatable("gui.automodpack.screen.danger.button.cancel").formatted(Formatting.GREEN), (button) -> {
             ModpackUpdated = "false";
             this.client.setScreen(parent);
         }));
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height / 6 + 96, 190, 20, Text.translatable("gui.automodpack.screen.danger.button.dontshowagain").formatted(Formatting.GRAY), (button) -> {
             AutoModpackConfig.danger_screen = false;
-            new DownloadModpack();
+            //new DownloadModpack();
             this.client.setScreen(parent);
+            CompletableFuture.runAsync(DownloadModpack::new);
+            this.client.setScreen(new LoadingScreen());
         }));
         this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height / 6 + 96, 120, 20, Text.translatable("gui.automodpack.screen.danger.button.accept").formatted(Formatting.RED), (button) -> {
-            new DownloadModpack();
+            //new DownloadModpack();
             this.client.setScreen(parent);
+            CompletableFuture.runAsync(DownloadModpack::new);
+            this.client.setScreen(new LoadingScreen());
         }));
     }
 

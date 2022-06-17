@@ -22,6 +22,8 @@
   "gui.automodpack.screen.confirm.button.quit": "Tak (Wyjdź z gry)",
   "gui.automodpack.screen.confirm.button.cancel": "Nie (Wróć do gry)",
 
+  "gui.automodpack.screen.loading.title": "Pobieranie aktualizacji...",
+
   "gui.automodpack.screen.danger.title": "Uwaga! Znaleziono modpacka!",
   "gui.automodpack.screen.danger.description": "Czy chcesz pobrać aktualizację do niego?",
   "gui.automodpack.screen.danger.secDescription": "Lub jeśli go jeszcze nie masz to pobrać?",

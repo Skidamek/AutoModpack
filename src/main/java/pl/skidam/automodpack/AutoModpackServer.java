@@ -6,6 +6,8 @@ import net.fabricmc.fabric.api.networking.v1.*;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
+import net.minecraft.server.network.ServerPlayNetworkHandler;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.server.HostModpack;
@@ -14,11 +16,18 @@ import pl.skidam.automodpack.utils.ShityCompressor;
 
 import java.io.*;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.Others.config;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
+
+    public static final File modpackDir = new File("./AutoModpack/modpack/");
+    public static final File modpackZip = new File("./AutoModpack/modpack.zip");
+    public static final File modpackModsDir = new File("./AutoModpack/modpack/mods/");
+    public static final File modpackConfDir = new File("./AutoModpack/modpack/config/");
+    public static final File serverModsDir = new File("./mods/");
 
     @Override
     public void onInitializeServer() {
@@ -27,21 +36,29 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         new SetupFiles();
         genModpack();
 
-        // mod check
+        // packets
         ServerLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onClientResponse);
         ServerLoginNetworking.registerGlobalReceiver(AM_LINK, this::onSuccess);
+        ServerPlayNetworking.registerGlobalReceiver(AM_KICK, this::onKick);
         ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
+
+        if (modpackZip.exists()) {
+            if (Objects.requireNonNull(modpackModsDir.listFiles()).length < 1 && Objects.requireNonNull(modpackConfDir.listFiles()).length < 1) {
+                LOGGER.info("Modpack found, but no mods or configs inside. Deleting modpack.");
+                modpackZip.delete();
+                return;
+            }
+
+            ServerLifecycleEvents.SERVER_STARTED.register(HostModpack::start);
+            ServerLifecycleEvents.SERVER_STOPPING.register(server -> HostModpack.stop());
+        }
     }
 
     public static void genModpack() {
-        File modpackDir = new File("./AutoModpack/modpack/");
-        File modpackZip = new File("./AutoModpack/modpack.zip");
-        File modpackModsDir = new File("./AutoModpack/modpack/mods/");
-        File modpackConfDir = new File("./AutoModpack/modpack/config/");
-        File serverModsDir = new File("./mods/");
 
         // sync mods
         if (config.sync_mods) {
+            LOGGER.info("Synchronizing mods from server to modpack");
             try {
                 FileUtils.deleteDirectory(modpackModsDir);
             } catch (IOException e) {
@@ -62,23 +79,13 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
                     }
                 }
             }
-        }
 
-        if (modpackDir.exists() && Objects.requireNonNull(modpackModsDir.listFiles()).length >= 1 || Objects.requireNonNull(modpackConfDir.listFiles()).length >= 1) {
-            LOGGER.info("Creating modpack");
-            new ShityCompressor(modpackDir, modpackZip);
-            LOGGER.info("Modpack created");
-        }
 
-        if (modpackZip.exists()) {
-            if (Objects.requireNonNull(modpackModsDir.listFiles()).length < 1 && Objects.requireNonNull(modpackConfDir.listFiles()).length < 1) {
-                LOGGER.info("Modpack found, but no mods or configs inside. Deleting modpack.");
-                modpackZip.delete();
-                return;
+            if (modpackDir.exists() && Objects.requireNonNull(modpackModsDir.listFiles()).length >= 1 || Objects.requireNonNull(modpackConfDir.listFiles()).length >= 1) {
+                LOGGER.info("Creating modpack");
+                new ShityCompressor(modpackDir, modpackZip);
+                LOGGER.info("Modpack created");
             }
-
-            ServerLifecycleEvents.SERVER_STARTED.register(HostModpack::start);
-            ServerLifecycleEvents.SERVER_STOPPING.register(server -> HostModpack.stop());
         }
     }
 
@@ -110,5 +117,8 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
             LOGGER.info("Sent modpack link to client");
         }
+    }
+    private void onKick(MinecraftServer minecraftServer, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf packetByteBuf, PacketSender sender) {
+        handler.disconnect(Text.of("You have to update your modpack to play on this server!"));
     }
 }

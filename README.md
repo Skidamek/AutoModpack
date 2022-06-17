@@ -1,14 +1,11 @@
 # **Welcome to AutoModpack,**
 
 # Key features
+- Your players no longer have to update mods.
 - Modpack hosting
 - Easy download/update modpack (add mods, delete mods, add configs whatever you want)
-- Your players no longer have to update mods.
-- Update checker. (only for clients for now)
-
-Coming soon
-- Auto copy mods from mods installed on servers to modpack. 
-- Config
+- Sync server mods with modpack mods.
+- Update checker.
 
 # How to use
 
@@ -58,7 +55,7 @@ No, it doesn't. It will only delete mods which are written out in delmods.txt in
 **Contributors are welcome**
 [**click.**](CONTRIBUTING.md)
   
-<p align="center"><img src="https://i.imgur.com/WQofabo.png" alt="Logo" width="200"></p>
+<p align="center"><img src="https://i.imgur.com/zogBcIG" alt="Logo" width="200"></p>
 <h1 align="center">AutoModpack  <br><br>
     <a href="https://fabricmc.net/"><img
         src="https://cdn.discordapp.com/attachments/705864145169416313/969720133998239794/fabric_supported.png"

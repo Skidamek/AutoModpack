@@ -3,7 +3,6 @@ package pl.skidam.automodpack;
 import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,14 +11,16 @@ import pl.skidam.automodpack.config.AutoModpackConfig;
 import pl.skidam.automodpack.server.Commands;
 
 import java.io.File;
-import java.util.concurrent.CompletableFuture;
 
 public class AutoModpackMain implements ModInitializer {
+
+    // TODO make cloth-config unnecessary
 
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
     public static final Identifier AM_CHECK = new Identifier(MOD_ID, "check");
     public static final Identifier AM_LINK = new Identifier(MOD_ID, "link");
+    public static final Identifier AM_KICK = new Identifier(MOD_ID, "kick");
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
     public static boolean Checking;

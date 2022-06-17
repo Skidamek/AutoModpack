@@ -12,6 +12,7 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -79,10 +80,7 @@ public class HostModpack implements HttpHandler {
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
-//        if (Objects.equals(exchange.getRequestMethod(), "GET")) {
-
-            LOGGER.info("Supplying modpack to the client.");
-
+        if (Objects.equals(exchange.getRequestMethod(), "GET")) {
             OutputStream outputStream = exchange.getResponseBody();
             File pack = MODPACK_FILE.toFile();
 
@@ -97,8 +95,8 @@ public class HostModpack implements HttpHandler {
 
             outputStream.flush();
             outputStream.close();
-//        } else {
-//            exchange.sendResponseHeaders(400, 0);
-//        }
+        } else {
+            exchange.sendResponseHeaders(400, 0);
+        }
     }
 }

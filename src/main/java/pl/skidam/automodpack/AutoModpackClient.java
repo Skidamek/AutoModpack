@@ -3,18 +3,13 @@ package pl.skidam.automodpack;
 import io.netty.buffer.Unpooled;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-import me.shedaniel.autoconfig.AutoConfig;
-import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.client.StartAndCheck;
-import pl.skidam.automodpack.config.AutoModpackConfig;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
 
 import java.io.*;
@@ -54,6 +49,7 @@ public class AutoModpackClient implements ClientModInitializer {
 
         InternetConnectionCheck.InternetConnectionCheck();
 
+        // packets
         ClientLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onServerRequest);
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
