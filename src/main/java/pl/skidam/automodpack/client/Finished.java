@@ -34,7 +34,7 @@ public class Finished {
                 break;
             }
 
-            if (isOnServer) {
+            if (isOnServer && ModpackUpdated.equals("true")) {
                 while (true) {
                     if (ClientPlayNetworking.canSend(AM_KICK)) {
                         // TODO change it to ClientLoginNetwork
