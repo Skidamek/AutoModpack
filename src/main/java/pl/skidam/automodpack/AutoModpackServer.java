@@ -16,7 +16,6 @@ import pl.skidam.automodpack.utils.ShityCompressor;
 
 import java.io.*;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.Others.config;
@@ -39,7 +38,6 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         // packets
         ServerLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onClientResponse);
         ServerLoginNetworking.registerGlobalReceiver(AM_LINK, this::onSuccess);
-        ServerPlayNetworking.registerGlobalReceiver(AM_KICK, this::onKick);
         ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
 
         if (modpackZip.exists()) {
@@ -117,8 +115,5 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
             LOGGER.info("Sent modpack link to client");
         }
-    }
-    private void onKick(MinecraftServer minecraftServer, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf packetByteBuf, PacketSender sender) {
-        handler.disconnect(Text.of("You have to update your modpack to play on this server!"));
     }
 }

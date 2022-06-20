@@ -20,7 +20,6 @@ public class AutoModpackMain implements ModInitializer {
     public static final String MOD_ID = "automodpack";
     public static final Identifier AM_CHECK = new Identifier(MOD_ID, "check");
     public static final Identifier AM_LINK = new Identifier(MOD_ID, "link");
-    public static final Identifier AM_KICK = new Identifier(MOD_ID, "kick");
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
     public static boolean Checking;

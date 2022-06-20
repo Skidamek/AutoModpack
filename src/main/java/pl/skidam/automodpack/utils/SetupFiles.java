@@ -51,6 +51,7 @@ public class SetupFiles {
             oldAM.mkdir();
         }
 
+        // TODO: fix this
         // Auto renaming system. Rename the wrong name of automodpack mod to the right name.
         File AutoModpackJar = new File( "./mods/AutoModpack.jar");
         File mods = new File("./mods/");

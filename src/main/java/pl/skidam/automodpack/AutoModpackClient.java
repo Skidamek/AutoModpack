@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.networking.v1.ClientLoginConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
@@ -21,6 +22,7 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 public class AutoModpackClient implements ClientModInitializer {
 
     public static boolean isOnServer;
+    public static boolean ClientIsLogging;
 
     @Override
     public void onInitializeClient() {
@@ -52,6 +54,10 @@ public class AutoModpackClient implements ClientModInitializer {
         // packets
         ClientLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onServerRequest);
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
+
+        // register
+        ClientLoginConnectionEvents.QUERY_START.register((clientLoginNetworkHandler, minecraftClient) -> ClientIsLogging = true);
+        ClientLoginConnectionEvents.DISCONNECT.register((clientLoginNetworkHandler, minecraftClient) -> ClientIsLogging = false);
 
         new StartAndCheck(true, false);
     }

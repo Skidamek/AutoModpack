@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.client;
 
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.text.Text;
@@ -16,8 +14,10 @@ public class Finished {
 
     public Finished() {
 
+        LOGGER.error("Finished!");
         while (true) {
             if (DangerScreenWasShown) {
+                LOGGER.error("Finished - DangerScreenWasShown! skipping");
                 DangerScreenWasShown = false;
                 break;
             }
@@ -31,36 +31,31 @@ public class Finished {
 //                    }
             // prod env
             if (currentScreen.contains("442") || currentScreen.contains("500") || currentScreen.contains("429") || currentScreen.contains("526") || currentScreen.contains("525") || currentScreen.contains("424") || currentScreen.contains("modsscreen") || currentScreen.contains("loading")) {
+                LOGGER.error("Finished - currentScreen! 1 skipping" + currentScreen);
                 break;
             }
 
-            if (isOnServer && ModpackUpdated.equals("true")) {
-                while (true) {
-                    if (ClientPlayNetworking.canSend(AM_KICK)) {
-                        // TODO change it to ClientLoginNetwork
-                        ClientPlayNetworking.send(AM_KICK, PacketByteBufs.empty());
-                        LOGGER.error("sent kick packet 1");
-                        break;
-                    }
-                    LOGGER.error("sent kick packet 2");
+            if (ModpackUpdated.equals("true")) {
+                LOGGER.error("Finished - Modpack updated!");
+                if (MinecraftClient.getInstance().world != null) {
+                    MinecraftClient.getInstance().world.disconnect();
+                    LOGGER.error("Finished - disconnected!");
                 }
-                LOGGER.error("sent kick packet 3");
-                while (true) {
-                    LOGGER.error("Waiting for server to kick...");
-                    assert MinecraftClient.getInstance().currentScreen != null;
-                    String currentScreenGO = MinecraftClient.getInstance().currentScreen.toString().toLowerCase();
+
+                if (MinecraftClient.getInstance().currentScreen != null) {
+                    LOGGER.error("Finished - currentScreen! 2" + currentScreen);
                     // dev env
 //                            if (currentScreen.contains("disconnected")) {
 //                                break;
 //                            }
                     // prod env
-                    if (currentScreenGO.contains("419")) {
-                        LOGGER.error("Server kicked us!");
+                    if (currentScreen.contains("419")) {
                         isOnServer = false;
+                        LOGGER.error("Finished - kicked and here you are! skipping");
                         break;
                     }
+
                 }
-                break;
             }
         }
 
@@ -85,7 +80,6 @@ public class Finished {
 
         AutoModpackUpdated = null;
         ModpackUpdated = null;
-        Checking = false;
 
         if (MinecraftClient.getInstance().currentScreen.toString().contains("loading")) {
             MinecraftClient.getInstance().setScreen(new TitleScreen());
