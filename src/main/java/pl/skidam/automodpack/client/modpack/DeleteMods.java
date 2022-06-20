@@ -1,11 +1,9 @@
 package pl.skidam.automodpack.client.modpack;
 
-import net.lingala.zip4j.ZipFile;
-import net.lingala.zip4j.exception.ZipException;
 import org.apache.commons.io.FileDeleteStrategy;
 import pl.skidam.automodpack.AutoModpackMain;
-import pl.skidam.automodpack.client.StartAndCheck;
 import pl.skidam.automodpack.utils.ShityCompressor;
+import pl.skidam.automodpack.utils.ShityDeCompressor;
 import pl.skidam.automodpack.utils.Wait;
 
 import java.io.*;
@@ -26,10 +24,7 @@ public class DeleteMods {
             this.preload = true;
             Wait.wait(500);
             if (!delModsTxt.exists()) {
-                try {
-                    new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods.txt", "./");
-                } catch (ZipException e) { // ignore
-                }
+                new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./"), false, "delmods.txt");
             }
         }
         if (!preload) {

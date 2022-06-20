@@ -2,7 +2,6 @@ package pl.skidam.automodpack.client.modpack;
 
 import net.minecraft.client.MinecraftClient;
 
-import net.minecraft.client.gui.screen.Screen;
 import pl.skidam.automodpack.client.ui.DangerScreen;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.config.AutoModpackConfig;
@@ -10,7 +9,6 @@ import pl.skidam.automodpack.utils.Download;
 
 import java.util.concurrent.CompletableFuture;
 
-import static pl.skidam.automodpack.AutoModpackClient.ClientIsLogging;
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
@@ -42,10 +40,10 @@ public class DownloadModpack {
                 if (MinecraftClient.getInstance().currentScreen != null) {
                     CompletableFuture.runAsync(DownloadModpack::new);
                     // check if player is joining server
-                    if (ClientIsLogging) {
+                    if (isOnServer) {
                         while (true) {
                             if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("419")) {
-                                ClientIsLogging = false;
+                                isOnServer = false;
                                 break;
                             }
 

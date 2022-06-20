@@ -22,7 +22,6 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 public class AutoModpackClient implements ClientModInitializer {
 
     public static boolean isOnServer;
-    public static boolean ClientIsLogging;
 
     @Override
     public void onInitializeClient() {
@@ -56,8 +55,8 @@ public class AutoModpackClient implements ClientModInitializer {
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
         // register
-        ClientLoginConnectionEvents.QUERY_START.register((clientLoginNetworkHandler, minecraftClient) -> ClientIsLogging = true);
-        ClientLoginConnectionEvents.DISCONNECT.register((clientLoginNetworkHandler, minecraftClient) -> ClientIsLogging = false);
+        ClientLoginConnectionEvents.QUERY_START.register((clientLoginNetworkHandler, minecraftClient) -> isOnServer = true);
+        ClientLoginConnectionEvents.DISCONNECT.register((clientLoginNetworkHandler, minecraftClient) -> isOnServer = false);
 
         new StartAndCheck(true, false);
     }

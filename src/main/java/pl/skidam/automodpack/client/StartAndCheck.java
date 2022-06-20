@@ -26,8 +26,6 @@ public class StartAndCheck {
                 // Checking loop
                 Checking = true;
                 while (Checking) {
-                    LOGGER.error("AutoModpack updated? " + AutoModpackUpdated);
-                    LOGGER.error("Modpack updated? " + ModpackUpdated);
                     if (AutoModpackUpdated != null && ModpackUpdated != null) {
                         new Finished();
                         Checking = false;

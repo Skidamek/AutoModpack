@@ -26,7 +26,7 @@
 
   "gui.automodpack.screen.danger.title": "Attention! Modpack found!",
   "gui.automodpack.screen.danger.description": "Do you want to download update to it?",
-  "gui.automodpack.screen.danger.secDescription": "Or if you don't have it yet, download it?",
+  "gui.automodpack.screen.danger.secDescription": "It might be risky! Don't download if don't trust the server admins!",
   "gui.automodpack.screen.danger.button.accept": "Download",
   "gui.automodpack.screen.danger.button.dontshowagain": "Download and don't show it again",
   "gui.automodpack.screen.danger.button.cancel": "Don't download",

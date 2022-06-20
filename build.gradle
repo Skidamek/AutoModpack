@@ -35,7 +35,6 @@ dependencies {
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-	implementation include ('net.lingala.zip4j:zip4j:2.10.0')
 	modImplementation ('com.terraformersmc:modmenu:4.+')
 	modApi ("me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}") {exclude(group: "net.fabricmc.fabric-api")}
 }

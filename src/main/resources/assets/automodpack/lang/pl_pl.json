@@ -26,7 +26,7 @@
 
   "gui.automodpack.screen.danger.title": "Uwaga! Znaleziono modpacka!",
   "gui.automodpack.screen.danger.description": "Czy chcesz pobrać aktualizację do niego?",
-  "gui.automodpack.screen.danger.secDescription": "Lub jeśli go jeszcze nie masz to pobrać?",
+  "gui.automodpack.screen.danger.secDescription": "To może być ryzykowne! Nie pobieraj, jeśli nie ufasz administratorom serwera!",
   "gui.automodpack.screen.danger.button.accept": "Pobierz",
   "gui.automodpack.screen.danger.button.dontshowagain": "Pobierz i nie pokazuj tego ponownie",
   "gui.automodpack.screen.danger.button.cancel": "Nie pobieraj",

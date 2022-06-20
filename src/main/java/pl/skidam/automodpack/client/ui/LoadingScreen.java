@@ -8,26 +8,23 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.MathHelper;
 import pl.skidam.automodpack.utils.Download;
-
-import static pl.skidam.automodpack.client.modpack.UnZip.progressMonitor;
+import pl.skidam.automodpack.utils.ShityDeCompressor;
 
 @Environment(EnvType.CLIENT)
 public class LoadingScreen extends Screen {
 
-    private Screen parent;
-    private int unZipPercentage;
-
     public LoadingScreen() {
         super(Text.translatable("gui.automodpack.screen.loading.title").formatted(Formatting.BOLD));
+        // it needs to be here to restart unzip progress value
+        ShityDeCompressor.progress = 0;
     }
 
     private String getPercentage() {
         int percentage = Download.downloadPercent;
         if (percentage == 100) {
-            try {
-                percentage = progressMonitor.getPercentDone();
-                unZipPercentage = percentage;
-            } catch (Exception e) { // ignore
+            percentage = ShityDeCompressor.progress;
+            if (percentage == 100) {
+                return "Please wait...";
             }
         }
         return MathHelper.clamp(percentage, 0, 100) + "%";
@@ -38,7 +35,7 @@ public class LoadingScreen extends Screen {
         if (Download.downloadPercent == 100) {
             step = "Extracting modpack...";
         }
-        if (unZipPercentage == 100) {
+        if (ShityDeCompressor.progress == 100) {
             step = "Finishing...";
         }
         return step;
