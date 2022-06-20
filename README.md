@@ -55,7 +55,7 @@ No, it doesn't. It will only delete mods which are written out in delmods.txt in
 **Contributors are welcome**
 [**click.**](CONTRIBUTING.md)
   
-<p align="center"><img src="https://i.imgur.com/zogBcIG" alt="Logo" width="200"></p>
+<p align="center"><img src="https://i.imgur.com/zogBcIG.png" alt="Logo" width="200"></p>
 <h1 align="center">AutoModpack  <br><br>
     <a href="https://fabricmc.net/"><img
         src="https://cdn.discordapp.com/attachments/705864145169416313/969720133998239794/fabric_supported.png"
