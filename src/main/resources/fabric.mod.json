@@ -9,7 +9,6 @@
     "Skidam"
   ],
   "contact": {
-    "homepage": "http://130.61.233.54/",
     "sources": "https://github.com/Skidamek/AutoModpack/",
     "issues": "https://github.com/Skidamek/AutoModpack/issues/"
   },
@@ -21,9 +20,9 @@
   "entrypoints": {
     "client": ["pl.skidam.automodpack.AutoModpackClient"],
     "server": ["pl.skidam.automodpack.AutoModpackServer"],
-    "preLaunch": ["pl.skidam.automodpack.PreLoad"],
+    "preLaunch": ["pl.skidam.automodpack.PreLoadFabric"],
     "main": ["pl.skidam.automodpack.AutoModpackMain"],
-    "modmenu": [ "pl.skidam.automodpack.config.ModMenuIntegration" ]
+    "modmenu": ["pl.skidam.automodpack.config.ModMenuIntegration"]
   },
   "mixins": [
     "automodpack.mixins.json"
@@ -31,8 +30,7 @@
 
   "depends": {
     "fabricloader": ">=0.13",
-    "minecraft": "1.19.x",
-    "java": ">=17"
+    "minecraft": "1.19.x"
   },
   "suggests": {
     "modmenu": ">=1.0.0",

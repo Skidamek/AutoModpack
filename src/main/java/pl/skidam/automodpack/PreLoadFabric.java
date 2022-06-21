@@ -3,21 +3,28 @@ package pl.skidam.automodpack;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
-import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.client.modpack.DeleteMods;
 import pl.skidam.automodpack.client.modpack.TrashMod;
+import pl.skidam.automodpack.utils.InternetConnectionCheck;
 import pl.skidam.automodpack.utils.SetupFiles;
 
 import java.io.File;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
-public class PreLoad implements PreLaunchEntrypoint {
+public class PreLoadFabric implements PreLaunchEntrypoint {
 
     @Override
     public void onPreLaunch() {
 
         LOGGER.info("Prelaunching...");
+
+        InternetConnectionCheck.InternetConnectionCheck();
+
+        // fabric loader detected
+        ENV_BRAND = "fabric";
+
+        new checkCompat();
 
         if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) {
             LOGGER.info("Successfully prelaunched!");

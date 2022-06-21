@@ -48,8 +48,6 @@ public class AutoModpackClient implements ClientModInitializer {
             LOGGER.info("Loaded saved link to modpack: " + link);
         }
 
-        InternetConnectionCheck.InternetConnectionCheck();
-
         // packets
         ClientLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onServerRequest);
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);

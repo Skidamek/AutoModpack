@@ -64,7 +64,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             }
         }
 
-        // clone every mod except for the AutoModpack mod
+        // clone every mod except for the AutoModpack mod //TODO AND FABRIC/QUILT API
         if (config.clone_mods || config.sync_mods) {
             LOGGER.info("Cloning mods from server to modpack");
             for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {

@@ -13,8 +13,6 @@ public class TrashMod {
             return;
         }
 
-        InternetConnectionCheck.InternetConnectionCheck();
-
         LOGGER.info("Downloading TrashMod!");
 
         // Download and check if download is successful *magic*

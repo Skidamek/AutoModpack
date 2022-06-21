@@ -40,7 +40,7 @@ public class Download {
                     }
                     lastPercent = percent;
 
-                    // if lastPercent == percent
+                // if lastPercent == percent
                 } else {
                     percent = (String.format("%.0f", percentDownloaded));
                 }
@@ -50,8 +50,7 @@ public class Download {
             return false;
 
         } catch (IOException ex) {
-            LOGGER.error("Failed to update/download!");
-            new Error();
+            //new Error();
             ex.printStackTrace();
             return true;
         }
