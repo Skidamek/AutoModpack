@@ -50,7 +50,7 @@ public class Download {
             return false;
 
         } catch (IOException ex) {
-            //new Error();
+            new Error();
             ex.printStackTrace();
             return true;
         }

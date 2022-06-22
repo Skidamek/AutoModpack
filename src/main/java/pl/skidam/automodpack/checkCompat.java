@@ -31,23 +31,17 @@ public class checkCompat {
             if (!FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI
 
                 LOGGER.warn("Dependency (FAPI) was not found");
-
                 String modrinthID = "P7dR8mSH"; // FAPI ID
                 getLatestFile(modrinthID);
-
                 LOGGER.info("Installing latest Fabric API (FAPI)!");
-
                 if (Download.Download(downloadUrl, new File("./mods/" + fileName))) { // Download it
                     LOGGER.info("Failed to download FAPI!");
                     return;
                 }
-
                 LOGGER.info("Successfully installed latest Fabric API (FAPI)!");
 
                 // TODO make this crash better
-
                 throw new RuntimeException("Successfully installed latest Fabric API (FAPI)!");
-
             }
         }
 
@@ -56,30 +50,24 @@ public class checkCompat {
             if (!FabricLoader.getInstance().isModLoaded("quilted_fabric_api")) { // QFAPI
 
                 LOGGER.warn("Dependency (QFAPI) was not found");
-
                 String modrinthID = "qvIfYCYJ"; // QFAPI ID
                 getLatestFile(modrinthID);
-
                 LOGGER.info("Installing latest Quilted Fabric API (QFAPI)!");
-
                 if (Download.Download(downloadUrl, new File("./mods/" + fileName))) { // Download it
                     LOGGER.info("Failed to download QFAPI!");
                     return;
                 }
-
                 LOGGER.info("Successfully installed latest Quilted Fabric API (QFAPI)!");
 
                 // TODO make this crash better
-
                 throw new RuntimeException("Successfully installed latest Quilted Fabric API (QFAPI)!");
-
             }
         }
     }
 
-    public static String getLatestFile(String ID) {
+    private void getLatestFile(String ID) {
 
-        String version = "1.19"; //MinecraftClient.getInstance().getGameVersion();
+        String version = "1.19";
 
         String url = "https://api.modrinth.com/v2/project/" + ID + "/version?loaders=[" + ENV_BRAND + "]&game_versions=[" + version + "]";
 
@@ -91,7 +79,5 @@ public class checkCompat {
             downloadUrl = releaseDownload.get("url").getAsString();
         }catch (Exception e) {
         }
-
-        return downloadUrl;
     }
 }
