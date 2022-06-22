@@ -9,10 +9,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.StartAndCheck;
+import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.utils.ToastExecutor;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
-import static pl.skidam.automodpack.config.AutoModpackConfig.check_updates_button;
 
 @Mixin(TitleScreen.class)
 public class UpdateButtonMixin extends Screen {
@@ -24,7 +24,7 @@ public class UpdateButtonMixin extends Screen {
 
     @Inject(at = @At("RETURN"), method = "initWidgetsNormal" )
     private void AutoModpackUpdateButton(int y, int spacingY, CallbackInfo ci) {
-        if (check_updates_button) {
+        if (Config.CHECK_UPDATES_BUTTON) {
             this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y, 115, 20, Button, (button) -> {
                 new ToastExecutor(0);
                 if (!Checking) {

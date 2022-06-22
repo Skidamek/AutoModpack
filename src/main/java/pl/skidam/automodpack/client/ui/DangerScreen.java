@@ -8,7 +8,7 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.modpack.DownloadModpack;
-import pl.skidam.automodpack.config.AutoModpackConfig;
+import pl.skidam.automodpack.config.Config;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -32,14 +32,12 @@ public class DangerScreen extends Screen {
             this.client.setScreen(parent);
         }));
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height / 6 + 96, 190, 20, Text.translatable("gui.automodpack.screen.danger.button.dontshowagain").formatted(Formatting.GRAY), (button) -> {
-            AutoModpackConfig.danger_screen = false;
-            //new DownloadModpack();
+            Config.DANGER_SCREEN = false;
             DangerScreenWasShown = true;
             CompletableFuture.runAsync(DownloadModpack::new);
             this.client.setScreen(new LoadingScreen());
         }));
         this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height / 6 + 96, 120, 20, Text.translatable("gui.automodpack.screen.danger.button.accept").formatted(Formatting.RED), (button) -> {
-            //new DownloadModpack();
             DangerScreenWasShown = true;
             CompletableFuture.runAsync(DownloadModpack::new);
             this.client.setScreen(new LoadingScreen());

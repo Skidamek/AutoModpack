@@ -4,7 +4,7 @@ import net.minecraft.client.MinecraftClient;
 
 import pl.skidam.automodpack.client.ui.DangerScreen;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
-import pl.skidam.automodpack.config.AutoModpackConfig;
+import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.utils.Download;
 
 import java.util.concurrent.CompletableFuture;
@@ -36,27 +36,31 @@ public class DownloadModpack {
 
         public prepare() {
 
-            if (!AutoModpackConfig.danger_screen) {
-                if (MinecraftClient.getInstance().currentScreen != null) {
-                    CompletableFuture.runAsync(DownloadModpack::new);
-                    // check if player is joining server
-                    if (isOnServer) {
-                        while (true) {
-                            if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("419")) {
-                                isOnServer = false;
-                                break;
-                            }
+            try {
+                if (Config.DANGER_SCREEN) {
+                    if (MinecraftClient.getInstance().currentScreen != null) {
+                        CompletableFuture.runAsync(DownloadModpack::new);
+                        // check if player is joining server
+                        if (isOnServer) {
+                            while (true) {
+                                if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("419")) {
+                                    isOnServer = false;
+                                    break;
+                                }
 
-                            if (MinecraftClient.getInstance().world != null) {
-                                MinecraftClient.getInstance().world.disconnect();
+                                if (MinecraftClient.getInstance().world != null) {
+                                    MinecraftClient.getInstance().world.disconnect();
+                                }
                             }
                         }
-                     }
 
-                    MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));
+                        MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));
+                    }
+
+                    return;
                 }
-
-                return;
+            } catch (Exception e) {
+                e.printStackTrace();
             }
 
             while (true) {

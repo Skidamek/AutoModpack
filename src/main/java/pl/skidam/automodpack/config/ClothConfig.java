@@ -5,8 +5,10 @@ import me.shedaniel.autoconfig.annotation.Config;
 import me.shedaniel.autoconfig.annotation.ConfigEntry;
 import me.shedaniel.cloth.clothconfig.shadowed.blue.endless.jankson.Comment;
 
+import static pl.skidam.automodpack.config.Config.*;
+
 @Config(name = "automodpack")
-public class AutoModpackConfig implements ConfigData {
+public class ClothConfig implements ConfigData {
     @ConfigEntry.Category("CLIENT SIDE")
     @Comment("Danger screen before download/update modpack")
     public static boolean danger_screen = true;

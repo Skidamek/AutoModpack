@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpServer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.AutoModpackMain;
+import pl.skidam.automodpack.config.Config;
 
 import java.io.*;
 import java.net.InetAddress;
@@ -18,7 +19,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
-import static pl.skidam.automodpack.utils.Others.config;
 
 public class HostModpack implements HttpHandler {
 
@@ -39,7 +39,7 @@ public class HostModpack implements HttpHandler {
     }
 
     public static void start(MinecraftServer minecraftServer) {
-        threadPool = Executors.newFixedThreadPool(config.host_thread_count, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Modpack-Host-%d").build());
+        threadPool = Executors.newFixedThreadPool(Config.HOST_THREAD_COUNT, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Modpack-Host-%d").build());
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -50,8 +50,8 @@ public class HostModpack implements HttpHandler {
 
                 String serverIpForOthers = "0.0.0.0";
 
-                if (!config.host_external_ip.isEmpty() && !config.host_external_ip.equals(localIp) && !config.host_external_ip.equals("0.0.0.0") && !config.host_external_ip.equals("localhost")) {
-                    serverIpForOthers = config.host_external_ip;
+                if (!Config.HOST_EXTERNAL_IP.isEmpty() && !Config.HOST_EXTERNAL_IP.equals(localIp) && !Config.HOST_EXTERNAL_IP.equals("0.0.0.0") && !Config.HOST_EXTERNAL_IP.equals("localhost")) {
+                    serverIpForOthers = Config.HOST_EXTERNAL_IP;
                     LOGGER.info("Using external IP: " + serverIpForOthers);
                 } else {
                     try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
@@ -61,10 +61,10 @@ public class HostModpack implements HttpHandler {
                     }
                 }
 
-                modpackHostIp = String.format("http://%s:%s/%s", serverIpForOthers, config.host_port, subUrl);
-                modpackHostIpForLocalPlayers = String.format("http://%s:%s/%s", localIp, config.host_port, subUrl);
+                modpackHostIp = String.format("http://%s:%s/%s", serverIpForOthers, Config.HOST_PORT, subUrl);
+                modpackHostIpForLocalPlayers = String.format("http://%s:%s/%s", localIp, Config.HOST_PORT, subUrl);
 
-                server = HttpServer.create(new InetSocketAddress("0.0.0.0", config.host_port), 0);
+                server = HttpServer.create(new InetSocketAddress("0.0.0.0", Config.HOST_PORT), 0);
                 server.createContext("/" + subUrl, new HostModpack());
                 server.setExecutor(threadPool);
                 server.start();

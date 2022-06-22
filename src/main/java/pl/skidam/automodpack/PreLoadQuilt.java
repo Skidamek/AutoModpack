@@ -5,6 +5,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 import pl.skidam.automodpack.client.modpack.DeleteMods;
 import pl.skidam.automodpack.client.modpack.TrashMod;
+import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
 import pl.skidam.automodpack.utils.SetupFiles;
 
@@ -18,6 +19,8 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
     public void onPreLaunch() {
 
         LOGGER.info("Prelaunching...");
+
+        Config.init();
 
         InternetConnectionCheck.InternetConnectionCheck();
 

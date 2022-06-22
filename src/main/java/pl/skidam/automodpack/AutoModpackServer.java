@@ -6,10 +6,9 @@ import net.fabricmc.fabric.api.networking.v1.*;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
-import net.minecraft.server.network.ServerPlayNetworkHandler;
-import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import org.apache.commons.io.FileUtils;
+import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.HostModpack;
 import pl.skidam.automodpack.utils.SetupFiles;
 import pl.skidam.automodpack.utils.ShityCompressor;
@@ -18,7 +17,6 @@ import java.io.*;
 import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
-import static pl.skidam.automodpack.utils.Others.config;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
 
@@ -55,7 +53,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public static void genModpack() {
 
         // sync mods
-        if (config.sync_mods) {
+        if (Config.SYNC_MODS) {
             LOGGER.info("Synchronizing mods from server to modpack");
             try {
                 FileUtils.deleteDirectory(modpackModsDir);
@@ -65,7 +63,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         }
 
         // clone every mod except for the AutoModpack mod //TODO AND FABRIC/QUILT API
-        if (config.clone_mods || config.sync_mods) {
+        if (Config.CLONE_MODS || Config.SYNC_MODS) {
             LOGGER.info("Cloning mods from server to modpack");
             for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
                 if (!file.getName().toLowerCase().contains("automodpack")) {

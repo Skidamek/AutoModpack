@@ -4,7 +4,7 @@ import com.google.gson.JsonObject;
 import me.shedaniel.autoconfig.AutoConfig;
 import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import net.fabricmc.loader.api.FabricLoader;
-import pl.skidam.automodpack.config.AutoModpackConfig;
+import pl.skidam.automodpack.config.ClothConfig;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.JsonTools;
 
@@ -23,7 +23,7 @@ public class checkCompat {
 
         if (FabricLoader.getInstance().isModLoaded("cloth-config")) {
             // Initialize AutoConfig
-            AutoConfig.register(AutoModpackConfig.class, JanksonConfigSerializer::new);
+            AutoConfig.register(ClothConfig.class, JanksonConfigSerializer::new);
         }
 
         if (ENV_BRAND.equals("fabric")) {
