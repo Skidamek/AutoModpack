@@ -27,7 +27,7 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
         // quilt loader detected
         ENV_BRAND = "quilt";
 
-        new checkCompat();
+        new compatCheck();
 
         if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) {
             LOGGER.info("Successfully prelaunched!");

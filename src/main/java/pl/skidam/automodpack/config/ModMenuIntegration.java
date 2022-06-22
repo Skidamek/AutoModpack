@@ -2,11 +2,16 @@ package pl.skidam.automodpack.config;
 
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
-import me.shedaniel.autoconfig.AutoConfig;
+import net.fabricmc.loader.api.FabricLoader;
 
 public class ModMenuIntegration implements ModMenuApi {
     @Override
     public ConfigScreenFactory<?> getModConfigScreenFactory() {
-        return parent -> AutoConfig.getConfigScreen(ClothConfig.class, parent).get();
+        return (parent) -> {
+            if (FabricLoader.getInstance().isModLoaded("cloth-config")) {
+                return ConfigScreen.createConfigGui(new Config(), parent);
+            }
+            return parent;
+        };
     }
 }

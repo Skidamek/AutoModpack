@@ -1,10 +1,7 @@
 package pl.skidam.automodpack;
 
 import com.google.gson.JsonObject;
-import me.shedaniel.autoconfig.AutoConfig;
-import me.shedaniel.autoconfig.serializer.JanksonConfigSerializer;
 import net.fabricmc.loader.api.FabricLoader;
-import pl.skidam.automodpack.config.ClothConfig;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.JsonTools;
 
@@ -13,18 +10,13 @@ import java.io.File;
 import static pl.skidam.automodpack.AutoModpackMain.ENV_BRAND;
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
-public class checkCompat {
+public class compatCheck {
 
     private static String downloadUrl = "";
     private static String latest = "";
     private static String fileName = "";
 
-    public checkCompat() {
-
-        if (FabricLoader.getInstance().isModLoaded("cloth-config")) {
-            // Initialize AutoConfig
-            AutoConfig.register(ClothConfig.class, JanksonConfigSerializer::new);
-        }
+    public compatCheck() {
 
         if (ENV_BRAND.equals("fabric")) {
             // Download fabric api if we don't have it

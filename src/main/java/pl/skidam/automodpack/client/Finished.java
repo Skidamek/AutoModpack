@@ -14,7 +14,6 @@ public class Finished {
 
     public Finished() {
 
-        LOGGER.error("Finished!");
         while (true) {
             if (DangerScreenWasShown) {
                 DangerScreenWasShown = false;
@@ -32,7 +31,7 @@ public class Finished {
                 break;
             }
 
-            if (ModpackUpdated.equals("true")) {
+            if (ModpackUpdated.equals("true") || AutoModpackUpdated.equals("true")) {
                 if (MinecraftClient.getInstance().world != null) {
                     MinecraftClient.getInstance().world.disconnect();
                 }

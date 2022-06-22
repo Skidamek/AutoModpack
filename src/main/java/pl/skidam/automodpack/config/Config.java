@@ -50,6 +50,11 @@ public class Config {
     public static void init() {
     }
 
+    public void save() {
+        AutoModpackMain.LOGGER.info("Saving AutoModpack config...");
+        init();
+    }
+
     private static int getInt(Properties properties, String key, int def) {
         try {
             return Integer.parseUnsignedInt(properties.getProperty(key));

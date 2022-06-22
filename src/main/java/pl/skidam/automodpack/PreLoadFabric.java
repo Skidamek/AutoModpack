@@ -27,7 +27,7 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
         // fabric loader detected
         ENV_BRAND = "fabric";
 
-        new checkCompat();
+        new compatCheck();
 
         if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) {
             LOGGER.info("Successfully prelaunched!");
