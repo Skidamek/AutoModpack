@@ -18,6 +18,10 @@ public class compatCheck {
 
     public compatCheck() {
 
+        if (FabricLoader.getInstance().isModLoaded("cloth-config")) {
+            AutoModpackMain.isClothConfig = true;
+        }
+
         if (ENV_BRAND.equals("fabric")) {
             // Download fabric api if we don't have it
             if (!FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI

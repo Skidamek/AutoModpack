@@ -11,6 +11,8 @@
   "gui.automodpack.toast.down.4": "Your AutoModpack is up to date!",
   "gui.automodpack.toast.up.5": "Error!",
   "gui.automodpack.toast.down.5": "Try again later!",
+  "gui.automodpack.toast.up.6": "Can't open mod config",
+  "gui.automodpack.toast.down.6": "You need to install Cloth-Config mod",
 
   "gui.automodpack.button.update": "Check updates!",
 
