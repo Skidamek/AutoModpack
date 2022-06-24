@@ -35,67 +35,34 @@ public class DownloadModpack {
         public static boolean DangerScreenWasShown = false;
 
         public prepare() {
+            while (true) {
+                if (MinecraftClient.getInstance().currentScreen != null) {
+                    if (!isOnServer) {
+                        DangerScreenWasShown = false;
+                        break;
+                    }
+                }
 
-            try {
-                if (Config.DANGER_SCREEN) {
-                    if (MinecraftClient.getInstance().currentScreen != null) {
-                        CompletableFuture.runAsync(DownloadModpack::new);
-                        // check if player is joining server
-                        if (isOnServer) {
-                            while (true) {
-                                if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("419")) {
-                                    isOnServer = false;
-                                    break;
-                                }
-
-                                if (MinecraftClient.getInstance().world != null) {
-                                    MinecraftClient.getInstance().world.disconnect();
-                                }
-                            }
-                        }
-
-                        MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));
+                if (isOnServer) {
+                    if (MinecraftClient.getInstance().world != null) {
+                        MinecraftClient.getInstance().world.disconnect();
                     }
 
-                    return;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-
-            while (true) {
-                assert MinecraftClient.getInstance().currentScreen != null;
-                String currentScreen = MinecraftClient.getInstance().currentScreen.toString().toLowerCase();
-                // dev env
-//                    if (currentScreen.contains("title") || currentScreen.contains("multi") || currentScreen.contains("options" || currentScreen.contains("modsscreen")) {
-//                        break;
-//                    }
-                // prod env
-                if (currentScreen.contains("442") || currentScreen.contains("500") || currentScreen.contains("429") || currentScreen.contains("526") || currentScreen.contains("525") || currentScreen.contains("424") || currentScreen.contains("modsscreen")) {
-                    DangerScreenWasShown = true;
-                    break;
-                }
-
-                if (MinecraftClient.getInstance().world != null) {
-                    MinecraftClient.getInstance().world.disconnect();
-                }
-
-                if (MinecraftClient.getInstance().currentScreen != null) {
-                    // dev env
-//                            if (currentScreen.contains("disconnected")) {
-//                                break;
-//                            }
-                    // prod env
-                    if (currentScreen.contains("419")) {
+                    if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("419")) {
+                        DangerScreenWasShown = false;
                         isOnServer = false;
                         break;
                     }
-
                 }
-
             }
 
-            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new DangerScreen()));
+            if (Config.DANGER_SCREEN) {
+                MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new DangerScreen()));
+            }
+            if (!Config.DANGER_SCREEN) {
+                CompletableFuture.runAsync(DownloadModpack::new);
+                MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));
+            }
         }
     }
 }
