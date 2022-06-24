@@ -54,8 +54,8 @@ Server side settings:
 - `sync_mods`: `true` or `false` (default: `false`) - Its the same as "Clone mods" but here all other mods will be deleted.(you **can't** add mods that you don't want to load on the server, delmods.txt **is** making automatically when some mods got updated or deleted)
 - `host_port`: `integer` (default: `30037`) - At this port http server for hosting modpack will be running.
 - `host_thread_count`: `integer` (default: `2`) - Http server will be use this amount of threads.
-- `host_external_ip`: `whatever` (default: ``) - Http server will be use this external ip instead of default one. (OPTIONAL)
-- `external_modpack_host`: `whatever` (default: ``) - Typed here http/s address will be used as external host server. This will automatically disable `modpack_host`. (OPTIONAL)
+- `host_external_ip`: `whatever` (default: none) - Http server will be use this external ip instead of default one. (OPTIONAL)
+- `external_modpack_host`: `whatever` (default: none) - Typed here http/s address will be used as external host server. This will automatically disable `modpack_host`. (OPTIONAL)
 
 # Commands
 
