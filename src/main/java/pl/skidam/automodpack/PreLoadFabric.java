@@ -18,7 +18,7 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
     @Override
     public void onPreLaunch() {
 
-        LOGGER.info("Prelaunching...");
+        LOGGER.info("Prelaunching AutoModpack...");
 
         Config.init();
 
@@ -29,12 +29,12 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
 
         new compatCheck();
 
-        if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) {
-            LOGGER.info("Successfully prelaunched!");
+        new SetupFiles();
+
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
+            LOGGER.info("AutoModpack successfully prelaunched!");
             return;
         }
-
-        new SetupFiles();
 
         new TrashMod();
 
@@ -46,6 +46,6 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
 
         new DeleteMods(true, "false");
 
-        LOGGER.info("Successfully prelaunched!");
+        LOGGER.info("AutoModpack successfully prelaunched!");
     }
 }

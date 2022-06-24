@@ -12,7 +12,6 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class SelfUpdater {
     File selfBackup = new File("./AutoModpack/AutoModpack.jar");
-    File oldAutoModpack = new File("./AutoModpack/OldAutoModpack/AutoModpack.jar");
 
     public SelfUpdater() {
 
@@ -20,32 +19,28 @@ public class SelfUpdater {
         // Check how big the mod file is
 
         if (!selfBackup.exists()) {
-            try {
-                Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e) { // ignore
-            }
+            try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
         }
 
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
-        long currentSize = selfBackup.length();
+        long currentBackupSize = selfBackup.length();
         long latestSize = Long.parseLong(WebFileSize.webfileSize(selfLink));
 
-        if (currentSize == latestSize) {
+        if (currentBackupSize == latestSize) {
             LOGGER.info("Didn't found any updates for AutoModpack!");
             new ToastExecutor(4);
             AutoModpackUpdated = "false";
             return;
         }
-        // Update found
 
-        // Backup old AutoModpack
-        try {
-            Files.copy(selfOut.toPath(), oldAutoModpack.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) { // ignore
+        if (currentBackupSize == 0) { // make backup
+            try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
+            AutoModpackUpdated = "false";
+            return;
         }
 
-        // Download update
+        // Update found
         AutoModpackDownload();
     }
 
@@ -60,7 +55,7 @@ public class SelfUpdater {
             return;
         }
 
-        try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) {throw new RuntimeException(e);}
+        try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
         LOGGER.info("Successfully self updated!");
         AutoModpackUpdated = "true";
     }

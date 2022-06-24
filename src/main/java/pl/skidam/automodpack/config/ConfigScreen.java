@@ -5,7 +5,6 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
-
 public class ConfigScreen {
     public static Screen createConfigGui(Config config, Screen parent) {
         ConfigBuilder builder = ConfigBuilder.create()
@@ -13,9 +12,7 @@ public class ConfigScreen {
                 .setSavingRunnable(config::save)
                 .setParentScreen(parent);
 
-
-        ConfigCategory configCategory = builder.getOrCreateCategory(Text.literal("Config"))
-                ;
+        ConfigCategory configCategory = builder.getOrCreateCategory(Text.literal("Config"));
         AbstractConfigListEntry<?> showDangerScreen = builder.entryBuilder()
                 .startBooleanToggle(Text.literal("Show Danger Screen"), Config.DANGER_SCREEN)
                 .setTooltip(Text.literal("Show Danger Screen before downloading updates."))
@@ -24,22 +21,32 @@ public class ConfigScreen {
                 .build();
         configCategory.addEntry(showDangerScreen);
 
-        AbstractConfigListEntry<?> showUpdatesButton = builder.entryBuilder()
+        AbstractConfigListEntry<?> showCheckUpdatesButton = builder.entryBuilder()
                 .startBooleanToggle(Text.literal("Show \"Check updates!\" button"), Config.CHECK_UPDATES_BUTTON)
                 .setTooltip(Text.literal("Show \"Check updates!\" button on Title Screen."))
                 .setSaveConsumer((toggled) -> Config.CHECK_UPDATES_BUTTON = toggled)
                 .setDefaultValue(true)
                 .build();
-        configCategory.addEntry(showUpdatesButton);
+        configCategory.addEntry(showCheckUpdatesButton);
+
+        AbstractConfigListEntry<?> showDeleteModpackButton = builder.entryBuilder()
+                .startBooleanToggle(Text.literal("Show \"Delete modpack!\" button"), Config.DELETE_MODPACK_BUTTON)
+                .setTooltip(Text.literal("Show \"Delete modpack!\" button on Title Screen. Button is only visible when some modpack is installed."))
+                .setSaveConsumer((toggled) -> Config.DELETE_MODPACK_BUTTON = toggled)
+                .setDefaultValue(true)
+                .build();
+        configCategory.addEntry(showDeleteModpackButton);
 
         configCategory.addEntry(builder.entryBuilder()
-                .startTextDescription(Text.literal("WARNING: Configs below this message work only on servers!").formatted(Formatting.RED))
+                .startTextDescription(Text.literal("WARNING: Configs below this message work only on servers! ⬇").formatted(Formatting.RED))
                 .build()
         );
 
+        // TODO if player is on server where has op permission, send this config to server and reload this config on server
+
         AbstractConfigListEntry<?> modpackHost = builder.entryBuilder()
                 .startBooleanToggle(Text.literal("Host modpack"), Config.MODPACK_HOST)
-                .setTooltip(Text.literal("Start http server to host modpack. If this is disabled, settings below will be ignored except for \"External host server\"."))
+                .setTooltip(Text.literal("Host http server for modpack. If this is disabled use \"External host server\"."))
                 .setSaveConsumer((toggled) -> Config.MODPACK_HOST = toggled)
                 .setDefaultValue(true)
                 .build();
@@ -47,7 +54,7 @@ public class ConfigScreen {
 
         AbstractConfigListEntry<?> cloneMods = builder.entryBuilder()
                 .startBooleanToggle(Text.literal("Clone mods"), Config.CLONE_MODS)
-                .setTooltip(Text.literal("Mods in modpack are cloned with server mods."))
+                .setTooltip(Text.literal("Clone all mods from default mods folder on your server to the modpack."))
                 .setSaveConsumer((toggled) -> Config.CLONE_MODS = toggled)
                 .setDefaultValue(true)
                 .build();
@@ -55,7 +62,7 @@ public class ConfigScreen {
 
         AbstractConfigListEntry<?> syncMods = builder.entryBuilder()
                 .startBooleanToggle(Text.literal("Sync mods"), Config.SYNC_MODS)
-                .setTooltip(Text.literal("Mods in modpack are synced with server mods. This will automatically enable \"Clone mods\"."))
+                .setTooltip(Text.literal("Its the same as \"Clone mods\" but here all other mods will be deleted."))
                 .setSaveConsumer((toggled) -> Config.SYNC_MODS = toggled)
                 .setDefaultValue(false)
                 .build();
@@ -86,9 +93,9 @@ public class ConfigScreen {
         configCategory.addEntry(hostExternalIP);
 
         AbstractConfigListEntry<?> externalHostServer = builder.entryBuilder()
-                .startStrField(Text.literal("External host server ip"), Config.EXTERNAL_HOST_SERVER)
-                .setTooltip(Text.literal("Typed ip will be used as external host server. This will automatically disable Http server including all server settings above."))
-                .setSaveConsumer((string) -> Config.EXTERNAL_HOST_SERVER = string)
+                .startStrField(Text.literal("External modpack host"), Config.EXTERNAL_MODPACK_HOST)
+                .setTooltip(Text.literal("Typed here http/s address will be used as external host server. This will automatically disable Http server."))
+                .setSaveConsumer((string) -> Config.EXTERNAL_MODPACK_HOST = string)
                 .setDefaultValue("")
                 .build();
         configCategory.addEntry(externalHostServer);

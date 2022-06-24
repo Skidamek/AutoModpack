@@ -22,6 +22,10 @@ public class compatCheck {
             AutoModpackMain.isClothConfig = true;
         }
 
+        if (FabricLoader.getInstance().isModLoaded("modmenu")) {
+            AutoModpackMain.isModMenu = true;
+        }
+
         if (ENV_BRAND.equals("fabric")) {
             // Download fabric api if we don't have it
             if (!FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI

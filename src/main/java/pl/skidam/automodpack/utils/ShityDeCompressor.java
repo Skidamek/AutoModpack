@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.utils;
 
-import pl.skidam.automodpack.AutoModpackMain;
-
 import java.io.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -40,7 +38,6 @@ public class ShityDeCompressor {
                     entryGoing++;
                     float progress = entryGoing / entries * 100;
                     ShityDeCompressor.progress = (int) progress;
-                    AutoModpackMain.LOGGER.info("Extracting zip: " + ShityDeCompressor.progress + "%");
                     // ---------------- //
 
                     String unZippedFile = unZippedOut + File.separator + Zip_Entry2.getName();
@@ -75,7 +72,6 @@ public class ShityDeCompressor {
             }
 
         } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
@@ -88,8 +84,7 @@ public class ShityDeCompressor {
                 Buffered_Output_Stream.write(Bytes, 0, Read_Byte);
             }
             Buffered_Output_Stream.close();
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (IOException e) { // ignore it
         }
     }
 }

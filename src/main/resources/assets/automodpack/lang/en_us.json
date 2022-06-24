@@ -12,16 +12,24 @@
   "gui.automodpack.toast.up.5": "Error!",
   "gui.automodpack.toast.down.5": "Try again later!",
   "gui.automodpack.toast.up.6": "Can't open mod config",
-  "gui.automodpack.toast.down.6": "You need to install Cloth-Config mod",
+  "gui.automodpack.toast.down.6": "You need to install Cloth Config mod",
 
-  "gui.automodpack.button.update": "Check updates!",
+  "gui.automodpack.button.update": "Check updates",
+  "gui.automodpack.button.delete": "Delete modpack",
 
-  "gui.automodpack.screen.confirm.title.all": "Downloaded updates for your Modpack and \"AutoModpack\" (this mod)!",
-  "gui.automodpack.screen.confirm.title.modpack": "An update has been downloaded for your Modpack!",
-  "gui.automodpack.screen.confirm.title.automodpack": "An update has been downloaded for \"AutoModpack\" (this mod)!",
-  "gui.automodpack.screen.confirm.description": "If you want to complete the update you have to restart the game.",
-  "gui.automodpack.screen.confirm.secDescription": "Do you want to restart now?",
-  "gui.automodpack.screen.confirm.button.quit": "Yes (Quit)",
+  "gui.automodpack.screen.restart.title.all": "Downloaded updates for your Modpack and \"AutoModpack\" (this mod)!",
+  "gui.automodpack.screen.restart.title.modpack": "An update has been downloaded for your Modpack!",
+  "gui.automodpack.screen.restart.title.automodpack": "An update has been downloaded for \"AutoModpack\" (this mod)!",
+  "gui.automodpack.screen.restart.description": "If you want to complete the update you have to restart the game.",
+  "gui.automodpack.screen.restart.secDescription": "Do you want to restart now?",
+  "gui.automodpack.screen.restart.button.quit": "Yes (Quit)",
+  "gui.automodpack.screen.restart.button.cancel": "No (Back to the game)",
+
+  "gui.automodpack.screen.confirm.title": "❌ Delete Modpack ❌",
+  "gui.automodpack.screen.confirm.description": "You will lose all mods and configs from downloaded modpack.",
+  "gui.automodpack.screen.confirm.secDescription": "You will need to restart game.",
+  "gui.automodpack.screen.confirm.thiDescription": "Are you sure you want to delete it?",
+  "gui.automodpack.screen.confirm.button.sure": "Yes (Delete and quit)",
   "gui.automodpack.screen.confirm.button.cancel": "No (Back to the game)",
 
   "gui.automodpack.screen.loading.title": "Downloading updates...",
@@ -31,16 +39,5 @@
   "gui.automodpack.screen.danger.secDescription": "It might be risky! Don't download if don't trust the server admins!",
   "gui.automodpack.screen.danger.button.accept": "Download",
   "gui.automodpack.screen.danger.button.dontshowagain": "Download and don't show it again",
-  "gui.automodpack.screen.danger.button.cancel": "Don't download",
-
-  "text.autoconfig.automodpack.title": "AutoModpack Settings",
-  "text.autoconfig.automodpack.category.CLIENT SIDE": "Settings for client",
-  "text.autoconfig.automodpack.category.SERVER SIDE": "Settings for server",
-  "text.autoconfig.automodpack.option.danger_screen": "Enable danger screen",
-  "text.autoconfig.automodpack.option.check_updates_button": "Show \"Check updates\" button",
-  "text.autoconfig.automodpack.option.clone_mods": "Clone mods",
-  "text.autoconfig.automodpack.option.sync_mods": "Sync mods",
-  "text.autoconfig.automodpack.option.host_port": "Host port to modpack http server",
-  "text.autoconfig.automodpack.option.host_thread_count": "How many threads to handle modpack http server",
-  "text.autoconfig.automodpack.option.host_external_ip": "Optional external ip to modpack http server"
+  "gui.automodpack.screen.danger.button.cancel": "Don't download"
 }

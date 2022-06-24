@@ -4,7 +4,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import pl.skidam.automodpack.client.ui.ConfirmScreen;
+import pl.skidam.automodpack.client.ui.RestartScreen;
 
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
 import static pl.skidam.automodpack.AutoModpackMain.*;
@@ -52,22 +52,22 @@ public class Finished {
         }
 
 
-        Text bothUpdates = Text.translatable("gui.automodpack.screen.confirm.title.all").formatted(Formatting.BOLD);
-        Text modpackUpdate = Text.translatable("gui.automodpack.screen.confirm.title.modpack").formatted(Formatting.BOLD);
-        Text automodpackUpdate = Text.translatable("gui.automodpack.screen.confirm.title.automodpack").formatted(Formatting.BOLD);
+        Text bothUpdates = Text.translatable("gui.automodpack.screen.restart.title.all").formatted(Formatting.BOLD);
+        Text modpackUpdate = Text.translatable("gui.automodpack.screen.restart.title.modpack").formatted(Formatting.BOLD);
+        Text automodpackUpdate = Text.translatable("gui.automodpack.screen.restart.title.automodpack").formatted(Formatting.BOLD);
 
         LOGGER.info("Here you are!");
 
         if (AutoModpackUpdated.equals("true") && ModpackUpdated.equals("true")) {
-            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new ConfirmScreen(bothUpdates)));
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new RestartScreen(bothUpdates)));
         }
 
         if (AutoModpackUpdated.equals("true") && ModpackUpdated.equals("false")) {
-            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new ConfirmScreen(automodpackUpdate)));
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new RestartScreen(automodpackUpdate)));
         }
 
         if (AutoModpackUpdated.equals("false") && ModpackUpdated.equals("true")) {
-            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new ConfirmScreen(modpackUpdate)));
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new RestartScreen(modpackUpdate)));
         }
 
         AutoModpackUpdated = null;

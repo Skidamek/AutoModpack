@@ -11,7 +11,6 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.client.StartAndCheck;
-import pl.skidam.automodpack.utils.InternetConnectionCheck;
 
 import java.io.*;
 import java.util.Scanner;

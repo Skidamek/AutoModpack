@@ -11,7 +11,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static net.minecraft.server.command.CommandManager.literal;
 public class Commands {
-    public static void register() {
+    public static void register() { // TODO config server reload command
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(
                 literal("automodpack")

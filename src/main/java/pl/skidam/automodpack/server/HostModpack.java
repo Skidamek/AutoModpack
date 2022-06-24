@@ -6,7 +6,6 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
-import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.config.Config;
 
 import java.io.*;
@@ -30,6 +29,9 @@ public class HostModpack implements HttpHandler {
 
 
     public static void stop() {
+        if (!Config.MODPACK_HOST) {
+            return;
+        }
         if (server != null) {
             server.stop(1);
         }
@@ -39,6 +41,17 @@ public class HostModpack implements HttpHandler {
     }
 
     public static void start(MinecraftServer minecraftServer) {
+
+        if (!Config.MODPACK_HOST || !Config.EXTERNAL_MODPACK_HOST.equals("")) {
+            LOGGER.info("Modpack host is disabled");
+            if (!Config.EXTERNAL_MODPACK_HOST.equals("")) {
+                LOGGER.info("Using external host server: " + Config.EXTERNAL_MODPACK_HOST);
+                link = Config.EXTERNAL_MODPACK_HOST;
+                modpackHostIpForLocalPlayers = Config.EXTERNAL_MODPACK_HOST;
+            }
+            return;
+        }
+
         threadPool = Executors.newFixedThreadPool(Config.HOST_THREAD_COUNT, new ThreadFactoryBuilder().setNameFormat("AutoModpack-Modpack-Host-%d").build());
 
         CompletableFuture.runAsync(() -> {
@@ -69,13 +82,13 @@ public class HostModpack implements HttpHandler {
                 server.setExecutor(threadPool);
                 server.start();
 
-                AutoModpackMain.link = modpackHostIp;
+                link = modpackHostIp;
 
                 LOGGER.info("Modpack host started at {} and {} for local players.", modpackHostIp, modpackHostIpForLocalPlayers);
             } catch (Exception e) {
                 LOGGER.error("Failed to start the modpack server!", e);
             }
-        }, HostModpack.threadPool);
+        }, threadPool);
     }
 
     @Override

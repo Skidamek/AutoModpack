@@ -49,31 +49,31 @@ public class DeleteMods {
             // loop to delete all names in ./mods/ folder of names in files in delmods.txt
             while (inFile.hasNextLine()) {
 
-                String modNameLine = inFile.nextLine();
-                File modName = new File("./mods/" + modNameLine);
+                String modName = inFile.nextLine();
+                File modFile = new File("./mods/" + modName);
 
-                if (modName.exists()) {
-                    if (!modNameLine.endsWith(".jar")) {
-                        modName = new File("./mods/" + modNameLine + ".jar");
+                if (modFile.exists()) {
+                    if (!modName.endsWith(".jar")) {
+                        modFile = new File("./mods/" + modName + ".jar");
                     }
 
-                    if (modName.exists()) {
-                        LOGGER.info("Deleting: " + modNameLine);
-                        FileDeleteStrategy.FORCE.delete(modName);
+                    if (modFile.exists()) {
+                        LOGGER.info("Deleting: " + modName);
+                        FileDeleteStrategy.FORCE.delete(modFile);
                     }
 
-                    if (modName.exists()) { // if mod to delete still exists
+                    if (modFile.exists()) { // if mod to delete still exists
                         // MAGIC TACTIC
-                        new ShityCompressor(new File("./AutoModpack/TrashMod/"), modName);
-                        LOGGER.warn("Successfully converted to TrashMod: " + modName);
+                        new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
+                        LOGGER.warn("Successfully converted to TrashMod: " + modFile);
                     }
 
-                    if (modName.exists()) { // if mod to delete still exists
+                    if (modFile.exists()) { // if mod to delete still exists
                         // Try to delete it again
-                        FileDeleteStrategy.FORCE.delete(modName);
+                        FileDeleteStrategy.FORCE.delete(modFile);
                     }
 
-                    LOGGER.info("Successfully deleted: " + modNameLine);
+                    LOGGER.info("Successfully deleted: " + modName);
                 }
             }
 

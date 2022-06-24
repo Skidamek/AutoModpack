@@ -13,6 +13,7 @@ public class ToastExecutor {
     // 3 == No updates found to Modpack
     // 4 == No updates found to AutoModpack (mod)
     // 5 == Error
+    // 6 == Cloth-Config warn
 
     public ToastExecutor(int WhoAreYou) {
 

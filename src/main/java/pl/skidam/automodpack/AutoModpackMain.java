@@ -26,7 +26,7 @@ public class AutoModpackMain implements ModInitializer {
     public static final String trashLink = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
     public static final File trashOut = new File("./AutoModpack/TrashMod.jar");
     public static boolean isClothConfig = false;
-
+    public static boolean isModMenu = false;
     public static String VERSION = FabricLoader.getInstance().getModContainer("automodpack").get().getMetadata().getVersion().getFriendlyString();
 
     @Override
