@@ -102,8 +102,7 @@ public class ShityCompressor { // by Skidam so cool i know xD
             zos.closeEntry();
             zos.close();
 
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (IOException e) { // ignore
         }
     }
 

@@ -65,12 +65,13 @@ public class DeleteMods {
                     if (modFile.exists()) { // if mod to delete still exists
                         // MAGIC TACTIC
                         new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
-                        LOGGER.warn("Successfully converted to TrashMod: " + modFile);
-                    }
-
-                    if (modFile.exists()) { // if mod to delete still exists
-                        // Try to delete it again
-                        FileDeleteStrategy.FORCE.delete(modFile);
+                        LOGGER.info("Successfully converted to TrashMod: " + modFile);
+                        try {
+                            FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
+                            fw.write(modName + "\n");
+                            fw.close();
+                        } catch (Exception e) { // ignore
+                        }
                     }
 
                     LOGGER.info("Successfully deleted: " + modName);

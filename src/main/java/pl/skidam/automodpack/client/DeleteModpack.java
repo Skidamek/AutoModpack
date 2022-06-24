@@ -5,6 +5,7 @@ import pl.skidam.automodpack.utils.ShityCompressor;
 import pl.skidam.automodpack.utils.ShityDeCompressor;
 
 import java.io.File;
+import java.io.FileWriter;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
@@ -32,20 +33,19 @@ public class DeleteModpack {
                         LOGGER.info("Deleting: " + modName);
                         FileDeleteStrategy.FORCE.delete(modFile);
                     }
-                    if (modFile.exists()) { // if mod to delete still exists
-                        // MAGIC TACTIC
-                        new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
-                        LOGGER.warn("Successfully converted to TrashMod: " + modFile);
+                } catch (Exception e) { // ignore
+                }
+                if (modFile.exists()) { // if mod to delete still exists
+                    // MAGIC TACTIC
+                    new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
+                    LOGGER.info("Successfully converted to TrashMod: " + modFile);
+                    // add name of mod to the txt file in ./AutoModpack/trashed-mods.txt
+                    try {
+                        FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
+                        fw.write(modName + "\n");
+                        fw.close();
+                    } catch (Exception e) { // ignore
                     }
-                    if (modFile.exists()) { // if mod to delete still exists
-                        // Try to delete it again
-                        FileDeleteStrategy.FORCE.delete(modFile);
-                    }
-
-                    LOGGER.info("Successfully deleted: " + modName);
-                } catch (Exception e) {
-                    LOGGER.error("Error while deleting: " + modName);
-                    LOGGER.error(e.getMessage());
                 }
             }
         }
