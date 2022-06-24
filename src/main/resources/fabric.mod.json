@@ -13,7 +13,7 @@
     "issues": "https://github.com/Skidamek/AutoModpack/issues/"
   },
 
-  "license": "CC0-1.0",
+  "license": "MIT",
   "icon": "assets/automodpack/icon.png",
 
   "environment": "*",

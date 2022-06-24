@@ -3,7 +3,7 @@ package pl.skidam.automodpack;
 import com.google.gson.JsonObject;
 import net.fabricmc.loader.api.FabricLoader;
 import pl.skidam.automodpack.utils.Download;
-import pl.skidam.automodpack.utils.JsonTools;
+import pl.skidam.automodpack.utils.JsonTool;
 
 import java.io.File;
 
@@ -72,7 +72,7 @@ public class compatCheck {
         String url = "https://api.modrinth.com/v2/project/" + ID + "/version?loaders=[" + ENV_BRAND + "]&game_versions=[" + version + "]";
 
         try {
-            JsonObject release = new JsonTools().getJsonArray(url).get(0).getAsJsonObject();
+            JsonObject release = new JsonTool().getJsonArray(url).get(0).getAsJsonObject();
             latest = release.get("version_number").getAsString();
             JsonObject releaseDownload = release.getAsJsonArray("files").get(0).getAsJsonObject();
             fileName = releaseDownload.get("filename").getAsString();

@@ -9,7 +9,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-public class JsonTools {
+public class JsonTool {
 
     public JsonArray getJsonArray(String url) throws IOException {
         JsonElement element = null;
