@@ -12,8 +12,8 @@ public class StartAndCheck {
 
     public StartAndCheck(boolean isLoading, boolean onlyModpack) {
 
-        // If minecraft is still loading wait for it to finish
         new Thread(() -> {
+            // If minecraft is still loading wait for it to finish
             if (isLoading) {
                 while (MinecraftClient.getInstance().currentScreen == null) {
                     Wait.wait(1000);
@@ -25,24 +25,24 @@ public class StartAndCheck {
             CompletableFuture.runAsync(() -> {
                 // Checking loop
                 Checking = true;
-                while (true) {
+                while (Checking) {
                     if (AutoModpackUpdated != null && ModpackUpdated != null) {
-                        Checking = false;
                         new Finished();
-                        break;
+                        Checking = false;
                     }
                     Wait.wait(1000);
                 }
             });
 
-            new CheckModpack();
-
             if (onlyModpack) {
                 AutoModpackUpdated = "false";
-                return;
+                new CheckModpack();
             }
 
-            new SelfUpdater();
+            if (!onlyModpack) {
+                new CheckModpack();
+                new SelfUpdater();
+            }
         }).start();
     }
 }

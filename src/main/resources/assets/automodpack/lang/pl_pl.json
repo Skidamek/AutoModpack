@@ -11,12 +11,33 @@
   "gui.automodpack.toast.down.4": "Twój AutoModpack jest aktualny!",
   "gui.automodpack.toast.up.5": "Error!",
   "gui.automodpack.toast.down.5": "Spróbuj ponownie później!",
-  "gui.automodpack.button.update": "Sprawdź aktualizacje!",
-  "gui.automodpack.screen.title.all": "Pobrano aktualizacje dla twojego Modpacka i \"AutoModpacka\" (ten mod)!",
-  "gui.automodpack.screen.title.modpack": "Pobrano aktualizację dla twojego Modpacka!",
-  "gui.automodpack.screen.title.automodpack": "Pobrano aktualizację dla \"AutoModpacka\" (ten mod)!",
-  "gui.automodpack.screen.description": "Jeśli chcesz dokończyć proces aktualizacji, musisz zrestartować grę.",
-  "gui.automodpack.screen.secDescription": "Chcesz zrestartować teraz?",
-  "gui.automodpack.screen.button.quit": "Tak (Wyjdź z gry)",
-  "gui.automodpack.screen.button.cancel": "Nie (Wróć do gry)"
+  "gui.automodpack.toast.up.6": "Nie można otworzyć configu",
+  "gui.automodpack.toast.down.6": "Musisz zainstalować mod Cloth Config",
+
+  "gui.automodpack.button.update": "Sprawdź aktualizacje",
+  "gui.automodpack.button.delete": "Usuń modpacka",
+
+  "gui.automodpack.screen.restart.title.all": "Pobrano aktualizacje dla twojego Modpacka i \"AutoModpacka\" (ten mod)!",
+  "gui.automodpack.screen.restart.title.modpack": "Pobrano aktualizację dla twojego Modpacka!",
+  "gui.automodpack.screen.restart.title.automodpack": "Pobrano aktualizację dla \"AutoModpacka\" (ten mod)!",
+  "gui.automodpack.screen.restart.description": "Jeśli chcesz dokończyć proces aktualizacji, musisz zrestartować grę.",
+  "gui.automodpack.screen.restart.secDescription": "Chcesz zrestartować teraz?",
+  "gui.automodpack.screen.restart.button.quit": "Tak (Wyjdź z gry)",
+  "gui.automodpack.screen.restart.button.cancel": "Nie (Wróć do gry)",
+
+  "gui.automodpack.screen.confirm.title": "❌ Usunięcie modpacka ❌",
+  "gui.automodpack.screen.confirm.description": "Stracisz wszystkie mody łącznie z plikami konfiguracyjnymi z pobranego modpacka.",
+  "gui.automodpack.screen.confirm.secDescription": "Będziesz musiał zrestartować grę.",
+  "gui.automodpack.screen.confirm.thiDescription": "Czy na pewno chcesz go usunąć?",
+  "gui.automodpack.screen.confirm.button.sure": "Tak (Usuń i wyjdź z gry)",
+  "gui.automodpack.screen.confirm.button.cancel": "Nie (Wróć do gry)",
+
+  "gui.automodpack.screen.loading.title": "Pobieranie aktualizacji...",
+
+  "gui.automodpack.screen.danger.title": "Uwaga! Znaleziono modpacka!",
+  "gui.automodpack.screen.danger.description": "Czy chcesz pobrać aktualizację do niego?",
+  "gui.automodpack.screen.danger.secDescription": "To może być ryzykowne! Nie pobieraj, jeśli nie ufasz administratorom serwera!",
+  "gui.automodpack.screen.danger.button.accept": "Pobierz",
+  "gui.automodpack.screen.danger.button.dontshowagain": "Pobierz i nie pokazuj tego ponownie",
+  "gui.automodpack.screen.danger.button.cancel": "Nie pobieraj"
 }

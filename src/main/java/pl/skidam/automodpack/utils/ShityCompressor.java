@@ -9,9 +9,9 @@ import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
-public class ShityCompressor { // by Skidam
+public class ShityCompressor { // by Skidam so cool i know xD
 
-    public ShityCompressor(File unzippedInput, File zipOut) {
+    public ShityCompressor(File unZippedInput, File zipOut) {
 
         try {
             FileOutputStream fos = new FileOutputStream(zipOut);
@@ -20,7 +20,7 @@ public class ShityCompressor { // by Skidam
 
             // TODO clean this mess
 
-            for (File file : Objects.requireNonNull(unzippedInput.listFiles())) {
+            for (File file : Objects.requireNonNull(unZippedInput.listFiles())) {
                 if (file.isFile()) {
                     zos.putNextEntry(new ZipEntry(file.getName()));
                     zos.write(FileUtils.readFileToByteArray(file));

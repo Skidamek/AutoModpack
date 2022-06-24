@@ -2,6 +2,8 @@ package pl.skidam.automodpack.utils;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.MinecraftClient;
+import org.apache.commons.io.FileDeleteStrategy;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,9 +23,10 @@ public class SetupFiles {
 
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
             server();
-            return;
         }
-        client();
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+            client();
+        }
     }
 
     private void server() {
@@ -42,33 +45,41 @@ public class SetupFiles {
         if (!confDir.exists()) {
             confDir.mkdir();
         }
+
+        File delFile = new File("./AutoModpack/modpack/delmods.txt");
+        if (!delFile.exists()) {
+            try {
+                delFile.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private void client() {
 
-        File oldAM = new File("./AutoModpack/OldAutoModpack/");
-        if (!oldAM.exists()) {
-            oldAM.mkdir();
-        }
-
         // Auto renaming system. Rename the wrong name of automodpack mod to the right name.
-        File AutoModpackJar = new File( "./mods/AutoModpack.jar");
         File mods = new File("./mods/");
         String[] modsList = mods.list();
+        String correctModName = "AutoModpack-1.18.x.jar";
 
         for (String mod : modsList) {
             if (mod.endsWith(".jar")) {
                 File modFile = new File("./mods/" + mod);
-                if (mod.toLowerCase().contains("automodpack") && !mod.equalsIgnoreCase("AutoModpack.jar")) {
-                    LOGGER.warn("Renaming " + modFile + " to AutoModpack.jar");
+                if (mod.toLowerCase().contains("automodpack") && !mod.equals(correctModName)) {
+                    LOGGER.warn("Renaming " + modFile + " to " + correctModName);
                     try {
-                        Files.move(modFile.toPath(), AutoModpackJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                    } catch (IOException e) { // ignore it
+                        FileDeleteStrategy.FORCE.delete(modFile);
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
                 }
             }
         }
 
+        if (!new File("./AutoModpack/TrashMod/").exists() && trashOut.exists()) {
+            new ShityDeCompressor(trashOut, new File("./AutoModpack/TrashMod/"), true, "none");
+        }
 
         File modpack_link = new File ("./AutoModpack/modpack-link.txt");
 

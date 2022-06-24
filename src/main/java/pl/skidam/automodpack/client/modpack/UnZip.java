@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.modpack;
 
-import net.lingala.zip4j.ZipFile;
-import net.lingala.zip4j.exception.ZipException;
+import pl.skidam.automodpack.utils.ShityDeCompressor;
 
 import java.io.File;
 
@@ -16,13 +15,7 @@ public class UnZip {
 
             // Start unzip
             LOGGER.info("Unzipping!");
-
-            try {
-                new ZipFile(out).extractAll("./");
-            } catch (ZipException e) {
-                e.printStackTrace();
-            }
-
+            new ShityDeCompressor(out, new File("./"), true, "none");
             LOGGER.info("Successfully unzipped!");
 
             // delete old mods

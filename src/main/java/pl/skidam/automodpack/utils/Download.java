@@ -8,6 +8,9 @@ import java.util.Objects;
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
 public class Download {
+
+    public static int downloadPercent = 0;
+
     public static boolean Download(String link, File output) {
         try {
             URL url = new URL(link);
@@ -21,7 +24,7 @@ public class Download {
             int read;
             double percentDownloaded;
             String lastPercent = null;
-            String percent = null;
+            String percent = "0";
 
             while ((read = in.read(buffer, 0, 1024)) >= 0) {
                 bout.write(buffer, 0, read);
@@ -31,10 +34,13 @@ public class Download {
                 // if lastPercent != percent
                 if (!Objects.equals(lastPercent, percent)) {
                     percent = (String.format("%.0f", percentDownloaded));
-                    LOGGER.info(percent + "%");
+                    downloadPercent = Integer.parseInt(percent);
+                    if (percent.contains("0")) {
+                        LOGGER.info(percent + "%");
+                    }
                     lastPercent = percent;
 
-                    // if lastPercent == percent
+                // if lastPercent == percent
                 } else {
                     percent = (String.format("%.0f", percentDownloaded));
                 }
@@ -44,7 +50,6 @@ public class Download {
             return false;
 
         } catch (IOException ex) {
-            LOGGER.error("Failed to update/download!");
             new Error();
             ex.printStackTrace();
             return true;

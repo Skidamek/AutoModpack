@@ -4,13 +4,13 @@ import io.netty.buffer.Unpooled;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.networking.v1.ClientLoginConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.client.StartAndCheck;
-import pl.skidam.automodpack.utils.InternetConnectionCheck;
 
 import java.io.*;
 import java.util.Scanner;
@@ -20,10 +20,14 @@ import java.util.function.Consumer;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 public class AutoModpackClient implements ClientModInitializer {
 
+    public static boolean isOnServer;
+
     @Override
     public void onInitializeClient() {
 
         LOGGER.info("Initializing AutoModpack...");
+
+        isOnServer = false;
 
         // load saved link from ./AutoModpack/modpack-link.txt file
         String savedLink = "";
@@ -43,10 +47,13 @@ public class AutoModpackClient implements ClientModInitializer {
             LOGGER.info("Loaded saved link to modpack: " + link);
         }
 
-        InternetConnectionCheck.InternetConnectionCheck();
-
+        // packets
         ClientLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onServerRequest);
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
+
+        // register
+        ClientLoginConnectionEvents.QUERY_START.register((clientLoginNetworkHandler, minecraftClient) -> isOnServer = true);
+        ClientLoginConnectionEvents.DISCONNECT.register((clientLoginNetworkHandler, minecraftClient) -> isOnServer = false);
 
         new StartAndCheck(true, false);
     }

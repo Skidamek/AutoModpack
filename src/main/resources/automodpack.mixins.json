@@ -12,6 +12,5 @@
     "defaultRequire": 1
   },
   "mixins": [
-    "UpdateButtonMixin"
   ]
 }

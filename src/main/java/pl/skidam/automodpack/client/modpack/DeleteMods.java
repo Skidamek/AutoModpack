@@ -1,10 +1,9 @@
 package pl.skidam.automodpack.client.modpack;
 
-import net.lingala.zip4j.ZipFile;
-import net.lingala.zip4j.exception.ZipException;
 import org.apache.commons.io.FileDeleteStrategy;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.utils.ShityCompressor;
+import pl.skidam.automodpack.utils.ShityDeCompressor;
 import pl.skidam.automodpack.utils.Wait;
 
 import java.io.*;
@@ -25,10 +24,7 @@ public class DeleteMods {
             this.preload = true;
             Wait.wait(500);
             if (!delModsTxt.exists()) {
-                try {
-                    new ZipFile("./AutoModpack/modpack.zip").extractFile("delmods.txt", "./");
-                } catch (ZipException e) { // ignore
-                }
+                new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./"), false, "delmods.txt");
             }
         }
         if (!preload) {
@@ -53,31 +49,31 @@ public class DeleteMods {
             // loop to delete all names in ./mods/ folder of names in files in delmods.txt
             while (inFile.hasNextLine()) {
 
-                String modNameLine = inFile.nextLine();
-                File modName = new File("./mods/" + modNameLine);
+                String modName = inFile.nextLine();
+                File modFile = new File("./mods/" + modName);
 
-                if (modName.exists()) {
-                    if (!modNameLine.endsWith(".jar")) {
-                        modName = new File("./mods/" + modNameLine + ".jar");
+                if (modFile.exists()) {
+                    if (!modName.endsWith(".jar")) {
+                        modFile = new File("./mods/" + modName + ".jar");
                     }
 
-                    if (modName.exists()) {
-                        LOGGER.info("Deleting: " + modNameLine);
-                        FileDeleteStrategy.FORCE.delete(modName);
+                    if (modFile.exists()) {
+                        LOGGER.info("Deleting: " + modName);
+                        FileDeleteStrategy.FORCE.delete(modFile);
                     }
 
-                    if (modName.exists()) { // if mod to delete still exists
+                    if (modFile.exists()) { // if mod to delete still exists
                         // MAGIC TACTIC
-                        new ShityCompressor(new File("./AutoModpack/TrashMod/"), modName);
-                        LOGGER.warn("Successfully converted to TrashMod: " + modName);
+                        new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
+                        LOGGER.warn("Successfully converted to TrashMod: " + modFile);
                     }
 
-                    if (modName.exists()) { // if mod to delete still exists
+                    if (modFile.exists()) { // if mod to delete still exists
                         // Try to delete it again
-                        FileDeleteStrategy.FORCE.delete(modName);
+                        FileDeleteStrategy.FORCE.delete(modFile);
                     }
 
-                    LOGGER.info("Successfully deleted: " + modNameLine);
+                    LOGGER.info("Successfully deleted: " + modName);
                 }
             }
 
