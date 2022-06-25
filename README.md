@@ -16,7 +16,7 @@ Put it into the `mods` folder of your minecraft/server installation.
 
 Launch the game your game/server.
 
-NOTE: If game crashed at first launch don't worry. It crashed because you need to have installed fabric api / quilted fabric api, which is installed automatically before when that crash.
+NOTE: If game crashed at first launch don't worry. It crashed because you need to have installed fabric api / quilted fabric api, which is installed automatically before that crash.
 
 **- Client**
 
