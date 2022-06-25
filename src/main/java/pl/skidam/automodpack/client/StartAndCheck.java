@@ -24,11 +24,10 @@ public class StartAndCheck {
 
             CompletableFuture.runAsync(() -> {
                 // Checking loop
-                Checking = true;
-                while (Checking) {
+                while (true) {
                     if (AutoModpackUpdated != null && ModpackUpdated != null) {
                         new Finished();
-                        Checking = false;
+                        break;
                     }
                     Wait.wait(1000);
                 }
