@@ -39,7 +39,7 @@ Restart server and you are good to go! Enjoy!
 
 # Config
 
-**Use Cloth Config and Mod Menu mods to change settings while playing.**
+**Use Cloth Config and Mod Menu mods to change settings in game.**
 
 Client side settings:
 
