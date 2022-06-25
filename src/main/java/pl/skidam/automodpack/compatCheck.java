@@ -67,9 +67,9 @@ public class compatCheck {
 
     private void getLatestFile(String ID) {
 
-        String version = "1.18";
+        String version = "1.18.2";
 
-        String url = "https://api.modrinth.com/v2/project/" + ID + "/version?loaders=[" + ENV_BRAND + "]&game_versions=[" + version + "]";
+        String url = "https://api.modrinth.com/v2/project/" + ID + "/version?game_versions=[\"" + version + "\"]";
 
         try {
             JsonObject release = new JsonTool().getJsonArray(url).get(0).getAsJsonObject();
