@@ -69,7 +69,7 @@ public class compatCheck {
 
         String version = "1.19";
 
-        String url = "https://api.modrinth.com/v2/project/" + ID + "/version?loaders=[" + ENV_BRAND + "]&game_versions=[" + version + "]";
+        String url = "https://api.modrinth.com/v2/project/" + ID + "/version?game_versions=[\"" + version + "\"]";
 
         try {
             JsonObject release = new JsonTool().getJsonArray(url).get(0).getAsJsonObject();
