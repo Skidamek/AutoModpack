@@ -6,7 +6,6 @@ import java.util.zip.ZipInputStream;
 
 public class ShityDeCompressor {
     public static int progress;
-    public static ZipEntry Zip_Entry;
 
     public ShityDeCompressor(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
         try {
@@ -56,7 +55,7 @@ public class ShityDeCompressor {
             // extract only one file from zip
             if (!extractAll) {
                 ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
-                Zip_Entry = zipInputStream.getNextEntry();
+                ZipEntry Zip_Entry = zipInputStream.getNextEntry();
 
                 while (Zip_Entry != null) {
                     String unZippedFile = unZippedOut + File.separator + Zip_Entry.getName();
