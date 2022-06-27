@@ -9,8 +9,7 @@ import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.config.Config;
 
 import java.io.*;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
+import java.net.*;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -26,10 +25,11 @@ public class HostModpack implements HttpHandler {
     private static ExecutorService threadPool = null;
     public static String modpackHostIp;
     public static String modpackHostIpForLocalPlayers;
+    private static String serverIpForOthers = "0.0.0.0";
 
 
     public static void stop() {
-        if (!Config.MODPACK_HOST) {
+        if (!Config.MODPACK_HOST || !Config.EXTERNAL_MODPACK_HOST.equals("")) {
             return;
         }
         if (server != null) {
@@ -45,9 +45,13 @@ public class HostModpack implements HttpHandler {
         if (!Config.MODPACK_HOST || !Config.EXTERNAL_MODPACK_HOST.equals("")) {
             LOGGER.info("Modpack host is disabled");
             if (!Config.EXTERNAL_MODPACK_HOST.equals("")) {
-                LOGGER.info("Using external host server: " + Config.EXTERNAL_MODPACK_HOST);
-                link = Config.EXTERNAL_MODPACK_HOST;
-                modpackHostIpForLocalPlayers = Config.EXTERNAL_MODPACK_HOST;
+                if (validateURL(Config.EXTERNAL_MODPACK_HOST)) {
+                    LOGGER.info("Using external host server: " + Config.EXTERNAL_MODPACK_HOST);
+                    link = Config.EXTERNAL_MODPACK_HOST;
+                    modpackHostIpForLocalPlayers = Config.EXTERNAL_MODPACK_HOST;
+                } else {
+                    LOGGER.error("EXTERNAL_MODPACK_HOST is not valid url or is not end with /modpack");
+                }
             }
             return;
         }
@@ -61,16 +65,14 @@ public class HostModpack implements HttpHandler {
                 String localIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
 
-                String serverIpForOthers = "0.0.0.0";
-
-                if (!Config.HOST_EXTERNAL_IP.isEmpty() && !Config.HOST_EXTERNAL_IP.equals(localIp) && !Config.HOST_EXTERNAL_IP.equals("0.0.0.0") && !Config.HOST_EXTERNAL_IP.equals("localhost")) {
-                    serverIpForOthers = Config.HOST_EXTERNAL_IP;
-                    LOGGER.info("Using external IP: " + serverIpForOthers);
-                } else {
-                    try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
-                        serverIpForOthers = s.next();
-                    } catch (Exception e) {
-                        e.printStackTrace();
+                if (!Config.HOST_EXTERNAL_IP.equals("")) {
+                    if (validateURL(Config.HOST_EXTERNAL_IP)) {
+                        serverIpForOthers = Config.HOST_EXTERNAL_IP;
+                        LOGGER.info("Using external IP: " + serverIpForOthers);
+                    } else {
+                        LOGGER.error("External IP is not valid url or is not end with /modpack");
+                        useIPV4Address();
+                        LOGGER.warn("Using local ip: " + serverIpForOthers);
                     }
                 }
 
@@ -110,6 +112,41 @@ public class HostModpack implements HttpHandler {
             outputStream.close();
         } else {
             exchange.sendResponseHeaders(400, 0);
+        }
+    }
+
+    private static void useIPV4Address() {
+        try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
+            serverIpForOthers = s.next();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static boolean validateURL(String url) {
+        String localIp = "0.0.0.0";
+        try {
+            localIp = InetAddress.getLocalHost().getHostAddress();
+        } catch (UnknownHostException e) { // ignore
+        }
+        if (!url.isEmpty() && !url.equals(localIp) && !url.equals("0.0.0.0") && !url.equals("localhost")) {
+            try {
+                URI URI = new URI(url);
+                String string = URI.getScheme();
+                if ("http".equals(string) || "https".equals(string) || "level".equals(string)) {
+                    if (!"level".equals(string) || !url.contains("..") && url.endsWith("/modpack")) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            } catch (URISyntaxException e) {
+                return false;
+            }
+        } else {
+            return false;
         }
     }
 }
