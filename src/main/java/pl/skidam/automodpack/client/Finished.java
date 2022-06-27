@@ -52,10 +52,9 @@ public class Finished {
             }
         }
 
-
-        Text bothUpdates = new TranslatableText("gui.automodpack.screen.restart.title.all").formatted(Formatting.BOLD);
-        Text modpackUpdate = new TranslatableText("gui.automodpack.screen.restart.title.modpack").formatted(Formatting.BOLD);
-        Text automodpackUpdate = new TranslatableText("gui.automodpack.screen.restart.title.automodpack").formatted(Formatting.BOLD);
+        Text bothUpdates = Text.translatable("gui.automodpack.screen.restart.title.all").formatted(Formatting.BOLD);
+        Text modpackUpdate = Text.translatable("gui.automodpack.screen.restart.title.modpack").formatted(Formatting.BOLD);
+        Text automodpackUpdate = Text.translatable("gui.automodpack.screen.restart.title.automodpack").formatted(Formatting.BOLD);
 
         LOGGER.info("Here you are!");
 

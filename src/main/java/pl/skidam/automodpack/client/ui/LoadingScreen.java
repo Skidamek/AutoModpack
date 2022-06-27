@@ -4,7 +4,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.text.TranslatableText;
+import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.MathHelper;
 import pl.skidam.automodpack.utils.Download;
@@ -14,7 +14,7 @@ import pl.skidam.automodpack.utils.ShityDeCompressor;
 public class LoadingScreen extends Screen {
 
     public LoadingScreen() {
-        super(new TranslatableText("gui.automodpack.screen.loading.title").formatted(Formatting.BOLD));
+        super(Text.translatable("gui.automodpack.screen.loading.title").formatted(Formatting.BOLD));
         // it needs to be here to restart unzip progress value
         ShityDeCompressor.progress = 0;
     }

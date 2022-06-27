@@ -12,7 +12,7 @@ import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 public class DeleteTrashedMods {
 
     public DeleteTrashedMods() {
-
+    
         // read ./AutoModpack/trashed-mods.txt and add lines from it to array
         String[] trashedModsNames = new String[0];
         try {

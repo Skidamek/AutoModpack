@@ -30,7 +30,7 @@
 
   "depends": {
     "fabricloader": ">=0.13",
-    "minecraft": "1.18.x"
+    "minecraft": "1.19.x"
   },
   "suggests": {
     "modmenu": ">=1.0.0",

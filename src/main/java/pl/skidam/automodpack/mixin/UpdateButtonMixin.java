@@ -37,16 +37,16 @@ public class UpdateButtonMixin extends Screen {
         }
 
         if (Config.CHECK_UPDATES_BUTTON) {
-            this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y + Y_CHECK_UPDATES_BUTTON, 115, 20, new TranslatableText("gui.automodpack.button.update"), (button) -> {
+            this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y + Y_CHECK_UPDATES_BUTTON, 115, 20, Text.translatable("gui.automodpack.button.update"), (button) -> {
                 new ToastExecutor(0);
-                if (!isChecking) {
+                if (!Checking) {
                     new StartAndCheck(false, false);
                 }
             }));
         }
 
         if (Config.DELETE_MODPACK_BUTTON && out.exists()) { // out == modpackdir
-            this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y + Y_DELETE_MODPACK_BUTTON, 115, 20, new TranslatableText("gui.automodpack.button.delete"), (button) -> {
+            this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y + Y_DELETE_MODPACK_BUTTON, 115, 20, Text.translatable("gui.automodpack.button.delete"), (button) -> {
                 this.client.setScreen(new ConfirmScreen());
             }));
         }

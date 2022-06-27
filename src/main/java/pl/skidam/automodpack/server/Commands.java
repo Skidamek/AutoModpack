@@ -1,9 +1,9 @@
 package pl.skidam.automodpack.server;
 import com.mojang.brigadier.context.CommandContext;
-import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
 import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.LiteralText;
+import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.AutoModpackServer;
 
@@ -12,7 +12,7 @@ import java.util.concurrent.CompletableFuture;
 import static net.minecraft.server.command.CommandManager.literal;
 public class Commands {
     public static void register() { // TODO config server reload command
-        CommandRegistrationCallback.EVENT.register((dispatcher, dedicated) -> {
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
             dispatcher.register(
                 literal("automodpack")
                     .executes(Commands::about)
@@ -25,9 +25,9 @@ public class Commands {
     }
 
     private static int about(CommandContext<ServerCommandSource> context) {
-        context.getSource().sendFeedback(new LiteralText("AutoModpack")
+        context.getSource().sendFeedback(Text.literal("AutoModpack")
                 .formatted(Formatting.GREEN)
-                .append(new LiteralText(" - " + AutoModpackMain.VERSION)
+                .append(Text.literal(" - " + AutoModpackMain.VERSION)
                         .formatted(Formatting.WHITE)
                 ), false);
 
@@ -36,11 +36,11 @@ public class Commands {
 
     public static int generateModpack(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
-            context.getSource().sendFeedback(new LiteralText("Generating Modpack...")
+            context.getSource().sendFeedback(Text.literal("Generating Modpack...")
                     .formatted(Formatting.GREEN),
                     true);
             AutoModpackServer.genModpack();
-            context.getSource().sendFeedback(new LiteralText("Modpack generated!")
+            context.getSource().sendFeedback(Text.literal("Modpack generated!")
                     .formatted(Formatting.GREEN),
                     true);
         });
