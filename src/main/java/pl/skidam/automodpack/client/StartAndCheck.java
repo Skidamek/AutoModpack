@@ -10,11 +10,12 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class StartAndCheck {
 
+    public static boolean isChecking = false;
     public StartAndCheck(boolean isLoading, boolean onlyModpack) {
 
         new Thread(() -> {
-            // If minecraft is still loading wait for it to finish
             if (isLoading) {
+                // If minecraft is still loading wait for it to finish
                 while (MinecraftClient.getInstance().currentScreen == null) {
                     Wait.wait(1000);
                 }
@@ -25,8 +26,10 @@ public class StartAndCheck {
             CompletableFuture.runAsync(() -> {
                 // Checking loop
                 while (true) {
+                    isChecking = true;
                     if (AutoModpackUpdated != null && ModpackUpdated != null) {
                         new Finished();
+                        isChecking = false;
                         break;
                     }
                     Wait.wait(1000);

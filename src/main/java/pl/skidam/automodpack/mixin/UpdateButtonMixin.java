@@ -15,6 +15,7 @@ import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.utils.ToastExecutor;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.client.StartAndCheck.isChecking;
 
 @Mixin(TitleScreen.class)
 public class UpdateButtonMixin extends Screen {
@@ -37,7 +38,7 @@ public class UpdateButtonMixin extends Screen {
         if (Config.CHECK_UPDATES_BUTTON) {
             this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y + Y_CHECK_UPDATES_BUTTON, 115, 20, Text.translatable("gui.automodpack.button.update"), (button) -> {
                 new ToastExecutor(0);
-                if (!Checking) {
+                if (!isChecking) {
                     new StartAndCheck(false, false);
                 }
             }));

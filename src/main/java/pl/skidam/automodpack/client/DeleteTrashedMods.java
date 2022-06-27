@@ -13,10 +13,10 @@ public class DeleteTrashedMods {
 
     public DeleteTrashedMods() {
 
-        // read ./AutoModpack/modpack-link.txt and add lines from it to array
+        // read ./AutoModpack/trashed-mods.txt and add lines from it to array
         String[] trashedModsNames = new String[0];
         try {
-            FileReader fr = new FileReader("./AutoModpack/modpack-link.txt");
+            FileReader fr = new FileReader("./AutoModpack/trashed-mods.txt");
             BufferedReader br = new BufferedReader(fr);
             String line;
             while ((line = br.readLine()) != null) {
@@ -32,11 +32,11 @@ public class DeleteTrashedMods {
                 try {
                     if (trashedModFile.exists()) {
                         FileDeleteStrategy.FORCE.delete(trashedModFile);
+                        LOGGER.info("Successfully deleted trashed mod: " + trashedModName);
                     }
                 } catch (Exception e) { // ignore
                 }
             }
-            LOGGER.info("Successfully deleted trashed mod: " + trashedModName);
         }
 
         // delete trashedModFile

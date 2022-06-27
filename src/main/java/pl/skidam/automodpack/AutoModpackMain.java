@@ -18,7 +18,6 @@ public class AutoModpackMain implements ModInitializer {
     public static final Identifier AM_LINK = new Identifier(MOD_ID, "link");
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
-    public static boolean Checking;
     public static String link;
     public static final File out = new File("./AutoModpack/modpack.zip");
     public static final String selfLink = "https://github.com/Skidamek/AutoModpack/releases/latest/download/AutoModpack-1.19.x.jar";
