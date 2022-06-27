@@ -5,8 +5,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 
-public class validateURL {
-    public static boolean validateURL(String url) {
+public class ValidateURL {
+    public static boolean ValidateURL(String url) {
         String localIp = "0.0.0.0";
         try {
             localIp = InetAddress.getLocalHost().getHostAddress();
@@ -17,8 +17,12 @@ public class validateURL {
                 URI URI = new URI(url);
                 String string = URI.getScheme();
                 if ("http".equals(string) || "https".equals(string) || "level".equals(string)) {
-                    if (!"level".equals(string) || !url.contains("..") && url.endsWith("/modpack")) {
-                        return true;
+                    if (!"level".equals(string) || !url.contains("..")) {
+                        if (url.endsWith("/modpack") || url.endsWith("/modpack.zip")) {
+                            return true;
+                        } else {
+                            return false;
+                        }
                     } else {
                         return false;
                     }
@@ -32,5 +36,4 @@ public class validateURL {
             return false;
         }
     }
-
 }
