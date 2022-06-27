@@ -4,6 +4,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.TitleScreen;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.client.StartAndCheck.isChecking;
 
 public class Error {
 
@@ -11,7 +12,7 @@ public class Error {
 
         AutoModpackUpdated = "false";
         ModpackUpdated = "false";
-        Checking = false;
+        isChecking = false;
 
         new ToastExecutor(5);
 

@@ -28,12 +28,13 @@ public class compatCheck {
 
         if (ENV_BRAND.equals("fabric")) {
             // Download fabric api if we don't have it
-            if (!FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI
+            //if (!FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI
 
                 LOGGER.warn("Dependency (FAPI) was not found");
                 String modrinthID = "P7dR8mSH"; // FAPI ID
                 getLatestFile(modrinthID);
-                LOGGER.info("Installing latest Fabric API (FAPI)!");
+                LOGGER.info("Installing latest Fabric API (FAPI)! " + latest);
+                LOGGER.error("Download URL: " + downloadUrl);
                 if (Download.Download(downloadUrl, new File("./mods/" + fileName))) { // Download it
                     LOGGER.info("Failed to download FAPI!");
                     return;
@@ -42,7 +43,7 @@ public class compatCheck {
 
                 // TODO make this crash better
                 throw new RuntimeException("Successfully installed latest Fabric API (FAPI)!");
-            }
+           // }
         }
 
         if (ENV_BRAND.equals("quilt")) {
@@ -52,7 +53,8 @@ public class compatCheck {
                 LOGGER.warn("Dependency (QFAPI) was not found");
                 String modrinthID = "qvIfYCYJ"; // QFAPI ID
                 getLatestFile(modrinthID);
-                LOGGER.info("Installing latest Quilted Fabric API (QFAPI)!");
+                LOGGER.error("Installing latest Quilted Fabric API (QFAPI)! " + latest);
+                LOGGER.error("Download URL: " + downloadUrl);
                 if (Download.Download(downloadUrl, new File("./mods/" + fileName))) { // Download it
                     LOGGER.info("Failed to download QFAPI!");
                     return;
@@ -71,13 +73,16 @@ public class compatCheck {
 
         String url = "https://api.modrinth.com/v2/project/" + ID + "/version?game_versions=[\"" + version + "\"]";
 
+        url = url.replaceAll("\"", "%22"); // so important!
+
         try {
             JsonObject release = new JsonTool().getJsonArray(url).get(0).getAsJsonObject();
             latest = release.get("version_number").getAsString();
             JsonObject releaseDownload = release.getAsJsonArray("files").get(0).getAsJsonObject();
-            fileName = releaseDownload.get("filename").getAsString();
             downloadUrl = releaseDownload.get("url").getAsString();
-        }catch (Exception e) {
+            fileName = releaseDownload.get("filename").getAsString();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }
