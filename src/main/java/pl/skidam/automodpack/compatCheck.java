@@ -28,7 +28,7 @@ public class compatCheck {
 
         if (ENV_BRAND.equals("fabric")) {
             // Download fabric api if we don't have it
-            //if (!FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI
+            if (!FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI
 
                 LOGGER.warn("Dependency (FAPI) was not found");
                 String modrinthID = "P7dR8mSH"; // FAPI ID
@@ -43,7 +43,7 @@ public class compatCheck {
 
                 // TODO make this crash better
                 throw new RuntimeException("Successfully installed latest Fabric API (FAPI)!");
-           // }
+            }
         }
 
         if (ENV_BRAND.equals("quilt")) {
