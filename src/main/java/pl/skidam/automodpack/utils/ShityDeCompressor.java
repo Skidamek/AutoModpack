@@ -6,7 +6,6 @@ import java.util.zip.ZipInputStream;
 
 public class ShityDeCompressor {
     public static int progress;
-    public static ZipEntry Zip_Entry;
 
     public ShityDeCompressor(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
         try {
@@ -42,7 +41,7 @@ public class ShityDeCompressor {
 
                     String unZippedFile = unZippedOut + File.separator + Zip_Entry2.getName();
                     if (!Zip_Entry2.isDirectory()) {
-                        extractFile(zipInputStream2, unZippedFile);
+                        extractFile(zipInputStream2, unZippedFile, 1024);
                     } else {
                         File directory = new File(unZippedFile);
                         directory.mkdirs();
@@ -56,13 +55,13 @@ public class ShityDeCompressor {
             // extract only one file from zip
             if (!extractAll) {
                 ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
-                Zip_Entry = zipInputStream.getNextEntry();
+                ZipEntry Zip_Entry = zipInputStream.getNextEntry();
 
                 while (Zip_Entry != null) {
                     String unZippedFile = unZippedOut + File.separator + Zip_Entry.getName();
                     if (!Zip_Entry.isDirectory()) {
                         if (Zip_Entry.getName().equals(fileName)) {
-                            extractFile(zipInputStream, unZippedFile);
+                            extractFile(zipInputStream, unZippedFile, (int) Zip_Entry.getSize());
                         }
                     }
                     zipInputStream.closeEntry();
@@ -75,10 +74,10 @@ public class ShityDeCompressor {
         }
     }
 
-    private static void extractFile(ZipInputStream zipInputStream, String unZippedFile) {
+    private static void extractFile(ZipInputStream zipInputStream, String unZippedFile, int bufferSize) {
         try {
             BufferedOutputStream Buffered_Output_Stream = new BufferedOutputStream(new FileOutputStream(unZippedFile));
-            byte[] Bytes = new byte[(int) Zip_Entry.getSize()];
+            byte[] Bytes = new byte[bufferSize];
             int Read_Byte = 0;
             while ((Read_Byte = zipInputStream.read(Bytes)) != -1) {
                 Buffered_Output_Stream.write(Bytes, 0, Read_Byte);
