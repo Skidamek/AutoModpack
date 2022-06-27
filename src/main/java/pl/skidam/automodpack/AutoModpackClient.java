@@ -18,7 +18,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
-import static pl.skidam.automodpack.utils.validateURL.validateURL;
+import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 public class AutoModpackClient implements ClientModInitializer {
 
     public static boolean isOnServer;
@@ -43,7 +43,7 @@ public class AutoModpackClient implements ClientModInitializer {
         } catch (Exception e) { // ignore
         }
 
-        if (validateURL(savedLink)) {
+        if (ValidateURL(savedLink)) {
             link = savedLink;
             LOGGER.info("Loaded saved link to modpack: " + link);
         } else {

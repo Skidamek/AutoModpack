@@ -17,7 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
-import static pl.skidam.automodpack.utils.validateURL.validateURL;
+import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 
 public class HostModpack implements HttpHandler {
 
@@ -47,7 +47,7 @@ public class HostModpack implements HttpHandler {
         if (!Config.MODPACK_HOST || !Config.EXTERNAL_MODPACK_HOST.equals("")) {
             LOGGER.info("Modpack host is disabled");
             if (!Config.EXTERNAL_MODPACK_HOST.equals("")) {
-                if (validateURL(Config.EXTERNAL_MODPACK_HOST)) {
+                if (ValidateURL(Config.EXTERNAL_MODPACK_HOST)) {
                     LOGGER.info("Using external host server: " + Config.EXTERNAL_MODPACK_HOST);
                     link = Config.EXTERNAL_MODPACK_HOST;
                     modpackHostIpForLocalPlayers = Config.EXTERNAL_MODPACK_HOST;
@@ -68,7 +68,7 @@ public class HostModpack implements HttpHandler {
                 String subUrl = "modpack";
 
                 if (!Config.HOST_EXTERNAL_IP.equals("")) {
-                    if (validateURL(Config.HOST_EXTERNAL_IP)) {
+                    if (ValidateURL(Config.HOST_EXTERNAL_IP)) {
                         serverIpForOthers = Config.HOST_EXTERNAL_IP;
                         LOGGER.info("Using external IP: " + serverIpForOthers);
                     } else {
