@@ -78,7 +78,7 @@ public class ShityDeCompressor {
         try {
             BufferedOutputStream Buffered_Output_Stream = new BufferedOutputStream(new FileOutputStream(unZippedFile));
             byte[] Bytes = new byte[bufferSize];
-            if (bufferSize == 0) {
+            if (bufferSize == 0 || bufferSize == -1) {
                 Bytes = new byte[1024];
             }
             int Read_Byte = 0;
