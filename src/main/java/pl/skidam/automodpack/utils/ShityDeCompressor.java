@@ -79,7 +79,7 @@ public class ShityDeCompressor {
         try {
             BufferedOutputStream Buffered_Output_Stream = new BufferedOutputStream(new FileOutputStream(unZippedFile));
             byte[] Bytes = new byte[(int) Zip_Entry.getSize()];
-            int Read_Byte;
+            int Read_Byte = 0;
             while ((Read_Byte = zipInputStream.read(Bytes)) != -1) {
                 Buffered_Output_Stream.write(Bytes, 0, Read_Byte);
             }
