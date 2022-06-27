@@ -5,8 +5,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class ShityDeCompressor {
-    private static final int BUFFER_SIZE = 1000024;
     public static int progress;
+    public static ZipEntry Zip_Entry;
 
     public ShityDeCompressor(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
         try {
@@ -56,7 +56,7 @@ public class ShityDeCompressor {
             // extract only one file from zip
             if (!extractAll) {
                 ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
-                ZipEntry Zip_Entry = zipInputStream.getNextEntry();
+                Zip_Entry = zipInputStream.getNextEntry();
 
                 while (Zip_Entry != null) {
                     String unZippedFile = unZippedOut + File.separator + Zip_Entry.getName();
@@ -78,8 +78,8 @@ public class ShityDeCompressor {
     private static void extractFile(ZipInputStream zipInputStream, String unZippedFile) {
         try {
             BufferedOutputStream Buffered_Output_Stream = new BufferedOutputStream(new FileOutputStream(unZippedFile));
-            byte[] Bytes = new byte[BUFFER_SIZE];
-            int Read_Byte = 0;
+            byte[] Bytes = new byte[(int) Zip_Entry.getSize()];
+            int Read_Byte;
             while ((Read_Byte = zipInputStream.read(Bytes)) != -1) {
                 Buffered_Output_Stream.write(Bytes, 0, Read_Byte);
             }
