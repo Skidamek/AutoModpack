@@ -22,7 +22,7 @@ public class Error {
 
         try {
             if (MinecraftClient.getInstance().currentScreen.toString().contains("loading")) {
-                MinecraftClient.getInstance().setScreen(new TitleScreen());
+                MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new TitleScreen()));
             }
         } catch (Exception e) {
         }
