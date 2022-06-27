@@ -1,11 +1,15 @@
 package pl.skidam.automodpack.utils;
 
+import pl.skidam.automodpack.AutoModpackMain;
+
 import java.io.*;
+import java.util.Arrays;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class ShityDeCompressor {
     public static int progress;
+    public static ZipEntry Zip_Entry;
 
     public ShityDeCompressor(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
         try {
@@ -41,7 +45,7 @@ public class ShityDeCompressor {
 
                     String unZippedFile = unZippedOut + File.separator + Zip_Entry2.getName();
                     if (!Zip_Entry2.isDirectory()) {
-                        extractFile(zipInputStream2, unZippedFile, 1024);
+                        extractFile(zipInputStream2, unZippedFile);
                     } else {
                         File directory = new File(unZippedFile);
                         directory.mkdirs();
@@ -55,13 +59,13 @@ public class ShityDeCompressor {
             // extract only one file from zip
             if (!extractAll) {
                 ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
-                ZipEntry Zip_Entry = zipInputStream.getNextEntry();
+                Zip_Entry = zipInputStream.getNextEntry();
 
                 while (Zip_Entry != null) {
                     String unZippedFile = unZippedOut + File.separator + Zip_Entry.getName();
                     if (!Zip_Entry.isDirectory()) {
                         if (Zip_Entry.getName().equals(fileName)) {
-                            extractFile(zipInputStream, unZippedFile, (int) Zip_Entry.getSize());
+                            extractFile(zipInputStream, unZippedFile);
                         }
                     }
                     zipInputStream.closeEntry();
@@ -74,16 +78,16 @@ public class ShityDeCompressor {
         }
     }
 
-    private static void extractFile(ZipInputStream zipInputStream, String unZippedFile, int bufferSize) {
+    private static void extractFile(ZipInputStream zipInputStream, String unZippedFile) {
         try {
             BufferedOutputStream Buffered_Output_Stream = new BufferedOutputStream(new FileOutputStream(unZippedFile));
-            byte[] Bytes = new byte[bufferSize];
-            if (bufferSize == 0 || bufferSize == -1) {
-                Bytes = new byte[1024];
+            byte[] Buffer = new byte[1024];
+            if (Zip_Entry != null && Zip_Entry.getSize() > 0) {
+                Buffer = new byte[(int) Zip_Entry.getSize()];
             }
-            int Read_Byte = 0;
-            while ((Read_Byte = zipInputStream.read(Bytes)) > 0) {
-                Buffered_Output_Stream.write(Bytes, 0, Read_Byte);
+            int Read_Byte;
+            while ((Read_Byte = zipInputStream.read(Buffer)) > 0) {
+                Buffered_Output_Stream.write(Buffer, 0, Read_Byte);
             }
             Buffered_Output_Stream.close();
         } catch (IOException e) { // ignore it
