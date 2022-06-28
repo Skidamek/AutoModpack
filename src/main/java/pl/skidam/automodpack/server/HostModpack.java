@@ -74,7 +74,6 @@ public class HostModpack implements HttpHandler {
                         LOGGER.info("Using external IP: " + serverIpForOthers);
                     } else {
                         LOGGER.error("External IP is not valid url or is not end with /modpack");
-                        useIPV4Address();
                         LOGGER.warn("Using local ip: " + serverIpForOthers);
                     }
                 }
