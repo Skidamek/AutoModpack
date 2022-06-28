@@ -6,6 +6,7 @@ import pl.skidam.automodpack.utils.ShityDeCompressor;
 
 import java.io.File;
 import java.io.FileWriter;
+import java.io.IOException;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
@@ -22,32 +23,40 @@ public class DeleteModpack {
         File[] modpackModsFiles = new File("./AutoModpack/modpack/mods/").listFiles();
 
         // loop to delete all names in ./mods/ folder of names in files in "./AutoModpack/modpack/mods/"
-        for (File modpackModName : modpackModsFiles) {
+        try {
+            for (File modpackModName : modpackModsFiles) {
 
-            String modName = modpackModName.getName();
-            File modFile = new File("./mods/" + modName);
+                String modName = modpackModName.getName();
+                File modFile = new File("./mods/" + modName);
 
-            if (modFile.exists()) {
-                try {
+                if (modFile.exists()) {
+
                     if (modFile.exists()) {
                         LOGGER.info("Deleting: " + modName);
                         FileDeleteStrategy.FORCE.delete(modFile);
                     }
-                } catch (Exception e) { // ignore
-                }
-                if (modFile.exists()) { // if mod to delete still exists
-                    // MAGIC TACTIC
-                    new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
-                    LOGGER.info("Successfully converted to TrashMod: " + modFile);
-                    // add name of mod to the txt file in ./AutoModpack/trashed-mods.txt
-                    try {
+
+                    if (modFile.exists()) { // if mod to delete still exists
+                        new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
                         FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
                         fw.write(modName + "\n");
                         fw.close();
-                    } catch (Exception e) { // ignore
+                    }
+
+                    if (modFile.exists()) {
+                        FileDeleteStrategy.FORCE.delete(modFile);
+                    }
+
+                    if (!modFile.exists()) {
+                        LOGGER.info("Successfully deleted: " + modName);
+                    } else if (modFile.exists() && modFile.length() == 16681) {
+                        LOGGER.info("Successfully trashed: " + modName);
+                    } else {
+                        LOGGER.info("Failed to delete: " + modName);
                     }
                 }
             }
+        } catch (IOException e) { // ignore
         }
 
         // CONFIGS
@@ -67,9 +76,8 @@ public class DeleteModpack {
                         FileDeleteStrategy.FORCE.delete(configFile);
                     }
                     LOGGER.info("Successfully deleted: " + configName);
-                } catch (Exception e) {
-                    LOGGER.error("Error while deleting: " + configName);
-                    LOGGER.error(e.getMessage());
+                } catch (IOException e) { // ignore
+                    e.printStackTrace();
                 }
             }
         }

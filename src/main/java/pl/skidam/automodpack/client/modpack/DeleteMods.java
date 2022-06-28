@@ -53,6 +53,7 @@ public class DeleteMods {
                 File modFile = new File("./mods/" + modName);
 
                 if (modFile.exists()) {
+
                     if (!modName.endsWith(".jar")) {
                         modFile = new File("./mods/" + modName + ".jar");
                     }
@@ -63,18 +64,23 @@ public class DeleteMods {
                     }
 
                     if (modFile.exists()) { // if mod to delete still exists
-                        // MAGIC TACTIC
                         new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
-                        LOGGER.info("Successfully converted to TrashMod: " + modFile);
-                        try {
-                            FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
-                            fw.write(modName + "\n");
-                            fw.close();
-                        } catch (Exception e) { // ignore
-                        }
+                        FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
+                        fw.write(modName + "\n");
+                        fw.close();
                     }
 
-                    LOGGER.info("Successfully deleted: " + modName);
+                    if (modFile.exists()) {
+                        FileDeleteStrategy.FORCE.delete(modFile);
+                    }
+
+                    if (!modFile.exists()) {
+                        LOGGER.info("Successfully deleted: " + modName);
+                    } else if (modFile.exists() && modFile.length() == 16681) {
+                        LOGGER.info("Successfully converted to TrashMod: " + modName);
+                    } else {
+                        LOGGER.info("Failed to delete: " + modName);
+                    }
                 }
             }
 

@@ -21,34 +21,46 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
 
         LOGGER.info("Prelaunching AutoModpack...");
 
-        Config.init();
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+            Config.init();
 
-        InternetConnectionCheck.InternetConnectionCheck();
+            new TrashMod();
 
-        // quilt loader detected
-        ENV_BRAND = "quilt";
-
-        new compatCheck();
-
-        new SetupFiles();
-
-        if (FabricLoader.getInstance().getEnvironmentType() != EnvType.CLIENT) {
-            LOGGER.info("AutoModpack successfully prelaunched!");
-            return;
-        }
-
-        new TrashMod();
-
-        while (true) {
-            if (new File("./AutoModpack/TrashMod.jar").exists()) {
-                break;
+            while (true) {
+                if (new File("./AutoModpack/TrashMod.jar").exists()) {
+                    break;
+                }
             }
+
+            new DeleteTrashedMods();
+
+            InternetConnectionCheck.InternetConnectionCheck();
+
+            // quilt loader detected
+            ENV_BRAND = "quilt";
+
+            new compatCheck();
+
+            new SetupFiles();
+
+            new DeleteMods(true, "false");
+
+            LOGGER.info("AutoModpack successfully prelaunched!");
         }
 
-        new DeleteTrashedMods();
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
+            Config.init();
 
-        new DeleteMods(true, "false");
+            InternetConnectionCheck.InternetConnectionCheck();
 
-        LOGGER.info("AutoModpack successfully prelaunched!");
+            // quilt loader detected
+            ENV_BRAND = "quilt";
+
+            new compatCheck();
+
+            new SetupFiles();
+
+            LOGGER.info("AutoModpack successfully prelaunched!");
+        }
     }
 }

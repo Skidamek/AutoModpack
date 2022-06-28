@@ -26,7 +26,7 @@ public class HostModpack implements HttpHandler {
     private static ExecutorService threadPool = null;
     public static String modpackHostIp;
     public static String modpackHostIpForLocalPlayers;
-    private static String serverIpForOthers = "0.0.0.0";
+    private static String serverIpForOthers;
 
 
     public static void stop() {
@@ -63,6 +63,8 @@ public class HostModpack implements HttpHandler {
             try {
                 LOGGER.info("Starting modpack server...");
 
+                useIPV4Address();
+
                 String localIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
 
@@ -72,7 +74,6 @@ public class HostModpack implements HttpHandler {
                         LOGGER.info("Using external IP: " + serverIpForOthers);
                     } else {
                         LOGGER.error("External IP is not valid url or is not end with /modpack");
-                        useIPV4Address();
                         LOGGER.warn("Using local ip: " + serverIpForOthers);
                     }
                 }

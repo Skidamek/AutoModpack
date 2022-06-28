@@ -1,11 +1,10 @@
 package pl.skidam.automodpack.utils;
 
-import pl.skidam.automodpack.AutoModpackMain;
-
 import java.io.*;
-import java.util.Arrays;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
+import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
 public class ShityDeCompressor {
     public static int progress;
@@ -75,6 +74,7 @@ public class ShityDeCompressor {
             }
 
         } catch (IOException e) {
+            LOGGER.error(e.getMessage());
         }
     }
 
@@ -91,6 +91,7 @@ public class ShityDeCompressor {
             }
             Buffered_Output_Stream.close();
         } catch (IOException e) { // ignore it
+            LOGGER.error(e.getMessage());
         }
     }
 }
