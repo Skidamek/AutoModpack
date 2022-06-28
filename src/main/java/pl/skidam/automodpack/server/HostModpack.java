@@ -26,8 +26,7 @@ public class HostModpack implements HttpHandler {
     private static ExecutorService threadPool = null;
     public static String modpackHostIp;
     public static String modpackHostIpForLocalPlayers;
-
-    private static String serverIpForOthers = "0.0.0.0";
+    private static String serverIpForOthers;
 
 
     public static void stop() {
@@ -63,6 +62,8 @@ public class HostModpack implements HttpHandler {
         CompletableFuture.runAsync(() -> {
             try {
                 LOGGER.info("Starting modpack server...");
+
+                useIPV4Address();
 
                 String localIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";

@@ -21,34 +21,46 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
 
         LOGGER.info("Prelaunching AutoModpack...");
 
-        Config.init();
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+            Config.init();
 
-        InternetConnectionCheck.InternetConnectionCheck();
+            new TrashMod();
 
-        // fabric loader detected
-        ENV_BRAND = "fabric";
+            while (true) {
+                if (new File("./AutoModpack/TrashMod.jar").exists()) {
+                    break;
+                }
+            }
 
-        new compatCheck();
+            new DeleteTrashedMods();
 
-        new SetupFiles();
+            InternetConnectionCheck.InternetConnectionCheck();
+
+            // fabric loader detected
+            ENV_BRAND = "fabric";
+
+            new compatCheck();
+
+            new SetupFiles();
+
+            new DeleteMods(true, "false");
+
+            LOGGER.info("AutoModpack successfully prelaunched!");
+        }
 
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
+            Config.init();
+
+            InternetConnectionCheck.InternetConnectionCheck();
+
+            // fabric loader detected
+            ENV_BRAND = "fabric";
+
+            new compatCheck();
+
+            new SetupFiles();
+
             LOGGER.info("AutoModpack successfully prelaunched!");
-            return;
         }
-
-        new TrashMod();
-
-        while (true) {
-            if (new File("./AutoModpack/TrashMod.jar").exists()) {
-                break;
-            }
-        }
-
-        new DeleteTrashedMods();
-
-        new DeleteMods(true, "false");
-
-        LOGGER.info("AutoModpack successfully prelaunched!");
     }
 }

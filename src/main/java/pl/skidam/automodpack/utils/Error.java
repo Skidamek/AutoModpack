@@ -20,11 +20,8 @@ public class Error {
         LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
         LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
 
-        try {
-            if (MinecraftClient.getInstance().currentScreen.toString().contains("loading")) {
-                MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new TitleScreen()));
-            }
-        } catch (Exception e) {
+        if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("loading")) {
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new TitleScreen()));
         }
     }
 }
