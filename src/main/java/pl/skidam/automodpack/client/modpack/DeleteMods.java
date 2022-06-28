@@ -60,24 +60,36 @@ public class DeleteMods {
 
                     if (modFile.exists()) {
                         LOGGER.info("Deleting: " + modName);
-                        FileDeleteStrategy.FORCE.delete(modFile);
+                        try {
+                            FileDeleteStrategy.FORCE.delete(modFile);
+                        } catch (IOException ignored) {
+                        }
                     }
 
                     if (modFile.exists()) { // if mod to delete still exists
-                        new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
-                        FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
-                        fw.write(modName + "\n");
-                        fw.close();
+                        try {
+                            new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
+                        } catch (IOException ignored) {
+                        }
+                        try {
+                            FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
+                            fw.write(modName + "\n");
+                            fw.close();
+                        } catch (IOException ignored) {
+                        }
                     }
 
                     if (modFile.exists()) {
-                        FileDeleteStrategy.FORCE.delete(modFile);
+                        try {
+                            FileDeleteStrategy.FORCE.delete(modFile);
+                        } catch (IOException ignored) {
+                        }
                     }
 
                     if (!modFile.exists()) {
                         LOGGER.info("Successfully deleted: " + modName);
                     } else if (modFile.exists() && modFile.length() == 16681) {
-                        LOGGER.info("Successfully converted to TrashMod: " + modName);
+                        LOGGER.info("Successfully trashed: " + modName);
                     } else {
                         LOGGER.info("Failed to delete: " + modName);
                     }
@@ -86,12 +98,13 @@ public class DeleteMods {
 
             // Close the file
             inFile.close();
+        } catch (IOException ignored) { }
 
-            // Delete the file
+        // Delete the file
+        try {
             FileDeleteStrategy.FORCE.delete(delModsTxt);
+        } catch (IOException ignored) { }
 
-        } catch (IOException e) { // ignore
-        }
 
         LOGGER.info("Finished deleting mods!");
 

@@ -23,41 +23,47 @@ public class DeleteModpack {
         File[] modpackModsFiles = new File("./AutoModpack/modpack/mods/").listFiles();
 
         // loop to delete all names in ./mods/ folder of names in files in "./AutoModpack/modpack/mods/"
-        try {
-            for (File modpackModName : modpackModsFiles) {
 
-                String modName = modpackModName.getName();
-                File modFile = new File("./mods/" + modName);
+        for (File modpackModName : modpackModsFiles) {
+            String modName = modpackModName.getName();
+            File modFile = new File("./mods/" + modName);
+
+            if (modFile.exists()) {
 
                 if (modFile.exists()) {
-
-                    if (modFile.exists()) {
-                        LOGGER.info("Deleting: " + modName);
+                    LOGGER.info("Deleting: " + modName);
+                    try {
                         FileDeleteStrategy.FORCE.delete(modFile);
-                    }
+                    } catch (IOException ignored) { }
+                }
 
-                    if (modFile.exists()) { // if mod to delete still exists
+                if (modFile.exists()) { // if mod to delete still exists
+                    try {
                         new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
+                    } catch (IOException ignored) { }
+                    try {
                         FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
                         fw.write(modName + "\n");
                         fw.close();
-                    }
+                    } catch (IOException ignored) { }
+                }
 
-                    if (modFile.exists()) {
+                if (modFile.exists()) {
+                    try {
                         FileDeleteStrategy.FORCE.delete(modFile);
-                    }
+                    } catch (IOException ignored) { }
+                }
 
-                    if (!modFile.exists()) {
-                        LOGGER.info("Successfully deleted: " + modName);
-                    } else if (modFile.exists() && modFile.length() == 16681) {
-                        LOGGER.info("Successfully trashed: " + modName);
-                    } else {
-                        LOGGER.info("Failed to delete: " + modName);
-                    }
+                if (!modFile.exists()) {
+                    LOGGER.info("Successfully deleted: " + modName);
+                } else if (modFile.exists() && modFile.length() == 16681) {
+                    LOGGER.info("Successfully trashed: " + modName);
+                } else {
+                    LOGGER.info("Failed to delete: " + modName);
                 }
             }
-        } catch (IOException e) { // ignore
         }
+
 
         // CONFIGS
         // make array of file names "./AutoModpack/modpack/config/" folder

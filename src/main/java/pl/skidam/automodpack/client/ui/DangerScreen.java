@@ -33,6 +33,7 @@ public class DangerScreen extends Screen {
         }));
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height / 6 + 96, 190, 20, new TranslatableText("gui.automodpack.screen.danger.button.dontshowagain").formatted(Formatting.GRAY), (button) -> {
             Config.DANGER_SCREEN = false;
+            new Config().save();
             DangerScreenWasShown = true;
             CompletableFuture.runAsync(DownloadModpack::new);
             this.client.setScreen(new LoadingScreen());
