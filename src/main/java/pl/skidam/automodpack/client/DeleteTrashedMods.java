@@ -11,12 +11,11 @@ import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
 public class DeleteTrashedMods {
 
-    private static String trashedModsTxt = "./AutoModpack/trashed-mods.txt";
-
     public DeleteTrashedMods() {
 
         // read ./AutoModpack/trashed-mods.txt and add lines from it to array
         String[] trashedModsNames = new String[0];
+        String trashedModsTxt = "./AutoModpack/trashed-mods.txt";
         try {
             FileReader fr = new FileReader(trashedModsTxt);
             BufferedReader br = new BufferedReader(fr);
