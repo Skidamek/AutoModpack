@@ -22,6 +22,9 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
         LOGGER.info("Prelaunching AutoModpack...");
 
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+
+            new SetupFiles();
+
             Config.init();
 
             new TrashMod();
@@ -41,14 +44,15 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
 
             new compatCheck();
 
-            new SetupFiles();
-
             new DeleteMods(true, "false");
 
             LOGGER.info("AutoModpack successfully prelaunched!");
         }
 
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
+
+            new SetupFiles();
+
             Config.init();
 
             InternetConnectionCheck.InternetConnectionCheck();
@@ -57,8 +61,6 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
             ENV_BRAND = "fabric";
 
             new compatCheck();
-
-            new SetupFiles();
 
             LOGGER.info("AutoModpack successfully prelaunched!");
         }
