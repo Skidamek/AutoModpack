@@ -22,18 +22,45 @@ public class DeleteModpack {
         modsDeleted = true;
         configsDeleted = true;
 
+        int tryCountMods = 1;
+        int tryCountConfigs = 1;
+
         // unzip modpack.zip
         new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
 
         deleteMods();
         deleteConfigs();
 
-        while (!modsDeleted) {
-            deleteMods();
+        while (true) {
+            if (tryCountMods == 10) {
+                LOGGER.error("MAKE ME LOUDA Z TYMI MODAMI");
+                break;
+            }
+            if (!modsDeleted) {
+                tryCountMods++;
+                LOGGER.warn("Trying to delete mods again... " + tryCountMods);
+                modsDeleted = true;
+                deleteMods();
+            }
+            if (modsDeleted) {
+                break;
+            }
         }
 
-        while (!configsDeleted) {
-            deleteConfigs();
+        while (true) {
+            if (tryCountConfigs == 10) {
+                LOGGER.error("MAKE ME LOUDA Z TYMI CONFIGAMI");
+                break;
+            }
+            if (!configsDeleted) {
+                tryCountConfigs++;
+                LOGGER.warn("Trying to delete configs again... " + tryCountConfigs);
+                configsDeleted = true;
+                deleteConfigs();
+            }
+            if (configsDeleted) {
+                break;
+            }
         }
 
         // delete unzipped modpack dir, modpack.zip and modpack-link.txt
