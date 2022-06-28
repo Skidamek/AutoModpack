@@ -37,9 +37,7 @@ public class DeleteModpack {
                     }
 
                     if (modFile.exists()) { // if mod to delete still exists
-                        // MAGIC TACTIC
                         new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
-                        // add name of mod to the txt file in ./AutoModpack/trashed-mods.txt
                         FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
                         fw.write(modName + "\n");
                         fw.close();
@@ -60,7 +58,6 @@ public class DeleteModpack {
             }
         } catch (IOException e) { // ignore
         }
-
 
         // CONFIGS
         // make array of file names "./AutoModpack/modpack/config/" folder
