@@ -29,17 +29,24 @@ public class AutoModpackToast implements Toast {
         AutoModpackToast.WhoAreYou = WhoAreYou;
         if (WhoAreYou == 0) {
             TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/wait.png");
-        } else if (WhoAreYou == 1 || WhoAreYou == 2) {
+        }
+        if (WhoAreYou == 1 || WhoAreYou == 2) {
             TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/found-update.png");
-        } else if (WhoAreYou == 3 || WhoAreYou == 4) {
+        }
+        if (WhoAreYou == 3 || WhoAreYou == 4) {
             TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/no-update.png");
-        } else if (WhoAreYou == 5) {
+        }
+        if (WhoAreYou == 5) {
             TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/error.png");
-        } else if (WhoAreYou == 6) {
+        }
+        if (WhoAreYou == 6) {
             TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/cloth-config.png");
         }
         ToastManager toastManager = MinecraftClient.getInstance().getToastManager();
-        toastManager.add(new AutoModpackToast());
+        AutoModpackToast toast = toastManager.getToast(AutoModpackToast.class, Toast.TYPE);
+        if (toast == null) {
+            toastManager.add(new AutoModpackToast());
+        }
     }
 
     @Override
@@ -50,7 +57,13 @@ public class AutoModpackToast implements Toast {
         manager.drawTexture(matrices, 0, 0, 0, 0, getWidth(), getHeight());
         manager.getClient().textRenderer.draw(matrices, new TranslatableText("gui.automodpack.toast.up." + WhoAreYou), 33, 7, -256);
         manager.getClient().textRenderer.draw(matrices, new TranslatableText("gui.automodpack.toast.down." + WhoAreYou), 33, 19, -1);
-        return MinecraftClient.getInstance().currentScreen instanceof TitleScreen ? Visibility.SHOW : Visibility.HIDE;
+
+        String currentScreen = MinecraftClient.getInstance().currentScreen.toString().toLowerCase();
+        if (currentScreen.contains("442") || currentScreen.contains("500") || currentScreen.contains("429") || currentScreen.contains("526") || currentScreen.contains("525") || currentScreen.contains("424") || currentScreen.contains("modsscreen") || currentScreen.contains("loading") || currentScreen.contains("title") || currentScreen.contains("danger")) {
+            return Visibility.SHOW;
+        } else {
+            return Visibility.HIDE;
+        }
     }
 
     @Override

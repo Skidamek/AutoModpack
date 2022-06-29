@@ -10,6 +10,7 @@ import java.io.*;
 import java.util.Scanner;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
+import static pl.skidam.automodpack.AutoModpackMain.out;
 
 public class DeleteMods {
     private static File delModsTxt = new File("./delmods.txt");
@@ -24,7 +25,7 @@ public class DeleteMods {
 
         if (preload) {
             Wait.wait(500);
-            if (!delModsTxt.exists()) {
+            if (!delModsTxt.exists() && out.exists()) {
                 new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./"), false, "delmods.txt");
             }
         }

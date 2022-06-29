@@ -32,17 +32,17 @@ public class SelfUpdater {
         long currentBackupSize = selfBackup.length();
         long latestSize = Long.parseLong(WebFileSize.webfileSize(selfLink));
 
+        if (currentBackupSize == 0) { // make backup
+            try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
+            AutoModpackUpdated = "false";
+            LOGGER.info("AutoModpack backup has been created");
+        }
+
         if (currentBackupSize == latestSize) {
             LOGGER.info("Didn't found any updates for AutoModpack!");
             if (!preload) {
                 AutoModpackToast.add(4);
             }
-            AutoModpackUpdated = "false";
-            return;
-        }
-
-        if (currentBackupSize == 0) { // make backup
-            try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
             AutoModpackUpdated = "false";
             return;
         }

@@ -3,7 +3,7 @@
   "quilt_loader": {
     "group": "pl.skidam.automodpack",
     "id": "automodpack",
-    "version": "2.0.4",
+    "version": "2.0.5",
     "metadata": {
       "name": "AutoModpack",
       "description": "Just automatic updating and downloading modpacks!",

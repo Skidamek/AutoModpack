@@ -90,6 +90,9 @@ public class SetupFiles {
         } catch (IOException e) { // ignore
         }
 
-
+        try {
+            FileDeleteStrategy.FORCE.delete(new File("./AutoModpack/modpack/"));
+        } catch (IOException e) { // ignore
+        }
     }
 }

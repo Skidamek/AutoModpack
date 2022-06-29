@@ -46,11 +46,13 @@ public class AutoModpackClient implements ClientModInitializer {
         } catch (Exception e) { // ignore
         }
 
-        if (ValidateURL(savedLink)) {
-            link = savedLink;
-            LOGGER.info("Loaded saved link to modpack: " + link);
-        } else {
-            LOGGER.error("Saved link is not valid url or is not end with /modpack");
+        if (!savedLink.equals("")) {
+            if (ValidateURL(savedLink)) {
+                link = savedLink;
+                LOGGER.info("Loaded saved link to modpack: " + link);
+            } else {
+                LOGGER.error("Saved link is not valid url or is not end with /modpack");
+            }
         }
 
         // packets
