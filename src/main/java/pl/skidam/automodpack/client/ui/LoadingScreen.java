@@ -31,7 +31,7 @@ public class LoadingScreen extends Screen {
     }
 
     private String getStep() {
-        String step = "Downloading modpack...";
+        String step = "Downloading...";
         if (Download.downloadPercent == 100) {
             step = "Extracting modpack...";
         }

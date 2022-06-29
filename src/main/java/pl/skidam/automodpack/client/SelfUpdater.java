@@ -1,11 +1,9 @@
 package pl.skidam.automodpack.client;
 
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.TitleScreen;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.Error;
-import pl.skidam.automodpack.utils.ToastExecutor;
 import pl.skidam.automodpack.utils.WebFileSize;
 
 import java.io.*;
@@ -37,7 +35,7 @@ public class SelfUpdater {
         if (currentBackupSize == latestSize) {
             LOGGER.info("Didn't found any updates for AutoModpack!");
             if (!preload) {
-                new ToastExecutor(4);
+                AutoModpackToast.add(4);
             }
             AutoModpackUpdated = "false";
             return;
@@ -56,14 +54,14 @@ public class SelfUpdater {
     public void AutoModpackDownload() {
         LOGGER.info("Update found! Updating!");
         if (!preload) {
-            new ToastExecutor(2);
+            AutoModpackToast.add(2);
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));
         }
         // *magic* downloading
         if (Download.Download(selfLink, selfOut)) {
             LOGGER.error("Failed to update myself!");
             if (!preload) {
-                new ToastExecutor(5);
+                AutoModpackToast.add(5);
                 new Error();
             }
             AutoModpackUpdated = "false";
