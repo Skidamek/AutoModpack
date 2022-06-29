@@ -1,0 +1,8 @@
+{
+  "elevator_music": {
+    "subtitle": "automodpack.elevator_music",
+    "sounds" : [
+      "automodpack:elevator_music"
+    ]
+  }
+}

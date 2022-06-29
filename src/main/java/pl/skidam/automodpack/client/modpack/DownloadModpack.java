@@ -2,6 +2,10 @@ package pl.skidam.automodpack.client.modpack;
 
 import net.minecraft.client.MinecraftClient;
 
+import net.minecraft.client.sound.PositionedSoundInstance;
+import net.minecraft.client.sound.SoundInstance;
+import net.minecraft.sound.SoundCategory;
+import pl.skidam.automodpack.client.sound.ModSounds;
 import pl.skidam.automodpack.client.ui.DangerScreen;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.config.Config;

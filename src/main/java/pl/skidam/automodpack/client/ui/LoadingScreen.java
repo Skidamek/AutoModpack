@@ -2,11 +2,16 @@ package pl.skidam.automodpack.client.ui;
 
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.sound.PositionedSoundInstance;
+import net.minecraft.client.sound.SoundInstance;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.MathHelper;
+import pl.skidam.automodpack.client.sound.ModSounds;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.ShityDeCompressor;
 
@@ -17,6 +22,7 @@ public class LoadingScreen extends Screen {
         super(new TranslatableText("gui.automodpack.screen.loading.title").formatted(Formatting.BOLD));
         // it needs to be here to restart unzip progress value
         ShityDeCompressor.progress = 0;
+
     }
 
     private String getPercentage() {
@@ -42,6 +48,7 @@ public class LoadingScreen extends Screen {
     }
 
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
+
         this.renderBackground(matrices);
         String percentage = this.getPercentage();
         String step = this.getStep();

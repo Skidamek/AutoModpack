@@ -1,8 +1,13 @@
 package pl.skidam.automodpack.mixin;
 
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.sound.PositionedSoundInstance;
+import net.minecraft.client.sound.SoundInstance;
+import net.minecraft.client.sound.SoundManager;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,6 +18,7 @@ import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.client.AutoModpackToast;
 import pl.skidam.automodpack.client.StartAndCheck;
 import pl.skidam.automodpack.client.modpack.CheckModpack;
+import pl.skidam.automodpack.client.sound.ModSounds;
 import pl.skidam.automodpack.client.ui.ConfirmScreen;
 import pl.skidam.automodpack.config.Config;
 
@@ -36,6 +42,19 @@ public class UpdateButtonMixin extends Screen {
         if (!AutoModpackMain.isModMenu) {
             Y_DELETE_MODPACK_BUTTON = 24;
         }
+
+        assert this.client != null;
+        this.client.execute(() -> this.client.getSoundManager().play(
+                new PositionedSoundInstance(ModSounds.ELEVATOR_MUSIC.getId(),
+                        SoundCategory.MUSIC,
+                        10f,
+                        1f,
+                        true,
+                        0,
+                        SoundInstance.AttenuationType.NONE,
+                        0.0D, 0.0D, 0.0D,
+                        true)));
+
 
         if (Config.CHECK_UPDATES_BUTTON) {
             this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y + Y_CHECK_UPDATES_BUTTON, 115, 20, new TranslatableText("gui.automodpack.button.update"), (button) -> {
