@@ -89,15 +89,6 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
-            // write delmods.txt to LOGGER
-            try {
-                for (String mod : FileUtils.readLines(modpackDeleteTxt)) {
-                    LOGGER.info("Mod " + mod + " is in delmods.txt");
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
         }
 
         // clone mods
@@ -159,8 +150,6 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             }
 
             sender.sendPacket(AutoModpackMain.AM_LINK, outBuf);
-
-            LOGGER.info("Sent modpack link to client");
         }
     }
 }

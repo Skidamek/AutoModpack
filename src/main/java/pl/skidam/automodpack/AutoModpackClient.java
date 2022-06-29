@@ -11,6 +11,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.client.StartAndCheck;
+import pl.skidam.automodpack.client.modpack.CheckModpack;
 
 import java.io.*;
 import java.util.Scanner;
@@ -30,6 +31,7 @@ public class AutoModpackClient implements ClientModInitializer {
         LOGGER.info("Initializing AutoModpack...");
 
         isOnServer = false;
+        CheckModpack.isCheckUpdatesButtonClicked = false;
 
         // load saved link from ./AutoModpack/modpack-link.txt file
         String savedLink = "";

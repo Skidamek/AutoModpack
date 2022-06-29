@@ -9,6 +9,8 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class CheckModpack {
 
+    public static boolean isCheckUpdatesButtonClicked;
+
     public CheckModpack() {
 
         // if latest modpack is not same as current modpack download new mods.
@@ -48,6 +50,9 @@ public class CheckModpack {
 
         LOGGER.info("Didn't found any updates for modpack!");
         new ToastExecutor(3);
-        new UnZip(out, "false");
+        if (isCheckUpdatesButtonClicked) {
+            isCheckUpdatesButtonClicked = false;
+            new UnZip(out, "false");
+        }
     }
 }

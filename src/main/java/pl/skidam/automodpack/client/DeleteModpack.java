@@ -33,7 +33,9 @@ public class DeleteModpack {
 
         while (true) {
             if (tryCountMods == 10) {
-                LOGGER.error("MAKE ME LOUDA Z TYMI MODAMI");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (MODS) FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (MODS) FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (MODS) FAILED!");
                 break;
             }
             if (!modsDeleted) {
@@ -49,7 +51,9 @@ public class DeleteModpack {
 
         while (true) {
             if (tryCountConfigs == 10) {
-                LOGGER.error("MAKE ME LOUDA Z TYMI CONFIGAMI");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (CONFIGS) FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (CONFIGS) FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (CONFIGS) FAILED!");
                 break;
             }
             if (!configsDeleted) {

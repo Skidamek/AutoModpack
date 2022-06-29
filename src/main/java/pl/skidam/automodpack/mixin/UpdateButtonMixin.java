@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.client.StartAndCheck;
+import pl.skidam.automodpack.client.modpack.CheckModpack;
 import pl.skidam.automodpack.client.ui.ConfirmScreen;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.utils.ToastExecutor;
@@ -40,6 +41,7 @@ public class UpdateButtonMixin extends Screen {
             this.addDrawableChild(new ButtonWidget(this.width / 2 - 100 + 206, y + Y_CHECK_UPDATES_BUTTON, 115, 20, new TranslatableText("gui.automodpack.button.update"), (button) -> {
                 new ToastExecutor(0);
                 if (!isChecking) {
+                    CheckModpack.isCheckUpdatesButtonClicked = true;
                     new StartAndCheck(false, false);
                 }
             }));

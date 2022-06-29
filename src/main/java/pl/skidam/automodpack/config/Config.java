@@ -11,7 +11,6 @@ import java.util.Properties;
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
 public class Config {
-
     public static boolean DANGER_SCREEN;
     public static boolean CHECK_UPDATES_BUTTON;
     public static boolean DELETE_MODPACK_BUTTON;
