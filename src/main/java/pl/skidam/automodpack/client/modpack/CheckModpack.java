@@ -53,6 +53,8 @@ public class CheckModpack {
         if (isCheckUpdatesButtonClicked) {
             isCheckUpdatesButtonClicked = false;
             new UnZip(out, "false");
+        } else {
+            ModpackUpdated = "false";
         }
     }
 }
