@@ -33,12 +33,26 @@ public class StartAndCheck {
                 while (true) {
                     isChecking = true;
                     if (AutoModpackUpdated != null && ModpackUpdated != null) {
+                        if (AutoModpackUpdated == "true") {
+                            if (ModpackUpdated == "true") {
+                                AutoModpackToast.add(7); // both AutoModpack and Modpack found update
+                            } else {
+                                AutoModpackToast.add(8); // AutoModpack updated and Modpack NOT found update
+                            }
+                        }
+                        if (AutoModpackUpdated == "false") {
+                            if (ModpackUpdated == "false") {
+                                AutoModpackToast.add(9); // both AutoModpack and Modpack NOT found update
+                            } else {
+                                AutoModpackToast.add(10); // Automodpack NOT updated and Modpack found update
+                            }
+                        }
                         new Finished();
-                        isChecking = false;
                         break;
                     }
                     Wait.wait(500);
                 }
+                isChecking = false;
             });
 
             if (onlyModpack) {

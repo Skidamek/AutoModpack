@@ -22,7 +22,6 @@ public class LoadingScreen extends Screen {
         super(new TranslatableText("gui.automodpack.screen.loading.title").formatted(Formatting.BOLD));
         // it needs to be here to restart unzip progress value
         ShityDeCompressor.progress = 0;
-
     }
 
     private String getPercentage() {
@@ -48,7 +47,6 @@ public class LoadingScreen extends Screen {
     }
 
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
-
         this.renderBackground(matrices);
         String percentage = this.getPercentage();
         String step = this.getStep();

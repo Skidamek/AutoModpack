@@ -21,8 +21,8 @@ public class DangerScreen extends Screen {
 
     public DangerScreen() {
         super(new TranslatableText("gui.automodpack.screen.danger.title").formatted(Formatting.BOLD));
+        assert client != null;
     }
-
     @Override
     protected void init() {
         super.init();
