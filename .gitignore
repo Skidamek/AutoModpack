@@ -35,3 +35,6 @@ run/
 /config.yml
 /Skidamek/
 /logs/latest.log
+/src/main/resources/assets/automodpack/sounds/
+/src/main/resources/assets/automodpack/sounds/elevator_music.ogg
+/src/main/java/pl/skidam/automodpack/mixin/ElevatorMusicMixin.java
