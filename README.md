@@ -1,16 +1,20 @@
 # **Welcome to AutoModpack,**
 
+What is this?
+This basically makes it easier to update your modpack. Your friends / players don't need to manually update all mods / modpack thanks to this mod all this boring work is done automatically.
+
 # Key features
-- Your players no longer have to update mods.
-- Modpack hosting
+- Your players no longer have to update mods manually.
+- Modpack hosting.
 - Easy download/update modpack (add mods, delete mods, add configs whatever you want)
 - Sync modpack mods with server mods.
 - Dynamically change mods in modpack.
 - Update checker/downloader.
+- Delete modpack button.
 
 # How to use
 
-At first download the latest version of the mod from [here](https://modrinth.com/mod/automodpack/versions).
+First of all download the latest version of the mod from [here](https://modrinth.com/mod/automodpack/versions).
 
 Put it into the `mods` folder of your minecraft/server installation.
 
@@ -26,7 +30,7 @@ On join the server who has this mod, modpack will be automatically downloaded an
 
 **Open port (default: `30037`) on your server! TCP/UDP** need to host modpack.
 
-NOTE: if you can't open any port on your server, you can type in the config "external_modpack_host" to http/s address of download server it can be even MediaFire/Google Drive. You can upload there modpack.zip whose is automatically generated on your minecraft server at ./AutoModpack/modpack.zip
+NOTE: if you can't open any port on your server, you can type in the config "external_modpack_host" http/s address of download server it can be even MediaFire/Google Drive/Dropbox. You can upload there modpack.zip whose is automatically generated on your minecraft server at ./AutoModpack/modpack.zip
 
 Add mods/configs what ever you want in your modpack to the `./AutoModpack/modpack/` directory.
 
@@ -35,7 +39,7 @@ Restart server and you are good to go! Enjoy!
 **If you want to delete some mods from modpack**
 - Go to `./AutoModpack/modpack/` directory on your server.
 - Create file `delmods.txt`.
-- Inside this file put full names of mods you want to delete. (one name per line!)
+- Inside this file put full names of mods you want to delete. **(one full name per line!)**
 
 # Config
 
@@ -49,7 +53,7 @@ Client side settings:
 
 Server side settings:
 
-- `modpack_host`": (default: `true`) - Host http server for modpack. If this is disabled use "External host server".
+- `modpack_host`": (default: `true`) - Host http server for modpack. If this is disabled use `external_modpack_host`.
 - `sync_mods`: (default: `true`) - Clone all mods from default mods folder on your server to the modpack, but all other mods will be deleted. (you **can** add mods that you don't want to load on the server only in `./AutoModpack/modpack/[CLIENT] mods`, delmods.txt **is** making automatically when some mods got updated or deleted)
 - `host_port`: (default: `30037`) - At this port http server for hosting modpack will be running.
 - `host_thread_count`: (default: `2`) - Http server will be use this amount of threads.
@@ -66,21 +70,22 @@ Server side settings:
 - `/automodpack modpack-host restart` - Restart modpack hosting.
 
 # FAQ
-- Which versions are supported?
 
-1.19.x and 1.18.x on fabric/quilt modloader.
+Which versions are supported?
 
-- Do I must use official minecraft launcher?
+- 1.19.x and 1.18.x on fabric/quilt modloader.
 
-No, you can use any launcher you want except for Feather Client its unsupported. (but launcher must be compatible with fabric/quilt modloader)
+Do I must use official minecraft launcher?
 
-- Do I must install this mod on both sides?
+- No, you can use any launcher you want except for Feather Client its unsupported. (but launcher must be compatible with fabric/quilt modloader)
 
-Yes, you need to install this mod on both sides.
+Do I must install this mod on both sides?
 
-- Does it deleting existing mods which are not in modpack but the client has them?
+- Yes, you need to install this mod on both sides.
 
-No, it doesn't. It will only delete mods which are written out in delmods.txt in your modpack.
+Does it deleting existing mods which are not in modpack but the client has them?
+
+- No, it doesn't. It will only delete mods which are written out in delmods.txt in your modpack.
 
 - Does it automatically update my mods?
 
