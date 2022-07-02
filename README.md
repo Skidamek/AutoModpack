@@ -32,7 +32,7 @@ Add mods/configs what ever you want in your modpack to the `./AutoModpack/modpac
 
 Restart server and you are good to go! Enjoy!
 
-**If you want to delete some mods from modpack** 
+**If you want to delete some mods from modpack**
 - Go to `./AutoModpack/modpack/` directory on your server.
 - Create file `delmods.txt`.
 - Inside this file put full names of mods you want to delete. (one name per line!)
@@ -50,7 +50,7 @@ Client side settings:
 Server side settings:
 
 - `modpack_host`": (default: `true`) - Host http server for modpack. If this is disabled use "External host server".
-- `sync_mods`: (default: `true`) - Its the same as "Clone mods" but here all other mods will be deleted.(you **can** add mods that you don't want to load on the server only in `./AutoModpack/modpack/[CLIENT] mods`, delmods.txt **is** making automatically when some mods got updated or deleted)
+- `sync_mods`: (default: `true`) - Clone all mods from default mods folder on your server to the modpack, but all other mods will be deleted. (you **can** add mods that you don't want to load on the server only in `./AutoModpack/modpack/[CLIENT] mods`, delmods.txt **is** making automatically when some mods got updated or deleted)
 - `host_port`: (default: `30037`) - At this port http server for hosting modpack will be running.
 - `host_thread_count`: (default: `2`) - Http server will be use this amount of threads.
 - `host_external_ip`: (default: none) - Http server will be use this external ip instead of default one. (OPTIONAL)
@@ -89,7 +89,7 @@ No, it doesn't, but if you want this cool feature take a look at [AutoPlug](http
 
 **Contributors are welcome**
 [**click.**](CONTRIBUTING.md)
-  
+
 <p align="center"><img src="https://i.imgur.com/zogBcIG.png" alt="Logo" width="200"></p>
 <h1 align="center">AutoModpack  <br><br>
     <a href="https://fabricmc.net/"><img
