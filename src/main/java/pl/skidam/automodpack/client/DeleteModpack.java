@@ -14,6 +14,8 @@ public class DeleteModpack {
 
     private static boolean modsDeleted;
     private static boolean configsDeleted;
+    private static int tryCountMods;
+    private static int tryCountConfigs;
 
     public DeleteModpack() {
 
@@ -22,12 +24,18 @@ public class DeleteModpack {
         modsDeleted = true;
         configsDeleted = true;
 
-        int tryCountMods = 1;
-        int tryCountConfigs = 1;
+        tryCountMods = 1;
+        tryCountConfigs = 1;
 
         // unzip modpack.zip
         new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
 
+        makeIt();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> makeIt()));
+    }
+
+    private static void makeIt() {
         deleteMods();
         deleteConfigs();
 
@@ -77,7 +85,6 @@ public class DeleteModpack {
 
         LOGGER.info("Finished deleting modpack!");
         LOGGER.info("Restart your game!");
-
     }
 
     private static void deleteMods() {

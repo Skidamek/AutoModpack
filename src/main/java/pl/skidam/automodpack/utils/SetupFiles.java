@@ -54,6 +54,16 @@ public class SetupFiles {
                 e.printStackTrace();
             }
         }
+
+        File modpackClientModsDir = new File("./AutoModpack/modpack/[CLIENT] mods");
+        if (!modpackClientModsDir.exists()) {
+            modpackClientModsDir.mkdir();
+        }
+
+//        File tempDir = new File("./AutoModpack/temp/");
+//        if (!tempDir.exists()) {
+//            tempDir.mkdir();
+//        }
     }
 
     private void client() {

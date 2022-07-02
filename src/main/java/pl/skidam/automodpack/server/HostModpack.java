@@ -5,11 +5,11 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.config.Config;
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -22,7 +22,7 @@ import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 public class HostModpack implements HttpHandler {
 
     private static final Path MODPACK_FILE = Path.of(FabricLoader.getInstance().getGameDir().toFile() + "/AutoModpack/modpack.zip");
-    private static HttpServer server = null;
+    public static HttpServer server = null;
     private static ExecutorService threadPool = null;
     public static String modpackHostIp;
     public static String modpackHostIpForLocalPlayers;
@@ -30,9 +30,6 @@ public class HostModpack implements HttpHandler {
 
 
     public static void stop() {
-        if (!Config.MODPACK_HOST || !Config.EXTERNAL_MODPACK_HOST.equals("")) {
-            return;
-        }
         if (server != null) {
             server.stop(1);
         }
@@ -41,8 +38,7 @@ public class HostModpack implements HttpHandler {
         }
     }
 
-    public static void start(MinecraftServer minecraftServer) {
-
+    public static void start() {
         if (!Config.MODPACK_HOST || !Config.EXTERNAL_MODPACK_HOST.equals("")) {
             LOGGER.info("Modpack host is disabled");
             if (!Config.EXTERNAL_MODPACK_HOST.equals("")) {
@@ -101,7 +97,7 @@ public class HostModpack implements HttpHandler {
             OutputStream outputStream = exchange.getResponseBody();
             File pack = MODPACK_FILE.toFile();
 
-            exchange.getResponseHeaders().add("User-Agent", "Java/modpack-host");
+            exchange.getResponseHeaders().add("User-Agent", "Java/auto-modpack-host");
             exchange.sendResponseHeaders(200, pack.length());
 
             FileInputStream fis = new FileInputStream(pack);
@@ -118,7 +114,7 @@ public class HostModpack implements HttpHandler {
     }
 
     private static void useIPV4Address() {
-        try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), "UTF-8").useDelimiter("\\A")) {
+        try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), StandardCharsets.UTF_8).useDelimiter("\\A")) {
             serverIpForOthers = s.next();
         } catch (Exception e) {
             e.printStackTrace();

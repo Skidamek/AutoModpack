@@ -43,24 +43,27 @@ Restart server and you are good to go! Enjoy!
 
 Client side settings:
 
-- `danger_screen`: `true` or `false` (default: `true`) - Show danger screen before downloading updates.
-- `check_updates_button`: `true` or `false` (default: `true`) - Show "Check updates" button on Title Screen.
-- `delete_modpack_button`: `true` or `false` (default: `true`) - Show "Delete modpack" button on Title Screen. (Button is only visible when some modpack is installed)
+- `danger_screen`: (default: `true`) - Show danger screen before downloading updates.
+- `check_updates_button`: (default: `true`) - Show "Check updates" button on Title Screen.
+- `delete_modpack_button`: (default: `true`) - Show "Delete modpack" button on Title Screen. (Button is only visible when some modpack is installed)
 
 Server side settings:
 
-- `modpack_host`": `true` or `false` (default: `true`) - Host http server for modpack. If this is disabled use "External host server".
-- `clone_mods`: `true` or `false` (default: `true`) - Clone all mods from default mods folder on your server to the modpack. (you **can** add mods that you don't want to load on the server, delmods.txt **isn't** making automatically when some mods got updated or deleted)
-- `sync_mods`: `true` or `false` (default: `false`) - Its the same as "Clone mods" but here all other mods will be deleted.(you **can't** add mods that you don't want to load on the server, delmods.txt **is** making automatically when some mods got updated or deleted)
-- `host_port`: `integer` (default: `30037`) - At this port http server for hosting modpack will be running.
-- `host_thread_count`: `integer` (default: `2`) - Http server will be use this amount of threads.
-- `host_external_ip`: `whatever` (default: none) - Http server will be use this external ip instead of default one. (OPTIONAL)
-- `external_modpack_host`: `whatever` (default: none) - Typed here http/s address will be used as external host server. This will automatically disable `modpack_host`. (OPTIONAL)
+- `modpack_host`": (default: `true`) - Host http server for modpack. If this is disabled use "External host server".
+- `sync_mods`: (default: `true`) - Its the same as "Clone mods" but here all other mods will be deleted.(you **can** add mods that you don't want to load on the server only in `./AutoModpack/modpack/[CLIENT] mods`, delmods.txt **is** making automatically when some mods got updated or deleted)
+- `host_port`: (default: `30037`) - At this port http server for hosting modpack will be running.
+- `host_thread_count`: (default: `2`) - Http server will be use this amount of threads.
+- `host_external_ip`: (default: none) - Http server will be use this external ip instead of default one. (OPTIONAL)
+- `external_modpack_host`: (default: none) - Typed here http/s address will be used as external host server. This will automatically disable `modpack_host`. (OPTIONAL)
 
 # Commands
 
 - `/automodpack` - Check version of AutoModpack. (this mod)
 - `/automodpack generate-modpack` - Generate new modpack.zip file on server.
+- `/automodpack modpack-host` - Check if modpack is hosted.
+- `/automodpack modpack-host start` - Start modpack hosting.
+- `/automodpack modpack-host stop` - Stop modpack hosting.
+- `/automodpack modpack-host restart` - Restart modpack hosting.
 
 # FAQ
 - Which versions are supported?

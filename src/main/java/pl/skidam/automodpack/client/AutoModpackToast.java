@@ -33,15 +33,14 @@ public class AutoModpackToast implements Toast {
         AutoModpackToast.WhoAreYou = WhoAreYou;
         if (WhoAreYou == 0) {
             LoadingAnimationStep = 0;
-            AutoModpackMain.LOGGER.error("" + isLoadingAnimation);
             if (isLoadingAnimation == "false" || isLoadingAnimation == null) {
                 CompletableFuture.runAsync(() -> {
                     while (AutoModpackToast.WhoAreYou == 0) {
                         isLoadingAnimation = "true";
-                        LoadingAnimationStep++;
-                        if (LoadingAnimationStep == 8) { // number of frames in the animation - 1
-                            LoadingAnimationStep = 1;
+                        if (LoadingAnimationStep == 7) { // number of frames in the animation
+                            LoadingAnimationStep = 0;
                         }
+                        LoadingAnimationStep++;
                         TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/loading" + LoadingAnimationStep + ".png");
 
                         Wait.wait(100); // 10 fps
@@ -64,22 +63,22 @@ public class AutoModpackToast implements Toast {
         }
         ToastManager toastManager = MinecraftClient.getInstance().getToastManager();
         AutoModpackToast toast = toastManager.getToast(AutoModpackToast.class, Toast.TYPE);
-        AutoModpackMain.LOGGER.error("WhoAreYou: " + WhoAreYou);
-        AutoModpackMain.LOGGER.error("WhoAreYouBEFORE: " + WhoAreYouBefore);
         if (toast == null) {
+            AutoModpackMain.LOGGER.error("1");
             toastManager.add(new AutoModpackToast());
-        } else if (WhoAreYou != 0 && WhoAreYouBefore == 0) {
+        } else if (WhoAreYouBefore == 0) {
+            AutoModpackMain.LOGGER.error("2");
             toastManager.clear();
             toastManager.add(new AutoModpackToast());
         } else if (WhoAreYou == 1 && WhoAreYouBefore == 2 || WhoAreYou == 2 && WhoAreYouBefore == 1 || WhoAreYou == 3 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 3) {
+            AutoModpackMain.LOGGER.error("3");
             toastManager.add(new AutoModpackToast());
         } else if (WhoAreYou == 1 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 1 || WhoAreYou == 2 && WhoAreYouBefore == 3 || WhoAreYou == 3 && WhoAreYouBefore == 2) {
+            AutoModpackMain.LOGGER.error("4");
             toastManager.add(new AutoModpackToast());
         }
-        WhoAreYouBefore = WhoAreYou;
     }
 
-    @Override
     public Visibility draw(MatrixStack matrices, ToastManager manager, long startTime) {
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
         RenderSystem.setShaderTexture(0, TEXTURE);
@@ -90,13 +89,16 @@ public class AutoModpackToast implements Toast {
 
 
         if (WhoAreYou != 0) {
+            WhoAreYouBefore = WhoAreYou;
             return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
         } else if (WhoAreYou == 0) {
             while (WhoAreYou == 0) {
                 return Visibility.SHOW;
             }
+            WhoAreYouBefore = WhoAreYou;
             return Visibility.HIDE;
         } else {
+            WhoAreYouBefore = WhoAreYou;
             return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
         }
 

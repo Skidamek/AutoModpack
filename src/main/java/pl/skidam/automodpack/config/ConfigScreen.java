@@ -51,14 +51,6 @@ public class ConfigScreen {
                 .build();
         configCategory.addEntry(modpackHost);
 
-        AbstractConfigListEntry<?> cloneMods = builder.entryBuilder()
-                .startBooleanToggle(new LiteralText("Clone mods"), Config.CLONE_MODS)
-                .setTooltip(new LiteralText("Clone all mods from default mods folder on your server to the modpack."))
-                .setSaveConsumer((toggled) -> Config.CLONE_MODS = toggled)
-                .setDefaultValue(true)
-                .build();
-        configCategory.addEntry(cloneMods);
-
         AbstractConfigListEntry<?> syncMods = builder.entryBuilder()
                 .startBooleanToggle(new LiteralText("Sync mods"), Config.SYNC_MODS)
                 .setTooltip(new LiteralText("Its the same as \"Clone mods\" but here all other mods will be deleted."))
