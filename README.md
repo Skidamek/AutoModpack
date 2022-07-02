@@ -1,7 +1,7 @@
 # **Welcome to AutoModpack,**
 
 What is this?
-This basically makes it easier to update your modpack. Your friends / players don't need to manually update all mods / modpack thanks to this mod all this boring work is done automatically.
+This basically makes easier to update your modpack. Your friends / players don't need to manually update all mods / modpack thanks to this mod all this boring work is done automatically.
 
 # Key features
 - Your players no longer have to update mods manually.
