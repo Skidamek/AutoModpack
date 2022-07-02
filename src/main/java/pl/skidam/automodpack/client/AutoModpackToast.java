@@ -64,17 +64,13 @@ public class AutoModpackToast implements Toast {
         ToastManager toastManager = MinecraftClient.getInstance().getToastManager();
         AutoModpackToast toast = toastManager.getToast(AutoModpackToast.class, Toast.TYPE);
         if (toast == null) {
-            AutoModpackMain.LOGGER.error("1");
             toastManager.add(new AutoModpackToast());
         } else if (WhoAreYouBefore == 0) {
-            AutoModpackMain.LOGGER.error("2");
             toastManager.clear();
             toastManager.add(new AutoModpackToast());
         } else if (WhoAreYou == 1 && WhoAreYouBefore == 2 || WhoAreYou == 2 && WhoAreYouBefore == 1 || WhoAreYou == 3 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 3) {
-            AutoModpackMain.LOGGER.error("3");
             toastManager.add(new AutoModpackToast());
         } else if (WhoAreYou == 1 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 1 || WhoAreYou == 2 && WhoAreYouBefore == 3 || WhoAreYou == 3 && WhoAreYouBefore == 2) {
-            AutoModpackMain.LOGGER.error("4");
             toastManager.add(new AutoModpackToast());
         }
     }
