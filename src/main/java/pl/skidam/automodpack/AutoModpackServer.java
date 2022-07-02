@@ -22,6 +22,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
     public static final File modpackDir = new File("./AutoModpack/modpack/");
     public static final File modpackZip = new File("./AutoModpack/modpack.zip");
+    public static final File modpackClientModsDir = new File("./AutoModpack/modpack/[CLIENT] mods/");
     public static final File modpackModsDir = new File("./AutoModpack/modpack/mods/");
     public static final File modpackConfDir = new File("./AutoModpack/modpack/config/");
     public static final File modpackDeleteTxt = new File("./AutoModpack/modpack/delmods.txt");
@@ -39,12 +40,14 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
 
         if (modpackZip.exists()) {
-            ServerLifecycleEvents.SERVER_STARTED.register(HostModpack::start);
+            ServerLifecycleEvents.SERVER_STARTED.register(server -> HostModpack.start());
             ServerLifecycleEvents.SERVER_STOPPING.register(server -> HostModpack.stop());
         }
     }
 
     public static void genModpack() {
+
+        clientMods();
 
         // sync mods/clone mods and automatically generate delmods.txt
         if (Config.SYNC_MODS) {
@@ -54,6 +57,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             String[] oldMods = modpackModsDir.list();
             deleteAllMods();
             cloneMods();
+            clientMods();
             String[] newMods = modpackModsDir.list();
             // compare new to old mods and generate delmods.txt
             assert oldMods != null;
@@ -89,29 +93,19 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-
-            // write delmods.txt to LOGGER
-            try {
-                for (String mod : FileUtils.readLines(modpackDeleteTxt)) {
-                    LOGGER.info("Mod " + mod + " is in delmods.txt");
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        // clone mods
-        if (Config.CLONE_MODS && !Config.SYNC_MODS) {
-            LOGGER.info("Cloning mods from server to modpack");
-            cloneMods();
         }
 
         LOGGER.info("Creating modpack");
+        if (modpackZip.exists()) {
+            FileUtils.deleteQuietly(modpackZip);
+        }
+
         try {
             new ShityCompressor(modpackDir, modpackZip);
         } catch (IOException e) {
             LOGGER.error(e.getMessage());
         }
+
         LOGGER.info("Modpack created");
     }
 
@@ -122,6 +116,19 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
                     FileUtils.copyFileToDirectory(file, modpackModsDir);
                 } catch (IOException e) {
                     LOGGER.error("Error while cloning mods from server to modpack");
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    private static void clientMods() {
+        for (File file : Objects.requireNonNull(modpackClientModsDir.listFiles())) {
+            if (file.getName().endsWith(".jar") && !file.getName().toLowerCase().contains("automodpack")) {
+                try {
+                    FileUtils.copyFileToDirectory(file, modpackModsDir);
+                } catch (IOException e) {
+                    LOGGER.error("Error while cloning mods from client to modpack");
                     e.printStackTrace();
                 }
             }
@@ -159,8 +166,6 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             }
 
             sender.sendPacket(AutoModpackMain.AM_LINK, outBuf);
-
-            LOGGER.info("Sent modpack link to client");
         }
     }
 }

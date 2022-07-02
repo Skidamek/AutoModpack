@@ -3,7 +3,7 @@ package pl.skidam.automodpack.config;
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
 import pl.skidam.automodpack.AutoModpackMain;
-import pl.skidam.automodpack.utils.ToastExecutor;
+import pl.skidam.automodpack.client.AutoModpackToast;
 
 public class ModMenuIntegration implements ModMenuApi {
     @Override
@@ -12,7 +12,7 @@ public class ModMenuIntegration implements ModMenuApi {
             if (AutoModpackMain.isClothConfig) {
                 return ConfigScreen.createConfigGui(new Config(), parent);
             }
-            new ToastExecutor(6);
+            AutoModpackToast.add(6);
             return parent;
         };
     }

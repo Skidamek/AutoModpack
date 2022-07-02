@@ -11,6 +11,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.client.StartAndCheck;
+import pl.skidam.automodpack.client.modpack.CheckModpack;
 
 import java.io.*;
 import java.util.Scanner;
@@ -22,13 +23,13 @@ import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 public class AutoModpackClient implements ClientModInitializer {
 
     public static boolean isOnServer;
-
     @Override
     public void onInitializeClient() {
 
         LOGGER.info("Initializing AutoModpack...");
 
         isOnServer = false;
+        CheckModpack.isCheckUpdatesButtonClicked = false;
 
         // load saved link from ./AutoModpack/modpack-link.txt file
         String savedLink = "";
@@ -43,11 +44,13 @@ public class AutoModpackClient implements ClientModInitializer {
         } catch (Exception e) { // ignore
         }
 
-        if (ValidateURL(savedLink)) {
-            link = savedLink;
-            LOGGER.info("Loaded saved link to modpack: " + link);
-        } else {
-            LOGGER.error("Saved link is not valid url or is not end with /modpack");
+        if (!savedLink.equals("")) {
+            if (ValidateURL(savedLink)) {
+                link = savedLink;
+                LOGGER.info("Loaded saved link to modpack: " + link);
+            } else {
+                LOGGER.error("Saved link is not valid url or is not end with /modpack");
+            }
         }
 
         // packets

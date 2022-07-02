@@ -1,17 +1,10 @@
 package pl.skidam.automodpack.utils;
-
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
 import org.apache.commons.io.FileDeleteStrategy;
-
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-
 import static pl.skidam.automodpack.AutoModpackMain.*;
-
 public class SetupFiles {
     public SetupFiles() {
 
@@ -24,11 +17,11 @@ public class SetupFiles {
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
             server();
         }
+
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
             client();
         }
     }
-
     private void server() {
 
         File modpackDir = new File("./AutoModpack/modpack/");
@@ -54,6 +47,16 @@ public class SetupFiles {
                 e.printStackTrace();
             }
         }
+
+        File modpackClientModsDir = new File("./AutoModpack/modpack/[CLIENT] mods");
+        if (!modpackClientModsDir.exists()) {
+            modpackClientModsDir.mkdir();
+        }
+
+//        File tempDir = new File("./AutoModpack/temp/");
+//        if (!tempDir.exists()) {
+//            tempDir.mkdir();
+//        }
     }
 
     private void client() {
@@ -61,7 +64,7 @@ public class SetupFiles {
         // Auto renaming system. Rename the wrong name of automodpack mod to the right name.
         File mods = new File("./mods/");
         String[] modsList = mods.list();
-        String correctModName = "AutoModpack-1.19.x.jar";
+        String correctModName = "AutoModpack-1.18.x.jar";
 
         for (String mod : modsList) {
             if (mod.endsWith(".jar")) {
@@ -90,6 +93,9 @@ public class SetupFiles {
         } catch (IOException e) { // ignore
         }
 
-
+        try {
+            FileDeleteStrategy.FORCE.delete(new File("./AutoModpack/modpack/"));
+        } catch (IOException e) { // ignore
+        }
     }
 }

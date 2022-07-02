@@ -1,18 +1,11 @@
 package pl.skidam.automodpack.utils;
 
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.UnknownHostException;
 
 public class ValidateURL {
     public static boolean ValidateURL(String url) {
-        String localIp = "0.0.0.0";
-        try {
-            localIp = InetAddress.getLocalHost().getHostAddress();
-        } catch (UnknownHostException e) { // ignore
-        }
-        if (!url.isEmpty() && !url.equals(localIp) && !url.equals("0.0.0.0") && !url.equals("localhost")) {
+        if (!url.isEmpty() && !url.equals("0.0.0.0") && !url.equals("localhost")) {
             try {
                 URI URI = new URI(url);
                 String string = URI.getScheme();

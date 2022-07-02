@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.client.modpack;
 
-import pl.skidam.automodpack.utils.ToastExecutor;
+import pl.skidam.automodpack.client.AutoModpackToast;
 import pl.skidam.automodpack.utils.WebFileSize;
 
 import java.io.*;
@@ -8,6 +8,8 @@ import java.io.*;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class CheckModpack {
+
+    public static boolean isCheckUpdatesButtonClicked;
 
     public CheckModpack() {
 
@@ -27,7 +29,7 @@ public class CheckModpack {
         LOGGER.info("Current modpack size: " + currentSize);
         if (currentSize == 0) {
             LOGGER.info("Downloading modpack!");
-            new ToastExecutor(1);
+            AutoModpackToast.add(1);
             new DownloadModpack.prepare();
             return;
         }
@@ -41,13 +43,18 @@ public class CheckModpack {
 
         if (!Modpack.exists() || currentSize != latestSize) {
             LOGGER.info("Downloading modpack!");
-            new ToastExecutor(1);
+            AutoModpackToast.add(1);
             new DownloadModpack.prepare();
             return;
         }
 
         LOGGER.info("Didn't found any updates for modpack!");
-        new ToastExecutor(3);
-        new UnZip(out, "false");
+        AutoModpackToast.add(3);
+        if (isCheckUpdatesButtonClicked) {
+            isCheckUpdatesButtonClicked = false;
+            new UnZip(out, "false");
+        } else {
+            ModpackUpdated = "false";
+        }
     }
 }

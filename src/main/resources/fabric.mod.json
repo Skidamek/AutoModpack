@@ -1,12 +1,15 @@
 {
   "schemaVersion": 1,
   "id": "automodpack",
-  "version": "2.0.4",
+  "version": "2.1.0",
 
   "name": "AutoModpack",
   "description": "Just automatic updating and downloading modpacks!",
   "authors": [
     "Skidam"
+  ],
+  "contributors": [
+    "Pipelek"
   ],
   "contact": {
     "sources": "https://github.com/Skidamek/AutoModpack/",

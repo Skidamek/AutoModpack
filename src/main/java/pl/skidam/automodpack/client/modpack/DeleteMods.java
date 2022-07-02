@@ -10,27 +10,60 @@ import java.io.*;
 import java.util.Scanner;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
+import static pl.skidam.automodpack.AutoModpackMain.out;
 
 public class DeleteMods {
-    File delModsTxt = new File("./delmods.txt");
-    boolean preload;
-    String ModpackUpdated;
+    private static File delModsTxt = new File("./delmods.txt");
+    private static boolean preload;
+    private static String ModpackUpdated;
+    private static boolean modsDeleted;
 
     public DeleteMods(boolean preload, String ModpackUpdated) {
 
-        this.ModpackUpdated = ModpackUpdated;
+        DeleteMods.ModpackUpdated = ModpackUpdated;
+        DeleteMods.preload = preload;
 
         if (preload) {
-            this.preload = true;
             Wait.wait(500);
-            if (!delModsTxt.exists()) {
+            if (!delModsTxt.exists() && out.exists()) {
                 new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./"), false, "delmods.txt");
             }
         }
-        if (!preload) {
-            this.preload = false;
-        }
+
+        modsDeleted = true;
+        int tryCountMods = 1;
+
         Delete();
+
+        while (true) {
+            if (tryCountMods == 10) {
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODS FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODS FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODS FAILED!");
+                break;
+            }
+            if (!modsDeleted) {
+                tryCountMods++;
+                LOGGER.warn("Trying to delete mods again... " + tryCountMods);
+                modsDeleted = true;
+                Delete();
+            }
+            if (modsDeleted) {
+                break;
+            }
+        }
+
+        // Delete the file
+        try {
+            FileDeleteStrategy.FORCE.delete(delModsTxt);
+        } catch (IOException ignored) { }
+
+
+        LOGGER.info("Finished deleting mods!");
+
+        if (!preload) {
+            AutoModpackMain.ModpackUpdated = ModpackUpdated;
+        }
     }
 
     private void Delete() {
@@ -39,7 +72,7 @@ public class DeleteMods {
             if (preload) {
                 return;
             }
-            AutoModpackMain.ModpackUpdated = this.ModpackUpdated;
+            AutoModpackMain.ModpackUpdated = ModpackUpdated;
         }
 
         try {
@@ -92,6 +125,7 @@ public class DeleteMods {
                         LOGGER.info("Successfully trashed: " + modName);
                     } else {
                         LOGGER.info("Failed to delete: " + modName);
+                        modsDeleted = false;
                     }
                 }
             }
@@ -99,17 +133,5 @@ public class DeleteMods {
             // Close the file
             inFile.close();
         } catch (IOException ignored) { }
-
-        // Delete the file
-        try {
-            FileDeleteStrategy.FORCE.delete(delModsTxt);
-        } catch (IOException ignored) { }
-
-
-        LOGGER.info("Finished deleting mods!");
-
-        if (!preload) {
-            AutoModpackMain.ModpackUpdated = this.ModpackUpdated;
-        }
     }
 }

@@ -13,6 +13,7 @@ public class InternetConnectionCheck {
             try {
                 HttpURLConnection connection = (HttpURLConnection) new URL("https://www.google.com").openConnection();
                 connection.setRequestMethod("HEAD");
+                connection.setConnectTimeout(10000); // 10 seconds
                 int responseCode = connection.getResponseCode();
                 if (responseCode != 200) {
                     throw new Exception("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());

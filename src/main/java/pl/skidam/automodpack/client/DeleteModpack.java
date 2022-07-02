@@ -14,26 +14,36 @@ public class DeleteModpack {
 
     private static boolean modsDeleted;
     private static boolean configsDeleted;
+    private static int tryCountMods;
+    private static int tryCountConfigs;
 
     public DeleteModpack() {
 
         LOGGER.warn("Deleting modpack...");
+        // unzip modpack.zip
+        new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
+
+        makeIt();
+
+        Runtime.getRuntime().addShutdownHook(new Thread(DeleteModpack::makeIt));
+    }
+
+    private static void makeIt() {
 
         modsDeleted = true;
         configsDeleted = true;
 
-        int tryCountMods = 1;
-        int tryCountConfigs = 1;
-
-        // unzip modpack.zip
-        new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
+        tryCountMods = 1;
+        tryCountConfigs = 1;
 
         deleteMods();
         deleteConfigs();
 
         while (true) {
             if (tryCountMods == 10) {
-                LOGGER.error("MAKE ME LOUDA Z TYMI MODAMI");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (MODS) FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (MODS) FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (MODS) FAILED!");
                 break;
             }
             if (!modsDeleted) {
@@ -49,7 +59,9 @@ public class DeleteModpack {
 
         while (true) {
             if (tryCountConfigs == 10) {
-                LOGGER.error("MAKE ME LOUDA Z TYMI CONFIGAMI");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (CONFIGS) FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (CONFIGS) FAILED!");
+                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (CONFIGS) FAILED!");
                 break;
             }
             if (!configsDeleted) {
@@ -73,7 +85,6 @@ public class DeleteModpack {
 
         LOGGER.info("Finished deleting modpack!");
         LOGGER.info("Restart your game!");
-
     }
 
     private static void deleteMods() {
