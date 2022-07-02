@@ -10,7 +10,7 @@
 
 # How to use
 
-At first download the latest version of the mod from [here](https://github.com/Skidamek/AutoModpack/releases/latest/).
+At first download the latest version of the mod from [here](https://modrinth.com/mod/automodpack/versions).
 
 Put it into the `mods` folder of your minecraft/server installation.
 
