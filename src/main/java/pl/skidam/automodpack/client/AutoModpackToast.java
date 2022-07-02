@@ -8,7 +8,6 @@ import net.minecraft.client.toast.ToastManager;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Identifier;
-import oshi.driver.mac.Who;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.utils.Wait;
 
@@ -19,10 +18,7 @@ public class AutoModpackToast implements Toast {
     private static int WhoAreYou;
     private static int LoadingAnimationStep;
     private static String isLoadingAnimation;
-    private static int bothUpdate;
-    private static int oneUpdate;
-
-    private static AutoModpackToast toast;
+    private static int WhoAreYouBefore;
 
     // WhoAreYou
     // 0 == Button Clicked
@@ -32,14 +28,9 @@ public class AutoModpackToast implements Toast {
     // 4 == No updates found to AutoModpack (mod)
     // 5 == Error
     // 6 == Cloth-Config warn
-    // 7 == both AutoModpack and Modpack found update
-    // 8 == AutoModpack updated and Modpack NOT found update
-    // 9 == both AutoModpack and Modpack NOT found update
-    // 10 == Automodpack NOT updated and Modpack found update
 
     public static void add(int WhoAreYou) {
         AutoModpackToast.WhoAreYou = WhoAreYou;
-        AutoModpackMain.LOGGER.error("Adding AutoModpack Toast" + WhoAreYou);
         if (WhoAreYou == 0) {
             LoadingAnimationStep = 0;
             AutoModpackMain.LOGGER.error("" + isLoadingAnimation);
@@ -50,21 +41,19 @@ public class AutoModpackToast implements Toast {
                         LoadingAnimationStep++;
                         if (LoadingAnimationStep == 8) { // number of frames in the animation - 1
                             LoadingAnimationStep = 1;
-                            AutoModpackMain.LOGGER.warn("Animation step reset");
                         }
-                        AutoModpackMain.LOGGER.info("Animation step: " + LoadingAnimationStep);
                         TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/loading" + LoadingAnimationStep + ".png");
 
-                        Wait.wait(1000); // 1 fps
+                        Wait.wait(100); // 10 fps
                     }
-                    isLoadingAnimation = "false"; // TODO fix it
+                    isLoadingAnimation = "false";
                 });
             }
         }
-        if (WhoAreYou == 1 || WhoAreYou == 2 || WhoAreYou == 7 || WhoAreYou == 9 || WhoAreYou == 10) {
+        if (WhoAreYou == 1 || WhoAreYou == 2) {
             TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/found-update.png");
         }
-        if (WhoAreYou == 3 || WhoAreYou == 4 || WhoAreYou == 8 || WhoAreYou == 9 || WhoAreYou == 10) {
+        if (WhoAreYou == 3 || WhoAreYou == 4) {
             TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/no-update.png");
         }
         if (WhoAreYou == 5) {
@@ -74,16 +63,20 @@ public class AutoModpackToast implements Toast {
             TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/cloth-config.png");
         }
         ToastManager toastManager = MinecraftClient.getInstance().getToastManager();
-        toast = toastManager.getToast(AutoModpackToast.class, Toast.TYPE);
-        AutoModpackMain.LOGGER.warn("Toast " + toast);
-        if (WhoAreYou == 8 || WhoAreYou == 10) {
+        AutoModpackToast toast = toastManager.getToast(AutoModpackToast.class, Toast.TYPE);
+        AutoModpackMain.LOGGER.error("WhoAreYou: " + WhoAreYou);
+        AutoModpackMain.LOGGER.error("WhoAreYouBEFORE: " + WhoAreYouBefore);
+        if (toast == null) {
             toastManager.add(new AutoModpackToast());
-        } else if (WhoAreYou == 7 || WhoAreYou == 9) {
-
-        } else if (toast == null) {
+        } else if (WhoAreYou != 0 && WhoAreYouBefore == 0) {
+            toastManager.clear();
             toastManager.add(new AutoModpackToast());
-            MinecraftClient.getInstance().getToastManager().clear();
+        } else if (WhoAreYou == 1 && WhoAreYouBefore == 2 || WhoAreYou == 2 && WhoAreYouBefore == 1 || WhoAreYou == 3 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 3) {
+            toastManager.add(new AutoModpackToast());
+        } else if (WhoAreYou == 1 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 1 || WhoAreYou == 2 && WhoAreYouBefore == 3 || WhoAreYou == 3 && WhoAreYouBefore == 2) {
+            toastManager.add(new AutoModpackToast());
         }
+        WhoAreYouBefore = WhoAreYou;
     }
 
     @Override
@@ -95,7 +88,18 @@ public class AutoModpackToast implements Toast {
         manager.getClient().textRenderer.draw(matrices, new TranslatableText("gui.automodpack.toast.up." + WhoAreYou), 33, 7, -256);
         manager.getClient().textRenderer.draw(matrices, new TranslatableText("gui.automodpack.toast.down." + WhoAreYou), 33, 19, -1);
 
-        return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
+
+        if (WhoAreYou != 0) {
+            return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
+        } else if (WhoAreYou == 0) {
+            while (WhoAreYou == 0) {
+                return Visibility.SHOW;
+            }
+            return Visibility.HIDE;
+        } else {
+            return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
+        }
+
 
 
 //        if (MinecraftClient.getInstance().currentScreen != null) {
