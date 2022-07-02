@@ -14,28 +14,25 @@ public class DeleteModpack {
 
     private static boolean modsDeleted;
     private static boolean configsDeleted;
-    private static int tryCountMods;
-    private static int tryCountConfigs;
 
     public DeleteModpack() {
 
         LOGGER.warn("Deleting modpack...");
-
-        modsDeleted = true;
-        configsDeleted = true;
-
-        tryCountMods = 1;
-        tryCountConfigs = 1;
-
         // unzip modpack.zip
         new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
 
         makeIt();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> makeIt()));
+        Runtime.getRuntime().addShutdownHook(new Thread(DeleteModpack::makeIt));
     }
 
     private static void makeIt() {
+
+        modsDeleted = true;
+        configsDeleted = true;
+        int tryCountMods = 1;
+        int tryCountConfigs = 1;
+
         deleteMods();
         deleteConfigs();
 
