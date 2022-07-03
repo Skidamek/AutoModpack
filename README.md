@@ -3,6 +3,8 @@
 What is this?
 This basically makes easier to update your modpack. Your friends / players don't need to manually update all mods / modpack thanks to this mod all this boring work is done automatically.
 
+Showcase: https://youtu.be/lPPzaNPn8g8
+
 # Key features
 - Your players no longer have to update mods manually.
 - Modpack hosting.
