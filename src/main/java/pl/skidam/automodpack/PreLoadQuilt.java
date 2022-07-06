@@ -19,8 +19,9 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
 
     @Override
     public void onPreLaunch() {
-
     
+        LOGGER.info("Prelaunching AutoModpack...");
+
         // check if AutoModpack has correct name
         File mods = new File("./mods/");
         String[] modsList = mods.list();
@@ -36,7 +37,6 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
         }
 
 
-        LOGGER.info("Prelaunching AutoModpack...");
 
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
 
