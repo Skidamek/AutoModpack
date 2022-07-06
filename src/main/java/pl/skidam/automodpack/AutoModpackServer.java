@@ -146,7 +146,12 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     }
 
     private void onLoginStart(ServerLoginNetworkHandler serverLoginNetworkHandler, MinecraftServer minecraftServer, PacketSender sender, ServerLoginNetworking.LoginSynchronizer loginSynchronizer) {
-        sender.sendPacket(AutoModpackMain.AM_CHECK, PacketByteBufs.empty());
+        if (!Config.OPTIONAL_MODPACK) {
+            sender.sendPacket(AutoModpackMain.AM_CHECK, PacketByteBufs.empty());
+        }
+
+        // else accept player to join
+
     }
 
     private void onClientResponse(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {

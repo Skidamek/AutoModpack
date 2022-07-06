@@ -64,7 +64,7 @@ public class SetupFiles {
         // Auto renaming system. Rename the wrong name of automodpack mod to the right name.
         File mods = new File("./mods/");
         String[] modsList = mods.list();
-        String correctModName = "AutoModpack-1.18.x.jar";
+        String correctModName = "AutoModpack-1.19.x.jar"; // TODO replace this to dont remove but replace existing to the latest in autoupdate
 
         for (String mod : modsList) {
             if (mod.endsWith(".jar")) {
