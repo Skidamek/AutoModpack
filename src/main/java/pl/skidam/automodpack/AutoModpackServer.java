@@ -152,7 +152,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     private void onClientResponse(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
 
         if(!understood || buf.readInt() != 1) {
-            if (!Config.OPTIONAL_MODPACK) { // acept player to join while optional modpack is enabled // TODO make it better
+            if (!Config.ONLY_OPTIONAL_MODPACK) { // acept player to join while optional modpack is enabled // TODO make it better
                 serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://modrinth.com/mod/automodpack/versions"));
             }
 
