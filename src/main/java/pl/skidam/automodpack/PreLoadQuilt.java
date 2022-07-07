@@ -31,7 +31,10 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
             if (mod.endsWith(".jar")) {
                 File modFile = new File("./mods/" + mod);
                 if (mod.toLowerCase().contains("automodpack") && !mod.equals(correctModName)) {
-                    selfOut = modFile; // save current name
+                    modFile.delete();
+                    if (modFile.exists()) {
+                        selfOut = modFile; // save current name
+                    }
                 }
             }
         }
