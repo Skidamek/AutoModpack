@@ -152,7 +152,9 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     private void onClientResponse(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
 
         if(!understood || buf.readInt() != 1) {
-            serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://github.com/Skidamek/AutoModpack/releases"));
+            if (!Config.ONLY_OPTIONAL_MODPACK) { // acept player to join while optional modpack is enabled // TODO make it better
+                serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://modrinth.com/mod/automodpack/versions"));
+            }
         } else {
             // get minecraft player ip if player is in local network give him local address to modpack
             String playerIp = serverLoginNetworkHandler.getConnection().getAddress().toString();

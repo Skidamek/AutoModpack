@@ -22,13 +22,31 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
 
         LOGGER.info("Prelaunching AutoModpack...");
 
+        // check if AutoModpack has correct name
+        File mods = new File("./mods/");
+        String[] modsList = mods.list();
+        String correctModName = "AutoModpack-1.18.x.jar";
+
+        for (String mod : modsList) {
+            if (mod.endsWith(".jar")) {
+                File modFile = new File("./mods/" + mod);
+                if (mod.toLowerCase().contains("automodpack") && !mod.equals(correctModName)) {
+                    selfOut = modFile; // save current name
+                }
+            }
+        }
+
+
+
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
 
             new SetupFiles();
 
             Config.init();
 
-            new SelfUpdater(true);
+            if (InternetConnectionCheck.InternetConnectionCheck()) {
+                new SelfUpdater(true);
+            }
 
             new TrashMod();
 
@@ -39,8 +57,6 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
             }
 
             new DeleteTrashedMods();
-
-            InternetConnectionCheck.InternetConnectionCheck();
 
             // quilt loader detected
             ENV_BRAND = "quilt";
@@ -58,7 +74,9 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
 
             Config.init();
 
-            InternetConnectionCheck.InternetConnectionCheck();
+            if (InternetConnectionCheck.InternetConnectionCheck()) {
+                new SelfUpdater(true);
+            }
 
             // quilt loader detected
             ENV_BRAND = "quilt";

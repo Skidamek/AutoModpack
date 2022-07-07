@@ -3,13 +3,14 @@
   "quilt_loader": {
     "group": "pl.skidam.automodpack",
     "id": "automodpack",
-    "version": "2.1.0",
+    "version": "2.1.1",
     "metadata": {
       "name": "AutoModpack",
       "description": "Just automatic updating and downloading modpacks!",
       "contributors": {
         "Skidam": "Owner, developer",
-        "Pipelek": "Graphic artist, motivator"
+        "Pipelek": "Graphic artist, motivator",
+        "Merith" : "Great ideas"
       },
       "license": "MIT",
       "contact": {

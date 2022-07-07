@@ -16,6 +16,7 @@ public class Config {
     public static boolean DELETE_MODPACK_BUTTON;
     public static boolean MODPACK_HOST;
     public static boolean SYNC_MODS;
+    public static boolean ONLY_OPTIONAL_MODPACK;
     public static int HOST_PORT;
     public static int HOST_THREAD_COUNT;
     public static String HOST_EXTERNAL_IP;
@@ -37,6 +38,7 @@ public class Config {
         DELETE_MODPACK_BUTTON = getBoolean(properties, "delete_modpack_button", true);
         MODPACK_HOST = getBoolean(properties, "modpack_host", true);
         SYNC_MODS = getBoolean(properties, "sync_mods", false);
+        ONLY_OPTIONAL_MODPACK = getBoolean(properties, "only_optional_modpack", false);
         HOST_PORT = getInt(properties, "host_port", 30037);
         HOST_THREAD_COUNT = getInt(properties, "host_thread_count", 2);
         HOST_EXTERNAL_IP = getString(properties, "host_external_ip", "");
@@ -63,6 +65,7 @@ public class Config {
         properties.setProperty("delete_modpack_button", String.valueOf(DELETE_MODPACK_BUTTON));
         properties.setProperty("modpack_host", String.valueOf(MODPACK_HOST));
         properties.setProperty("sync_mods", String.valueOf(SYNC_MODS));
+        properties.setProperty("only_optional_modpack", String.valueOf(ONLY_OPTIONAL_MODPACK));
         properties.setProperty("host_port", String.valueOf(HOST_PORT));
         properties.setProperty("host_thread_count", String.valueOf(HOST_THREAD_COUNT));
         properties.setProperty("host_external_ip", HOST_EXTERNAL_IP);

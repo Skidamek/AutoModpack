@@ -13,7 +13,6 @@ import java.nio.file.StandardCopyOption;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class SelfUpdater {
-    File selfBackup = new File("./AutoModpack/AutoModpack-1.18.x.jar");
     boolean preload;
 
     public SelfUpdater(boolean preload) {
@@ -25,18 +24,13 @@ public class SelfUpdater {
 
         if (!selfBackup.exists()) {
             try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
+            LOGGER.info("AutoModpack backup has been created");
         }
 
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
         long currentBackupSize = selfBackup.length();
         long latestSize = Long.parseLong(WebFileSize.webfileSize(selfLink));
-
-        if (currentBackupSize == 0) { // make backup
-            try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
-            AutoModpackUpdated = "false";
-            LOGGER.info("AutoModpack backup has been created");
-        }
 
         if (currentBackupSize == latestSize) {
             LOGGER.info("Didn't found any updates for AutoModpack!");

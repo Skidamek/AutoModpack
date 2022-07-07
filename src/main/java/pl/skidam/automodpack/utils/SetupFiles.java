@@ -68,25 +68,6 @@ public class SetupFiles {
 
     private void client() {
 
-        // Auto renaming system. Rename the wrong name of automodpack mod to the right name.
-        File mods = new File("./mods/");
-        String[] modsList = mods.list();
-        String correctModName = "AutoModpack-1.18.x.jar";
-
-        for (String mod : modsList) {
-            if (mod.endsWith(".jar")) {
-                File modFile = new File("./mods/" + mod);
-                if (mod.toLowerCase().contains("automodpack") && !mod.equals(correctModName)) {
-                    LOGGER.warn("Renaming " + modFile + " to " + correctModName);
-                    try {
-                        FileDeleteStrategy.FORCE.delete(modFile);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-        }
-
         if (!new File("./AutoModpack/TrashMod/").exists() && trashOut.exists()) {
             new ShityDeCompressor(trashOut, new File("./AutoModpack/TrashMod/"), true, "none");
         }

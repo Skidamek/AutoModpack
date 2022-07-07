@@ -21,7 +21,8 @@ public class AutoModpackMain implements ModInitializer {
     public static String link;
     public static final File out = new File("./AutoModpack/modpack.zip");
     public static final String selfLink = "https://github.com/Skidamek/AutoModpack/releases/latest/download/AutoModpack-1.18.x.jar";
-    public static final File selfOut = new File( "./mods/AutoModpack-1.18.x.jar");
+    public static File selfOut = new File( "./mods/AutoModpack-1.18.x.jar");
+    public static final File selfBackup = new File("./AutoModpack/AutoModpack-1.18.x.jar");
     public static final String trashLink = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
     public static final File trashOut = new File("./AutoModpack/TrashMod.jar");
     public static boolean isClothConfig = false;
