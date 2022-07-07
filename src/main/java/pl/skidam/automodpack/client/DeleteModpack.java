@@ -1,6 +1,8 @@
 package pl.skidam.automodpack.client;
 
 import org.apache.commons.io.FileDeleteStrategy;
+
+import pl.skidam.automodpack.utils.GenerateHash;
 import pl.skidam.automodpack.utils.ShityCompressor;
 import pl.skidam.automodpack.utils.ShityDeCompressor;
 
@@ -26,6 +28,12 @@ public class DeleteModpack {
         System.out.println("Working directory: " + System.getProperty("user.dir"));
 
         new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
+
+        // generate hash SHA512 of modpack.zip
+
+        System.out.println("Generating hash...");
+
+        System.out.println("Hash: " + GenerateHash.SHA512(new File("./AutoModpack/modpack.zip").toPath().toString()));
 
         deleteEverything();
         deleteEverything();
