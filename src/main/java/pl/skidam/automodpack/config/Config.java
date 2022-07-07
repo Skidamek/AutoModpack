@@ -38,7 +38,7 @@ public class Config {
         DELETE_MODPACK_BUTTON = getBoolean(properties, "delete_modpack_button", true);
         MODPACK_HOST = getBoolean(properties, "modpack_host", true);
         SYNC_MODS = getBoolean(properties, "sync_mods", false);
-        ONLY_OPTIONAL_MODPACK = getBoolean(properties, "optional_modpack", false);
+        ONLY_OPTIONAL_MODPACK = getBoolean(properties, "only_optional_modpack", false);
         HOST_PORT = getInt(properties, "host_port", 30037);
         HOST_THREAD_COUNT = getInt(properties, "host_thread_count", 2);
         HOST_EXTERNAL_IP = getString(properties, "host_external_ip", "");
