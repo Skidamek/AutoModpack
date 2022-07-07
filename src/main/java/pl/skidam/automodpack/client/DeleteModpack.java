@@ -19,13 +19,20 @@ public class DeleteModpack {
 
     public DeleteModpack() {
 
-        LOGGER.warn("Deleting modpack...");
+        // LOGGER.warn("Deleting modpack...");
         // unzip modpack.zip
+        // get absolute path of current dir
+
+        System.out.println("Working directory: " + System.getProperty("user.dir"));
+
         new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
 
-        makeIt();
+        deleteEverything();
+        deleteEverything();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(DeleteModpack::makeIt));
+        // makeIt();
+
+        // Runtime.getRuntime().addShutdownHook(new Thread(DeleteModpack::makeIt));
     }
 
     private static void makeIt() {
@@ -85,6 +92,37 @@ public class DeleteModpack {
 
         LOGGER.info("Finished deleting modpack!");
         LOGGER.info("Restart your game!");
+    }
+
+    // main method
+    public static void main(String[] args) {
+        new DeleteModpack();
+    }
+
+    private static void deleteEverything() {
+        // make array of all files in modpack dir
+        File[] files = new File("./AutoModpack/modpack/").listFiles();  
+
+        if (files.length == 0) {
+            System.out.println("Nothing to delete...");
+            return;
+        }
+
+        System.out.println("Deleting everything...");
+        for (File file : files) {
+            System.out.println(file.getName() + ":");
+            File[] filesInDir = file.listFiles();
+            if (filesInDir == null) {
+                System.out.println("null!");
+                return;
+            } else {
+                for (File fileInDir : filesInDir) {
+                    System.out.println("\t" + fileInDir.getName());
+                    fileInDir.delete();
+                }
+                file.delete();
+            }
+        }
     }
 
     private static void deleteMods() {

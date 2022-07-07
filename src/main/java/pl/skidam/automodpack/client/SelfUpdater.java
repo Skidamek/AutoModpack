@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.utils.Download;
@@ -69,6 +71,12 @@ public class SelfUpdater {
         if (preload) {
             // TODO make this crash better
             throw new RuntimeException("Successfully updated myself! (AutoModpack)");
+        }
+
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
+            LOGGER.warn("Restart your server!");
+            LOGGER.warn("Restart your server!");
+            LOGGER.warn("Restart your server!");
         }
     }
 }
