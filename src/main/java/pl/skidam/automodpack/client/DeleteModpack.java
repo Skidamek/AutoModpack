@@ -27,13 +27,13 @@ public class DeleteModpack {
 
         System.out.println("Working directory: " + System.getProperty("user.dir"));
 
-        new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
-
-        // generate hash SHA512 of modpack.zip
-
         System.out.println("Generating hash...");
 
-        System.out.println("Hash: " + GenerateHash.SHA512(new File("./AutoModpack/modpack.zip").toPath().toString()));
+        System.out.println("Hash SHA-512: " + GenerateHash.SHA512(new File("./AutoModpack/modpack.zip").length() + ""));
+
+        System.out.println("Hash MD5: " + GenerateHash.MD5(new File("./AutoModpack/modpack.zip").length() + ""));
+
+        new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
 
         deleteEverything();
         deleteEverything();
