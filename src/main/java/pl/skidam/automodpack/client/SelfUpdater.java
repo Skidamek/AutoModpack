@@ -3,8 +3,8 @@ package pl.skidam.automodpack.client;
 import static pl.skidam.automodpack.AutoModpackMain.AutoModpackUpdated;
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 import static pl.skidam.automodpack.AutoModpackMain.selfBackup;
-import static pl.skidam.automodpack.AutoModpackMain.selfLink;
 import static pl.skidam.automodpack.AutoModpackMain.selfOut;
+import static pl.skidam.automodpack.utils.modrinthAPI.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -20,6 +20,7 @@ import pl.skidam.automodpack.utils.Error;
 import pl.skidam.automodpack.utils.ShityCompressor;
 import pl.skidam.automodpack.utils.ShityDeCompressor;
 import pl.skidam.automodpack.utils.WebFileSize;
+import pl.skidam.automodpack.utils.modrinthAPI;
 
 public class SelfUpdater {
     boolean preload;
@@ -39,7 +40,9 @@ public class SelfUpdater {
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
         long currentBackupSize = selfBackup.length();
-        long latestSize = Long.parseLong(WebFileSize.webfileSize(selfLink));
+        String modrinthID = "k68glP2e"; // AutoModpack ID
+        modrinthAPI.modrinthAPI(modrinthID);
+        long latestSize = Long.parseLong(WebFileSize.webfileSize(downloadUrl));
 
         if (currentBackupSize == latestSize) {
             LOGGER.info("Didn't found any updates for AutoModpack!");
@@ -60,8 +63,9 @@ public class SelfUpdater {
             AutoModpackToast.add(2);
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));
         }
+
         // *magic* downloading
-        if (Download.Download(selfLink, selfBackup)) {
+        if (Download.Download(downloadUrl, selfBackup)) {
             LOGGER.error("Failed to update myself!");
             if (!preload) {
                 AutoModpackToast.add(5);
