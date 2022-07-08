@@ -1,18 +1,25 @@
 package pl.skidam.automodpack.client;
 
+import static pl.skidam.automodpack.AutoModpackMain.AutoModpackUpdated;
+import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
+import static pl.skidam.automodpack.AutoModpackMain.selfBackup;
+import static pl.skidam.automodpack.AutoModpackMain.selfLink;
+import static pl.skidam.automodpack.AutoModpackMain.selfOut;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.Error;
+import pl.skidam.automodpack.utils.ShityCompressor;
+import pl.skidam.automodpack.utils.ShityDeCompressor;
 import pl.skidam.automodpack.utils.WebFileSize;
-
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-
-import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class SelfUpdater {
     boolean preload;
@@ -54,7 +61,7 @@ public class SelfUpdater {
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));
         }
         // *magic* downloading
-        if (Download.Download(selfLink, selfOut)) {
+        if (Download.Download(selfLink, selfBackup)) {
             LOGGER.error("Failed to update myself!");
             if (!preload) {
                 AutoModpackToast.add(5);
@@ -64,19 +71,32 @@ public class SelfUpdater {
             return;
         }
 
-        try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
+        // shutdown hook to make it the most reliable way to update
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            public void run() {
+                System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
+                File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");
+                new ShityDeCompressor(selfBackup, selfBackupUnzipped, true, "none");
+                try {
+                    new ShityCompressor(selfBackupUnzipped, selfOut);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
+            }
+        });
+
         LOGGER.info("Successfully self updated!");
         AutoModpackUpdated = "true";
 
         if (preload) {
             // TODO make this crash better
+            System.exit(0); // idk if it really needed
             throw new RuntimeException("Successfully updated myself! (AutoModpack)");
         }
 
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
-            LOGGER.warn("Restart your server!");
-            LOGGER.warn("Restart your server!");
-            LOGGER.warn("Restart your server!");
+            LOGGER.warn("Restart your server to properly update AutoModpack!");
         }
     }
 }

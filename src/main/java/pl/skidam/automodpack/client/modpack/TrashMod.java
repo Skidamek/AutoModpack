@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.client.modpack;
 
 import pl.skidam.automodpack.utils.Download;
-import pl.skidam.automodpack.utils.InternetConnectionCheck;
 import pl.skidam.automodpack.utils.ShityDeCompressor;
 
 import java.io.File;
