@@ -11,14 +11,17 @@ import java.util.zip.ZipOutputStream;
 
 public class ShityCompressor { // by Skidam so cool i know xD
 
-    public ShityCompressor(File unZippedInput, File zipOut) throws IOException {
+    public ShityCompressor(File unZippedInput, File zipOut, boolean flush) throws IOException {
 
         FileOutputStream fos = new FileOutputStream(zipOut);
         ZipOutputStream zos = new ZipOutputStream(fos);
 
+        if (flush) zos.flush();
+
         // TODO clean this mess
 
         for (File file : Objects.requireNonNull(unZippedInput.listFiles())) {
+            System.out.println("Adding " + file.getName() + " to zip file");
             if (!file.getName().equals("[CLIENT] mods")) {
                 if (file.isFile()) {
                     zos.putNextEntry(new ZipEntry(file.getName()));

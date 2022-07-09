@@ -23,7 +23,9 @@ public class ShityDeCompressor {
                 // how many entries in the zip file
                 int entries = 0;
                 while (Zip_Entry != null) {
-                    entries++;
+                    if (!Zip_Entry.getName().equals("META-INF/") && !Zip_Entry.getName().equals("MANIFEST.MF") && !Zip_Entry.getName().equals("META-INF/MANIFEST.MF")) {   
+                        entries++;
+                    }
                     Zip_Entry = zipInputStream.getNextEntry();
                 }
                 zipInputStream.close();
@@ -36,18 +38,21 @@ public class ShityDeCompressor {
                 float entryGoing = 0;
 
                 while (Zip_Entry2 != null) {
-                    // progress monitor //
-                    entryGoing++;
-                    float progress = entryGoing / entries * 100;
-                    ShityDeCompressor.progress = (int) progress;
-                    // ---------------- //
+                    if (!Zip_Entry2.getName().equals("META-INF/") && !Zip_Entry2.getName().equals("MANIFEST.MF") && !Zip_Entry2.getName().equals("META-INF/MANIFEST.MF")) {
+                        System.out.println("Extracting " + Zip_Entry2.getName());
+                        // progress monitor //
+                        entryGoing++;
+                        float progress = entryGoing / entries * 100;
+                        ShityDeCompressor.progress = (int) progress;
+                        // ---------------- //
 
-                    String unZippedFile = unZippedOut + File.separator + Zip_Entry2.getName();
-                    if (!Zip_Entry2.isDirectory()) {
-                        extractFile(zipInputStream2, unZippedFile);
-                    } else {
-                        File directory = new File(unZippedFile);
-                        directory.mkdirs();
+                        String unZippedFile = unZippedOut + File.separator + Zip_Entry2.getName();
+                        if (!Zip_Entry2.isDirectory()) {
+                            extractFile(zipInputStream2, unZippedFile);
+                        } else {
+                            File directory = new File(unZippedFile);
+                            directory.mkdirs();
+                        }
                     }
                     zipInputStream2.closeEntry();
                     Zip_Entry2 = zipInputStream2.getNextEntry();

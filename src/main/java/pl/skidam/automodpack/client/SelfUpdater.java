@@ -14,12 +14,12 @@ import java.nio.file.StandardCopyOption;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
+import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.Error;
 import pl.skidam.automodpack.utils.ShityCompressor;
 import pl.skidam.automodpack.utils.ShityDeCompressor;
-import pl.skidam.automodpack.utils.WebFileSize;
 import pl.skidam.automodpack.utils.modrinthAPI;
 
 public class SelfUpdater {
@@ -42,9 +42,8 @@ public class SelfUpdater {
         long currentBackupSize = selfBackup.length();
         String modrinthID = "k68glP2e"; // AutoModpack ID
         modrinthAPI.modrinthAPI(modrinthID);
-        long latestSize = Long.parseLong(WebFileSize.webfileSize(downloadUrl));
 
-        if (currentBackupSize == latestSize) {
+        if (currentBackupSize == modrinthAPIsize) {
             LOGGER.info("Didn't found any updates for AutoModpack!");
             if (!preload) {
                 AutoModpackToast.add(4);
@@ -65,7 +64,7 @@ public class SelfUpdater {
         }
 
         // *magic* downloading
-        if (Download.Download(downloadUrl, selfBackup)) {
+        if (Download.Download(modrinthAPIdownloadUrl, selfBackup)) {
             LOGGER.error("Failed to update myself!");
             if (!preload) {
                 AutoModpackToast.add(5);
@@ -75,6 +74,16 @@ public class SelfUpdater {
             return;
         }
 
+        System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
+        File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");
+        new ShityDeCompressor(selfBackup, selfBackupUnzipped, true, "none");
+        try {
+            new ShityCompressor(selfBackupUnzipped, selfOut, true);
+        } catch (IOException e) {
+        }
+        selfBackupUnzipped.delete();
+        System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
+
         // shutdown hook to make it the most reliable way to update
         Runtime.getRuntime().addShutdownHook(new Thread() {
             public void run() {
@@ -82,10 +91,10 @@ public class SelfUpdater {
                 File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");
                 new ShityDeCompressor(selfBackup, selfBackupUnzipped, true, "none");
                 try {
-                    new ShityCompressor(selfBackupUnzipped, selfOut);
+                    new ShityCompressor(selfBackupUnzipped, selfOut, true);
                 } catch (IOException e) {
-                    e.printStackTrace();
                 }
+                selfBackupUnzipped.delete();
                 System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
             }
         });

@@ -101,7 +101,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         }
 
         try {
-            new ShityCompressor(modpackDir, modpackZip);
+            new ShityCompressor(modpackDir, modpackZip, false);
         } catch (IOException e) {
             LOGGER.error(e.getMessage());
         }

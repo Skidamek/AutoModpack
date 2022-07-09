@@ -101,7 +101,7 @@ public class DeleteMods {
 
                     if (modFile.exists()) { // if mod to delete still exists
                         try {
-                            new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
+                            new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile, false);
                         } catch (IOException ignored) {
                         }
                         try {
