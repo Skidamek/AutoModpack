@@ -22,7 +22,7 @@ A clear and concise description of what you expected to happen.
 **Screenshots**
 If applicable, add screenshots to help explain your problem.
 
-**Version of the mod (please complete the following information):**
+**AutoModpack and Minecraft Version you are using (please complete the following information):**
  - 
 
 **Additional context**
