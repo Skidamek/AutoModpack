@@ -19,9 +19,10 @@ public class AutoModpackMain implements ModInitializer {
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
     public static String link;
-    public static final File out = new File("./AutoModpack/modpack.zip");
-    public static File selfOut = new File( "./mods/AutoModpack-1.19.x.jar");
-    public static final File selfBackup = new File("./AutoModpack/AutoModpack-1.19.x.jar");
+    public static final File out = new File("./AutoModpack/modpacks/modpack.zip"); // TODO name modpack of the server ip
+    public static String correctName = "AutoModpack-1.19.x.jar";
+    public static File selfOut = new File( "./mods/" + correctName);
+    public static final File selfBackup = new File("./AutoModpack/" + correctName);
     public static final String trashLink = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
     public static final File trashOut = new File("./AutoModpack/TrashMod.jar");
     public static boolean isClothConfig = false;

@@ -10,7 +10,7 @@ import net.minecraft.text.Text;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.HostModpack;
-import pl.skidam.automodpack.utils.ShityCompressor;
+import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.*;
 import java.util.Objects;
@@ -101,8 +101,9 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         }
 
         try {
-            new ShityCompressor(modpackDir, modpackZip, false);
+            new Zipper(modpackDir, modpackZip);
         } catch (IOException e) {
+            e.printStackTrace();
             LOGGER.error(e.getMessage());
         }
 

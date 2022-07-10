@@ -6,26 +6,24 @@ import java.util.zip.ZipInputStream;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
-public class ShityDeCompressor {
+public class UnZipper {
     public static int progress;
     public static ZipEntry Zip_Entry;
 
-    public ShityDeCompressor(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
+    public UnZipper(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
         try {
             // extract all files from zip
             if (extractAll) {
                 // Math to get the number of entries in the zip file. IDK how to make it better //
 
-                ShityDeCompressor.progress = 0;
+                UnZipper.progress = 0;
                 ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
                 ZipEntry Zip_Entry = zipInputStream.getNextEntry();
 
                 // how many entries in the zip file
                 int entries = 0;
                 while (Zip_Entry != null) {
-                    if (!Zip_Entry.getName().equals("META-INF/") && !Zip_Entry.getName().equals("MANIFEST.MF") && !Zip_Entry.getName().equals("META-INF/MANIFEST.MF")) {   
-                        entries++;
-                    }
+                    entries++;
                     Zip_Entry = zipInputStream.getNextEntry();
                 }
                 zipInputStream.close();
@@ -38,21 +36,18 @@ public class ShityDeCompressor {
                 float entryGoing = 0;
 
                 while (Zip_Entry2 != null) {
-                    if (!Zip_Entry2.getName().equals("META-INF/") && !Zip_Entry2.getName().equals("MANIFEST.MF") && !Zip_Entry2.getName().equals("META-INF/MANIFEST.MF")) {
-                        System.out.println("Extracting " + Zip_Entry2.getName());
-                        // progress monitor //
-                        entryGoing++;
-                        float progress = entryGoing / entries * 100;
-                        ShityDeCompressor.progress = (int) progress;
-                        // ---------------- //
+                    // progress monitor //
+                    entryGoing++;
+                    float progress = entryGoing / entries * 100;
+                    UnZipper.progress = (int) progress;
+                    // ---------------- //
 
-                        String unZippedFile = unZippedOut + File.separator + Zip_Entry2.getName();
-                        if (!Zip_Entry2.isDirectory()) {
-                            extractFile(zipInputStream2, unZippedFile);
-                        } else {
-                            File directory = new File(unZippedFile);
-                            directory.mkdirs();
-                        }
+                    String unZippedFile = unZippedOut + File.separator + Zip_Entry2.getName();
+                    if (!Zip_Entry2.isDirectory()) {
+                        extractFile(zipInputStream2, unZippedFile);
+                    } else {
+                        File directory = new File(unZippedFile);
+                        directory.mkdirs();
                     }
                     zipInputStream2.closeEntry();
                     Zip_Entry2 = zipInputStream2.getNextEntry();

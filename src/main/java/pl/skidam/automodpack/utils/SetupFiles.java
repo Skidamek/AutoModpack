@@ -62,7 +62,7 @@ public class SetupFiles {
     private void client() {
 
         if (!new File("./AutoModpack/TrashMod/").exists() && trashOut.exists()) {
-            new ShityDeCompressor(trashOut, new File("./AutoModpack/TrashMod/"), true, "none");
+            new UnZipper(trashOut, new File("./AutoModpack/TrashMod/"), true, "none");
         }
 
         File modpack_link = new File ("./AutoModpack/modpack-link.txt");
@@ -72,6 +72,11 @@ public class SetupFiles {
                 modpack_link.createNewFile();
             }
         } catch (IOException e) { // ignore
+        }
+
+        File modpack_list = new File ("./AutoModpack/modpacks/");
+        if (!modpack_list.exists()) {
+            modpack_list.mkdir();
         }
 
         try {

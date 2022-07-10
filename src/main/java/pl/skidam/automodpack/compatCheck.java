@@ -2,13 +2,13 @@ package pl.skidam.automodpack;
 
 import net.fabricmc.loader.api.FabricLoader;
 import pl.skidam.automodpack.utils.Download;
-import pl.skidam.automodpack.utils.modrinthAPI;
+import pl.skidam.automodpack.utils.ModrinthAPI;
 
 import java.io.File;
 
 import static pl.skidam.automodpack.AutoModpackMain.ENV_BRAND;
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
-import static pl.skidam.automodpack.utils.modrinthAPI.*;
+import static pl.skidam.automodpack.utils.ModrinthAPI.*;
 
 public class compatCheck {
 
@@ -29,8 +29,8 @@ public class compatCheck {
 
                 LOGGER.warn("Dependency (FAPI) was not found");
                 String modrinthID = "P7dR8mSH"; // FAPI ID
-                modrinthAPI.modrinthAPI(modrinthID);
-                LOGGER.info("Installing latest Fabric API (FAPI)! " + modrinthAPIlatest);
+                ModrinthAPI.modrinthAPI(modrinthID);
+                LOGGER.info("Installing latest Fabric API (FAPI)! " + modrinthAPIversion);
                 LOGGER.error("Download URL: " + modrinthAPIdownloadUrl);
                 if (Download.Download(modrinthAPIdownloadUrl, new File("./mods/" + modrinthAPIfileName))) { // Download it
                     LOGGER.info("Failed to download FAPI!");
@@ -49,8 +49,8 @@ public class compatCheck {
 
                 LOGGER.warn("Dependency (QFAPI) was not found");
                 String modrinthID = "qvIfYCYJ"; // QFAPI ID
-                modrinthAPI.modrinthAPI(modrinthID);
-                LOGGER.error("Installing latest Quilted Fabric API (QFAPI)! " + modrinthAPIlatest);
+                ModrinthAPI.modrinthAPI(modrinthID);
+                LOGGER.error("Installing latest Quilted Fabric API (QFAPI)! " + modrinthAPIversion);
                 LOGGER.error("Download URL: " + modrinthAPIdownloadUrl);
                 if (Download.Download(modrinthAPIdownloadUrl, new File("./mods/" + modrinthAPIfileName))) { // Download it
                     LOGGER.info("Failed to download QFAPI!");

@@ -2,9 +2,9 @@ package pl.skidam.automodpack.client.modpack;
 
 import org.apache.commons.io.FileDeleteStrategy;
 import pl.skidam.automodpack.AutoModpackMain;
-import pl.skidam.automodpack.utils.ShityCompressor;
-import pl.skidam.automodpack.utils.ShityDeCompressor;
+import pl.skidam.automodpack.utils.UnZipper;
 import pl.skidam.automodpack.utils.Wait;
+import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.*;
 import java.util.Scanner;
@@ -26,7 +26,7 @@ public class DeleteMods {
         if (preload) {
             Wait.wait(500);
             if (!delModsTxt.exists() && out.exists()) {
-                new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./"), false, "delmods.txt");
+                new UnZipper(new File("./AutoModpack/modpacks/modpack.zip"), new File("./"), false, "delmods.txt");
             }
         }
 
@@ -101,7 +101,7 @@ public class DeleteMods {
 
                     if (modFile.exists()) { // if mod to delete still exists
                         try {
-                            new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile, false);
+                            new Zipper(new File("./AutoModpack/TrashMod/"), modFile);
                         } catch (IOException ignored) {
                         }
                         try {
