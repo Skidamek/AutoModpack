@@ -10,6 +10,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
+import static pl.skidam.automodpack.AutoModpackMain.out;
 
 public class DeleteModpack {
 
@@ -32,7 +33,7 @@ public class DeleteModpack {
 //
 //        System.out.println("Hash MD5: " + GenerateHash.MD5(new File("./AutoModpack/modpack.zip").length() + ""));
 
-        new UnZipper(new File("./AutoModpack/modpacks/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
+        new UnZipper(out, new File("./AutoModpack/modpack/"), true, "none");
 
 //        deleteEverything();
 //        deleteEverything();

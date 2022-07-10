@@ -26,7 +26,7 @@ public class DeleteMods {
         if (preload) {
             Wait.wait(500);
             if (!delModsTxt.exists() && out.exists()) {
-                new UnZipper(new File("./AutoModpack/modpacks/modpack.zip"), new File("./"), false, "delmods.txt");
+                new UnZipper(out, new File("./"), false, "delmods.txt");
             }
         }
 

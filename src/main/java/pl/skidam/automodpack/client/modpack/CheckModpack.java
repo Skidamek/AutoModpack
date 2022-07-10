@@ -23,8 +23,7 @@ public class CheckModpack {
 
         LOGGER.info("Checking if modpack is up-to-date...");
 
-        File Modpack = new File("./AutoModpack/modpack.zip");
-        long currentSize = Modpack.length();
+        long currentSize = out.length();
         LOGGER.info("Current modpack size: " + currentSize);
 
         if (currentSize == 0) {
@@ -42,7 +41,7 @@ public class CheckModpack {
             return;
         }
 
-        if (!Modpack.exists() || currentSize != latestSize) {
+        if (!out.exists() || currentSize != latestSize) {
             LOGGER.info("Downloading modpack!");
             AutoModpackToast.add(1);
             new DownloadModpack.prepare();
