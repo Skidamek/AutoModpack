@@ -65,7 +65,7 @@ public class SetupFiles {
 
         File[] files = new File("./AutoModpack/").listFiles();
         for (File file : files) {
-            if (file.getName().contains("automodpack")) {
+            if (file.getName().toLowerCase().contains("automodpack")) {
                 FileUtils.deleteQuietly(file);
             }
         }
