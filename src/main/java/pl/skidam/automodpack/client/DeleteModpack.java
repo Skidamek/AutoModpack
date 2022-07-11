@@ -93,7 +93,7 @@ public class DeleteModpack {
         // delete unzipped modpack dir, modpack.zip and modpack-link.txt
         try {
             FileDeleteStrategy.FORCE.delete(new File("./AutoModpack/modpack/"));
-            FileDeleteStrategy.FORCE.delete(new File("./AutoModpack/modpacks/modpack.zip"));
+            FileDeleteStrategy.FORCE.delete(out);
             FileDeleteStrategy.FORCE.delete(new File("./AutoModpack/modpack-link.txt"));
         } catch (Exception e) { // ignore it
         }
