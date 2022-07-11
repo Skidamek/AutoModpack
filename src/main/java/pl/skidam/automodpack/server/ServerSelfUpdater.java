@@ -15,9 +15,6 @@ import static pl.skidam.automodpack.utils.ModrinthAPI.modrinthAPIdownloadUrl;
 
 public class ServerSelfUpdater {
 
-    private static String VERSION;
-    private final String modrinthAPIversion;
-
     public ServerSelfUpdater() {
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
@@ -25,15 +22,15 @@ public class ServerSelfUpdater {
         new ModrinthAPI(modrinthID);
         ModrinthAPI.modrinthAPIversion = ModrinthAPI.modrinthAPIversion.split("-")[0];
 
-        this.modrinthAPIversion = ModrinthAPI.modrinthAPIversion.replace(".", "");
-        this.VERSION = AutoModpackMain.VERSION.replace(".", "");
+        String modrinthAPIversion = ModrinthAPI.modrinthAPIversion.replace(".", "");
+        String VERSION = AutoModpackMain.VERSION.replace(".", "");
 
-        if (Integer.parseInt(this.VERSION) > Integer.parseInt(this.modrinthAPIversion)) {
+        if (Integer.parseInt(VERSION) > Integer.parseInt(modrinthAPIversion)) {
             LOGGER.info("You are using pre-release version of AutoModpack: " + AutoModpackMain.VERSION + " latest stable version is: " + ModrinthAPI.modrinthAPIversion);
             return;
         }
 
-        if (this.VERSION.equals(this.modrinthAPIversion)) {
+        if (VERSION.equals(modrinthAPIversion)) {
             LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
             return;
         }
