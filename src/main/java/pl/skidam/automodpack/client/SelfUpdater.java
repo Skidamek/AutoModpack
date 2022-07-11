@@ -8,6 +8,7 @@ import java.io.IOException;
 
 import net.minecraft.client.MinecraftClient;
 import org.apache.commons.io.FileUtils;
+import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.utils.*;
 import pl.skidam.automodpack.utils.Error;
@@ -26,10 +27,22 @@ public class SelfUpdater {
 
         String modrinthID = "k68glP2e"; // AutoModpack ID
         new ModrinthAPI(modrinthID);
-        modrinthAPIversion = modrinthAPIversion.split("-")[0];
+        ModrinthAPI.modrinthAPIversion = ModrinthAPI.modrinthAPIversion.split("-")[0];
+
+        String modrinthAPIversion = ModrinthAPI.modrinthAPIversion.replace(".", "");
+        String VERSION = AutoModpackMain.VERSION.replace(".", "");
+
+        if (Integer.parseInt(VERSION) > Integer.parseInt(modrinthAPIversion)) {
+            LOGGER.info("You are using pre-release version of AutoModpack: " + AutoModpackMain.VERSION + " latest stable version is: " + ModrinthAPI.modrinthAPIversion);
+            if (!preload) {
+                AutoModpackToast.add(4);
+            }
+            AutoModpackUpdated = "false";
+            return;
+        }
 
         if (VERSION.equals(modrinthAPIversion)) {
-            LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + VERSION);
+            LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
             if (!preload) {
                 AutoModpackToast.add(4);
             }
@@ -42,7 +55,7 @@ public class SelfUpdater {
     }
 
     public void AutoModpackDownload() {
-        LOGGER.info("Update found! Updating to new version: " + modrinthAPIversion);
+        LOGGER.info("Update found! Updating to new version: " + ModrinthAPI.modrinthAPIversion);
         if (!preload) {
             AutoModpackToast.add(2);
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));
@@ -71,14 +84,15 @@ public class SelfUpdater {
             FileUtils.deleteQuietly(selfBackupUnzipped);
             FileUtils.deleteQuietly(selfBackup);
             System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
+            // TODO make this crash better
+            throw new RuntimeException("Successfully updated myself! (AutoModpack)");
         }));
 
         LOGGER.info("Successfully self updated!");
         AutoModpackUpdated = "true";
 
         if (preload) {
-            // TODO make this crash better
-            throw new RuntimeException("Successfully updated myself! (AutoModpack)");
+            System.exit(0);
         }
     }
 }
