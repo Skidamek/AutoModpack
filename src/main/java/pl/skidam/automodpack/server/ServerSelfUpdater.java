@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.server;
 
 import org.apache.commons.io.FileUtils;
+import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.ModrinthAPI;
 import pl.skidam.automodpack.utils.UnZipper;
@@ -11,26 +12,33 @@ import java.io.IOException;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.ModrinthAPI.modrinthAPIdownloadUrl;
-import static pl.skidam.automodpack.utils.ModrinthAPI.modrinthAPIversion;
 
 public class ServerSelfUpdater {
+
+    private static String VERSION;
+    private final String modrinthAPIversion;
 
     public ServerSelfUpdater() {
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
         String modrinthID = "k68glP2e"; // AutoModpack ID
         new ModrinthAPI(modrinthID);
-        modrinthAPIversion = modrinthAPIversion.split("-")[0];
+        ModrinthAPI.modrinthAPIversion = ModrinthAPI.modrinthAPIversion.split("-")[0];
 
-        LOGGER.info("Current AutoModpack version: " + VERSION);
-        LOGGER.info("Latest AutoModpack version: " + modrinthAPIversion);
+        this.modrinthAPIversion = ModrinthAPI.modrinthAPIversion.replace(".", "");
+        this.VERSION = AutoModpackMain.VERSION.replace(".", "");
 
-        if (VERSION.equals(modrinthAPIversion)) {
-            LOGGER.info("Didn't found any updates for AutoModpack!");
+        if (Integer.parseInt(this.VERSION) > Integer.parseInt(this.modrinthAPIversion)) {
+            LOGGER.info("You are using pre-release version of AutoModpack: " + AutoModpackMain.VERSION + " latest stable version is: " + ModrinthAPI.modrinthAPIversion);
             return;
         }
 
-        LOGGER.info("Update found! Updating!");
+        if (this.VERSION.equals(this.modrinthAPIversion)) {
+            LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
+            return;
+        }
+
+        LOGGER.info("Update found! Updating to new version: " + ModrinthAPI.modrinthAPIversion);
 
         // *magic* downloading
         if (Download.Download(modrinthAPIdownloadUrl, selfBackup)) {
@@ -52,6 +60,6 @@ public class ServerSelfUpdater {
             System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
         }));
 
-        LOGGER.info("To successfully update AutoModpack, please restart server!");
+        LOGGER.warn("To successfully update AutoModpack, please restart server!");
     }
 }
