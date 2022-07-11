@@ -19,7 +19,7 @@ public class ServerSelfUpdater {
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
         String modrinthID = "k68glP2e"; // AutoModpack ID
-        ModrinthAPI.modrinthAPI(modrinthID);
+        new ModrinthAPI(modrinthID);
         modrinthAPIversion = modrinthAPIversion.split("-")[0];
 
         LOGGER.info("Current AutoModpack version: " + VERSION);

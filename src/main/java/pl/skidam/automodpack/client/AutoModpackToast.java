@@ -43,7 +43,7 @@ public class AutoModpackToast implements Toast {
                         LoadingAnimationStep++;
                         TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/loading" + LoadingAnimationStep + ".png");
 
-                        Wait.wait(100); // 10 fps
+                        new Wait(100); // 10 fps
                     }
                     isLoadingAnimation = "false";
                 });

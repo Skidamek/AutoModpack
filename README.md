@@ -57,6 +57,7 @@ Server side settings:
 
 - `modpack_host`": (default: `true`) - Host http server for modpack. If this is disabled use `external_modpack_host`.
 - `sync_mods`: (default: `true`) - Clone all mods from default mods folder on your server to the modpack, but all other mods will be deleted. (you **can** add mods that you don't want to load on the server only in `./AutoModpack/modpack/[CLIENT] mods`, delmods.txt **is** making automatically when some mods got updated or deleted)
+- `only_optional_modpack`: (default: `false`) - If this is enabled, vanilla players will, can join if other mods on server are only server side.
 - `host_port`: (default: `30037`) - At this port http server for hosting modpack will be running.
 - `host_thread_count`: (default: `2`) - Http server will be use this amount of threads.
 - `host_external_ip`: (default: none) - Http server will be use this external ip instead of default one. (OPTIONAL)

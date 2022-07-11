@@ -3,8 +3,6 @@ package pl.skidam.automodpack.client.modpack;
 import pl.skidam.automodpack.client.AutoModpackToast;
 import pl.skidam.automodpack.utils.WebFileSize;
 
-import java.io.*;
-
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class CheckModpack {

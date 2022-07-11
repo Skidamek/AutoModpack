@@ -24,7 +24,7 @@ public class DeleteMods {
         DeleteMods.preload = preload;
 
         if (preload) {
-            Wait.wait(500);
+            new Wait(500);
             if (!delModsTxt.exists() && out.exists()) {
                 new UnZipper(out, new File("./"), false, "delmods.txt");
             }

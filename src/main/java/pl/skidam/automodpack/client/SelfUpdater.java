@@ -25,14 +25,11 @@ public class SelfUpdater {
         LOGGER.info("Checking if AutoModpack is up-to-date..." + " preload? " + preload);
 
         String modrinthID = "k68glP2e"; // AutoModpack ID
-        ModrinthAPI.modrinthAPI(modrinthID);
+        new ModrinthAPI(modrinthID);
         modrinthAPIversion = modrinthAPIversion.split("-")[0];
 
-        LOGGER.info("Current AutoModpack version: " + VERSION);
-        LOGGER.info("Latest AutoModpack version: " + modrinthAPIversion);
-
         if (VERSION.equals(modrinthAPIversion)) {
-            LOGGER.info("Didn't found any updates for AutoModpack!");
+            LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + VERSION);
             if (!preload) {
                 AutoModpackToast.add(4);
             }
@@ -45,7 +42,7 @@ public class SelfUpdater {
     }
 
     public void AutoModpackDownload() {
-        LOGGER.info("Update found! Updating!");
+        LOGGER.info("Update found! Updating to new version: " + modrinthAPIversion);
         if (!preload) {
             AutoModpackToast.add(2);
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));

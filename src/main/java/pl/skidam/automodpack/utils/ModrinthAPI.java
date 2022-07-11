@@ -11,7 +11,7 @@ public class ModrinthAPI {
     public static String modrinthAPIfileName;
     public static long modrinthAPIsize;
 
-    public static void modrinthAPI(String modrinthID) {
+    public ModrinthAPI(String modrinthID) {
 
         String url = "https://api.modrinth.com/v2/project/" + modrinthID + "/version?game_versions=[\"" + MinecraftVersion.CURRENT.getName() + "\"]";
 

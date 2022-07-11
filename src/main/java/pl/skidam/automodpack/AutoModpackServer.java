@@ -17,6 +17,7 @@ import java.util.Objects;
 
 import static org.apache.commons.lang3.ArrayUtils.contains;
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.utils.getIPV4Adress.getIPV4Address;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
 
@@ -27,10 +28,13 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public static final File modpackConfDir = new File("./AutoModpack/modpack/config/");
     public static final File modpackDeleteTxt = new File("./AutoModpack/modpack/delmods.txt");
     public static final File serverModsDir = new File("./mods/");
+    public static String publicServerIP;
 
     @Override
     public void onInitializeServer() {
         LOGGER.info("Welcome to AutoModpack on Server!");
+
+        publicServerIP = getIPV4Address();
 
         genModpack();
 
@@ -163,7 +167,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
             PacketByteBuf outBuf = PacketByteBufs.create();
 
-            if (playerIp.contains("127.0.0.1")) {
+            if (playerIp.contains("127.0.0.1") || playerIp.contains(publicServerIP)) {
                 outBuf.writeString(HostModpack.modpackHostIpForLocalPlayers);
             } else {
                 outBuf.writeString(AutoModpackMain.link);

@@ -39,7 +39,6 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
             }
         }
 
-
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
 
             new SetupFiles();
