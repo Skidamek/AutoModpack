@@ -2,6 +2,8 @@ package pl.skidam.automodpack.utils;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import org.apache.commons.io.FileDeleteStrategy;
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
 import java.io.IOException;
 import static pl.skidam.automodpack.AutoModpackMain.*;
@@ -60,6 +62,18 @@ public class SetupFiles {
     }
 
     private void client() {
+
+        File[] files = new File("./AutoModpack/").listFiles();
+        for (File file : files) {
+            if (file.getName().contains("automodpack")) {
+                FileUtils.deleteQuietly(file);
+            }
+        }
+
+        File modpackZip = new File("./AutoModpack/modpack.zip");
+        if (modpackZip.exists()) {
+            FileUtils.deleteQuietly(modpackZip);
+        }
 
         if (!new File("./AutoModpack/TrashMod/").exists() && trashOut.exists()) {
             new UnZipper(trashOut, new File("./AutoModpack/TrashMod/"), true, "none");
