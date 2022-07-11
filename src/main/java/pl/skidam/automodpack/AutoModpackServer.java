@@ -10,13 +10,14 @@ import net.minecraft.text.Text;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.HostModpack;
-import pl.skidam.automodpack.utils.ShityCompressor;
+import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.*;
 import java.util.Objects;
 
 import static org.apache.commons.lang3.ArrayUtils.contains;
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.utils.getIPV4Adress.getIPV4Address;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
 
@@ -27,10 +28,13 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public static final File modpackConfDir = new File("./AutoModpack/modpack/config/");
     public static final File modpackDeleteTxt = new File("./AutoModpack/modpack/delmods.txt");
     public static final File serverModsDir = new File("./mods/");
+    public static String publicServerIP;
 
     @Override
     public void onInitializeServer() {
         LOGGER.info("Welcome to AutoModpack on Server!");
+
+        publicServerIP = getIPV4Address();
 
         genModpack();
 
@@ -101,8 +105,9 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         }
 
         try {
-            new ShityCompressor(modpackDir, modpackZip);
+            new Zipper(modpackDir, modpackZip);
         } catch (IOException e) {
+            e.printStackTrace();
             LOGGER.error(e.getMessage());
         }
 
@@ -155,13 +160,14 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             if (!Config.ONLY_OPTIONAL_MODPACK) { // acept player to join while optional modpack is enabled // TODO make it better
                 serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://modrinth.com/mod/automodpack/versions"));
             }
+
         } else {
             // get minecraft player ip if player is in local network give him local address to modpack
             String playerIp = serverLoginNetworkHandler.getConnection().getAddress().toString();
 
             PacketByteBuf outBuf = PacketByteBufs.create();
 
-            if (playerIp.contains("127.0.0.1")) {
+            if (playerIp.contains("127.0.0.1") || playerIp.contains(publicServerIP)) {
                 outBuf.writeString(HostModpack.modpackHostIpForLocalPlayers);
             } else {
                 outBuf.writeString(AutoModpackMain.link);

@@ -16,7 +16,7 @@ public class Download {
             URL url = new URL(link);
             HttpURLConnection http = (HttpURLConnection) url.openConnection();
             http.setRequestMethod("GET");
-            http.setConnectTimeout(10000); // 10 seconds
+            http.setConnectTimeout(30000); // 30 seconds
             int responseCode = http.getResponseCode();
             if (responseCode == 200) {
                 double fileSize = (double) http.getContentLengthLong();
@@ -44,7 +44,7 @@ public class Download {
                         }
                         lastPercent = percent;
 
-                    // if lastPercent == percent
+                        // if lastPercent == percent
                     } else {
                         percent = (String.format("%.0f", percentDownloaded));
                     }

@@ -8,6 +8,7 @@ import pl.skidam.automodpack.client.SelfUpdater;
 import pl.skidam.automodpack.client.modpack.DeleteMods;
 import pl.skidam.automodpack.client.modpack.TrashMod;
 import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.server.ServerSelfUpdater;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
 import pl.skidam.automodpack.utils.SetupFiles;
 
@@ -25,12 +26,11 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
         // check if AutoModpack has correct name
         File mods = new File("./mods/");
         String[] modsList = mods.list();
-        String correctModName = "AutoModpack-1.18.x.jar";
 
         for (String mod : modsList) {
             if (mod.endsWith(".jar")) {
                 File modFile = new File("./mods/" + mod);
-                if (mod.toLowerCase().contains("automodpack") && !mod.equals(correctModName)) {
+                if (mod.toLowerCase().contains("automodpack") && !mod.equals(correctName)) {
                     modFile.delete();
                     if (modFile.exists()) {
                         selfOut = modFile; // save current name
@@ -38,8 +38,6 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
                 }
             }
         }
-
-
 
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
 
@@ -78,7 +76,7 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
             Config.init();
 
             if (InternetConnectionCheck.InternetConnectionCheck()) {
-                new SelfUpdater(true);
+                new ServerSelfUpdater();
             }
 
             // fabric loader detected

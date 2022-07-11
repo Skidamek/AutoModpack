@@ -6,17 +6,17 @@ import java.util.zip.ZipInputStream;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
-public class ShityDeCompressor {
+public class UnZipper {
     public static int progress;
     public static ZipEntry Zip_Entry;
 
-    public ShityDeCompressor(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
+    public UnZipper(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
         try {
             // extract all files from zip
             if (extractAll) {
                 // Math to get the number of entries in the zip file. IDK how to make it better //
 
-                ShityDeCompressor.progress = 0;
+                UnZipper.progress = 0;
                 ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
                 ZipEntry Zip_Entry = zipInputStream.getNextEntry();
 
@@ -39,7 +39,7 @@ public class ShityDeCompressor {
                     // progress monitor //
                     entryGoing++;
                     float progress = entryGoing / entries * 100;
-                    ShityDeCompressor.progress = (int) progress;
+                    UnZipper.progress = (int) progress;
                     // ---------------- //
 
                     String unZippedFile = unZippedOut + File.separator + Zip_Entry2.getName();

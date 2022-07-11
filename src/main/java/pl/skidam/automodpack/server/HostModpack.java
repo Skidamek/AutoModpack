@@ -9,7 +9,6 @@ import pl.skidam.automodpack.config.Config;
 
 import java.io.*;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
@@ -17,6 +16,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.AutoModpackServer.publicServerIP;
 import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 
 public class HostModpack implements HttpHandler {
@@ -59,7 +59,7 @@ public class HostModpack implements HttpHandler {
             try {
                 LOGGER.info("Starting modpack server...");
 
-                useIPV4Address();
+                serverIpForOthers = publicServerIP;
 
                 String localIp = InetAddress.getLocalHost().getHostAddress();
                 String subUrl = "modpack";
@@ -110,14 +110,6 @@ public class HostModpack implements HttpHandler {
             outputStream.close();
         } else {
             exchange.sendResponseHeaders(400, 0);
-        }
-    }
-
-    private static void useIPV4Address() {
-        try (java.util.Scanner s = new java.util.Scanner(new java.net.URL("https://api.ipify.org").openStream(), StandardCharsets.UTF_8).useDelimiter("\\A")) {
-            serverIpForOthers = s.next();
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 }

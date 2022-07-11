@@ -1,25 +1,42 @@
 package pl.skidam.automodpack.client;
 
 import org.apache.commons.io.FileDeleteStrategy;
-import pl.skidam.automodpack.utils.ShityCompressor;
-import pl.skidam.automodpack.utils.ShityDeCompressor;
+
+import pl.skidam.automodpack.utils.UnZipper;
+import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
+import static pl.skidam.automodpack.AutoModpackMain.out;
 
 public class DeleteModpack {
 
     private static boolean modsDeleted;
     private static boolean configsDeleted;
+    private static int tryCountMods;
+    private static int tryCountConfigs;
 
     public DeleteModpack() {
 
         LOGGER.warn("Deleting modpack...");
         // unzip modpack.zip
-        new ShityDeCompressor(new File("./AutoModpack/modpack.zip"), new File("./AutoModpack/modpack/"), true, "none");
+        // get absolute path of current dir
+
+//        System.out.println("Working directory: " + System.getProperty("user.dir"));
+//
+//        System.out.println("Generating hash...");
+//
+//        System.out.println("Hash SHA-512: " + GenerateHash.SHA512(new File("./AutoModpack/modpack.zip").length() + ""));
+//
+//        System.out.println("Hash MD5: " + GenerateHash.MD5(new File("./AutoModpack/modpack.zip").length() + ""));
+
+        new UnZipper(out, new File("./AutoModpack/modpack/"), true, "none");
+
+//        deleteEverything();
+//        deleteEverything();
 
         makeIt();
 
@@ -30,8 +47,9 @@ public class DeleteModpack {
 
         modsDeleted = true;
         configsDeleted = true;
-        int tryCountMods = 1;
-        int tryCountConfigs = 1;
+
+        tryCountMods = 1;
+        tryCountConfigs = 1;
 
         deleteMods();
         deleteConfigs();
@@ -84,6 +102,44 @@ public class DeleteModpack {
         LOGGER.info("Restart your game!");
     }
 
+    // TODO: delete everything method
+//    private static void deleteEverything() {
+//        // make array of all files in modpack dir
+//        File[] files = new File("./AutoModpack/modpack/").listFiles();
+//
+//        if (files.length == 0) {
+//            LOGGER.info("Nothing to delete...");
+//            return;
+//        }
+//
+//        LOGGER.info("Deleting everything...");
+//        for (File file : files) {
+//            LOGGER.info(file.getName() + ":");
+//            File[] filesInDir = file.listFiles();
+//            if (filesInDir == null) {
+//                LOGGER.info("null!");
+//                return;
+//            } else {
+//                for (File fileInDir : filesInDir) {
+//                    LOGGER.info("\t" + fileInDir.getName());
+//                    fileInDir.delete();
+//                }
+//                file.delete();
+//            }
+//        }
+//    }
+
+//    public static void main(String[] args) {
+//        // user path
+//        System.out.println("Working directory: " + System.getProperty("user.dir"));
+//
+//        try {
+//            new Ziper(new File("./run/AutoModpack/TrashMod/"), new File("./run/mods/AutoModpack-1.19.x.jar"));
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
+//    }
+
     private static void deleteMods() {
         // MODS
         // make array of file names "./AutoModpack/modpack/mods/" folder
@@ -106,7 +162,7 @@ public class DeleteModpack {
 
                 if (modFile.exists()) { // if mod to delete still exists
                     try {
-                        new ShityCompressor(new File("./AutoModpack/TrashMod/"), modFile);
+                        new Zipper(new File("./AutoModpack/TrashMod/"), modFile);
                     } catch (IOException ignored) {
                     }
                     try {

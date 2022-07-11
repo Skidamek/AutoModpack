@@ -53,11 +53,19 @@ public class ConfigScreen {
 
         AbstractConfigListEntry<?> syncMods = builder.entryBuilder()
                 .startBooleanToggle(new LiteralText("Sync mods"), Config.SYNC_MODS)
-                .setTooltip(new LiteralText("Its the same as \"Clone mods\" but here all other mods will be deleted."))
+                .setTooltip(new LiteralText("Clone all mods from default mods folder on your server to the modpack, but all other mods will be deleted. (you **can** add mods that you don't want to load on the server only in `./AutoModpack/modpack/[CLIENT] mods`, delmods.txt **is** making automatically when some mods got updated or deleted)"))
                 .setSaveConsumer((toggled) -> Config.SYNC_MODS = toggled)
                 .setDefaultValue(false)
                 .build();
         configCategory.addEntry(syncMods);
+
+        AbstractConfigListEntry<?> onlyOptionalModpack = builder.entryBuilder()
+                .startBooleanToggle(new LiteralText("Only optional modpack"), Config.ONLY_OPTIONAL_MODPACK)
+                .setTooltip(new LiteralText("If this is enabled, vanilla players will, can join if other mods on server are only server side."))
+                .setSaveConsumer((toggled) -> Config.ONLY_OPTIONAL_MODPACK = toggled)
+                .setDefaultValue(false)
+                .build();
+        configCategory.addEntry(onlyOptionalModpack);
 
         AbstractConfigListEntry<?> hostPort = builder.entryBuilder()
                 .startIntField(new LiteralText("Host port"), Config.HOST_PORT)

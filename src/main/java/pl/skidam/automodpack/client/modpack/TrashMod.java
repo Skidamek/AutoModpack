@@ -1,8 +1,8 @@
 package pl.skidam.automodpack.client.modpack;
 
 import pl.skidam.automodpack.utils.Download;
-import pl.skidam.automodpack.utils.InternetConnectionCheck;
-import pl.skidam.automodpack.utils.ShityDeCompressor;
+import pl.skidam.automodpack.utils.UnZipper;
+import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.File;
 
@@ -24,7 +24,7 @@ public class TrashMod {
             LOGGER.error("Failed to download TrashMod!");
             return;
         }
-        new ShityDeCompressor(trashOut, new File("./AutoModpack/TrashMod/"), true, "none");
+        new UnZipper(trashOut, new File("./AutoModpack/TrashMod/"), true, "none");
         LOGGER.info("Successfully downloaded TrashMod!");
     }
 }

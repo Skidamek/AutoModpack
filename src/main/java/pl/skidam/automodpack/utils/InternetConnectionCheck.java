@@ -12,16 +12,16 @@ public class InternetConnectionCheck {
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL("https://www.google.com").openConnection();
             connection.setRequestMethod("HEAD");
-            connection.setConnectTimeout(10000); // 10 seconds
+            connection.setConnectTimeout(30000); // 30 seconds
             int responseCode = connection.getResponseCode();
             if (responseCode != 200) {
                 throw new Exception("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
-            } 
+            }
         } catch (Exception e) {
             LOGGER.error("Make sure that you have an internet connection!");
             LOGGER.error("Make sure that you have an internet connection!");
             LOGGER.error("Make sure that you have an internet connection!");
-            Wait.wait(1000);
+            new Wait(1000);
             return false;
         }
         return true;

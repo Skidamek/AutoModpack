@@ -19,10 +19,10 @@ public class StartAndCheck {
             if (isLoading) {
             // If minecraft is still loading wait for it to finish
                 while (MinecraftClient.getInstance().currentScreen == null) {
-                    Wait.wait(1000);
+                    new Wait(1000);
                 }
                 // wait to bypass most of the bugs
-                Wait.wait(5000);
+                new Wait(5000);
             }
 
             AutoModpackUpdated = null;
@@ -36,7 +36,7 @@ public class StartAndCheck {
                         new Finished();
                         break;
                     }
-                    Wait.wait(500);
+                    new Wait(500);
                 }
                 isChecking = false;
             });
@@ -53,7 +53,7 @@ public class StartAndCheck {
                         new SelfUpdater(false);
                         break;
                     }
-                    Wait.wait(50);
+                    new Wait(50);
                 }
             }
         }).start();

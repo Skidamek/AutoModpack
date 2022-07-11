@@ -1,16 +1,16 @@
 package pl.skidam.automodpack.client;
 
-import net.minecraft.client.MinecraftClient;
-import pl.skidam.automodpack.client.ui.LoadingScreen;
-import pl.skidam.automodpack.utils.Download;
-import pl.skidam.automodpack.utils.Error;
-import pl.skidam.automodpack.utils.WebFileSize;
-
-import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.utils.ModrinthAPI.*;
+
+import java.io.File;
+import java.io.IOException;
+
+import net.minecraft.client.MinecraftClient;
+import org.apache.commons.io.FileUtils;
+import pl.skidam.automodpack.client.ui.LoadingScreen;
+import pl.skidam.automodpack.utils.*;
+import pl.skidam.automodpack.utils.Error;
 
 public class SelfUpdater {
     boolean preload;
@@ -22,18 +22,14 @@ public class SelfUpdater {
         // If latest mod is not same as current mod download new mod.
         // Check how big the mod file is
 
-        if (!selfBackup.exists()) {
-            try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
-            LOGGER.info("AutoModpack backup has been created");
-        }
+        LOGGER.info("Checking if AutoModpack is up-to-date..." + " preload? " + preload);
 
-        LOGGER.info("Checking if AutoModpack is up-to-date...");
+        String modrinthID = "k68glP2e"; // AutoModpack ID
+        new ModrinthAPI(modrinthID);
+        modrinthAPIversion = modrinthAPIversion.split("-")[0];
 
-        long currentBackupSize = selfBackup.length();
-        long latestSize = Long.parseLong(WebFileSize.webfileSize(selfLink));
-
-        if (currentBackupSize == latestSize) {
-            LOGGER.info("Didn't found any updates for AutoModpack!");
+        if (VERSION.equals(modrinthAPIversion)) {
+            LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + VERSION);
             if (!preload) {
                 AutoModpackToast.add(4);
             }
@@ -46,13 +42,14 @@ public class SelfUpdater {
     }
 
     public void AutoModpackDownload() {
-        LOGGER.info("Update found! Updating!");
+        LOGGER.info("Update found! Updating to new version: " + modrinthAPIversion);
         if (!preload) {
             AutoModpackToast.add(2);
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));
         }
+
         // *magic* downloading
-        if (Download.Download(selfLink, selfOut)) {
+        if (Download.Download(modrinthAPIdownloadUrl, selfBackup)) {
             LOGGER.error("Failed to update myself!");
             if (!preload) {
                 AutoModpackToast.add(5);
@@ -62,7 +59,20 @@ public class SelfUpdater {
             return;
         }
 
-        try { Files.copy(selfOut.toPath(), selfBackup.toPath(), StandardCopyOption.REPLACE_EXISTING); } catch (IOException e) { } // ignore
+        // shutdown hook to make it the most reliable way to update
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
+            File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");
+            new UnZipper(selfBackup, selfBackupUnzipped, true, "none");
+            try {
+                new Zipper(selfBackupUnzipped, selfOut);
+            } catch (IOException e) {
+            }
+            FileUtils.deleteQuietly(selfBackupUnzipped);
+            FileUtils.deleteQuietly(selfBackup);
+            System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
+        }));
+
         LOGGER.info("Successfully self updated!");
         AutoModpackUpdated = "true";
 
