@@ -3,7 +3,7 @@
   "quilt_loader": {
     "group": "pl.skidam.automodpack",
     "id": "automodpack",
-    "version": "2.1.1",
+    "version": "2.1.2",
     "metadata": {
       "name": "AutoModpack",
       "description": "Just automatic updating and downloading modpacks!",
@@ -22,21 +22,11 @@
     "intermediate_mappings": "net.fabricmc:intermediary",
     "environment": "*",
     "entrypoints": {
-      "client": [
-        "pl.skidam.automodpack.AutoModpackClient"
-      ],
-      "server": [
-        "pl.skidam.automodpack.AutoModpackServer"
-      ],
-      "preLaunch": [
-        "pl.skidam.automodpack.PreLoadQuilt"
-      ],
-      "main": [
-        "pl.skidam.automodpack.AutoModpackMain"
-      ],
-      "modmenu": [
-        "pl.skidam.automodpack.config.ModMenuIntegration"
-      ]
+      "client": ["pl.skidam.automodpack.AutoModpackClient"],
+      "server": ["pl.skidam.automodpack.AutoModpackServer"],
+      "preLaunch": ["pl.skidam.automodpack.PreLoadQuilt"],
+      "main": ["pl.skidam.automodpack.AutoModpackMain"],
+      "modmenu": ["pl.skidam.automodpack.config.ModMenuIntegration"]
     },
     "depends": [
       {
