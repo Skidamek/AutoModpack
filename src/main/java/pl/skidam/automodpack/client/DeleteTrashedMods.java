@@ -13,7 +13,7 @@ public class DeleteTrashedMods {
 
     public DeleteTrashedMods() {
 
-        // read ./AutoModpack/trashed-mods.txt and add lines from it to array
+        // Read ./AutoModpack/trashed-mods.txt and add lines from it to array
         String[] trashedModsNames = new String[0];
         String trashedModsTxt = "./AutoModpack/trashed-mods.txt";
         try {
@@ -28,7 +28,7 @@ public class DeleteTrashedMods {
         } catch (Exception e) { // ignore
         }
 
-        // for trashedModsNames array, delete file with same name in ./mods/ folder
+        // For trashedModsNames array, delete file with same name in ./mods/ folder
         for (String trashedModName : trashedModsNames) {
             File trashedModFile = new File("./mods/" + trashedModName);
             if (trashedModFile.exists()) {
@@ -40,7 +40,7 @@ public class DeleteTrashedMods {
                 }
             }
         }
-        // delete trashed-mods.txt file
+        // Delete trashed-mods.txt file
         try {
             FileDeleteStrategy.FORCE.delete(new File(trashedModsTxt));
             LOGGER.info("Successfully deleted trashed-mods.txt file");

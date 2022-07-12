@@ -42,7 +42,7 @@ public class ConfigScreen {
                 .build()
         );
 
-        // TODO if player is on server where has op permission, send this config to server and reload this config on server
+        // TODO If player has op permission, send this config and reload this config on the server
 
         AbstractConfigListEntry<?> modpackHost = builder.entryBuilder()
                 .startBooleanToggle(Text.literal("Host modpack"), Config.MODPACK_HOST)

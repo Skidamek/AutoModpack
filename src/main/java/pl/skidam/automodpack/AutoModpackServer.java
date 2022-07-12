@@ -39,7 +39,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
         genModpack();
 
-        // packets
+        // Packets
         ServerLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onClientResponse);
         ServerLoginNetworking.registerGlobalReceiver(AM_LINK, this::onSuccess);
         ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
@@ -58,18 +58,18 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         if (Config.SYNC_MODS) {
             LOGGER.info("Synchronizing mods from server to modpack");
 
-            // make array of mods
+            // Make array of mods
             String[] oldMods = modpackModsDir.list();
             deleteAllMods();
             cloneMods();
             clientMods();
             String[] newMods = modpackModsDir.list();
-            // compare new to old mods and generate delmods.txt
+            // Compare new to old mods and generate delmods.txt
             assert oldMods != null;
             for (String mod : oldMods) {
                 if (!contains(newMods, mod)) {
                     try {
-                        // check if mod is not already in delmods.txt
+                        // Check if mod is not already in delmods.txt
                         if (!FileUtils.readLines(modpackDeleteTxt, Charset.defaultCharset()).contains(mod)) {
                             LOGGER.info("Writing " + mod + " to delmods.txt");
                             FileUtils.writeStringToFile(modpackDeleteTxt, mod + "\n", Charset.defaultCharset(), true);
@@ -80,7 +80,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
                 }
             }
 
-            // check if in delmods.txt there are not mods which are in serverModsDir
+            // Check if in delmods.txt there are not mods which are in serverModsDir
             try {
                 for (String delMod : FileUtils.readLines(modpackDeleteTxt, Charset.defaultCharset())) {
                     if (Objects.requireNonNull(serverModsDir.listFiles()).length > 0) {

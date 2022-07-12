@@ -35,7 +35,7 @@ public class Download {
                     downloaded += read;
                     percentDownloaded = (downloaded * 100) / fileSize;
 
-                    // if lastPercent != percent
+                    // If lastPercent != percent
                     if (!Objects.equals(lastPercent, percent)) {
                         percent = (String.format("%.0f", percentDownloaded));
                         downloadPercent = Integer.parseInt(percent);
@@ -44,7 +44,7 @@ public class Download {
                         }
                         lastPercent = percent;
 
-                        // if lastPercent == percent
+                        // If lastPercent == percent
                     } else {
                         percent = (String.format("%.0f", percentDownloaded));
                     }

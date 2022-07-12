@@ -20,7 +20,7 @@ public class StartAndCheck {
                 while (MinecraftClient.getInstance().currentScreen == null) {
                     new Wait(1000);
                 }
-                // wait to bypass most of the bugs
+                // Wait to bypass most of the bugs
                 new Wait(5000);
             }
 

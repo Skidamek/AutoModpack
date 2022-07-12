@@ -26,7 +26,7 @@ public class GenerateHash {
                 hashtext = "0" + hashtext;
             }
 
-            // return the HashText
+            // Return the HashText
             return hashtext;
         }
 

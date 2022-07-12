@@ -23,7 +23,7 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
 
         LOGGER.info("Prelaunching AutoModpack...");
 
-        // check if AutoModpack has correct name
+        // Check if AutoModpack has correct name
         File mods = new File("./mods/");
         String[] modsList = mods.list();
 
@@ -56,7 +56,7 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
 
             new DeleteTrashedMods();
 
-            // fabric loader detected
+            // Fabric loader detected
             ENV_BRAND = "fabric";
 
             new compatCheck();
@@ -76,7 +76,7 @@ public class PreLoadFabric implements PreLaunchEntrypoint {
                 new ServerSelfUpdater();
             }
 
-            // fabric loader detected
+            // Fabric loader detected
             ENV_BRAND = "fabric";
 
             new compatCheck();

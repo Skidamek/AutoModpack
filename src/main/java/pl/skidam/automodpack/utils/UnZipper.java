@@ -12,7 +12,7 @@ public class UnZipper {
 
     public UnZipper(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
         try {
-            // extract all files from zip
+            // Extract all files from zip
             if (extractAll) {
                 // Math to get the number of entries in the zip file. IDK how to make it better //
 
@@ -20,7 +20,7 @@ public class UnZipper {
                 ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
                 ZipEntry Zip_Entry = zipInputStream.getNextEntry();
 
-                // how many entries in the zip file
+                // How many entries in the zip file
                 int entries = 0;
                 while (Zip_Entry != null) {
                     entries++;
@@ -36,7 +36,7 @@ public class UnZipper {
                 float entryGoing = 0;
 
                 while (Zip_Entry2 != null) {
-                    // progress monitor //
+                    // Progress monitor //
                     entryGoing++;
                     float progress = entryGoing / entries * 100;
                     UnZipper.progress = (int) progress;
@@ -55,7 +55,7 @@ public class UnZipper {
                 zipInputStream2.close();
             }
 
-            // extract only one file from zip
+            // Extract only one file from zip
             if (!extractAll) {
                 ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
                 Zip_Entry = zipInputStream.getNextEntry();
@@ -90,7 +90,7 @@ public class UnZipper {
                 Buffered_Output_Stream.write(Buffer, 0, Read_Byte);
             }
             Buffered_Output_Stream.close();
-        } catch (IOException e) { // ignore it
+        } catch (IOException e) { // Ignore it
             LOGGER.error(e.getMessage());
         }
     }

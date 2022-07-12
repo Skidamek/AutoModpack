@@ -46,7 +46,7 @@ public class CheckModpack {
             return;
         }
 
-        LOGGER.info("Didn't found any updates for modpack!");
+        LOGGER.info("Didn't find any updates for modpack!");
         AutoModpackToast.add(3);
         if (isCheckUpdatesButtonClicked) {
             isCheckUpdatesButtonClicked = false;

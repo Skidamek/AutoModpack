@@ -56,7 +56,7 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
 
             new DeleteTrashedMods();
 
-            // quilt loader detected
+            // Quilt loader detected
             ENV_BRAND = "quilt";
 
             new compatCheck();
@@ -76,7 +76,7 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
                 new ServerSelfUpdater();
             }
 
-            // quilt loader detected
+            // Quilt loader detected
             ENV_BRAND = "quilt";
 
             new compatCheck();

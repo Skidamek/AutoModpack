@@ -15,7 +15,7 @@ public class LoadingScreen extends Screen {
 
     public LoadingScreen() {
         super(Text.translatable("gui.automodpack.screen.loading.title").formatted(Formatting.BOLD));
-        // it needs to be here to restart unzip progress value
+        // It needs to be here to restart unzip progress value
         UnZipper.progress = 0;
     }
 

@@ -60,7 +60,6 @@ public class DeleteMods {
             LOGGER.info("The file delmods.txt does not exist.");
         }
 
-
         LOGGER.info("Finished deleting mods!");
 
         if (!preload) {

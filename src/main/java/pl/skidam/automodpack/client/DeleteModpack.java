@@ -90,7 +90,7 @@ public class DeleteModpack {
             }
         }
 
-        // delete unzipped modpack dir, modpack.zip and modpack-link.txt
+        // Delete unzipped modpack dir, modpack.zip and modpack-link.txt
         try {
             FileDeleteStrategy.FORCE.delete(new File("./AutoModpack/modpack/"));
             FileDeleteStrategy.FORCE.delete(out);
@@ -103,8 +103,8 @@ public class DeleteModpack {
     }
 
     // TODO: delete everything method
-//    private static void deleteEverything() {
-//        // make array of all files in modpack dir
+//    Private static void deleteEverything() {
+//        // Make array of all files in modpack dir
 //        File[] files = new File("./AutoModpack/modpack/").listFiles();
 //
 //        if (files.length == 0) {
@@ -145,7 +145,7 @@ public class DeleteModpack {
         // make array of file names "./AutoModpack/modpack/mods/" folder
         File[] modpackModsFiles = new File("./AutoModpack/modpack/mods/").listFiles();
 
-        // loop to delete all names in ./mods/ folder of names in files in "./AutoModpack/modpack/mods/"
+        // Loop to delete all names in ./mods/ folder of names in files in "./AutoModpack/modpack/mods/"
         for (File modpackModName : modpackModsFiles) {
             String modName = modpackModName.getName();
             File modFile = new File("./mods/" + modName);
@@ -195,10 +195,10 @@ public class DeleteModpack {
     private static void deleteConfigs() {
 
         // CONFIGS
-        // make array of file names "./AutoModpack/modpack/config/" folder
+        // Make array of file names "./AutoModpack/modpack/config/" folder
         File[] modpackConfigFiles = new File("./AutoModpack/modpack/config/").listFiles();
 
-        // loop to delete all names in ./config/ folder of names in files in "./AutoModpack/modpack/config/"
+        // Loop to delete all names in ./config/ folder of names in files in "./AutoModpack/modpack/config/"
         for (File modpackConfigName : modpackConfigFiles) {
 
             String configName = modpackConfigName.getName();

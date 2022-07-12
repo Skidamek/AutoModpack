@@ -72,7 +72,7 @@ public class SelfUpdater {
             return;
         }
 
-        // shutdown hook to make it the most reliable way to update
+        // Shutdown hook to make it the most reliable way to update
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
             File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");

@@ -34,7 +34,7 @@ public class AutoModpackClient implements ClientModInitializer {
         isOnServer = false;
         CheckModpack.isCheckUpdatesButtonClicked = false;
 
-        // load saved link from ./AutoModpack/modpack-link.txt file
+        // Load saved link from ./AutoModpack/modpack-link.txt file
         String savedLink = "";
         try {
             File modpack_link = new File("./AutoModpack/modpack-link.txt");
