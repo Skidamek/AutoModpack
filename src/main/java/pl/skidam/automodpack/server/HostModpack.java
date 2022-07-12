@@ -65,13 +65,8 @@ public class HostModpack implements HttpHandler {
                 String subUrl = "modpack";
 
                 if (!Config.HOST_EXTERNAL_IP.equals("")) {
-                    if (ValidateURL(Config.HOST_EXTERNAL_IP)) {
-                        serverIpForOthers = Config.HOST_EXTERNAL_IP;
-                        LOGGER.info("Using external IP: " + serverIpForOthers);
-                    } else {
-                        LOGGER.error("External IP is not valid url or is not end with /modpack");
-                        LOGGER.warn("Using local ip: " + serverIpForOthers);
-                    }
+                    serverIpForOthers = Config.HOST_EXTERNAL_IP;
+                    LOGGER.info("Using external IP: " + serverIpForOthers);
                 }
 
                 modpackHostIp = String.format("http://%s:%s/%s", serverIpForOthers, Config.HOST_PORT, subUrl);

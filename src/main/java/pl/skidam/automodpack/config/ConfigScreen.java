@@ -55,7 +55,7 @@ public class ConfigScreen {
                 .startBooleanToggle(new LiteralText("Sync mods"), Config.SYNC_MODS)
                 .setTooltip(new LiteralText("Clone all mods from default mods folder on your server to the modpack, but all other mods will be deleted. (you **can** add mods that you don't want to load on the server only in `./AutoModpack/modpack/[CLIENT] mods`, delmods.txt **is** making automatically when some mods got updated or deleted)"))
                 .setSaveConsumer((toggled) -> Config.SYNC_MODS = toggled)
-                .setDefaultValue(false)
+                .setDefaultValue(true)
                 .build();
         configCategory.addEntry(syncMods);
 
