@@ -7,6 +7,7 @@ import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.utils.Download;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
@@ -48,7 +49,7 @@ public class DownloadModpack {
                         MinecraftClient.getInstance().world.disconnect();
                     }
 
-                    if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("419")) {
+                    if (Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().toLowerCase().contains("419")) {
                         DangerScreenWasShown = false;
                         isOnServer = false;
                         break;

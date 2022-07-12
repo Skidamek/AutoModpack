@@ -7,6 +7,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.DeleteModpack;
 
+import java.util.Objects;
+
 public class ConfirmScreen extends Screen {
     private Screen parent;
 
@@ -18,11 +20,11 @@ public class ConfirmScreen extends Screen {
     protected void init() {
         super.init();
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 50 - 100, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.confirm.button.cancel").formatted(Formatting.GREEN), (button) -> {
-            this.client.setScreen(parent);
+            Objects.requireNonNull(this.client).setScreen(parent);
         }));
         this.addDrawableChild(new ButtonWidget(this.width / 2, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.confirm.button.sure").formatted(Formatting.RED), (button) -> {
             new DeleteModpack();
-            this.client.scheduleStop();
+            Objects.requireNonNull(this.client).scheduleStop();
         }));
     }
 
