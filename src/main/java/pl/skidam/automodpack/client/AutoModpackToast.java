@@ -11,6 +11,7 @@ import net.minecraft.util.Identifier;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.utils.Wait;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 public class AutoModpackToast implements Toast {
@@ -33,7 +34,7 @@ public class AutoModpackToast implements Toast {
         AutoModpackToast.WhoAreYou = WhoAreYou;
         if (WhoAreYou == 0) {
             LoadingAnimationStep = 0;
-            if (isLoadingAnimation == "false" || isLoadingAnimation == null) {
+            if (Objects.equals(isLoadingAnimation, "false") || isLoadingAnimation == null) {
                 CompletableFuture.runAsync(() -> {
                     while (AutoModpackToast.WhoAreYou == 0) {
                         isLoadingAnimation = "true";
