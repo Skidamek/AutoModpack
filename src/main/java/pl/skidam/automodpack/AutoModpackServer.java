@@ -26,7 +26,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public static final File modpackZip = new File("./AutoModpack/modpack.zip");
     public static final File modpackClientModsDir = new File("./AutoModpack/modpack/[CLIENT] mods/");
     public static final File modpackModsDir = new File("./AutoModpack/modpack/mods/");
-    public static final File modpackConfDir = new File("./AutoModpack/modpack/config/");
+    // public static final File modpackConfDir = new File("./AutoModpack/modpack/config/");
     public static final File modpackDeleteTxt = new File("./AutoModpack/modpack/delmods.txt");
     public static final File serverModsDir = new File("./mods/");
     public static String publicServerIP;
