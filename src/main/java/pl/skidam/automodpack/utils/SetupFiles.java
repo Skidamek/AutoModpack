@@ -7,6 +7,7 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
@@ -68,7 +69,7 @@ public class SetupFiles {
     private void client() {
 
         File[] files = new File("./AutoModpack/").listFiles();
-        for (File file : files) {
+        for (File file : Objects.requireNonNull(files)) {
             if (file.getName().contains("automodpack")) {
                 FileUtils.deleteQuietly(file);
             }

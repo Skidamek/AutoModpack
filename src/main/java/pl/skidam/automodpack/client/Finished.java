@@ -6,6 +6,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.ui.RestartScreen;
 
+import java.util.Objects;
+
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.client.modpack.DownloadModpack.prepare.DangerScreenWasShown;
@@ -63,7 +65,7 @@ public class Finished {
         AutoModpackUpdated = null;
         ModpackUpdated = null;
 
-        if (MinecraftClient.getInstance().currentScreen.toString().contains("loading")) {
+        if (Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().contains("loading")) {
             MinecraftClient.getInstance().setScreen(new TitleScreen());
         }
     }

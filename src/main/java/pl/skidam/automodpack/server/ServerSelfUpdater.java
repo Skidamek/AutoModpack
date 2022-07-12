@@ -51,6 +51,7 @@ public class ServerSelfUpdater {
             try {
                 new Zipper(selfBackupUnzipped, selfOut);
             } catch (IOException e) {
+                LOGGER.error("Error unzipping file!");
             }
             FileUtils.deleteQuietly(selfBackupUnzipped);
             FileUtils.deleteQuietly(selfBackup);
