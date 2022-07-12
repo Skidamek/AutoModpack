@@ -14,32 +14,30 @@ import static net.minecraft.server.command.CommandManager.literal;
 
 public class Commands {
     public static void register() { // TODO config server reload command
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            dispatcher.register(
-                    literal("automodpack")
-                            .executes(Commands::about)
-                            .then(literal("generate-modpack")
-                                    .requires((source) -> source.hasPermissionLevel(2))
-                                    .executes(Commands::generateModpack)
-                            )
-                            .then(literal("modpack-host")
-                                    .requires((source) -> source.hasPermissionLevel(2))
-                                    .executes(Commands::modpackHostAbuot)
-                                    .then(literal("start")
-                                            .requires((source) -> source.hasPermissionLevel(2))
-                                            .executes(Commands::startModpackHost)
-                                    )
-                                    .then(literal("stop")
-                                            .requires((source) -> source.hasPermissionLevel(2))
-                                            .executes(Commands::stopModpackHost)
-                                    )
-                                    .then(literal("restart")
-                                            .requires((source) -> source.hasPermissionLevel(2))
-                                            .executes(Commands::restartModpackHost)
-                                    )
-                            )
-            );
-        });
+        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> dispatcher.register(
+                literal("automodpack")
+                        .executes(Commands::about)
+                        .then(literal("generate-modpack")
+                                .requires((source) -> source.hasPermissionLevel(2))
+                                .executes(Commands::generateModpack)
+                        )
+                        .then(literal("modpack-host")
+                                .requires((source) -> source.hasPermissionLevel(2))
+                                .executes(Commands::modpackHostAbuot)
+                                .then(literal("start")
+                                        .requires((source) -> source.hasPermissionLevel(2))
+                                        .executes(Commands::startModpackHost)
+                                )
+                                .then(literal("stop")
+                                        .requires((source) -> source.hasPermissionLevel(2))
+                                        .executes(Commands::stopModpackHost)
+                                )
+                                .then(literal("restart")
+                                        .requires((source) -> source.hasPermissionLevel(2))
+                                        .executes(Commands::restartModpackHost)
+                                )
+                        )
+        ));
     }
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
