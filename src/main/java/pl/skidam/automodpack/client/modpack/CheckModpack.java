@@ -11,7 +11,7 @@ public class CheckModpack {
 
     public CheckModpack() {
 
-        // if latest modpack is not same as current modpack download new mods.
+        // If the latest modpack is not same as current modpack download new mods.
         // Check how big the Modpack file is
         if (link == null || link.equals("null")) {
             LOGGER.info("No modpack link found!");
