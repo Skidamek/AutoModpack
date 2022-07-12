@@ -88,12 +88,6 @@ public class AutoModpackToast implements Toast {
         if (WhoAreYou != 0) {
             WhoAreYouBefore = WhoAreYou;
             return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
-        } else if (WhoAreYou == 0) {
-            while (WhoAreYou == 0) {
-                return Visibility.SHOW;
-            }
-            WhoAreYouBefore = WhoAreYou;
-            return Visibility.HIDE;
         } else {
             WhoAreYouBefore = WhoAreYou;
             return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
