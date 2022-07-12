@@ -145,7 +145,7 @@ public class DeleteModpack {
         File[] modpackModsFiles = new File("./AutoModpack/modpack/mods/").listFiles();
 
         // Loop to delete all names in ./mods/ folder of names in files in "./AutoModpack/modpack/mods/"
-        for (File modpackModName : modpackModsFiles) {
+        for (File modpackModName : Objects.requireNonNull(modpackModsFiles)) {
             String modName = modpackModName.getName();
             File modFile = new File("./mods/" + modName);
 
@@ -198,7 +198,7 @@ public class DeleteModpack {
         File[] modpackConfigFiles = new File("./AutoModpack/modpack/config/").listFiles();
 
         // Loop to delete all names in ./config/ folder of names in files in "./AutoModpack/modpack/config/"
-        for (File modpackConfigName : modpackConfigFiles) {
+        for (File modpackConfigName : Objects.requireNonNull(modpackConfigFiles)) {
 
             String configName = modpackConfigName.getName();
             File configFile = new File("./config/" + configName);
