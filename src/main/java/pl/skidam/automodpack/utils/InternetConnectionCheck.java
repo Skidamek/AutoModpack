@@ -16,6 +16,8 @@ public class InternetConnectionCheck {
             int responseCode = connection.getResponseCode();
             if (responseCode != 200) {
                 throw new Exception("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
+            } else {
+                return true;
             }
         } catch (Exception e) {
             LOGGER.error("Make sure that you have an internet connection!");
@@ -24,6 +26,5 @@ public class InternetConnectionCheck {
             new Wait(1000);
             return false;
         }
-        return true;
     }
 }
