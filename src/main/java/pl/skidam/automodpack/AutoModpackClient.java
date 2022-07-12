@@ -23,6 +23,8 @@ import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 public class AutoModpackClient implements ClientModInitializer {
 
     public static boolean isOnServer;
+    public static String serverIP;
+
     @Override
     public void onInitializeClient() {
 
@@ -58,7 +60,10 @@ public class AutoModpackClient implements ClientModInitializer {
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
         // register
-        ClientLoginConnectionEvents.QUERY_START.register((clientLoginNetworkHandler, minecraftClient) -> isOnServer = true);
+        ClientLoginConnectionEvents.QUERY_START.register((clientLoginNetworkHandler, minecraftClient) -> {
+            serverIP = clientLoginNetworkHandler.getConnection().getAddress().toString();
+            isOnServer = true;
+        });
         ClientLoginConnectionEvents.DISCONNECT.register((clientLoginNetworkHandler, minecraftClient) -> isOnServer = false);
 
         new StartAndCheck(true, false);
