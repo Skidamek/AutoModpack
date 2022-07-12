@@ -143,7 +143,9 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
     private static void deleteAllMods() {
         for (File file : Objects.requireNonNull(modpackModsDir.listFiles())) {
-            file.delete();
+            if(!file.delete()) {
+                LOGGER.error("Error while deleting the file: " + file);
+            }
         }
     }
 
