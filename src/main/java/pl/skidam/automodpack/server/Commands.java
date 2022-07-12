@@ -1,4 +1,5 @@
 package pl.skidam.automodpack.server;
+
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
@@ -107,7 +108,7 @@ public class Commands {
                 .formatted(Formatting.GREEN)
                 .append(Text.literal(" - ")
                         .formatted(Formatting.WHITE)
-                        .append(Text.literal( "" + isRunning)
+                        .append(Text.literal("" + isRunning)
                                 .formatted(statusColor)
                         )
                 ), false);

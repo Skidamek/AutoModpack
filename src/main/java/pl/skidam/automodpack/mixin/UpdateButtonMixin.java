@@ -25,7 +25,7 @@ public class UpdateButtonMixin extends Screen {
         super(title);
     }
 
-    @Inject(at = @At("RETURN"), method = "initWidgetsNormal" )
+    @Inject(at = @At("RETURN"), method = "initWidgetsNormal")
     private void AutoModpackUpdateButton(int y, int spacingY, CallbackInfo ci) {
         int Y_CHECK_UPDATES_BUTTON = 0;
         int Y_DELETE_MODPACK_BUTTON = 0;

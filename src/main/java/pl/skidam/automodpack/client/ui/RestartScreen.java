@@ -8,9 +8,12 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
+import java.util.Objects;
+
 @Environment(EnvType.CLIENT)
 public class RestartScreen extends Screen {
     private Screen parent;
+
     public RestartScreen(Text title) {
         super(title);
     }
@@ -19,10 +22,10 @@ public class RestartScreen extends Screen {
     protected void init() {
         super.init();
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 50 - 100, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.restart.button.cancel").formatted(Formatting.GREEN), (button) -> {
-            this.client.setScreen(parent);
+            Objects.requireNonNull(this.client).setScreen(parent);
         }));
         this.addDrawableChild(new ButtonWidget(this.width / 2, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.restart.button.quit").formatted(Formatting.RED), (button) -> {
-            this.client.scheduleStop();
+            Objects.requireNonNull(this.client).scheduleStop();
         }));
     }
 
@@ -34,5 +37,7 @@ public class RestartScreen extends Screen {
         super.render(matrices, mouseX, mouseY, delta);
     }
 
-    public boolean shouldCloseOnEsc() { return false; }
+    public boolean shouldCloseOnEsc() {
+        return false;
+    }
 }

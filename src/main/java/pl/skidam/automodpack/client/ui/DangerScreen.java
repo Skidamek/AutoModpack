@@ -53,5 +53,7 @@ public class DangerScreen extends Screen {
         super.render(matrices, mouseX, mouseY, delta);
     }
 
-    public boolean shouldCloseOnEsc() { return false; }
+    public boolean shouldCloseOnEsc() {
+        return false;
+    }
 }

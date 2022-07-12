@@ -17,7 +17,7 @@ public class Config {
     public static boolean MODPACK_HOST;
     public static boolean SYNC_MODS;
     public static boolean ONLY_OPTIONAL_MODPACK;
-//    public static boolean DISABLE_ALL_OTHER_MODS_ON_CLIENT;
+    //    public static boolean DISABLE_ALL_OTHER_MODS_ON_CLIENT;
     public static int HOST_PORT;
     public static int HOST_THREAD_COUNT;
     public static String HOST_EXTERNAL_IP;

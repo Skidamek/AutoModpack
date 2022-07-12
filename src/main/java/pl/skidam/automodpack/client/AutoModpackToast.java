@@ -99,7 +99,6 @@ public class AutoModpackToast implements Toast {
         }
 
 
-
 //        if (MinecraftClient.getInstance().currentScreen != null) {
 //            String currentScreen = MinecraftClient.getInstance().currentScreen.toString().toLowerCase();
 //            if (currentScreen.contains("loading") || currentScreen.contains("title") || currentScreen.contains("danger") || currentScreen.contains("confirm")) {

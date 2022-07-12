@@ -5,7 +5,7 @@ import com.google.gson.JsonObject;
 import net.minecraft.MinecraftVersion;
 
 public class ModrinthAPI {
-    
+
     public static String modrinthAPIdownloadUrl;
     public static String modrinthAPIversion;
     public static String modrinthAPIfileName;

@@ -143,7 +143,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
     private static void deleteAllMods() {
         for (File file : Objects.requireNonNull(modpackModsDir.listFiles())) {
-            if(!file.delete()) {
+            if (!file.delete()) {
                 LOGGER.error("Error while deleting the file: " + file);
             }
         }
@@ -154,12 +154,12 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     }
 
     private void onLoginStart(ServerLoginNetworkHandler serverLoginNetworkHandler, MinecraftServer minecraftServer, PacketSender sender, ServerLoginNetworking.LoginSynchronizer loginSynchronizer) {
-        sender.sendPacket(AutoModpackMain.AM_CHECK, PacketByteBufs.empty());        
+        sender.sendPacket(AutoModpackMain.AM_CHECK, PacketByteBufs.empty());
     }
 
     private void onClientResponse(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
 
-        if(!understood || buf.readInt() != 1) {
+        if (!understood || buf.readInt() != 1) {
             if (!Config.ONLY_OPTIONAL_MODPACK) { // Accept player to join while optional modpack is enabled // TODO make it better
                 serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://modrinth.com/mod/automodpack/versions"));
             }

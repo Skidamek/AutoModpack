@@ -13,7 +13,9 @@ public class WebFileSize {
             URL url = new URL(link);
             URLConnection conn = url.openConnection();
             size = conn.getHeaderField("Content-Length");
-            if (size == null) { size = "0"; }
+            if (size == null) {
+                size = "0";
+            }
         } catch (Exception e) {
             new Error();
             LOGGER.error("Make sure that you have an internet connection!");

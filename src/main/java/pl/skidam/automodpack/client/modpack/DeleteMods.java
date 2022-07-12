@@ -13,7 +13,7 @@ import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 import static pl.skidam.automodpack.AutoModpackMain.out;
 
 public class DeleteMods {
-    private static File delModsTxt = new File("./delmods.txt");
+    private static final File delModsTxt = new File("./delmods.txt");
     private static boolean preload;
     private static String ModpackUpdated;
     private static boolean modsDeleted;
@@ -56,7 +56,9 @@ public class DeleteMods {
         // Delete the file
         try {
             FileDeleteStrategy.FORCE.delete(delModsTxt);
-        } catch (IOException ignored) { }
+        } catch (IOException ignored) {
+            LOGGER.info("The file delmods.txt does not exist.");
+        }
 
 
         LOGGER.info("Finished deleting mods!");
@@ -132,6 +134,7 @@ public class DeleteMods {
 
             // Close the file
             inFile.close();
-        } catch (IOException ignored) { }
+        } catch (IOException ignored) {
+        }
     }
 }

@@ -20,7 +20,7 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
 
     @Override
     public void onPreLaunch() {
-    
+
         LOGGER.info("Prelaunching AutoModpack...");
 
         // check if AutoModpack has correct name
@@ -41,7 +41,7 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
             new SetupFiles();
 
             Config.init();
-            
+
             if (InternetConnectionCheck.InternetConnectionCheck()) {
                 new SelfUpdater(true);
             }

@@ -11,6 +11,7 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 public class StartAndCheck {
 
     public static boolean isChecking = false;
+
     public StartAndCheck(boolean isLoading, boolean onlyModpack) {
 
         new Thread(() -> {

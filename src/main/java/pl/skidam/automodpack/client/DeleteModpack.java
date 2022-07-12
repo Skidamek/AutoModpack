@@ -21,7 +21,7 @@ public class DeleteModpack {
 
     public DeleteModpack() {
 
-         LOGGER.warn("Deleting modpack...");
+        LOGGER.warn("Deleting modpack...");
         // unzip modpack.zip
         // get absolute path of current dir
 
@@ -38,9 +38,9 @@ public class DeleteModpack {
 //        deleteEverything();
 //        deleteEverything();
 
-         makeIt();
+        makeIt();
 
-         Runtime.getRuntime().addShutdownHook(new Thread(DeleteModpack::makeIt));
+        Runtime.getRuntime().addShutdownHook(new Thread(DeleteModpack::makeIt));
     }
 
     private static void makeIt() {

@@ -20,6 +20,7 @@ import java.util.function.Consumer;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
+
 public class AutoModpackClient implements ClientModInitializer {
 
     public static boolean isOnServer;

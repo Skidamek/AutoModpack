@@ -9,6 +9,7 @@ import pl.skidam.automodpack.client.DeleteModpack;
 
 public class ConfirmScreen extends Screen {
     private Screen parent;
+
     public ConfirmScreen() {
         super(Text.translatable("gui.automodpack.screen.confirm.title"));
     }
@@ -34,5 +35,7 @@ public class ConfirmScreen extends Screen {
         super.render(matrices, mouseX, mouseY, delta);
     }
 
-    public boolean shouldCloseOnEsc() { return false; }
+    public boolean shouldCloseOnEsc() {
+        return false;
+    }
 }

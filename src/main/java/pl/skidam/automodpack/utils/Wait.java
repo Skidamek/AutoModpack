@@ -4,8 +4,7 @@ public class Wait {
     public Wait(int ms) {
         try {
             Thread.sleep(ms);
-        }
-        catch(InterruptedException ex) {
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
     }
