@@ -8,6 +8,7 @@ import pl.skidam.automodpack.utils.Zipper;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 import static pl.skidam.automodpack.AutoModpackMain.out;
@@ -16,8 +17,6 @@ public class DeleteModpack {
 
     private static boolean modsDeleted;
     private static boolean configsDeleted;
-    private static int tryCountMods;
-    private static int tryCountConfigs;
 
     public DeleteModpack() {
 
@@ -48,8 +47,8 @@ public class DeleteModpack {
         modsDeleted = true;
         configsDeleted = true;
 
-        tryCountMods = 1;
-        tryCountConfigs = 1;
+        int tryCountMods = 1;
+        int tryCountConfigs = 1;
 
         deleteMods();
         deleteConfigs();
