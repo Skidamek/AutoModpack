@@ -83,8 +83,8 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             // check if in delmods.txt there are not mods which are in serverModsDir
             try {
                 for (String delMod : FileUtils.readLines(modpackDeleteTxt, Charset.defaultCharset())) {
-                    if (serverModsDir.listFiles().length > 0) {
-                        for (File file : serverModsDir.listFiles()) {
+                    if (Objects.requireNonNull(serverModsDir.listFiles()).length > 0) {
+                        for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
                             String FNLC = file.getName().toLowerCase(); // fileNameLowerCase
                             if (FNLC.endsWith(".jar") && !FNLC.contains("automodpack")) {
                                 if (FNLC.equals(delMod)) {
