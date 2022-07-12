@@ -21,12 +21,8 @@ public class RestartScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 50 - 100, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.restart.button.cancel").formatted(Formatting.GREEN), (button) -> {
-            Objects.requireNonNull(this.client).setScreen(parent);
-        }));
-        this.addDrawableChild(new ButtonWidget(this.width / 2, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.restart.button.quit").formatted(Formatting.RED), (button) -> {
-            Objects.requireNonNull(this.client).scheduleStop();
-        }));
+        this.addDrawableChild(new ButtonWidget(this.width / 2 - 50 - 100, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.restart.button.cancel").formatted(Formatting.GREEN), (button) -> Objects.requireNonNull(this.client).setScreen(parent)));
+        this.addDrawableChild(new ButtonWidget(this.width / 2, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.restart.button.quit").formatted(Formatting.RED), (button) -> Objects.requireNonNull(this.client).scheduleStop()));
     }
 
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
