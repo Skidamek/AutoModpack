@@ -11,7 +11,7 @@ public class ValidateURL {
                 String string = URI.getScheme();
                 if ("http".equals(string) || "https".equals(string) || "level".equals(string)) {
                     if (!"level".equals(string) || !url.contains("..")) {
-                        if (url.endsWith("/modpack") || url.endsWith("/modpack.zip")) {
+                        if (url.endsWith("/modpack") || url.endsWith("/modpack.zip") || url.startsWith("https://drive.google.com/drive/folders/")) {
                             return true;
                         } else {
                             return false;
