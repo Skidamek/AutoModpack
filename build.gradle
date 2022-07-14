@@ -38,6 +38,10 @@ dependencies {
 	modApi ("me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}") {exclude(group: "net.fabricmc.fabric-api")}
 
 	modLocalRuntime("maven.modrinth:lazydfu:0.1.2")
+
+	implementation 'com.google.api-client:google-api-client:1.35.1'
+	implementation 'com.google.oauth-client:google-oauth-client-jetty:1.34.1'
+	implementation 'com.google.apis:google-api-services-drive:v3-rev20220508-1.32.1'
 }
 
 tasks.withType(JavaCompile).configureEach {

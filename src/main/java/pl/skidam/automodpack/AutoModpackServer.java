@@ -8,11 +8,13 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import org.apache.commons.io.FileUtils;
+import pl.skidam.automodpack.client.modpack.GoogleDriveUpload;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.HostModpack;
 import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.*;
+import java.security.GeneralSecurityException;
 import java.util.Objects;
 
 import static org.apache.commons.lang3.ArrayUtils.contains;
@@ -112,6 +114,15 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         }
 
         LOGGER.info("Modpack created");
+
+        if (Config.EXTERNAL_MODPACK_HOST.startsWith("https://drive.google.com/drive/")) {
+            LOGGER.warn("Uploading modpack to Google Drive");
+            try {
+                GoogleDriveUpload.uploadModpack();
+            } catch (IOException | GeneralSecurityException e) {
+                LOGGER.error("Failed upload modpack to Google Drive\n" + e);
+            }
+        }
     }
 
     private static void cloneMods() {
