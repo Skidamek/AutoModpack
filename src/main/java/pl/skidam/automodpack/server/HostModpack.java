@@ -62,6 +62,9 @@ public class HostModpack implements HttpHandler {
                 serverIpForOthers = publicServerIP;
 
                 String localIp = InetAddress.getLocalHost().getHostAddress();
+                if (!Config.HOST_EXTERNAL_IP_FOR_LOCAL_PLAYERS.equals("")) {
+                    localIp = Config.HOST_EXTERNAL_IP_FOR_LOCAL_PLAYERS;
+                }
                 String subUrl = "modpack";
 
                 if (!Config.HOST_EXTERNAL_IP.equals("")) {

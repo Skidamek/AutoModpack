@@ -21,6 +21,7 @@ public class Config {
     public static int HOST_PORT;
     public static int HOST_THREAD_COUNT;
     public static String HOST_EXTERNAL_IP;
+    public static String HOST_EXTERNAL_IP_FOR_LOCAL_PLAYERS; // temporary way to fix problem when client from local network can't download modpack from local network server but the server is a different computer
     public static String EXTERNAL_MODPACK_HOST;
 
     static {
@@ -44,6 +45,7 @@ public class Config {
         HOST_PORT = getInt(properties, "host_port", 30037);
         HOST_THREAD_COUNT = getInt(properties, "host_thread_count", 2);
         HOST_EXTERNAL_IP = getString(properties, "host_external_ip", "");
+        HOST_EXTERNAL_IP_FOR_LOCAL_PLAYERS = getString(properties, "host_external_ip_for_local_players", "");
         EXTERNAL_MODPACK_HOST = getString(properties, "external_modpack_host", "");
 
         try (OutputStream out = Files.newOutputStream(path, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
@@ -72,6 +74,7 @@ public class Config {
         properties.setProperty("host_port", String.valueOf(HOST_PORT));
         properties.setProperty("host_thread_count", String.valueOf(HOST_THREAD_COUNT));
         properties.setProperty("host_external_ip", HOST_EXTERNAL_IP);
+        properties.setProperty("host_external_ip_for_local_players", HOST_EXTERNAL_IP_FOR_LOCAL_PLAYERS);
         properties.setProperty("external_modpack_host", EXTERNAL_MODPACK_HOST);
 
         try (OutputStream out = Files.newOutputStream(path, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
