@@ -84,6 +84,6 @@ public class GoogleDriveUpload {
                 .execute();
         String link = "https://drive.google.com/open?id=" + file.getId();
         System.out.println("File ID: " + file.getId() + " uploaded to Google Drive, link: " + link);
-        Config.EXTERNAL_MODPACK_HOST = link;
+        Config.EXTERNAL_MODPACK_HOST = "https://drive.google.com/uc?id=" + file.getId(); // direct download link
     }
 }
