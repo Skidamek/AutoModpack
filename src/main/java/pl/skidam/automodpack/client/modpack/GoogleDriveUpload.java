@@ -15,6 +15,7 @@ import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 import pl.skidam.automodpack.AutoModpackMain;
+import pl.skidam.automodpack.config.Config;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -81,6 +82,8 @@ public class GoogleDriveUpload {
         File file = service.files().create(fileMetadata, mediaContent)
                 .setFields("id")
                 .execute();
-        System.out.println("File ID: " + file.getId() + " uploaded to Google Drive, link: " + "https://drive.google.com/open?id=" + file.getId());
+        String link = "https://drive.google.com/open?id=" + file.getId();
+        System.out.println("File ID: " + file.getId() + " uploaded to Google Drive, link: " + link);
+        Config.EXTERNAL_MODPACK_HOST = link;
     }
 }
