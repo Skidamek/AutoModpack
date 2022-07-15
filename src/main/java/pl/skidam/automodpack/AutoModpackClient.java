@@ -72,7 +72,7 @@ public class AutoModpackClient implements ClientModInitializer {
     }
 
     private CompletableFuture<PacketByteBuf> onServerLinkReceived(MinecraftClient minecraftClient, ClientLoginNetworkHandler clientLoginNetworkHandler, PacketByteBuf outBuf, Consumer<GenericFutureListener<? extends Future<? super Void>>> consumer) {
-        String receivedLink = outBuf.readString(80);
+        String receivedLink = outBuf.readString(100);
         link = receivedLink;
         try {
             FileWriter fWriter = new FileWriter("./AutoModpack/modpack-link.txt");
