@@ -13,6 +13,7 @@ import pl.skidam.automodpack.server.HostModpack;
 import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.*;
+import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Objects;
@@ -29,7 +30,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public static final File modpackZip = new File("./AutoModpack/modpack.zip");
     public static final File modpackClientModsDir = new File("./AutoModpack/modpack/[CLIENT] mods/");
     public static final File modpackModsDir = new File("./AutoModpack/modpack/mods/");
-    public static final File modpackConfDir = new File("./AutoModpack/modpack/config/");
+    // public static final File modpackConfDir = new File("./AutoModpack/modpack/config/");
     public static final File modpackDeleteTxt = new File("./AutoModpack/modpack/delmods.txt");
     public static final File serverModsDir = new File("./mods/");
     public static String publicServerIP;
@@ -42,7 +43,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
         genModpack();
 
-        // packets
+        // Packets
         ServerLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onClientResponse);
         ServerLoginNetworking.registerGlobalReceiver(AM_LINK, this::onSuccess);
         ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
@@ -57,31 +58,32 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
         clientMods();
 
-        // sync mods/clone mods and automatically generate delmods.txt
+        // Sync mods and automatically generate delmods.txt
         if (Config.SYNC_MODS) {
             LOGGER.info("Synchronizing mods from server to modpack");
 
-            // make array of mods
+            // Make array of mods
             String[] oldMods = modpackModsDir.list();
             deleteAllMods();
             cloneMods();
             clientMods();
             String[] newMods = modpackModsDir.list();
 
-            // changelog - get system day and time
+            // Changelog generation
             SimpleDateFormat ft = new SimpleDateFormat("yyyy-MM-dd");
             String date = ft.format(new Date());
 
-            // check how many files is in the changelogsDir containing the date
+            // Check how many files is in the changelogsDir containing the date
             String[] changelogs = changelogsDir.list();
             int changelogsCount = 1;
+            assert changelogs != null;
             for (String changelog : changelogs) {
                 if (changelog.contains(date)) {
                     changelogsCount++;
                 }
             }
 
-            // create changelog file
+            // Create changelog file
             File changelog = new File(changelogsDir + "/" + "changelog-" + date + "-" + changelogsCount + ".txt");
             try {
                 changelog.createNewFile();
@@ -92,52 +94,52 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             assert newMods != null;
             for (String mod : newMods) {
                 if (!contains(oldMods, mod)) {
-                    // added mod
+                    // Added mod
                     try {
-                        FileUtils.writeStringToFile(changelog, " + " + mod + "\n", true);
+                        FileUtils.writeStringToFile(changelog, " + " + mod + "\n", Charset.defaultCharset(),true);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
             }
 
-            // compare new to old mods and generate delmods.txt
+            // Compare new to old mods and generate delmods.txt
             assert oldMods != null;
             for (String mod : oldMods) {
                 if (!contains(newMods, mod)) {
                     try {
-                        // check if mod is not already in delmods.txt
-                        if (!FileUtils.readLines(modpackDeleteTxt).contains(mod)) {
+                        // Check if mod is not already in delmods.txt
+                        if (!FileUtils.readLines(modpackDeleteTxt, Charset.defaultCharset()).contains(mod)) {
                             LOGGER.info("Writing " + mod + " to delmods.txt");
-                            FileUtils.writeStringToFile(modpackDeleteTxt, mod + "\n", true);
+                            FileUtils.writeStringToFile(modpackDeleteTxt, mod + "\n", Charset.defaultCharset(), true);
                         }
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
 
-                    // deleted mod
+                    // Deleted mod
                     try {
-                        FileUtils.writeStringToFile(changelog, " - " + mod + "\n", true);
+                        FileUtils.writeStringToFile(changelog, " - " + mod + "\n", Charset.defaultCharset(), true);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
             }
 
-            // check if changelog is empty
+            // Check if changelog is empty
             try {
-                if (FileUtils.readLines(changelog).isEmpty()) {
+                if (FileUtils.readLines(changelog, Charset.defaultCharset()).isEmpty()) {
                     changelog.delete();
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
 
-            // check if in delmods.txt there are not mods which are in serverModsDir
+            // Check if in delmods.txt there are not mods which are in serverModsDir
             try {
-                for (String delMod : FileUtils.readLines(modpackDeleteTxt)) {
-                    if (serverModsDir.listFiles().length > 0) {
-                        for (File file : serverModsDir.listFiles()) {
+                for (String delMod : FileUtils.readLines(modpackDeleteTxt, Charset.defaultCharset())) {
+                    if (Objects.requireNonNull(serverModsDir.listFiles()).length > 0) {
+                        for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
                             String FNLC = file.getName().toLowerCase(); // FileNameLowerCase
                             if (FNLC.endsWith(".jar") && !FNLC.contains("automodpack")) {
                                 if (file.getName().equals(delMod)) {
@@ -164,7 +166,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             }
         }
 
-        // remove blank lines from delmods.txt
+        // Remove blank lines from delmods.txt
         try {
             Scanner file = new Scanner(modpackDeleteTxt);
             PrintWriter writer = new PrintWriter(modpackDeleteTxt + ".tmp");
@@ -199,6 +201,16 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         }
 
         LOGGER.info("Modpack created");
+
+        // TODO GDRIVE UPLOAD
+//        if (Config.EXTERNAL_MODPACK_HOST.startsWith("https://drive.google.com/drive/")) {
+//            LOGGER.warn("Uploading modpack to Google Drive");
+//            try {
+//                GoogleDriveUpload.uploadModpack();
+//            } catch (IOException | GeneralSecurityException e) {
+//                LOGGER.error("Failed upload modpack to Google Drive\n" + e);
+//            }
+//        }
     }
 
     private static void cloneMods() {
@@ -229,7 +241,9 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
     private static void deleteAllMods() {
         for (File file : Objects.requireNonNull(modpackModsDir.listFiles())) {
-            file.delete();
+            if (!file.delete()) {
+                LOGGER.error("Error while deleting the file: " + file);
+            }
         }
     }
 
@@ -238,18 +252,18 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     }
 
     private void onLoginStart(ServerLoginNetworkHandler serverLoginNetworkHandler, MinecraftServer minecraftServer, PacketSender sender, ServerLoginNetworking.LoginSynchronizer loginSynchronizer) {
-        sender.sendPacket(AutoModpackMain.AM_CHECK, PacketByteBufs.empty());        
+        sender.sendPacket(AutoModpackMain.AM_CHECK, PacketByteBufs.empty());
     }
 
     private void onClientResponse(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
 
-        if(!understood || buf.readInt() != 1) {
-            if (!Config.ONLY_OPTIONAL_MODPACK) { // acept player to join while optional modpack is enabled // TODO make it better
+        if (!understood || buf.readInt() != 1) {
+            if (!Config.ONLY_OPTIONAL_MODPACK) { // Accept player to join while optional modpack is enabled // TODO make it better
                 serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://modrinth.com/mod/automodpack/versions"));
             }
 
         } else {
-            // get minecraft player ip if player is in local network give him local address to modpack
+            // Get minecraft player ip if player is in local network give him local address to modpack
             String playerIp = serverLoginNetworkHandler.getConnection().getAddress().toString();
 
             PacketByteBuf outBuf = PacketByteBufs.create();

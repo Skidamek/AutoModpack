@@ -13,6 +13,7 @@ import pl.skidam.automodpack.utils.InternetConnectionCheck;
 import pl.skidam.automodpack.utils.SetupFiles;
 
 import java.io.File;
+import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
@@ -27,7 +28,7 @@ public class PreLoad implements PreLaunchEntrypoint {
         File mods = new File("./mods/");
         String[] modsList = mods.list();
 
-        for (String mod : modsList) {
+        for (String mod : Objects.requireNonNull(modsList)) {
             if (mod.endsWith(".jar")) {
                 File modFile = new File("./mods/" + mod);
                 if (mod.toLowerCase().contains("automodpack") && !mod.equals(correctName)) {

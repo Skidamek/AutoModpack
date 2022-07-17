@@ -11,6 +11,7 @@ import net.minecraft.util.Identifier;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.utils.Wait;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 public class AutoModpackToast implements Toast {
@@ -33,7 +34,7 @@ public class AutoModpackToast implements Toast {
         AutoModpackToast.WhoAreYou = WhoAreYou;
         if (WhoAreYou == 0) {
             LoadingAnimationStep = 0;
-            if (isLoadingAnimation == "false" || isLoadingAnimation == null) {
+            if (Objects.equals(isLoadingAnimation, "false") || isLoadingAnimation == null) {
                 CompletableFuture.runAsync(() -> {
                     while (AutoModpackToast.WhoAreYou == 0) {
                         isLoadingAnimation = "true";
@@ -84,10 +85,7 @@ public class AutoModpackToast implements Toast {
         manager.getClient().textRenderer.draw(matrices, Text.translatable("gui.automodpack.toast.down." + WhoAreYou), 33, 19, -1);
 
 
-        if (WhoAreYou != 0) {
-            WhoAreYouBefore = WhoAreYou;
-            return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
-        } else if (WhoAreYou == 0) {
+        if (WhoAreYou == 0) {
             while (WhoAreYou == 0) {
                 return Visibility.SHOW;
             }
@@ -97,7 +95,6 @@ public class AutoModpackToast implements Toast {
             WhoAreYouBefore = WhoAreYou;
             return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
         }
-
 
 
 //        if (MinecraftClient.getInstance().currentScreen != null) {

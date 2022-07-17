@@ -13,39 +13,43 @@ public class DeleteTrashedMods {
 
     public DeleteTrashedMods() {
 
-        // read ./AutoModpack/trashed-mods.txt and add lines from it to array
-        String[] trashedModsNames = new String[0];
+        // Read ./AutoModpack/trashed-mods.txt and add lines from it to array
         String trashedModsTxt = "./AutoModpack/trashed-mods.txt";
-        try {
-            FileReader fr = new FileReader(trashedModsTxt);
-            BufferedReader br = new BufferedReader(fr);
-            String line;
-            while ((line = br.readLine()) != null) {
-                trashedModsNames = add(trashedModsNames, line);
-            }
-            br.close();
-            fr.close();
-        } catch (Exception e) { // ignore
-        }
+        if (new File (trashedModsTxt).exists()) {
+            String[] trashedModsNames = new String[0];
 
-        // for trashedModsNames array, delete file with same name in ./mods/ folder
-        for (String trashedModName : trashedModsNames) {
-            File trashedModFile = new File("./mods/" + trashedModName);
-            if (trashedModFile.exists()) {
-                try {
-                    FileDeleteStrategy.FORCE.delete(trashedModFile);
-                    LOGGER.info("Successfully deleted trashed mod: " + trashedModName);
-                } catch (Exception e) { // ignore
-                    e.printStackTrace();
+            try {
+                FileReader fr = new FileReader(trashedModsTxt);
+                BufferedReader br = new BufferedReader(fr);
+                String line;
+                while ((line = br.readLine()) != null) {
+                    trashedModsNames = add(trashedModsNames, line);
+                }
+                br.close();
+                fr.close();
+            } catch (Exception e) {
+                LOGGER.error("Could not read trashed-mods.txt file\n" + e.getMessage());
+            }
+
+
+            // For trashedModsNames array, delete file with same name in ./mods/ folder
+            for (String trashedModName : trashedModsNames) {
+                File trashedModFile = new File("./mods/" + trashedModName);
+                if (trashedModFile.exists()) {
+                    try {
+                        FileDeleteStrategy.FORCE.delete(trashedModFile);
+                        LOGGER.info("Successfully deleted trashed mod: " + trashedModName);
+                    } catch (Exception ignored) {
+                    }
                 }
             }
-        }
-        // delete trashed-mods.txt file
-        try {
-            FileDeleteStrategy.FORCE.delete(new File(trashedModsTxt));
-            LOGGER.info("Successfully deleted trashed-mods.txt file");
-        } catch (Exception e) {
-            e.printStackTrace();
+            // Delete trashed-mods.txt file
+            try {
+                FileDeleteStrategy.FORCE.delete(new File(trashedModsTxt));
+                LOGGER.info("Successfully deleted trashed-mods.txt file");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 }

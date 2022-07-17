@@ -46,8 +46,15 @@ public class ServerSelfUpdater {
             File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");
             try {
                 new UnZipper(selfBackup, selfBackupUnzipped, "none");
+            } catch (IOException e) {
+                LOGGER.error("Error unzipping file!");
+                throw new RuntimeException(e);
+            }
+            try {
                 new Zipper(selfBackupUnzipped, selfOut);
             } catch (IOException e) {
+                LOGGER.error("Error zipping file!");
+                throw new RuntimeException(e);
             }
             FileUtils.deleteQuietly(selfBackupUnzipped);
             FileUtils.deleteQuietly(selfBackup);

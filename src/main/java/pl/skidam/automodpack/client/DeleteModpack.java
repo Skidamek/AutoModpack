@@ -10,6 +10,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackClient.modpack_link;
 import static pl.skidam.automodpack.AutoModpackMain.*;
@@ -54,7 +55,7 @@ public class DeleteModpack {
             }
         }
 
-        // delete unzipped modpack dir, modpack.zip and modpack-link.txt
+        // Delete unzipped modpack dir, modpack.zip and modpack-link.txt
         try {
             FileDeleteStrategy.FORCE.delete(unzippedModpack);
             FileDeleteStrategy.FORCE.delete(out);
@@ -66,8 +67,7 @@ public class DeleteModpack {
 
     private static void selectFilesToDelete() {
         File[] files = unzippedModpack.listFiles();
-        assert files != null;
-        for (File file : files) {
+        for (File file : Objects.requireNonNull(files)) {
             if (file.isDirectory()) {
                 modpackFiles.add(new File("./" + file.getName() + "/"));
             } else {
@@ -77,8 +77,7 @@ public class DeleteModpack {
 
         for (File modpackFile : modpackFiles) {
             File[] children = modpackFile.listFiles();
-            assert children != null;
-            for (File child : children) {
+            for (File child : Objects.requireNonNull(children)) {
                 File path = new File(modpackFile + "\\" + child.getName());
                 if (child.isDirectory()) {
                     path = new File(modpackFile + "\\" + child.getName() + "\\");
@@ -95,7 +94,7 @@ public class DeleteModpack {
                 FileDeleteStrategy.FORCE.delete(file);
             } catch (IOException ignored) { }
 
-            if (file.exists() && file.getName().endsWith(".jar")) { // if mod to delete still exists
+            if (file.exists() && file.getName().endsWith(".jar")) { // If mod to delete still exists
                 try {
                     new Zipper(new File("./AutoModpack/TrashMod/"), file);
                 } catch (IOException e) {

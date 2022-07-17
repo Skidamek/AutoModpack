@@ -20,6 +20,7 @@ import java.util.function.Consumer;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
+
 public class AutoModpackClient implements ClientModInitializer {
 
     public static boolean isOnServer;
@@ -34,7 +35,7 @@ public class AutoModpackClient implements ClientModInitializer {
         isOnServer = false;
         CheckModpack.isCheckUpdatesButtonClicked = false;
 
-        // load saved link from ./AutoModpack/modpack-link.txt file
+        // Load saved link from ./AutoModpack/modpack-link.txt file
         String savedLink = "";
         try {
             FileReader fr = new FileReader(modpack_link);
@@ -43,7 +44,7 @@ public class AutoModpackClient implements ClientModInitializer {
                 savedLink = inFile.nextLine();
             }
             inFile.close();
-        } catch (Exception e) { // ignore
+        } catch (Exception ignored) {
         }
 
         if (!savedLink.equals("")) {
@@ -55,11 +56,11 @@ public class AutoModpackClient implements ClientModInitializer {
             }
         }
 
-        // packets
+        // Packets
         ClientLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onServerRequest);
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
-        // register
+        // Register
         ClientLoginConnectionEvents.QUERY_START.register((clientLoginNetworkHandler, minecraftClient) -> {
             serverIP = clientLoginNetworkHandler.getConnection().getAddress().toString();
             isOnServer = true;
@@ -77,7 +78,7 @@ public class AutoModpackClient implements ClientModInitializer {
     }
 
     private CompletableFuture<PacketByteBuf> onServerLinkReceived(MinecraftClient minecraftClient, ClientLoginNetworkHandler clientLoginNetworkHandler, PacketByteBuf outBuf, Consumer<GenericFutureListener<? extends Future<? super Void>>> consumer) {
-        String receivedLink = outBuf.readString(80);
+        String receivedLink = outBuf.readString(100);
         link = receivedLink;
         try {
             FileWriter fWriter = new FileWriter(modpack_link);

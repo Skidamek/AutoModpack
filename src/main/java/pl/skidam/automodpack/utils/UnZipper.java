@@ -9,7 +9,7 @@ import java.util.zip.ZipInputStream;
 public class UnZipper {
     public static int progress;
     private static int entries;
-    private static float entryGoing; // idk why it needs to be float...
+    private static float entryGoing; // IDK why it needs to be float...
 
     public UnZipper(File fileZip, File destDir, String oneFileToUnzipIfAny) throws IOException {
         byte[] buffer = new byte[1024];
@@ -18,7 +18,7 @@ public class UnZipper {
         if (oneFileToUnzipIfAny.equals("") || oneFileToUnzipIfAny.equals("none")) {
             progressBarSetup(fileZip);
             while (zipEntry != null) {
-                // progress bar //
+                // Progress bar //
                 entryGoing++;
                 progress = (int) (entryGoing / entries * 100);
                 // System.out.println("Extracting " + zipEntry.getName() + (int) entryGoing + "/" + entries + " " + progress + "%");
@@ -29,13 +29,13 @@ public class UnZipper {
                         throw new IOException("Failed to create directory " + newFile);
                     }
                 } else {
-                    // fix for Windows-created archives
+                    // Fix for Windows-created archives
                     File parent = newFile.getParentFile();
                     if (!parent.isDirectory() && !parent.mkdirs()) {
                         throw new IOException("Failed to create directory " + parent);
                     }
 
-                    // write file content
+                    // Write file content
                     FileOutputStream fos = new FileOutputStream(newFile);
                     int len;
                     while ((len = zis.read(buffer)) > 0) {
@@ -59,13 +59,13 @@ public class UnZipper {
                             throw new IOException("Failed to create directory " + newFile);
                         }
                     } else {
-                        // fix for Windows-created archives
+                        // Fix for Windows-created archives
                         File parent = newFile.getParentFile();
                         if (!parent.isDirectory() && !parent.mkdirs()) {
                             throw new IOException("Failed to create directory " + parent);
                         }
 
-                        // write file content
+                        // Write file content
                         FileOutputStream fos = new FileOutputStream(newFile);
                         int len;
                         while ((len = zis.read(buffer)) > 0) {
@@ -108,7 +108,7 @@ public class UnZipper {
         ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zip));
         ZipEntry Zip_Entry = zipInputStream.getNextEntry();
 
-        // how many entries in the zip file to after make percentage of it
+        // How many entries in the zip file to after make percentage of it
         while (Zip_Entry != null) {
             entries++;
             Zip_Entry = zipInputStream.getNextEntry();

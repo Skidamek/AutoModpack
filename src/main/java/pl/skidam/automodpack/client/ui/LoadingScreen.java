@@ -15,12 +15,12 @@ public class LoadingScreen extends Screen {
 
     public LoadingScreen() {
         super(Text.translatable("gui.automodpack.screen.loading.title").formatted(Formatting.BOLD));
-        // it needs to be here to restart unzip progress value
+        // It needs to be here to restart unzip progress value
         UnZipper.progress = 0;
     }
 
     private String getProgress() {
-        int percentage = Download.progress;
+        float percentage = Download.progress;
         if (percentage == 100) {
             percentage = UnZipper.progress;
             if (percentage == 100) {
@@ -41,12 +41,22 @@ public class LoadingScreen extends Screen {
         return step;
     }
 
+    private String getInternetConnectionSpeed() {
+        if (Download.progress > 0 && Download.progress < 100) {
+            return Download.internetConnectionSpeed;
+        } else {
+            return "";
+        }
+    }
+
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
         String percentage = this.getProgress();
         String step = this.getStep();
-        drawCenteredText(matrices, this.textRenderer, step, this.width / 2, 100, 16777215);
-        drawCenteredText(matrices, this.textRenderer, percentage, this.width / 2, 300 / 2 - 9 / 2 - 30, 16777215);
+        String internetConnectionSpeed = this.getInternetConnectionSpeed();
+        drawCenteredText(matrices, this.textRenderer, step, this.width / 2, 80, 16777215);
+        drawCenteredText(matrices, this.textRenderer, percentage, this.width / 2, 100, 16777215);
+        drawCenteredText(matrices, this.textRenderer, internetConnectionSpeed, this.width / 2, 120, 16777215);
         super.render(matrices, mouseX, mouseY, delta);
     }
 
