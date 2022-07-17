@@ -13,7 +13,6 @@ public class AutoModpackMain implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
-    public static String ENV_BRAND = "null";
     public static final Identifier AM_CHECK = new Identifier(MOD_ID, "check");
     public static final Identifier AM_LINK = new Identifier(MOD_ID, "link");
     public static String AutoModpackUpdated;

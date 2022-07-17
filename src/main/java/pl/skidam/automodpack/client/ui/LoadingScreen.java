@@ -19,8 +19,8 @@ public class LoadingScreen extends Screen {
         UnZipper.progress = 0;
     }
 
-    private String getPercentage() {
-        int percentage = Download.downloadPercent;
+    private String getProgress() {
+        int percentage = Download.progress;
         if (percentage == 100) {
             percentage = UnZipper.progress;
             if (percentage == 100) {
@@ -32,7 +32,7 @@ public class LoadingScreen extends Screen {
 
     private String getStep() {
         String step = "Downloading...";
-        if (Download.downloadPercent == 100) {
+        if (Download.progress == 100) {
             step = "Extracting modpack...";
         }
         if (UnZipper.progress == 100) {
@@ -43,7 +43,7 @@ public class LoadingScreen extends Screen {
 
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        String percentage = this.getPercentage();
+        String percentage = this.getProgress();
         String step = this.getStep();
         drawCenteredText(matrices, this.textRenderer, step, this.width / 2, 100, 16777215);
         drawCenteredText(matrices, this.textRenderer, percentage, this.width / 2, 300 / 2 - 9 / 2 - 30, 16777215);

@@ -26,7 +26,7 @@
   "gui.automodpack.screen.restart.button.cancel": "Nie (Wróć do gry)",
 
   "gui.automodpack.screen.confirm.title": "❌ Usunięcie modpacka ❌",
-  "gui.automodpack.screen.confirm.description": "Stracisz wszystkie mody łącznie z plikami konfiguracyjnymi z pobranego modpacka.",
+  "gui.automodpack.screen.confirm.description": "Stracisz wszystkie rzeczy z pobranego modpacka.",
   "gui.automodpack.screen.confirm.secDescription": "Będziesz musiał zrestartować grę.",
   "gui.automodpack.screen.confirm.thiDescription": "Czy na pewno chcesz go usunąć?",
   "gui.automodpack.screen.confirm.button.sure": "Tak (Usuń i wyjdź z gry)",

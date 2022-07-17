@@ -13,7 +13,7 @@ import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 import static pl.skidam.automodpack.AutoModpackMain.out;
 
 public class DeleteMods {
-    private static File delModsTxt = new File("./delmods.txt");
+    private static final File delModsTxt = new File("./delmods.txt");
     private static boolean preload;
     private static String ModpackUpdated;
     private static boolean modsDeleted;
@@ -26,7 +26,11 @@ public class DeleteMods {
         if (preload) {
             new Wait(500);
             if (!delModsTxt.exists() && out.exists()) {
-                new UnZipper(out, new File("./"), false, "delmods.txt");
+                try {
+                    new UnZipper(out, new File("./"), "delmods.txt");
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
             }
         }
 

@@ -26,7 +26,7 @@
   "gui.automodpack.screen.restart.button.cancel": "No (Back to the game)",
 
   "gui.automodpack.screen.confirm.title": "❌ Delete Modpack ❌",
-  "gui.automodpack.screen.confirm.description": "You will lose all mods and configs from downloaded modpack.",
+  "gui.automodpack.screen.confirm.description": "You will lose all stuff from downloaded modpack.",
   "gui.automodpack.screen.confirm.secDescription": "You will need to restart game.",
   "gui.automodpack.screen.confirm.thiDescription": "Are you sure you want to delete it?",
   "gui.automodpack.screen.confirm.button.sure": "Yes (Delete and quit)",

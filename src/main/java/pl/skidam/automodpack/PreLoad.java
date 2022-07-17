@@ -16,11 +16,11 @@ import java.io.File;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
-public class PreLoadQuilt implements PreLaunchEntrypoint {
+public class PreLoad implements PreLaunchEntrypoint {
 
     @Override
     public void onPreLaunch() {
-    
+
         LOGGER.info("Prelaunching AutoModpack...");
 
         // check if AutoModpack has correct name
@@ -41,7 +41,7 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
             new SetupFiles();
 
             Config.init();
-            
+
             if (InternetConnectionCheck.InternetConnectionCheck()) {
                 new SelfUpdater(true);
             }
@@ -55,9 +55,6 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
             }
 
             new DeleteTrashedMods();
-
-            // quilt loader detected
-            ENV_BRAND = "quilt";
 
             new compatCheck();
 
@@ -75,9 +72,6 @@ public class PreLoadQuilt implements PreLaunchEntrypoint {
             if (InternetConnectionCheck.InternetConnectionCheck()) {
                 new ServerSelfUpdater();
             }
-
-            // quilt loader detected
-            ENV_BRAND = "quilt";
 
             new compatCheck();
 

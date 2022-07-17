@@ -3,17 +3,27 @@ package pl.skidam.automodpack.utils;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLConnection;
 import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
 public class Download {
 
-    public static int downloadPercent = 0;
+    public static int progress = 0;
 
     public static boolean Download(String link, File output) {
         try {
             URL url = new URL(link);
+
+            // TODO get minecraft username
+//            URLConnection conn = url.openConnection();
+//
+//
+//            conn.setRequestProperty("X-Minecraft-Username", HERE);
+//            conn.connect();
+//            conn.getInputStream().close();
+
             HttpURLConnection http = (HttpURLConnection) url.openConnection();
             http.setRequestMethod("GET");
             http.setConnectTimeout(30000); // 30 seconds
@@ -38,7 +48,7 @@ public class Download {
                     // if lastPercent != percent
                     if (!Objects.equals(lastPercent, percent)) {
                         percent = (String.format("%.0f", percentDownloaded));
-                        downloadPercent = Integer.parseInt(percent);
+                        progress = Integer.parseInt(percent);
                         if (percent.contains("0")) {
                             LOGGER.info(percent + "%");
                         }

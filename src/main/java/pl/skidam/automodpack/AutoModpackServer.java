@@ -13,7 +13,10 @@ import pl.skidam.automodpack.server.HostModpack;
 import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Objects;
+import java.util.Scanner;
 
 import static org.apache.commons.lang3.ArrayUtils.contains;
 import static pl.skidam.automodpack.AutoModpackMain.*;
@@ -21,6 +24,7 @@ import static pl.skidam.automodpack.utils.getIPV4Adress.getIPV4Address;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
 
+    public static final File changelogsDir = new File("./AutoModpack/changelogs/");
     public static final File modpackDir = new File("./AutoModpack/modpack/");
     public static final File modpackZip = new File("./AutoModpack/modpack.zip");
     public static final File modpackClientModsDir = new File("./AutoModpack/modpack/[CLIENT] mods/");
@@ -63,6 +67,40 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             cloneMods();
             clientMods();
             String[] newMods = modpackModsDir.list();
+
+            // changelog - get system day and time
+            SimpleDateFormat ft = new SimpleDateFormat("yyyy-MM-dd");
+            String date = ft.format(new Date());
+
+            // check how many files is in the changelogsDir containing the date
+            String[] changelogs = changelogsDir.list();
+            int changelogsCount = 1;
+            for (String changelog : changelogs) {
+                if (changelog.contains(date)) {
+                    changelogsCount++;
+                }
+            }
+
+            // create changelog file
+            File changelog = new File(changelogsDir + "/" + "changelog-" + date + "-" + changelogsCount + ".txt");
+            try {
+                changelog.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            assert newMods != null;
+            for (String mod : newMods) {
+                if (!contains(oldMods, mod)) {
+                    // added mod
+                    try {
+                        FileUtils.writeStringToFile(changelog, " + " + mod + "\n", true);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+
             // compare new to old mods and generate delmods.txt
             assert oldMods != null;
             for (String mod : oldMods) {
@@ -76,7 +114,23 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
+
+                    // deleted mod
+                    try {
+                        FileUtils.writeStringToFile(changelog, " - " + mod + "\n", true);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
+            }
+
+            // check if changelog is empty
+            try {
+                if (FileUtils.readLines(changelog).isEmpty()) {
+                    changelog.delete();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
 
             // check if in delmods.txt there are not mods which are in serverModsDir
@@ -84,20 +138,53 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
                 for (String delMod : FileUtils.readLines(modpackDeleteTxt)) {
                     if (serverModsDir.listFiles().length > 0) {
                         for (File file : serverModsDir.listFiles()) {
-                            String FNLC = file.getName().toLowerCase(); // fileNameLowerCase
+                            String FNLC = file.getName().toLowerCase(); // FileNameLowerCase
                             if (FNLC.endsWith(".jar") && !FNLC.contains("automodpack")) {
-                                if (FNLC.equals(delMod)) {
-                                    LOGGER.info("Removing " + delMod + " from delmods.txt");
-                                    FileUtils.deleteQuietly(modpackDeleteTxt);
+                                if (file.getName().equals(delMod)) {
+                                    LOGGER.error("Removing " + delMod + " from delmods.txt");
+                                    Scanner sc = new Scanner(modpackDeleteTxt);
+                                    StringBuilder sb = new StringBuilder();
+                                    while (sc.hasNextLine()) {
+                                        sb.append(sc.nextLine()).append("\n");
+                                    }
+                                    sc.close();
+                                    String result = sb.toString();
+                                    result = result.replace(delMod, "");
+                                    PrintWriter writer = new PrintWriter(modpackDeleteTxt);
+                                    writer.append(result);
+                                    writer.flush();
+                                    writer.close();
                                 }
                             }
                         }
                     }
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
+
+        // remove blank lines from delmods.txt
+        try {
+            Scanner file = new Scanner(modpackDeleteTxt);
+            PrintWriter writer = new PrintWriter(modpackDeleteTxt + ".tmp");
+
+            while (file.hasNext()) {
+                String line = file.nextLine();
+                if (!line.isEmpty()) {
+                    writer.write(line);
+                    writer.write("\n");
+                }
+            }
+
+            file.close();
+            writer.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        modpackDeleteTxt.delete();
+        new File (modpackDeleteTxt + ".tmp").renameTo(modpackDeleteTxt);
 
         LOGGER.info("Creating modpack");
         if (modpackZip.exists()) {

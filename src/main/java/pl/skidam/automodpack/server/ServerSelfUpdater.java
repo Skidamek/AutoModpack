@@ -2,10 +2,7 @@ package pl.skidam.automodpack.server;
 
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.AutoModpackMain;
-import pl.skidam.automodpack.utils.Download;
-import pl.skidam.automodpack.utils.ModrinthAPI;
-import pl.skidam.automodpack.utils.UnZipper;
-import pl.skidam.automodpack.utils.Zipper;
+import pl.skidam.automodpack.utils.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -47,8 +44,8 @@ public class ServerSelfUpdater {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
             File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");
-            new UnZipper(selfBackup, selfBackupUnzipped, true, "none");
             try {
+                new UnZipper(selfBackup, selfBackupUnzipped, "none");
                 new Zipper(selfBackupUnzipped, selfOut);
             } catch (IOException e) {
             }

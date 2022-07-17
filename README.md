@@ -32,7 +32,7 @@ On join the server who has this mod, modpack will be automatically downloaded an
 
 **Open port (default: `30037`) on your server! TCP/UDP** need to host modpack.
 
-NOTE: if you can't open any port on your server, you can type in the config "external_modpack_host" http/s address of download server it can be even MediaFire/Google Drive/Dropbox. You can upload there modpack.zip whose is automatically generated on your minecraft server at ./AutoModpack/modpack.zip
+NOTE: if you can't open any port on your server, use Google Drive upload there modpack.zip whose automatically generated on your minecraft server at `./AutoModpack/modpack.zip`. **Direct download link** type into the config "external_modpack_host". 
 
 Add mods/configs what ever you want in your modpack to the `./AutoModpack/modpack/` directory.
 

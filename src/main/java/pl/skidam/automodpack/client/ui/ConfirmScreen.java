@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
@@ -8,7 +9,7 @@ import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.DeleteModpack;
 
 public class ConfirmScreen extends Screen {
-    private Screen parent;
+    private static boolean showButtons = true;
     public ConfirmScreen() {
         super(Text.translatable("gui.automodpack.screen.confirm.title"));
     }
@@ -16,13 +17,16 @@ public class ConfirmScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 50 - 100, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.confirm.button.cancel").formatted(Formatting.GREEN), (button) -> {
-            this.client.setScreen(parent);
-        }));
-        this.addDrawableChild(new ButtonWidget(this.width / 2, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.confirm.button.sure").formatted(Formatting.RED), (button) -> {
-            new DeleteModpack();
-            this.client.scheduleStop();
-        }));
+        if (showButtons) {
+            this.addDrawableChild(new ButtonWidget(this.width / 2 - 50 - 100, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.confirm.button.cancel").formatted(Formatting.GREEN), (button) -> {
+                this.client.setScreen(new TitleScreen());
+            }));
+            this.addDrawableChild(new ButtonWidget(this.width / 2, this.height / 6 + 48 - 6 + 75, 150, 20, Text.translatable("gui.automodpack.screen.confirm.button.sure").formatted(Formatting.RED), (button) -> {
+                showButtons = false;
+                new DeleteModpack();
+                this.client.scheduleStop();
+            }));
+        }
     }
 
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {

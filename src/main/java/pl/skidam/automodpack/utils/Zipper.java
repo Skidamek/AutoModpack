@@ -27,7 +27,6 @@ public class Zipper {
         if (fileToZip.getName().equals("[CLIENT] mods")) {
             return;
         }
-
         if (fileToZip.isHidden()) {
             return;
         }

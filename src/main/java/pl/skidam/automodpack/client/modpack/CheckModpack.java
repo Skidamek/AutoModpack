@@ -31,7 +31,7 @@ public class CheckModpack {
             return;
         }
 
-        long latestSize = Long.parseLong(WebFileSize.webfileSize(link));
+        long latestSize = WebFileSize.webfileSize(link);
         LOGGER.info("Latest modpack size: " + latestSize);
 
         if (latestSize == 0) {

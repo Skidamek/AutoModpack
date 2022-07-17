@@ -41,7 +41,7 @@ public class SelfUpdater {
             return;
         }
 
-        if (VERSION.equals(modrinthAPIversion)) {
+        if (VERSION.equals(modrinthAPIversion) && selfOut.length() == WebFileSize.webfileSize(modrinthAPIdownloadUrl)) {
             LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
             if (!preload) {
                 AutoModpackToast.add(4);
@@ -76,7 +76,11 @@ public class SelfUpdater {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
             File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");
-            new UnZipper(selfBackup, selfBackupUnzipped, true, "none");
+            try {
+                new UnZipper(selfBackup, selfBackupUnzipped, "none");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
             try {
                 new Zipper(selfBackupUnzipped, selfOut);
             } catch (IOException e) {

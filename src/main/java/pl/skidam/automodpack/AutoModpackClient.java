@@ -24,6 +24,7 @@ public class AutoModpackClient implements ClientModInitializer {
 
     public static boolean isOnServer;
     public static String serverIP;
+    public static final File modpack_link = new File("./AutoModpack/modpack-link.txt");
 
     @Override
     public void onInitializeClient() {
@@ -36,7 +37,6 @@ public class AutoModpackClient implements ClientModInitializer {
         // load saved link from ./AutoModpack/modpack-link.txt file
         String savedLink = "";
         try {
-            File modpack_link = new File("./AutoModpack/modpack-link.txt");
             FileReader fr = new FileReader(modpack_link);
             Scanner inFile = new Scanner(fr);
             if (inFile.hasNextLine()) {
@@ -80,7 +80,7 @@ public class AutoModpackClient implements ClientModInitializer {
         String receivedLink = outBuf.readString(80);
         link = receivedLink;
         try {
-            FileWriter fWriter = new FileWriter("./AutoModpack/modpack-link.txt");
+            FileWriter fWriter = new FileWriter(modpack_link);
             fWriter.flush();
             fWriter.write(receivedLink);
             fWriter.close();
