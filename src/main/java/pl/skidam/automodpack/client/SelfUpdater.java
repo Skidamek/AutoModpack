@@ -41,7 +41,7 @@ public class SelfUpdater {
             return;
         }
 
-        if (VERSION.equals(modrinthAPIversion) && selfOut.length() == WebFileSize.webfileSize(modrinthAPIdownloadUrl)) {
+        if (VERSION.equals(modrinthAPIversion) && selfOut.length() == modrinthAPIsize) {
             LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
             if (!preload) {
                 AutoModpackToast.add(4);

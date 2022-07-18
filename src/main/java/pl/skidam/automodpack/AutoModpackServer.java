@@ -21,7 +21,7 @@ import java.util.Scanner;
 
 import static org.apache.commons.lang3.ArrayUtils.contains;
 import static pl.skidam.automodpack.AutoModpackMain.*;
-import static pl.skidam.automodpack.utils.getIPV4Adress.getIPV4Address;
+import static pl.skidam.automodpack.utils.GetIPV4Address.getIPV4Address;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
 

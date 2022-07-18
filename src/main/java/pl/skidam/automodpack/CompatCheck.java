@@ -9,10 +9,10 @@ import java.io.File;
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 import static pl.skidam.automodpack.utils.ModrinthAPI.*;
 
-public class compatCheck {
+public class CompatCheck {
 
 
-    public compatCheck() {
+    public CompatCheck() {
 
         if (FabricLoader.getInstance().isModLoaded("cloth-config")) {
             AutoModpackMain.isClothConfig = true;

@@ -57,7 +57,7 @@ public class PreLoad implements PreLaunchEntrypoint {
 
             new DeleteTrashedMods();
 
-            new compatCheck();
+            new CompatCheck();
 
             new DeleteMods(true, "false");
 
@@ -74,7 +74,7 @@ public class PreLoad implements PreLaunchEntrypoint {
                 new ServerSelfUpdater();
             }
 
-            new compatCheck();
+            new CompatCheck();
 
             LOGGER.info("AutoModpack successfully prelaunched!");
         }
