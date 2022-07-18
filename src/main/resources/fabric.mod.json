@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "automodpack",
-  "version": "2.1.4",
+  "version": "2.2.0",
 
   "name": "AutoModpack",
   "description": "Just automatic updating and downloading modpacks!",
@@ -10,7 +10,8 @@
   ],
   "contributors": [
     "Pipelek",
-    "Merith"
+    "Merith",
+    "Junortiz"
   ],
   "contact": {
     "sources": "https://github.com/Skidamek/AutoModpack/",
@@ -24,7 +25,7 @@
   "entrypoints": {
     "client": ["pl.skidam.automodpack.AutoModpackClient"],
     "server": ["pl.skidam.automodpack.AutoModpackServer"],
-    "preLaunch": ["pl.skidam.automodpack.PreLoadFabric"],
+    "preLaunch": ["pl.skidam.automodpack.PreLoad"],
     "main": ["pl.skidam.automodpack.AutoModpackMain"],
     "modmenu": ["pl.skidam.automodpack.config.ModMenuIntegration"]
   },

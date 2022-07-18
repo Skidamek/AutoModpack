@@ -11,6 +11,7 @@ import net.minecraft.util.Identifier;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.utils.Wait;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 public class AutoModpackToast implements Toast {
@@ -33,7 +34,7 @@ public class AutoModpackToast implements Toast {
         AutoModpackToast.WhoAreYou = WhoAreYou;
         if (WhoAreYou == 0) {
             LoadingAnimationStep = 0;
-            if (isLoadingAnimation == "false" || isLoadingAnimation == null) {
+            if (Objects.equals(isLoadingAnimation, "false") || isLoadingAnimation == null) {
                 CompletableFuture.runAsync(() -> {
                     while (AutoModpackToast.WhoAreYou == 0) {
                         isLoadingAnimation = "true";
@@ -65,12 +66,17 @@ public class AutoModpackToast implements Toast {
         AutoModpackToast toast = toastManager.getToast(AutoModpackToast.class, Toast.TYPE);
         if (toast == null) {
             toastManager.add(new AutoModpackToast());
-        } else if (WhoAreYouBefore == 0) {
+        } else if (WhoAreYouBefore == 0 || WhoAreYouBefore == 4 || WhoAreYouBefore == 3 || WhoAreYouBefore == 2 || WhoAreYouBefore == 1) {
+            if (WhoAreYou == 0) {
+                toastManager.clear();
+            }
+            if (WhoAreYou == 2 || WhoAreYou == 4) {
+                toastManager.add(new AutoModpackToast());
+            }
+            // dont do anything lol
+        } else if (WhoAreYou == 0) {
             toastManager.clear();
-            toastManager.add(new AutoModpackToast());
-        } else if (WhoAreYou == 1 && WhoAreYouBefore == 2 || WhoAreYou == 2 && WhoAreYouBefore == 1 || WhoAreYou == 3 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 3) {
-            toastManager.add(new AutoModpackToast());
-        } else if (WhoAreYou == 1 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 1 || WhoAreYou == 2 && WhoAreYouBefore == 3 || WhoAreYou == 3 && WhoAreYouBefore == 2) {
+        } else {
             toastManager.add(new AutoModpackToast());
         }
     }
@@ -84,10 +90,7 @@ public class AutoModpackToast implements Toast {
         manager.getClient().textRenderer.draw(matrices, new TranslatableText("gui.automodpack.toast.down." + WhoAreYou), 33, 19, -1);
 
 
-        if (WhoAreYou != 0) {
-            WhoAreYouBefore = WhoAreYou;
-            return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
-        } else if (WhoAreYou == 0) {
+        if (WhoAreYou == 0) {
             while (WhoAreYou == 0) {
                 return Visibility.SHOW;
             }
@@ -97,19 +100,6 @@ public class AutoModpackToast implements Toast {
             WhoAreYouBefore = WhoAreYou;
             return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
         }
-
-
-
-//        if (MinecraftClient.getInstance().currentScreen != null) {
-//            String currentScreen = MinecraftClient.getInstance().currentScreen.toString().toLowerCase();
-//            if (currentScreen.contains("loading") || currentScreen.contains("title") || currentScreen.contains("danger") || currentScreen.contains("confirm")) {
-//                return Visibility.SHOW;
-//            } else {
-//                return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
-//            }
-//        } else {
-//            return startTime >= 5000L ? Visibility.HIDE : Visibility.SHOW;
-//        }
     }
 
     @Override

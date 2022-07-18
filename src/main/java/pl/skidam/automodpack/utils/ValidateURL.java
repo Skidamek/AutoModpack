@@ -10,7 +10,7 @@ public class ValidateURL {
                 URI URI = new URI(url);
                 String string = URI.getScheme();
                 if ("http".equals(string) || "https".equals(string) || "level".equals(string)) {
-                    if (!"level".equals(string) || !url.contains("..")) {
+                    if (!"level".equals(string) && !url.contains("..")) {
                         return url.endsWith("/modpack") || url.endsWith("/modpack.zip") || url.startsWith("https://drive.google.com/");
                     } else {
                         return false;

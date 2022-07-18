@@ -2,9 +2,10 @@ package pl.skidam.automodpack.client.modpack;
 
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.UnZipper;
-import pl.skidam.automodpack.utils.Zipper;
+import pl.skidam.automodpack.utils.WebFileSize;
 
 import java.io.File;
+import java.io.IOException;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
@@ -24,7 +25,16 @@ public class TrashMod {
             LOGGER.error("Failed to download TrashMod!");
             return;
         }
-        new UnZipper(trashOut, new File("./AutoModpack/TrashMod/"), true, "none");
+
+        long fileSize = WebFileSize.webfileSize(trashLink);
+        while (!(trashOut.length() == fileSize)) { }
+
+        try {
+            new UnZipper(trashOut, new File("./AutoModpack/TrashMod/"), "none");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         LOGGER.info("Successfully downloaded TrashMod!");
     }
 }

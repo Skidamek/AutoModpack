@@ -8,213 +8,120 @@ import pl.skidam.automodpack.utils.Zipper;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
-import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
-import static pl.skidam.automodpack.AutoModpackMain.out;
+import static pl.skidam.automodpack.AutoModpackClient.modpack_link;
+import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class DeleteModpack {
-
-    private static boolean modsDeleted;
-    private static boolean configsDeleted;
-    private static int tryCountMods;
-    private static int tryCountConfigs;
+    private static boolean deleted;
+    private static final File unzippedModpack = new File("./AutoModpack/modpack/");
+    private static final List<File> modpackFiles = new ArrayList<>();
 
     public DeleteModpack() {
+        System.out.println("Deleting modpack...");
 
-        LOGGER.warn("Deleting modpack...");
-        // unzip modpack.zip
-        // get absolute path of current dir
-
-//        System.out.println("Working directory: " + System.getProperty("user.dir"));
-//
-//        System.out.println("Generating hash...");
-//
-//        System.out.println("Hash SHA-512: " + GenerateHash.SHA512(new File("./AutoModpack/modpack.zip").length() + ""));
-//
-//        System.out.println("Hash MD5: " + GenerateHash.MD5(new File("./AutoModpack/modpack.zip").length() + ""));
-
-        new UnZipper(out, new File("./AutoModpack/modpack/"), true, "none");
-
-//        deleteEverything();
-//        deleteEverything();
-
-        makeIt();
-
-        Runtime.getRuntime().addShutdownHook(new Thread(DeleteModpack::makeIt));
-    }
-
-    private static void makeIt() {
-
-        modsDeleted = true;
-        configsDeleted = true;
-
-        tryCountMods = 1;
-        tryCountConfigs = 1;
-
-        deleteMods();
-        deleteConfigs();
-
-        while (true) {
-            if (tryCountMods == 10) {
-                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (MODS) FAILED!");
-                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (MODS) FAILED!");
-                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (MODS) FAILED!");
-                break;
-            }
-            if (!modsDeleted) {
-                tryCountMods++;
-                LOGGER.warn("Trying to delete mods again... " + tryCountMods);
-                modsDeleted = true;
-                deleteMods();
-            }
-            if (modsDeleted) {
-                break;
-            }
-        }
-
-        while (true) {
-            if (tryCountConfigs == 10) {
-                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (CONFIGS) FAILED!");
-                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (CONFIGS) FAILED!");
-                LOGGER.error("AUTOMODPACK -- ERROR - DELETING MODPACK (CONFIGS) FAILED!");
-                break;
-            }
-            if (!configsDeleted) {
-                tryCountConfigs++;
-                LOGGER.warn("Trying to delete configs again... " + tryCountConfigs);
-                configsDeleted = true;
-                deleteConfigs();
-            }
-            if (configsDeleted) {
-                break;
-            }
-        }
-
-        // delete unzipped modpack dir, modpack.zip and modpack-link.txt
         try {
-            FileDeleteStrategy.FORCE.delete(new File("./AutoModpack/modpack/"));
-            FileDeleteStrategy.FORCE.delete(out);
-            FileDeleteStrategy.FORCE.delete(new File("./AutoModpack/modpack-link.txt"));
-        } catch (Exception e) { // ignore it
+            new UnZipper(out, unzippedModpack, "none");
+        } catch (IOException e) {
+            System.out.println("Error while unzipping!\n" + e);
+            e.printStackTrace();
         }
 
-        LOGGER.info("Finished deleting modpack!");
-        LOGGER.info("Restart your game!");
+        Runtime.getRuntime().addShutdownHook(new Thread(DeleteModpack::start));
     }
 
-    // TODO: delete everything method
-//    private static void deleteEverything() {
-//        // make array of all files in modpack dir
-//        File[] files = new File("./AutoModpack/modpack/").listFiles();
-//
-//        if (files.length == 0) {
-//            LOGGER.info("Nothing to delete...");
-//            return;
-//        }
-//
-//        LOGGER.info("Deleting everything...");
-//        for (File file : files) {
-//            LOGGER.info(file.getName() + ":");
-//            File[] filesInDir = file.listFiles();
-//            if (filesInDir == null) {
-//                LOGGER.info("null!");
-//                return;
-//            } else {
-//                for (File fileInDir : filesInDir) {
-//                    LOGGER.info("\t" + fileInDir.getName());
-//                    fileInDir.delete();
-//                }
-//                file.delete();
-//            }
-//        }
-//    }
+    private static void start() {
+        deleted = true;
+        int tryCounter = 0;
 
-//    public static void main(String[] args) {
-//        // user path
-//        System.out.println("Working directory: " + System.getProperty("user.dir"));
-//
-//        try {
-//            new Ziper(new File("./run/AutoModpack/TrashMod/"), new File("./run/mods/AutoModpack-1.19.x.jar"));
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//        }
-//    }
+        selectFilesToDelete();
 
-    private static void deleteMods() {
-        // MODS
-        // make array of file names "./AutoModpack/modpack/mods/" folder
-        File[] modpackModsFiles = new File("./AutoModpack/modpack/mods/").listFiles();
+        while (true) {
+            if (!deleted && tryCounter < 10) {
+                tryCounter++;
+                System.out.println("Trying to delete modpack again... " + tryCounter);
+                deleted = true;
+                selectFilesToDelete();
+            }
+            if (!deleted && tryCounter == 10) {
+                System.out.println("AUTOMODPACK -- ERROR - DELETING MODPACK FAILED!");
+            }
+            if (deleted) {
+                System.out.println("Modpack deleted successfully!");
+                break;
+            }
+        }
 
-        // loop to delete all names in ./mods/ folder of names in files in "./AutoModpack/modpack/mods/"
-        for (File modpackModName : modpackModsFiles) {
-            String modName = modpackModName.getName();
-            File modFile = new File("./mods/" + modName);
+        // Delete unzipped modpack dir, modpack.zip and modpack-link.txt
+        try {
+            FileDeleteStrategy.FORCE.delete(unzippedModpack);
+            FileDeleteStrategy.FORCE.delete(out);
+            FileDeleteStrategy.FORCE.delete(modpack_link);
+        } catch (Exception ignored) { }
 
-            if (modFile.exists()) {
+        System.out.println("Restart your game!");
+    }
 
-                if (modFile.exists()) {
-                    LOGGER.info("Deleting: " + modName);
-                    try {
-                        FileDeleteStrategy.FORCE.delete(modFile);
-                    } catch (IOException ignored) {
-                    }
+    private static void selectFilesToDelete() {
+        File[] files = unzippedModpack.listFiles();
+        for (File file : Objects.requireNonNull(files)) {
+            if (file.isDirectory()) {
+                modpackFiles.add(new File("./" + file.getName() + "/"));
+            } else {
+                deleteLogic(file);
+            }
+        }
+
+        for (File modpackFile : modpackFiles) {
+            File[] children = modpackFile.listFiles();
+            for (File child : Objects.requireNonNull(children)) {
+                File path = new File(modpackFile + "\\" + child.getName());
+                if (child.isDirectory()) {
+                    path = new File(modpackFile + "\\" + child.getName() + "\\");
                 }
-
-                if (modFile.exists()) { // if mod to delete still exists
-                    try {
-                        new Zipper(new File("./AutoModpack/TrashMod/"), modFile);
-                    } catch (IOException ignored) {
-                    }
-                    try {
-                        FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
-                        fw.write(modName + "\n");
-                        fw.close();
-                    } catch (IOException ignored) {
-                    }
-                }
-
-                if (modFile.exists()) {
-                    try {
-                        FileDeleteStrategy.FORCE.delete(modFile);
-                    } catch (IOException ignored) {
-                    }
-                }
-
-                if (!modFile.exists()) {
-                    LOGGER.info("Successfully deleted: " + modName);
-                } else if (modFile.exists() && modFile.length() == 16681) {
-                    LOGGER.info("Successfully trashed: " + modName);
-                } else {
-                    LOGGER.info("Failed to delete: " + modName);
-                    modsDeleted = false;
-                }
+                deleteLogic(path);
             }
         }
     }
 
-    private static void deleteConfigs() {
+    private static void deleteLogic(File file) {
+        if (file.exists() && !file.getName().equals(correctName)) {
+            System.out.println("Deleting: " + file);
+            try {
+                FileDeleteStrategy.FORCE.delete(file);
+            } catch (IOException ignored) { }
 
-        // CONFIGS
-        // make array of file names "./AutoModpack/modpack/config/" folder
-        File[] modpackConfigFiles = new File("./AutoModpack/modpack/config/").listFiles();
-
-        // loop to delete all names in ./config/ folder of names in files in "./AutoModpack/modpack/config/"
-        for (File modpackConfigName : modpackConfigFiles) {
-
-            String configName = modpackConfigName.getName();
-            File configFile = new File("./config/" + configName);
-
-            if (configFile.exists()) {
+            if (file.exists() && file.getName().endsWith(".jar")) { // If mod to delete still exists
                 try {
-                    if (configFile.exists()) {
-                        LOGGER.info("Deleting: " + configName);
-                        FileDeleteStrategy.FORCE.delete(configFile);
-                    }
-                    LOGGER.info("Successfully deleted: " + configName);
-                } catch (IOException e) { // ignore
-                    configsDeleted = false;
+                    new Zipper(new File("./AutoModpack/TrashMod/"), file);
+                } catch (IOException e) {
                     e.printStackTrace();
                 }
+                try {
+                    FileWriter fw = new FileWriter("./AutoModpack/trashed-mods.txt", true);
+                    fw.write(file.getName() + "\n");
+                    fw.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if (file.exists()) {
+                try {
+                    FileDeleteStrategy.FORCE.delete(file);
+                } catch (IOException ignored) { }
+            }
+
+            if (!file.exists()) {
+                System.out.println("Successfully deleted: " + file);
+            } else if (file.exists() && file.length() == 16988) {
+                System.out.println("Successfully trashed: " + file);
+            } else {
+                System.out.println("Failed to delete: " + file);
+                deleted = false;
             }
         }
     }

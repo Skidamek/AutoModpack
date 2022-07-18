@@ -9,11 +9,25 @@ import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
 public class Download {
 
-    public static int downloadPercent = 0;
+    public static float progress;
+    public static String averageInternetConnectionSpeed;
 
     public static boolean Download(String link, File output) {
         try {
             URL url = new URL(link);
+
+            // TODO get minecraft username
+//            URLConnection conn = url.openConnection();
+//
+//
+//            conn.setRequestProperty("X-Minecraft-Username", HERE);
+//            conn.connect();
+//            conn.getInputStream().close();
+
+            progress = 0;
+            averageInternetConnectionSpeed = "";
+            long startTime = System.currentTimeMillis();
+
             HttpURLConnection http = (HttpURLConnection) url.openConnection();
             http.setRequestMethod("GET");
             http.setConnectTimeout(30000); // 30 seconds
@@ -30,23 +44,32 @@ public class Download {
                 String lastPercent = null;
                 String percent = "0";
 
-                while ((read = in.read(buffer, 0, 1024)) >= 0) {
+                while ((read = in.read(buffer, 0, 1024)) >= 0) { // TODO make it real time, not average!
                     bout.write(buffer, 0, read);
                     downloaded += read;
                     percentDownloaded = (downloaded * 100) / fileSize;
 
+                    long endTime = System.currentTimeMillis();
+                    double rate = (((downloaded / 1024) / ((endTime - startTime) / 1000.0)) * 8);
+                    rate = Math.round( rate * 100.0 ) / 100.0;
+                    if (rate > 1000) {
+                        averageInternetConnectionSpeed = String.format("%.1f", (rate / 1024)).concat(" Mb/s");
+                    } else {
+                        averageInternetConnectionSpeed = String.format("%.1f", rate).concat(" Kb/s");
+                    }
+
                     // if lastPercent != percent
                     if (!Objects.equals(lastPercent, percent)) {
-                        percent = (String.format("%.0f", percentDownloaded));
-                        downloadPercent = Integer.parseInt(percent);
-                        if (percent.contains("0")) {
-                            LOGGER.info(percent + "%");
+                        percent = (String.format("%.1f", percentDownloaded));
+                        progress = Float.parseFloat(percent);
+                        if (percent.contains("0.0") && !percent.equals("0.0")) {
+                            LOGGER.info("Downloaded " + percent.split("\\.")[0] + "%" + " with average internet connection speed of " + averageInternetConnectionSpeed);
                         }
                         lastPercent = percent;
 
                         // if lastPercent == percent
                     } else {
-                        percent = (String.format("%.0f", percentDownloaded));
+                        percent = (String.format("%.1f", percentDownloaded));
                     }
                 }
                 bout.close();

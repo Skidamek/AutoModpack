@@ -24,10 +24,9 @@ public class Zipper {
     }
 
     private static void zipFile(File fileToZip, String fileName, ZipOutputStream zipOut) throws IOException {
-        if (fileToZip.getName().equals("[CLIENT] mods")) {
+        if (fileToZip.getName().equals("[CLIENT] mods") || fileToZip.getName().equals("automodpack.properties")) {
             return;
         }
-
         if (fileToZip.isHidden()) {
             return;
         }

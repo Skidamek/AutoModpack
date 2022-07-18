@@ -2,10 +2,7 @@ package pl.skidam.automodpack.server;
 
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.AutoModpackMain;
-import pl.skidam.automodpack.utils.Download;
-import pl.skidam.automodpack.utils.ModrinthAPI;
-import pl.skidam.automodpack.utils.UnZipper;
-import pl.skidam.automodpack.utils.Zipper;
+import pl.skidam.automodpack.utils.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,7 +27,7 @@ public class ServerSelfUpdater {
             return;
         }
 
-        if (VERSION.equals(modrinthAPIversion)) {
+        if (VERSION.equals(modrinthAPIversion) && selfOut.length() == WebFileSize.webfileSize(modrinthAPIdownloadUrl)) {
             LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
             return;
         }
@@ -47,10 +44,17 @@ public class ServerSelfUpdater {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
             File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");
-            new UnZipper(selfBackup, selfBackupUnzipped, true, "none");
+            try {
+                new UnZipper(selfBackup, selfBackupUnzipped, "none");
+            } catch (IOException e) {
+                LOGGER.error("Error unzipping file!");
+                throw new RuntimeException(e);
+            }
             try {
                 new Zipper(selfBackupUnzipped, selfOut);
             } catch (IOException e) {
+                LOGGER.error("Error zipping file!");
+                throw new RuntimeException(e);
             }
             FileUtils.deleteQuietly(selfBackupUnzipped);
             FileUtils.deleteQuietly(selfBackup);

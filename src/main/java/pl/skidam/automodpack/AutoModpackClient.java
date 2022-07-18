@@ -23,6 +23,8 @@ import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 public class AutoModpackClient implements ClientModInitializer {
 
     public static boolean isOnServer;
+    public static String serverIP;
+    public static final File modpack_link = new File("./AutoModpack/modpack-link.txt");
     @Override
     public void onInitializeClient() {
 
@@ -31,17 +33,16 @@ public class AutoModpackClient implements ClientModInitializer {
         isOnServer = false;
         CheckModpack.isCheckUpdatesButtonClicked = false;
 
-        // load saved link from ./AutoModpack/modpack-link.txt file
+        // Load saved link from ./AutoModpack/modpack-link.txt file
         String savedLink = "";
         try {
-            File modpack_link = new File("./AutoModpack/modpack-link.txt");
             FileReader fr = new FileReader(modpack_link);
             Scanner inFile = new Scanner(fr);
             if (inFile.hasNextLine()) {
                 savedLink = inFile.nextLine();
             }
             inFile.close();
-        } catch (Exception e) { // ignore
+        } catch (Exception ignored) {
         }
 
         if (!savedLink.equals("")) {
@@ -53,12 +54,15 @@ public class AutoModpackClient implements ClientModInitializer {
             }
         }
 
-        // packets
+        // Packets
         ClientLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onServerRequest);
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
-        // register
-        ClientLoginConnectionEvents.QUERY_START.register((clientLoginNetworkHandler, minecraftClient) -> isOnServer = true);
+        // Register
+        ClientLoginConnectionEvents.QUERY_START.register((clientLoginNetworkHandler, minecraftClient) -> {
+            serverIP = clientLoginNetworkHandler.getConnection().getAddress().toString();
+            isOnServer = true;
+        });
         ClientLoginConnectionEvents.DISCONNECT.register((clientLoginNetworkHandler, minecraftClient) -> isOnServer = false);
 
         new StartAndCheck(true, false);
@@ -75,7 +79,7 @@ public class AutoModpackClient implements ClientModInitializer {
         String receivedLink = outBuf.readString(100);
         link = receivedLink;
         try {
-            FileWriter fWriter = new FileWriter("./AutoModpack/modpack-link.txt");
+            FileWriter fWriter = new FileWriter(modpack_link);
             fWriter.flush();
             fWriter.write(receivedLink);
             fWriter.close();

@@ -41,7 +41,7 @@ public class ConfigScreen {
                 .build()
         );
 
-        // TODO if player is on server where has op permission, send this config to server and reload this config on server
+        // TODO If player has op permission, send this config and reload it on the server
 
         AbstractConfigListEntry<?> modpackHost = builder.entryBuilder()
                 .startBooleanToggle(new LiteralText("Host modpack"), Config.MODPACK_HOST)
@@ -53,7 +53,7 @@ public class ConfigScreen {
 
         AbstractConfigListEntry<?> syncMods = builder.entryBuilder()
                 .startBooleanToggle(new LiteralText("Sync mods"), Config.SYNC_MODS)
-                .setTooltip(new LiteralText("Clone all mods from default mods folder on your server to the modpack, but all other mods will be deleted. (you **can** add mods that you don't want to load on the server only in `./AutoModpack/modpack/[CLIENT] mods`, delmods.txt **is** making automatically when some mods got updated or deleted)"))
+                .setTooltip(new LiteralText("Clone all mods from default mods folder on your server to the modpack, but all other mods will be deleted. (you can add mods that you don't want to load on the server only in ./AutoModpack/modpack/[CLIENT] mods, delmods.txt is making automatically when some mods got updated or deleted)"))
                 .setSaveConsumer((toggled) -> Config.SYNC_MODS = toggled)
                 .setDefaultValue(true)
                 .build();

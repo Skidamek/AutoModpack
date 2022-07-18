@@ -1,20 +1,18 @@
-# **Welcome to AutoModpack,**
+# Welcome to AutoModpack,
 
 What is this?
 This basically makes easier to update your modpack. Your friends / players don't need to manually update all mods / modpack thanks to this mod all this boring work is done automatically.
 
 Showcase: https://youtu.be/lPPzaNPn8g8
 
-# Key features
+## Key features
 - Your players no longer have to update mods manually.
 - Modpack hosting.
-- Easy download/update modpack (add mods, delete mods, add configs whatever you want)
+- Easy manage as admin (your player's mods, configs, shaderpacks, resourcepacks, etc.)
 - Sync modpack mods with server mods.
-- Dynamically change mods in modpack.
-- Update checker/downloader.
-- Delete modpack button.
+- Dynamically change your modpack without triggering your friends/players.
 
-# How to use
+## How to use
 
 First of all download the latest version of the mod from [here](https://modrinth.com/mod/automodpack/versions).
 
@@ -32,38 +30,48 @@ On join the server who has this mod, modpack will be automatically downloaded an
 
 **Open port (default: `30037`) on your server! TCP/UDP** need to host modpack.
 
-NOTE: if you can't open any port on your server, you can type in the config "external_modpack_host" http/s address of download server it can be even MediaFire/Google Drive/Dropbox. You can upload there modpack.zip whose is automatically generated on your minecraft server at ./AutoModpack/modpack.zip
+NOTE: if you can't open any port on your server, or you just care about server performance. Use Google Drive, upload there modpack.zip whose automatically generated on your minecraft server at `./AutoModpack/modpack.zip`. And the link type into the config "external_modpack_host".
 
-Add mods/configs what ever you want in your modpack to the `./AutoModpack/modpack/` directory.
+(Unfortunately when using Google Drive or other download service/server `sync_mods` will not work. (Working on it, if you know how to implement Google Drive upload feature, please let me know.) )
+
+Add mods/configs whatever you want in your modpack to the `./AutoModpack/modpack/` directory.
 
 Restart server and you are good to go! Enjoy!
 
-**If you want to delete some mods from modpack**
+**I want to delete some mods from my modpack**
 - Go to `./AutoModpack/modpack/` directory on your server.
 - Create file `delmods.txt`.
 - Inside this file put full names of mods you want to delete. **(one full name per line!)**
 
-# Config
+## Config
 
-**Use Cloth Config and Mod Menu mods to change settings in game.**
+*config/automodpack.properties*
 
-Client side settings:
+Use Cloth Config and Mod Menu mods to change settings in game
 
-- `danger_screen`: (default: `true`) - Show danger screen before downloading updates.
-- `check_updates_button`: (default: `true`) - Show "Check updates" button on Title Screen.
-- `delete_modpack_button`: (default: `true`) - Show "Delete modpack" button on Title Screen. (Button is only visible when some modpack is installed)
+**Client side**
 
-Server side settings:
+| Name                    | Default Value | Description                                   |
+|-------------------------|---------------|-----------------------------------------------|
+| `danger_screen`         | `true`        | Show danger screen before downloading updates |
+| `check_updates_button`  | `true`        | Show "Check updates" button on Title Screen   |
+| `delete_modpack_button` | `true`        | Show "Delete modpack" button on Title Screen  |
 
-- `modpack_host`": (default: `true`) - Host http server for modpack. If this is disabled use `external_modpack_host`.
-- `sync_mods`: (default: `true`) - Clone all mods from default mods folder on your server to the modpack, but all other mods will be deleted. (you **can** add mods that you don't want to load on the server only in `./AutoModpack/modpack/[CLIENT] mods`, delmods.txt **is** making automatically when some mods got updated or deleted)
-- `only_optional_modpack`: (default: `false`) - If this is enabled, vanilla players will, can join if other mods on server are only server side.
-- `host_port`: (default: `30037`) - At this port http server for hosting modpack will be running.
-- `host_thread_count`: (default: `2`) - Http server will be use this amount of threads.
-- `host_external_ip`: (default: none) - Http server will be use this external ip instead of default one. (OPTIONAL)
-- `external_modpack_host`: (default: none) - Typed here http/s address will be used as external host server. This will automatically disable `modpack_host`. (OPTIONAL)
+**Server side**
 
-# Commands
+| Name                                 | Default Value | Description                                                                                                                |
+|--------------------------------------|---------------|----------------------------------------------------------------------------------------------------------------------------|
+| `modpack_host`                       | `true`        | Host http server for modpack. If this is disabled use `external_modpack_host`                                              |
+| `sync_mods`                          | `true`        | Clone all your mods to modpack and delete all mods whose were deleted or updated                                           |
+| `only_optional_modpack`              | `false`       | Vanilla players will, can join if other mods on server are only server side                                                |
+| `host_port`                          | `30037`       | This port will be used to host modpack                                                                                     |
+| `host_thread_count`                  | `2`           | Modpack host will be use this amount of threads.                                                                           |
+| `host_external_ip`                   | --            | Modpack host will be use this external ip instead of default one. (OPTIONAL)                                               |
+| `host_external_ip_for_local_players` | --            | Same as `host_external_ip` but only for players from local network. (OPTIONAL)                                             |
+| `external_modpack_host`              | --            | Typed here http/s address will be used as external host server. This will automatically disable `modpack_host`. (OPTIONAL) |
+
+
+## Commands
 
 - `/automodpack` - Check version of AutoModpack. (this mod)
 - `/automodpack generate-modpack` - Generate new modpack.zip file on server.
@@ -72,30 +80,36 @@ Server side settings:
 - `/automodpack modpack-host stop` - Stop modpack hosting.
 - `/automodpack modpack-host restart` - Restart modpack hosting.
 
-# FAQ
+## FAQ
 
-Which versions are supported?
+- Which versions are supported?
 
-- 1.19.x and 1.18.x on fabric/quilt modloader.
+1.19.x and 1.18.x on fabric/quilt modloader.
 
-Do I must use official minecraft launcher?
+- What is [CLIENT\] MODS folder?
 
-- No, you can use any launcher you want except for Feather Client its unsupported. (but launcher must be compatible with fabric/quilt modloader)
+Basically (It's for server admins and have it purpose only if `sync_mods` is enabled) you can add there those mods you want to add to the modpack, but you don't want to load them on server
 
-Do I must install this mod on both sides?
+- Do I must use official minecraft launcher?
 
-- Yes, you need to install this mod on both sides.
+No, you can use any launcher you want except for Feather Client its unsupported. (but launcher must be compatible with fabric/quilt modloader)
 
-Does it deleting existing mods which are not in modpack but the client has them?
+- Do I must install this mod on both sides?
 
-- No, it doesn't. It will only delete mods which are written out in delmods.txt in your modpack.
+Yes, you need to install this mod on both sides.
+
+- Does it deleting existing mods which are not in modpack but the client has them?
+
+No, it doesn't. It will only delete mods which are written out in delmods.txt in your modpack.
 
 - Does it automatically update my mods?
 
 No, it doesn't, but if you want this cool feature take a look at [AutoPlug](https://www.spigotmc.org/resources/autoplug-automatic-updater-for-plugins-mods-server-java-itself.78414/). If you are using AutoPlug, I recommend you set `sync_mods` to `true` in AutoModpack config.
 
+## Questions?
+* Contact me via discord Skidam#0001
 
-**Contributors are welcome**
+**Contributors are welcome!**
 [**click.**](CONTRIBUTING.md)
 
 <p align="center"><img src="https://i.imgur.com/zogBcIG.png" alt="Logo" width="200"></p>

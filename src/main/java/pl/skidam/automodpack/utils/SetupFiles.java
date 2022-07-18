@@ -6,7 +6,10 @@ import org.apache.commons.io.FileUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Objects;
+
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.AutoModpackServer.changelogsDir;
 public class SetupFiles {
     public SetupFiles() {
 
@@ -55,6 +58,10 @@ public class SetupFiles {
             modpackClientModsDir.mkdir();
         }
 
+        if (!changelogsDir.exists()) {
+            changelogsDir.mkdir();
+        }
+
 //        File tempDir = new File("./AutoModpack/temp/");
 //        if (!tempDir.exists()) {
 //            tempDir.mkdir();
@@ -64,7 +71,7 @@ public class SetupFiles {
     private void client() {
 
         File[] files = new File("./AutoModpack/").listFiles();
-        for (File file : files) {
+        for (File file : Objects.requireNonNull(files)) {
             if (file.getName().toLowerCase().contains("automodpack")) {
                 FileUtils.deleteQuietly(file);
             }
@@ -76,7 +83,11 @@ public class SetupFiles {
         }
 
         if (!new File("./AutoModpack/TrashMod/").exists() && trashOut.exists()) {
-            new UnZipper(trashOut, new File("./AutoModpack/TrashMod/"), true, "none");
+            try {
+                new UnZipper(trashOut, new File("./AutoModpack/TrashMod/"), "none");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
         File modpack_link = new File ("./AutoModpack/modpack-link.txt");

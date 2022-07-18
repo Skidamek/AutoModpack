@@ -1,97 +1,118 @@
 package pl.skidam.automodpack.utils;
 
+import pl.skidam.automodpack.AutoModpackMain;
+
 import java.io.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
-
 public class UnZipper {
     public static int progress;
-    public static ZipEntry Zip_Entry;
+    private static int entries;
+    private static float entryGoing; // IDK why it needs to be float...
 
-    public UnZipper(File zippedInput, File unZippedOut, boolean extractAll, String fileName) {
-        try {
-            // extract all files from zip
-            if (extractAll) {
-                // Math to get the number of entries in the zip file. IDK how to make it better //
-
-                UnZipper.progress = 0;
-                ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
-                ZipEntry Zip_Entry = zipInputStream.getNextEntry();
-
-                // how many entries in the zip file
-                int entries = 0;
-                while (Zip_Entry != null) {
-                    entries++;
-                    Zip_Entry = zipInputStream.getNextEntry();
-                }
-                zipInputStream.close();
-
-                // ---------------------------------------------------------------------------- //
-
-                ZipInputStream zipInputStream2 = new ZipInputStream(new FileInputStream(zippedInput));
-                ZipEntry Zip_Entry2 = zipInputStream2.getNextEntry();
-
-                float entryGoing = 0;
-
-                while (Zip_Entry2 != null) {
-                    // progress monitor //
-                    entryGoing++;
-                    float progress = entryGoing / entries * 100;
-                    UnZipper.progress = (int) progress;
-                    // ---------------- //
-
-                    String unZippedFile = unZippedOut + File.separator + Zip_Entry2.getName();
-                    if (!Zip_Entry2.isDirectory()) {
-                        extractFile(zipInputStream2, unZippedFile);
-                    } else {
-                        File directory = new File(unZippedFile);
-                        directory.mkdirs();
+    public UnZipper(File fileZip, File destDir, String oneFileToUnzipIfAny) throws IOException {
+        byte[] buffer = new byte[1024];
+        ZipInputStream zis = new ZipInputStream(new FileInputStream(fileZip));
+        ZipEntry zipEntry = zis.getNextEntry();
+        if (oneFileToUnzipIfAny.equals("") || oneFileToUnzipIfAny.equals("none")) {
+            progressBarSetup(fileZip);
+            while (zipEntry != null) {
+                // Progress bar //
+                entryGoing++;
+                progress = (int) (entryGoing / entries * 100);
+                // System.out.println("Extracting " + zipEntry.getName() + (int) entryGoing + "/" + entries + " " + progress + "%");
+                // ------------ //
+                File newFile = newFile(destDir, zipEntry);
+                if (zipEntry.isDirectory()) {
+                    if (!newFile.isDirectory() && !newFile.mkdirs()) {
+                        throw new IOException("Failed to create directory " + newFile);
                     }
-                    zipInputStream2.closeEntry();
-                    Zip_Entry2 = zipInputStream2.getNextEntry();
+                } else {
+                    // Fix for Windows-created archives
+                    File parent = newFile.getParentFile();
+                    if (!parent.isDirectory() && !parent.mkdirs()) {
+                        throw new IOException("Failed to create directory " + parent);
+                    }
+
+                    // Write file content
+                    FileOutputStream fos = new FileOutputStream(newFile);
+                    int len;
+                    while ((len = zis.read(buffer)) > 0) {
+                        fos.write(buffer, 0, len);
+                    }
+                    fos.close();
                 }
-                zipInputStream2.close();
+                zipEntry = zis.getNextEntry();
             }
+            zis.closeEntry();
+            zis.close();
 
-            // extract only one file from zip
-            if (!extractAll) {
-                ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zippedInput));
-                Zip_Entry = zipInputStream.getNextEntry();
-
-                while (Zip_Entry != null) {
-                    String unZippedFile = unZippedOut + File.separator + Zip_Entry.getName();
-                    if (!Zip_Entry.isDirectory()) {
-                        if (Zip_Entry.getName().equals(fileName)) {
-                            extractFile(zipInputStream, unZippedFile);
+        } else {
+            boolean found = false;
+            while (zipEntry != null) {
+                if (zipEntry.getName().equals(oneFileToUnzipIfAny)) {
+                    found = true;
+                    File newFile = newFile(destDir, zipEntry);
+                    if (zipEntry.isDirectory()) {
+                        if (!newFile.isDirectory() && !newFile.mkdirs()) {
+                            throw new IOException("Failed to create directory " + newFile);
                         }
-                    }
-                    zipInputStream.closeEntry();
-                    Zip_Entry = zipInputStream.getNextEntry();
-                }
-                zipInputStream.close();
-            }
+                    } else {
+                        // Fix for Windows-created archives
+                        File parent = newFile.getParentFile();
+                        if (!parent.isDirectory() && !parent.mkdirs()) {
+                            throw new IOException("Failed to create directory " + parent);
+                        }
 
-        } catch (IOException e) {
-            LOGGER.error(e.getMessage());
+                        // Write file content
+                        FileOutputStream fos = new FileOutputStream(newFile);
+                        int len;
+                        while ((len = zis.read(buffer)) > 0) {
+                            fos.write(buffer, 0, len);
+                        }
+                        fos.close();
+                    }
+                    break;
+                } else {
+                    zipEntry = zis.getNextEntry();
+                }
+            }
+            zis.closeEntry();
+            zis.close();
+
+            if (!found) {
+                AutoModpackMain.LOGGER.warn("File not found in archive: " + oneFileToUnzipIfAny);
+            }
         }
     }
 
-    private static void extractFile(ZipInputStream zipInputStream, String unZippedFile) {
-        try {
-            BufferedOutputStream Buffered_Output_Stream = new BufferedOutputStream(new FileOutputStream(unZippedFile));
-            byte[] Buffer = new byte[1024];
-            if (Zip_Entry != null && Zip_Entry.getSize() > 0) {
-                Buffer = new byte[(int) Zip_Entry.getSize()];
-            }
-            int Read_Byte;
-            while ((Read_Byte = zipInputStream.read(Buffer)) > 0) {
-                Buffered_Output_Stream.write(Buffer, 0, Read_Byte);
-            }
-            Buffered_Output_Stream.close();
-        } catch (IOException e) { // ignore it
-            LOGGER.error(e.getMessage());
+    private static File newFile(File destinationDir, ZipEntry zipEntry) throws IOException {
+        File destFile = new File(destinationDir, zipEntry.getName());
+
+        String destDirPath = destinationDir.getCanonicalPath();
+        String destFilePath = destFile.getCanonicalPath();
+
+        if (!destFilePath.startsWith(destDirPath + File.separator)) {
+            throw new IOException("Entry is outside of the target dir: " + zipEntry.getName());
         }
+
+        return destFile;
+    }
+
+    private static void progressBarSetup(File zip) throws IOException {
+        progress = 0;
+        entries = 0;
+        entryGoing = 0;
+
+        ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zip));
+        ZipEntry Zip_Entry = zipInputStream.getNextEntry();
+
+        // How many entries in the zip file to after make percentage of it
+        while (Zip_Entry != null) {
+            entries++;
+            Zip_Entry = zipInputStream.getNextEntry();
+        }
+        zipInputStream.close();
     }
 }

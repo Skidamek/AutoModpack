@@ -7,6 +7,8 @@ import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.ui.RestartScreen;
 
+import java.util.Objects;
+
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.client.modpack.DownloadModpack.prepare.DangerScreenWasShown;
@@ -20,9 +22,8 @@ public class Finished {
                 DangerScreenWasShown = false;
                 break;
             }
-            // doesn't work well on dev env
-            assert MinecraftClient.getInstance().currentScreen != null;
-            String currentScreen = MinecraftClient.getInstance().currentScreen.toString().toLowerCase();
+            // Doesn't work well on dev env
+            String currentScreen = Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().toLowerCase();
             if (currentScreen.contains("442") || currentScreen.contains("500") || currentScreen.contains("429") || currentScreen.contains("526") || currentScreen.contains("525") || currentScreen.contains("424") || currentScreen.contains("modsscreen") || currentScreen.contains("loading") || currentScreen.contains("title")) {
                 break;
             }
@@ -38,9 +39,12 @@ public class Finished {
                         break;
                     }
                 }
+            } else {
+                if (MinecraftClient.getInstance().world != null) {
+                    break;
+                }
             }
         }
-
 
         Text bothUpdates = new TranslatableText("gui.automodpack.screen.restart.title.all").formatted(Formatting.BOLD);
         Text modpackUpdate = new TranslatableText("gui.automodpack.screen.restart.title.modpack").formatted(Formatting.BOLD);
@@ -62,8 +66,9 @@ public class Finished {
 
         AutoModpackUpdated = null;
         ModpackUpdated = null;
+        StartAndCheck.isChecking = false;
 
-        if (MinecraftClient.getInstance().currentScreen.toString().contains("loading")) {
+        if (Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().contains("loading")) {
             MinecraftClient.getInstance().setScreen(new TitleScreen());
         }
     }

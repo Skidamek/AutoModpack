@@ -41,8 +41,8 @@ public class SelfUpdater {
             return;
         }
 
-        if (VERSION.equals(modrinthAPIversion)) {
-            LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
+        if (VERSION.equals(modrinthAPIversion) && selfOut.length() == modrinthAPIsize) {
+            LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
             if (!preload) {
                 AutoModpackToast.add(4);
             }
@@ -72,14 +72,21 @@ public class SelfUpdater {
             return;
         }
 
-        // shutdown hook to make it the most reliable way to update
+        // Shutdown hook to make it the most reliable way to update
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
             File selfBackupUnzipped = new File("./AutoModpack/AutoModpack-temp/");
-            new UnZipper(selfBackup, selfBackupUnzipped, true, "none");
+            try {
+                new UnZipper(selfBackup, selfBackupUnzipped, "none");
+            } catch (IOException e) {
+                LOGGER.error("Error unzipping file!");
+                throw new RuntimeException(e);
+            }
             try {
                 new Zipper(selfBackupUnzipped, selfOut);
             } catch (IOException e) {
+                LOGGER.error("Error zipping file!");
+                throw new RuntimeException(e);
             }
             FileUtils.deleteQuietly(selfBackupUnzipped);
             FileUtils.deleteQuietly(selfBackup);

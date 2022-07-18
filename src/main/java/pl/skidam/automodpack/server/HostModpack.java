@@ -27,14 +27,16 @@ public class HostModpack implements HttpHandler {
     public static String modpackHostIp;
     public static String modpackHostIpForLocalPlayers;
     private static String serverIpForOthers;
-
+    public static boolean isRunning;
 
     public static void stop() {
         if (server != null) {
-            server.stop(1);
+            server.stop(0);
+            isRunning = false;
         }
         if (threadPool != null) {
             threadPool.shutdownNow();
+            isRunning = false;
         }
     }
 
@@ -43,6 +45,24 @@ public class HostModpack implements HttpHandler {
             LOGGER.info("Modpack host is disabled");
             if (!Config.EXTERNAL_MODPACK_HOST.equals("")) {
                 if (ValidateURL(Config.EXTERNAL_MODPACK_HOST)) {
+
+                    // google drive link fixer (make it direct download link)
+                    if (Config.EXTERNAL_MODPACK_HOST.startsWith("https://drive.google.com/")) {
+
+                        if (Config.EXTERNAL_MODPACK_HOST.contains("/file/d/")) {
+                            Config.EXTERNAL_MODPACK_HOST = Config.EXTERNAL_MODPACK_HOST.replace("/file/d/", "/uc?id=");
+                        }
+                        if (Config.EXTERNAL_MODPACK_HOST.contains("/view?usp=sharing")) {
+                            Config.EXTERNAL_MODPACK_HOST = Config.EXTERNAL_MODPACK_HOST.replace("/view?usp=sharing", "&confirm=true");
+                        }
+
+                        if (ValidateURL(Config.EXTERNAL_MODPACK_HOST)) {
+                            new Config().save();
+                        } else {
+                            LOGGER.error("External modpack host is not valid");
+                        }
+                    }
+
                     LOGGER.info("Using external host server: " + Config.EXTERNAL_MODPACK_HOST);
                     link = Config.EXTERNAL_MODPACK_HOST;
                     modpackHostIpForLocalPlayers = Config.EXTERNAL_MODPACK_HOST;
@@ -62,6 +82,9 @@ public class HostModpack implements HttpHandler {
                 serverIpForOthers = publicServerIP;
 
                 String localIp = InetAddress.getLocalHost().getHostAddress();
+                if (!Config.HOST_EXTERNAL_IP_FOR_LOCAL_PLAYERS.equals("")) {
+                    localIp = Config.HOST_EXTERNAL_IP_FOR_LOCAL_PLAYERS;
+                }
                 String subUrl = "modpack";
 
                 if (!Config.HOST_EXTERNAL_IP.equals("")) {
@@ -80,8 +103,10 @@ public class HostModpack implements HttpHandler {
                 link = modpackHostIp;
 
                 LOGGER.info("Modpack host started at {} and {} for local players.", modpackHostIp, modpackHostIpForLocalPlayers);
+                isRunning = true;
             } catch (Exception e) {
                 LOGGER.error("Failed to start the modpack server!", e);
+                isRunning = false;
             }
         }, threadPool);
     }

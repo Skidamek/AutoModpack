@@ -3,14 +3,15 @@
   "quilt_loader": {
     "group": "pl.skidam.automodpack",
     "id": "automodpack",
-    "version": "2.1.4",
+    "version": "2.2.0",
     "metadata": {
       "name": "AutoModpack",
       "description": "Just automatic updating and downloading modpacks!",
       "contributors": {
         "Skidam": "Owner",
         "Pipelek": "Graphic artist, motivator",
-        "Merith" : "Great ideas"
+        "Merith" : "Great ideas",
+        "Junortiz" : "Contributor"
       },
       "license": "MIT",
       "contact": {
@@ -24,7 +25,7 @@
     "entrypoints": {
       "client": ["pl.skidam.automodpack.AutoModpackClient"],
       "server": ["pl.skidam.automodpack.AutoModpackServer"],
-      "preLaunch": ["pl.skidam.automodpack.PreLoadQuilt"],
+      "preLaunch": ["pl.skidam.automodpack.PreLoad"],
       "main": ["pl.skidam.automodpack.AutoModpackMain"],
       "modmenu": ["pl.skidam.automodpack.config.ModMenuIntegration"]
     },
