@@ -55,7 +55,7 @@ public class SelfUpdater {
     }
 
     public void AutoModpackDownload() {
-        LOGGER.info("Update found! Updating to new version: " + ModrinthAPI.modrinthAPIversion);
+        LOGGER.info("Update find! Updating to new version: " + ModrinthAPI.modrinthAPIversion);
         if (!preload) {
             AutoModpackToast.add(2);
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));

@@ -29,11 +29,11 @@ public class ServerSelfUpdater {
         }
 
         if (VERSION.equals(modrinthAPIversion) && selfOut.length() == modrinthAPIsize) {
-            LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
+            LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
             return;
         }
 
-        LOGGER.info("Update found! Updating to new version: " + ModrinthAPI.modrinthAPIversion);
+        LOGGER.info("Update find! Updating to new version: " + ModrinthAPI.modrinthAPIversion);
 
         // *magic* downloading
         if (Download.Download(modrinthAPIdownloadUrl, selfBackup)) {
