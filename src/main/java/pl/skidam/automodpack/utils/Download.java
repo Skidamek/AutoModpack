@@ -3,17 +3,14 @@ package pl.skidam.automodpack.utils;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLConnection;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
 public class Download {
 
     public static float progress;
-    public static String internetConnectionSpeed;
-    private static long startTime;
+    public static String averageInternetConnectionSpeed;
 
     public static boolean Download(String link, File output) {
         try {
@@ -28,15 +25,8 @@ public class Download {
 //            conn.getInputStream().close();
 
             progress = 0;
-            internetConnectionSpeed = "";
-            CompletableFuture.runAsync(() -> {
-                startTime = System.currentTimeMillis();
-                new Wait(2000);
-                while (progress > 0 && progress < 100) {
-                    startTime = startTime + 1000;
-                    new Wait(2000);
-                }
-            });
+            averageInternetConnectionSpeed = "";
+            long startTime = System.currentTimeMillis();
 
             HttpURLConnection http = (HttpURLConnection) url.openConnection();
             http.setRequestMethod("GET");
@@ -54,7 +44,7 @@ public class Download {
                 String lastPercent = null;
                 String percent = "0";
 
-                while ((read = in.read(buffer, 0, 1024)) >= 0) {
+                while ((read = in.read(buffer, 0, 1024)) >= 0) { // TODO make it real time, not average!
                     bout.write(buffer, 0, read);
                     downloaded += read;
                     percentDownloaded = (downloaded * 100) / fileSize;
@@ -63,9 +53,9 @@ public class Download {
                     double rate = (((downloaded / 1024) / ((endTime - startTime) / 1000.0)) * 8);
                     rate = Math.round( rate * 100.0 ) / 100.0;
                     if (rate > 1000) {
-                        internetConnectionSpeed = String.format("%.1f", (rate / 1024)).concat(" Mb/s");
+                        averageInternetConnectionSpeed = String.format("%.1f", (rate / 1024)).concat(" Mb/s");
                     } else {
-                        internetConnectionSpeed = String.format("%.1f", rate).concat(" Kb/s");
+                        averageInternetConnectionSpeed = String.format("%.1f", rate).concat(" Kb/s");
                     }
 
                     // if lastPercent != percent
@@ -73,7 +63,7 @@ public class Download {
                         percent = (String.format("%.1f", percentDownloaded));
                         progress = Float.parseFloat(percent);
                         if (percent.contains("0.0") && !percent.equals("0.0")) {
-                            LOGGER.info("Downloaded " + percent.split("\\.")[0] + "%" + " with internet connection speed of " + internetConnectionSpeed);
+                            LOGGER.info("Downloaded " + percent.split("\\.")[0] + "%" + " with average internet connection speed of " + averageInternetConnectionSpeed);
                         }
                         lastPercent = percent;
 

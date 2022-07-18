@@ -66,12 +66,17 @@ public class AutoModpackToast implements Toast {
         AutoModpackToast toast = toastManager.getToast(AutoModpackToast.class, Toast.TYPE);
         if (toast == null) {
             toastManager.add(new AutoModpackToast());
-        } else if (WhoAreYouBefore == 0) {
+        } else if (WhoAreYouBefore == 0 || WhoAreYouBefore == 4 || WhoAreYouBefore == 3 || WhoAreYouBefore == 2 || WhoAreYouBefore == 1) {
+            if (WhoAreYou == 0) {
+                toastManager.clear();
+            }
+            if (WhoAreYou == 2 || WhoAreYou == 4) {
+                toastManager.add(new AutoModpackToast());
+            }
+            // dont do anything lol
+        } else if (WhoAreYou == 0) {
             toastManager.clear();
-            toastManager.add(new AutoModpackToast());
-        } else if (WhoAreYou == 1 && WhoAreYouBefore == 2 || WhoAreYou == 2 && WhoAreYouBefore == 1 || WhoAreYou == 3 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 3) {
-            toastManager.add(new AutoModpackToast());
-        } else if (WhoAreYou == 1 && WhoAreYouBefore == 4 || WhoAreYou == 4 && WhoAreYouBefore == 1 || WhoAreYou == 2 && WhoAreYouBefore == 3 || WhoAreYou == 3 && WhoAreYouBefore == 2) {
+        } else {
             toastManager.add(new AutoModpackToast());
         }
     }

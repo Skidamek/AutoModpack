@@ -13,7 +13,6 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 
 public class StartAndCheck {
-
     public static boolean isChecking = false;
     public StartAndCheck(boolean isLoading, boolean onlyModpack) {
 
@@ -60,7 +59,6 @@ public class StartAndCheck {
                     isChecking = true;
                     if (AutoModpackUpdated != null && ModpackUpdated != null) {
                         new Finished();
-                        isChecking = false;
                         break;
                     }
                     new Wait(500);

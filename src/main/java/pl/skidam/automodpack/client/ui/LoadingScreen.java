@@ -43,7 +43,7 @@ public class LoadingScreen extends Screen {
 
     private String getInternetConnectionSpeed() {
         if (Download.progress > 0 && Download.progress < 100) {
-            return Download.internetConnectionSpeed;
+            return Download.averageInternetConnectionSpeed;
         } else {
             return "";
         }

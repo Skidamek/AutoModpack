@@ -46,6 +46,24 @@ public class HostModpack implements HttpHandler {
             LOGGER.info("Modpack host is disabled");
             if (!Config.EXTERNAL_MODPACK_HOST.equals("")) {
                 if (ValidateURL(Config.EXTERNAL_MODPACK_HOST)) {
+
+                    // google drive link fixer (make it direct download link)
+                    if (Config.EXTERNAL_MODPACK_HOST.startsWith("https://drive.google.com/")) {
+
+                        if (Config.EXTERNAL_MODPACK_HOST.contains("/file/d/")) {
+                            Config.EXTERNAL_MODPACK_HOST = Config.EXTERNAL_MODPACK_HOST.replace("/file/d/", "/uc?id=");
+                        }
+                        if (Config.EXTERNAL_MODPACK_HOST.contains("/view?usp=sharing")) {
+                            Config.EXTERNAL_MODPACK_HOST = Config.EXTERNAL_MODPACK_HOST.replace("/view?usp=sharing", "&confirm=true");
+                        }
+
+                        if (ValidateURL(Config.EXTERNAL_MODPACK_HOST)) {
+                            new Config().save();
+                        } else {
+                            LOGGER.error("External modpack host is not valid");
+                        }
+                    }
+
                     LOGGER.info("Using external host server: " + Config.EXTERNAL_MODPACK_HOST);
                     link = Config.EXTERNAL_MODPACK_HOST;
                     modpackHostIpForLocalPlayers = Config.EXTERNAL_MODPACK_HOST;

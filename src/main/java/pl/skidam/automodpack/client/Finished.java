@@ -66,6 +66,7 @@ public class Finished {
 
         AutoModpackUpdated = null;
         ModpackUpdated = null;
+        StartAndCheck.isChecking = false;
 
         if (Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().contains("loading")) {
             MinecraftClient.getInstance().setScreen(new TitleScreen());
