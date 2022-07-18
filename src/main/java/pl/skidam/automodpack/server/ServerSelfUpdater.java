@@ -9,6 +9,7 @@ import java.io.IOException;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.ModrinthAPI.modrinthAPIdownloadUrl;
+import static pl.skidam.automodpack.utils.ModrinthAPI.modrinthAPIsize;
 
 public class ServerSelfUpdater {
 
@@ -27,7 +28,7 @@ public class ServerSelfUpdater {
             return;
         }
 
-        if (VERSION.equals(modrinthAPIversion) && selfOut.length() == WebFileSize.webfileSize(modrinthAPIdownloadUrl)) {
+        if (VERSION.equals(modrinthAPIversion) && selfOut.length() == modrinthAPIsize) {
             LOGGER.info("Didn't found any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
             return;
         }
