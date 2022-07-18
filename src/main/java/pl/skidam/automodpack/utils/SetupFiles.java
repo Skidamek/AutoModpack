@@ -45,6 +45,16 @@ public class SetupFiles {
             confDir.mkdir();
         }
 
+        File shaderpacksDir = new File("./AutoModpack/modpack/shaderpacks/");
+        if (!shaderpacksDir.exists()) {
+            shaderpacksDir.mkdir();
+        }
+
+        File resourcepacksDir = new File("./AutoModpack/modpack/resourcepacks/");
+        if (!resourcepacksDir.exists()) {
+            resourcepacksDir.mkdir();
+        }
+
         File delFile = new File("./AutoModpack/modpack/delmods.txt");
         if (!delFile.exists()) {
             try {
