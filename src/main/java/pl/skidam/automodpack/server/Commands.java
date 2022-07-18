@@ -23,7 +23,7 @@ public class Commands {
                         )
                         .then(literal("modpack-host")
                                 .requires((source) -> source.hasPermissionLevel(2))
-                                .executes(Commands::modpackHostAbuot)
+                                .executes(Commands::modpackHostAbout)
                                 .then(literal("start")
                                         .requires((source) -> source.hasPermissionLevel(2))
                                         .executes(Commands::startModpackHost)
@@ -98,7 +98,7 @@ public class Commands {
     }
 
 
-    private static int modpackHostAbuot(CommandContext<ServerCommandSource> context) {
+    private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
         Formatting statusColor = HostModpack.isRunning ? Formatting.GREEN : Formatting.RED;
         context.getSource().sendFeedback(Text.literal("Modpack hosting status")
                 .formatted(Formatting.GREEN)
