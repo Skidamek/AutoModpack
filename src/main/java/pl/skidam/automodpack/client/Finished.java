@@ -23,8 +23,7 @@ public class Finished {
             }
 
             // Doesn't work well on dev env
-            assert MinecraftClient.getInstance().currentScreen != null;
-            String currentScreen = MinecraftClient.getInstance().currentScreen.toString().toLowerCase();
+            String currentScreen = Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().toLowerCase();
             if (currentScreen.contains("442") || currentScreen.contains("500") || currentScreen.contains("429") || currentScreen.contains("526") || currentScreen.contains("525") || currentScreen.contains("424") || currentScreen.contains("modsscreen") || currentScreen.contains("loading") || currentScreen.contains("title")) {
                 break;
             }
@@ -39,6 +38,10 @@ public class Finished {
                         isOnServer = false;
                         break;
                     }
+                }
+            } else {
+                if (MinecraftClient.getInstance().world != null) {
+                    break;
                 }
             }
         }
