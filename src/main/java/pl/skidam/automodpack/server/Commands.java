@@ -21,7 +21,7 @@ public class Commands {
                                 .requires((source) -> source.hasPermissionLevel(2))
                                 .executes(Commands::generateModpack)
                         )
-                        .then(literal("modpack-host") // TODO fix it
+                        .then(literal("modpack-host")
                                 .requires((source) -> source.hasPermissionLevel(2))
                                 .executes(Commands::modpackHostAbuot)
                                 .then(literal("start")
@@ -42,11 +42,10 @@ public class Commands {
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
-            context.getSource().sendFeedback(Text.literal("Starting modpack hosting...")
-                            .formatted(Formatting.YELLOW),
-                    true);
-            boolean isRunning = HostModpack.server != null;
-            if (!isRunning) {
+            if (!HostModpack.isRunning) {
+                context.getSource().sendFeedback(Text.literal("Starting modpack hosting...")
+                                .formatted(Formatting.YELLOW),
+                        true);
                 HostModpack.start();
                 context.getSource().sendFeedback(Text.literal("Modpack hosting started!")
                                 .formatted(Formatting.GREEN),
@@ -63,11 +62,10 @@ public class Commands {
 
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
-            context.getSource().sendFeedback(Text.literal("Stopping modpack hosting...")
-                            .formatted(Formatting.RED),
-                    true);
-            boolean isRunning = HostModpack.server != null;
-            if (isRunning) {
+            if (HostModpack.isRunning) {
+                context.getSource().sendFeedback(Text.literal("Stopping modpack hosting...")
+                                .formatted(Formatting.RED),
+                        true);
                 HostModpack.stop();
                 context.getSource().sendFeedback(Text.literal("Modpack hosting stopped!")
                                 .formatted(Formatting.RED),
@@ -86,11 +84,12 @@ public class Commands {
             context.getSource().sendFeedback(Text.literal("Restarting modpack hosting...")
                             .formatted(Formatting.YELLOW),
                     true);
-            boolean isRunning = HostModpack.server != null;
-            if (isRunning) {
+            if (HostModpack.isRunning) {
                 HostModpack.stop();
             }
-            HostModpack.start();
+            if (!HostModpack.isRunning) {
+                HostModpack.start();
+            }
             context.getSource().sendFeedback(Text.literal("Modpack hosting restarted!")
                             .formatted(Formatting.GREEN),
                     true);
@@ -100,13 +99,12 @@ public class Commands {
 
 
     private static int modpackHostAbuot(CommandContext<ServerCommandSource> context) {
-        boolean isRunning = HostModpack.server != null;
-        Formatting statusColor = isRunning ? Formatting.GREEN : Formatting.RED;
+        Formatting statusColor = HostModpack.isRunning ? Formatting.GREEN : Formatting.RED;
         context.getSource().sendFeedback(Text.literal("Modpack hosting status")
                 .formatted(Formatting.GREEN)
                 .append(Text.literal(" - ")
                         .formatted(Formatting.WHITE)
-                        .append(Text.literal( "" + isRunning)
+                        .append(Text.literal( "" + HostModpack.isRunning)
                                 .formatted(statusColor)
                         )
                 ), false);

@@ -27,14 +27,17 @@ public class HostModpack implements HttpHandler {
     public static String modpackHostIp;
     public static String modpackHostIpForLocalPlayers;
     private static String serverIpForOthers;
+    public static boolean isRunning;
 
 
     public static void stop() {
         if (server != null) {
-            server.stop(1);
+            server.stop(0);
+            isRunning = false;
         }
         if (threadPool != null) {
             threadPool.shutdownNow();
+            isRunning = false;
         }
     }
 
@@ -83,8 +86,10 @@ public class HostModpack implements HttpHandler {
                 link = modpackHostIp;
 
                 LOGGER.info("Modpack host started at {} and {} for local players.", modpackHostIp, modpackHostIpForLocalPlayers);
+                isRunning = true;
             } catch (Exception e) {
                 LOGGER.error("Failed to start the modpack server!", e);
+                isRunning = false;
             }
         }, threadPool);
     }

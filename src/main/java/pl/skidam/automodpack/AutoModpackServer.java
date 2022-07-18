@@ -39,6 +39,8 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public void onInitializeServer() {
         LOGGER.info("Welcome to AutoModpack on Server!");
 
+        HostModpack.isRunning = false;
+
         publicServerIP = getIPV4Address();
 
         genModpack();
