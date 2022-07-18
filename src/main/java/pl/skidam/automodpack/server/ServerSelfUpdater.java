@@ -28,7 +28,7 @@ public class ServerSelfUpdater {
             return;
         }
 
-        if (VERSION.equals(modrinthAPIversion) && selfOut.length() == modrinthAPIsize) {
+        if (VERSION.equals(modrinthAPIversion)) {
             LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
             return;
         }
