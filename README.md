@@ -45,7 +45,7 @@ Restart server and you are good to go! Enjoy!
 
 ## Config
 
-*config/automodpack.properties*
+*./config/automodpack.properties*
 
 Use Cloth Config and Mod Menu mods to change settings in game
 
@@ -105,6 +105,15 @@ No, it doesn't. It will only delete mods which are written out in delmods.txt in
 - Does it automatically update my mods?
 
 No, it doesn't, but if you want this cool feature take a look at [AutoPlug](https://www.spigotmc.org/resources/autoplug-automatic-updater-for-plugins-mods-server-java-itself.78414/). If you are using AutoPlug, I recommend you set `sync_mods` to `true` in AutoModpack config.
+
+## Common problems
+
+- I get errors every time I try to download modpack!
+
+Check if in the server log after start where is a notification about the modpack host launch, there is a correct ip (the ip you are trying connect to the server)
+If not change in the config `host_external_ip` to your correct server ip (without port)
+
+Follow the same process if you have a problem with the local host ip, but to `host_external_ip_for_local_players`
 
 ## Questions?
 * Contact me via discord Skidam#0001
