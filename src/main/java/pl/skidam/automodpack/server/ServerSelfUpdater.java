@@ -9,7 +9,6 @@ import java.io.IOException;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.ModrinthAPI.modrinthAPIdownloadUrl;
-import static pl.skidam.automodpack.utils.ModrinthAPI.modrinthAPIsize;
 
 public class ServerSelfUpdater {
 
