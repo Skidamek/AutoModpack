@@ -108,7 +108,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             // Compare new to old mods and generate delmods.txt
             assert oldMods != null;
             for (String mod : oldMods) {
-                if (!contains(newMods, mod)) {
+                if (!contains(newMods, mod) && !mod.equals(correctName)) { // fix to #34
                     try {
                         // Check if mod is not already in delmods.txt
                         if (!FileUtils.readLines(modpackDeleteTxt, Charset.defaultCharset()).contains(mod)) {
