@@ -30,7 +30,7 @@ On join the server who has this mod, modpack will be automatically downloaded an
 
 **Open port (default: `30037`) on your server! TCP/UDP** need to host modpack.
 
-NOTE: if you can't open any port on your server, or you just care about server performance. Use Google Drive, upload there modpack.zip whose automatically generated on your minecraft server at `./AutoModpack/modpack.zip`. And the link type into the config "external_modpack_host". 
+NOTE: if you can't open any port on your server, or you just care about server performance. Use Google Drive, upload there modpack.zip whose automatically generated on your minecraft server at `./AutoModpack/modpack.zip`. And the link type into the config "external_modpack_host".
 
 (Unfortunately when using Google Drive or other download service/server `sync_mods` will not work. (Working on it, if you know how to implement Google Drive upload feature, please let me know.) )
 
@@ -110,7 +110,7 @@ No, it doesn't, but if you want this cool feature take a look at [AutoPlug](http
 
 - I get errors every time I try to download modpack!
 
-Check if in the server log after start where is a notification about the modpack host launch, there is a correct ip (the ip you are trying connect to the server)
+Check if in the server log after start where is a notification about the modpack host launch, there is a correct ip (the ip you are trying to connect to the server)
 If not change in the config `host_external_ip` to your correct server ip (without port)
 
 Follow the same process if you have a problem with the local host ip, but to `host_external_ip_for_local_players`
@@ -122,15 +122,18 @@ Follow the same process if you have a problem with the local host ip, but to `ho
 [**click.**](CONTRIBUTING.md)
 
 <p align="center"><img src="https://i.imgur.com/zogBcIG.png" alt="Logo" width="200"></p>
-<h1 align="center">AutoModpack  <br><br>
+<h1 align="center">AutoModpack  <br>
+    <a href="https://www.curseforge.com/minecraft/mc-mods/automodpack"><img src="http://cf.way2muchnoise.eu/639211.svg" alt="CF"></a>
+    <a href="https://modrinth.com/mod/automodpack"><img src="https://img.shields.io/badge/dynamic/json?logo=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+Cjxzdmcgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDUxMiA1MTQiIHZlcnNpb249IjEuMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgeG1sOnNwYWNlPSJwcmVzZXJ2ZSIgeG1sbnM6c2VyaWY9Imh0dHA6Ly93d3cuc2VyaWYuY29tLyIgc3R5bGU9ImZpbGwtcnVsZTpldmVub2RkO2NsaXAtcnVsZTpldmVub2RkO3N0cm9rZS1saW5lam9pbjpyb3VuZDtzdHJva2UtbWl0ZXJsaW1pdDoyOyI+CiAgICA8Zz4KICAgICAgICA8ZyBpZD0ibW9kcmludGgiPgogICAgICAgICAgICA8cGF0aCBkPSJNNTAzLjE2LDMyMy41NkM1MTQuNTUsMjgxLjQ3IDUxNS4zMiwyMzUuOTEgNTAzLjIsMTkwLjc2QzQ2Ni41Nyw1NC4yMyAzMjYuMDQsLTI2LjggMTg5LjMzLDkuNzhDODMuODEsMzguMDIgMTEuMzksMTI4LjA3IDAuNjksMjMwLjQ3TDQzLjk5LDIzMC40N0M1NC4yOSwxNDcuMzMgMTEzLjc0LDc0LjczIDE5OS43NSw1MS43MUMzMDYuMDUsMjMuMjYgNDE1LjEzLDgwLjY3IDQ1My4xNywxODEuMzhMNDExLjAzLDE5Mi42NUMzOTEuNjQsMTQ1LjggMzUyLjU3LDExMS40NSAzMDYuMyw5Ni44MkwyOTguNTYsMTQwLjY2QzMzNS4wOSwxNTQuMTMgMzY0LjcyLDE4NC41IDM3NS41NiwyMjQuOTFDMzkxLjM2LDI4My44IDM2MS45NCwzNDQuMTQgMzA4LjU2LDM2OS4xN0wzMjAuMDksNDEyLjE2QzM5MC4yNSwzODMuMjEgNDMyLjQsMzEwLjMgNDIyLjQzLDIzNS4xNEw0NjQuNDEsMjIzLjkxQzQ2OC45MSwyNTIuNjIgNDY3LjM1LDI4MS4xNiA0NjAuNTUsMzA4LjA3TDUwMy4xNiwzMjMuNTZaIiBzdHlsZT0iZmlsbDpyZ2IoMjMsMjMsMjUpOyIvPgogICAgICAgICAgICA8cGF0aCBkPSJNMzIxLjk5LDUwNC4yMkMxODUuMjcsNTQwLjggNDQuNzUsNDU5Ljc3IDguMTEsMzIzLjI0QzMuODQsMzA3LjMxIDEuMTcsMjkxLjMzIDAsMjc1LjQ2TDQzLjI3LDI3NS40NkM0NC4zNiwyODcuMzcgNDYuNDcsMjk5LjM1IDQ5LjY4LDMxMS4yOUM1My4wNCwzMjMuOCA1Ny40NSwzMzUuNzUgNjIuNzksMzQ3LjA3TDEwMS4zOCwzMjMuOTJDOTguMTMsMzE2LjQyIDk1LjM5LDMwOC42IDkzLjIxLDMwMC40N0M2OS4xNywyMTAuODcgMTIyLjQxLDExOC43NyAyMTIuMTMsOTQuNzZDMjI5LjEzLDkwLjIxIDI0Ni4yMyw4OC40NCAyNjIuOTMsODkuMTVMMjU1LjE5LDEzM0MyNDQuNzMsMTMzLjA1IDIzNC4xMSwxMzQuNDIgMjIzLjUzLDEzNy4yNUMxNTcuMzEsMTU0Ljk4IDExOC4wMSwyMjIuOTUgMTM1Ljc1LDI4OS4wOUMxMzYuODUsMjkzLjE2IDEzOC4xMywyOTcuMTMgMTM5LjU5LDMwMC45OUwxODguOTQsMjcxLjM4TDE3NC4wNywyMzEuOTVMMjIwLjY3LDE4NC4wOEwyNzkuNTcsMTcxLjM5TDI5Ni42MiwxOTIuMzhMMjY5LjQ3LDIxOS44OEwyNDUuNzksMjI3LjMzTDIyOC44NywyNDQuNzJMMjM3LjE2LDI2Ny43OUMyMzcuMTYsMjY3Ljc5IDI1My45NSwyODUuNjMgMjUzLjk4LDI4NS42NEwyNzcuNywyNzkuMzNMMjk0LjU4LDI2MC43OUwzMzEuNDQsMjQ5LjEyTDM0Mi40MiwyNzMuODJMMzA0LjM5LDMyMC40NUwyNDAuNjYsMzQwLjYzTDIxMi4wOCwzMDguODFMMTYyLjI2LDMzOC43QzE4Ny44LDM2Ny43OCAyMjYuMiwzODMuOTMgMjY2LjAxLDM4MC41NkwyNzcuNTQsNDIzLjU1QzIxOC4xMyw0MzEuNDEgMTYwLjEsNDA2LjgyIDEyNC4wNSwzNjEuNjRMODUuNjQsMzg0LjY4QzEzNi4yNSw0NTEuMTcgMjIzLjg0LDQ4NC4xMSAzMDkuNjEsNDYxLjE2QzM3MS4zNSw0NDQuNjQgNDE5LjQsNDAyLjU2IDQ0NS40MiwzNDkuMzhMNDg4LjA2LDM2NC44OEM0NTcuMTcsNDMxLjE2IDM5OC4yMiw0ODMuODIgMzIxLjk5LDUwNC4yMloiIHN0eWxlPSJmaWxsOnJnYigyMywyMywyNSk7ZmlsbC1ydWxlOm5vbnplcm87Ii8+CiAgICAgICAgPC9nPgogICAgPC9nPgo8L3N2Zz4K&label=&suffix=%20&query=downloads&url=https://api.modrinth.com/api/v1/mod/k68glP2e&style=flat&color=242629&labelColor=5ca424" alt="Modrinth"></a>
+    <br>
     <a href="https://fabricmc.net/"><img
-        src="https://cdn.discordapp.com/attachments/705864145169416313/969720133998239794/fabric_supported.png"
-        alt="Supported on Fabric"
-        width="200"
-    ></a>
-    <a href="https://quiltmc.org/"><img
-        src="https://cdn.discordapp.com/attachments/705864145169416313/969716884482183208/quilt_supported.png"
-        alt="Supported on Quilt"
-        width="200"
-    ></a>
+            src="https://cdn.discordapp.com/attachments/705864145169416313/969720133998239794/fabric_supported.png"
+            alt="Supported on Fabric"
+            width="200"
+        ></a>
+        <a href="https://quiltmc.org/"><img
+            src="https://cdn.discordapp.com/attachments/705864145169416313/969716884482183208/quilt_supported.png"
+            alt="Supported on Quilt"
+            width="200"
+        ></a>
 </h1>
