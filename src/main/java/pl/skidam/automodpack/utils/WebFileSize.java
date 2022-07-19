@@ -12,8 +12,8 @@ public class WebFileSize {
         try {
             URL url = new URL(link);
             HttpURLConnection http = (HttpURLConnection) url.openConnection();
-            http.setRequestMethod("HEAD");
-            http.setConnectTimeout(5000); // 5 seconds
+            http.setRequestMethod("GET");
+            http.setConnectTimeout(1000); // 10 seconds
             size = Long.parseLong(http.getHeaderField("Content-Length"));
         } catch (Exception e) {
             new Error();
