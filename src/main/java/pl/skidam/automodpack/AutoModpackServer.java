@@ -162,6 +162,21 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
                             }
                         }
                     }
+
+                    if (delMod.equals(correctName)) {
+                        Scanner sc = new Scanner(modpackDeleteTxt);
+                        StringBuilder sb = new StringBuilder();
+                        while (sc.hasNextLine()) {
+                            sb.append(sc.nextLine()).append("\n");
+                        }
+                        sc.close();
+                        String result = sb.toString();
+                        result = result.replace(delMod, "");
+                        PrintWriter writer = new PrintWriter(modpackDeleteTxt);
+                        writer.append(result);
+                        writer.flush();
+                        writer.close();
+                    }
                 }
             } catch (Exception e) {
                 e.printStackTrace();
