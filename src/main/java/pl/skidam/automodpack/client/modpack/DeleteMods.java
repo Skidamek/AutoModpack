@@ -80,6 +80,8 @@ public class DeleteMods {
             AutoModpackMain.ModpackUpdated = ModpackUpdated;
         }
 
+        new TrashMod();
+
         try {
             FileReader fr = new FileReader(delModsTxt);
             Scanner inFile = new Scanner(fr);
@@ -93,7 +95,7 @@ public class DeleteMods {
                 if (modFile.exists()) {
 
                     if (!modName.endsWith(".jar")) {
-                        modFile = new File("./mods/" + modName + ".jar");
+                        modFile = new File(modFile + ".jar");
                     }
 
                     if (modFile.exists()) {
@@ -105,14 +107,6 @@ public class DeleteMods {
                     }
 
                     if (modFile.exists()) { // if mod to delete still exists
-                        if (!(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458)) {
-                            try {
-                                new UnZipper(trashOut, unZippedTrashDir, "none");
-                            } catch (IOException e) {
-                                LOGGER.error("Failed to unzip TrashMod!");
-                            }
-                        }
-
                         try {
                             new Zipper(unZippedTrashDir, modFile);
                         } catch (IOException ignored) {

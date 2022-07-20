@@ -61,7 +61,12 @@ public class Download {
                     // if lastPercent != percent
                     if (!Objects.equals(lastPercent, percent)) {
                         percent = (String.format("%.1f", percentDownloaded));
-                        progress = Float.parseFloat(percent);
+                        percent.replaceAll(",", ".");
+                        try {
+                            progress = Float.parseFloat(percent);
+                        } catch (NumberFormatException e) {
+                            LOGGER.error("Error while parsing progress to float: " + percent);
+                        }
                         if (percent.contains("0.0") && !percent.equals("0.0")) {
                             LOGGER.info("Downloaded " + percent.split("\\.")[0] + "%" + " with average internet connection speed of " + averageInternetConnectionSpeed);
                         }

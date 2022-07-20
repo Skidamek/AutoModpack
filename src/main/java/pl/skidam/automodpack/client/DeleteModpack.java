@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client;
 
 import org.apache.commons.io.FileDeleteStrategy;
 
+import pl.skidam.automodpack.client.modpack.TrashMod;
 import pl.skidam.automodpack.utils.UnZipper;
 import pl.skidam.automodpack.utils.Zipper;
 
@@ -29,6 +30,8 @@ public class DeleteModpack {
             System.out.println("Error while unzipping!\n" + e);
             e.printStackTrace();
         }
+
+        start();
 
         Runtime.getRuntime().addShutdownHook(new Thread(DeleteModpack::start));
     }
@@ -88,6 +91,8 @@ public class DeleteModpack {
     }
 
     private static void deleteLogic(File file) {
+        new TrashMod();
+
         if (file.exists() && !file.getName().equals(correctName)) {
             System.out.println("Deleting: " + file);
             try {

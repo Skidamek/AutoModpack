@@ -14,13 +14,13 @@ public class TrashMod {
     public static File unZippedTrashDir = new File("./AutoModpack/TrashMod/");
     public TrashMod() {
 
-        if (trashOut.exists()) {
+        if (trashOut.exists() && unZippedTrashDir.exists() && FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458) {
             return;
         }
 
         LOGGER.info("Downloading TrashMod!");
 
-        while (unZippedTrashDir.exists() && !(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458)) {
+       do {
             // Download and check if download is successful *magic*
             if (Download.Download(trashLink, trashOut)) {
                 LOGGER.error("Failed to download TrashMod!");
@@ -32,7 +32,7 @@ public class TrashMod {
             } catch (IOException e) {
                 LOGGER.error("Failed to unzip TrashMod!");
             }
-        }
+       } while (!trashOut.exists() || !unZippedTrashDir.exists() || !(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458));
 
         LOGGER.info("Successfully downloaded TrashMod!");
     }
