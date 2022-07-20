@@ -61,7 +61,7 @@ public class Download {
                     // if lastPercent != percent
                     if (!Objects.equals(lastPercent, percent)) {
                         percent = (String.format("%.1f", percentDownloaded));
-                        percent.replaceAll(",", ". ");
+                        percent.replaceAll(",", ".");
                         try {
                             progress = Float.parseFloat(percent);
                         } catch (NumberFormatException e) {
