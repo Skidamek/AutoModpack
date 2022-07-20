@@ -49,12 +49,6 @@ public class PreLoad implements PreLaunchEntrypoint {
 
             new TrashMod();
 
-            while (true) {
-                if (new File("./AutoModpack/TrashMod.jar").exists()) {
-                    break;
-                }
-            }
-
             new DeleteTrashedMods();
 
             new CompatCheck();

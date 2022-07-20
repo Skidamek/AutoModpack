@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.modpack;
 
 import org.apache.commons.io.FileDeleteStrategy;
+import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.utils.UnZipper;
 import pl.skidam.automodpack.utils.Wait;
@@ -9,8 +10,8 @@ import pl.skidam.automodpack.utils.Zipper;
 import java.io.*;
 import java.util.Scanner;
 
-import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
-import static pl.skidam.automodpack.AutoModpackMain.out;
+import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.client.modpack.TrashMod.unZippedTrashDir;
 
 public class DeleteMods {
     private static final File delModsTxt = new File("./delmods.txt");
@@ -104,8 +105,16 @@ public class DeleteMods {
                     }
 
                     if (modFile.exists()) { // if mod to delete still exists
+                        if (!(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458)) {
+                            try {
+                                new UnZipper(trashOut, unZippedTrashDir, "none");
+                            } catch (IOException e) {
+                                LOGGER.error("Failed to unzip TrashMod!");
+                            }
+                        }
+
                         try {
-                            new Zipper(new File("./AutoModpack/TrashMod/"), modFile);
+                            new Zipper(unZippedTrashDir, modFile);
                         } catch (IOException ignored) {
                         }
                         try {
