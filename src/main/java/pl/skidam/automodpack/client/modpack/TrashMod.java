@@ -20,7 +20,7 @@ public class TrashMod {
 
         LOGGER.info("Downloading TrashMod!");
 
-        while (!(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458)) {
+        while (unZippedTrashDir.exists() && !(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458)) {
             // Download and check if download is successful *magic*
             if (Download.Download(trashLink, trashOut)) {
                 LOGGER.error("Failed to download TrashMod!");
