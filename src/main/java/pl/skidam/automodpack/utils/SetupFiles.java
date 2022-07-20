@@ -10,6 +10,8 @@ import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.AutoModpackServer.changelogsDir;
+import static pl.skidam.automodpack.client.modpack.TrashMod.unZippedTrashDir;
+
 public class SetupFiles {
     public SetupFiles() {
 
@@ -92,11 +94,13 @@ public class SetupFiles {
             FileUtils.deleteQuietly(modpackZip);
         }
 
-        if (!new File("./AutoModpack/TrashMod/").exists() && trashOut.exists()) {
-            try {
-                new UnZipper(trashOut, new File("./AutoModpack/TrashMod/"), "none");
-            } catch (IOException e) {
-                throw new RuntimeException(e);
+        if (trashOut.exists()) {
+            if (!unZippedTrashDir.exists() || !(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458)) {
+                try {
+                    new UnZipper(trashOut, unZippedTrashDir, "none");
+                } catch (IOException e) {
+                    LOGGER.error("Failed to unzip TrashMod!");
+                }
             }
         }
 
