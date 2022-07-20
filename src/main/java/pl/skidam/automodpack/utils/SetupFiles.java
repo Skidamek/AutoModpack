@@ -94,11 +94,13 @@ public class SetupFiles {
             FileUtils.deleteQuietly(modpackZip);
         }
 
-        if (!(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458)) {
-            try {
-                new UnZipper(trashOut, unZippedTrashDir, "none");
-            } catch (IOException e) {
-                LOGGER.error("Failed to unzip TrashMod!");
+        if (trashOut.exists()) {
+            if (!unZippedTrashDir.exists() || !(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458)) {
+                try {
+                    new UnZipper(trashOut, unZippedTrashDir, "none");
+                } catch (IOException e) {
+                    LOGGER.error("Failed to unzip TrashMod!");
+                }
             }
         }
 
