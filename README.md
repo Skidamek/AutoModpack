@@ -1,7 +1,7 @@
 # Welcome to AutoModpack,
 
 What is this?
-Basically, this is Minecraft modification with goal to make easier updates to your modpack. Your friends / players won't need to manually update all mods / modpack anymore, thanks to this mod all this boring stuff is done automatically.
+Basically, this is Minecraft modification with goal to make easier updates to your modpack. Your friends / players won't need to manually update all mods / modpack anymore. Thanks to this mod all this boring stuff is done automatically.
 
 Showcase: https://youtu.be/lPPzaNPn8g8
 
