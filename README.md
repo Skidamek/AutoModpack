@@ -28,7 +28,7 @@ Showcase: https://youtu.be/lPPzaNPn8g8
 - Modpack hosting.
 - Easy manage as admin (your player's mods, configs, shaderpacks, resourcepacks, etc.)
 - Sync modpack mods with server mods.
-- Dynamically change your modpack without triggering your friends/players.
+- Dynamically change content of your modpack without triggering your friends/players.
 
 ## How to use
 
