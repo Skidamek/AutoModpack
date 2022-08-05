@@ -21,6 +21,7 @@ public class DeleteModpack {
     private static boolean deleted;
     private static final File unzippedModpack = new File("./AutoModpack/modpack/");
     private static final List<File> modpackFiles = new ArrayList<>();
+    private static final List<File> modpackFilesChild = new ArrayList<>();
 
     public DeleteModpack() {
         System.out.println("Deleting modpack...");
@@ -30,6 +31,16 @@ public class DeleteModpack {
         } catch (IOException e) {
             System.out.println("Error while unzipping!\n" + e);
             e.printStackTrace();
+        }
+
+        for (File file : Objects.requireNonNull(unzippedModpack.listFiles())) { // to dont delete q/fapi on modpack delete
+            if (file.getName().equals("mods")) {
+                for (File file1 : Objects.requireNonNull(file.listFiles())) {
+                    if (file1.getName().startsWith("fabric-api-") || file1.getName().startsWith("qfapi-")) {
+                        file1.delete();
+                    }
+                }
+            }
         }
 
         start();
@@ -84,9 +95,22 @@ public class DeleteModpack {
             for (File child : Objects.requireNonNull(children)) {
                 File path = new File(modpackFile + "\\" + child.getName());
                 if (child.isDirectory()) {
-                    path = new File(modpackFile + "\\" + child.getName() + "\\");
+                    modpackFilesChild.add(new File(path + "\\"));
+                } else {
+                    deleteLogic(path);
                 }
-                deleteLogic(path);
+            }
+        }
+
+        for (File modpackFileChild : modpackFilesChild) {
+            File[] children = modpackFileChild.listFiles();
+            for (File child : Objects.requireNonNull(children)) {
+                File path = new File(modpackFileChild + "\\" + child.getName());
+                if (child.isDirectory()) {
+                    deleteLogic(new File(path + "\\"));
+                } else {
+                    deleteLogic(path);
+                }
             }
         }
     }
