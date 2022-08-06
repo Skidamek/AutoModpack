@@ -2,8 +2,6 @@ package pl.skidam.automodpack.client;
 
 import org.apache.commons.io.FileDeleteStrategy;
 
-import org.apache.commons.io.FileUtils;
-import pl.skidam.automodpack.client.modpack.TrashMod;
 import pl.skidam.automodpack.utils.UnZipper;
 import pl.skidam.automodpack.utils.Zipper;
 
@@ -116,8 +114,6 @@ public class DeleteModpack {
     }
 
     private static void deleteLogic(File file) {
-        new TrashMod();
-
         if (file.exists() && !file.getName().equals(correctName)) {
             System.out.println("Deleting: " + file);
             try {
@@ -126,7 +122,11 @@ public class DeleteModpack {
 
             if (file.exists() && file.getName().endsWith(".jar")) { // If mod to delete still exists
                 try {
-                    new Zipper(new File("./AutoModpack/TrashMod/"), file);
+                    File emptyFolder = new File("./AutoModpack/empty/");
+                    if (!emptyFolder.exists()) {
+                        emptyFolder.mkdir();
+                    }
+                    new Zipper(emptyFolder, file);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

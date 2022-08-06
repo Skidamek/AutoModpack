@@ -6,7 +6,6 @@ import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 import pl.skidam.automodpack.client.DeleteTrashedMods;
 import pl.skidam.automodpack.client.SelfUpdater;
 import pl.skidam.automodpack.client.modpack.DeleteMods;
-import pl.skidam.automodpack.client.modpack.TrashMod;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.ServerSelfUpdater;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
@@ -46,8 +45,6 @@ public class PreLoad implements PreLaunchEntrypoint {
             if (InternetConnectionCheck.InternetConnectionCheck()) {
                 new SelfUpdater(true);
             }
-
-            new TrashMod();
 
             new DeleteTrashedMods();
 

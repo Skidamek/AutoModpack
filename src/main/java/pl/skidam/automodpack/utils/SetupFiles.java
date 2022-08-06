@@ -8,9 +8,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
 
-import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.AutoModpackServer.changelogsDir;
-import static pl.skidam.automodpack.client.modpack.TrashMod.unZippedTrashDir;
 
 public class SetupFiles {
     public SetupFiles() {
@@ -92,16 +90,6 @@ public class SetupFiles {
         File modpackZip = new File("./AutoModpack/modpack.zip");
         if (modpackZip.exists()) {
             FileUtils.deleteQuietly(modpackZip);
-        }
-
-        if (trashOut.exists()) {
-            if (!unZippedTrashDir.exists() || !(FileUtils.sizeOfDirectory(unZippedTrashDir) == 20458)) {
-                try {
-                    new UnZipper(trashOut, unZippedTrashDir, "none");
-                } catch (IOException e) {
-                    LOGGER.error("Failed to unzip TrashMod!");
-                }
-            }
         }
 
         File modpack_link = new File ("./AutoModpack/modpack-link.txt");
