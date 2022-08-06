@@ -17,6 +17,7 @@ public class Config {
     public static boolean MODPACK_HOST;
     public static boolean SYNC_MODS;
     public static boolean ONLY_OPTIONAL_MODPACK;
+    public static boolean AUTO_EXCLUDE_SERVER_SIDE_MODS;
 //    public static boolean DISABLE_ALL_OTHER_MODS_ON_CLIENT;
     public static int HOST_PORT;
     public static int HOST_THREAD_COUNT;
@@ -41,6 +42,7 @@ public class Config {
         MODPACK_HOST = getBoolean(properties, "modpack_host", true);
         SYNC_MODS = getBoolean(properties, "sync_mods", true);
         ONLY_OPTIONAL_MODPACK = getBoolean(properties, "only_optional_modpack", false);
+        AUTO_EXCLUDE_SERVER_SIDE_MODS = getBoolean(properties, "auto_exclude_server_side_mods", true);
 //        DISABLE_ALL_OTHER_MODS_ON_CLIENT = getBoolean(properties, "disable_all_other_mods_on_client", false);
         HOST_PORT = getInt(properties, "host_port", 30037);
         HOST_THREAD_COUNT = getInt(properties, "host_thread_count", 2);
@@ -70,6 +72,7 @@ public class Config {
         properties.setProperty("modpack_host", String.valueOf(MODPACK_HOST));
         properties.setProperty("sync_mods", String.valueOf(SYNC_MODS));
         properties.setProperty("only_optional_modpack", String.valueOf(ONLY_OPTIONAL_MODPACK));
+        properties.setProperty("auto_exclude_server_side_mods", String.valueOf(AUTO_EXCLUDE_SERVER_SIDE_MODS));
 //        properties.setProperty("disable_all_other_mods_on_client", String.valueOf(DISABLE_ALL_OTHER_MODS_ON_CLIENT)); // TODO make it work
         properties.setProperty("host_port", String.valueOf(HOST_PORT));
         properties.setProperty("host_thread_count", String.valueOf(HOST_THREAD_COUNT));

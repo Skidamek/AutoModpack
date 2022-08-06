@@ -3,6 +3,8 @@ package pl.skidam.automodpack;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.*;
+import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.metadata.ModEnvironment;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
@@ -69,6 +71,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             deleteAllMods();
             cloneMods();
             clientMods();
+            onlyServerSideMods();
             String[] newMods = modpackModsDir.list();
 
             // Changelog generation
@@ -239,6 +242,22 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
                     LOGGER.error("Error while cloning mods from server to modpack");
                     e.printStackTrace();
                 }
+            }
+        }
+    }
+
+    private static void onlyServerSideMods() {
+        if (!Config.AUTO_EXCLUDE_SERVER_SIDE_MODS) return;
+        for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
+            if (file.getName().endsWith(".jar") && !file.getName().toLowerCase().contains("automodpack")) {
+                FabricLoader.getInstance().getModContainer(file.getName()).ifPresent(modContainer -> {
+                    if (modContainer.getMetadata().getEnvironment() == ModEnvironment.SERVER) {
+                        File serverSideModInModpack = new File(modpackModsDir + file.getName());
+                        if (serverSideModInModpack.exists()) {
+                            FileUtils.deleteQuietly(serverSideModInModpack);
+                        }
+                    }
+                });
             }
         }
     }
