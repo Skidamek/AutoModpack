@@ -2,12 +2,9 @@ package pl.skidam.automodpack;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.mojang.authlib.GameProfile;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.*;
-import net.fabricmc.loader.api.FabricLoader;
-import net.fabricmc.loader.api.metadata.ModEnvironment;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
@@ -40,6 +37,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public static final File modpackDeleteTxt = new File("./AutoModpack/modpack/delmods.txt");
     public static final File serverModsDir = new File("./mods/");
     public static String publicServerIP;
+    public static File tempDir = new File("./AutoModpack/temp/");
 
     @Override
     public void onInitializeServer() {
@@ -64,6 +62,10 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public static void genModpack() {
 
         clientMods();
+
+        if (!Config.SYNC_MODS) {
+            onlyServerSideMods();
+        }
 
         // Sync mods and automatically generate delmods.txt
         if (Config.SYNC_MODS) {
@@ -255,43 +257,53 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
             if (file.getName().endsWith(".jar") && !file.getName().toLowerCase().contains("automodpack")) {
                 try {
-                    new UnZipper(file, new File("./AutoModpack/temp/" + file.getName()), "fabric.mod.json");
-                    LOGGER.info("Found fabric.mod.json for " + file.getName());
-                } catch (IOException e) {
+                    new UnZipper(file, new File(tempDir + "/" + file.getName()), "fabric.mod.json");
+                } catch (IOException e1) {
                     try {
-                        new UnZipper(file, new File("./AutoModpack/temp/" + file.getName()), "quilt.mod.json");
-                        LOGGER.info("Found quilt.mod.json for " + file.getName());
-                    } catch (IOException ex) {
+                        new UnZipper(file, new File(tempDir + "/" + file.getName()), "quilt.mod.json"); // for quilt support
+                    } catch (IOException e2) {
                         return;
                     }
                 }
 
                 // check if in the temp folder is a fabric.mod.json or quilt.mod.json file
-                File[] tempFiles = new File("./AutoModpack/temp/").listFiles();
-                if (tempFiles == null) return;
-                for (File tempFile : tempFiles) {
-                    File[] tempFiles2 = tempFile.listFiles();
-                    if (tempFiles2 == null) return;
-                    for (File tempFile2 : tempFiles2) {
-                        if (tempFile2.getName().equals("fabric.mod.json") || tempFile2.getName().equals("quilt.mod.json")) {
-                            try {
-                                JsonObject jsonObject = JsonParser.parseReader(new FileReader(tempFile2)).getAsJsonObject();
-                                if (jsonObject.has("\"environment\": \"server\"")) {
-                                    File serverSideModInModpack = new File(modpackModsDir + file.getName());
-                                    if (serverSideModInModpack.exists()) {
-                                        FileUtils.deleteQuietly(serverSideModInModpack);
-                                        LOGGER.info(file.getName() + " is server side mod and has been excluded from modpack");
-                                    }
-                                } else {
-                                    LOGGER.info(file.getName() + " is not a server side mod");
-                                }
-                            } catch (FileNotFoundException e) {
-                                e.printStackTrace();
-                            }
-                        }
+                File[] serverSideMods = tempDir.listFiles();
+                if (serverSideMods == null) return;
+
+                if (new File(tempDir + "/" + file.getName()).exists()) {
+                    File serverSideModJson = null;
+                    if (new File(tempDir + "/" + file.getName() + "/fabric.mod.json").exists()) {
+                        serverSideModJson = new File(tempDir + "/" + file.getName() + "/fabric.mod.json");
+                    } else if (new File(tempDir + "/" + file.getName() + "/quilt.mod.json").exists()) {
+                        serverSideModJson = new File(tempDir + "/" + file.getName() + "/quilt.mod.json");
                     }
 
-                    FileUtils.deleteQuietly(tempFile);
+                    if (serverSideModJson != null) {
+                        try {
+                            JsonObject jsonObject = JsonParser.parseReader(new FileReader(serverSideModJson)).getAsJsonObject();
+                            String environment;
+                            try {
+                                environment = jsonObject.get("environment").getAsString();
+                            } catch (Exception e1) {
+                                try {
+                                    JsonObject quilt_loader = jsonObject.get("quilt_loader").getAsJsonObject(); // for quilt support
+                                    environment = quilt_loader.get("environment").getAsString();
+                                } catch (Exception e2) { // this mod doesn't have provided any environment
+                                    continue;
+                                }
+                            }
+                            if (environment.equals("server")) {
+                                File serverSideModInModpack = new File(modpackModsDir + "/" + file.getName());
+                                if (serverSideModInModpack.exists()) {
+                                    FileUtils.deleteQuietly(serverSideModInModpack);
+                                    LOGGER.info(file.getName() + " is server side mod and has been auto excluded from modpack");
+                                }
+                            }
+                        } catch (FileNotFoundException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    FileUtils.deleteQuietly(new File(tempDir + "/" + file.getName()));
                 }
             }
         }
