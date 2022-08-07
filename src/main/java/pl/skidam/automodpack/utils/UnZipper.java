@@ -83,6 +83,7 @@ public class UnZipper {
 
             if (!found) {
                 AutoModpackMain.LOGGER.warn("File not found in archive: " + oneFileToUnzipIfAny);
+                throw new IOException("File not found in archive: " + oneFileToUnzipIfAny);
             }
         }
     }

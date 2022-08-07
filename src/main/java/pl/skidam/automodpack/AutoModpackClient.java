@@ -57,7 +57,6 @@ public class AutoModpackClient implements ClientModInitializer {
         }
 
         // Packets
-        ClientLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onServerRequest);
         ClientLoginNetworking.registerGlobalReceiver(AM_LINK, this::onServerLinkReceived);
 
         // Register
@@ -70,15 +69,8 @@ public class AutoModpackClient implements ClientModInitializer {
         new StartAndCheck(true, false);
     }
 
-    private CompletableFuture<PacketByteBuf> onServerRequest(MinecraftClient minecraftClient, ClientLoginNetworkHandler clientLoginNetworkHandler, PacketByteBuf inBuf, Consumer<GenericFutureListener<? extends Future<? super Void>>> consumer) {
-        PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-
-        buf.writeInt(1);
-        return CompletableFuture.completedFuture(buf);
-    }
-
-    private CompletableFuture<PacketByteBuf> onServerLinkReceived(MinecraftClient minecraftClient, ClientLoginNetworkHandler clientLoginNetworkHandler, PacketByteBuf outBuf, Consumer<GenericFutureListener<? extends Future<? super Void>>> consumer) {
-        String receivedLink = outBuf.readString(100);
+    private CompletableFuture<PacketByteBuf> onServerLinkReceived(MinecraftClient minecraftClient, ClientLoginNetworkHandler clientLoginNetworkHandler, PacketByteBuf inBuf, Consumer<GenericFutureListener<? extends Future<? super Void>>> consumer) {
+        String receivedLink = inBuf.readString(100);
         link = receivedLink;
         try {
             FileWriter fWriter = new FileWriter(modpack_link);
@@ -89,6 +81,8 @@ public class AutoModpackClient implements ClientModInitializer {
         }
         LOGGER.info("Link received from server: {}. Saved to file.", receivedLink);
         new StartAndCheck(false, true);
-        return CompletableFuture.completedFuture(PacketByteBufs.empty());
+        PacketByteBuf outBuf = PacketByteBufs.create();
+        outBuf.writeString("1");
+        return CompletableFuture.completedFuture(outBuf);
     }
 }

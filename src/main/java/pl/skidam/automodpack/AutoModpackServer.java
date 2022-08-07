@@ -1,5 +1,8 @@
 package pl.skidam.automodpack;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.*;
@@ -12,6 +15,7 @@ import net.minecraft.text.Text;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.HostModpack;
+import pl.skidam.automodpack.utils.UnZipper;
 import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.*;
@@ -48,7 +52,6 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         genModpack();
 
         // Packets
-        ServerLoginNetworking.registerGlobalReceiver(AM_CHECK, this::onClientResponse);
         ServerLoginNetworking.registerGlobalReceiver(AM_LINK, this::onSuccess);
         ServerLoginConnectionEvents.QUERY_START.register(this::onLoginStart);
 
@@ -248,16 +251,48 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
     private static void onlyServerSideMods() {
         if (!Config.AUTO_EXCLUDE_SERVER_SIDE_MODS) return;
+        LOGGER.info("Excluding server side mods...");
         for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
             if (file.getName().endsWith(".jar") && !file.getName().toLowerCase().contains("automodpack")) {
-                FabricLoader.getInstance().getModContainer(file.getName()).ifPresent(modContainer -> {
-                    if (modContainer.getMetadata().getEnvironment() == ModEnvironment.SERVER) {
-                        File serverSideModInModpack = new File(modpackModsDir + file.getName());
-                        if (serverSideModInModpack.exists()) {
-                            FileUtils.deleteQuietly(serverSideModInModpack);
+                try {
+                    new UnZipper(file, new File("./AutoModpack/temp/" + file.getName()), "fabric.mod.json");
+                    LOGGER.info("Found fabric.mod.json for " + file.getName());
+                } catch (IOException e) {
+                    try {
+                        new UnZipper(file, new File("./AutoModpack/temp/" + file.getName()), "quilt.mod.json");
+                        LOGGER.info("Found quilt.mod.json for " + file.getName());
+                    } catch (IOException ex) {
+                        return;
+                    }
+                }
+
+                // check if in the temp folder is a fabric.mod.json or quilt.mod.json file
+                File[] tempFiles = new File("./AutoModpack/temp/").listFiles();
+                if (tempFiles == null) return;
+                for (File tempFile : tempFiles) {
+                    File[] tempFiles2 = tempFile.listFiles();
+                    if (tempFiles2 == null) return;
+                    for (File tempFile2 : tempFiles2) {
+                        if (tempFile2.getName().equals("fabric.mod.json") || tempFile2.getName().equals("quilt.mod.json")) {
+                            try {
+                                JsonObject jsonObject = JsonParser.parseReader(new FileReader(tempFile2)).getAsJsonObject();
+                                if (jsonObject.has("\"environment\": \"server\"")) {
+                                    File serverSideModInModpack = new File(modpackModsDir + file.getName());
+                                    if (serverSideModInModpack.exists()) {
+                                        FileUtils.deleteQuietly(serverSideModInModpack);
+                                        LOGGER.info(file.getName() + " is server side mod and has been excluded from modpack");
+                                    }
+                                } else {
+                                    LOGGER.info(file.getName() + " is not a server side mod");
+                                }
+                            } catch (FileNotFoundException e) {
+                                e.printStackTrace();
+                            }
                         }
                     }
-                });
+
+                    FileUtils.deleteQuietly(tempFile);
+                }
             }
         }
     }
@@ -283,34 +318,34 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         }
     }
 
-    private void onSuccess(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean b, PacketByteBuf packetByteBuf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
+    private void onSuccess(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
         // Successfully sent link to client, client can join and play on server.
+        if (!understood || !buf.readString().equals("1")) {
+            if (!Config.ONLY_OPTIONAL_MODPACK) { // Accept player to join while optional modpack is enabled // TODO make it better
+                serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://modrinth.com/mod/automodpack/versions"));
+                LOGGER.warn("Player " + serverLoginNetworkHandler.getConnectionInfo() + " has not installed \"AutoModpack\" mod");
+            } else {
+                LOGGER.warn("Player " + serverLoginNetworkHandler.getConnectionInfo() + " has not installed modpack");
+                serverLoginNetworkHandler.acceptPlayer();
+            }
+        } else {
+            LOGGER.warn("Player " + serverLoginNetworkHandler.getConnectionInfo() + " has installed modpack");
+            serverLoginNetworkHandler.acceptPlayer();
+        }
     }
 
     private void onLoginStart(ServerLoginNetworkHandler serverLoginNetworkHandler, MinecraftServer minecraftServer, PacketSender sender, ServerLoginNetworking.LoginSynchronizer loginSynchronizer) {
-        sender.sendPacket(AutoModpackMain.AM_CHECK, PacketByteBufs.empty());
-    }
+        // Get minecraft player ip if player is in local network give him local address to modpack
+        String playerIp = serverLoginNetworkHandler.getConnection().getAddress().toString();
 
-    private void onClientResponse(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
+        PacketByteBuf outBuf = PacketByteBufs.create();
 
-        if (!understood || buf.readInt() != 1) {
-            if (!Config.ONLY_OPTIONAL_MODPACK) { // Accept player to join while optional modpack is enabled // TODO make it better
-                serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://modrinth.com/mod/automodpack/versions"));
-            }
-
+        if (playerIp.contains("127.0.0.1") || playerIp.contains(publicServerIP)) {
+            outBuf.writeString(HostModpack.modpackHostIpForLocalPlayers);
         } else {
-            // Get minecraft player ip if player is in local network give him local address to modpack
-            String playerIp = serverLoginNetworkHandler.getConnection().getAddress().toString();
-
-            PacketByteBuf outBuf = PacketByteBufs.create();
-
-            if (playerIp.contains("127.0.0.1") || playerIp.contains(publicServerIP)) {
-                outBuf.writeString(HostModpack.modpackHostIpForLocalPlayers);
-            } else {
-                outBuf.writeString(AutoModpackMain.link);
-            }
-
-            sender.sendPacket(AutoModpackMain.AM_LINK, outBuf);
+            outBuf.writeString(AutoModpackMain.link);
         }
+
+        sender.sendPacket(AutoModpackMain.AM_LINK, outBuf);
     }
 }
