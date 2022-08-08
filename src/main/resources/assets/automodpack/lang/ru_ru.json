@@ -33,6 +33,10 @@
   "gui.automodpack.screen.confirm.button.cancel": "Нет (Вернутся в игру)",
 
   "gui.automodpack.screen.loading.title": "Загружаю обновления...",
+  "gui.automodpack.screen.loading.wait": "Please wait...",
+  "gui.automodpack.screen.loading.download": "Downloading...",
+  "gui.automodpack.screen.loading.extract": "Extracting modpack...",
+  "gui.automodpack.screen.loading.finish": "Finishing...",
 
   "gui.automodpack.screen.danger.title": "Внимание! Модпак найден!",
   "gui.automodpack.screen.danger.description": "Вы хотите скачать обновление для модпака?",

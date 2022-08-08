@@ -33,6 +33,10 @@
   "gui.automodpack.screen.confirm.button.cancel": "아니오 (게임으로 되돌아감)",
 
   "gui.automodpack.screen.loading.title": "업데이트 다운로드 중...",
+  "gui.automodpack.screen.loading.wait": "Please wait...",
+  "gui.automodpack.screen.loading.download": "Downloading...",
+  "gui.automodpack.screen.loading.extract": "Extracting modpack...",
+  "gui.automodpack.screen.loading.finish": "Finishing...",
 
   "gui.automodpack.screen.danger.title": "주의! 모드팩을 발견했습니다!",
   "gui.automodpack.screen.danger.description": "업데이트를 다운로드하시겠습니까?",
