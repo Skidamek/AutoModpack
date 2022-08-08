@@ -1,0 +1,47 @@
+{
+  "gui.automodpack.toast.up.0": "업데이트 확인 중...",
+  "gui.automodpack.toast.down.0": "기다려주세요...",
+  "gui.automodpack.toast.up.1": "업데이트 발견!",
+  "gui.automodpack.toast.down.1": "모드팩 다운로드 중...",
+  "gui.automodpack.toast.up.2": "업데이트 발견!",
+  "gui.automodpack.toast.down.2": "AutoModpack 다운로드 중...",
+  "gui.automodpack.toast.up.3": "발견한 업데이트 없음!",
+  "gui.automodpack.toast.down.3": "모드팩이 최신 버전입니다!",
+  "gui.automodpack.toast.up.4": "발견한 업데이트 없음!",
+  "gui.automodpack.toast.down.4": "AutoModpack이 최신 버전입니다!",
+  "gui.automodpack.toast.up.5": "오류!",
+  "gui.automodpack.toast.down.5": "나중에 다시 시도해 주세요!",
+  "gui.automodpack.toast.up.6": "mod 환경설정 파일을 열 수 없습니다",
+  "gui.automodpack.toast.down.6": "Cloth Config를 설치해야 합니다",
+
+  "gui.automodpack.button.update": "업데이트 확인",
+  "gui.automodpack.button.delete": "모드팩 삭제",
+
+  "gui.automodpack.screen.restart.title.all": "모드팩 및 \"AutoModpack\" (이 모드) 업데이트를 다운로드했습니다!",
+  "gui.automodpack.screen.restart.title.modpack": "모드팩 업데이트가 다운로드되었습니다!",
+  "gui.automodpack.screen.restart.title.automodpack": "\"AutoModpack\" (이 모드) 업데이트를 다운로드했습니다!",
+  "gui.automodpack.screen.restart.description": "업데이트를 완료하려면 게임을 다시 시작해야 합니다.",
+  "gui.automodpack.screen.restart.secDescription": "지금 다시 시작하시겠습니까?",
+  "gui.automodpack.screen.restart.button.quit": "예 (종료)",
+  "gui.automodpack.screen.restart.button.cancel": "아니오 (게임으로 되돌아감)",
+
+  "gui.automodpack.screen.confirm.title": "❌ 모드팩 삭제 ❌",
+  "gui.automodpack.screen.confirm.description": "다운로드한 모드팩의 모든 내용을 잃게 됩니다.",
+  "gui.automodpack.screen.confirm.secDescription": "게임을 다시 시작해야 합니다.",
+  "gui.automodpack.screen.confirm.thiDescription": "정말 삭제하시겠습니까?",
+  "gui.automodpack.screen.confirm.button.sure": "예 (삭제 및 종료)",
+  "gui.automodpack.screen.confirm.button.cancel": "아니오 (게임으로 되돌아감)",
+
+  "gui.automodpack.screen.loading.title": "업데이트 다운로드 중...",
+  "gui.automodpack.screen.loading.wait": "Please wait...",
+  "gui.automodpack.screen.loading.download": "Downloading...",
+  "gui.automodpack.screen.loading.extract": "Extracting modpack...",
+  "gui.automodpack.screen.loading.finish": "Finishing...",
+
+  "gui.automodpack.screen.danger.title": "주의! 모드팩을 발견했습니다!",
+  "gui.automodpack.screen.danger.description": "업데이트를 다운로드하시겠습니까?",
+  "gui.automodpack.screen.danger.secDescription": "시스템이 위험할 수도 있습니다! 서버 관리자를 신뢰할 수 없다면 다운로드하지 마세요!",
+  "gui.automodpack.screen.danger.button.accept": "다운로드",
+  "gui.automodpack.screen.danger.button.dontshowagain": "다운로드 및 다시 이 알림을 표시하지 않음",
+  "gui.automodpack.screen.danger.button.cancel": "다운로드 안함"
+}

@@ -63,6 +63,16 @@ public class HostModpack implements HttpHandler {
                         }
                     }
 
+                    // mediafire link fixer (make it direct download link)
+                    if (Config.EXTERNAL_MODPACK_HOST.startsWith("https://www.dropbox.com/s/")) {
+                        Config.EXTERNAL_MODPACK_HOST = Config.EXTERNAL_MODPACK_HOST.replace("?dl=0", "?dl=1");
+                        if (ValidateURL(Config.EXTERNAL_MODPACK_HOST)) {
+                            new Config().save();
+                        } else {
+                            LOGGER.error("External modpack host is not valid");
+                        }
+                    }
+
                     LOGGER.info("Using external host server: " + Config.EXTERNAL_MODPACK_HOST);
                     link = Config.EXTERNAL_MODPACK_HOST;
                     modpackHostIpForLocalPlayers = Config.EXTERNAL_MODPACK_HOST;

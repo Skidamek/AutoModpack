@@ -4,9 +4,11 @@
   "package": "pl.skidam.automodpack.mixin",
   "compatibilityLevel": "JAVA_17",
   "client": [
-    "UpdateButtonMixin"
+    "TitleScreen"
   ],
   "server": [
+    "DisconnectDisabler",
+    "FabricRegistrySyncDisabler"
   ],
   "injectors": {
     "defaultRequire": 1

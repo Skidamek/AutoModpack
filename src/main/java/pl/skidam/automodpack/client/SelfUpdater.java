@@ -19,39 +19,40 @@ public class SelfUpdater {
     public SelfUpdater(boolean preload) {
 
         this.preload = preload;
-
-        // If latest mod is not same as current mod download new mod.
-        // Check how big the mod file is
-
         LOGGER.info("Checking if AutoModpack is up-to-date..." + " preload? " + preload);
 
-        String modrinthID = "k68glP2e"; // AutoModpack ID
-        new ModrinthAPI(modrinthID);
-        ModrinthAPI.modrinthAPIversion = ModrinthAPI.modrinthAPIversion.split("-")[0];
+        if (InternetConnectionCheck.InternetConnectionCheck("https://modrinth.com/")) {
 
-        String modrinthAPIversion = ModrinthAPI.modrinthAPIversion.replace(".", "");
-        String VERSION = AutoModpackMain.VERSION.replace(".", "");
+            // If latest mod is not same as current mod download new mod.
+            // Check how big the mod file is
+            String modrinthID = "k68glP2e"; // AutoModpack ID
+            new ModrinthAPI(modrinthID);
+            ModrinthAPI.modrinthAPIversion = ModrinthAPI.modrinthAPIversion.split("-")[0];
 
-        if (Integer.parseInt(VERSION) > Integer.parseInt(modrinthAPIversion)) {
-            LOGGER.info("You are using pre-release version of AutoModpack: " + AutoModpackMain.VERSION + " latest stable version is: " + ModrinthAPI.modrinthAPIversion);
-            if (!preload) {
-                AutoModpackToast.add(4);
+            String modrinthAPIversion = ModrinthAPI.modrinthAPIversion.replace(".", "");
+            String VERSION = AutoModpackMain.VERSION.replace(".", "");
+
+            if (Integer.parseInt(VERSION) > Integer.parseInt(modrinthAPIversion)) {
+                LOGGER.info("You are using pre-release version of AutoModpack: " + AutoModpackMain.VERSION + " latest stable version is: " + ModrinthAPI.modrinthAPIversion);
+                if (!preload) {
+                    AutoModpackToast.add(4);
+                }
+                AutoModpackUpdated = "false";
+                return;
             }
-            AutoModpackUpdated = "false";
-            return;
-        }
 
-        if (VERSION.equals(modrinthAPIversion)) {
-            LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
-            if (!preload) {
-                AutoModpackToast.add(4);
+            if (VERSION.equals(modrinthAPIversion)) {
+                LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + AutoModpackMain.VERSION);
+                if (!preload) {
+                    AutoModpackToast.add(4);
+                }
+                AutoModpackUpdated = "false";
+                return;
             }
-            AutoModpackUpdated = "false";
-            return;
-        }
 
-        // Update found
-        AutoModpackDownload();
+            // Update found
+            AutoModpackDownload();
+        }
     }
 
     public void AutoModpackDownload() {

@@ -17,15 +17,17 @@ public class ModrinthAPI {
 
         url = url.replaceAll("\"", "%22"); // so important!
 
-        try {
-            JsonObject JSONArray = new JsonTool().getJsonArray(url).get(0).getAsJsonObject();
-            modrinthAPIversion = JSONArray.get("version_number").getAsString();
-            JsonObject JSONArrayfiles = JSONArray.getAsJsonArray("files").get(0).getAsJsonObject();
-            modrinthAPIdownloadUrl = JSONArrayfiles.get("url").getAsString();
-            modrinthAPIfileName = JSONArrayfiles.get("filename").getAsString();
-            modrinthAPIsize = JSONArrayfiles.get("size").getAsLong();
-        } catch (Exception e) {
-            e.printStackTrace();
+        if (InternetConnectionCheck.InternetConnectionCheck(url)) {
+            try {
+                JsonObject JSONArray = new JsonTool().getJsonArray(url).get(0).getAsJsonObject();
+                modrinthAPIversion = JSONArray.get("version_number").getAsString();
+                JsonObject JSONArrayfiles = JSONArray.getAsJsonArray("files").get(0).getAsJsonObject();
+                modrinthAPIdownloadUrl = JSONArrayfiles.get("url").getAsString();
+                modrinthAPIfileName = JSONArrayfiles.get("filename").getAsString();
+                modrinthAPIsize = JSONArrayfiles.get("size").getAsLong();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 }

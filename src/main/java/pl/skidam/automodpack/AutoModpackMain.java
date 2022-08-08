@@ -13,7 +13,6 @@ public class AutoModpackMain implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
-    public static final Identifier AM_CHECK = new Identifier(MOD_ID, "check");
     public static final Identifier AM_LINK = new Identifier(MOD_ID, "link");
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
@@ -22,10 +21,9 @@ public class AutoModpackMain implements ModInitializer {
     public static String correctName = "AutoModpack-1.18.x.jar";
     public static File selfOut = new File( "./mods/" + correctName);
     public static final File selfBackup = new File("./AutoModpack/" + correctName);
-    public static final String trashLink = "https://github.com/Skidamek/TrashMod/releases/download/latest/trash.jar";
-    public static final File trashOut = new File("./AutoModpack/TrashMod.jar");
     public static boolean isClothConfig = false;
     public static boolean isModMenu = false;
+    public static boolean isVelocity = false;
     public static String VERSION = FabricLoader.getInstance().getModContainer("automodpack").isPresent() ? FabricLoader.getInstance().getModContainer("automodpack").get().getMetadata().getVersion().getFriendlyString() : null;
 
     @Override

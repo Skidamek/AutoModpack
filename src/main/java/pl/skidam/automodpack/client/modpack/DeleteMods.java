@@ -1,17 +1,15 @@
 package pl.skidam.automodpack.client.modpack;
 
 import org.apache.commons.io.FileDeleteStrategy;
-import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.utils.UnZipper;
-import pl.skidam.automodpack.utils.Zipper;
 import pl.skidam.automodpack.utils.Wait;
+import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.*;
 import java.util.Scanner;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
-import static pl.skidam.automodpack.client.modpack.TrashMod.unZippedTrashDir;
 
 public class DeleteMods {
     private static final File delModsTxt = new File("./delmods.txt");
@@ -29,8 +27,7 @@ public class DeleteMods {
             if (!delModsTxt.exists() && out.exists()) {
                 try {
                     new UnZipper(out, new File("./"), "delmods.txt");
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
+                } catch (IOException e) { // ignore
                 }
             }
         }
@@ -61,7 +58,8 @@ public class DeleteMods {
         // Delete the file
         try {
             FileDeleteStrategy.FORCE.delete(delModsTxt);
-        } catch (IOException ignored) { }
+        } catch (IOException ignored) {
+        }
 
 
         LOGGER.info("Finished deleting mods!");
@@ -79,8 +77,6 @@ public class DeleteMods {
             }
             AutoModpackMain.ModpackUpdated = ModpackUpdated;
         }
-
-        new TrashMod();
 
         try {
             FileReader fr = new FileReader(delModsTxt);
@@ -108,7 +104,11 @@ public class DeleteMods {
 
                     if (modFile.exists()) { // if mod to delete still exists
                         try {
-                            new Zipper(unZippedTrashDir, modFile);
+                            File emptyFolder = new File("./AutoModpack/empty/");
+                            if (!emptyFolder.exists()) {
+                                emptyFolder.mkdir();
+                            }
+                            new Zipper(emptyFolder, modFile);
                         } catch (IOException ignored) {
                         }
                         try {
@@ -128,7 +128,7 @@ public class DeleteMods {
 
                     if (!modFile.exists()) {
                         LOGGER.info("Successfully deleted: " + modName);
-                    } else if (modFile.exists() && modFile.length() == 16681) {
+                    } else if (modFile.exists() && modFile.length() == 22) {
                         LOGGER.info("Successfully trashed: " + modName);
                     } else {
                         LOGGER.info("Failed to delete: " + modName);
@@ -139,6 +139,7 @@ public class DeleteMods {
 
             // Close the file
             inFile.close();
-        } catch (IOException ignored) { }
+        } catch (IOException ignored) {
+        }
     }
 }

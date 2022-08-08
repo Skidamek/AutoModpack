@@ -5,6 +5,7 @@ import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.client.ui.DangerScreen;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.Relaunch;
 import pl.skidam.automodpack.utils.Download;
 
 import java.util.concurrent.CompletableFuture;
@@ -13,6 +14,8 @@ import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class DownloadModpack {
+
+    private static boolean preload;
 
     public DownloadModpack() {
 
@@ -28,13 +31,31 @@ public class DownloadModpack {
         LOGGER.info("Successfully downloaded modpack!");
 
         new UnZip(out, "true");
+
+        if (preload) {
+            try {
+                new Relaunch();
+            } catch (Throwable e) {
+                LOGGER.error("Failed to relaunch minecraft! " + e);
+                e.printStackTrace();
+                throw new RuntimeException("Updated modpack, restart your game!");
+            }
+        }
     }
 
     public static class prepare {
 
         public static boolean DangerScreenWasShown = false;
 
-        public prepare() {
+        public prepare(boolean preload) {
+
+            DownloadModpack.preload = preload;
+
+            if (preload) {
+                new DownloadModpack();
+                return;
+            }
+
             while (true) {
                 if (MinecraftClient.getInstance().currentScreen != null) {
                     if (!isOnServer) {
@@ -52,6 +73,16 @@ public class DownloadModpack {
                         DangerScreenWasShown = false;
                         isOnServer = false;
                         break;
+                    }
+                }
+            }
+
+            if (isVelocity) {
+                while (true) {
+                    if (MinecraftClient.getInstance().currentScreen != null) {
+                        if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("disconnected") || MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("419")) {
+                            break;
+                        }
                     }
                 }
             }

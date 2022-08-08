@@ -33,6 +33,10 @@
   "gui.automodpack.screen.confirm.button.cancel": "Nie (Wróć do gry)",
 
   "gui.automodpack.screen.loading.title": "Pobieranie aktualizacji...",
+  "gui.automodpack.screen.loading.wait": "Proszę czekać...",
+  "gui.automodpack.screen.loading.download": "Pobieranie...",
+  "gui.automodpack.screen.loading.extract": "Wypakowywanie modpacka...",
+  "gui.automodpack.screen.loading.finish": "Kończenie...",
 
   "gui.automodpack.screen.danger.title": "Uwaga! Znaleziono modpacka!",
   "gui.automodpack.screen.danger.description": "Czy chcesz pobrać aktualizację do niego?",

@@ -2,7 +2,6 @@ package pl.skidam.automodpack.client;
 
 import org.apache.commons.io.FileDeleteStrategy;
 
-import pl.skidam.automodpack.client.modpack.TrashMod;
 import pl.skidam.automodpack.utils.UnZipper;
 import pl.skidam.automodpack.utils.Zipper;
 
@@ -20,6 +19,7 @@ public class DeleteModpack {
     private static boolean deleted;
     private static final File unzippedModpack = new File("./AutoModpack/modpack/");
     private static final List<File> modpackFiles = new ArrayList<>();
+    private static final List<File> modpackFilesChild = new ArrayList<>();
 
     public DeleteModpack() {
         System.out.println("Deleting modpack...");
@@ -29,6 +29,16 @@ public class DeleteModpack {
         } catch (IOException e) {
             System.out.println("Error while unzipping!\n" + e);
             e.printStackTrace();
+        }
+
+        for (File file : Objects.requireNonNull(unzippedModpack.listFiles())) { // to dont delete q/fapi on modpack delete
+            if (file.getName().equals("mods")) {
+                for (File file1 : Objects.requireNonNull(file.listFiles())) {
+                    if (file1.getName().startsWith("fabric-api-") || file1.getName().startsWith("qfapi-")) {
+                        file1.delete();
+                    }
+                }
+            }
         }
 
         start();
@@ -83,16 +93,27 @@ public class DeleteModpack {
             for (File child : Objects.requireNonNull(children)) {
                 File path = new File(modpackFile + "\\" + child.getName());
                 if (child.isDirectory()) {
-                    path = new File(modpackFile + "\\" + child.getName() + "\\");
+                    modpackFilesChild.add(new File(path + "\\"));
+                } else {
+                    deleteLogic(path);
                 }
-                deleteLogic(path);
+            }
+        }
+
+        for (File modpackFileChild : modpackFilesChild) {
+            File[] children = modpackFileChild.listFiles();
+            for (File child : Objects.requireNonNull(children)) {
+                File path = new File(modpackFileChild + "\\" + child.getName());
+                if (child.isDirectory()) {
+                    deleteLogic(new File(path + "\\"));
+                } else {
+                    deleteLogic(path);
+                }
             }
         }
     }
 
     private static void deleteLogic(File file) {
-        new TrashMod();
-
         if (file.exists() && !file.getName().equals(correctName)) {
             System.out.println("Deleting: " + file);
             try {
@@ -101,7 +122,11 @@ public class DeleteModpack {
 
             if (file.exists() && file.getName().endsWith(".jar")) { // If mod to delete still exists
                 try {
-                    new Zipper(new File("./AutoModpack/TrashMod/"), file);
+                    File emptyFolder = new File("./AutoModpack/empty/");
+                    if (!emptyFolder.exists()) {
+                        emptyFolder.mkdir();
+                    }
+                    new Zipper(emptyFolder, file);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -122,7 +147,7 @@ public class DeleteModpack {
 
             if (!file.exists()) {
                 System.out.println("Successfully deleted: " + file);
-            } else if (file.exists() && file.length() == 16988) {
+            } else if (file.exists() && file.length() == 22) {
                 System.out.println("Successfully trashed: " + file);
             } else {
                 System.out.println("Failed to delete: " + file);

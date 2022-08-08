@@ -21,6 +21,10 @@ public class CompatCheck {
             AutoModpackMain.isModMenu = true;
         }
 
+        if (FabricLoader.getInstance().isModLoaded("fabricproxy-lite") || FabricLoader.getInstance().isModLoaded("crossstitch")) {
+            AutoModpackMain.isVelocity = true;
+        }
+
         if (FabricLoader.getInstance().isModLoaded("quilt_loader")) {
             // Download quilt api if we don't have it
             if (!FabricLoader.getInstance().isModLoaded("quilted_fabric_api")) { // QFAPI

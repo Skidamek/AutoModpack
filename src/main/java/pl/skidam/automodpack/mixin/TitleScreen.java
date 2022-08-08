@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.mixin;
 
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
@@ -21,10 +20,10 @@ import java.util.Objects;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.client.StartAndCheck.isChecking;
 
-@Mixin(TitleScreen.class)
-public class UpdateButtonMixin extends Screen {
+@Mixin(net.minecraft.client.gui.screen.TitleScreen.class)
+public class TitleScreen extends Screen {
 
-    public UpdateButtonMixin(Text title) {
+    public TitleScreen(Text title) {
         super(title);
     }
 
