@@ -127,7 +127,7 @@ public class DeleteMods {
 
                     if (!modFile.exists()) {
                         LOGGER.info("Successfully deleted: " + modName);
-                    } else if (modFile.exists() && modFile.length() == 16681) {
+                    } else if (modFile.exists() && modFile.length() == 22) {
                         LOGGER.info("Successfully trashed: " + modName);
                     } else {
                         LOGGER.info("Failed to delete: " + modName);

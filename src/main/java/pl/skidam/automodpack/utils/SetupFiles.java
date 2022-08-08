@@ -110,5 +110,21 @@ public class SetupFiles {
             FileDeleteStrategy.FORCE.delete(new File("./AutoModpack/modpack/"));
         } catch (IOException e) { // ignore
         }
+
+        // delete
+        File trashmodFolder = new File ("./AutoModpack/TrashMod/");
+        if (trashmodFolder.exists()) {
+            FileUtils.deleteQuietly(trashmodFolder);
+        }
+
+        File emptyFolder = new File ("./AutoModpack/empty/");
+        if (emptyFolder.exists()) {
+            FileUtils.deleteQuietly(emptyFolder);
+        }
+
+        File TrashMod = new File ("./AutoModpack/TrashMod.jar");
+        if (TrashMod.exists()) {
+            FileUtils.deleteQuietly(TrashMod);
+        }
     }
 }

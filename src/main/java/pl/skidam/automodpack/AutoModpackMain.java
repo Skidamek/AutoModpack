@@ -23,6 +23,7 @@ public class AutoModpackMain implements ModInitializer {
     public static final File selfBackup = new File("./AutoModpack/" + correctName);
     public static boolean isClothConfig = false;
     public static boolean isModMenu = false;
+    public static boolean isVelocity = false;
     public static String VERSION = FabricLoader.getInstance().getModContainer("automodpack").isPresent() ? FabricLoader.getInstance().getModContainer("automodpack").get().getMetadata().getVersion().getFriendlyString() : null;
 
     @Override

@@ -147,7 +147,7 @@ public class DeleteModpack {
 
             if (!file.exists()) {
                 System.out.println("Successfully deleted: " + file);
-            } else if (file.exists() && file.length() == 16988) {
+            } else if (file.exists() && file.length() == 22) {
                 System.out.println("Successfully trashed: " + file);
             } else {
                 System.out.println("Failed to delete: " + file);

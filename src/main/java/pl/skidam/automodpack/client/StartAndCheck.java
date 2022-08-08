@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client;
 
 import net.minecraft.client.MinecraftClient;
 import pl.skidam.automodpack.client.modpack.CheckModpack;
+import pl.skidam.automodpack.utils.LoadModpackLink;
 import pl.skidam.automodpack.utils.Wait;
 
 import java.io.FileReader;
@@ -18,28 +19,7 @@ public class StartAndCheck {
 
         new Thread(() -> {
 
-            if (link == null) {
-                // Load saved link from ./AutoModpack/modpack-link.txt file
-                String savedLink = "";
-                try {
-                    FileReader fr = new FileReader(modpack_link);
-                    Scanner inFile = new Scanner(fr);
-                    if (inFile.hasNextLine()) {
-                        savedLink = inFile.nextLine();
-                    }
-                    inFile.close();
-                } catch (Exception e) { // ignore
-                }
-
-                if (!savedLink.equals("")) {
-                    if (ValidateURL(savedLink)) {
-                        link = savedLink;
-                        LOGGER.info("Loaded saved link to modpack: " + link);
-                    } else {
-                        LOGGER.error("Saved link is not valid url or is not end with /modpack");
-                    }
-                }
-            }
+            new LoadModpackLink();
 
             if (isLoading) {
                 // If minecraft is still loading wait for it to finish
@@ -61,23 +41,23 @@ public class StartAndCheck {
                         new Finished();
                         break;
                     }
-                    new Wait(500);
+                    new Wait(25);
                 }
             });
 
             if (onlyModpack) {
                 AutoModpackUpdated = "false";
-                new CheckModpack();
+                new CheckModpack(false);
             }
 
             if (!onlyModpack) {
-                new CheckModpack();
+                new CheckModpack(false);
                 while (true) {
                     if (ModpackUpdated != null) {
                         new SelfUpdater(false);
                         break;
                     }
-                    new Wait(50);
+                    new Wait(25);
                 }
             }
         }).start();

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.modpack;
 
 import pl.skidam.automodpack.client.AutoModpackToast;
+import pl.skidam.automodpack.utils.InternetConnectionCheck;
 import pl.skidam.automodpack.utils.WebFileSize;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
@@ -9,7 +10,7 @@ public class CheckModpack {
 
     public static boolean isCheckUpdatesButtonClicked;
 
-    public CheckModpack() {
+    public CheckModpack(boolean preload) {
 
         // If the latest modpack is not same as current modpack download new mods.
         // Check how big the Modpack file is
@@ -21,15 +22,20 @@ public class CheckModpack {
 
         LOGGER.info("Checking if modpack is up-to-date...");
 
+        if (!InternetConnectionCheck.InternetConnectionCheck(link)) return;
+
         long currentSize = out.length();
         LOGGER.info("Current modpack size: " + currentSize);
 
         if (currentSize == 0) {
             LOGGER.info("Downloading modpack!");
-            AutoModpackToast.add(1);
-            new DownloadModpack.prepare();
+            if (!preload) {
+                AutoModpackToast.add(1);
+            }
+            new DownloadModpack.prepare(preload);
             return;
         }
+
 
         long latestSize = WebFileSize.webfileSize(link);
         LOGGER.info("Latest modpack size: " + latestSize);
@@ -41,13 +47,17 @@ public class CheckModpack {
 
         if (!out.exists() || currentSize != latestSize) {
             LOGGER.info("Downloading modpack!");
-            AutoModpackToast.add(1);
-            new DownloadModpack.prepare();
+            if (!preload) {
+                AutoModpackToast.add(1);
+            }
+            new DownloadModpack.prepare(preload);
             return;
         }
 
         LOGGER.info("Didn't find any updates for modpack!");
-        AutoModpackToast.add(3);
+        if (!preload) {
+            AutoModpackToast.add(3);
+        }
         if (isCheckUpdatesButtonClicked) {
             isCheckUpdatesButtonClicked = false;
             new UnZip(out, "false");
@@ -55,4 +65,5 @@ public class CheckModpack {
             ModpackUpdated = "false";
         }
     }
+
 }
