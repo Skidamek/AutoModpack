@@ -81,6 +81,7 @@ Use Cloth Config and Mod Menu mods to change settings in game
 |--------------------------------------|---------------|----------------------------------------------------------------------------------------------------------------------------|
 | `modpack_host`                       | `true`        | Host http server for modpack. If this is disabled use `external_modpack_host`                                              |
 | `sync_mods`                          | `true`        | Clone all your mods to modpack and delete all mods whose were deleted or updated                                           |
+| `auto_exclude_server_side_mods`      | `true`        | Excluding all server side mods from modpack to prevent some crashes on client                                              |
 | `only_optional_modpack`              | `false`       | Vanilla players will, can join if other mods on server are only server side                                                |
 | `host_port`                          | `30037`       | This port will be used to host modpack                                                                                     |
 | `host_thread_count`                  | `2`           | Modpack host will be use this amount of threads.                                                                           |
