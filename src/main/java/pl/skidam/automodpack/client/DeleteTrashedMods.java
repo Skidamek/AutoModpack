@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client;
 
 import org.apache.commons.io.FileDeleteStrategy;
+import org.apache.commons.io.FileUtils;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -43,13 +44,9 @@ public class DeleteTrashedMods {
                     }
                 }
             }
+
             // Delete trashed-mods.txt file
-            try {
-                FileDeleteStrategy.FORCE.delete(new File(trashedModsTxt));
-                LOGGER.info("Successfully deleted trashed-mods.txt file");
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            FileUtils.deleteQuietly(new File(trashedModsTxt));
         }
     }
 }

@@ -61,9 +61,6 @@ public class DeleteMods {
         } catch (IOException ignored) {
         }
 
-
-        LOGGER.info("Finished deleting mods!");
-
         if (!preload) {
             AutoModpackMain.ModpackUpdated = ModpackUpdated;
         }

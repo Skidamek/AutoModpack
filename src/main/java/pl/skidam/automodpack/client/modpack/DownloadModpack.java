@@ -2,12 +2,13 @@ package pl.skidam.automodpack.client.modpack;
 
 import net.minecraft.client.MinecraftClient;
 
+import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.client.ui.DangerScreen;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.config.Config;
-import pl.skidam.automodpack.Relaunch;
 import pl.skidam.automodpack.utils.Download;
 
+import java.io.File;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
@@ -31,6 +32,17 @@ public class DownloadModpack {
         LOGGER.info("Successfully downloaded modpack!");
 
         new UnZip(out, "true");
+
+        File[] files = new File("./mods/").listFiles();
+        assert files != null;
+        for (File file : files) {
+            if (isFabricLoader && file.getName().startsWith("qfapi-")) {
+                FileUtils.deleteQuietly(file);
+            }
+            else if (isQuiltLoader && file.getName().startsWith("fabric-api-")) {
+                FileUtils.deleteQuietly(file);
+            }
+        }
 
         if (preload) {
             throw new RuntimeException("Updated modpack, restart your game!");

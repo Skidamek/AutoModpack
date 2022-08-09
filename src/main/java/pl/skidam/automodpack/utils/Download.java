@@ -13,23 +13,9 @@ public class Download {
 
     public static float progress;
     public static String averageInternetConnectionSpeed;
-    private static boolean isDownloading;
     public static boolean Download(String link, File output) {
 
         if (InternetConnectionCheck.InternetConnectionCheck(link)) {
-
-            isDownloading = true;
-            try {
-                CompletableFuture.runAsync(() -> {
-                    new Wait(15500);
-                    if (isDownloading && progress < 1.0) {
-                        LOGGER.error("Downloading took too long, cancelling...");
-                        throw new ArithmeticException("Downloading took too long, cancelling...");
-                    }
-                });
-            } catch (ArithmeticException e) {
-                return true;
-            }
 
             try {
                 URL url = new URL(link);
@@ -48,7 +34,7 @@ public class Download {
 
                 HttpURLConnection http = (HttpURLConnection) url.openConnection();
                 http.setRequestMethod("GET");
-                http.setConnectTimeout(15000); // 15 seconds
+                http.setConnectTimeout(10000); // 10 seconds
                 int responseCode = http.getResponseCode();
                 if (responseCode == 200) {
                     double fileSize = (double) http.getContentLengthLong();
@@ -102,10 +88,8 @@ public class Download {
             } catch (IOException ex) {
                 new Error();
                 ex.printStackTrace();
-                isDownloading = false;
                 return true;
             }
-            isDownloading = false;
             return false;
         } else {
             return true;

@@ -25,7 +25,8 @@ public class AutoModpackMain implements ModInitializer {
     public static boolean isModMenu = false;
     public static boolean isVelocity = false;
     public static String VERSION = FabricLoader.getInstance().getModContainer("automodpack").isPresent() ? FabricLoader.getInstance().getModContainer("automodpack").get().getMetadata().getVersion().getFriendlyString() : null;
-
+    public static boolean isFabricLoader = false;
+    public static boolean isQuiltLoader = false;
     @Override
     public void onInitialize() {
 

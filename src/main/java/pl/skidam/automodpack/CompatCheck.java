@@ -26,6 +26,7 @@ public class CompatCheck {
         }
 
         if (FabricLoader.getInstance().isModLoaded("quilt_loader")) {
+            AutoModpackMain.isQuiltLoader = true;
             // Download quilt api if we don't have it
             if (!FabricLoader.getInstance().isModLoaded("quilted_fabric_api")) { // QFAPI
 
@@ -44,6 +45,7 @@ public class CompatCheck {
                 throw new RuntimeException("Successfully installed latest Quilted Fabric API (QFAPI)!");
             }
         } else { // fabric
+            AutoModpackMain.isFabricLoader = true;
             // Download fabric api if we don't have it
             if (!FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI
 

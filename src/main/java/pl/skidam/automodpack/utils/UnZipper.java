@@ -82,7 +82,7 @@ public class UnZipper {
             zis.close();
 
             if (!found) {
-                if (!oneFileToUnzipIfAny.equals("fabric.mod.json") && !oneFileToUnzipIfAny.equals("quilt.mod.json")) {
+                if (!oneFileToUnzipIfAny.equals("fabric.mod.json") && !oneFileToUnzipIfAny.equals("quilt.mod.json") && !oneFileToUnzipIfAny.equals("trashed-mods.txt")) {
                     AutoModpackMain.LOGGER.warn("File not found in archive: " + oneFileToUnzipIfAny);
                 }
                 throw new IOException("File not found in archive: " + oneFileToUnzipIfAny);

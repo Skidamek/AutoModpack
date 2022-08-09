@@ -11,15 +11,17 @@ public class InternetConnectionCheck {
         // Internet connection check
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-            connection.setConnectTimeout(30000); // 30 seconds
+            connection.setConnectTimeout(10000); // 10 seconds
             int responseCode = connection.getResponseCode();
-            if (responseCode != 200 && responseCode != 404 && responseCode != 400) {
-                throw new Exception("AutoModpack -- Internet isn't available, Failed to get code 200/404/400 from " + connection.getURL().toString());
+            if (responseCode != 200) {
+                LOGGER.error("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
+                new Wait(1000);
+                return false;
             } else {
                 return true;
             }
         } catch (Exception e) {
-            LOGGER.error("Make sure that you have an internet connection!");
+            LOGGER.error("Something went wrong \n" + e);
             new Wait(1000);
             return false;
         }
