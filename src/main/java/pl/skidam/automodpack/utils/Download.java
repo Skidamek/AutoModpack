@@ -13,22 +13,9 @@ public class Download {
 
     public static float progress;
     public static String averageInternetConnectionSpeed;
-    private static boolean isDownloading;
-
     public static boolean Download(String link, File output) {
 
         if (InternetConnectionCheck.InternetConnectionCheck(link)) {
-
-            isDownloading = true;
-
-            CompletableFuture.runAsync(() -> {
-                new Wait(10500);
-                if (isDownloading && progress < 1.0) {
-                    LOGGER.error("Downloading took too long, cancelling...");
-                    throw new RuntimeException("Downloading took too long, cancelling...");
-                }
-            });
-
 
             try {
                 URL url = new URL(link);
@@ -101,10 +88,8 @@ public class Download {
             } catch (IOException ex) {
                 new Error();
                 ex.printStackTrace();
-                isDownloading = false;
                 return true;
             }
-            isDownloading = false;
             return false;
         } else {
             return true;

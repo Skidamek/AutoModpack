@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client;
 
 import org.apache.commons.io.FileDeleteStrategy;
+import org.apache.commons.io.FileUtils;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -31,7 +32,6 @@ public class DeleteTrashedMods {
                 LOGGER.error("Could not read trashed-mods.txt file\n" + e.getMessage());
             }
 
-
             // For trashedModsNames array, delete file with same name in ./mods/ folder
             for (String trashedModName : trashedModsNames) {
                 File trashedModFile = new File("./mods/" + trashedModName);
@@ -44,11 +44,7 @@ public class DeleteTrashedMods {
                 }
             }
             // Delete trashed-mods.txt file
-            try {
-                FileDeleteStrategy.FORCE.delete(new File(trashedModsTxt));
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            FileUtils.deleteQuietly(new File(trashedModsTxt));
         }
     }
 }
