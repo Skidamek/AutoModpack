@@ -60,9 +60,6 @@ public class DeleteMods {
             FileDeleteStrategy.FORCE.delete(delModsTxt);
         } catch (IOException ignored) { }
 
-
-        LOGGER.info("Finished deleting mods!");
-
         if (!preload) {
             AutoModpackMain.ModpackUpdated = ModpackUpdated;
         }

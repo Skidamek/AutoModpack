@@ -46,7 +46,6 @@ public class DeleteTrashedMods {
             // Delete trashed-mods.txt file
             try {
                 FileDeleteStrategy.FORCE.delete(new File(trashedModsTxt));
-                LOGGER.info("Successfully deleted trashed-mods.txt file");
             } catch (Exception e) {
                 e.printStackTrace();
             }

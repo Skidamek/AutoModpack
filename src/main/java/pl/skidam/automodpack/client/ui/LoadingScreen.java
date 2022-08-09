@@ -4,6 +4,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.MathHelper;
@@ -19,24 +20,24 @@ public class LoadingScreen extends Screen {
         UnZipper.progress = 0;
     }
 
-    private String getProgress() {
-        float percentage = Download.progress;
-        if (percentage == 100) {
-            percentage = UnZipper.progress;
-            if (percentage == 100) {
-                return "Please wait...";
+    private Text getProgress() {
+        Text percentage = Text.translatable(Download.progress + "%");
+        if (Download.progress == 100) {
+            percentage = Text.translatable(UnZipper.progress + "%");
+            if (UnZipper.progress == 100) {
+                percentage = Text.translatable("gui.automodpack.screen.loading.wait"); // Please wait...
             }
         }
-        return MathHelper.clamp(percentage, 0, 100) + "%";
+        return percentage;
     }
 
-    private String getStep() {
-        String step = "Downloading...";
+    private Text getStep() {
+        Text step = Text.translatable("gui.automodpack.screen.loading.download"); // Downloading...
         if (Download.progress == 100) {
-            step = "Extracting modpack...";
+            step = Text.translatable("gui.automodpack.screen.loading.extract"); // Extracting modpack...
         }
         if (UnZipper.progress == 100) {
-            step = "Finishing...";
+            step = Text.translatable("gui.automodpack.screen.loading.finish"); // Finishing...
         }
         return step;
     }
@@ -51,8 +52,8 @@ public class LoadingScreen extends Screen {
 
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        String percentage = this.getProgress();
-        String step = this.getStep();
+        Text percentage = this.getProgress();
+        Text step = this.getStep();
         String internetConnectionSpeed = this.getInternetConnectionSpeed();
         drawCenteredText(matrices, this.textRenderer, step, this.width / 2, 80, 16777215);
         drawCenteredText(matrices, this.textRenderer, percentage, this.width / 2, 100, 16777215);

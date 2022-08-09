@@ -20,15 +20,15 @@ public class Download {
         if (InternetConnectionCheck.InternetConnectionCheck(link)) {
 
             isDownloading = true;
+
             CompletableFuture.runAsync(() -> {
-               new Wait(25500);
-               if (isDownloading && progress < 1.0) {
-                   LOGGER.error("Downloading took too long, cancelling...");
-                   ModpackUpdated = "false";
-                   output.delete();
-                   isDownloading = false;
-               }
+                new Wait(10500);
+                if (isDownloading && progress < 1.0) {
+                    LOGGER.error("Downloading took too long, cancelling...");
+                    throw new RuntimeException("Downloading took too long, cancelling...");
+                }
             });
+
 
             try {
                 URL url = new URL(link);
@@ -47,7 +47,7 @@ public class Download {
 
                 HttpURLConnection http = (HttpURLConnection) url.openConnection();
                 http.setRequestMethod("GET");
-                http.setConnectTimeout(25000); // 25 seconds
+                http.setConnectTimeout(10000); // 10 seconds
                 int responseCode = http.getResponseCode();
                 if (responseCode == 200) {
                     double fileSize = (double) http.getContentLengthLong();

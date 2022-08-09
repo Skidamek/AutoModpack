@@ -13,7 +13,7 @@ import pl.skidam.automodpack.AutoModpackMain;
 public class FabricRegistrySyncDisabler {
     @Inject(method = "sendPacket(Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/fabricmc/fabric/impl/registry/sync/packet/RegistryPacketHandler;)V", at = @At("HEAD"), cancellable = true)
     private static void sendPacketInject(ServerPlayerEntity player, RegistryPacketHandler handler, CallbackInfo ci) {
-        if (AutoModpackMain.isVelocity) {
+        if (AutoModpackMain.isVelocity) { // hmmm
             ci.cancel();
         }
     }
