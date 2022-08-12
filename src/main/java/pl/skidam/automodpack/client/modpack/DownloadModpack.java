@@ -7,6 +7,7 @@ import pl.skidam.automodpack.client.ui.DangerScreen;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.Relaunch;
+import pl.skidam.automodpack.ui.ScreenBox;
 import pl.skidam.automodpack.utils.Download;
 
 import java.io.File;
@@ -45,14 +46,14 @@ public class DownloadModpack {
         }
 
         if (preload) {
-            throw new RuntimeException("Updated modpack, restart your game!");
+            new ScreenBox("Updated modpack, restart your game!");
 
 //            try {
 //                new Relaunch();
 //            } catch (Throwable e) {
 //                LOGGER.error("Failed to relaunch minecraft! " + e);
 //                e.printStackTrace();
-//                throw new RuntimeException("Updated modpack, restart your game!");
+//                new ScreenBox("Updated modpack, restart your game!");
 //            }
         }
     }

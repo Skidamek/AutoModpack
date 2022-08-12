@@ -3,6 +3,7 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
+import pl.skidam.automodpack.AutoModpackMain;
 
 import java.io.File;
 import java.io.IOException;
@@ -101,7 +102,7 @@ public class SetupFiles {
             FileUtils.deleteQuietly(modpackZip);
         }
 
-        File modpack_link = new File ("./AutoModpack/modpack-link.txt");
+        File modpack_link = new File("./AutoModpack/modpack-link.txt");
 
         try {
             if (!modpack_link.exists()) {
@@ -110,7 +111,7 @@ public class SetupFiles {
         } catch (IOException e) { // ignore
         }
 
-        File modpack_list = new File ("./AutoModpack/modpacks/");
+        File modpack_list = new File("./AutoModpack/modpacks/");
         if (!modpack_list.exists()) {
             modpack_list.mkdir();
         }
@@ -121,19 +122,28 @@ public class SetupFiles {
         }
 
         // delete
-        File trashmodFolder = new File ("./AutoModpack/TrashMod/");
+        File trashmodFolder = new File("./AutoModpack/TrashMod/");
         if (trashmodFolder.exists()) {
             FileUtils.deleteQuietly(trashmodFolder);
         }
 
-        File emptyFolder = new File ("./AutoModpack/empty/");
+        File emptyFolder = new File("./AutoModpack/empty/");
         if (emptyFolder.exists()) {
             FileUtils.deleteQuietly(emptyFolder);
         }
 
-        File TrashMod = new File ("./AutoModpack/TrashMod.jar");
+        File TrashMod = new File("./AutoModpack/TrashMod.jar");
         if (TrashMod.exists()) {
             FileUtils.deleteQuietly(TrashMod);
+        }
+
+        // extract icon
+        try {
+            new UnZipper(new File("./mods/" + AutoModpackMain.correctName), new File("./AutoModpack/"), "assets/automodpack/icon.png");
+            FileUtils.copyFileToDirectory(new File("./AutoModpack/assets/automodpack/icon.png"), new File("./AutoModpack/"));
+            FileUtils.deleteQuietly(new File("./AutoModpack/assets/"));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }

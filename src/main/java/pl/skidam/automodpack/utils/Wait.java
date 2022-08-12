@@ -9,5 +9,4 @@ public class Wait {
             Thread.currentThread().interrupt();
         }
     }
-
 }
