@@ -139,7 +139,7 @@ public class SetupFiles {
 
         // extract icon
         try {
-            new UnZipper(new File("./mods/" + AutoModpackMain.correctName), new File("./AutoModpack/"), "assets/automodpack/icon.png");
+            new UnZipper(new File("./mods/" + selfOut.getName()), new File("./AutoModpack/"), "assets/automodpack/icon.png");
             FileUtils.copyFileToDirectory(new File("./AutoModpack/assets/automodpack/icon.png"), new File("./AutoModpack/"));
             FileUtils.deleteQuietly(new File("./AutoModpack/assets/"));
         } catch (IOException e) {
