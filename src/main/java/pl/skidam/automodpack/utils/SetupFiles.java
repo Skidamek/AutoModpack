@@ -34,6 +34,15 @@ public class SetupFiles {
             modpackDir.mkdir();
         }
 
+        File blacklistModsTxt = new File("./AutoModpack/blacklistMods.txt");
+        if (!blacklistModsTxt.exists()) {
+            try {
+                blacklistModsTxt.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
         File modsDir = new File("./AutoModpack/modpack/mods/");
         if (!modsDir.exists()) {
             modsDir.mkdir();

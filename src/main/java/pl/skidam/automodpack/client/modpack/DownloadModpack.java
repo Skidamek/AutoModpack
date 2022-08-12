@@ -32,6 +32,7 @@ public class DownloadModpack {
 
         new UnZip(out, "true");
 
+        // TODO fix this one...
         File[] files = new File("./mods/").listFiles();
         assert files != null;
         for (File file : files) {

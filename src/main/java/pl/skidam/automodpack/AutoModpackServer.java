@@ -286,6 +286,24 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         modpackDeleteTxt.delete();
         new File (modpackDeleteTxt + ".tmp").renameTo(modpackDeleteTxt);
 
+        try {
+            File blacklistModsTxt = new File("./AutoModpack/blacklistMods.txt");
+            if (!FileUtils.readLines(blacklistModsTxt, Charset.defaultCharset()).isEmpty()) {
+                for (String mod : FileUtils.readLines(blacklistModsTxt, Charset.defaultCharset())) {
+                    File modFile = new File(modpackModsDir + "/" + mod);
+                    if (modFile.exists()) {
+                        if (modFile.delete()) {
+                            LOGGER.info("Excluded " + modFile.getName() + " from modpack");
+                        } else {
+                            LOGGER.error("Could not delete blacklisted mod " + modFile.getName() + " from modpack mods");
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         LOGGER.info("Creating modpack");
         if (modpackZip.exists()) {
             FileUtils.deleteQuietly(modpackZip);

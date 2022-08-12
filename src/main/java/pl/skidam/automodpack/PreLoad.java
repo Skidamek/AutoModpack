@@ -9,18 +9,13 @@ import pl.skidam.automodpack.client.modpack.CheckModpack;
 import pl.skidam.automodpack.client.modpack.DeleteMods;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.ServerSelfUpdater;
-import pl.skidam.automodpack.utils.InternetConnectionCheck;
 import pl.skidam.automodpack.utils.LoadModpackLink;
 import pl.skidam.automodpack.utils.SetupFiles;
 
 import java.io.File;
-import java.io.FileReader;
 import java.util.Objects;
-import java.util.Scanner;
 
-import static pl.skidam.automodpack.AutoModpackClient.modpack_link;
 import static pl.skidam.automodpack.AutoModpackMain.*;
-import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 
 public class PreLoad implements PreLaunchEntrypoint {
 
