@@ -52,7 +52,7 @@ public class PreLoad implements PreLaunchEntrypoint {
 
             new LoadModpackLink();
 
-            new CheckModpack(true);
+//            new CheckModpack(true);  // TODO fix it
 
             new DeleteTrashedMods();
 
