@@ -35,6 +35,7 @@ public class Download {
                 HttpURLConnection http = (HttpURLConnection) url.openConnection();
                 http.setRequestMethod("GET");
                 http.setConnectTimeout(10000); // 10 seconds
+                http.setReadTimeout(10000); // 10 seconds as well
                 int responseCode = http.getResponseCode();
                 if (responseCode == 200) {
                     double fileSize = (double) http.getContentLengthLong();
