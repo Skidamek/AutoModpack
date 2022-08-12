@@ -10,6 +10,7 @@ import net.minecraft.client.MinecraftClient;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
+import pl.skidam.automodpack.ui.ScreenBox;
 import pl.skidam.automodpack.utils.*;
 import pl.skidam.automodpack.utils.Error;
 
@@ -92,8 +93,7 @@ public class SelfUpdater {
             FileUtils.deleteQuietly(selfBackupUnzipped);
             FileUtils.deleteQuietly(selfBackup);
             System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
-            // TODO make this crash better
-            throw new RuntimeException("Successfully updated myself! (AutoModpack)");
+            new ScreenBox("Successfully updated myself! (AutoModpack)");
         }));
 
         LOGGER.info("Successfully self updated!");

@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
 
+import static pl.skidam.automodpack.AutoModpackMain.selfOut;
 import static pl.skidam.automodpack.AutoModpackServer.changelogsDir;
 
 public class SetupFiles {
@@ -134,6 +135,15 @@ public class SetupFiles {
         File TrashMod = new File ("./AutoModpack/TrashMod.jar");
         if (TrashMod.exists()) {
             FileUtils.deleteQuietly(TrashMod);
+        }
+
+        // extract icon
+        try {
+            new UnZipper(new File("./mods/" + selfOut.getName()), new File("./AutoModpack/"), "assets/automodpack/icon.png");
+            FileUtils.copyFileToDirectory(new File("./AutoModpack/assets/automodpack/icon.png"), new File("./AutoModpack/"));
+            FileUtils.deleteQuietly(new File("./AutoModpack/assets/"));
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 }

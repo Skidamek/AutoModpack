@@ -1,6 +1,7 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.loader.api.FabricLoader;
+import pl.skidam.automodpack.ui.ScreenBox;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.ModrinthAPI;
 
@@ -41,8 +42,7 @@ public class CompatCheck {
                 }
                 LOGGER.info("Successfully installed latest Quilted Fabric API (QFAPI)!");
 
-                // TODO make this crash better
-                throw new RuntimeException("Successfully installed latest Quilted Fabric API (QFAPI)!");
+                new ScreenBox("Successfully installed latest Quilted Fabric API (QFAPI)!");
             }
         } else { // fabric
             AutoModpackMain.isFabricLoader = true;
@@ -60,8 +60,7 @@ public class CompatCheck {
                 }
                 LOGGER.info("Successfully installed latest Fabric API (FAPI)!");
 
-                // TODO make this crash better
-                throw new RuntimeException("Successfully installed latest Fabric API (FAPI)!");
+                new ScreenBox("Successfully installed latest Fabric API (FAPI)!");
             }
         }
     }
