@@ -3,12 +3,12 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
-import pl.skidam.automodpack.AutoModpackMain;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
 
+import static pl.skidam.automodpack.AutoModpackMain.selfOut;
 import static pl.skidam.automodpack.AutoModpackServer.changelogsDir;
 
 public class SetupFiles {
