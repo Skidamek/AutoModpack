@@ -20,7 +20,7 @@ public class DownloadModpack {
 
     public DownloadModpack() {
 
-        LOGGER.info("Downloading modpack form {}...", link);
+        LOGGER.info("Downloading modpack from {}...", link);
 
         // Download and check if download is successful *magic*
 
