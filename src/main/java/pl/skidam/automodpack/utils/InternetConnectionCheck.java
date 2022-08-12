@@ -18,6 +18,7 @@ public class InternetConnectionCheck {
                 new Wait(1000);
                 return false;
             } else {
+                connection.disconnect();
                 return true;
             }
         } catch (Exception e) {
