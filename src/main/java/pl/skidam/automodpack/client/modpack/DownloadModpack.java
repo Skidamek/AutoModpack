@@ -21,7 +21,7 @@ public class DownloadModpack {
 
     public DownloadModpack() {
 
-        LOGGER.info("Downloading modpack form {}...", link);
+        LOGGER.info("Downloading modpack from {}...", link);
 
         if (Download.Download(link, out)) {
             LOGGER.info("Failed to download modpack!");
