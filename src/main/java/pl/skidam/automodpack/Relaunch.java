@@ -46,6 +46,8 @@ import static pl.skidam.automodpack.AutoModpackMain.correctName;
 // https://github.com/sschr15/Version-Mod-Loader/blob/master/src/main/java/sschr15/fabricmods/tools/versionmodloader/VersionModLoader.java
 // Thanks! :)
 
+// TODO make it work
+
 public class Relaunch {
     public Relaunch() throws Throwable {
         LOGGER.info("Relaunching...");
