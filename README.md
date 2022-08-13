@@ -21,7 +21,7 @@ Welcome to AutoModpack,
 What is this?
 Basically, this is Minecraft modification with goal to make easier updates to your modpack. Your friends / players won't need to manually update all mods / modpack anymore. Thanks to this mod all this boring stuff is done automatically.
 
-Showcase: https://youtu.be/lPPzaNPn8g8
+<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/lPPzaNPn8g8" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 
 ## Key features
 - Your players no longer have to update mods manually.
@@ -48,7 +48,7 @@ On join the server who has this mod, modpack will be automatically downloaded an
 
 **Open port (default: `30037`) on your server! TCP/UDP** need to host modpack.
 
-NOTE: if you can't open any port on your server, or you just care about server performance. Use Google Drive, upload there modpack.zip whose automatically generated on your minecraft server at `./AutoModpack/modpack.zip`. And the link type into the config "external_modpack_host". 
+NOTE: if you can't open any port on your server, or you just care about server performance. Use Google Drive, upload there modpack.zip whose automatically generated on your minecraft server at `./AutoModpack/modpack.zip`. And the link type into the config "external_modpack_host".
 
 (Unfortunately when using Google Drive or other download service/server `sync_mods` will not work. (Working on it, if you know how to implement Google Drive upload feature, please let me know.) )
 
