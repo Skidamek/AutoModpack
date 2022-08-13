@@ -11,7 +11,8 @@ public class InternetConnectionCheck {
         // Internet connection check
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-            connection.setConnectTimeout(10000); // 30 seconds
+            connection.setConnectTimeout(10000); // 10 seconds
+            connection.setReadTimeout(10000); // 10 seconds as well
             int responseCode = connection.getResponseCode();
             if (responseCode != 200) {
                 LOGGER.error("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
