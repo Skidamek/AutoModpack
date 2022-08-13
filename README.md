@@ -21,7 +21,7 @@ Welcome to AutoModpack,
 What is this?
 Basically, this is Minecraft modification with goal to make easier updates to your modpack. Your friends / players won't need to manually update all mods / modpack anymore. Thanks to this mod all this boring stuff is done automatically.
 
-<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/lPPzaNPn8g8" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+Showcase: https://youtu.be/lPPzaNPn8g8
 
 ## Key features
 - Your players no longer have to update mods manually.
