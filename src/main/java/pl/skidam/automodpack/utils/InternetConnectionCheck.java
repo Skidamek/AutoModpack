@@ -16,15 +16,13 @@ public class InternetConnectionCheck {
             if (responseCode != 200) {
                 LOGGER.error("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
                 connection.disconnect();
-                new Wait(1000);
                 return false;
             } else {
                 connection.disconnect();
                 return true;
             }
         } catch (Exception e) {
-            LOGGER.error("Something went wrong \n" + e);
-            new Wait(1000);
+            LOGGER.error("Something went wrong " + e);
             return false;
         }
     }

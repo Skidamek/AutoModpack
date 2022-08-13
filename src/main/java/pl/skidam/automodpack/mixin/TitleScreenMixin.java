@@ -20,9 +20,9 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.client.StartAndCheck.isChecking;
 
 @Mixin(net.minecraft.client.gui.screen.TitleScreen.class)
-public class TitleScreen extends Screen {
+public class TitleScreenMixin extends Screen {
 
-    public TitleScreen(Text title) {
+    public TitleScreenMixin(Text title) {
         super(title);
     }
 

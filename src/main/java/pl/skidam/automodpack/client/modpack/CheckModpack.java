@@ -22,7 +22,10 @@ public class CheckModpack {
 
         LOGGER.info("Checking if modpack is up-to-date...");
 
-        if (!InternetConnectionCheck.InternetConnectionCheck(link)) return;
+        if (!InternetConnectionCheck.InternetConnectionCheck(link)) {
+            ModpackUpdated = "false";
+            return;
+        };
 
         long currentSize = out.length();
         LOGGER.info("Current modpack size: " + currentSize);
