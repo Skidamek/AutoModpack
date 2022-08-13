@@ -6,8 +6,10 @@ import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.ui.RestartScreen;
+import pl.skidam.automodpack.utils.Wait;
 
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
 import static pl.skidam.automodpack.AutoModpackMain.*;
@@ -68,8 +70,11 @@ public class Finished {
         ModpackUpdated = null;
         StartAndCheck.isChecking = false;
 
-        if (Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().toLowerCase().contains("loading")) {
-            MinecraftClient.getInstance().setScreen(new TitleScreen());
-        }
+        CompletableFuture.runAsync(() -> {
+            new Wait(500);
+            if (Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().toLowerCase().contains("loading")) {
+                MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new TitleScreen()));
+            }
+        });
     }
 }

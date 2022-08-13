@@ -34,8 +34,8 @@ public class CompatCheck {
                 LOGGER.warn("Dependency (QFAPI) was not found");
                 String modrinthID = "qvIfYCYJ"; // QFAPI ID
                 new ModrinthAPI(modrinthID);
-                LOGGER.error("Installing latest Quilted Fabric API (QFAPI)! " + modrinthAPIversion);
-                LOGGER.error("Download URL: " + modrinthAPIdownloadUrl);
+                LOGGER.info("Installing latest Quilted Fabric API (QFAPI)! " + modrinthAPIversion);
+                LOGGER.info("Download URL: " + modrinthAPIdownloadUrl);
                 if (Download.Download(modrinthAPIdownloadUrl, new File("./mods/" + modrinthAPIfileName))) { // Download it
                     LOGGER.info("Failed to download QFAPI!");
                     return;
@@ -53,7 +53,7 @@ public class CompatCheck {
                 String modrinthID = "P7dR8mSH"; // FAPI ID
                 new ModrinthAPI(modrinthID);
                 LOGGER.info("Installing latest Fabric API (FAPI)! " + modrinthAPIversion);
-                LOGGER.error("Download URL: " + modrinthAPIdownloadUrl);
+                LOGGER.info("Download URL: " + modrinthAPIdownloadUrl);
                 if (Download.Download(modrinthAPIdownloadUrl, new File("./mods/" + modrinthAPIfileName))) { // Download it
                     LOGGER.info("Failed to download FAPI!");
                     return;
