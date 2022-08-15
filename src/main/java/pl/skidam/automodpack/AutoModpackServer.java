@@ -86,7 +86,10 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         // Get minecraft player ip if player is in local network give him local address to modpack
         String playerIp = serverPlayNetworkHandler.getConnection().getAddress().toString();
         PacketByteBuf outBuf = PacketByteBufs.create();
-        if (playerIp.contains("127.0.0.1") || playerIp.contains(publicServerIP)) {
+        String HostIPForLocal = HostModpack.modpackHostIpForLocalPlayers.substring(HostModpack.modpackHostIpForLocalPlayers.indexOf("/")+2); // Removes HTTP:// or HTTPS://
+        String HostNetwork = HostIPForLocal.substring(0, HostIPForLocal.indexOf('.', HostIPForLocal.indexOf('.')+1)+1); // Reduces ip from x.x.x.x to x.x.
+
+        if (playerIp.contains("127.0.0.1") || playerIp.contains(publicServerIP) || playerIp.startsWith("/"+HostNetwork)) {
             outBuf.writeString(HostModpack.modpackHostIpForLocalPlayers);
         } else {
             outBuf.writeString(AutoModpackMain.link);
@@ -99,7 +102,10 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         // Get minecraft player ip if player is in local network give him local address to modpack
         String playerIp = serverLoginNetworkHandler.getConnection().getAddress().toString();
         PacketByteBuf outBuf = PacketByteBufs.create();
-        if (playerIp.contains("127.0.0.1") || playerIp.contains(publicServerIP)) {
+        String HostIPForLocal = HostModpack.modpackHostIpForLocalPlayers.substring(HostModpack.modpackHostIpForLocalPlayers.indexOf("/")+2); // Removes HTTP:// or HTTPS://
+        String HostNetwork = HostIPForLocal.substring(0, HostIPForLocal.indexOf('.', HostIPForLocal.indexOf('.')+1)+1); // Reduces ip from x.x.x.x to x.x.
+
+        if (playerIp.contains("127.0.0.1") || playerIp.contains(publicServerIP) || playerIp.startsWith("/"+HostNetwork)) {
             outBuf.writeString(HostModpack.modpackHostIpForLocalPlayers);
         } else {
             outBuf.writeString(AutoModpackMain.link);
