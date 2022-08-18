@@ -44,7 +44,7 @@ jobs:
       - name: Do gradle release
         uses: gradle/gradle-build-action@v2
         with:
-          arguments: publishMod -Prelease_type=${{ inputs.release_type }} -Pchange_log="${{ inputs.change_log }}"
+          arguments: publishMod -Prelease_type=${{ inputs.release_type }} -Pchange_log=${{ inputs.change_log }}
         env:
           CURSEFORGE_TOKEN: ${{secrets.CURSEFORGE_TOKEN}}
           MODRINTH_TOKEN: ${{secrets.MODRINTH_TOKEN}}
