@@ -84,6 +84,7 @@ if(project.hasProperty('release_type')) {
 	if(project.hasProperty('change_log')) {
 		changeLog = project.getProperty('change_log')
 		changeLog = changeLog.replace("\"", "")
+		changeLog = changeLog.replace("-", "\n-")
 	}
 	tasks.register("publishMod") {
 		dependsOn(build)
