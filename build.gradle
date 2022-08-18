@@ -121,7 +121,7 @@ if(project.hasProperty('release_type')) {
 	modrinth {
 		token = System.getenv("MODRINTH_TOKEN")
 		// This is the default. Remember to have the MODRINTH_TOKEN environment variable set or else this will fail, or set it to whatever you want - just make sure it stays private!
-		projectId = "automodpack" // This can be the project ID or the slug. Either will work!
+		projectId = "k68glP2e" // This can be the project ID or the slug. Either will work!
 		versionNumber = "${project.mod_version}-1.19"
 		// You don't need to set this manually. Will fail if Modrinth has this version already
 		versionName = "${project.archives_base_name}-${project.mod_version}"
