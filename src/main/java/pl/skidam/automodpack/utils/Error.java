@@ -17,13 +17,13 @@ public class Error {
         ModpackUpdated = "false";
         isChecking = false;
 
+        LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
+        LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
+        LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
+
         AutoModpackToast.add(5);
 
-        LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
-        LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
-        LOGGER.error("Error! Download server may be down, AutoModpack is wrongly configured or you just don't have internet connection!");
-
-        if (Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().toLowerCase().contains("loading")) {
+        if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("loading")) {
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new TitleScreen()));
         }
     }

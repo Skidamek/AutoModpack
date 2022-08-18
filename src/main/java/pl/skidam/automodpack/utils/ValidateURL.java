@@ -11,13 +11,15 @@ public class ValidateURL {
                 String string = URI.getScheme();
                 if ("http".equals(string) || "https".equals(string) || "level".equals(string)) {
                     if (!"level".equals(string) && !url.contains("..")) {
-                        if (url.startsWith("https://www.dropbox.com/s/") && url.endsWith("/modpack.zip?dl=0") || url.endsWith("/modpack.zip?dl=1")) {
+                        if (url.endsWith("/modpack") || url.endsWith("/modpack.zip")) {
+                            return true;
+                        } else if (url.startsWith("https://drive.google.com/")) {
+                            return true;
+                        } else if (url.startsWith("https://www.dropbox.com/s/") && url.endsWith("/modpack.zip?dl=0") || url.endsWith("/modpack.zip?dl=1")) {
+                            return true;
+                        } else if (url.startsWith("https://www.mediafire.com/file/") && url.endsWith("/modpack.zip/file")) {
                             return true;
                         }
-                        else if (url.startsWith("https://www.mediafire.com/file/") && url.endsWith("/modpack.zip/file")) {
-                            return true;
-                        }
-                        else return url.startsWith("https://drive.google.com/") || url.endsWith("/modpack") || url.endsWith("/modpack.zip");
                     } else {
                         return false;
                     }
@@ -25,10 +27,12 @@ public class ValidateURL {
                     return false;
                 }
             } catch (URISyntaxException e) {
+                e.printStackTrace();
                 return false;
             }
         } else {
             return false;
         }
+        return false;
     }
 }

@@ -1,0 +1,46 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'alpha/beta/release'
+        required: true
+        type: choice
+        default: 'release'
+        options:
+          - 'release'
+          - 'beta'
+          - 'alpha'
+      change_log:
+        description: 'changelog'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: 'temurin'
+      - name: checkout repository
+        uses: actions/checkout@v3
+      - name: configure gradle
+        uses: gradle/wrapper-validation-action@v1
+      - name: Grant execute permission for gradlew
+        if: ${{ runner.os != 'Windows' }}
+        run: chmod +x gradlew
+      - name: Do gradle release
+        uses: gradle/gradle-build-action@v2
+        with:
+          arguments: publishMod -Prelease_type=${{ inputs.release_type }}
+        env:
+          CURSEFORGE_TOKEN: ${{secrets.CURSEFORGE_TOKEN}}
+          MODRINTH_TOKEN: ${{secrets.MODRINTH_TOKEN}}
+          GITHUB_TOKEN: ${{secrets.GH_TOKEN}}

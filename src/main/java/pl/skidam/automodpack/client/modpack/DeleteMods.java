@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.modpack;
 
 import org.apache.commons.io.FileDeleteStrategy;
+import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.utils.UnZipper;
 import pl.skidam.automodpack.utils.Wait;
@@ -56,9 +57,7 @@ public class DeleteMods {
         }
 
         // Delete the file
-        try {
-            FileDeleteStrategy.FORCE.delete(delModsTxt);
-        } catch (IOException ignored) { }
+        FileUtils.deleteQuietly(delModsTxt);
 
         if (!preload) {
             AutoModpackMain.ModpackUpdated = ModpackUpdated;
@@ -78,11 +77,11 @@ public class DeleteMods {
             FileReader fr = new FileReader(delModsTxt);
             Scanner inFile = new Scanner(fr);
 
-            // loop to delete all names in ./mods/ folder of names in files in delmods.txt
+            // loop to delete all names in mods folder of names in files in delmods.txt
             while (inFile.hasNextLine()) {
 
                 String modName = inFile.nextLine();
-                File modFile = new File("./mods/" + modName);
+                File modFile = new File(modsPath.toFile() + File.separator + modName);
 
                 if (modFile.exists()) {
 
@@ -135,6 +134,8 @@ public class DeleteMods {
 
             // Close the file
             inFile.close();
-        } catch (IOException ignored) { }
+            fr.close();
+        } catch (IOException ignored) {
+        }
     }
 }

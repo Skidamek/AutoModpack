@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.commons.lang3.function.Failable.rethrow;
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
-import static pl.skidam.automodpack.AutoModpackMain.correctName;
+import static pl.skidam.automodpack.utils.JarUtilities.correctName;
 
 // Copied & modified from Version-Mod-Loader by sschr15 under the MIT License
 // https://github.com/sschr15/Version-Mod-Loader/blob/master/src/main/java/sschr15/fabricmods/tools/versionmodloader/VersionModLoader.java
@@ -66,11 +66,11 @@ public class Relaunch {
             if (!FabricLoader.getInstance().isDevelopmentEnvironment()) {
             // we need to add our jarfile to the classpath
             ModContainer container = FabricLoader.getInstance().getModContainer("automodpack")
-                    .orElseThrow(() -> new RuntimeException("Could not find jar file for automodpack"));
+                    .orElseThrow(() -> new IllegalStateException("Could not find jar file for automodpack"));
             Path jar;
             try {
                 jar = container.getRootPaths().stream().filter(p -> p.getFileName().toString().equals(correctName)).findFirst().get();
-            } catch (RuntimeException e) {
+            } catch (Exception e) {
                 // very old fabric crashes when we try to access root path too early
                 Class<?> modContainer = Class.forName("net.fabricmc.loader.ModContainer");
                 Method setupRootPath = modContainer.getDeclaredMethod("setupRootPath");

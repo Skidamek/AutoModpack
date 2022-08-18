@@ -8,19 +8,18 @@ import org.slf4j.LoggerFactory;
 import pl.skidam.automodpack.server.Commands;
 
 import java.io.File;
+import java.nio.file.Path;
 
 public class AutoModpackMain implements ModInitializer {
 
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
     public static final Identifier AM_LINK = new Identifier(MOD_ID, "link");
+    public static Path modsPath;
     public static String AutoModpackUpdated;
     public static String ModpackUpdated;
     public static String link;
     public static final File out = new File("./AutoModpack/modpacks/modpack.zip"); // TODO name modpack of the server ip
-    public static String correctName = "AutoModpack-1.19.x.jar";
-    public static File selfOut = new File( "./mods/" + correctName);
-    public static final File selfBackup = new File("./AutoModpack/" + correctName);
     public static boolean isClothConfig = false;
     public static boolean isModMenu = false;
     public static boolean isVelocity = false;

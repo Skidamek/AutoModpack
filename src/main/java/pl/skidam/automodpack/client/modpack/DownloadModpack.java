@@ -6,11 +6,11 @@ import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.client.ui.DangerScreen;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.config.Config;
-import pl.skidam.automodpack.Relaunch;
 import pl.skidam.automodpack.ui.ScreenBox;
 import pl.skidam.automodpack.utils.Download;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
@@ -24,6 +24,8 @@ public class DownloadModpack {
 
         LOGGER.info("Downloading modpack from {}...", link);
 
+        // Download and check if download is successful *magic*
+
         if (Download.Download(link, out)) {
             LOGGER.info("Failed to download modpack!");
             return;
@@ -33,8 +35,16 @@ public class DownloadModpack {
 
         new UnZip(out, "true");
 
+        if (!modsPath.getFileName().toString().equals("mods")) {
+            try {
+                FileUtils.moveDirectory(new File("./mods/"), new File(modsPath.toFile() + File.separator));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
         // TODO fix this one...
-        File[] files = new File("./mods/").listFiles();
+        File[] files = modsPath.toFile().listFiles();
         assert files != null;
         for (File file : files) {
             if (isFabricLoader && file.getName().startsWith("qfapi-")) {

@@ -1,16 +1,20 @@
 package pl.skidam.automodpack.server;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import net.fabricmc.loader.api.FabricLoader;
+import org.apache.commons.lang3.StringUtils;
 import pl.skidam.automodpack.config.Config;
 
 import java.io.*;
 import java.net.*;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,7 +32,6 @@ public class HostModpack implements HttpHandler {
     public static String modpackHostIpForLocalPlayers;
     private static String serverIpForOthers;
     public static boolean isRunning;
-
 
     public static void stop() {
         if (server != null) {
@@ -64,13 +67,15 @@ public class HostModpack implements HttpHandler {
                         }
                     }
 
-                    // mediafire link fixer (make it direct download link)
+                    // dropbox link fixer (make it direct download link)
                     if (Config.EXTERNAL_MODPACK_HOST.startsWith("https://www.dropbox.com/s/")) {
-                        Config.EXTERNAL_MODPACK_HOST = Config.EXTERNAL_MODPACK_HOST.replace("?dl=0", "?dl=1");
-                        if (ValidateURL(Config.EXTERNAL_MODPACK_HOST)) {
-                            new Config().save();
-                        } else {
-                            LOGGER.error("External modpack host is not valid");
+                        if (Config.EXTERNAL_MODPACK_HOST.contains("?dl=0")) {
+                            Config.EXTERNAL_MODPACK_HOST = Config.EXTERNAL_MODPACK_HOST.replace("?dl=0", "?dl=1");
+                            if (ValidateURL(Config.EXTERNAL_MODPACK_HOST)) {
+                                new Config().save();
+                            } else {
+                                LOGGER.error("External modpack host is not valid");
+                            }
                         }
                     }
 
@@ -125,20 +130,36 @@ public class HostModpack implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         if (Objects.equals(exchange.getRequestMethod(), "GET")) {
+
             OutputStream outputStream = exchange.getResponseBody();
             File pack = MODPACK_FILE.toFile();
 
-            exchange.getResponseHeaders().add("User-Agent", "Java/auto-modpack-host");
+            exchange.getResponseHeaders().add("User-Agent", "Java/AutoModpack-host");
             exchange.sendResponseHeaders(200, pack.length());
 
             FileInputStream fis = new FileInputStream(pack);
             BufferedInputStream bis = new BufferedInputStream(fis);
-            bis.transferTo(outputStream);
-            bis.close();
-            fis.close();
+            CompletableFuture.runAsync(() -> { // maybe it will help... maybe not... idk xD
+                try {
+                    bis.transferTo(outputStream);
+                    bis.close();
+                    fis.close();
+                    outputStream.flush();
+                    outputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
 
-            outputStream.flush();
-            outputStream.close();
+            // There was some good idea I guess, but well... it didn't work bc ipcache aren't always generated? idk..... https://pastebin.com/qDPH2Jpn  so if you want to make it better feel free to do it (super fun with json) :)
+            if (exchange.getRequestHeaders().getFirst("X-Minecraft-Username") != null) {
+                if (!exchange.getRequestHeaders().getFirst("X-Minecraft-Username").equals("other-packet")) {
+                    String playerUsername = exchange.getRequestHeaders().getFirst("X-Minecraft-Username");
+                    LOGGER.info("{} downloading modpack", playerUsername);
+                }
+            } else {
+                LOGGER.info("Non-minecraft client downloading modpack");
+            }
         } else {
             exchange.sendResponseHeaders(400, 0);
         }

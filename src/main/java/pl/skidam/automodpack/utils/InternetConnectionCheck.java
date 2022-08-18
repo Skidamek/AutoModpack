@@ -9,11 +9,13 @@ public class InternetConnectionCheck {
 
     public static boolean InternetConnectionCheck(String url) {
         // Internet connection check
+        int responseCode = 0;
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-            connection.setConnectTimeout(10000); // 10 seconds
-            connection.setReadTimeout(10000); // 10 seconds as well
-            int responseCode = connection.getResponseCode();
+            connection.setRequestProperty("X-Minecraft-Username", "other-packet");
+            connection.setConnectTimeout(3000); // 3 seconds
+            connection.setReadTimeout(3000); // 3 seconds as well
+            responseCode = connection.getResponseCode();
             if (responseCode != 200) {
                 LOGGER.error("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
                 connection.disconnect();
@@ -23,7 +25,7 @@ public class InternetConnectionCheck {
                 return true;
             }
         } catch (Exception e) {
-            LOGGER.error("Something went wrong " + e);
+            LOGGER.error("Something went wrong (code: {}) {}", responseCode, e);
             return false;
         }
     }

@@ -15,15 +15,16 @@ public class Config {
     public static boolean CHECK_UPDATES_BUTTON;
     public static boolean DELETE_MODPACK_BUTTON;
     public static boolean MODPACK_HOST;
+    public static boolean GENERATE_MODPACK_ON_LAUNCH;
     public static boolean SYNC_MODS;
     public static boolean ONLY_OPTIONAL_MODPACK;
     public static boolean AUTO_EXCLUDE_SERVER_SIDE_MODS;
-//    public static boolean AUTO_EXCLUDE_CLIENT_SIDE_MODS;
+    //    public static boolean AUTO_EXCLUDE_CLIENT_SIDE_MODS;
 //    public static boolean DISABLE_ALL_OTHER_MODS_ON_CLIENT;
     public static int HOST_PORT;
     public static int HOST_THREAD_COUNT;
     public static String HOST_EXTERNAL_IP;
-    public static String HOST_EXTERNAL_IP_FOR_LOCAL_PLAYERS; // temporary way to fix problem when client from local network can't download modpack from local network server but the server is a different computer
+    public static String HOST_EXTERNAL_IP_FOR_LOCAL_PLAYERS;
     public static String EXTERNAL_MODPACK_HOST;
 
     static {
@@ -33,7 +34,7 @@ public class Config {
             try (InputStream in = Files.newInputStream(path, StandardOpenOption.CREATE)) {
                 properties.load(in);
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                e.printStackTrace();
             }
         }
 
@@ -41,6 +42,7 @@ public class Config {
         CHECK_UPDATES_BUTTON = getBoolean(properties, "check_updates_button", true);
         DELETE_MODPACK_BUTTON = getBoolean(properties, "delete_modpack_button", true);
         MODPACK_HOST = getBoolean(properties, "modpack_host", true);
+        GENERATE_MODPACK_ON_LAUNCH = getBoolean(properties, "generate_modpack_on_launch", true);
         SYNC_MODS = getBoolean(properties, "sync_mods", true);
         ONLY_OPTIONAL_MODPACK = getBoolean(properties, "only_optional_modpack", false);
         AUTO_EXCLUDE_SERVER_SIDE_MODS = getBoolean(properties, "auto_exclude_server_side_mods", true);
@@ -55,7 +57,7 @@ public class Config {
         try (OutputStream out = Files.newOutputStream(path, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
             properties.store(out, "Configuration file for AutoModpack");
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
     }
 
@@ -72,6 +74,7 @@ public class Config {
         properties.setProperty("check_updates_button", String.valueOf(CHECK_UPDATES_BUTTON));
         properties.setProperty("delete_modpack_button", String.valueOf(DELETE_MODPACK_BUTTON));
         properties.setProperty("modpack_host", String.valueOf(MODPACK_HOST));
+        properties.setProperty("generate_modpack_on_launch", String.valueOf(SYNC_MODS));
         properties.setProperty("sync_mods", String.valueOf(SYNC_MODS));
         properties.setProperty("only_optional_modpack", String.valueOf(ONLY_OPTIONAL_MODPACK));
         properties.setProperty("auto_exclude_server_side_mods", String.valueOf(AUTO_EXCLUDE_SERVER_SIDE_MODS));
@@ -86,7 +89,7 @@ public class Config {
         try (OutputStream out = Files.newOutputStream(path, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
             properties.store(out, "Configuration file for AutoModpack");
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
 
     }
@@ -95,8 +98,12 @@ public class Config {
         try {
             return Integer.parseUnsignedInt(properties.getProperty(key));
         } catch (NumberFormatException e) {
-            if (Files.isRegularFile(FabricLoader.getInstance().getConfigDir().resolve("automodpack.properties"))) {
-                LOGGER.error("Invalid value for " + key + " in automodpack.properties. Value must be an integer. Value restarted to " + def);
+            if (properties.containsKey(key)) {
+                if (Files.isRegularFile(FabricLoader.getInstance().getConfigDir().resolve("automodpack.properties"))) {
+                    LOGGER.error("Invalid value for " + key + " in automodpack.properties. Value must be an integer. Value restarted to " + def);
+                }
+            } else {
+                LOGGER.info("Added new option to automodpack config (automodpack.properties): " + key + " = " + def);
             }
             properties.setProperty(key, String.valueOf(def));
             return def;
@@ -116,8 +123,12 @@ public class Config {
         if (booleanValue.equals(properties.getProperty(key))) {
             return Boolean.parseBoolean(booleanValue);
         } else {
-            if (Files.isRegularFile(FabricLoader.getInstance().getConfigDir().resolve("automodpack.properties"))) {
-                LOGGER.error("Invalid value for " + key + " in automodpack.properties. Value must be true or false. Value restarted to " + def);
+            if (properties.containsKey(key)) {
+                if (Files.isRegularFile(FabricLoader.getInstance().getConfigDir().resolve("automodpack.properties"))) {
+                    LOGGER.error("Invalid value for " + key + " in automodpack.properties. Value must be true or false. Value restarted to " + def);
+                }
+            } else {
+                LOGGER.info("Added new option to automodpack config (automodpack.properties): " + key + " = " + def);
             }
             properties.setProperty(key, String.valueOf(def));
             return def;

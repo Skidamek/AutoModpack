@@ -8,6 +8,7 @@ import pl.skidam.automodpack.utils.ModrinthAPI;
 import java.io.File;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
+import static pl.skidam.automodpack.AutoModpackMain.modsPath;
 import static pl.skidam.automodpack.utils.ModrinthAPI.*;
 
 public class CompatCheck {
@@ -36,7 +37,7 @@ public class CompatCheck {
                 new ModrinthAPI(modrinthID);
                 LOGGER.info("Installing latest Quilted Fabric API (QFAPI)! " + modrinthAPIversion);
                 LOGGER.info("Download URL: " + modrinthAPIdownloadUrl);
-                if (Download.Download(modrinthAPIdownloadUrl, new File("./mods/" + modrinthAPIfileName))) { // Download it
+                if (Download.Download(modrinthAPIdownloadUrl, new File(modsPath.toFile() + File.separator + modrinthAPIfileName))) { // Download it
                     LOGGER.info("Failed to download QFAPI!");
                     return;
                 }
@@ -44,17 +45,17 @@ public class CompatCheck {
 
                 new ScreenBox("Successfully installed latest Quilted Fabric API (QFAPI)!");
             }
-        } else { // fabric
+        } else { // fabric or something other lol
             AutoModpackMain.isFabricLoader = true;
             // Download fabric api if we don't have it
-            if (!FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI
+            if (!FabricLoader.getInstance().isModLoaded("fabric-api") && !FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI
 
                 LOGGER.warn("Dependency (FAPI) was not found");
                 String modrinthID = "P7dR8mSH"; // FAPI ID
                 new ModrinthAPI(modrinthID);
                 LOGGER.info("Installing latest Fabric API (FAPI)! " + modrinthAPIversion);
                 LOGGER.info("Download URL: " + modrinthAPIdownloadUrl);
-                if (Download.Download(modrinthAPIdownloadUrl, new File("./mods/" + modrinthAPIfileName))) { // Download it
+                if (Download.Download(modrinthAPIdownloadUrl, new File(modsPath.toFile() + File.separator + modrinthAPIfileName))) { // Download it
                     LOGGER.info("Failed to download FAPI!");
                     return;
                 }

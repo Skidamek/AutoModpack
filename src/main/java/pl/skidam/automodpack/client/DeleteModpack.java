@@ -14,6 +14,7 @@ import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackClient.modpack_link;
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.utils.JarUtilities.correctName;
 
 public class DeleteModpack {
     private static boolean deleted;

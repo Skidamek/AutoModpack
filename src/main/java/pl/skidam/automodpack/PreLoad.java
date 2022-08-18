@@ -9,11 +9,9 @@ import pl.skidam.automodpack.client.modpack.CheckModpack;
 import pl.skidam.automodpack.client.modpack.DeleteMods;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.ServerSelfUpdater;
+import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.LoadModpackLink;
 import pl.skidam.automodpack.utils.SetupFiles;
-
-import java.io.File;
-import java.util.Objects;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
@@ -24,18 +22,9 @@ public class PreLoad implements PreLaunchEntrypoint {
 
         LOGGER.info("Prelaunching AutoModpack...");
 
-        // check if AutoModpack has correct name
-        File mods = new File("./mods/");
-        String[] modsList = mods.list();
+        JarUtilities.getJarFileOfMod("automodpack");
 
-        for (String mod : Objects.requireNonNull(modsList)) {
-            if (mod.endsWith(".jar")) {
-                File modFile = new File("./mods/" + mod);
-                if (mod.toLowerCase().contains("automodpack") && !mod.equals(correctName)) {
-                    selfOut = modFile; // save current name
-                }
-            }
-        }
+        modsPath = JarUtilities.getModsPath();
 
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
 

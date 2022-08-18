@@ -22,7 +22,7 @@ public class AutoModpackToast implements Toast {
     private static int WhoAreYouBefore;
 
     // WhoAreYou
-    // 0 == Button Clicked
+    // 0 == Button Clicked (Animation)
     // 1 == Found Update to Modpack
     // 2 == Found Update to AutoModpack (mod)
     // 3 == No updates found to Modpack
@@ -30,7 +30,14 @@ public class AutoModpackToast implements Toast {
     // 5 == Error
     // 6 == Cloth-Config warn
 
-    public static void add(int WhoAreYou) {
+    public static void add(int WhoAreYou) { // TODO fix this stupid toasts #fix_to_#25 https://github.com/Skidamek/AutoModpack/issues/25
+
+        try {
+            if (MinecraftClient.getInstance().currentScreen == null) return;
+        } catch (NullPointerException e) {
+            return;
+        }
+
         AutoModpackToast.WhoAreYou = WhoAreYou;
         if (WhoAreYou == 0) {
             LoadingAnimationStep = 0;
@@ -64,6 +71,7 @@ public class AutoModpackToast implements Toast {
         }
         ToastManager toastManager = MinecraftClient.getInstance().getToastManager();
         AutoModpackToast toast = toastManager.getToast(AutoModpackToast.class, Toast.TYPE);
+
         if (toast == null) {
             toastManager.add(new AutoModpackToast());
         } else if (WhoAreYouBefore == 0 || WhoAreYouBefore == 4 || WhoAreYouBefore == 3 || WhoAreYouBefore == 2 || WhoAreYouBefore == 1) {
@@ -91,7 +99,7 @@ public class AutoModpackToast implements Toast {
 
 
         if (WhoAreYou == 0) {
-            while (WhoAreYou == 0) {
+            while (WhoAreYou == 0) { // ignore it, or me if I am stupid lol
                 return Visibility.SHOW;
             }
             WhoAreYouBefore = WhoAreYou;

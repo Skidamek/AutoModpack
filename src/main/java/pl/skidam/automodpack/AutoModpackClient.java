@@ -23,6 +23,7 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class AutoModpackClient implements ClientModInitializer {
 
+    public static boolean Checked = false;
     public static boolean isOnServer;
     public static String serverIP;
     public static final File modpack_link = new File("./AutoModpack/modpack-link.txt");
@@ -45,8 +46,6 @@ public class AutoModpackClient implements ClientModInitializer {
             isOnServer = true;
         });
         ClientLoginConnectionEvents.DISCONNECT.register((clientLoginNetworkHandler, minecraftClient) -> isOnServer = false);
-
-        new StartAndCheck(true, false);
     }
 
     private static void onServerPlayLinkReceived(MinecraftClient minecraftClient, ClientPlayNetworkHandler clientPlayNetworkHandler, PacketByteBuf inBuf, PacketSender sender) {
@@ -59,7 +58,7 @@ public class AutoModpackClient implements ClientModInitializer {
             fWriter.close();
         } catch (IOException e) { // ignore
         }
-        LOGGER.info("Link received from server through velocity: {}. Saved to file.", receivedLink);
+        LOGGER.info("Link received from server through proxy: {}. Saved to file.", receivedLink);
         PacketByteBuf outBuf = PacketByteBufs.create();
         outBuf.writeString("1");
         CompletableFuture.completedFuture(outBuf);

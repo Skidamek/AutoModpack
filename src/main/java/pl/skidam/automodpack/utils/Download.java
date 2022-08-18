@@ -4,10 +4,8 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
-import static pl.skidam.automodpack.AutoModpackMain.ModpackUpdated;
 
 public class Download {
 
@@ -16,30 +14,22 @@ public class Download {
     public static boolean Download(String link, File output) {
 
         if (InternetConnectionCheck.InternetConnectionCheck(link)) {
-
             try {
                 URL url = new URL(link);
-
-                // TODO get minecraft username
-//            URLConnection conn = url.openConnection();
-//
-//
-//            conn.setRequestProperty("X-Minecraft-Username", HERE);
-//            conn.connect();
-//            conn.getInputStream().close();
 
                 progress = 0;
                 averageInternetConnectionSpeed = "";
                 long startTime = System.currentTimeMillis();
 
-                HttpURLConnection http = (HttpURLConnection) url.openConnection();
-                http.setRequestMethod("GET");
-                http.setConnectTimeout(10000); // 10 seconds
-                http.setReadTimeout(10000); // 10 seconds as well
-                int responseCode = http.getResponseCode();
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestProperty("X-Minecraft-Username", GetMinecraftUserName.getMinecraftUserName());
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(10000); // 10 seconds
+                connection.setReadTimeout(10000); // 10 seconds as well
+                int responseCode = connection.getResponseCode();
                 if (responseCode == 200) {
-                    double fileSize = (double) http.getContentLengthLong();
-                    BufferedInputStream in = new BufferedInputStream(http.getInputStream());
+                    double fileSize = (double) connection.getContentLengthLong();
+                    BufferedInputStream in = new BufferedInputStream(connection.getInputStream());
                     FileOutputStream fos = new FileOutputStream(output);
                     BufferedOutputStream bout = new BufferedOutputStream(fos, 1024);
                     byte[] buffer = new byte[1024];

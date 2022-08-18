@@ -21,7 +21,7 @@ Welcome to AutoModpack,
 What is this?
 Basically, this is Minecraft modification with goal to make easier updates to your modpack. Your friends / players won't need to manually update all mods / modpack anymore. Thanks to this mod all this boring stuff is done automatically.
 
-Showcase: https://youtu.be/lPPzaNPn8g8
+[Showcase (YouTube video)](https://youtu.be/lPPzaNPn8g8)
 
 ## Key features
 - Your players no longer have to update mods manually.
@@ -85,6 +85,7 @@ Use Cloth Config and Mod Menu mods to change settings in game
 | Name                                 | Default Value | Description                                                                                                                |
 |--------------------------------------|---------------|----------------------------------------------------------------------------------------------------------------------------|
 | `modpack_host`                       | `true`        | Host http server for modpack. If this is disabled use `external_modpack_host`                                              |
+| `generate_modpack_on_launch`         | `true`        | Auto generation modpack at the every start of the server                                                                   |
 | `sync_mods`                          | `true`        | Clone all your mods to modpack and delete all mods whose were deleted or updated                                           |
 | `auto_exclude_server_side_mods`      | `true`        | Excluding all server side mods from modpack to prevent some crashes on client                                              |
 | `only_optional_modpack`              | `false`       | Vanilla players will, can join if other mods on server are only server side                                                |
@@ -120,7 +121,7 @@ No, you can use any launcher you want except for Feather Client its unsupported.
 
 - Do I must install this mod on both sides?
 
-Yes, you need to install this mod on both sides.
+Yes, you need to install this mod on both sides. (However if you enable only_optional_modpack in the config, player will be able to join without automodpack installed)
 
 - Does it deleting existing mods which are not in modpack but the client has them?
 

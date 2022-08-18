@@ -10,6 +10,7 @@ public class ModrinthAPI {
     public static String modrinthAPIversion;
     public static String modrinthAPIfileName;
     public static long modrinthAPIsize;
+    public static String modrinthAPIversionType;
 
     public ModrinthAPI(String modrinthID) {
 
@@ -21,6 +22,7 @@ public class ModrinthAPI {
             try {
                 JsonObject JSONArray = new JsonTool().getJsonArray(url).get(0).getAsJsonObject();
                 modrinthAPIversion = JSONArray.get("version_number").getAsString();
+                modrinthAPIversionType = JSONArray.get("version_type").getAsString();
                 JsonObject JSONArrayfiles = JSONArray.getAsJsonArray("files").get(0).getAsJsonObject();
                 modrinthAPIdownloadUrl = JSONArrayfiles.get("url").getAsString();
                 modrinthAPIfileName = JSONArrayfiles.get("filename").getAsString();

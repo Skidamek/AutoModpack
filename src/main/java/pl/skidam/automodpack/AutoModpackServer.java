@@ -26,6 +26,7 @@ import java.util.Scanner;
 import static org.apache.commons.lang3.ArrayUtils.contains;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.GetIPV4Address.getIPV4Address;
+import static pl.skidam.automodpack.utils.JarUtilities.correctName;
 
 public class AutoModpackServer implements DedicatedServerModInitializer {
 
@@ -36,7 +37,6 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     public static final File modpackModsDir = new File("./AutoModpack/modpack/mods/");
     // public static final File modpackConfDir = new File("./AutoModpack/modpack/config/");
     public static final File modpackDeleteTxt = new File("./AutoModpack/modpack/delmods.txt");
-    public static final File serverModsDir = new File("./mods/");
     public static String publicServerIP;
     public static File tempDir = new File("./AutoModpack/temp/");
     public static String[] oldMods;
@@ -50,7 +50,9 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
 
         publicServerIP = getIPV4Address();
 
-        genModpack();
+        if (Config.GENERATE_MODPACK_ON_LAUNCH) {
+            genModpack();
+        }
 
         // Packets
         if (!isVelocity) {
@@ -119,10 +121,8 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         if (!understood || !buf.readString().equals("1")) {
             if (!Config.ONLY_OPTIONAL_MODPACK) { // Accept player to join while optional modpack is enabled
                 serverLoginNetworkHandler.disconnect(Text.of("You have to install \"AutoModpack\" mod to play on this server! https://modrinth.com/mod/automodpack/versions"));
-                LOGGER.warn("Player " + getPlayerNickInLogin(serverLoginNetworkHandler.getConnectionInfo()) + " has not installed \"AutoModpack\" mod");
-            } else {
-                LOGGER.warn("Player " + getPlayerNickInLogin(serverLoginNetworkHandler.getConnectionInfo()) + " has not installed modpack");
             }
+            LOGGER.warn("Player " + getPlayerNickInLogin(serverLoginNetworkHandler.getConnectionInfo()) + " has not installed \"AutoModpack\" mod");
         }
     }
 
@@ -132,7 +132,8 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             nick = connectionInfo.split("name=")[1];
             nick = nick.split(",")[0];
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
+            return null;
         }
 
         return nick;
@@ -227,25 +228,23 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             // Check if in delmods.txt there are not mods which are in serverModsDir
             try {
                 for (String delMod : FileUtils.readLines(modpackDeleteTxt, Charset.defaultCharset())) {
-                    if (Objects.requireNonNull(serverModsDir.listFiles()).length > 0) {
-                        for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
-                            String FNLC = file.getName().toLowerCase(); // FileNameLowerCase
-                            if (FNLC.endsWith(".jar") && !FNLC.contains("automodpack")) {
-                                if (file.getName().equals(delMod)) {
-                                    LOGGER.error("Removing " + delMod + " from delmods.txt");
-                                    Scanner sc = new Scanner(modpackDeleteTxt);
-                                    StringBuilder sb = new StringBuilder();
-                                    while (sc.hasNextLine()) {
-                                        sb.append(sc.nextLine()).append("\n");
-                                    }
-                                    sc.close();
-                                    String result = sb.toString();
-                                    result = result.replace(delMod, "");
-                                    PrintWriter writer = new PrintWriter(modpackDeleteTxt);
-                                    writer.append(result);
-                                    writer.flush();
-                                    writer.close();
+                    for (File file : Objects.requireNonNull(modsPath.toFile().listFiles())) {
+                        String FNLC = file.getName().toLowerCase(); // FileNameLowerCase
+                        if (FNLC.endsWith(".jar") && !FNLC.contains("automodpack")) {
+                            if (file.getName().equals(delMod)) {
+                                LOGGER.error("Removing " + delMod + " from delmods.txt");
+                                Scanner sc = new Scanner(modpackDeleteTxt);
+                                StringBuilder sb = new StringBuilder();
+                                while (sc.hasNextLine()) {
+                                    sb.append(sc.nextLine()).append("\n");
                                 }
+                                sc.close();
+                                String result = sb.toString();
+                                result = result.replace(delMod, "");
+                                PrintWriter writer = new PrintWriter(modpackDeleteTxt);
+                                writer.append(result);
+                                writer.flush();
+                                writer.close();
                             }
                         }
                     }
@@ -289,13 +288,20 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
             e.printStackTrace();
         }
 
-        modpackDeleteTxt.delete();
-        new File (modpackDeleteTxt + ".tmp").renameTo(modpackDeleteTxt);
+        FileUtils.deleteQuietly(modpackDeleteTxt);
+        if (!new File (modpackDeleteTxt + ".tmp").renameTo(modpackDeleteTxt)) {
+            LOGGER.error("Failed to rename " + modpackDeleteTxt + ".tmp to " + modpackDeleteTxt);
+        }
 
         try {
             File blacklistModsTxt = new File("./AutoModpack/blacklistMods.txt");
             if (!FileUtils.readLines(blacklistModsTxt, Charset.defaultCharset()).isEmpty()) {
                 for (String mod : FileUtils.readLines(blacklistModsTxt, Charset.defaultCharset())) {
+                    try {
+                        FileUtils.writeStringToFile(modpackDeleteTxt, mod + "\n", Charset.defaultCharset(), true);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                     File modFile = new File(modpackModsDir + "/" + mod);
                     if (modFile.exists()) {
                         if (modFile.delete()) {
@@ -336,7 +342,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     }
 
     private static void cloneMods() {
-        for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
+        for (File file : Objects.requireNonNull(modsPath.toFile().listFiles())) {
             if (file.getName().endsWith(".jar") && !file.getName().toLowerCase().contains("automodpack")) {
                 try {
                     FileUtils.copyFileToDirectory(file, modpackModsDir);
@@ -351,7 +357,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     private static void autoExcludeMods() {
         if (!Config.AUTO_EXCLUDE_SERVER_SIDE_MODS) return;
         LOGGER.info("Excluding server-side mods from modpack");
-        for (File file : Objects.requireNonNull(serverModsDir.listFiles())) {
+        for (File file : Objects.requireNonNull(modsPath.toFile().listFiles())) {
             if (file.getName().endsWith(".jar") && !file.getName().toLowerCase().contains("automodpack")) {
                 try {
                     new UnZipper(file, new File(tempDir + "/" + file.getName()), "fabric.mod.json");
@@ -363,7 +369,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
                     }
                 }
 
-                // check if in the temp folder is a fabric.mod.json or quilt.mod.json file
+                // check if in the temp folder is a fabric.mod.json or quilt.mod.json file //TODO FabricLoader.getInstance().getModContainer("automodpack").isPresent() ? FabricLoader.getInstance().getModContainer("automodpack").get().getMetadata().getVersion().getFriendlyString() : null;
                 File[] serverSideMods = tempDir.listFiles();
                 if (serverSideMods == null) return;
 

@@ -10,10 +10,11 @@ public class WebFileSize {
         long size = 0;
         try {
             URL url = new URL(link);
-            HttpURLConnection http = (HttpURLConnection) url.openConnection();
-            http.setRequestMethod("GET");
-            http.setConnectTimeout(5000); // 5 seconds
-            size = Long.parseLong(http.getHeaderField("Content-Length"));
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestProperty("X-Minecraft-Username", "other-packet");
+            connection.setConnectTimeout(5000); // 5 seconds
+            connection.setConnectTimeout(5000); // 5 seconds as well
+            size = Long.parseLong(connection.getHeaderField("Content-Length"));
         } catch (Exception e) {
             LOGGER.error("Make sure that you have an internet connection! " + e);
             new Error();

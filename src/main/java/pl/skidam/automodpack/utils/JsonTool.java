@@ -14,14 +14,18 @@ public class JsonTool {
     public JsonArray getJsonArray(String url) throws IOException {
         JsonElement element = null;
 
-        HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-        con.setConnectTimeout(1000);
-        con.connect();
-        if (con.getResponseCode() == 200) {
-            try (InputStreamReader inr = new InputStreamReader(con.getInputStream())) {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setRequestProperty("X-Minecraft-Username", "other-packet");
+        connection.setConnectTimeout(3000); // 5 seconds
+        connection.setReadTimeout(3000); // 5 seconds as well
+        connection.connect();
+        if (connection.getResponseCode() == 200) {
+            try (InputStreamReader inr = new InputStreamReader(connection.getInputStream())) {
                 element = JsonParser.parseReader(inr);
             }
         }
+
+        connection.disconnect();
 
         if (element != null && element.isJsonArray()) {
             return element.getAsJsonArray();

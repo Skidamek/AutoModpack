@@ -8,8 +8,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
 
-import static pl.skidam.automodpack.AutoModpackMain.selfOut;
 import static pl.skidam.automodpack.AutoModpackServer.changelogsDir;
+import static pl.skidam.automodpack.utils.JarUtilities.selfOut;
 
 public class SetupFiles {
     public SetupFiles() {
@@ -138,12 +138,14 @@ public class SetupFiles {
         }
 
         // extract icon
-        try {
-            new UnZipper(new File("./mods/" + selfOut.getName()), new File("./AutoModpack/"), "assets/automodpack/icon.png");
-            FileUtils.copyFileToDirectory(new File("./AutoModpack/assets/automodpack/icon.png"), new File("./AutoModpack/"));
-            FileUtils.deleteQuietly(new File("./AutoModpack/assets/"));
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (!FabricLoader.getInstance().isDevelopmentEnvironment()) {
+            try {
+                new UnZipper(selfOut, new File("./AutoModpack/"), "assets/automodpack/icon.png");
+                FileUtils.copyFileToDirectory(new File("./AutoModpack/assets/automodpack/icon.png"), new File("./AutoModpack/"));
+                FileUtils.deleteQuietly(new File("./AutoModpack/assets/"));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 }
