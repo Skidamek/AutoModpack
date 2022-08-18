@@ -126,7 +126,6 @@ if(project.hasProperty('release_type')) {
 		uploadFile = remapJar // With Loom, this MUST be set to `remapJar` instead of `jar`!
 		gameVersions = ["1.19", "1.19.1", "1.19.2"] // Must be an array, even with only one version
 		loaders = ["fabric", "quilt"]
-		// Must also be an array - no need to specify this if you're using Loom or ForgeGradle
 	}
 
 	githubRelease {
