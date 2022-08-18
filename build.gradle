@@ -130,7 +130,7 @@ if(project.hasProperty('release_type')) {
 	}
 
 	githubRelease {
-		token System.getenv("GH_TOKEN") // This is your personal access token with Repo permissions
+		token = System.getenv("GH_TOKEN") // This is your personal access token with Repo permissions
 		owner "Skidamek" // default is the last part of your group. Eg group: "com.github.breadmoirai" => owner: "breadmoirai"
 		repo "AutoModpack" // by default this is set to your project name
 		tagName "v${project.mod_version}" // by default this is set to "v${project.version}"
@@ -140,7 +140,7 @@ if(project.hasProperty('release_type')) {
 		body change_log // by default this is empty
 		draft false // by default this is true
 		prerelease release_type != "release" // by default this is false
-		releaseAssets remapJar // this points to which files you want to upload as assets with your release, by default this is empty
+		releaseAssets = remapJar // this points to which files you want to upload as assets with your release, by default this is empty
 		allowUploadToExisting true // Setting this to true will allow this plugin to upload artifacts to a release if it found an existing one. If overwrite is set to true, this option is ignored.
 		overwrite false // by default false; if set to true, will delete an existing release with the same tag and name
 		// dryRun true // by default false; you can use this to see what actions would be taken without making a release
