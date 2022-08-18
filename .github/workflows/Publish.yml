@@ -48,4 +48,4 @@ jobs:
         env:
           CURSEFORGE_TOKEN: ${{secrets.CURSEFORGE_TOKEN}}
           MODRINTH_TOKEN: ${{secrets.MODRINTH_TOKEN}}
-          GITHUB_TOKEN: ${{secrets.GH_TOKEN}}
+          GH_TOKEN: ${{secrets.GH_TOKEN}}
