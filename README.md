@@ -40,8 +40,6 @@ Put it into the `mods` folder of your minecraft/server installation.
 
 Launch the game your game/server.
 
-NOTE: If game crashed at first launch don't worry. It crashed because you need to have installed fabric api / quilted fabric api, which is installed automatically before that crash.
-
 **- Client**
 
 On join the server who has this mod, modpack will be automatically downloaded and installed. You will only need to restart the game to properly load the mods.
