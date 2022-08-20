@@ -30,6 +30,17 @@ public class CompatCheck {
 
         if (FabricLoader.getInstance().isModLoaded("quilt_loader")) {
             AutoModpackMain.isQuiltLoader = true;
+
+            // search mod folder to delete fapi if exists on quilt loader
+            File[] files = modsPath.toFile().listFiles();
+            assert files != null;
+            for (File file : files) {
+                if (file.getName().toLowerCase().startsWith("fabric-api-")) {
+                    DeleteModpack.deleteLogic(file);
+                    DeleteModpack.deleted = true; // reset deleted boolean to dont broke DeleteModpack class
+                }
+            }
+
             // Download quilt api if we don't have it
             if (!FabricLoader.getInstance().isModLoaded("quilted_fabric_api")) { // QFAPI
 
@@ -44,20 +55,21 @@ public class CompatCheck {
                 }
                 LOGGER.info("Successfully installed latest Quilted Fabric API (QFAPI)!");
 
-                // search mod folder to delete fapi if exists on quilt loader
-                File[] files = modsPath.toFile().listFiles();
-                assert files != null;
-                for (File file : files) {
-                    if (file.getName().toLowerCase().startsWith("fabric-api-")) {
-                        DeleteModpack.deleteLogic(file);
-                        DeleteModpack.deleted = true; // reset deleted boolean to dont broke DeleteModpack class
-                    }
-                }
-
                 new ScreenBox("Successfully installed Quilted Fabric API (QFAPI)!");
             }
         } else { // fabric or something other lol
             AutoModpackMain.isFabricLoader = true;
+
+            // search mod folder to delete fapi if exists on quilt loader
+            File[] files = modsPath.toFile().listFiles();
+            assert files != null;
+            for (File file : files) {
+                if (file.getName().toLowerCase().startsWith("qfapi-")) {
+                    DeleteModpack.deleteLogic(file);
+                    DeleteModpack.deleted = true; // reset deleted boolean to dont broke DeleteModpack class
+                }
+            }
+
             // Download fabric api if we don't have it
             if (!FabricLoader.getInstance().isModLoaded("fabric-api") && !FabricLoader.getInstance().isModLoaded("fabric")) { // FAPI
 
@@ -71,16 +83,6 @@ public class CompatCheck {
                     return;
                 }
                 LOGGER.info("Successfully installed latest Fabric API (FAPI)!");
-
-                // search mod folder to delete fapi if exists on quilt loader
-                File[] files = modsPath.toFile().listFiles();
-                assert files != null;
-                for (File file : files) {
-                    if (file.getName().toLowerCase().startsWith("qfapi-")) {
-                        DeleteModpack.deleteLogic(file);
-                        DeleteModpack.deleted = true; // reset deleted boolean to dont broke DeleteModpack class
-                    }
-                }
 
                 new ScreenBox("Successfully installed Fabric API (FAPI)!");
             }

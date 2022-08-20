@@ -94,7 +94,6 @@ public class SelfUpdater {
             FileUtils.deleteQuietly(selfBackupUnzipped);
             FileUtils.deleteQuietly(selfBackup);
             System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
-            new ScreenBox("Successfully updated myself! (AutoModpack)");
         }));
 
         LOGGER.info("Successfully self updated!");

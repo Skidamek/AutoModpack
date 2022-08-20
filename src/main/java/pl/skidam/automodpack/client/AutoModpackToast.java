@@ -88,9 +88,9 @@ public class AutoModpackToast implements Toast {
             toastManager.add(new AutoModpackToast());
         }
 
-        if (toast == null) {
-            toastManager.add(new AutoModpackToast());
-        }
+//        if (toast == null) {
+//            toastManager.add(new AutoModpackToast());
+//        }
     }
 
     public Visibility draw(MatrixStack matrices, ToastManager manager, long startTime) {
