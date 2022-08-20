@@ -30,6 +30,8 @@ Basically, this is Minecraft modification with goal to make easier updates to yo
 - Sync modpack mods with server mods.
 - Dynamically change content of your modpack without triggering your friends/players.
 
+## Server crashed? try manually install latest update
+
 ## How to use
 
 First of all download the latest version of the mod from [here](https://modrinth.com/mod/automodpack/versions).
