@@ -3,11 +3,15 @@ package pl.skidam.automodpack.utils;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import org.apache.commons.lang3.StringUtils;
+import org.quiltmc.loader.api.QuiltLoader;
 import pl.skidam.automodpack.AutoModpackMain;
 
 import java.io.File;
 import java.nio.file.FileSystem;
 import java.nio.file.Path;
+import java.util.Collection;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 public class JarUtilities {
 
@@ -42,7 +46,7 @@ public class JarUtilities {
             }
         }
 
-        return jarFile;
+        return jarFile; // returns name of the file
     }
 
     public static Path getModsPath() {
@@ -51,5 +55,46 @@ public class JarUtilities {
             AutoModpackMain.LOGGER.info("Found external mods folder ({})", modsPath.getFileName());
         }
         return modsPath;
+    }
+
+    public static Collection getListOfModsIDS() {
+        Collection modList;
+        if (FabricLoader.getInstance().isModLoaded("quilt_loader")) {
+            modList = new quiltModList().quiltModList(); // Quilt doest support fabric method for getting mod list, so
+        } else {
+            modList = new fabricModList().fabricModList();
+        }
+        return modList;
+    }
+
+    private static class quiltModList {
+        private Collection quiltModList() {
+            Collection<org.quiltmc.loader.api.ModContainer> modsList = QuiltLoader.getAllMods();
+            // Remove every mod that is (fabric or quilt api something) from the list
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("fabric-") && !Objects.requireNonNull(getJarFileOfMod(m.toString().split(" ")[0])).startsWith("fabric-")).collect(Collectors.toList());
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("quilt_") && !Objects.requireNonNull(getJarFileOfMod(m.toString().split(" ")[0])).startsWith("quilt_")).collect(Collectors.toList());
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("quilted_") && !Objects.requireNonNull(getJarFileOfMod(m.toString().split(" ")[0])).startsWith("quilted_")).collect(Collectors.toList());
+
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("minecraft") && !Objects.requireNonNull(getJarFileOfMod(m.toString().split(" ")[0])).startsWith("minecraft")).collect(Collectors.toList());
+
+            // Remove java from the list
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("java")).collect(Collectors.toList());
+            return modsList;
+        }
+    }
+    private static class fabricModList {
+        private Collection fabricModList() {
+            Collection<ModContainer> modsList = FabricLoader.getInstance().getAllMods();
+            // Remove every mod that is (fabric or quilt api something) from the list
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("fabric-") && !Objects.requireNonNull(getJarFileOfMod(m.toString().split(" ")[0])).startsWith("fabric-")).collect(Collectors.toList());
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("quilt_") && !Objects.requireNonNull(getJarFileOfMod(m.toString().split(" ")[0])).startsWith("quilt_")).collect(Collectors.toList());
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("quilted_") && !Objects.requireNonNull(getJarFileOfMod(m.toString().split(" ")[0])).startsWith("quilted_")).collect(Collectors.toList());
+
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("minecraft") && !Objects.requireNonNull(getJarFileOfMod(m.toString().split(" ")[0])).startsWith("minecraft")).collect(Collectors.toList());
+
+            // Remove java from the list
+            modsList = modsList.stream().filter(m -> !m.toString().startsWith("java")).collect(Collectors.toList());
+            return modsList;
+        }
     }
 }

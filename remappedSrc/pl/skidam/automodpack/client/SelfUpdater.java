@@ -14,7 +14,6 @@ import pl.skidam.automodpack.AutoModpackMain;
 import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.ui.ScreenBox;
 import pl.skidam.automodpack.utils.*;
-import pl.skidam.automodpack.utils.Error;
 
 public class SelfUpdater {
     boolean preload;
@@ -104,7 +103,7 @@ public class SelfUpdater {
             new ScreenBox("Successfully updated AutoModpack - " + ModrinthAPI.modrinthAPIversion);
         }
     }
-    private static class Screen { // thank you DJtheRedstoner :)
+    private static class Screen {
         private Screen() {
             AutoModpackToast.add(2);
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new LoadingScreen()));

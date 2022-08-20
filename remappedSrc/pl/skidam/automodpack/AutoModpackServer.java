@@ -4,7 +4,6 @@ import com.google.gson.*;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.*;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
@@ -14,14 +13,12 @@ import net.minecraft.text.Text;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.HostModpack;
-import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.UnZipper;
 import pl.skidam.automodpack.utils.Zipper;
 
 import java.io.*;
 import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
-import java.util.Collection;
 import java.util.Date;
 import java.util.Objects;
 import java.util.Scanner;
@@ -143,7 +140,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         return nick;
     }
 
-    public static void genModpack() { // TODO optimize loops
+    public static void genModpack() {
 
         if (!Config.SYNC_MODS) {
             autoExcludeMods();
@@ -364,26 +361,83 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
     private static void autoExcludeMods() {
         if (!Config.AUTO_EXCLUDE_SERVER_SIDE_MODS) return;
         LOGGER.info("Excluding server-side mods from modpack");
+        for (File file : Objects.requireNonNull(modsPath.toFile().listFiles())) {
+            if (file.getName().endsWith(".jar") && !file.getName().toLowerCase().contains("automodpack")) {
+                try {
+                    new UnZipper(file, new File(tempDir + "/" + file.getName()), "fabric.mod.json");
+                } catch (IOException e1) {
+                    try {
+                        new UnZipper(file, new File(tempDir + "/" + file.getName()), "quilt.mod.json"); // for quilt support
+                    } catch (IOException e2) {
+                        return;
+                    }
+                }
 
-        Collection modList = JarUtilities.getListOfModsIDS();
+                // check if in the temp folder is a fabric.mod.json or quilt.mod.json file //TODO FabricLoader.getInstance().getModContainer("automodpack").isPresent() ? FabricLoader.getInstance().getModContainer("automodpack").get().getMetadata().getVersion().getFriendlyString() : null;
+                File[] serverSideMods = tempDir.listFiles();
+                if (serverSideMods == null) return;
 
-        // make for loop for each mod in modList
-        for (Object mod : modList) {
-            String modId = mod.toString().split(" ")[0];
-            String environment = FabricLoader.getInstance().getModContainer(modId).isPresent() ? FabricLoader.getInstance().getModContainer(modId).get().getMetadata().getEnvironment().toString().toLowerCase() : "null";
-            if (environment.equals("server")) {
-                String modName = FabricLoader.getInstance().getModContainer(modId).isPresent() ? FabricLoader.getInstance().getModContainer(modId).get().getMetadata().getName() : "null";
-                File serverSideModInModpack = new File(modpackModsDir + "/" + modName);
-                if (serverSideModInModpack.exists()) {
-                    FileUtils.deleteQuietly(serverSideModInModpack);
-                    for (String oldMod : oldMods) { // log to console if this mod was in modpack before
-                        if (oldMod.equals(serverSideModInModpack.getName())) {
-                            LOGGER.info(modName + " is server-side mod and has been auto excluded from modpack");
+                if (new File(tempDir + "/" + file.getName()).exists()) {
+                    File modJsonFile = null;
+                    if (new File(tempDir + "/" + file.getName() + "/fabric.mod.json").exists()) {
+                        modJsonFile = new File(tempDir + "/" + file.getName() + "/fabric.mod.json");
+                    } else if (new File(tempDir + "/" + file.getName() + "/quilt.mod.json").exists()) {
+                        modJsonFile = new File(tempDir + "/" + file.getName() + "/quilt.mod.json");
+                    }
+
+                    if (modJsonFile != null) {
+                        try {
+                            FileReader modJsonReader = new FileReader(modJsonFile);
+                            JsonObject jsonObject = JsonParser.parseReader(modJsonReader).getAsJsonObject();
+                            String environment;
+                            try {
+                                environment = jsonObject.get("environment").getAsString();
+                            } catch (Exception e1) {
+                                try {
+                                    JsonObject quilt_loader = jsonObject.get("quilt_loader").getAsJsonObject(); // for quilt support
+                                    environment = quilt_loader.get("environment").getAsString();
+                                } catch (Exception e2) { // this mod doesn't have provided any environment lol
+                                    environment = "*";
+                                }
+                            }
+                            modJsonReader.close();
+                            if (Config.AUTO_EXCLUDE_SERVER_SIDE_MODS && environment.equals("server")) {
+                                File serverSideModInModpack = new File(modpackModsDir + "/" + file.getName());
+                                if (serverSideModInModpack.exists()) {
+                                    FileUtils.deleteQuietly(serverSideModInModpack);
+                                    for (String oldMod : oldMods) { // log to console if this mod was in modpack before
+                                        if (oldMod.equals(serverSideModInModpack.getName())) {
+                                            LOGGER.info(file.getName() + " is server-side mod and has been auto excluded from modpack");
+                                        }
+                                    }
+                                }
+                            }
+
+                            // BRAIN LAG THIS IS NON SENSE
+
+//                            if (Config.AUTO_EXCLUDE_CLIENT_SIDE_MODS && environment.equals("client")) {
+//                                // copy file to client side mods in modpack
+//                                File clientSideModInModpack = new File(modpackClientModsDir + "/" + file.getName());
+//                                if (!clientSideModInModpack.exists() || clientSideModInModpack.length() != file.length()) {
+//                                    FileUtils.deleteQuietly(clientSideModInModpack);
+//                                    FileUtils.copyFileToDirectory(file, modpackClientModsDir);
+//                                }
+//                                for (String oldMod : oldMods) { // log to console if this mod was in modpack before
+//                                    if (!oldMod.equals(clientSideModInModpack.getName())) {
+//                                        LOGGER.info(file.getName() + " is client side mod and has been auto excluded from server mods");
+//                                    }
+//                                }
+//                                FileUtils.deleteQuietly(file);
+//                            }
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
                     }
+                    FileUtils.deleteQuietly(new File(tempDir + "/" + file.getName()));
                 }
             }
         }
+        FileUtils.deleteQuietly(tempDir);
     }
 
     private static void clientMods() {

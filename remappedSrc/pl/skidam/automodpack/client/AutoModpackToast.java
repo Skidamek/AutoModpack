@@ -78,9 +78,9 @@ public class AutoModpackToast implements Toast {
             if (WhoAreYou == 0 || WhoAreYouBefore == 0) {
                 toastManager.clear();
             }
-            if (WhoAreYou == 2 || WhoAreYou == 4) {
-                toastManager.add(new AutoModpackToast());
-            }
+//            if (WhoAreYou == 2 || WhoAreYou == 4) {
+//                toastManager.add(new AutoModpackToast());
+//            }
             // dont do anything lol
         } else if (WhoAreYou == 0) {
             toastManager.clear();

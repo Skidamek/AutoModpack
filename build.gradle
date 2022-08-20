@@ -2,7 +2,7 @@ plugins {
 	id 'fabric-loom' version '0.12-SNAPSHOT'
 	id 'com.modrinth.minotaur' version '2.+'
 	id 'com.matthewprenger.cursegradle' version '1.4.0'
-	id 'io.github.juuxel.loom-quiltflower' version '1.7.3'
+	id 'io.github.juuxel.loom-quiltflower' version '1.7.+'
 	id "com.github.breadmoirai.github-release" version "2.4.1"
 	id 'maven-publish'
 }
@@ -20,8 +20,9 @@ repositories {
 	mavenLocal()
 	maven { url = "https://maven.fabricmc.net/" }
 	maven { url = "https://maven.shedaniel.me/" }
-	maven { url = 'https://maven.terraformersmc.com/' }
+	maven { url = "https://maven.terraformersmc.com/" }
 	maven { url = "https://api.modrinth.com/maven" }
+	maven { url "https://maven.quiltmc.org/repository/release" }
 
 	// Add repositories to retrieve artifacts from in here.
 	// You should only use this when depending on other mods because
@@ -44,6 +45,8 @@ dependencies {
 	implementation 'com.google.api-client:google-api-client:2.0.0'
 	implementation 'com.google.oauth-client:google-oauth-client-jetty:1.34.1'
 	implementation 'com.google.apis:google-api-services-drive:v3-rev20220709-1.32.1'
+
+	modImplementation "org.quiltmc:qsl:3.0.0-beta.14+1.19.2"
 }
 
 processResources {
@@ -83,8 +86,7 @@ String changeLog = ""
 if(project.hasProperty('release_type')) {
 	if(project.hasProperty('change_log')) {
 		changeLog = project.getProperty('change_log')
-		changeLog = changeLog.replace("\"", "")
-		changeLog = changeLog.replace("-", "\n-")
+		changeLog = changeLog.replaceAll("\"", "")
 	}
 	tasks.register("publishMod") {
 		dependsOn(build)
