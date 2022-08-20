@@ -8,7 +8,6 @@ import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.ui.ScreenBox;
 import pl.skidam.automodpack.utils.Download;
-import pl.skidam.automodpack.utils.JarUtilities;
 
 import java.io.File;
 import java.io.IOException;
@@ -41,20 +40,6 @@ public class DownloadModpack {
                 FileUtils.moveDirectory(new File("./mods/"), new File(modsPath.toFile() + File.separator));
             } catch (IOException e) {
                 e.printStackTrace();
-            }
-        }
-
-        // TODO fix this one...
-        File[] files = modsPath.toFile().listFiles();
-        assert files != null;
-        String fapi = JarUtilities.getJarFileOfMod("fabric_api");
-        String qfapi = JarUtilities.getJarFileOfMod("quilted_fabric_api");
-        for (File file : files) {
-            if (isFabricLoader && file.getName().equals(qfapi)) {
-                FileUtils.deleteQuietly(file); // deletes qfapi if exists on fabric loader
-            }
-            else if (isQuiltLoader && file.getName().equals(fapi)) {
-                FileUtils.deleteQuietly(file); // deletes fapi if exists on quilt loader
             }
         }
 

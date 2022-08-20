@@ -17,7 +17,7 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.JarUtilities.correctName;
 
 public class DeleteModpack {
-    private static boolean deleted;
+    public static boolean deleted;
     private static final File unzippedModpack = new File("./AutoModpack/modpack/");
     private static final List<File> modpackFiles = new ArrayList<>();
     private static final List<File> modpackFilesChild = new ArrayList<>();
@@ -114,7 +114,7 @@ public class DeleteModpack {
         }
     }
 
-    private static void deleteLogic(File file) {
+    public static void deleteLogic(File file) {
         if (file.exists() && !file.getName().equals(correctName)) {
             System.out.println("Deleting: " + file);
             try {

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.loader.api.FabricLoader;
+import pl.skidam.automodpack.client.DeleteModpack;
 import pl.skidam.automodpack.ui.ScreenBox;
 import pl.skidam.automodpack.utils.Download;
 import pl.skidam.automodpack.utils.ModrinthAPI;
@@ -43,6 +44,16 @@ public class CompatCheck {
                 }
                 LOGGER.info("Successfully installed latest Quilted Fabric API (QFAPI)!");
 
+                // search mod folder to delete fapi if exists on quilt loader
+                File[] files = modsPath.toFile().listFiles();
+                assert files != null;
+                for (File file : files) {
+                    if (file.getName().toLowerCase().startsWith("fabric-api-")) {
+                        DeleteModpack.deleteLogic(file);
+                        DeleteModpack.deleted = true; // reset deleted boolean to dont broke DeleteModpack class
+                    }
+                }
+
                 new ScreenBox("Successfully installed Quilted Fabric API (QFAPI)!");
             }
         } else { // fabric or something other lol
@@ -60,6 +71,16 @@ public class CompatCheck {
                     return;
                 }
                 LOGGER.info("Successfully installed latest Fabric API (FAPI)!");
+
+                // search mod folder to delete fapi if exists on quilt loader
+                File[] files = modsPath.toFile().listFiles();
+                assert files != null;
+                for (File file : files) {
+                    if (file.getName().toLowerCase().startsWith("qfapi-")) {
+                        DeleteModpack.deleteLogic(file);
+                        DeleteModpack.deleted = true; // reset deleted boolean to dont broke DeleteModpack class
+                    }
+                }
 
                 new ScreenBox("Successfully installed Fabric API (FAPI)!");
             }

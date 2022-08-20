@@ -139,17 +139,6 @@ public class HostModpack implements HttpHandler {
 
             FileInputStream fis = new FileInputStream(pack);
             BufferedInputStream bis = new BufferedInputStream(fis);
-            CompletableFuture.runAsync(() -> { // maybe it will help... maybe not... idk xD
-                try {
-                    bis.transferTo(outputStream);
-                    bis.close();
-                    fis.close();
-                    outputStream.flush();
-                    outputStream.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            });
 
             // There was some good idea I guess, but well... it didn't work bc ipcache aren't always generated? idk..... https://pastebin.com/qDPH2Jpn  so if you want to make it better feel free to do it (super fun with json) :)
             if (exchange.getRequestHeaders().getFirst("X-Minecraft-Username") != null) {
@@ -160,6 +149,13 @@ public class HostModpack implements HttpHandler {
             } else {
                 LOGGER.info("Non-minecraft client downloading modpack");
             }
+
+            bis.transferTo(outputStream);
+            bis.close();
+            fis.close();
+            outputStream.flush();
+            outputStream.close();
+
         } else {
             exchange.sendResponseHeaders(400, 0);
         }

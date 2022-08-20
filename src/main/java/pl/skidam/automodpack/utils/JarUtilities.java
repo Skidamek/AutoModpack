@@ -24,8 +24,7 @@ public class JarUtilities {
 
         // Get jar file
         if (!FabricLoader.getInstance().isDevelopmentEnvironment()) {
-            ModContainer container = FabricLoader.getInstance().getModContainer(modId)
-                    .orElseThrow(() -> new IllegalStateException("Could not find jar file for " + modId));
+            ModContainer container = FabricLoader.getInstance().getModContainer(modId).get();
 
             Path jarPath = container.getRootPaths().stream().findFirst().isPresent() ? container.getRootPaths().stream().findFirst().get() : null;
 
