@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.utils;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import org.apache.commons.io.FileUtils;
 
@@ -9,6 +11,9 @@ import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
 
 public class GetMinecraftUserName {
     public static String getMinecraftUserName() {
+
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) return null;
+
         File usernameFile = new File("AutoModpack/username.txt");
 
         if (MinecraftClient.getInstance() != null) {
