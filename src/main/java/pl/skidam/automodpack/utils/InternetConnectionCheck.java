@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.utils;
 
+import pl.skidam.automodpack.client.AutoModpackToast;
+
 import java.net.HttpURLConnection;
 import java.net.URL;
 
@@ -25,6 +27,7 @@ public class InternetConnectionCheck {
                 return true;
             }
         } catch (Exception e) {
+            AutoModpackToast.add(10);
             LOGGER.error("Something went wrong (code: {}) {}", responseCode, e);
             return false;
         }

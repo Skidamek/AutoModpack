@@ -29,6 +29,7 @@ public class AutoModpackToast implements Toast {
     // 4 == No updates found to AutoModpack (mod)
     // 5 == Error
     // 6 == Cloth-Config warn
+    // 10 = Clear toasts
 
     public static void add(int WhoAreYou) { // TODO fix this stupid toasts #fix_to_#25 https://github.com/Skidamek/AutoModpack/issues/25
 
@@ -71,6 +72,11 @@ public class AutoModpackToast implements Toast {
         }
         ToastManager toastManager = MinecraftClient.getInstance().getToastManager();
         AutoModpackToast toast = toastManager.getToast(AutoModpackToast.class, Toast.TYPE);
+
+        if (WhoAreYou == 10) {
+            toastManager.clear();
+            return;
+        }
 
         if (toast == null) {
             toastManager.add(new AutoModpackToast());

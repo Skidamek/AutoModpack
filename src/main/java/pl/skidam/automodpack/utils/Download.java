@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.utils;
 
+import pl.skidam.automodpack.client.AutoModpackToast;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -77,6 +79,7 @@ public class Download {
                 }
 
             } catch (IOException ex) {
+                AutoModpackToast.add(10);
                 new Error();
                 ex.printStackTrace();
                 return true;
