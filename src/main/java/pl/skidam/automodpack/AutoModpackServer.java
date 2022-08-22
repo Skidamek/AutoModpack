@@ -71,7 +71,7 @@ public class AutoModpackServer implements DedicatedServerModInitializer {
         }
 
         if (modpackZip.exists()) {
-            ServerLifecycleEvents.SERVER_STARTED.register(server -> HostModpack.start());
+            ServerLifecycleEvents.SERVER_STARTED.register(server -> HostModpack.init());
             ServerLifecycleEvents.SERVER_STOPPING.register(server -> HostModpack.stop());
         }
     }
