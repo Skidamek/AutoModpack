@@ -35,9 +35,11 @@ public class AutoModpackToast implements Toast {
 
         try {
             if (MinecraftClient.getInstance().currentScreen == null) return;
-        } catch (NullPointerException e) {
+        } catch (Exception e) {
             return;
         }
+
+        TEXTURE = new Identifier(AutoModpackMain.MOD_ID, "gui/error.png");
 
         AutoModpackToast.WhoAreYou = WhoAreYou;
         if (WhoAreYou == 0) {

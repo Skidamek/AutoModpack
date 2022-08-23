@@ -16,12 +16,12 @@ public class JsonTool {
 
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setRequestProperty("X-Minecraft-Username", "other-packet");
-        connection.setConnectTimeout(3000); // 5 seconds
-        connection.setReadTimeout(3000); // 5 seconds as well
+        connection.setConnectTimeout(3000); // 3 seconds
+        connection.setReadTimeout(3000); // 3 seconds as well
         connection.connect();
         if (connection.getResponseCode() == 200) {
-            try (InputStreamReader inr = new InputStreamReader(connection.getInputStream())) {
-                element = JsonParser.parseReader(inr);
+            try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
+                element = JsonParser.parseReader(isr);
             }
         }
 

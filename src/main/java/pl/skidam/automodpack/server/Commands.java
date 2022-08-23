@@ -46,7 +46,7 @@ public class Commands {
                 context.getSource().sendFeedback(Text.literal("Starting modpack hosting...")
                                 .formatted(Formatting.YELLOW),
                         true);
-                HostModpack.start();
+                HostModpack.init();
                 context.getSource().sendFeedback(Text.literal("Modpack hosting started!")
                                 .formatted(Formatting.GREEN),
                         true);
@@ -88,7 +88,7 @@ public class Commands {
                 HostModpack.stop();
             }
             if (!HostModpack.isRunning) {
-                HostModpack.start();
+                HostModpack.init();
             }
             context.getSource().sendFeedback(Text.literal("Modpack hosting restarted!")
                             .formatted(Formatting.GREEN),
@@ -132,7 +132,7 @@ public class Commands {
             context.getSource().sendFeedback(Text.literal("Generating Modpack...")
                             .formatted(Formatting.GREEN),
                     true);
-            AutoModpackServer.genModpack();
+            new GenerateModpack();
             context.getSource().sendFeedback(Text.literal("Modpack generated!")
                             .formatted(Formatting.GREEN),
                     true);
