@@ -80,13 +80,20 @@ public class AutoModpackToast implements Toast {
             return;
         }
 
+        // SO TRASHSHSHSHHSHHHHHY
+
         if (toast == null) {
             toastManager.add(new AutoModpackToast());
         } else if (WhoAreYouBefore == 0 || WhoAreYouBefore == 4 || WhoAreYouBefore == 3 || WhoAreYouBefore == 2 || WhoAreYouBefore == 1) {
-            if (WhoAreYou == 0 || WhoAreYouBefore == 0) {
+            if (WhoAreYou == 0 && WhoAreYouBefore != 0) {
                 toastManager.clear();
             }
             if (WhoAreYou == 2 || WhoAreYou == 4) {
+                if (WhoAreYouBefore == 0) {
+                    toastManager.clear();
+                } else if (WhoAreYou == 4 && WhoAreYouBefore == 1) {
+                    toastManager.clear();
+                }
                 toastManager.add(new AutoModpackToast());
             }
             // dont do anything lol
@@ -95,10 +102,6 @@ public class AutoModpackToast implements Toast {
         } else {
             toastManager.add(new AutoModpackToast());
         }
-
-//        if (toast == null) {
-//            toastManager.add(new AutoModpackToast());
-//        }
     }
 
     public Visibility draw(MatrixStack matrices, ToastManager manager, long startTime) {

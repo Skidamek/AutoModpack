@@ -9,6 +9,7 @@ import static pl.skidam.automodpack.AutoModpackMain.*;
 public class CheckModpack {
 
     public static boolean isCheckUpdatesButtonClicked;
+    public static boolean update;
 
     public CheckModpack(boolean preload) {
 
@@ -21,6 +22,7 @@ public class CheckModpack {
         }
 
         LOGGER.info("Checking if modpack is up-to-date...");
+        update = false;
 
         if (!InternetConnectionCheck.InternetConnectionCheck(link)) {
             ModpackUpdated = "false";
@@ -32,9 +34,7 @@ public class CheckModpack {
 
         if (currentSize == 0) {
             LOGGER.info("Downloading modpack!");
-            if (!preload) {
-                AutoModpackToast.add(1);
-            }
+            AutoModpackToast.add(1);
             new DownloadModpack.prepare(preload);
             return;
         }
@@ -48,19 +48,16 @@ public class CheckModpack {
             return;
         }
 
-        if (!out.exists() || currentSize != latestSize) {
-            LOGGER.info("Downloading modpack!");
-            if (!preload) {
-                AutoModpackToast.add(1);
-            }
+        if (currentSize != latestSize) {
+            LOGGER.info("Updating modpack!");
+            AutoModpackToast.add(1);
+            update = true;
             new DownloadModpack.prepare(preload);
             return;
         }
 
         LOGGER.info("Didn't find any updates for modpack!");
-        if (!preload) {
-            AutoModpackToast.add(3);
-        }
+        AutoModpackToast.add(3);
         if (isCheckUpdatesButtonClicked) {
             isCheckUpdatesButtonClicked = false;
             new UnZip(out, "false");
@@ -68,5 +65,4 @@ public class CheckModpack {
             ModpackUpdated = "false";
         }
     }
-
 }

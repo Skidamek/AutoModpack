@@ -10,6 +10,7 @@ import java.awt.*;
 public class ScreenBox extends JFrame {
     public ScreenBox(String text) {
         JFrame frame = new JFrame();
+        getRootPane().setWindowDecorationStyle(JRootPane.FRAME); //Setting the RootPane as the main window frame
         frame.setUndecorated(true); // vanishing the title bar
         frame.setLayout(null);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -18,9 +19,6 @@ public class ScreenBox extends JFrame {
         frame.getContentPane().setBackground(new ColorUIResource(22, 27, 34));
         Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
         frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
-
-        //Setting the RootPane as the main window frame
-        getRootPane().setWindowDecorationStyle(JRootPane.FRAME);
 
         JLabel RestartText = new JLabel("Restart your game!");
         RestartText.setBounds(40, 10, 260, 30);

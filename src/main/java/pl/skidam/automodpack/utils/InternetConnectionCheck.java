@@ -19,7 +19,7 @@ public class InternetConnectionCheck {
             connection.setReadTimeout(3000); // 3 seconds as well
             responseCode = connection.getResponseCode();
             if (responseCode != 200) {
-                LOGGER.error("AutoModpack -- Internet isn't available, Failed to get code 200 from " + connection.getURL().toString());
+                LOGGER.error("AutoModpack -- Internet isn't available, Failed to get code 200 (got {}) from {}", responseCode, connection.getURL().toString());
                 connection.disconnect();
                 return false;
             } else {

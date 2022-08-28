@@ -30,10 +30,10 @@ public class TitleScreenMixin extends Screen {
     @Inject(at = @At("RETURN"), method = "initWidgetsNormal" )
     private void AutoModpackUpdateButton(int y, int spacingY, CallbackInfo ci) {
 
-        if (!Checked && !isChecking) {
-            Checked = true;
-            new StartAndCheck(true, false);
-        }
+//        if (!Checked && !isChecking) {
+//            Checked = true;
+//            new StartAndCheck(true, false);
+//        }
 
         int Y_CHECK_UPDATES_BUTTON = 0;
         int Y_DELETE_MODPACK_BUTTON = 0;

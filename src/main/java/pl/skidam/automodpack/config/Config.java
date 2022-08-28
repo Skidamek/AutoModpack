@@ -19,7 +19,7 @@ public class Config {
     public static boolean SYNC_MODS;
     public static boolean ONLY_OPTIONAL_MODPACK;
     public static boolean AUTO_EXCLUDE_SERVER_SIDE_MODS;
-    //    public static boolean AUTO_EXCLUDE_CLIENT_SIDE_MODS;
+//    public static boolean AUTO_EXCLUDE_CLIENT_SIDE_MODS;
 //    public static boolean DISABLE_ALL_OTHER_MODS_ON_CLIENT;
     public static int HOST_PORT;
     public static int HOST_THREAD_COUNT;

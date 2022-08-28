@@ -23,29 +23,13 @@ public class GetMinecraftUserName {
                     if (!usernameFile.createNewFile()) {
                         LOGGER.info("Can not create username file.");
                     }
-                } else {
-                    FileReader fr = new FileReader(usernameFile);
-                    BufferedReader br = new BufferedReader(fr);
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        if (!line.equals(username)) {
-                            FileUtils.deleteQuietly(usernameFile);
-                            if (!usernameFile.createNewFile()) {
-                                LOGGER.info("Can not create username file.");
-                            }
-                        }
-                    }
-                    br.close();
-                    fr.close();
                 }
 
                 FileWriter fw = new FileWriter(usernameFile);
                 fw.flush();
                 fw.write(username);
                 fw.close();
-                if (!usernameFile.setReadOnly()) {
-                    LOGGER.info("Can not set username file read only.");
-                }
+
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -55,9 +39,6 @@ public class GetMinecraftUserName {
         } else if (usernameFile.exists()) {
 
             try {
-//                LOGGER.error("Can read? " + usernameFile.canRead());
-//                LOGGER.error("Can write? " + usernameFile.canWrite());
-//                LOGGER.error("Can execute? " + usernameFile.canExecute());
                 FileReader fr = new FileReader(usernameFile);
                 BufferedReader br = new BufferedReader(fr);
                 String username = br.readLine();

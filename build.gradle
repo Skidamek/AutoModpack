@@ -77,9 +77,7 @@ java {
 }
 
 jar {
-	from("LICENSE") {
-		rename { "${project.archivesBaseName}"}
-	}
+	from("LICENSE")
 }
 
 String changeLog = ""

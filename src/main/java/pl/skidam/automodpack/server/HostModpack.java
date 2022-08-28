@@ -4,7 +4,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import net.fabricmc.loader.api.FabricLoader;
 import pl.skidam.automodpack.config.Config;
-import pl.skidam.automodpack.utils.JarUtilities;
 
 import java.io.*;
 import java.net.*;
@@ -18,7 +17,9 @@ import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 
 public class HostModpack {
 
-    private static final Path MODPACK_FILE = Path.of(FabricLoader.getInstance().getGameDir().toFile() + "/AutoModpack/modpack.zip");
+    public static final Path MODPACK_FILE = Path.of(FabricLoader.getInstance().getGameDir().toFile() + "/AutoModpack/modpack.zip");
+    public static final Path MODPACK_CONTENT_FILE = Path.of(FabricLoader.getInstance().getGameDir().toFile() + "/AutoModpack/modpack-content.txt");
+    public static final Path MODPACK_DIR = Path.of(FabricLoader.getInstance().getGameDir().toFile() + "/AutoModpack/modpack/");
     public static HttpServer server = null;
     public static String modpackHostIp;
     public static String modpackHostIpForLocalPlayers;
@@ -61,8 +62,6 @@ public class HostModpack {
                 LOGGER.info("Using external host server: " + Config.EXTERNAL_MODPACK_HOST);
                 link = Config.EXTERNAL_MODPACK_HOST;
                 modpackHostIpForLocalPlayers = Config.EXTERNAL_MODPACK_HOST;
-
-                start();
             } else {
                 LOGGER.error("EXTERNAL_MODPACK_HOST is not valid url or is not end with /modpack");
             }
@@ -119,20 +118,20 @@ public class HostModpack {
     public static void handle(HttpExchange exchange) throws IOException {
         if (Objects.equals(exchange.getRequestMethod(), "GET")) {
 
-
             OutputStream outputStream = exchange.getResponseBody();
 
             String subUrl = exchange.getRequestURI().getPath().substring(1);
-//            LOGGER.info("Requested: " + subUrl);
 
             File pack;
             if (subUrl.equals("modpack")) {
                 pack = MODPACK_FILE.toFile();
+            } else if (subUrl.equals("content")) {
+                pack = MODPACK_CONTENT_FILE.toFile();
+            } else if (subUrl.contains("..")) {
+                LOGGER.warn("There is a potential hacker: {} ip: {}", exchange.getRequestHeaders().getFirst("X-Minecraft-Username"), exchange.getRemoteAddress());
+                return;
             } else {
-                String mod = JarUtilities.getJarFileOfMod(subUrl);
-                LOGGER.warn("Modpack host is trying to download mod: " + mod);
-                pack = new File(modsPath + "\\" + mod);
-                LOGGER.warn(pack.toString());
+                pack = new File(MODPACK_DIR + File.separator + subUrl);
             }
 
             exchange.getResponseHeaders().add("User-Agent", "Java/AutoModpack-host");
@@ -145,10 +144,14 @@ public class HostModpack {
             if (exchange.getRequestHeaders().getFirst("X-Minecraft-Username") != null) {
                 if (!exchange.getRequestHeaders().getFirst("X-Minecraft-Username").equals("other-packet")) {
                     String playerUsername = exchange.getRequestHeaders().getFirst("X-Minecraft-Username");
-                    LOGGER.info("{} downloading {}", playerUsername, subUrl);
+                    if (subUrl.equals("modpack")) {
+                        LOGGER.info("{} is downloading the modpack", playerUsername);
+                    } else if (subUrl.equals("content")) {
+                        LOGGER.info("{} is updating the modpack", playerUsername);
+                    }
                 }
             } else {
-                LOGGER.info("Non-minecraft client downloading {}", subUrl);
+                LOGGER.info("Non-minecraft client is downloading {}", subUrl);
             }
 
             bis.transferTo(outputStream);
