@@ -27,3 +27,6 @@ If applicable, add screenshots to help explain your problem.
 
 **Additional context**
 Add any other context about the problem here.
+
+**Client & Server log**
+Log from ./logs/latest.log (If you scared of ip leak, please dm me logs on discord Skidam#0001)
