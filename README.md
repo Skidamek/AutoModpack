@@ -60,7 +60,7 @@ Restart server and you are good to go! Enjoy!
 - Inside this file put full names of mods you want to delete. **(one full name per line!)**
 
 **I want to exclude some mods from my modpack**
-- Try to use `auto_exclude_server_side_mods` in config, if it doest work like you want to, make the steps below...
+- Try to use `auto_exclude_server_side_mods` in config, if it doesn't work like you want to, make the steps below...
 - Go to `./AutoModpack/blacklist.txt` file on your server.
 - Inside this file put full names of mods you want to delete. **(one full name per line!)**
 
