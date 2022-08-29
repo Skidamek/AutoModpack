@@ -68,7 +68,7 @@ Restart server and you are good to go! Enjoy!
 
 *./config/automodpack.properties*
 
-Use Cloth Config and Mod Menu mods to change settings in game
+Use Cloth Config and Mod Menu to change settings in game
 
 **Client side**
 
