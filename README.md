@@ -139,7 +139,7 @@ change in the config `host_external_ip` to your correct server ip (without port)
 Follow the same process if you have a problem with the local host ip, but to `host_external_ip_for_local_players`
 
 ## Questions?
-* Feel free to contact me via discord Skidam#0001
+* Feel free to contact me via discord Skidam#8666
 
 **Contributors are welcome!**
 [**click.**](CONTRIBUTING.md)
