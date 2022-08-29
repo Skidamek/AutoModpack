@@ -134,7 +134,7 @@ No, it doesn't, but if you want this cool feature take a look at [AutoPlug](http
 - I get errors every time I try to download modpack!
 
 Check if in the server log after start where is a notification about the modpack host launch, there is a correct ip (Its really can be last numbers of ip)
-If not change in the config `host_external_ip` to your correct server ip (without port)
+change in the config `host_external_ip` to your correct server ip (without port)
 
 Follow the same process if you have a problem with the local host ip, but to `host_external_ip_for_local_players`
 
