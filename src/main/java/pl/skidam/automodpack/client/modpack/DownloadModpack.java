@@ -9,11 +9,8 @@ import pl.skidam.automodpack.client.ui.LoadingScreen;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.server.HostModpack;
 import pl.skidam.automodpack.ui.ScreenBox;
-import pl.skidam.automodpack.utils.Download;
+import pl.skidam.automodpack.utils.*;
 import pl.skidam.automodpack.utils.Error;
-import pl.skidam.automodpack.utils.UnZipper;
-import pl.skidam.automodpack.utils.Zipper;
-import pl.skidam.automodpack.utils.GenerateContentList;
 
 import java.io.File;
 import java.io.FileReader;
@@ -233,6 +230,7 @@ public class DownloadModpack {
             }
 
             while (true) {
+                new Wait(250);
                 if (MinecraftClient.getInstance().currentScreen != null) {
                     if (!isOnServer) {
                         DangerScreenWasShown = false;
@@ -245,11 +243,12 @@ public class DownloadModpack {
                         MinecraftClient.getInstance().world.disconnect();
                     }
 
-                    assert MinecraftClient.getInstance().currentScreen != null;
-                    if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("419")) {
-                        DangerScreenWasShown = false;
-                        isOnServer = false;
-                        break;
+                    if (MinecraftClient.getInstance().currentScreen != null) {
+                        if (MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("disconnected") || MinecraftClient.getInstance().currentScreen.toString().toLowerCase().contains("419")) {
+                            DangerScreenWasShown = false;
+                            isOnServer = false;
+                            break;
+                        }
                     }
                 }
             }

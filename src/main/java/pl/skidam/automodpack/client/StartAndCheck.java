@@ -5,13 +5,9 @@ import pl.skidam.automodpack.client.modpack.CheckModpack;
 import pl.skidam.automodpack.utils.LoadModpackLink;
 import pl.skidam.automodpack.utils.Wait;
 
-import java.io.FileReader;
-import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
 
-import static pl.skidam.automodpack.AutoModpackClient.modpack_link;
 import static pl.skidam.automodpack.AutoModpackMain.*;
-import static pl.skidam.automodpack.utils.ValidateURL.ValidateURL;
 
 public class StartAndCheck {
     public static boolean isChecking = false;

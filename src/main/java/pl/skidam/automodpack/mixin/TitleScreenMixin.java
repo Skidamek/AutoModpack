@@ -16,7 +16,6 @@ import pl.skidam.automodpack.config.Config;
 
 import java.util.Objects;
 
-import static pl.skidam.automodpack.AutoModpackClient.Checked;
 import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.client.StartAndCheck.isChecking;
 

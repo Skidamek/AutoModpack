@@ -4,6 +4,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import pl.skidam.automodpack.client.DeleteModpack;
 import pl.skidam.automodpack.ui.ScreenBox;
 import pl.skidam.automodpack.utils.Download;
+import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.ModrinthAPI;
 
 import java.io.File;
@@ -26,6 +27,12 @@ public class CompatCheck {
 
         if (FabricLoader.getInstance().isModLoaded("fabricproxy-lite") || FabricLoader.getInstance().isModLoaded("crossstitch")) {
             AutoModpackMain.isVelocity = true;
+        }
+
+        if (FabricLoader.getInstance().isModLoaded("seamless_loading_screen")) {
+            LOGGER.error("Found incompatibility between AutoModpack and " + JarUtilities.getJarFileOfMod("seamless_loading_screen") + ". Delete this mod to have better effect!");
+            LOGGER.error("Found incompatibility between AutoModpack and " + JarUtilities.getJarFileOfMod("seamless_loading_screen") + ". Delete this mod to have better effect!");
+            LOGGER.error("Found incompatibility between AutoModpack and " + JarUtilities.getJarFileOfMod("seamless_loading_screen") + ". Delete this mod to have better effect!");
         }
 
         if (FabricLoader.getInstance().isModLoaded("quilt_loader")) {

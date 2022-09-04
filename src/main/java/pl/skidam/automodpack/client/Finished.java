@@ -8,7 +8,6 @@ import pl.skidam.automodpack.client.ui.RestartScreen;
 import pl.skidam.automodpack.utils.Wait;
 
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.AutoModpackClient.isOnServer;
 import static pl.skidam.automodpack.AutoModpackMain.*;
@@ -32,20 +31,20 @@ public class Finished {
 
             if (ModpackUpdated.equals("true") || AutoModpackUpdated.equals("true")) {
                 if (MinecraftClient.getInstance().world != null) {
-                    MinecraftClient.getInstance().world.disconnect();
+                    MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().world.disconnect());
+                    new Wait(250);
                 }
 
                 if (MinecraftClient.getInstance().currentScreen != null) {
-                    if (currentScreen.contains("419")) {
-                        isOnServer = false;
-                        break;
-                    }
+                    isOnServer = false;
+                    break;
                 }
             } else {
                 if (MinecraftClient.getInstance().world != null) {
                     break;
                 }
             }
+            break;
         }
 
         Text bothUpdates = Text.translatable("gui.automodpack.screen.restart.title.all").formatted(Formatting.BOLD);
@@ -55,26 +54,32 @@ public class Finished {
         LOGGER.info("Here you are!");
 
         if (AutoModpackUpdated.equals("true") && ModpackUpdated.equals("true")) {
+            AutoModpackUpdated = null;
+            ModpackUpdated = null;
+            StartAndCheck.isChecking = false;
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new RestartScreen(bothUpdates)));
         }
 
-        if (AutoModpackUpdated.equals("true") && ModpackUpdated.equals("false")) {
+        else if (AutoModpackUpdated.equals("true") && ModpackUpdated.equals("false")) {
+            AutoModpackUpdated = null;
+            ModpackUpdated = null;
+            StartAndCheck.isChecking = false;
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new RestartScreen(automodpackUpdate)));
         }
 
-        if (AutoModpackUpdated.equals("false") && ModpackUpdated.equals("true")) {
+        else if (AutoModpackUpdated.equals("false") && ModpackUpdated.equals("true")) {
+            AutoModpackUpdated = null;
+            ModpackUpdated = null;
+            StartAndCheck.isChecking = false;
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new RestartScreen(modpackUpdate)));
         }
 
-        AutoModpackUpdated = null;
-        ModpackUpdated = null;
-        StartAndCheck.isChecking = false;
-
-        CompletableFuture.runAsync(() -> {
-            new Wait(500);
-            if (Objects.requireNonNull(MinecraftClient.getInstance().currentScreen).toString().toLowerCase().contains("loading")) {
-                MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new TitleScreen()));
-            }
-        });
+        else if (MinecraftClient.getInstance().currentScreen != null) {
+            if (AutoModpackUpdated.equals("false") && ModpackUpdated.equals("false")) return;
+            AutoModpackUpdated = null;
+            ModpackUpdated = null;
+            StartAndCheck.isChecking = false;
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new TitleScreen()));
+        }
     }
 }

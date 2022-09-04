@@ -7,14 +7,13 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import pl.skidam.automodpack.AutoModpackMain;
 
 @Mixin(RegistrySyncManager.class)
 public class FabricRegistrySyncDisabler {
     @Inject(method = "sendPacket(Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/fabricmc/fabric/impl/registry/sync/packet/RegistryPacketHandler;)V", at = @At("HEAD"), cancellable = true)
     private static void sendPacketInject(ServerPlayerEntity player, RegistryPacketHandler handler, CallbackInfo ci) {
-        if (AutoModpackMain.isVelocity) { // hmmm
+//        if (AutoModpackMain.isVelocity) { // hmmm // TODO replace this if to check if player for sure have modpack installed
             ci.cancel();
-        }
+//        }
     }
 }
