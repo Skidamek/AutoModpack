@@ -30,9 +30,10 @@ public class CompatCheck {
         }
 
         if (FabricLoader.getInstance().isModLoaded("seamless_loading_screen")) {
-            LOGGER.error("Found incompatibility between AutoModpack and " + JarUtilities.getJarFileOfMod("seamless_loading_screen") + ". Delete this mod to have better effect!");
-            LOGGER.error("Found incompatibility between AutoModpack and " + JarUtilities.getJarFileOfMod("seamless_loading_screen") + ". Delete this mod to have better effect!");
-            LOGGER.error("Found incompatibility between AutoModpack and " + JarUtilities.getJarFileOfMod("seamless_loading_screen") + ". Delete this mod to have better effect!");
+            String jarName = JarUtilities.getJarFileOfMod("seamless_loading_screen");
+            LOGGER.error("Found incompatibility between AutoModpack and Seamless Loading Screen. Delete {} mod to have better effect!", jarName);
+            LOGGER.error("Found incompatibility between AutoModpack and Seamless Loading Screen. Delete {} mod to have better effect!", jarName);
+            LOGGER.error("Found incompatibility between AutoModpack and Seamless Loading Screen. Delete {} mod to have better effect!", jarName);
         }
 
         if (FabricLoader.getInstance().isModLoaded("quilt_loader")) {
