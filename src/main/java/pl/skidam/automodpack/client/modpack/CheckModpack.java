@@ -4,6 +4,8 @@ import pl.skidam.automodpack.client.AutoModpackToast;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
 import pl.skidam.automodpack.utils.WebFileSize;
 
+import java.nio.file.Files;
+
 import static pl.skidam.automodpack.AutoModpackMain.*;
 
 public class CheckModpack {
@@ -49,6 +51,21 @@ public class CheckModpack {
         }
 
         if (currentSize != latestSize) {
+
+            int time_edit = -1;
+            int size = -1;
+
+            try {
+                Files.getAttribute(out.toPath(), "automodpack/time-edit");
+                Files.getAttribute(out.toPath(), "automodpack/size");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            if (time_edit == -1 || size == -1) {
+
+            }
+
             LOGGER.info("Updating modpack!");
             AutoModpackToast.add(1);
             update = true;

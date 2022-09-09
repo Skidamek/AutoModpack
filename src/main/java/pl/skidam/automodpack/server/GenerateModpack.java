@@ -9,12 +9,12 @@ import pl.skidam.automodpack.utils.GenerateContentList;
 
 import java.io.*;
 import java.nio.charset.Charset;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
 import static org.apache.commons.lang3.ArrayUtils.contains;
-import static pl.skidam.automodpack.AutoModpackMain.LOGGER;
-import static pl.skidam.automodpack.AutoModpackMain.modsPath;
+import static pl.skidam.automodpack.AutoModpackMain.*;
 import static pl.skidam.automodpack.utils.JarUtilities.correctName;
 import static pl.skidam.automodpack.AutoModpackServer.*;
 
@@ -22,8 +22,15 @@ public class GenerateModpack {
 
     public GenerateModpack() { // TODO optimization
 
-        if (!Config.SYNC_MODS) autoExcludeMods();
-        clientMods();
+        long beforeModpackSize = -1;
+        if (out.exists()) {
+            beforeModpackSize = out.length();
+        }
+
+        if (!Config.SYNC_MODS) {
+            autoExcludeMods();
+            clientMods();
+        }
 
         if (Config.SYNC_MODS) {
             LOGGER.info("Synchronizing mods from server to modpack");
@@ -222,6 +229,23 @@ public class GenerateModpack {
             e.printStackTrace();
         }
 
+        if (beforeModpackSize == -1) {
+            LOGGER.error("beforeModpackSize is -1");
+            try {
+                Files.setAttribute(out.toPath(), "automodpack/time-edit", System.currentTimeMillis());
+                Files.setAttribute(out.toPath(), "automodpack/size", out.length());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        } else if (beforeModpackSize != out.length()) {
+            LOGGER.error("beforeModpackSize {} is different than new one {}", beforeModpackSize, out.length());
+            try {
+                Files.setAttribute(out.toPath(), "automodpack/time-edit", System.currentTimeMillis());
+                Files.setAttribute(out.toPath(), "automodpack/size", out.length());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
 
         LOGGER.info("Modpack created");
 

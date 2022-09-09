@@ -15,6 +15,7 @@ import pl.skidam.automodpack.utils.Error;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.CompletableFuture;
@@ -173,6 +174,24 @@ public class DownloadModpack {
             }
 
             FileUtils.deleteQuietly(updateDir);
+
+            if (!WebFileSize.webfileSize(link).equals(out.length())) {
+                try {
+                    Files.setAttribute(out.toPath(), "automodpack/time-edit", System.currentTimeMillis());
+                    Object lastModify = Files.getAttribute(out.toPath(), "automodpack/time-edit");
+                    Object lastSize = Files.getAttribute(out.toPath(), "automodpack/size");
+                    if (lastModify != null) {
+                        LOGGER.error("lastModify NOT NULL");
+                    }
+                    LOGGER.error(lastModify + "");
+                    if (lastSize != null) {
+                        LOGGER.error("lastSize NOT NULL");
+                    }
+                    LOGGER.error(lastSize + "");
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
 
         } else {
             LOGGER.info("Downloading modpack from {}...", link);
