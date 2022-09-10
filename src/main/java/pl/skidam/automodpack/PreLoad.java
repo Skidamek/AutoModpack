@@ -36,9 +36,9 @@ public class PreLoad implements PreLaunchEntrypoint {
 
             new LoadModpackLink();
 
-            if (!Config.DANGER_SCREEN) {
+//            if (!Config.DANGER_SCREEN) { // TODO make it better xD
                 new CheckModpack(true);
-            }
+//            }
 
             new DeleteTrashedMods();
 
