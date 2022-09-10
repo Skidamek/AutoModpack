@@ -4,9 +4,11 @@ import pl.skidam.automodpack.client.AutoModpackToast;
 import pl.skidam.automodpack.utils.InternetConnectionCheck;
 import pl.skidam.automodpack.utils.WebFileSize;
 
+import java.io.IOException;
 import java.nio.file.Files;
 
 import static pl.skidam.automodpack.AutoModpackMain.*;
+import static pl.skidam.automodpack.client.modpack.DownloadModpack.modpackDetailsFile;
 
 public class CheckModpack {
 
@@ -42,7 +44,7 @@ public class CheckModpack {
         }
 
 
-        long latestSize = WebFileSize.webfileSize(link);
+        long latestSize = WebFileSize.getWebFileSize(link);
         LOGGER.info("Latest modpack size: " + latestSize);
 
         if (latestSize == 0) {
@@ -52,19 +54,33 @@ public class CheckModpack {
 
         if (currentSize != latestSize) {
 
-            int time_edit = -1;
-            int size = -1;
+            // check modpackDetailsFile
+            if (modpackDetailsFile.exists()) {
+                // get first line to string
+                long bindedModpackSizeDetail = -1;
+                long currentModpackSizeDetail = -1;
+                try {
+                    bindedModpackSizeDetail = Long.parseLong(Files.readAllLines(modpackDetailsFile.toPath()).get(0));
+                    currentModpackSizeDetail = Long.parseLong(Files.readAllLines(modpackDetailsFile.toPath()).get(1));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
 
-            try {
-                Files.getAttribute(out.toPath(), "automodpack/time-edit");
-                Files.getAttribute(out.toPath(), "automodpack/size");
-            } catch (Exception e) {
-                e.printStackTrace();
+                if (bindedModpackSizeDetail == latestSize) {
+                    if (currentModpackSizeDetail == currentSize) {
+                        LOGGER.info("Didn't find any updates for modpack!");
+                        AutoModpackToast.add(3);
+                        if (isCheckUpdatesButtonClicked) {
+                            isCheckUpdatesButtonClicked = false;
+                            new UnZip(out, "false");
+                        } else {
+                            ModpackUpdated = "false";
+                        }
+                        return;
+                    }
+                }
             }
 
-            if (time_edit == -1 || size == -1) {
-
-            }
 
             LOGGER.info("Updating modpack!");
             AutoModpackToast.add(1);

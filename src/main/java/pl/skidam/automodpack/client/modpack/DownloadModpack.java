@@ -12,9 +12,7 @@ import pl.skidam.automodpack.ui.ScreenBox;
 import pl.skidam.automodpack.utils.*;
 import pl.skidam.automodpack.utils.Error;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.util.List;
 import java.util.Scanner;
@@ -28,6 +26,7 @@ public class DownloadModpack {
     public static boolean preload;
     public static int maxInputs;
     public static int minInputs;
+    public static File modpackDetailsFile = new File("./AutoModpack/modpacks/" + out.getName() + "-details.txt");
 
     public DownloadModpack() {
 
@@ -175,24 +174,6 @@ public class DownloadModpack {
 
             FileUtils.deleteQuietly(updateDir);
 
-            if (!WebFileSize.webfileSize(link).equals(out.length())) {
-                try {
-                    Files.setAttribute(out.toPath(), "automodpack/time-edit", System.currentTimeMillis());
-                    Object lastModify = Files.getAttribute(out.toPath(), "automodpack/time-edit");
-                    Object lastSize = Files.getAttribute(out.toPath(), "automodpack/size");
-                    if (lastModify != null) {
-                        LOGGER.error("lastModify NOT NULL");
-                    }
-                    LOGGER.error(lastModify + "");
-                    if (lastSize != null) {
-                        LOGGER.error("lastSize NOT NULL");
-                    }
-                    LOGGER.error(lastSize + "");
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-
         } else {
             LOGGER.info("Downloading modpack from {}...", link);
 
@@ -205,6 +186,18 @@ public class DownloadModpack {
 
             LOGGER.info("Successfully downloaded modpack!");
 
+        }
+
+        try {
+            FileWriter fw = new FileWriter(modpackDetailsFile);
+            PrintWriter outFile = new PrintWriter(fw);
+            outFile.flush();
+            outFile.println(WebFileSize.getWebFileSize(link));
+            outFile.println(out.length());
+            outFile.close();
+            fw.close();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
 
         new UnZip(out, "true");
