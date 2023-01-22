@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "pl.skidam.automodpack.sharedresources.normal",
+  "compatibilityLevel": "JAVA_17",
+  "plugin": "pl.skidam.automodpack.mixin.MixinPlugin",
+  "client": [
+    "options.GameOptionsMixin",
+    "resourcepacks.FileResourcePackProviderAccessor",
+    "resourcepacks.ResourcePackManagerMixin"
+  ],
+  "server": [
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [
+  ]
+}

@@ -1,178 +1,60 @@
 plugins {
-	id 'fabric-loom' version '1.0-SNAPSHOT'
-	id 'com.modrinth.minotaur' version '2.+'
-	id 'com.matthewprenger.cursegradle' version '1.4.0'
-	id 'io.github.juuxel.loom-quiltflower' version '1.7.+'
-	id "com.github.breadmoirai.github-release" version "2.4.1"
-	id 'maven-publish'
+    id "architectury-plugin" version "3.4-SNAPSHOT"
+    id "dev.architectury.loom" version "1.0-SNAPSHOT" apply false
+    id 'io.github.juuxel.loom-quiltflower' version "${quilt_flower_version}" apply false
+//    id "io.github.pacifistmc.forgix" version "1.2.6"
 }
 
-sourceCompatibility = JavaVersion.VERSION_17
-targetCompatibility = JavaVersion.VERSION_17
-
-archivesBaseName = project.archives_base_name
-version = project.mod_version
-group = project.maven_group
-
-repositories {
-
-	mavenCentral()
-	mavenLocal()
-	maven { url = "https://maven.fabricmc.net/" }
-	maven { url = "https://maven.shedaniel.me/" }
-	maven { url = "https://maven.terraformersmc.com/" }
-	maven { url = "https://api.modrinth.com/maven" }
-	maven { url "https://maven.quiltmc.org/repository/release" }
-
-	// Add repositories to retrieve artifacts from in here.
-	// You should only use this when depending on other mods because
-	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
-	// for more information about repositories.
+architectury {
+    minecraft = rootProject.minecraft_version
 }
 
-dependencies {
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+subprojects {
+    apply plugin: "dev.architectury.loom"
+    apply plugin: "io.github.juuxel.loom-quiltflower"
 
-	modImplementation ("com.terraformersmc:modmenu:${project.modmenu_version}")
-	modApi ("me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}") {exclude(group: "net.fabricmc.fabric-api")}
+    loom {
+        silentMojangMappingsLicense()
+    }
 
-	modLocalRuntime("maven.modrinth:lazydfu:0.1.3")
+    archivesBaseName = rootProject.archives_base_name + "-${project.name}"
+    version = rootProject.mod_version
 
-	implementation 'com.google.api-client:google-api-client:2.0.0'
-	implementation 'com.google.oauth-client:google-oauth-client-jetty:1.34.1'
-	implementation 'com.google.apis:google-api-services-drive:v3-rev20220709-1.32.1'
-
-	modImplementation "org.quiltmc:qsl:3.0.0-beta.14+1.19.2"
+    dependencies {
+        minecraft "com.mojang:minecraft:${rootProject.minecraft_version}"
+        // The following line declares the mojmap mappings, you may use other mappings as well
+        // mappings loom.officialMojangMappings()
+        // The following line declares the yarn mappings you may select this one as well.
+        mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    }
 }
 
-processResources {
-	inputs.property "mod_version", project.mod_version
-	filteringCharset "UTF-8"
+//forgix { // Removed due problem with reforged fabric api for forge which loaded on fabric causes crash // TODO fix this, would be cool...
+//    group = "pl.skidam.automodpack"
+//    mergedJarName = "AutoModpack.jar"
+//}
 
-	filesMatching("fabric.mod.json") {
-		expand "version": project.mod_version
-	}
+allprojects {
+    apply plugin: "java"
+    apply plugin: "architectury-plugin"
+    apply plugin: "maven-publish"
 
-	filesMatching("quilt.mod.json") {
-		expand "version": project.mod_version
-	}
-}
+//    archivesBaseName = rootProject.archives_base_name
+//    version = rootProject.mod_version
+    group = rootProject.maven_group
 
-version = ""
+    repositories {
+    }
 
-tasks.withType(JavaCompile).configureEach {
-	// Minecraft 1.18 (1.18-pre2) upwards uses Java 17.
-	it.options.release = 17
-}
+    tasks.withType(JavaCompile) {
+        options.encoding = "UTF-8"
+        options.release = 17
+    }
 
-java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
-	// If you remove this line, sources will not be generated.
-	withSourcesJar()
-}
+    java {
+        withSourcesJar()
+    }
 
-jar {
-	from("LICENSE")
-}
-
-String changeLog = ""
-if(project.hasProperty('release_type')) {
-	if(project.hasProperty('change_log')) {
-		changeLog = project.getProperty('change_log')
-		changeLog = changeLog.replaceAll("\"", "")
-	}
-	tasks.register("publishMod") {
-		dependsOn(build)
-		finalizedBy(tasks.curseforge)
-		finalizedBy(tasks.modrinth)
-		finalizedBy(tasks.githubRelease)
-	}
-
-	curseforge {
-		apiKey = System.getenv("CURSEFORGE_TOKEN")
-		project {
-			id = "639211"
-			releaseType = release_type
-			changelogType = "markdown"
-			changelog = changeLog
-			addGameVersion "Fabric"
-			addGameVersion "Quilt"
-			addGameVersion "1.19"
-			addGameVersion "1.19.1"
-			addGameVersion "1.19.2"
-			addGameVersion "Java 17"
-
-			mainArtifact(remapJar) {
-				displayName = "${project.archives_base_name}-${project.mod_version}"
-			}
-			afterEvaluate {
-				uploadTask.dependsOn(remapJar)
-			}
-			options {
-				forgeGradleIntegration = false
-			}
-		}
-	}
-
-	modrinth {
-		token = System.getenv("MODRINTH_TOKEN")
-		// This is the default. Remember to have the MODRINTH_TOKEN environment variable set or else this will fail, or set it to whatever you want - just make sure it stays private!
-		projectId = "k68glP2e" // This can be the project ID or the slug. Either will work!
-		versionNumber = "${project.mod_version}-1.19"
-		// You don't need to set this manually. Will fail if Modrinth has this version already
-		versionName = "${project.archives_base_name}-${project.mod_version}"
-		changelog = changeLog
-		versionType = release_type // This is the default -- can also be `beta` or `alpha`
-		uploadFile = remapJar // With Loom, this MUST be set to `remapJar` instead of `jar`!
-		gameVersions = ["1.19", "1.19.1", "1.19.2"] // Must be an array, even with only one version
-		loaders = ["fabric", "quilt"]
-	}
-
-	githubRelease {
-		token = System.getenv("GH_TOKEN") // This is your personal access token with Repo permissions
-		owner "Skidamek" // default is the last part of your group. Eg group: "com.github.breadmoirai" => owner: "breadmoirai"
-		repo "AutoModpack" // by default this is set to your project name
-		tagName "v${project.mod_version}" // by default this is set to "v${project.version}"
-		targetCommitish "1.19" // by default this is set to "main"
-		releaseName "AutoModpack ${project.mod_version}" // Release title, by default this is the same as the tagName
-		generateReleaseNotes false // Generate release notes automatically, if true and body is present, body will be pre-pended, if name is not given, one will be generated by the tag
-		body changeLog // by default this is empty
-		draft false // by default this is true
-		prerelease release_type != "release" // by default this is false
-		releaseAssets = remapJar // this points to which files you want to upload as assets with your release, by default this is empty
-		allowUploadToExisting true // Setting this to true will allow this plugin to upload artifacts to a release if it found an existing one. If overwrite is set to true, this option is ignored.
-		overwrite false // by default false; if set to true, will delete an existing release with the same tag and name
-		// dryRun true // by default false; you can use this to see what actions would be taken without making a release
-		apiEndpoint "https://api.github.com" // should only change for github enterprise users
-		client // This is the okhttp client used for http requests
-	}
-}
-
-
-// configure the maven publication
-publishing {
-	publications {
-		maven(MavenPublication) {
-			from components.java
-		}
-	}
-
-
-	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
-	repositories {
-		// Add repositories to publish to here.
-		// Notice: This block does NOT have the same function as the block in the top level.
-		// The repositories here will be used for publishing your artifact, not for
-		// retrieving dependencies.
-	}
-
-}
-
-tasks.withType(JavaCompile) {
-	options.encoding = 'UTF-8'
+//    build.finalizedBy(mergeJars)
+//    assemble.finalizedBy(mergeJars)
 }

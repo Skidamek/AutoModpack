@@ -1,0 +1,21 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "pl.skidam.automodpack.mixin",
+  "plugin": "pl.skidam.automodpack.mixin.MixinPlugin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "ClientLoginNetworkHandlerMixin",
+    "TitleScreenMixin"
+  ],
+  "server": [
+    "DisconnectDisabler",
+    "FabricRegistrySyncDisabler",
+    "ServerLoginNetworkHandlerAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "mixins": [
+  ]
+}

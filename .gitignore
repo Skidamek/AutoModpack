@@ -35,3 +35,10 @@ run/
 /config.yml
 /Skidamek/
 /logs/latest.log
+
+output/
+libs/
+
+.metadata
+
+.architectury-transformer

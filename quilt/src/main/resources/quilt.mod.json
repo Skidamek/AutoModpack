@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "quilt_loader": {
+    "group": "pl.skidam.automodpack",
+    "id": "automodpack",
+    "version": "${version}",
+    "metadata": {
+      "name": "AutoModpack",
+      "description": "Just automatic updating and downloading modpacks!",
+      "contributors": {
+        "Skidam": "Owner",
+        "Pipelek": "Graphic artist",
+        "Merith" : "Great ideas",
+        "SinisterEmber": "Contributor",
+        "enjarai": "shared-resources"
+      },
+      "license": "LGPL-3.0-or-later",
+      "contact": {
+        "sources": "https://github.com/Skidamek/AutoModpack/",
+        "issues": "https://github.com/Skidamek/AutoModpack/issues/"
+      },
+      "icon": "assets/automodpack/icon.png"
+    },
+    "intermediate_mappings": "net.fabricmc:intermediary",
+    "environment": "*",
+    "entrypoints": {
+      "main": ["pl.skidam.automodpack.AutoModpack::onInitialize"],
+      "preLaunch": ["pl.skidam.automodpack.AutoModpack::onPreInitialize"]
+    },
+    "depends": [
+      {
+        "id": "quilt_loader",
+        "versions": ">=0.17.0"
+      },
+      {
+        "id": "minecraft",
+        "versions": ">=1.19"
+      }
+    ]
+  },
+  "mixin": [
+    "automodpack.mixins.json",
+    "automodpack.sharedresources.mixins.json",
+    "automodpack.sharedresources.compat.iris.mixins.json"
+  ]
+}

@@ -1,0 +1,38 @@
+modLoader = "javafml"
+loaderVersion = "[39,)"
+issueTrackerURL = "https://github.com/Skidamek/AutoModpack/issues"
+license = "MIT"
+
+[[mods]]
+modId = "automodpack"
+version = "${version}"
+displayName = "AutoModpack"
+authors = '''
+Skidam
+Pipelek
+Merith
+Junortiz
+gyular
+sall0-0p (_lordBucket)
+BotVodka
+SinisterEmber
+dadoirie (Dado)
+'''
+description = '''
+Just automatic updating and downloading modpacks!
+'''
+logoFile = "icon.png"
+
+[[dependencies.automodpack]]
+modId = "forge"
+mandatory = true
+versionRange = "[39,)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.automodpack]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[1.19,)"
+ordering = "NONE"
+side = "BOTH"

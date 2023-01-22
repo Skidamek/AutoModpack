@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "automodpack",
+  "version": "${version}",
+
+  "name": "AutoModpack",
+  "description": "Simplifies the process of updating and downloading modpacks, making it fully automatic and effortless for players!",
+  "authors": [
+    "Skidam"
+  ],
+  "contributors": [
+    "Pipelek",
+    "Merith",
+    "SinisterEmber",
+    "enjarai"
+  ],
+  "contact": {
+    "sources": "https://github.com/Skidamek/AutoModpack/",
+    "issues": "https://github.com/Skidamek/AutoModpack/issues/"
+  },
+
+  "license": "LGPL-3.0-or-later",
+  "icon": "assets/automodpack/icon.png",
+
+  "environment": "*",
+  "entrypoints": {
+    "main": ["pl.skidam.automodpack.AutoModpack::onInitialize"],
+    "preLaunch": ["pl.skidam.automodpack.AutoModpack::onPreInitialize"]
+  },
+  "mixins": [
+    "automodpack.mixins.json",
+    "automodpack.sharedresources.mixins.json",
+    "automodpack.sharedresources.compat.iris.mixins.json"
+  ],
+
+  "depends": {
+    "fabricloader": ">=0.14",
+    "minecraft": ">=1.19 <=1.19.2"
+  }
+}
