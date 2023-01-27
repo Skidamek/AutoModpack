@@ -297,7 +297,7 @@ public class ModpackUpdater {
         } catch (SocketTimeoutException | ConnectException e) {
             LOGGER.error("Modpack host of " + link + " is not responding", e);
         } catch (Exception e) {
-            ScreenTools.setTo.Error("Critical error while downloading modpack.", e.getMessage(), "More details in logs.");
+            ScreenTools.setTo.Error("Critical error while downloading modpack.", "\"" + e.getMessage() + "\"", "More details in logs.");
             e.printStackTrace();
         }
     }
@@ -337,8 +337,6 @@ public class ModpackUpdater {
         }
     }
 
-    static long fileSize = -1;
-
     private static void download(String url, File downloadFile, String serverChecksum) {
         // call it only once when update is false yet
         if (!update || !ScreenTools.getScreenString().contains("downloadscreen")) ScreenTools.setTo.Download();
@@ -370,7 +368,7 @@ public class ModpackUpdater {
                         downloadInfo.setDownloading(downloadInstance.isDownloading());
                         downloadInfo.setCancelled(false);
                         downloadInfo.setEta(downloadInstance.getETA());
-                        fileSize = downloadInfo.setFileSize(downloadInstance.getFileSize());
+                        downloadInfo.setFileSize(downloadInstance.getFileSize());
                         downloadInfo.setBytesPerSecond(downloadInstance.getBytesPerSecond());
 
                         totalBytesDownloaded += downloadInstance.getTotalBytesRead() - oldValue;
@@ -381,6 +379,8 @@ public class ModpackUpdater {
 
                     totalBytesDownloaded += downloadInstance.getTotalBytesRead() - oldValue;
                 });
+
+                long fileSize = WebFileSize.getWebFileSize(url);
 
                 String ourChecksum = downloadInstance.download(url, downloadFile);
 

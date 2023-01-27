@@ -53,7 +53,7 @@ public class RestartScreen extends Screen {
     public void initWidgets() {
         assert this.client != null;
         cancelButton = new ButtonWidget(this.width / 2 - 150, this.height / 6 + 120, 150, 20, TextHelper.translatable("gui.automodpack.screen.restart.button.cancel").formatted(Formatting.RED), (button) -> {
-            this.client.setScreen(parent);
+            this.client.setScreen(null);
         });
         restartButton = new ButtonWidget(this.width / 2, this.height / 6 + 120, 150, 20, TextHelper.translatable("gui.automodpack.screen.restart.button.quit").formatted(Formatting.GREEN), (button) -> {
             ReLauncher.run(gameDir);

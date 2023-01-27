@@ -109,12 +109,11 @@ public class ReLauncher {
 
         String optionalModsProperty = "";
 
-        if (gameDir != null) {
-            // -Dfabric.addMods || -Dloader.modsDir
+        if (gameDir != null) { // -Dfabric.addMods || -Dloader.modsDir
             File modsDir = new File(gameDir + "/mods/");
             if (modsDir.exists()) {
                 if (modsDir.listFiles() != null && modsDir.listFiles().length > 0) {
-                    optionalModsProperty = formatPath(getOptionalModsProperty(modsDir));
+                    optionalModsProperty = getOptionalModsProperty(modsDir);
                 }
             }
         }
@@ -127,7 +126,7 @@ public class ReLauncher {
         ));
 
 
-        if (gameDir != null && !command.contains(optionalModsProperty)) {
+        if (gameDir != null && (!command.contains(optionalModsProperty) && !command.contains(formatPath(optionalModsProperty)))) {
             LOGGER.error("AutoModpack relauncher failed to add {} property to command!\nCommand: {}", optionalModsProperty, command);
             System.exit(1);
         }
@@ -192,11 +191,12 @@ public class ReLauncher {
             return "";
         }
 
-        String path = formatPath(additionalModsDir.getAbsolutePath()).replace("/./", "/");
+        Path path = additionalModsDir.toPath().normalize().toAbsolutePath();
+        String strPath = formatPath(path.toString());
 
         if (Platform.Fabric) {
-            return "-Dfabric.addMods=\"" + path + "\"";
-        } else if (Platform.Quilt) {
+            return "-Dfabric.addMods=\"" + strPath + "\"";
+        } else if (Platform.Quilt) { // quilt changed how it handles optional mods
             String loaderVersion = Platform.getModVersion("quilt_loader");
             if (loaderVersion.contains("-beta")) {
                 loaderVersion = loaderVersion.replaceFirst("-beta\\..*", "");
@@ -204,11 +204,12 @@ public class ReLauncher {
             String loaderVersionWithChanges = "0.18.1";
             int result = loaderVersion.compareTo(loaderVersionWithChanges);
             if (result < 0) {
-                return "-Dloader.addMods=\"" + path + "\"";
+                return "-Dloader.addMods=\"" + strPath + "\"";
             } else {
-                return "-Dloader.addMods=\"" + path + "/*\"";
+                return "-Dloader.addMods=\"" + strPath + "/*\"";
             }
         } else {
+            LOGGER.error("Can't get optional mods property, unknown platform!");
             return "";
         }
     }
@@ -217,7 +218,7 @@ public class ReLauncher {
         StringBuilder sb = new StringBuilder();
 
         if (jvmArgs.contains("-Dfabric.addMods=")) {
-            String[] args = jvmArgs.split(" -Dfabric.addMods=");
+            String[] args = jvmArgs.split("-Dfabric.addMods=");
             for (int i = 0; i < args.length; i++) {
                 if (i == 0) {
                     sb.append(args[i]);
@@ -237,7 +238,7 @@ public class ReLauncher {
         }
 
         if (jvmArgs.contains("-Dloader.addMods=")) {
-            String[] args = jvmArgs.split(" -Dloader.addMods=");
+            String[] args = jvmArgs.split("-Dloader.addMods=");
             for (int i = 0; i < args.length; i++) {
                 if (i == 0) {
                     sb.append(args[i]);

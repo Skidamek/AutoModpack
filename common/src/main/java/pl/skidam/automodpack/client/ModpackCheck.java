@@ -47,7 +47,6 @@ public class ModpackCheck {
             }
 
             if (!localMods.containsKey(mod.modId)) {
-                LOGGER.warn("Modpack is not loaded");
                 return false;
             }
         }

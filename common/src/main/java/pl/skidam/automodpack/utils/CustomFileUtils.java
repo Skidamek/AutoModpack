@@ -9,6 +9,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 
@@ -53,6 +54,10 @@ public class CustomFileUtils {
     }
 
     public static void copyFile(File source, File destination) throws IOException {
+        if (!destination.exists()) {
+            if (!destination.getParentFile().exists()) destination.getParentFile().mkdirs();
+            Files.createFile(destination.toPath());
+        }
         try (FileInputStream inputStream = new FileInputStream(source);
              FileChannel sourceChannel = inputStream.getChannel();
              FileOutputStream outputStream = new FileOutputStream(destination);

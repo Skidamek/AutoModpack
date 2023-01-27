@@ -15,9 +15,8 @@ public class WebFileSize {
         try {
             URL url = new URL(link);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestProperty("Minecraft-Username", "other-packet");
-            connection.setConnectTimeout(3000); // 5 seconds
-            connection.setReadTimeout(3000); // 5 seconds as well
+            connection.setConnectTimeout(3000);
+            connection.setReadTimeout(3000);
             size = Long.parseLong(connection.getHeaderField("Content-Length"));
             connection.disconnect();
         } catch (Exception e) {
