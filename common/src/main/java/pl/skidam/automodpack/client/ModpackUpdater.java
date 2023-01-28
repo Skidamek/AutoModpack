@@ -239,7 +239,7 @@ public class ModpackUpdater {
             CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).get();
 
             if (update) {
-                // if was updated, delete old files from modpack
+                // if was updated, delete old files from modpack // TODO look at this more...
                 List<String> files = serverModpackContent.list.stream().map(modpackContentField -> new File(modpackContentField.file).getName()).toList();
 
                 try (Stream<Path> stream = Files.walk(modpackDir.toPath(), 10)) {
@@ -248,7 +248,7 @@ public class ModpackUpdater {
                         if (file.equals(modpackContentFile.toPath())) continue;
                         if (!files.contains(file.toFile().getName())) {
                             LOGGER.info("Deleting " + file.toFile().getName());
-                            CustomFileUtils.forceDelete(file.toFile());
+                            CustomFileUtils.forceDelete(file.toFile(), true);
                             changelogList.put(file.toFile().getName(), false);
                         }
                     }
@@ -265,7 +265,7 @@ public class ModpackUpdater {
                     if (file.exists()) {
                         File fileInRunningDir = new File("." + mod.file);
                         if (fileInRunningDir.exists()) {
-                            CustomFileUtils.forceDelete(fileInRunningDir);
+                            CustomFileUtils.forceDelete(fileInRunningDir, false);
                         }
                         CustomFileUtils.copyFile(file, fileInRunningDir);
                         AutoModpack.LOGGER.info("Copied " + mod.file + " to running directory");
@@ -274,7 +274,7 @@ public class ModpackUpdater {
             }
 
             if (modpackContentFile.exists()) {
-                CustomFileUtils.forceDelete(modpackContentFile);
+                CustomFileUtils.forceDelete(modpackContentFile, false);
             }
 
             Files.write(modpackContentFile.toPath(), GSON.toJson(serverModpackContent).getBytes());
@@ -455,7 +455,7 @@ public class ModpackUpdater {
                 File deletedModsFolder = new File( automodpackDir + "/deletedMods/");
                 if (!deletedModsFolder.exists()) deletedModsFolder.mkdirs();
                 Files.copy(defaultMod.toPath(), new File(deletedModsFolder + File.separator + defaultMod.getName()).toPath(), StandardCopyOption.REPLACE_EXISTING);
-                CustomFileUtils.forceDelete(defaultMod);
+                CustomFileUtils.forceDelete(defaultMod, true);
             }
         }
     }

@@ -9,12 +9,11 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import org.slf4j.Logger;
 import pl.skidam.automodpack.AutoModpack;
+import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.client.ui.AutoModpackToast;
-import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.ui.Windows;
-import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.ModrinthAPI;
 
 import java.awt.*;
@@ -29,7 +28,6 @@ import java.util.zip.ZipFile;
 import static pl.skidam.automodpack.AutoModpack.clientConfig;
 import static pl.skidam.automodpack.AutoModpack.modsPath;
 import static pl.skidam.automodpack.Platform.ModPlatform.FABRIC;
-import static pl.skidam.automodpack.utils.JarUtilities.getJarFileOfMod;
 
 public class PlatformImpl {
     static final Logger LOGGER = LogUtils.getLogger();
@@ -88,10 +86,6 @@ public class PlatformImpl {
                 return;
             }
             LOGGER.info("Successfully installed latest version of Fabric API (FAPI)!");
-
-            if (Platform.isModLoaded("quilted_fabric_api")) {
-                CustomFileUtils.forceDelete(new File(modsPath.toFile() + File.separator + getJarFileOfMod("quilted_fabric_api")));
-            }
 
             if (Platform.getEnvironmentType().equals("CLIENT")) {
                 if (clientConfig.autoRelaunchWhenUpdated) {

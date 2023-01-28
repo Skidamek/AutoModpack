@@ -136,7 +136,7 @@ public class ModpackCheck {
                     if (!found) {
                         LOGGER.warn("Didn't found {} in modpack, deleting it", file.getName());
                         deletedSomething = true;
-                        CustomFileUtils.forceDelete(file);
+                        CustomFileUtils.forceDelete(file, true);
                         ModpackUpdater.changelogList.put(file.getName(), false);
 
                         // Deleting file from running directory if it's the same file as in modpack
@@ -150,7 +150,7 @@ public class ModpackCheck {
                                 long modpackSize = file.length();
                                 if (runningSize == modpackSize) {
                                     LOGGER.warn("Found same file in running directory, deleting it");
-                                    CustomFileUtils.forceDelete(runningFile);
+                                    CustomFileUtils.forceDelete(runningFile, true);
                                 }
                             }
                         }

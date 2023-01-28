@@ -14,7 +14,7 @@ import java.security.DigestInputStream;
 import java.security.MessageDigest;
 
 public class CustomFileUtils {
-    public static void forceDelete(File file) {
+    public static void forceDelete(File file, boolean deleteOnExit) {
 
         if (file.exists()) {
             FileUtils.deleteQuietly(file);
@@ -46,7 +46,7 @@ public class CustomFileUtils {
                 }
             }
 
-            if (file.exists()) {
+            if (deleteOnExit && file.exists()) {
                 file.deleteOnExit();
                 AutoModpack.LOGGER.info("File {} will be deleted on exit", file.getName());
             }

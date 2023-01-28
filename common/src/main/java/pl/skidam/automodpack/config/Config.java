@@ -27,7 +27,7 @@ public class Config {
         public boolean velocitySupport = false;
         // public boolean forceToDisableAllOtherModsOnClients = false;
         public int hostPort = 30037;
-        public int hostThreads = 8;
+        public int hostThreads = 16;
         public String hostIp = "";
         public String hostLocalIp = "";
         public String externalModpackHostLink = "";

@@ -131,8 +131,8 @@ public class SelfUpdater {
                     System.out.println("Error while zipping file!");
                     e.printStackTrace();
                 }
-                CustomFileUtils.forceDelete(tempUpdateFileUnzipped);
-                CustomFileUtils.forceDelete(automodpackUpdateJar);
+                CustomFileUtils.forceDelete(tempUpdateFileUnzipped, true);
+                CustomFileUtils.forceDelete(automodpackUpdateJar, true);
                 System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
             }));
 

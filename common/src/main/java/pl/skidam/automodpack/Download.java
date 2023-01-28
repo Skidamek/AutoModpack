@@ -1,13 +1,9 @@
 package pl.skidam.automodpack;
 
-import org.apache.commons.codec.binary.Hex;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.MinecraftUserName;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.URL;
 import java.net.URLConnection;
 import java.security.DigestInputStream;
@@ -36,21 +32,21 @@ public class Download {
         }
 
         if (outFile.exists()) {
-            CustomFileUtils.forceDelete(outFile);
+            CustomFileUtils.forceDelete(outFile, false);
         }
 
         InputStream inputStream = connection.getInputStream();
         OutputStream outputStream = new FileOutputStream(outFile);
-        // Create a new instance of the SHA-512 digest
-        DigestInputStream digestInputStream = new DigestInputStream(inputStream, MessageDigest.getInstance("SHA-512"));
+        MessageDigest md = MessageDigest.getInstance("SHA-512");
+        DigestInputStream digestInputStream = new DigestInputStream(inputStream, md);
 
         Instant start = Instant.now();
         totalBytesRead = 0;
         byte[] buffer = new byte[8192];
         int bytesRead;
         while ((bytesRead = digestInputStream.read(buffer)) != -1) {
-            isDownloading = true;
             outputStream.write(buffer, 0, bytesRead);
+            isDownloading = true;
             totalBytesRead += bytesRead;
             Instant now = Instant.now();
             Duration elapsed = Duration.between(start, now);
@@ -60,15 +56,24 @@ public class Download {
             if (bytesPerSecond > 0) downloadETA = (fileSize - totalBytesRead) / bytesPerSecond;
             if (downloadETA > 0) downloadETA = Math.ceil(downloadETA);
         }
-        // get the SHA-512 checksum of the file
-        String sha512 = Hex.encodeHexString(digestInputStream.getMessageDigest().digest());
+
+        // calculate sha512 checksum
+        byte[] digest = md.digest();
+        StringBuilder sb = new StringBuilder();
+        for (byte b : digest) {
+            sb.append(String.format("%02x", b));
+        }
+        String sha512 = sb.toString();
 
         inputStream.close();
         outputStream.close();
+        digestInputStream.close();
+
         isDownloading = false;
 
         return sha512; // return the sha512 checksum
     }
+
 
     public double getBytesPerSecond() {
         return bytesPerSecond;
