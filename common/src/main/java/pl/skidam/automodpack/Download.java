@@ -11,6 +11,7 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.zip.GZIPInputStream;
 
 public class Download {
     private double bytesPerSecond;
@@ -23,6 +24,7 @@ public class Download {
         isDownloading = false;
         URL url = new URL(downloadUrl);
         URLConnection connection = url.openConnection();
+        connection.setRequestProperty("Accept-Encoding", "gzip");
         connection.setRequestProperty("Minecraft-Username", MinecraftUserName.get());
         connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AutoModpack.VERSION);
         connection.setConnectTimeout(8000);
@@ -38,6 +40,10 @@ public class Download {
         }
 
         InputStream inputStream = connection.getInputStream();
+        String encoding = connection.getHeaderField("Content-Encoding");
+        if (encoding != null && encoding.equals("gzip")) {
+            inputStream = new GZIPInputStream(inputStream);
+        }
         OutputStream outputStream = new FileOutputStream(outFile);
 
         Instant start = Instant.now();

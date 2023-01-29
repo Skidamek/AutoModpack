@@ -6,6 +6,7 @@ import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.Ip;
 import pl.skidam.automodpack.utils.Url;
 
+import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -113,7 +114,7 @@ public class HttpServer {
 
                                 if (!client.isOpen()) continue;
 
-                                ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE);
+                                ByteBuffer buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
                                 int read = client.read(buffer);
                                 if (read == -1) {
                                     client.close();
@@ -225,10 +226,11 @@ public class HttpServer {
 
         client.write(StandardCharsets.UTF_8.encode(response));
 
-        FileInputStream in = new FileInputStream(file);
-        ByteBuffer chunk = ByteBuffer.allocate(BUFFER_SIZE);
-        while (in.getChannel().read(chunk) > 0) {
-            chunk.flip();
+        BufferedInputStream in = new BufferedInputStream(new FileInputStream(file));
+        ByteBuffer chunk = ByteBuffer.allocateDirect(BUFFER_SIZE);
+        int bytesRead;
+        while ((bytesRead = in.read(chunk.array())) > 0) {
+            chunk.limit(bytesRead);
             client.write(chunk);
             chunk.clear();
         }
@@ -236,4 +238,34 @@ public class HttpServer {
 
         client.close();
     }
+
+//    private static void sendFile(SocketChannel client, File file) throws IOException {
+//        if (!client.isOpen()) return;
+//
+//        if (!file.exists()) {
+//            sendError(client, 404);
+//            return;
+//        }
+//
+//        String response = "HTTP/1.1 200 OK\r\n";
+//        response += "Content-Encoding: gzip\r\n";
+//        response += "Content-Type: application/octet-stream\r\n";
+//        response += "Content-Length: " + file.length() + "\r\n";
+//        response += "\r\n";
+//
+//        client.write(StandardCharsets.UTF_8.encode(response));
+//
+//        GZIPOutputStream gzipOut = new GZIPOutputStream(new BufferedOutputStream(Channels.newOutputStream(client)));
+//        BufferedInputStream in = new BufferedInputStream(new FileInputStream(file));
+//        byte[] buffer = new byte[BUFFER_SIZE];
+//        int len;
+//        while ((len = in.read(buffer)) > 0) {
+//            gzipOut.write(buffer, 0, len);
+//        }
+//        in.close();
+//        gzipOut.finish();
+//        gzipOut.close();
+//
+//        client.close();
+//    }
 }
