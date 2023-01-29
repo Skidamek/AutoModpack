@@ -15,7 +15,7 @@ import net.minecraft.text.Text;
 import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
-import pl.skidam.automodpack.modpack.Modpack;
+import pl.skidam.automodpack.modpack.HttpServer;
 
 import java.util.UUID;
 
@@ -57,7 +57,7 @@ public class LoginS2CPacket {
             if (uniqueId != null) acceptLogin.put(uniqueId, true);
             AutoModpack.LOGGER.info("AutoModpack version match!");
 
-            if (!Modpack.Host.isRunning && AutoModpack.serverConfig.externalModpackHostLink.equals("")) return;
+            if (!HttpServer.isRunning && AutoModpack.serverConfig.externalModpackHostLink.equals("")) return;
 
             String playerIp = connection.getAddress().toString();
             String HostIPForLocal = AutoModpack.serverConfig.hostLocalIp.replaceFirst("(https?://)", ""); // Removes HTTP:// or HTTPS://

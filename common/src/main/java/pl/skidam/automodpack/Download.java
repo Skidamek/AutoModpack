@@ -3,11 +3,12 @@ package pl.skidam.automodpack;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.MinecraftUserName;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URL;
 import java.net.URLConnection;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -23,6 +24,7 @@ public class Download {
         URL url = new URL(downloadUrl);
         URLConnection connection = url.openConnection();
         connection.setRequestProperty("Minecraft-Username", MinecraftUserName.get());
+        connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AutoModpack.VERSION);
         connection.setConnectTimeout(8000);
         connection.setReadTimeout(5000);
         fileSize = connection.getContentLengthLong();
@@ -37,14 +39,12 @@ public class Download {
 
         InputStream inputStream = connection.getInputStream();
         OutputStream outputStream = new FileOutputStream(outFile);
-        MessageDigest md = MessageDigest.getInstance("SHA-512");
-        DigestInputStream digestInputStream = new DigestInputStream(inputStream, md);
 
         Instant start = Instant.now();
         totalBytesRead = 0;
         byte[] buffer = new byte[8192];
         int bytesRead;
-        while ((bytesRead = digestInputStream.read(buffer)) != -1) {
+        while ((bytesRead = inputStream.read(buffer)) != -1) {
             outputStream.write(buffer, 0, bytesRead);
             isDownloading = true;
             totalBytesRead += bytesRead;
@@ -57,21 +57,12 @@ public class Download {
             if (downloadETA > 0) downloadETA = Math.ceil(downloadETA);
         }
 
-        // calculate sha512 checksum
-        byte[] digest = md.digest();
-        StringBuilder sb = new StringBuilder();
-        for (byte b : digest) {
-            sb.append(String.format("%02x", b));
-        }
-        String sha512 = sb.toString();
-
         inputStream.close();
         outputStream.close();
-        digestInputStream.close();
 
         isDownloading = false;
 
-        return sha512; // return the sha512 checksum
+        return CustomFileUtils.getSHA512(outFile); // return the sha512 checksum
     }
 
 

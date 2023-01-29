@@ -10,6 +10,7 @@ import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.modpack.Commands;
+import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.modpack.Modpack;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.utils.JarUtilities;
@@ -56,8 +57,8 @@ public class AutoModpack {
             }
             ModPackets.registerS2CPackets();
 
-            ServerLifecycleEvents.SERVER_STARTED.register(server -> Modpack.Host.start());
-            ServerLifecycleEvents.SERVER_STOPPING.register(server -> Modpack.Host.stop());
+            ServerLifecycleEvents.SERVER_STARTED.register(server -> HttpServer.start());
+            ServerLifecycleEvents.SERVER_STOPPING.register(server ->  HttpServer.stop());
         } else {
             MinecraftUserName.get(); // To save the username` to variable in MinecraftUserName class for later use
             ModPackets.registerC2SPackets();

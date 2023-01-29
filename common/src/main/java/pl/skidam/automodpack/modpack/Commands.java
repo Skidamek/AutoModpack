@@ -58,11 +58,11 @@ public class Commands {
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
-            if (!Modpack.Host.isRunning) {
+            if (!HttpServer.isRunning) {
                 context.getSource().sendFeedback(Text.literal("Starting modpack hosting...")
                                 .formatted(Formatting.YELLOW),
                         true);
-                Modpack.Host.start();
+                HttpServer.start();
                 context.getSource().sendFeedback(Text.literal("Modpack hosting started!")
                                 .formatted(Formatting.GREEN),
                         true);
@@ -78,11 +78,11 @@ public class Commands {
 
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
-            if (Modpack.Host.isRunning) {
+            if (HttpServer.isRunning) {
                 context.getSource().sendFeedback(Text.literal("Stopping modpack hosting...")
                                 .formatted(Formatting.RED),
                         true);
-                Modpack.Host.stop();
+                HttpServer.stop();
                 context.getSource().sendFeedback(Text.literal("Modpack hosting stopped!")
                                 .formatted(Formatting.RED),
                         true);
@@ -100,11 +100,11 @@ public class Commands {
             context.getSource().sendFeedback(Text.literal("Restarting modpack hosting...")
                             .formatted(Formatting.YELLOW),
                     true);
-            if (Modpack.Host.isRunning) {
-                Modpack.Host.stop();
-                Modpack.Host.start();
+            if (HttpServer.isRunning) {
+                HttpServer.stop();
+                HttpServer.start();
             } else if (AutoModpack.serverConfig.modpackHost){
-                Modpack.Host.start();
+                HttpServer.start();
                 context.getSource().sendFeedback(Text.literal("Modpack hosting restarted!")
                                 .formatted(Formatting.GREEN),
                         true);
@@ -119,8 +119,8 @@ public class Commands {
 
 
     private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
-        Formatting statusColor = Modpack.Host.isRunning ? Formatting.GREEN : Formatting.RED;
-        String status = Modpack.Host.isRunning ? "running" : "not running";
+        Formatting statusColor = HttpServer.isRunning ? Formatting.GREEN : Formatting.RED;
+        String status = HttpServer.isRunning ? "running" : "not running";
         context.getSource().sendFeedback(Text.literal("Modpack hosting status")
                 .formatted(Formatting.GREEN)
                 .append(Text.literal(" - ")

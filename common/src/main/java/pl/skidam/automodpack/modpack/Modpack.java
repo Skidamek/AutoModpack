@@ -1,29 +1,19 @@
 package pl.skidam.automodpack.modpack;
 
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
 import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.CustomFileUtils;
-import pl.skidam.automodpack.utils.Ip;
 import pl.skidam.automodpack.utils.JarUtilities;
-import pl.skidam.automodpack.utils.Url;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.Executors;
-
-import static pl.skidam.automodpack.modpack.Modpack.Host.filesList;
 
 public class Modpack {
     public static Path hostModpackDir = Path.of(AutoModpack.automodpackDir + File.separator + "host-modpack");
@@ -45,9 +35,9 @@ public class Modpack {
         AutoModpack.LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms");
     }
 
-    private static List<Config.ModpackContentFields.ModpackContentItems> autoExcludeServerMods(List<Config.ModpackContentFields.ModpackContentItems> list) {
+    private static void autoExcludeServerMods(List<Config.ModpackContentFields.ModpackContentItems> list) {
 
-        if (Platform.Forge) return list;
+        if (Platform.Forge) return;
 
         List<String> removeSimilar = new ArrayList<>();
 
@@ -82,134 +72,11 @@ public class Modpack {
                 return false;
             });
         }
-
-        return list;
     }
 
-
-    private static List<Config.ModpackContentFields.ModpackContentItems> removeAutoModpackFilesFromContent(List<Config.ModpackContentFields.ModpackContentItems> list) {
+    private static void removeAutoModpackFilesFromContent(List<Config.ModpackContentFields.ModpackContentItems> list) {
         list.removeIf(modpackContentItems -> modpackContentItems.file.toLowerCase().contains("automodpack"));
-        return list;
     }
-
-
-    public static class Host {
-        public static String link;
-        public static HttpServer server = null;
-        public static boolean isRunning = false;
-        public static List<String> filesList = new ArrayList<>();
-
-        public static void start() {
-            if (!AutoModpack.serverConfig.modpackHost) {
-                AutoModpack.LOGGER.warn("Modpack hosting is disabled in config");
-                return;
-            }
-
-            if (AutoModpack.serverConfig.hostIp == null || AutoModpack.serverConfig.hostIp.equals("")) {
-                AutoModpack.serverConfig.hostIp = Ip.getPublic();
-                ConfigTools.saveConfig(AutoModpack.serverConfigFile, AutoModpack.serverConfig);
-                AutoModpack.LOGGER.warn("Host IP isn't set in config! Setting it to {}", AutoModpack.serverConfig.hostIp);
-            }
-
-            if (AutoModpack.serverConfig.hostLocalIp == null || AutoModpack.serverConfig.hostLocalIp.equals("")) {
-                try {
-                    AutoModpack.serverConfig.hostLocalIp = Ip.getLocal();
-                    ConfigTools.saveConfig(AutoModpack.serverConfigFile, AutoModpack.serverConfig);
-                    AutoModpack.LOGGER.warn("Host local IP isn't set in config! Setting it to {}", AutoModpack.serverConfig.hostLocalIp);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-
-            startServer();
-        }
-
-        public static void stop() {
-            if (!isRunning) return;
-            isRunning = false;
-            server.stop(0);
-            AutoModpack.LOGGER.info("Stopped modpack hosting");
-        }
-
-        private static void startServer() {
-            try {
-                Config.ModpackContentFields serverModpackContent = ConfigTools.loadModpackContent(hostModpackContentFile);
-                if (serverModpackContent == null) {
-                    AutoModpack.LOGGER.error("Modpack content is null! Can't start hosting modpack");
-                    return;
-                }
-
-                filesList.clear();
-                for (Config.ModpackContentFields.ModpackContentItems item : serverModpackContent.list) {
-                    filesList.add(item.file);
-                }
-
-                InetSocketAddress address;
-                if (AutoModpack.serverConfig.hostIp.equals(Ip.getPublic()) || AutoModpack.serverConfig.hostIp.equals("")) {
-                    address = new InetSocketAddress("0.0.0.0", AutoModpack.serverConfig.hostPort);
-                } else {
-                    address = new InetSocketAddress(AutoModpack.serverConfig.hostIp, AutoModpack.serverConfig.hostPort);
-                }
-                server = HttpServer.create(address, 0);
-
-                server.createContext("/", Host::handle);
-                server.setExecutor(Executors.newFixedThreadPool(AutoModpack.serverConfig.hostThreads));
-                server.start();
-
-                isRunning = true;
-
-                AutoModpack.LOGGER.info("Modpack hosting started!");
-            } catch (IOException e) {
-                AutoModpack.LOGGER.error("An error occurred while starting the server: {}", e.getMessage());
-            }
-        }
-
-        private static void handle(HttpExchange exchange) throws IOException {
-            if (exchange.getRequestMethod().equals("GET")) {
-                String subUrl = exchange.getRequestURI().toString();
-                subUrl = Url.decode(subUrl); // changes things like %5B %5D to [ ] and etc.
-
-                File file;
-                if (subUrl.equals("") || subUrl.equals("/")) {
-                    file = hostModpackContentFile;
-                } else if (subUrl.contains("..")) {
-                    exchange.sendResponseHeaders(403, 0);
-                    return;
-                } else if (filesList.contains(subUrl)) {
-                    file = new File(hostModpackDir + File.separator + subUrl);
-                    if (!file.exists()) {
-                        file = new File("./" + subUrl);
-                        if (!file.exists()) {
-                            exchange.sendResponseHeaders(404, 0);
-                            return;
-                        }
-                    }
-                } else {
-                    exchange.sendResponseHeaders(404, 0);
-                    return;
-                }
-
-                if (!file.exists() || !file.isFile()) {
-                    exchange.sendResponseHeaders(404, 0);
-                    return;
-                }
-
-                exchange.getResponseHeaders().add("Content-Type", "application/octet-stream");
-                exchange.sendResponseHeaders(200, file.length());
-
-                try (InputStream input = Files.newInputStream(file.toPath().toAbsolutePath().normalize());
-                     OutputStream output = exchange.getResponseBody()) {
-                    input.transferTo(output);
-                    output.flush();
-                } catch (IOException e) {
-                    AutoModpack.LOGGER.error("An error occurred while handling the request: {}", e.getMessage());
-                }
-            } else {
-                exchange.sendResponseHeaders(400, 0);
-            }
-        }
-    }
-
 
     public static class Content {
         public static Config.ModpackContentFields modpackContent;
@@ -244,9 +111,9 @@ public class Modpack {
 
                 ConfigTools.saveConfig(modpackContentFile, modpackContent);
 
-                filesList.clear();
+                HttpServer.filesList.clear();
                 for (Config.ModpackContentFields.ModpackContentItems item : list) {
-                    filesList.add(item.file);
+                    HttpServer.filesList.add(item.file);
                 }
 
             } catch (Exception e) {

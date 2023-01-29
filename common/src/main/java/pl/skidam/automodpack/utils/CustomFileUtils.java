@@ -10,7 +10,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
-import java.security.DigestInputStream;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 
 public class CustomFileUtils {
@@ -47,8 +47,8 @@ public class CustomFileUtils {
             }
 
             if (deleteOnExit && file.exists()) {
-                file.deleteOnExit();
                 AutoModpack.LOGGER.info("File {} will be deleted on exit", file.getName());
+                file.deleteOnExit();
             }
         }
     }
@@ -68,14 +68,13 @@ public class CustomFileUtils {
     }
 
     public static String getSHA512(File file) throws Exception {
-        DigestInputStream digestInputStream = new DigestInputStream(new FileInputStream(file), MessageDigest.getInstance("SHA-512"));
-        byte[] buffer = new byte[8192];
-        while (digestInputStream.read(buffer) != -1);
-        byte[] digest = digestInputStream.getMessageDigest().digest();
-        StringBuilder sb = new StringBuilder();
-        for (byte b : digest) {
-            sb.append(String.format("%02x", b & 0xff));
+        byte[] fileData = Files.readAllBytes(Paths.get(file.getAbsolutePath()));
+        MessageDigest messageDigest = MessageDigest.getInstance("SHA-512");
+        byte[] checksum = messageDigest.digest(fileData);
+        StringBuilder result = new StringBuilder();
+        for (byte b : checksum) {
+            result.append(String.format("%02x", b));
         }
-        return sb.toString();
+        return result.toString();
     }
 }

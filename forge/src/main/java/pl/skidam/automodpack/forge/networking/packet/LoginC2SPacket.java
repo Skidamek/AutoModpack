@@ -12,7 +12,7 @@ import net.minecraftforge.network.NetworkEvent;
 import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.forge.networking.ModPackets;
-import pl.skidam.automodpack.modpack.Modpack;
+import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.utils.Ip;
 
 import java.util.function.Supplier;
@@ -78,7 +78,7 @@ public class LoginC2SPacket implements Packet<ServerLoginPacketListener>  {
             } else {
                 AutoModpack.LOGGER.info("AutoModpack version match!");
 
-                if (!Modpack.Host.isRunning) return;
+                if (!HttpServer.isRunning) return;
 
                 String playerIp = connection.getAddress().toString();
                 String HostIPForLocal = AutoModpack.serverConfig.hostLocalIp.substring(AutoModpack.serverConfig.hostLocalIp.indexOf("/") + 2); // Removes HTTP:// or HTTPS://
