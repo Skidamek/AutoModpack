@@ -10,7 +10,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.security.MessageDigest;
 
 public class CustomFileUtils {
@@ -67,14 +66,32 @@ public class CustomFileUtils {
         }
     }
 
-    public static String getSHA512(File file) throws Exception {
-        byte[] fileData = Files.readAllBytes(Paths.get(file.getAbsolutePath()));
-        MessageDigest messageDigest = MessageDigest.getInstance("SHA-512");
-        byte[] checksum = messageDigest.digest(fileData);
-        StringBuilder result = new StringBuilder();
-        for (byte b : checksum) {
-            result.append(String.format("%02x", b));
+    public static String getHash(File file, String algorithm) throws Exception {
+        if (!file.exists()) return null;
+
+        // "SHA-512", "SHA-256"
+        MessageDigest md = MessageDigest.getInstance(algorithm);
+        md.update(Files.readAllBytes(file.toPath()));
+
+        byte[] digest = md.digest();
+        StringBuilder sb = new StringBuilder();
+        for (byte b : digest) {
+            sb.append(String.format("%02x", b & 0xff));
         }
-        return result.toString();
+
+        return sb.toString();
+    }
+
+    public static boolean compareHashWithFile(File file, String hash, String algorithm) throws Exception {
+        String fileHash = getHash(file, algorithm);
+
+        if (fileHash == null) return false;
+
+        if (!fileHash.equals(hash)) {
+            CustomFileUtils.forceDelete(file, false);
+            return false;
+        } else {
+            return true;
+        }
     }
 }

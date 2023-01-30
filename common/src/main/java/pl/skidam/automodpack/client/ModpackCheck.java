@@ -21,6 +21,11 @@ public class ModpackCheck {
     public enum UpdateType { FULL, DELETE, NONE }
 
     public static boolean isLoaded(Config.ModpackContentFields modpackContent) {
+        if (modpackContent == null) {
+            LOGGER.error("Modpack content is null");
+            return false;
+        }
+
         Collection modList = Platform.getModList();
         if (modList.size() == 0) {
             LOGGER.error("modList is empty");
@@ -83,7 +88,7 @@ public class ModpackCheck {
                 }
 
                 String serverChecksum = modpackFile.hash;
-                String localChecksum = CustomFileUtils.getSHA512(file);
+                String localChecksum = CustomFileUtils.getHash(file, "SHA-256");
                 if (!serverChecksum.equals(localChecksum)) {
                     isUpdate = true;
                     break;
@@ -142,8 +147,8 @@ public class ModpackCheck {
                         // Deleting file from running directory if it's the same file as in modpack
                         File runningFile = new File("." + modpackDir);
                         if (runningFile.exists() && runningFile.isFile()) {
-                            String runningChecksum = CustomFileUtils.getSHA512(runningFile);
-                            String modpackChecksum = CustomFileUtils.getSHA512(file);
+                            String runningChecksum = CustomFileUtils.getHash(runningFile, "SHA-256");
+                            String modpackChecksum = CustomFileUtils.getHash(file, "SHA-256");
 
                             if (runningChecksum.equals(modpackChecksum)) {
                                 long runningSize = runningFile.length();

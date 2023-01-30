@@ -102,7 +102,6 @@ public class AutoModpack {
             }
 
 //            new DeleteTrashedMods();
-            new CompatCheck();
 //            new DeleteMods(true, "false");
 
 

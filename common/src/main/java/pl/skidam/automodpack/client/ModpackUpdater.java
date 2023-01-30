@@ -24,12 +24,10 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static pl.skidam.automodpack.AutoModpack.LOGGER;
-import static pl.skidam.automodpack.AutoModpack.automodpackDir;
+import static pl.skidam.automodpack.AutoModpack.*;
 import static pl.skidam.automodpack.config.ConfigTools.GSON;
 
 public class ModpackUpdater {
@@ -108,7 +106,9 @@ public class ModpackUpdater {
         try {
             HttpRequest getContent = HttpRequest.newBuilder()
                     .timeout(Duration.ofSeconds(3))
-                    .setHeader("X-Minecraft-Username", MinecraftUserName.get())
+                    .setHeader("Accept-Encoding", "gzip")
+                    .setHeader("Minecraft-Username", MinecraftUserName.get())
+                    .setHeader("User-Agent", "github/skidamek/automodpack/" + AutoModpack.VERSION)
                     .uri(new URI(link))
                     .build();
 
@@ -303,7 +303,7 @@ public class ModpackUpdater {
     }
 
     private static CompletableFuture<Void> downloadAsync(String url, File downloadFile, String serverChecksum) {
-        return CompletableFuture.runAsync(() -> download(url, downloadFile, serverChecksum), DOWNLOAD_EXECUTOR);
+        return CompletableFuture.runAsync(() -> downloadFile(url, downloadFile, serverChecksum), DOWNLOAD_EXECUTOR);
     }
 
     private static CompletableFuture<Void> processAsync(String url, File downloadFile, boolean isEditable, String serverChecksum) {
@@ -312,7 +312,7 @@ public class ModpackUpdater {
 
     private static void process(String url, File downloadFile, boolean isEditable, String serverChecksum) {
         if (!downloadFile.exists()) {
-            download(url, downloadFile, serverChecksum);
+            downloadFile(url, downloadFile, serverChecksum);
             return;
         }
 
@@ -322,7 +322,7 @@ public class ModpackUpdater {
         }
 
         try {
-            String localChecksum = CustomFileUtils.getSHA512(downloadFile);
+            String localChecksum = CustomFileUtils.getHash(downloadFile, "SHA-256");
 
             if (serverChecksum.equals(localChecksum)) { // up-to-date
                 LOGGER.info("File " + downloadFile.getName() + " is up-to-date!");
@@ -331,31 +331,33 @@ public class ModpackUpdater {
                 LOGGER.warn(downloadFile.getName() + " Local checksum: " + localChecksum + " Server checksum: " + serverChecksum);
             }
 
-            download(url, downloadFile, serverChecksum);
+            downloadFile(url, downloadFile, serverChecksum);
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private static void download(String url, File downloadFile, String serverChecksum) {
-        // call it only once when update is false yet
-        if (!update || !ScreenTools.getScreenString().contains("downloadscreen")) ScreenTools.setTo.Download();
+    private static void downloadFile(String url, File downloadFile, String serverChecksum) {
+        if (!update || !ScreenTools.getScreenString().contains("downloadscreen")) {
+            ScreenTools.setTo.Download();
+        }
         update = true;
-
         DownloadInfo downloadInfo = new DownloadInfo(downloadFile.getName());
+        downloadInfos.add(downloadInfo);
 
-        int tries = 0;
-        while (tries < 5) {
-            tries++;
+        int maxAttempts = 5;
+        int attempts = 0;
+        boolean success = false;
+        long startTime = System.currentTimeMillis();
+
+        while (attempts < maxAttempts && !success) {
+            attempts++;
+            AutoModpack.LOGGER.info("Downloading {}... (attempt {})", downloadFile.getName(), attempts);
+            AutoModpack.LOGGER.info("URL: {}", url);
+
             try {
-                long start = System.currentTimeMillis();
-                AutoModpack.LOGGER.info("Downloading {}... (try {})", downloadFile.getName(), tries);
-                AutoModpack.LOGGER.info("URL: {}", url);
-                if (!downloadInfos.contains(downloadInfo)) downloadInfos.add(downloadInfo);
                 Download downloadInstance = new Download();
-
-
-                Future<Void> future = CompletableFuture.runAsync(() -> {
+                CompletableFuture.runAsync(() -> {
                     while (!downloadInstance.isDownloading()) {
                         new Wait(1);
                     }
@@ -363,57 +365,55 @@ public class ModpackUpdater {
                     long oldValue = 0;
 
                     while (downloadInstance.isDownloading()) {
-                        downloadInfo.setBytesDownloaded(downloadInstance.getTotalBytesRead());
-                        downloadInfo.setDownloadSpeed(downloadInstance.getBytesPerSecond() / 1024 / 1024);
-                        downloadInfo.setDownloading(downloadInstance.isDownloading());
-                        downloadInfo.setCancelled(false);
-                        downloadInfo.setEta(downloadInstance.getETA());
-                        downloadInfo.setFileSize(downloadInstance.getFileSize());
-                        downloadInfo.setBytesPerSecond(downloadInstance.getBytesPerSecond());
-
-                        totalBytesDownloaded += downloadInstance.getTotalBytesRead() - oldValue;
-                        oldValue = downloadInstance.getTotalBytesRead();
-
+                        oldValue = updateDownloadInfo(downloadInstance, downloadInfo, oldValue);
                         new Wait(25);
                     }
-
-                    totalBytesDownloaded += downloadInstance.getTotalBytesRead() - oldValue;
                 });
 
                 long fileSize = WebFileSize.getWebFileSize(url);
 
-                String ourChecksum = downloadInstance.download(url, downloadFile);
+                downloadInstance.download(url, downloadFile);
 
-                if (!future.isDone()) future.cancel(true);
+                String ourChecksum = CustomFileUtils.getHash(downloadFile, "SHA-256");
 
                 if (serverChecksum.equals(ourChecksum)) {
-                    AutoModpack.LOGGER.info("{} downloaded successfully in {}ms", downloadFile.getName(), (System.currentTimeMillis() - start));
-                    changelogList.put(downloadFile.getName(), true);
-                    alreadyDownloaded++;
-                    downloadInfos.remove(downloadInfo);
-                    return;
+                    success = true;
+                } else if (attempts == maxAttempts && fileSize == downloadFile.length()) {
+                    // TODO fix issue that some files return wrong checksums, and delete this `if`
+                    success = true;
                 } else {
-                    if (tries == 5) {
-                        if (fileSize == downloadFile.length()) { // TODO fix issue that some files returns wrong checksums, and delete this `if`
-                            AutoModpack.LOGGER.info("{} downloaded `kinda` successfully in {}ms", downloadFile.getName(), (System.currentTimeMillis() - start));
-                            changelogList.put(downloadFile.getName(), true);
-                            alreadyDownloaded++;
-                            downloadInfos.remove(downloadInfo);
-                            return;
-                        }
-                    }
-                    AutoModpack.LOGGER.warn("Checksums don't match, try again, client: {} server: {}", ourChecksum, serverChecksum);
+                    AutoModpack.LOGGER.warn("Checksums do not match, retrying... client: {} server: {}", ourChecksum, serverChecksum);
                     Files.deleteIfExists(downloadFile.toPath());
                 }
             } catch (SocketTimeoutException e) {
-                // Download loop
-                AutoModpack.LOGGER.error("Download of {} got timeout, trying again...", downloadFile.getName());
+                AutoModpack.LOGGER.error("Download of {} timed out, retrying...", downloadFile.getName());
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
+
         downloadInfos.remove(downloadInfo);
-        AutoModpack.LOGGER.error("Failed to download {} after {} tries", downloadFile.getName(), tries);
+        if (success) {
+            AutoModpack.LOGGER.info("{} downloaded successfully in {}ms", downloadFile.getName(), (System.currentTimeMillis() - startTime));
+            changelogList.put(downloadFile.getName(), true);
+            alreadyDownloaded++;
+        } else {
+            AutoModpack.LOGGER.error("Failed to download {} after {} attempts", downloadFile.getName(), attempts);
+        }
+    }
+
+    private static long updateDownloadInfo(Download downloadInstance, DownloadInfo downloadInfo, long oldValue) {
+        downloadInfo.setBytesDownloaded(downloadInstance.getTotalBytesRead());
+        downloadInfo.setDownloadSpeed(downloadInstance.getBytesPerSecond() / 1024 / 1024);
+        downloadInfo.setDownloading(downloadInstance.isDownloading());
+        downloadInfo.setCancelled(false);
+        downloadInfo.setEta(downloadInstance.getETA());
+        downloadInfo.setFileSize(downloadInstance.getFileSize());
+        downloadInfo.setBytesPerSecond(downloadInstance.getBytesPerSecond());
+
+        totalBytesDownloaded += downloadInstance.getTotalBytesRead() - oldValue;
+        oldValue = downloadInstance.getTotalBytesRead();
+        return oldValue;
     }
 
 

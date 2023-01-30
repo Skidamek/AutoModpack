@@ -6,28 +6,21 @@ import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.Ip;
 import pl.skidam.automodpack.utils.Url;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.zip.GZIPOutputStream;
 
 import static pl.skidam.automodpack.modpack.Modpack.hostModpackContentFile;
 import static pl.skidam.automodpack.modpack.Modpack.hostModpackDir;
 
 public class HttpServer {
-    private static final int BUFFER_SIZE = 8192 * 4;
+    private static final int BUFFER_SIZE = 64 * 1024;
     public static List<String> filesList = new ArrayList<>();
     public static ExecutorService HTTPServerExecutor;
     public static boolean isRunning = false;
@@ -140,6 +133,7 @@ public class HttpServer {
     private static class RequestHandler implements Runnable {
         private final SocketChannel client;
         private final String request;
+        private static Map<String, String> headers = new HashMap<>();
 
         public RequestHandler(SocketChannel client, String request) {
             this.client = client;
@@ -148,10 +142,22 @@ public class HttpServer {
 
         @Override
         public void run() {
+            System.out.println(request);
+
             String[] requestLines = request.split("\r\n");
             String[] requestFirstLine = requestLines[0].split(" ");
             String requestMethod = requestFirstLine[0];
             String requestUrl = requestFirstLine[1];
+
+            headers = new HashMap<>();
+            for (String line : requestLines) {
+                int colonIndex = line.indexOf(":");
+                if (colonIndex == -1) continue;
+
+                String key = line.substring(0, colonIndex).trim();
+                String value = line.substring(colonIndex + 1).trim();
+                headers.put(key, value);
+            }
 
             requestUrl = Url.decode(requestUrl);
 
@@ -196,76 +202,81 @@ public class HttpServer {
             }
         }
 
-    }
+        private static final String ERROR_RESPONSE =
+                "HTTP/1.1 %d\r\n" +
+                "Content-Type: text/html\r\n" +
+                "Content-Length: 0\r\n" +
+                "\r\n";
 
-    private static void sendError(SocketChannel client, int code) throws IOException {
-        if (!client.isOpen()) return;
+        private static void sendError(SocketChannel client, int code) throws IOException {
+            if (!client.isOpen()) return;
 
-        String response = "HTTP/1.1 " + code + "\r\n";
-        response += "Content-Type: text/html\r\n";
-        response += "Content-Length: 0\r\n";
-        response += "\r\n";
+            String response = String.format(ERROR_RESPONSE, code);
+            client.write(StandardCharsets.UTF_8.encode(response));
 
-        client.write(StandardCharsets.UTF_8.encode(response));
-
-        client.close();
-    }
-
-    private static void sendFile(SocketChannel client, File file) throws IOException {
-        if (!client.isOpen()) return;
-
-        if (!file.exists()) {
-            sendError(client, 404);
-            return;
+            client.close();
         }
 
-        String response = "HTTP/1.1 200 OK\r\n";
-        response += "Content-Type: application/octet-stream\r\n";
-        response += "Content-Length: " + file.length() + "\r\n";
-        response += "\r\n";
+        private static final String OK_RESPONSE_GZIP =
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Encoding: gzip\r\n" +
+                "Content-Type: application/octet-stream\r\n" +
+                "Content-Length: %d\r\n" +
+                "\r\n";
 
-        client.write(StandardCharsets.UTF_8.encode(response));
+        private static final String OK_RESPONSE_NORMAL =
+                "HTTP/1.1 200 OK\r\n" +
+                "Content-Type: application/octet-stream\r\n" +
+                "Content-Length: %d\r\n" +
+                "\r\n";
 
-        BufferedInputStream in = new BufferedInputStream(new FileInputStream(file));
-        ByteBuffer chunk = ByteBuffer.allocateDirect(BUFFER_SIZE);
-        int bytesRead;
-        while ((bytesRead = in.read(chunk.array())) > 0) {
-            chunk.limit(bytesRead);
-            client.write(chunk);
-            chunk.clear();
+
+        private static void sendFile(SocketChannel client, File file) throws IOException {
+            if (!client.isOpen()) return;
+
+            if (!file.exists()) {
+                sendError(client, 404);
+                return;
+            }
+
+            String acceptEncoding = headers.getOrDefault("Accept-Encoding", "");
+
+            OutputStream out = null;
+            try {
+                if (acceptEncoding.contains("gzip")) {
+                    String response = String.format(OK_RESPONSE_GZIP, file.length());
+                    client.write(StandardCharsets.UTF_8.encode(response));
+                    out = new GZIPOutputStream(new BufferedOutputStream(client.socket().getOutputStream()));
+                } else {
+                    String response = String.format(OK_RESPONSE_NORMAL, file.length());
+                    client.write(StandardCharsets.UTF_8.encode(response));
+                    out = new BufferedOutputStream(client.socket().getOutputStream());
+                }
+
+                try (BufferedInputStream in = new BufferedInputStream(new FileInputStream(file))) {
+                    ByteBuffer chunk = ByteBuffer.allocateDirect(BUFFER_SIZE);
+                    int bytesRead;
+                    while ((bytesRead = in.read(chunk.array())) > 0) {
+                        chunk.limit(bytesRead);
+                        client.write(chunk);
+                        chunk.clear();
+                    }
+                }
+                out.flush();
+            } finally {
+                if (out != null) {
+                    out.close();
+                }
+            }
+
+            System.out.println("Closing client");
+
+            client.close();
+
+
         }
-        in.close();
 
-        client.close();
+
+
     }
-
-//    private static void sendFile(SocketChannel client, File file) throws IOException {
-//        if (!client.isOpen()) return;
-//
-//        if (!file.exists()) {
-//            sendError(client, 404);
-//            return;
-//        }
-//
-//        String response = "HTTP/1.1 200 OK\r\n";
-//        response += "Content-Encoding: gzip\r\n";
-//        response += "Content-Type: application/octet-stream\r\n";
-//        response += "Content-Length: " + file.length() + "\r\n";
-//        response += "\r\n";
-//
-//        client.write(StandardCharsets.UTF_8.encode(response));
-//
-//        GZIPOutputStream gzipOut = new GZIPOutputStream(new BufferedOutputStream(Channels.newOutputStream(client)));
-//        BufferedInputStream in = new BufferedInputStream(new FileInputStream(file));
-//        byte[] buffer = new byte[BUFFER_SIZE];
-//        int len;
-//        while ((len = in.read(buffer)) > 0) {
-//            gzipOut.write(buffer, 0, len);
-//        }
-//        in.close();
-//        gzipOut.finish();
-//        gzipOut.close();
-//
-//        client.close();
-//    }
 }

@@ -16,6 +16,7 @@ import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.client.ui.AutoModpackToast;
 import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.ui.Windows;
+import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.ModrinthAPI;
 
 import java.awt.*;
@@ -76,7 +77,12 @@ public class PlatformImpl {
             LOGGER.info("Download URL: " + qfapi.modrinthAPIdownloadUrl);
             try {
                 Download downloadInstance = new Download();
-                String localChecksum = downloadInstance.download(qfapi.modrinthAPIdownloadUrl, new File(modsPath.toFile() + File.separator + qfapi.modrinthAPIfileName)); // Download it
+
+                File file = new File(modsPath.toFile() + File.separator + qfapi.modrinthAPIfileName);
+
+                downloadInstance.download(qfapi.modrinthAPIdownloadUrl, file); // Download it
+
+                String localChecksum = CustomFileUtils.getHash(file, "SHA-512");
 
                 if (!localChecksum.equals(qfapi.modrinthAPISHA512Hash)) {
                     AutoModpack.LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");

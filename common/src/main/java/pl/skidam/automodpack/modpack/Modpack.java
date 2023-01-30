@@ -167,7 +167,7 @@ public class Modpack {
                         }
                     }
 
-                    String hash = CustomFileUtils.getSHA512(file);
+                    String hash = CustomFileUtils.getHash(file, "SHA-256");
                     if (file.getName().endsWith(".jar")) {
                         modId = JarUtilities.getModIdFromJar(file, true);
                         type = modId == null ? "other" : "mod";
