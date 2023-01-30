@@ -30,8 +30,6 @@ public class Download {
             connection.setReadTimeout(5000);
             fileSize = connection.getContentLengthLong();
 
-            // log out every connection.getRequestProperties() to see what is being sent
-            connection.getRequestProperties().forEach((k, v) -> System.out.println(k + ": " + v));
 
             if (!outFile.getParentFile().exists()) {
                 outFile.getParentFile().mkdirs();
@@ -45,7 +43,6 @@ public class Download {
             InputStream inputStream = connection.getInputStream();
             String encoding = connection.getHeaderField("Content-Encoding");
             if (encoding != null && encoding.equals("gzip")) {
-                AutoModpack.LOGGER.warn("GZIP encoding detected, decompressing...");
                 inputStream = new GZIPInputStream(inputStream, BUFFER_SIZE);
             }
 
