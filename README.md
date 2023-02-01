@@ -56,7 +56,7 @@ Launch the game your game/server.
 1. Open port (default: `30037`) on your server! need to host modpack.
 2. Restart server
 
-and you are good to go! Enjoy!
+and you are good to go!
 
 **Want to add more content to your modpack?**
 - Just put it into `/automodpack/host-modpack/` directory on your server.
@@ -117,12 +117,13 @@ and you are good to go! Enjoy!
 
 ## Common problem
 
-- I get errors every time I try to download modpack!
+**Got errors every time you try to download the modpack?**
 
-Check if in the server log after start where is a notification about the modpack host launch, there is a correct ip (Its really can be last numbers of ip)
-change in the config `hostIp` to your correct server ip (without port)
+- Take a look at your server log after starting the server. See if there's a notice about the modpack host launch and make sure the IP is correct (it may only be the last digits of the IP).
 
-Follow the same process if you have a problem with the local host ip, but to `hostLocalIp`
+- If the IP isn't right, head over to the config file and change the "hostIp" to your server's correct IP (without the port).
+
+- Having trouble with the local host IP? No worries, just repeat the process but change "hostLocalIp" instead.
 
 ## Questions?
 * Feel free to contact me via discord Skidam#8666
