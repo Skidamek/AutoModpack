@@ -23,7 +23,7 @@ import static pl.skidam.automodpack.modpack.Modpack.hostModpackContentFile;
 import static pl.skidam.automodpack.modpack.Modpack.hostModpackDir;
 
 public class HttpServer {
-    private static final int BUFFER_SIZE = 64 * 1024;
+    private static final int BUFFER_SIZE = 128 * 1024;
     public static List<String> filesList = new ArrayList<>();
     public static ExecutorService HTTPServerExecutor;
     public static boolean isRunning = false;
@@ -221,35 +221,22 @@ public class HttpServer {
                 return;
             }
 
-            try (FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ)) {
+            try (client; FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ)) {
                 long fileSize = fileChannel.size();
-                String response = "HTTP/1.1 200 OK\r\n" +
-                        "Content-Type: application/octet-stream\r\n" +
-                        "Content-Length: " + fileSize + "\r\n" +
-                        "\r\n";
+                String response = String.format(OK_RESPONSE, fileSize);
                 client.write(StandardCharsets.UTF_8.encode(response));
 
-                int bufferSize = 8 * 1024 * 1024; // 8 MB buffer size
-                ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
-                AutoModpack.LOGGER.info("Starting main loop...");
+                ByteBuffer buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
                 while (fileChannel.read(buffer) > 0) {
-                    AutoModpack.LOGGER.info("Main loop writing to client remaining: " + buffer.remaining());
                     buffer.flip();
                     while (buffer.hasRemaining() && client.isOpen() && fileChannel.isOpen()) {
-                        if (!client.isOpen() || !fileChannel.isOpen()) {
-                            AutoModpack.LOGGER.info("Client or file channel closed...");
-                            continue;
-                        }
-                        AutoModpack.LOGGER.info("Writing to client remaining: " + buffer.remaining());
                         client.write(buffer);
                     }
-                    AutoModpack.LOGGER.info("Clearing buffer...");
                     buffer.clear();
                 }
+            } catch (Exception e) {
+                if (!e.getMessage().contains("Broken pipe")) e.printStackTrace();
             }
-
-            AutoModpack.LOGGER.info("Closing client...");
-            client.close();
         }
     }
 }

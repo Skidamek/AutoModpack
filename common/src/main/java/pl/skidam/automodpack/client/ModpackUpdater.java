@@ -366,20 +366,15 @@ public class ModpackUpdater {
                     }
                 });
 
-                long fileSize = WebFileSize.getWebFileSize(url);
-
                 downloadInstance.download(url, downloadFile);
 
                 String ourChecksum = CustomFileUtils.getHash(downloadFile, "SHA-256");
 
                 if (serverChecksum.equals(ourChecksum)) {
                     success = true;
-                } else if (attempts == maxAttempts && fileSize == downloadFile.length()) {
-                    // TODO fix issue that some files return wrong checksums, and delete this `if`
-                    success = true;
                 } else {
                     AutoModpack.LOGGER.warn("Checksums do not match, retrying... client: {} server: {}", ourChecksum, serverChecksum);
-//                    CustomFileUtils.forceDelete(downloadFile, false);
+                    CustomFileUtils.forceDelete(downloadFile, false);
                 }
             } catch (SocketTimeoutException e) {
                 AutoModpack.LOGGER.error("Download of {} timed out, retrying...", downloadFile.getName());
