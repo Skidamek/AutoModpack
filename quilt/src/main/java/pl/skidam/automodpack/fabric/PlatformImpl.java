@@ -50,7 +50,7 @@ public class PlatformImpl {
         return modsList.stream().map(mod -> mod.metadata().id() + " " + mod.metadata().version()).collect(Collectors.toList());
     }
 
-    public static void downloadDependencies() throws Exception {
+    public static void downloadDependencies() {
         if (!Platform.isModLoaded("quilted_fabric_api") && !Platform.isModLoaded("fabric")) { // QFAPI
 
             LOGGER.warn("Dependency (QFAPI) was not found");
@@ -227,6 +227,14 @@ public class PlatformImpl {
                     JsonObject quiltLoader = json.get("quilt_loader").getAsJsonObject();
                     if (quiltLoader.has("environment")) {
                         return quiltLoader.get("environment").getAsString().toUpperCase();
+                    }
+
+                    // if not, we also can check in different place
+                    if (json.has("minecraft")) {
+                        JsonObject minecraft = json.get("minecraft").getAsJsonObject();
+                        if (minecraft.has("environment")) {
+                            return minecraft.get("environment").getAsString().toUpperCase();
+                        }
                     }
                 }
             }

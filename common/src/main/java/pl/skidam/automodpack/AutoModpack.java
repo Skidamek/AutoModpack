@@ -62,18 +62,11 @@ public class AutoModpack {
         } else {
             MinecraftUserName.get(); // To save the username` to variable in MinecraftUserName class for later use
             ModPackets.registerC2SPackets();
-
-            // To be sure that everything is saved before game is closed
-//            ClientLifecycleEvents.CLIENT_STOPPING.register(client -> {
-//                ConfigTools.saveConfig(clientConfigFile, clientConfig);
-//                ConfigTools.saveConfig(serverConfigFile, serverConfig);
-//            });
         }
     }
 
 
     public static void onPreInitialize() {
-
         long start = System.currentTimeMillis();
         LOGGER.info("Prelaunching AutoModpack...");
         preload = true;
@@ -93,25 +86,16 @@ public class AutoModpack {
         new SelfUpdater();
 
         if (Platform.getEnvironmentType().equals("CLIENT")) {
-
             String selectedModpack = clientConfig.selectedModpack;
             if (selectedModpack != null && !selectedModpack.equals("")) {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
                 new ModpackUpdater(selectedModpackLink, selectedModpackDir, true);
             }
-
-//            new DeleteTrashedMods();
-//            new DeleteMods(true, "false");
-
-
-        } else if (Platform.getEnvironmentType().equals("SERVER")) {
-
         }
 
         new CompatCheck();
 
         LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
-
     }
 }

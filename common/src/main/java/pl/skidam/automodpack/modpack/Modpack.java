@@ -168,6 +168,7 @@ public class Modpack {
                     }
 
                     String hash = CustomFileUtils.getHash(file, "SHA-256");
+
                     if (file.getName().endsWith(".jar")) {
                         modId = JarUtilities.getModIdFromJar(file, true);
                         type = modId == null ? "other" : "mod";
@@ -193,6 +194,11 @@ public class Modpack {
                         }
                     }
 
+                    // It should overwrite existing file in the list
+                    // because first this syncs files from server running dir
+                    // And then it gets files from host-modpack dir
+                    // So we want to overwrite files from server running dir with files from host-modpack dir
+                    // if there are likely same or kinda changed
                     for (Config.ModpackContentFields.ModpackContentItems item : list) {
                         if (item.file.equals(modpackFile)) {
                             list.remove(item);

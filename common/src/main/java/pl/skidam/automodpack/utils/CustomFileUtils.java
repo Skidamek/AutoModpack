@@ -71,8 +71,13 @@ public class CustomFileUtils {
 
         MessageDigest md = MessageDigest.getInstance(algorithm);
 
-        md.reset();
-        md.update(Files.readAllBytes(file.toPath()));
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = fis.read(buffer)) != -1) {
+                md.update(buffer, 0, read);
+            }
+        }
 
         byte[] digest = md.digest();
         StringBuilder sb = new StringBuilder();
@@ -82,7 +87,6 @@ public class CustomFileUtils {
 
         return sb.toString();
     }
-
 
     public static boolean compareHashWithFile(File file, String hash, String algorithm) throws Exception {
         String fileHash = getHash(file, algorithm);
