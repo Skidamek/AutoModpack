@@ -32,23 +32,16 @@ public class DangerScreen extends Screen {
     protected void init() {
         super.init();
         assert this.client != null;
-        //                                                       - 210
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 110, this.height / 6 + 96, 120, 20, TextHelper.translatable("gui.automodpack.screen.danger.button.cancel").formatted(Formatting.RED), (button) -> {
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.danger.button.cancel").formatted(Formatting.RED), button -> {
             AutoModpack.LOGGER.error("User canceled download, setting his to screen " + parent.getTitle().getString());
             this.client.setScreen(parent);
-        }));
+        }).position(this.width / 2 - 110, this.height / 6 + 96).size(120, 20).build());
 
-//        this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height / 6 + 96, 190, 20, TextHelper.translatable("gui.automodpack.screen.danger.button.dontshowagain").formatted(Formatting.GRAY), (button) -> {
-//            AutoModpack.clientConfig.dangerScreen
-//            CompletableFuture.runAsync(DownloadModpack::new);
-//            this.client.setScreen(new LoadingScreen());
-//        }));
-        //                                                       + 100
-        this.addDrawableChild(new ButtonWidget(this.width / 2 + 10, this.height / 6 + 96, 120, 20, TextHelper.translatable("gui.automodpack.screen.danger.button.accept").formatted(Formatting.GREEN), (button) -> {
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.danger.button.accept").formatted(Formatting.GREEN), button -> {
             CompletableFuture.runAsync(() -> {
                 ModpackUpdater.ModpackUpdaterMain(link, modpackDir, loadIfItsNotLoaded, modpackContentFile);
             });
-        }));
+        }).position(this.width / 2 + 10, this.height / 6 + 96).size(120, 20).build());
     }
 
     @Override

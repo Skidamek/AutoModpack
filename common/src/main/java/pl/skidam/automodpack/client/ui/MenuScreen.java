@@ -42,20 +42,20 @@ public class MenuScreen extends Screen {
         super.init();
         assert this.client != null;
 
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, Text.translatable("gui.automodpack.button.update"), (button) -> {
+        this.addDrawableChild(ButtonWidget.builder(Text.translatable("gui.automodpack.button.update"), button -> {
             AutoModpackToast.add(0);
             String modpack = AutoModpack.clientConfig.selectedModpack;
             new ModpackUpdater(ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack), true);
-        }));
+        }).position(this.width / 2 - 210, this.height - 38).size(115, 20).build());
 
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height - 38, 115, 20, Text.translatable("gui.automodpack.button.delete"), (button) -> {
+        this.addDrawableChild(ButtonWidget.builder(Text.translatable("gui.automodpack.button.delete"), button -> {
 //            this.client.setScreen(new ConfirmScreen());
-        }));
+        }).position(this.width / 2 - 90, this.height - 38).size(115, 20).build());
 
         // make back to the main menu button
-        this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height - 38, 115, 20, Text.translatable("gui.automodpack.button.back"), (button) -> {
+        this.addDrawableChild(ButtonWidget.builder(Text.translatable("gui.automodpack.button.back"), button -> {
             this.client.setScreen(new TitleScreen());
-        }));
+        }).position(this.width / 2 + 100, this.height - 38).size(115, 20).build());
     }
 
 

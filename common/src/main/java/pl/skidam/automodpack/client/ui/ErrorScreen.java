@@ -18,9 +18,7 @@ public class ErrorScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 100, this.height / 4 + 96, 200, 20, TextHelper.translatable("gui.toMenu"), (buttonWidget) -> {
-            client.setScreen(null);
-        }));
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.toMenu"), button -> client.setScreen(null)).position(this.width / 2 - 100, this.height / 4 + 96).size(200, 20).build());
     }
 
     @Override

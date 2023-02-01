@@ -2,7 +2,8 @@ package pl.skidam.automodpack.utils;
 
 import net.minecraft.resource.FileResourcePackProvider;
 import net.minecraft.resource.ResourcePackProfile;
-import pl.skidam.automodpack.sharedresources.normal.resourcepacks.FileResourcePackProviderAccessor;
+import net.minecraft.resource.ResourcePackSource;
+import net.minecraft.resource.ResourceType;
 
 import java.nio.file.Path;
 import java.util.function.Consumer;
@@ -16,18 +17,18 @@ public class ExternalFileResourcePackProvider extends FileResourcePackProvider {
     protected final Supplier<Path> pathSupplier;
 
     public ExternalFileResourcePackProvider(Supplier<Path> pathSupplier) {
-        super(null, (name) -> name);
+        super(null, ResourceType.CLIENT_RESOURCES, ResourcePackSource.NONE);
         this.pathSupplier = pathSupplier;
     }
 
     @Override
-    public void register(Consumer<ResourcePackProfile> profileAdder, ResourcePackProfile.Factory factory) {
-        FileResourcePackProviderAccessor thiz = (FileResourcePackProviderAccessor) this;
+    public void register(Consumer<ResourcePackProfile> profileAdder) {
+        FileResourcepackProviderProxy thiz = (FileResourcepackProviderProxy) this;
 
         Path path = pathSupplier.get();
         if (path == null) return;
-        thiz.setPacksFolder(path.toFile());
+        thiz.sharedresources$setPacksFolder(path);
 
-        super.register(profileAdder, factory);
+        super.register(profileAdder);
     }
 }

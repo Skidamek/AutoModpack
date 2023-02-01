@@ -31,7 +31,7 @@ public class DownloadScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 50, this.height - 25, 100, 20, TextHelper.translatable("gui.automodpack.screen.download.button.cancel"), (button) -> ModpackUpdater.cancelDownload()));
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.download.button.cancel"), button -> ModpackUpdater.cancelDownload()).position(this.width / 2 - 50, this.height - 25).size(100, 20).build());
     }
 
     private Text getStage() {

@@ -45,10 +45,11 @@ public class ChangelogScreen extends Screen {
         this.setInitialFocus(this.searchField);
 
         // Add the back button
-        this.addDrawableChild(new ButtonWidget(5, this.height - 20 - 5, 50, 20, TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), (button) -> {
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> {
             assert this.client != null;
             this.client.setScreen(this.parent);
-        }));
+        }).position(5, this.height - 20 - 5).size(50, 20).build());
+
     }
 
     @Override
