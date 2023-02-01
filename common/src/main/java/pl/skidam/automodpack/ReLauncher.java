@@ -102,6 +102,8 @@ public class ReLauncher {
             return;
         }
 
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("windows");
+
         // remove old -Dfabric.addMods and -Dloader.addMods properties
         if (command.contains("-Dfabric.addMods") || command.contains("-Dloader.addMods")) {
             command = removeAddModsProperties(command);
@@ -129,6 +131,11 @@ public class ReLauncher {
         if (gameDir != null && (!command.contains(optionalModsProperty) && !command.contains(formatPath(optionalModsProperty)))) {
             LOGGER.error("AutoModpack relauncher failed to add {} property to command!\nCommand: {}", optionalModsProperty, command);
             System.exit(1);
+        }
+
+        if (!isWindows) {
+            LOGGER.warn("AutoModpack relauncher may not work on non-windows systems!");
+            LOGGER.warn("Check this issue: https://github.com/Skidamek/AutoModpack/issues/87");
         }
 
         LOGGER.info("Restarting Minecraft with command:\n" + command);
@@ -162,6 +169,11 @@ public class ReLauncher {
 //        if (!AutoModpack.preload) {
 //            new Window().restartingWindow();
 //        }
+
+        if (!isWindows) {
+            LOGGER.warn("AutoModpack relauncher may not work on non-windows systems!");
+            LOGGER.warn("Check this issue: https://github.com/Skidamek/AutoModpack/issues/87");
+        }
 
         System.exit(0);
     }
