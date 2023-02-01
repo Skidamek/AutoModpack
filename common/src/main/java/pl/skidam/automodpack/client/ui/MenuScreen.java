@@ -11,6 +11,7 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.AutoModpack;
+import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.ModpackContentTools;
@@ -25,7 +26,7 @@ public class MenuScreen extends Screen {
     private final Screen parent;
 
     public MenuScreen(Screen parent) {
-        super(Text.literal("Auto").formatted(Formatting.GOLD).append(Text.literal("Modpack").formatted(Formatting.WHITE).append(Text.literal(" Menu").formatted(Formatting.GRAY)).formatted(Formatting.BOLD)));
+        super(TextHelper.literal("Auto").formatted(Formatting.GOLD).append(TextHelper.literal("Modpack").formatted(Formatting.WHITE).append(TextHelper.literal(" Menu").formatted(Formatting.GRAY)).formatted(Formatting.BOLD)));
         assert client != null;
         this.parent = parent;
     }
@@ -42,18 +43,18 @@ public class MenuScreen extends Screen {
         super.init();
         assert this.client != null;
 
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, Text.translatable("gui.automodpack.button.update"), (button) -> {
+        this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.update"), (button) -> {
             AutoModpackToast.add(0);
             String modpack = AutoModpack.clientConfig.selectedModpack;
             new ModpackUpdater(ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack), true);
         }));
 
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height - 38, 115, 20, Text.translatable("gui.automodpack.button.delete"), (button) -> {
+        this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.delete"), (button) -> {
 //            this.client.setScreen(new ConfirmScreen());
         }));
 
         // make back to the main menu button
-        this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height - 38, 115, 20, Text.translatable("gui.automodpack.button.back"), (button) -> {
+        this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.back"), (button) -> {
             this.client.setScreen(new TitleScreen());
         }));
     }
@@ -144,7 +145,7 @@ public class MenuScreen extends Screen {
             }
 
             public Text getNarration() {
-                return Text.translatable("narrator.select", this.modpackDefinition);
+                return TextHelper.translatable("narrator.select", this.modpackDefinition);
             }
         }
     }

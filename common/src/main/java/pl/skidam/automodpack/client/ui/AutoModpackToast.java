@@ -6,10 +6,10 @@ import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.toast.Toast;
 import net.minecraft.client.toast.ToastManager;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
+import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.utils.Wait;
 
 import java.util.Objects;
@@ -122,8 +122,8 @@ public class AutoModpackToast {
             RenderSystem.setShaderTexture(0, TEXTURE);
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
             manager.drawTexture(matrices, 0, 0, 0, 0, getWidth(), getHeight());
-            manager.getClient().textRenderer.draw(matrices, Text.translatable("gui.automodpack.toast.up." + whoAreYou), 33, 7, -256);
-            manager.getClient().textRenderer.draw(matrices, Text.translatable("gui.automodpack.toast.down." + whoAreYou), 33, 19, -1);
+            manager.getClient().textRenderer.draw(matrices, TextHelper.translatable("gui.automodpack.toast.up." + whoAreYou), 33, 7, -256);
+            manager.getClient().textRenderer.draw(matrices, TextHelper.translatable("gui.automodpack.toast.down." + whoAreYou), 33, 19, -1);
 
 
             if (whoAreYou == 0) {
