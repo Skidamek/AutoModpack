@@ -7,8 +7,8 @@
   "client": [
     "options.GameOptionsMixin",
     "resourcepacks.FileResourcePackProviderAccessor",
-    "resourcepacks.ResourcePackManagerMixin",
-    "resourcepacks.FileResourcePackProviderMixin"
+    "resourcepacks.FileResourcePackProviderMixin",
+    "resourcepacks.ResourcePackManagerMixin"
   ],
   "server": [
   ],

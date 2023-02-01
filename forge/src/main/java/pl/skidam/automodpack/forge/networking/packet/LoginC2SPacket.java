@@ -11,6 +11,7 @@ import net.minecraft.text.Text;
 import net.minecraftforge.network.NetworkEvent;
 import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
+import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.forge.networking.ModPackets;
 import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.utils.Ip;
@@ -34,7 +35,7 @@ public class LoginC2SPacket implements Packet<ServerLoginPacketListener>  {
     public void apply(ServerLoginPacketListener listener) {
         ClientConnection connection = listener.getConnection();
         if (!this.version.equals(AutoModpack.VERSION)) {
-            Text reason = Text.of("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod to play on this server!");
+            Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod to play on this server!");
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
         } else {
@@ -72,7 +73,7 @@ public class LoginC2SPacket implements Packet<ServerLoginPacketListener>  {
         ServerPlayerEntity player = context.getSender();
         context.enqueueWork(() -> {
             if (!this.version.equals(AutoModpack.VERSION)) {
-                Text reason = Text.of("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
                 connection.send(new DisconnectS2CPacket(reason));
                 connection.disconnect(reason);
             } else {

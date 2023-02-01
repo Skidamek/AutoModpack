@@ -14,6 +14,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
+import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.HttpServer;
 
@@ -50,7 +51,7 @@ public class LoginS2CPacket {
         if (!understood || !buf.readString().equals(correctResponse)) {
             if (uniqueId != null) acceptLogin.put(uniqueId, false);
             if (AutoModpack.serverConfig.optionalModpack) return;
-            Text reason = Text.of("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+            Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
         } else {

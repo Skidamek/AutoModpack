@@ -10,6 +10,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
+import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.packet.LinkC2SPacket;
 import pl.skidam.automodpack.networking.packet.LinkS2CPacket;
@@ -58,7 +59,7 @@ public class ModPacketsImpl {
                         if (acceptLogin.containsKey(uniqueId)) {
                             if (!acceptLogin.get(uniqueId)) {
 //                                AutoModpack.LOGGER.error("Disconnecting login for " + profile.getName() + " (" + uniqueId + ")");
-                                Text reason = Text.literal("Modpack is not the same as on server");
+                                Text reason = TextHelper.literal("Modpack is not the same as on server");
                                 handler.connection.send(new LoginDisconnectS2CPacket(reason));
                                 handler.connection.disconnect(reason);
                             }
@@ -69,7 +70,7 @@ public class ModPacketsImpl {
 
                         if (i == 300) {
                             AutoModpack.LOGGER.error("Timeout login for " + profile.getName() + " (" + uniqueId + ")");
-                            Text reason = Text.literal("AutoModpack - timeout");
+                            Text reason = TextHelper.literal("AutoModpack - timeout");
                             handler.connection.send(new LoginDisconnectS2CPacket(reason));
                             handler.connection.disconnect(reason);
                         }
