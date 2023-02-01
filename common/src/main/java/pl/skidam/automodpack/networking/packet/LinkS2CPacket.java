@@ -10,6 +10,7 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 
 import java.util.UUID;
@@ -23,7 +24,7 @@ public class LinkS2CPacket {
 
         if (!buf.readBoolean()) { // disconnect
             acceptLogin.put(uniqueId, false);
-            Text reason = Text.of("[AutoModpack] Install/Update modpack to join");
+            Text reason = TextHelper.literal("[AutoModpack] Install/Update modpack to join");
             handler.connection.send(new LoginDisconnectS2CPacket(reason));
             handler.connection.disconnect(reason);
         }

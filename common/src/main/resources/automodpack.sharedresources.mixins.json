@@ -6,8 +6,8 @@
   "plugin": "pl.skidam.automodpack.mixin.MixinPlugin",
   "client": [
     "options.GameOptionsMixin",
-    "resourcepacks.FileResourcePackProviderAccessor",
-    "resourcepacks.ResourcePackManagerMixin"
+    "resourcepacks.ResourcePackManagerMixin",
+    "resourcepacks.FileResourcePackProviderMixin"
   ],
   "server": [
   ],
