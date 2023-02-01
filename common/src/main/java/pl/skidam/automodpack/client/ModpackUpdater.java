@@ -1,9 +1,6 @@
 package pl.skidam.automodpack.client;
 
-import pl.skidam.automodpack.AutoModpack;
-import pl.skidam.automodpack.Download;
-import pl.skidam.automodpack.Platform;
-import pl.skidam.automodpack.ReLauncher;
+import pl.skidam.automodpack.*;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.*;
@@ -327,10 +324,9 @@ public class ModpackUpdater {
             if (serverChecksum.equals(localChecksum)) { // up-to-date
                 LOGGER.info("File " + downloadFile.getName() + " is up-to-date!");
                 return;
-            } else {
-                LOGGER.warn(downloadFile.getName() + " Local checksum: " + localChecksum + " Server checksum: " + serverChecksum);
             }
 
+            LOGGER.warn(downloadFile.getName() + " Local checksum: " + localChecksum + " Server checksum: " + serverChecksum);
             downloadFile(url, downloadFile, serverChecksum);
         } catch (Exception e) {
             e.printStackTrace();
@@ -383,7 +379,7 @@ public class ModpackUpdater {
                     success = true;
                 } else {
                     AutoModpack.LOGGER.warn("Checksums do not match, retrying... client: {} server: {}", ourChecksum, serverChecksum);
-                    Files.deleteIfExists(downloadFile.toPath());
+//                    CustomFileUtils.forceDelete(downloadFile, false);
                 }
             } catch (SocketTimeoutException e) {
                 AutoModpack.LOGGER.error("Download of {} timed out, retrying...", downloadFile.getName());

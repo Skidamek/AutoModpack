@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 public class CustomFileUtils {
     public static void forceDelete(File file, boolean deleteOnExit) {
@@ -66,11 +67,22 @@ public class CustomFileUtils {
         }
     }
 
+    private static final ThreadLocal<MessageDigest> DIGEST = ThreadLocal.withInitial(() -> null);
+
     public static String getHash(File file, String algorithm) throws Exception {
         if (!file.exists()) return null;
 
-        // "SHA-512", "SHA-256"
-        MessageDigest md = MessageDigest.getInstance(algorithm);
+        MessageDigest md = DIGEST.get();
+        if (md == null || !md.getAlgorithm().equals(algorithm)) {
+            try {
+                md = MessageDigest.getInstance(algorithm);
+                DIGEST.set(md);
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace();
+            }
+        }
+        assert md != null;
+        md.reset();
         md.update(Files.readAllBytes(file.toPath()));
 
         byte[] digest = md.digest();
@@ -81,6 +93,7 @@ public class CustomFileUtils {
 
         return sb.toString();
     }
+
 
     public static boolean compareHashWithFile(File file, String hash, String algorithm) throws Exception {
         String fileHash = getHash(file, algorithm);

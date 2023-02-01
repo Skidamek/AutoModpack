@@ -7,15 +7,12 @@ import pl.skidam.automodpack.utils.Ip;
 import pl.skidam.automodpack.utils.Url;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -216,7 +213,6 @@ public class HttpServer {
                 "Content-Length: %d\r\n" +
                 "\r\n";
 
-
         private static void sendFile(SocketChannel client, File file) throws IOException {
             if (!client.isOpen()) return;
 
@@ -225,18 +221,34 @@ public class HttpServer {
                 return;
             }
 
-            String response = String.format(OK_RESPONSE, file.length());
-            client.write(StandardCharsets.UTF_8.encode(response));
+            try (FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ)) {
+                long fileSize = fileChannel.size();
+                String response = "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: application/octet-stream\r\n" +
+                        "Content-Length: " + fileSize + "\r\n" +
+                        "\r\n";
+                client.write(StandardCharsets.UTF_8.encode(response));
 
-            FileInputStream in = new FileInputStream(file);
-            ByteBuffer chunk = ByteBuffer.allocate(BUFFER_SIZE);
-            while (in.getChannel().read(chunk) > 0) {
-                chunk.flip();
-                client.write(chunk);
-                chunk.clear();
+                int bufferSize = 8 * 1024 * 1024; // 8 MB buffer size
+                ByteBuffer buffer = ByteBuffer.allocate(bufferSize);
+                AutoModpack.LOGGER.info("Starting main loop...");
+                while (fileChannel.read(buffer) > 0) {
+                    AutoModpack.LOGGER.info("Main loop writing to client remaining: " + buffer.remaining());
+                    buffer.flip();
+                    while (buffer.hasRemaining() && client.isOpen() && fileChannel.isOpen()) {
+                        if (!client.isOpen() || !fileChannel.isOpen()) {
+                            AutoModpack.LOGGER.info("Client or file channel closed...");
+                            continue;
+                        }
+                        AutoModpack.LOGGER.info("Writing to client remaining: " + buffer.remaining());
+                        client.write(buffer);
+                    }
+                    AutoModpack.LOGGER.info("Clearing buffer...");
+                    buffer.clear();
+                }
             }
 
-            in.close();
+            AutoModpack.LOGGER.info("Closing client...");
             client.close();
         }
     }
