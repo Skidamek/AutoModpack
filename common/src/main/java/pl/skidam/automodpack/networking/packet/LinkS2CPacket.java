@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
+import net.minecraft.network.packet.s2c.play.DisconnectS2CPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
@@ -32,7 +33,12 @@ public class LinkS2CPacket {
             acceptLogin.put(uniqueId, true);
         }
     }
-    public static void receive(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler serverPlayNetworkHandler, PacketByteBuf packetByteBuf, PacketSender packetSender) {
+    public static void receive(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {
         // just join the server
+        if (!buf.readBoolean()) { // disconnect
+            Text reason = TextHelper.literal("[AutoModpack] Install/Update modpack to join");
+            handler.connection.send(new DisconnectS2CPacket(reason));
+            handler.connection.disconnect(reason);
+        }
     }
 }

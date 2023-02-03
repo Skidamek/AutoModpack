@@ -27,6 +27,7 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import static pl.skidam.automodpack.AutoModpack.clientConfig;
@@ -172,6 +173,8 @@ public class PlatformImpl {
                     }
                 }
             }
+        } catch (ZipException ignored) {
+            return null;
         } catch (IOException | JsonSyntaxException e) {
             e.printStackTrace();
         }
@@ -238,6 +241,8 @@ public class PlatformImpl {
                     }
                 }
             }
+        } catch (ZipException ignored) {
+            return "UNKNOWN";
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -295,6 +300,8 @@ public class PlatformImpl {
                     }
                 }
             }
+        } catch (ZipException ignored) {
+            return null;
         } catch (IOException e) {
             e.printStackTrace();
         }

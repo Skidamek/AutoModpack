@@ -1,10 +1,5 @@
 package pl.skidam.automodpack.utils;
 
-import net.minecraft.client.MinecraftClient;
-import pl.skidam.automodpack.AutoModpack;
-import pl.skidam.automodpack.Platform;
-import pl.skidam.automodpack.config.ConfigTools;
-
 public class MinecraftUserName {
     private static String username;
 
@@ -14,21 +9,22 @@ public class MinecraftUserName {
             return username;
         }
 
-        if (Platform.getEnvironmentType().equals("SERVER")) return null;
-
-        if (MinecraftClient.getInstance() != null) {
-            String username = MinecraftClient.getInstance().getSession().getUsername();
-            AutoModpack.clientConfig.username = username;
-            ConfigTools.saveConfig(AutoModpack.clientConfigFile, AutoModpack.clientConfig);
-            return MinecraftUserName.username = username;
-        } else if (AutoModpack.clientConfig.username != null || !AutoModpack.clientConfig.username.equals("")) {
-            return AutoModpack.clientConfig.username;
-        } else {
-            if (System.getProperties().contains("user.name")) {
-                return "(" + System.getProperty("user.name") + ")"; // lol    pov admin: reads console... Jan Kowalski is downloading modpack XD
-            } else {
-                return null;
-            }
-        }
+//        if (Platform.getEnvironmentType().equals("SERVER")) return null;
+//
+//        if (MinecraftClient.getInstance() != null) {
+//            String username = MinecraftClient.getInstance().getSession().getUsername();
+//            AutoModpack.clientConfig.username = username;
+//            ConfigTools.saveConfig(AutoModpack.clientConfigFile, AutoModpack.clientConfig);
+//            return MinecraftUserName.username = username;
+//        } else if (AutoModpack.clientConfig.username != null || !AutoModpack.clientConfig.username.equals("")) {
+//            return AutoModpack.clientConfig.username;
+//        } else {
+//            if (System.getProperties().contains("user.name")) {
+//                return "(" + System.getProperty("user.name") + ")"; // lol    pov admin: reads console... Jan Kowalski is downloading modpack XD
+//            } else {
+//                return null;
+//            }
+//        }
+        return null;
     }
 }
