@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.utils;
 
 public class MinecraftUserName {
-    private static String username;
+    private static String username = "";
 
     public static String get() {
 

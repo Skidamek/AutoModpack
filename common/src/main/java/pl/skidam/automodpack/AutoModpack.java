@@ -28,7 +28,7 @@ public class AutoModpack {
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
     public static String VERSION = JarUtilities.getModVersion("automodpack");
-    public static String MC_VERSION;
+    public static String MC_VERSION = MinecraftVersion.CURRENT.getName();
     public static File automodpackJar;
     public static String JAR_NAME; // File name how automodpack jar is called, for example automodpack-1.19.x.jar
     public static final File automodpackDir = new File("./automodpack/");
@@ -47,14 +47,6 @@ public class AutoModpack {
     public static String selectedModpackLink;
     public static Config.ServerConfigFields serverConfig;
     public static Config.ClientConfigFields clientConfig;
-
-    static {
-        try {
-            MC_VERSION = MinecraftVersion.CURRENT.getName();
-        } catch (NoSuchFieldError e) {
-            MC_VERSION = "";
-        }
-    }
 
     public static void onInitialize() {
         preload = false;

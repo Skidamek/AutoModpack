@@ -33,12 +33,16 @@ public class LoginS2CPacket {
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         UUID uniqueId = profile.getId();
+        String playerName = profile.getName();
 
         String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
 
         if (!understood || !buf.readString().equals(correctResponse)) {
             if (uniqueId != null) acceptLogin.put(uniqueId, false);
-            if (AutoModpack.serverConfig.optionalModpack) return;
+            if (AutoModpack.serverConfig.optionalModpack) {
+                AutoModpack.LOGGER.info("{} has not installed automodpack.", playerName);
+                return;
+            }
             Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
@@ -74,7 +78,6 @@ public class LoginS2CPacket {
             }
         }
 
-
         PacketByteBuf outBuf = PacketByteBufs.create();
         outBuf.writeString(linkToSend);
 
@@ -87,7 +90,10 @@ public class LoginS2CPacket {
         String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
 
         if (!buf.readString().equals(correctResponse)) {
-            if (AutoModpack.serverConfig.optionalModpack) return;
+            if (AutoModpack.serverConfig.optionalModpack) {
+                AutoModpack.LOGGER.info("{} has not installed automodpack.", player.getName().getString());
+                return;
+            }
             Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
             connection.send(new DisconnectS2CPacket(reason));
             connection.disconnect(reason);

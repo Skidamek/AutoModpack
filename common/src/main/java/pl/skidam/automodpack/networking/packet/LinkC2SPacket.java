@@ -12,7 +12,9 @@ import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.client.ModpackCheck;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.ScreenTools;
 import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack.utils.Wait;
 
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
@@ -73,14 +75,31 @@ public class LinkC2SPacket {
 
         sender.sendPacket(LINK, response);
 
-        CompletableFuture.runAsync(() -> {
-            if (updateType == ModpackCheck.UpdateType.DELETE) {
-                new ReLauncher.Restart(modpackDir);
-            } else if (updateType == ModpackCheck.UpdateType.FULL) {
-                new ModpackUpdater(link, modpackDir, true);
-            } else if (!isLoaded) {
-                new ReLauncher.Restart(modpackDir);
+        if (updateType == ModpackCheck.UpdateType.DELETE || updateType == ModpackCheck.UpdateType.FULL || !isLoaded) {
+            // disconnect from server
+            if (client.world != null) {
+                MinecraftClient.getInstance().execute(() -> {
+                    client.world.disconnect();
+                    client.disconnect();
+                });
+            } else {
+                MinecraftClient.getInstance().execute(client::disconnect);
             }
-        });
+
+            CompletableFuture.runAsync(() -> {
+                // wait until client got disconnected
+                while (ScreenTools.getScreen() == null) {
+                    new Wait(50);
+                }
+
+                if (updateType == ModpackCheck.UpdateType.DELETE) {
+                    new ReLauncher.Restart(modpackDir);
+                } else if (updateType == ModpackCheck.UpdateType.FULL) {
+                    new ModpackUpdater(link, modpackDir, true);
+                } else { // !isLoaded
+                    new ReLauncher.Restart(modpackDir);
+                }
+            });
+        }
     }
 }

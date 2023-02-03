@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.modpack;
 
+import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.server.command.ServerCommandSource;
@@ -53,7 +54,7 @@ public class Commands {
             AutoModpack.serverConfig = ConfigTools.loadConfig(AutoModpack.serverConfigFile, Config.ServerConfigFields.class);
             context.getSource().sendFeedback(TextHelper.literal("AutoModpack server config reloaded!").formatted(Formatting.GREEN), true);
         });
-        return 0;
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
@@ -72,8 +73,7 @@ public class Commands {
                         false);
             }
         });
-        return 0;
-
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
@@ -92,7 +92,7 @@ public class Commands {
                         false);
             }
         });
-        return 0;
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int restartModpackHost(CommandContext<ServerCommandSource> context) {
@@ -114,7 +114,7 @@ public class Commands {
                         false);
             }
         });
-        return 0;
+        return Command.SINGLE_SUCCESS;
     }
 
 
@@ -135,7 +135,7 @@ public class Commands {
                 .formatted(Formatting.YELLOW), false);
         context.getSource().sendFeedback(TextHelper.literal("/automodpack config reload")
                 .formatted(Formatting.YELLOW), false);
-        return 0;
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int about(CommandContext<ServerCommandSource> context) {
@@ -148,7 +148,7 @@ public class Commands {
                 .formatted(Formatting.YELLOW), false);
         context.getSource().sendFeedback(TextHelper.literal("/automodpack config reload")
                 .formatted(Formatting.YELLOW), false);
-        return 0;
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int generateModpack(CommandContext<ServerCommandSource> context) {
@@ -161,6 +161,6 @@ public class Commands {
                             .formatted(Formatting.GREEN),
                     true);
         });
-        return 0;
+        return Command.SINGLE_SUCCESS;
     }
 }
