@@ -11,7 +11,8 @@ public class Config {
 //        public boolean deleteModpackButton = true;
         public String username = "";
         public String javaExecutablePath = "";
-        public boolean updateCheck = false;
+        public boolean selfUpdater = false;
+        public boolean downloadDependency = true;
         public boolean autoRelaunchWhenUpdated = false;
     }
 
@@ -31,7 +32,8 @@ public class Config {
         public String hostIp = "";
         public String hostLocalIp = "";
         public String externalModpackHostLink = "";
-        public boolean updateCheck = true;
+        public boolean selfUpdater = false;
+        public boolean downloadDependency = true;
     }
 
     public static class ModpackContentFields {

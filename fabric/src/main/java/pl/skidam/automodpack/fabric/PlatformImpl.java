@@ -54,15 +54,15 @@ public class PlatformImpl {
             LOGGER.warn("Dependency (FAPI) was not found");
 
             if (Platform.getEnvironmentType().equals("SERVER")) {
-                if (!AutoModpack.serverConfig.updateCheck) {
-                    AutoModpack.LOGGER.warn("AutoModpack update check is disabled, you need to manually install fabric api!");
+                if (!AutoModpack.serverConfig.downloadDependency) {
+                    AutoModpack.LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
                     return;
                 }
             }
 
             if (Platform.getEnvironmentType().equals("CLIENT")) {
-                if (!AutoModpack.clientConfig.updateCheck) {
-                    AutoModpack.LOGGER.warn("AutoModpack update check is disabled, you need to manually install fabric api!");
+                if (!AutoModpack.clientConfig.downloadDependency) {
+                    AutoModpack.LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
                     return;
                 }
             }

@@ -22,17 +22,11 @@ public class SelfUpdater {
         }
 
         if (Platform.getEnvironmentType().equals("SERVER")) {
-            if (!AutoModpack.serverConfig.updateCheck) {
-                AutoModpack.LOGGER.info("AutoModpack update check is disabled!");
-                return;
-            }
+            if (!AutoModpack.serverConfig.selfUpdater) return;
         }
 
         if (Platform.getEnvironmentType().equals("CLIENT")) {
-            if (!AutoModpack.clientConfig.updateCheck) {
-                AutoModpack.LOGGER.info("AutoModpack update check is disabled!");
-                return;
-            }
+            if (!AutoModpack.clientConfig.selfUpdater) return;
         }
 
         // TODO remove this when forge version will be published, if at all...
