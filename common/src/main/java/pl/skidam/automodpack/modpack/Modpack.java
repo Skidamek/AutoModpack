@@ -144,25 +144,33 @@ public class Modpack {
                     boolean isEditable = false;
 
                     if (!modpackDir.toString().startsWith("./automodpack/host-modpack/")) {
-                        if (AutoModpack.serverConfig.excludeSyncedFiles.contains(modpackFile)) {
-                            AutoModpack.LOGGER.info("File {} is excluded! Skipping...", file);
+                        boolean excluded = false;
+                        for (String excludeFile : AutoModpack.serverConfig.excludeSyncedFiles) {
+                            if (matchesExclusionCriteria(modpackFile, excludeFile)) { // wild cards e.g. *.json or supermod-1.19-*.jar
+                                excluded = true;
+                                break;
+                            }
+                        }
+                        if (excluded) {
+                            AutoModpack.LOGGER.info("File {} is excluded! Skipping..." + modpackFile);
                             continue;
                         }
                     }
 
+
                     if (size.equals("0")) {
-                        AutoModpack.LOGGER.warn("File {} is empty! Skipping...", file);
+                        AutoModpack.LOGGER.warn("File {} is empty! Skipping...", modpackFile);
                         continue;
                     }
 
                     if (!modpackDir.equals(hostModpackDir.toFile())) {
                         if (modpackFile.endsWith(".tmp")) {
-                            AutoModpack.LOGGER.warn("File {} is temporary! Skipping...", file);
+                            AutoModpack.LOGGER.warn("File {} is temporary! Skipping...", modpackFile);
                             continue;
                         }
 
                         if (modpackFile.endsWith(".disabled")) {
-                            AutoModpack.LOGGER.warn("File {} is disabled! Skipping...", file);
+                            AutoModpack.LOGGER.warn("File {} is disabled! Skipping...", modpackFile);
                             continue;
                         }
                     }
@@ -198,7 +206,7 @@ public class Modpack {
                     // because first this syncs files from server running dir
                     // And then it gets files from host-modpack dir
                     // So we want to overwrite files from server running dir with files from host-modpack dir
-                    // if there are likely same or kinda changed
+                    // if there are likely same or a bit changed
                     for (Config.ModpackContentFields.ModpackContentItems item : list) {
                         if (item.file.equals(modpackFile)) {
                             list.remove(item);
@@ -208,6 +216,23 @@ public class Modpack {
 
                     list.add(new Config.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, hash));
                 }
+            }
+        }
+
+        private static boolean matchesExclusionCriteria(String modpackFile, String excludeFile) {
+            if (excludeFile.contains("*")) { // wild cards magic
+                String[] excludeFileParts = excludeFile.split("\\*");
+                int startIndex = 0;
+                for (String excludeFilePart : excludeFileParts) {
+                    int currentIndex = modpackFile.indexOf(excludeFilePart, startIndex);
+                    if (currentIndex == -1) {
+                        return false;
+                    }
+                    startIndex = currentIndex + excludeFilePart.length();
+                }
+                return true;
+            } else {
+                return excludeFile.contains(modpackFile);
             }
         }
     }

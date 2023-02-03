@@ -58,17 +58,29 @@ public class LinkC2SPacket {
         AutoModpack.LOGGER.warn("Received link packet from server! " + link);
         AutoModpack.ClientLink = link;
 
-        String modpackFileName = link.substring(link.lastIndexOf("/") + 1); // removes https:// and http://
+        String modpackFileName = link.replaceFirst("(https?://)", ""); // removes https:// and http://
         modpackFileName = modpackFileName.replace(":", "-"); // replaces : with -
         File modpackDir = new File(modpacksDir + File.separator + modpackFileName);
-        new ModpackUpdater(link, modpackDir, true);
 
         AutoModpack.clientConfig.selectedModpack = modpackFileName;
         ConfigTools.saveConfig(AutoModpack.clientConfigFile, AutoModpack.clientConfig);
 
+        ModpackCheck.UpdateType updateType = ModpackCheck.isUpdate(link, modpackDir);
+        boolean isLoaded = ModpackCheck.isLoaded(ModpackUpdater.getServerModpackContent(link));
+
         PacketByteBuf response = PacketByteBufs.create();
-        response.writeBoolean(ModpackCheck.isUpdate(link, modpackDir) == ModpackCheck.UpdateType.NONE);
+        response.writeBoolean(updateType == ModpackCheck.UpdateType.NONE && isLoaded);
 
         sender.sendPacket(LINK, response);
+
+        CompletableFuture.runAsync(() -> {
+            if (updateType == ModpackCheck.UpdateType.DELETE) {
+                new ReLauncher.Restart(modpackDir);
+            } else if (updateType == ModpackCheck.UpdateType.FULL) {
+                new ModpackUpdater(link, modpackDir, true);
+            } else if (!isLoaded) {
+                new ReLauncher.Restart(modpackDir);
+            }
+        });
     }
 }

@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import static pl.skidam.automodpack.AutoModpack.clientConfig;
@@ -161,6 +162,8 @@ public class PlatformImpl {
                     return json.get("environment").getAsString().toUpperCase();
                 }
             }
+        } catch (ZipException ignored) {
+            return "UNKNOWN";
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -195,6 +198,8 @@ public class PlatformImpl {
                     return json.get("version").getAsString();
                 }
             }
+        } catch (ZipException ignored) {
+            return "UNKNOWN";
         } catch (IOException | JsonSyntaxException e) {
             e.printStackTrace();
         }
@@ -251,6 +256,8 @@ public class PlatformImpl {
                     return json.get("id").getAsString();
                 }
             }
+        } catch (ZipException ignored) {
+            return null;
         } catch (IOException e) {
             e.printStackTrace();
         }

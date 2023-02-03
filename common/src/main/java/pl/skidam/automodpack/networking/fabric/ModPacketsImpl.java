@@ -41,61 +41,8 @@ public class ModPacketsImpl {
     public static void registerS2CPackets() {
         // Server
 
-        // Packets
-        if (!AutoModpack.serverConfig.velocitySupport) {
-            ServerLoginNetworking.registerGlobalReceiver(HANDSHAKE, LoginS2CPacket::receive);
-            ServerLoginNetworking.registerGlobalReceiver(LINK, LinkS2CPacket::receive);
-
-            ServerLoginConnectionEvents.QUERY_START.register((handler, server, sender, sync) -> {
-
-                GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
-                UUID uniqueId = profile.getId();
-
-                FutureTask<?> future = new FutureTask<>(() -> {
-                    for (int i = 0; i <= 301; i++) {
-                        Thread.sleep(50);
-//                        AutoModpack.LOGGER.error("Delaying login for " + profile.getName() + " (" + uniqueId + ") for " + i + "ms");
-
-                        if (acceptLogin.containsKey(uniqueId)) {
-                            if (!acceptLogin.get(uniqueId)) {
-//                                AutoModpack.LOGGER.error("Disconnecting login for " + profile.getName() + " (" + uniqueId + ")");
-                                Text reason = TextHelper.literal("Modpack is not the same as on server");
-                                handler.connection.send(new LoginDisconnectS2CPacket(reason));
-                                handler.connection.disconnect(reason);
-                            }
-//                            AutoModpack.LOGGER.error("Login for " + profile.getName() + " (" + uniqueId + ") accepted");
-                            acceptLogin.remove(uniqueId);
-                            break;
-                        }
-
-                        if (i == 300) {
-                            AutoModpack.LOGGER.error("Timeout login for " + profile.getName() + " (" + uniqueId + ")");
-                            Text reason = TextHelper.literal("AutoModpack - timeout");
-                            handler.connection.send(new LoginDisconnectS2CPacket(reason));
-                            handler.connection.disconnect(reason);
-                        }
-                    }
-
-                    return null;
-                });
-
-                // Execute the task on a worker thread as not to block the server thread
-                Util.getMainWorkerExecutor().execute(future);
-
-                PacketByteBuf buf = PacketByteBufs.create();
-                String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
-                buf.writeString(correctResponse);
-                sender.sendPacket(HANDSHAKE, buf);
-
-                sync.waitFor(future);
-            });
-
-
-
-        }
-
         // For velocity support, velocity doest support login packets
-        if (AutoModpack.serverConfig.velocitySupport)  {
+        if (AutoModpack.serverConfig.velocityMode)  {
             ServerPlayNetworking.registerGlobalReceiver(HANDSHAKE, LoginS2CPacket::receive);
             ServerPlayNetworking.registerGlobalReceiver(LINK, LinkS2CPacket::receive);
 
@@ -105,6 +52,51 @@ public class ModPacketsImpl {
                 buf.writeString(correctResponse);
                 sender.sendPacket(HANDSHAKE, buf);
             });
+            return;
         }
+
+        ServerLoginNetworking.registerGlobalReceiver(HANDSHAKE, LoginS2CPacket::receive);
+        ServerLoginNetworking.registerGlobalReceiver(LINK, LinkS2CPacket::receive);
+
+        ServerLoginConnectionEvents.QUERY_START.register((handler, server, sender, sync) -> {
+
+            GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
+            UUID uniqueId = profile.getId();
+
+            FutureTask<?> future = new FutureTask<>(() -> {
+                for (int i = 0; i <= 301; i++) {
+                    Thread.sleep(50);
+
+                    if (acceptLogin.containsKey(uniqueId)) {
+                        if (!acceptLogin.get(uniqueId)) {
+                            Text reason = TextHelper.literal("Modpack is not the same as on server");
+                            handler.connection.send(new LoginDisconnectS2CPacket(reason));
+                            handler.connection.disconnect(reason);
+                        }
+                        acceptLogin.remove(uniqueId);
+                        break;
+                    }
+
+                    if (i == 300) {
+                        AutoModpack.LOGGER.error("Timeout login for " + profile.getName() + " (" + uniqueId.toString()  + ")");
+                        Text reason = TextHelper.literal("AutoModpack - timeout");
+                        handler.connection.send(new LoginDisconnectS2CPacket(reason));
+                        handler.connection.disconnect(reason);
+                    }
+                }
+
+                return null;
+            });
+
+            // Execute the task on a worker thread as not to block the server thread
+            Util.getMainWorkerExecutor().execute(future);
+
+            PacketByteBuf buf = PacketByteBufs.create();
+            String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
+            buf.writeString(correctResponse);
+            sender.sendPacket(HANDSHAKE, buf);
+
+            sync.waitFor(future);
+        });
     }
 }
