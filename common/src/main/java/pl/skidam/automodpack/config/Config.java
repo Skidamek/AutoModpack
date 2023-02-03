@@ -11,7 +11,7 @@ public class Config {
 //        public boolean deleteModpackButton = true;
         public String username = "";
         public String javaExecutablePath = "";
-        public boolean updateCheck = true;
+        public boolean updateCheck = false;
         public boolean autoRelaunchWhenUpdated = false;
     }
 
@@ -20,11 +20,11 @@ public class Config {
         public boolean modpackHost = true;
         public boolean generateModpackOnStart = true;
         public List<String> syncedFiles = List.of("/mods/", "/config/");
-        public List<String> excludeSyncedFiles = List.of("/mods/idontwantthismodinmodpack.jar", "/config/andthisconfigtoo.json");
+        public List<String> excludeSyncedFiles = List.of("/mods/iDontWantThisModInModpack.jar", "/config/andThisConfigToo.json", "/mods/andAllThisMods-*.jar");
         public List<String> allowEditsInFiles = List.of("/options.txt");
         public boolean optionalModpack = false;
         public boolean autoExcludeServerSideMods = true;
-        public boolean velocitySupport = false;
+        public boolean velocityMode = false;
         // public boolean forceToDisableAllOtherModsOnClients = false;
         public int hostPort = 30037;
         public int hostThreads = 8;
