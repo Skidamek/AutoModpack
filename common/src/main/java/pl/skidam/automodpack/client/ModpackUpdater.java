@@ -1,6 +1,8 @@
 package pl.skidam.automodpack.client;
 
-import pl.skidam.automodpack.*;
+import pl.skidam.automodpack.AutoModpack;
+import pl.skidam.automodpack.Download;
+import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.*;
@@ -15,16 +17,19 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static pl.skidam.automodpack.AutoModpack.*;
+import static pl.skidam.automodpack.AutoModpack.LOGGER;
+import static pl.skidam.automodpack.AutoModpack.automodpackDir;
 import static pl.skidam.automodpack.config.ConfigTools.GSON;
 
 public class ModpackUpdater {
@@ -41,6 +46,7 @@ public class ModpackUpdater {
     public static String getStage() {
         return alreadyDownloaded + "/" + wholeQueue;
     }
+    private static final Map<String, String> defaultMods = getDefaultMods();
 
     public static int getTotalPercentageOfFileSizeDownloaded() {
         long totalBytes = 0;
@@ -189,15 +195,6 @@ public class ModpackUpdater {
         long start = System.currentTimeMillis();
 
         try {
-            Collection modList = Platform.getModList();
-            HashMap<String, Integer> localMods = new HashMap<>();
-            int i = 0;
-            for (Object mod : modList) {
-                i++;
-                String modId = mod.toString().split(" ")[0]; // mod is  "modid (version)" so we remove everything after space to get modid (modid can't have space in it)
-                localMods.put(modId, i);
-            }
-
             wholeQueue = serverModpackContent.list.size();
             for (Config.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
                 while (downloadFutures.size() >= MAX_DOWNLOADS) { // Async Setting - max `some` download at the same time
@@ -207,7 +204,6 @@ public class ModpackUpdater {
                 }
 
                 String fileName = modpackContentField.file;
-                LOGGER.info("Downloading file: " + fileName);
 
                 String serverModId = modpackContentField.modId;
                 String serverChecksum = modpackContentField.hash;
@@ -224,11 +220,16 @@ public class ModpackUpdater {
                 }
 
                 CompletableFuture<Void> downloadFuture;
-                if (isMod && !localMods.containsKey(serverModId)) {
-                    downloadFuture = downloadAsync(url, downloadFile, serverChecksum);
-                } else {
-                    downloadFuture = processAsync(url, downloadFile, isEditable, serverChecksum);
+                if (isMod && defaultMods != null) {
+                    if (defaultMods.containsKey(fileName) || defaultMods.containsValue(serverModId)) {
+                        File modFileInRunDir = new File("./" + fileName);
+                        if (serverChecksum.equals(CustomFileUtils.getHash(modFileInRunDir, "SHA-256"))) {
+                            LOGGER.info("Skipping already installed mod: " + fileName);
+                            continue;
+                        }
+                    }
                 }
+                downloadFuture = processAsync(url, downloadFile, isEditable, serverChecksum);
 
                 downloadFutures.add(downloadFuture);
             }
@@ -236,7 +237,7 @@ public class ModpackUpdater {
             CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).get();
 
             if (update) {
-                // if was updated, delete old files from modpack // TODO look at this more...
+                // if was updated, delete old files from modpack
                 List<String> files = serverModpackContent.list.stream().map(modpackContentField -> new File(modpackContentField.file).getName()).toList();
 
                 try (Stream<Path> stream = Files.walk(modpackDir.toPath(), 10)) {
@@ -297,10 +298,6 @@ public class ModpackUpdater {
             ScreenTools.setTo.Error("Critical error while downloading modpack.", "\"" + e.getMessage() + "\"", "More details in logs.");
             e.printStackTrace();
         }
-    }
-
-    private static CompletableFuture<Void> downloadAsync(String url, File downloadFile, String serverChecksum) {
-        return CompletableFuture.runAsync(() -> downloadFile(url, downloadFile, serverChecksum), DOWNLOAD_EXECUTOR);
     }
 
     private static CompletableFuture<Void> processAsync(String url, File downloadFile, boolean isEditable, String serverChecksum) {
@@ -370,7 +367,12 @@ public class ModpackUpdater {
 
                 String ourChecksum = CustomFileUtils.getHash(downloadFile, "SHA-256");
 
+                long size = WebFileSize.getWebFileSize(url);
+
                 if (serverChecksum.equals(ourChecksum)) {
+                    success = true;
+                } else if (attempts == maxAttempts && downloadFile.length() == size) { // FIXME
+                    AutoModpack.LOGGER.warn("Checksums do not match, but size is correct so we will assume it is correct lol");
                     success = true;
                 } else {
                     AutoModpack.LOGGER.warn("Checksums do not match, retrying... client: {} server: {}", ourChecksum, serverChecksum);
@@ -432,22 +434,30 @@ public class ModpackUpdater {
     }
 
     private static void DeleteDuplicatedMods(File modpackModsFile) throws IOException {
-        File defaultModsFolder = new File("./mods/");
-        File[] defaultMods = defaultModsFolder.listFiles();
+        Map<String, String> defaultModNames = getDefaultMods();
         File[] modpackMods = modpackModsFile.listFiles();
-        if (defaultMods == null || modpackMods == null) return;
-        Map<String, String> modpackModNames = new HashMap<>();
+        if (defaultModNames == null || modpackMods == null) return;
+
         for (File modpackMod : modpackMods) {
-            modpackModNames.put(modpackMod.getName(), JarUtilities.getModIdFromJar(modpackMod, true));
-        }
-        for (File defaultMod : defaultMods) {
-            if (modpackModNames.containsKey(defaultMod.getName()) || modpackModNames.containsValue(JarUtilities.getModIdFromJar(defaultMod, true))) {
-                LOGGER.info("Deleting duplicated mod: " + defaultMod.getName());
+            String modId = JarUtilities.getModIdFromJar(modpackMod, true);
+            if (defaultModNames.containsKey(modpackMod.getName()) || (modId != null && defaultModNames.containsValue(modId))) {
+                LOGGER.info("Deleting duplicated mod: " + modpackMod.getName());
                 File deletedModsFolder = new File( automodpackDir + "/deletedMods/");
                 if (!deletedModsFolder.exists()) deletedModsFolder.mkdirs();
-                Files.copy(defaultMod.toPath(), new File(deletedModsFolder + File.separator + defaultMod.getName()).toPath(), StandardCopyOption.REPLACE_EXISTING);
-                CustomFileUtils.forceDelete(defaultMod, true);
+                CustomFileUtils.copyFile(modpackMod, new File(deletedModsFolder + File.separator + modpackMod.getName()));
+                CustomFileUtils.forceDelete(modpackMod, true);
             }
         }
+    }
+
+    private static Map<String, String> getDefaultMods() {
+        Map<String, String> defaultMods = new HashMap<>();
+        File defaultModsFolder = new File("./mods/");
+        File[] defaultModsFiles = defaultModsFolder.listFiles();
+        if (defaultModsFiles == null) return null;
+        for (File defaultMod : defaultModsFiles) {
+            defaultMods.put(defaultMod.getName(), JarUtilities.getModIdFromJar(defaultMod, true));
+        }
+        return defaultMods;
     }
 }

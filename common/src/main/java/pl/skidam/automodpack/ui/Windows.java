@@ -9,10 +9,14 @@ import java.io.IOException;
 import java.util.Objects;
 
 // I use Linux btw
-
-public class Windows extends JFrame {
+public class Windows {
     public void restartWindow(String text) {
-        JFrame frame = new JFrame();
+        JFrame frame;
+        try {
+            frame = new JFrame();
+        } catch (Exception e) {
+            return;
+        }
         frame.setUndecorated(true);
         frame.setLayout(null);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -71,9 +75,7 @@ public class Windows extends JFrame {
     }
 
 
-    public void restartingWindow() { // TODO make it show when relaunching mc
-
-        JFrame frame = new JFrame();
+    public void restartingWindow(JFrame frame) {
         frame.setUndecorated(true);
         frame.setLayout(null);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -86,12 +88,70 @@ public class Windows extends JFrame {
         JLabel RestartText = new JLabel("Minecraft is restarting...");
         RestartText.setBounds(0, 10, 400, 32);
         RestartText.setFont(new Font("Segoe UI", Font.PLAIN, 24));
-        RestartText.setForeground(Color.red);
+        RestartText.setForeground(Color.GREEN);
         RestartText.setHorizontalAlignment(JLabel.CENTER); // center the text
 
         JLabel CustomText = new JLabel("Don't launch Minecraft manually!");
         CustomText.setBounds(0, 54, 400, 36);
         CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 18));
+        CustomText.setForeground(Color.red);
+        CustomText.setHorizontalAlignment(JLabel.CENTER); // center the text
+
+        JButton OKButton = new JButton("OK");
+        OKButton.setBounds(160, 100, 60, 25);
+        OKButton.setBackground(new Color(0, 153, 51)); // set background color
+        OKButton.setForeground(Color.white); // set text color
+        OKButton.setFont(new Font("Segoe UI", Font.BOLD, 14)); // set font style and size
+        OKButton.setFocusPainted(false);
+        OKButton.addActionListener(e -> {
+            frame.dispose();
+            System.exit(0);
+        });
+
+        BufferedImage icon = null;
+        try {
+            icon = ImageIO.read(Objects.requireNonNull(Windows.class.getClassLoader().getResourceAsStream("assets/automodpack/icon.png")));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        frame.add(OKButton);
+        frame.add(CustomText);
+        frame.add(RestartText);
+        frame.setTitle("AutoModpack window");
+        frame.setIconImage(icon);
+        frame.setVisible(true);
+        frame.requestFocus();
+        frame.toFront();
+
+        synchronized (Windows.class) {
+            try {
+                Windows.class.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public void errorRestartingWindow(JFrame frame) {
+        frame.setUndecorated(true);
+        frame.setLayout(null);
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(400, 150);
+        frame.setResizable(false);
+        frame.getContentPane().setBackground(new ColorUIResource(22, 27, 34));
+        Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
+        frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
+
+        JLabel RestartText = new JLabel("Re-launcher don't work on your OS!");
+        RestartText.setBounds(0, 10, 400, 32);
+        RestartText.setFont(new Font("Segoe UI", Font.PLAIN, 18));
+        RestartText.setForeground(Color.red);
+        RestartText.setHorizontalAlignment(JLabel.CENTER); // center the text
+
+        JLabel CustomText = new JLabel("https://github.com/Skidamek/AutoModpack/issues/87");
+        CustomText.setBounds(0, 54, 400, 36);
+        CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 14));
         CustomText.setForeground(Color.white);
         CustomText.setHorizontalAlignment(JLabel.CENTER); // center the text
 

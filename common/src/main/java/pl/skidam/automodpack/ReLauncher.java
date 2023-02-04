@@ -2,8 +2,11 @@ package pl.skidam.automodpack;
 
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.client.ScreenTools;
+import pl.skidam.automodpack.ui.Windows;
 import pl.skidam.automodpack.utils.JavaPath;
 
+import javax.swing.*;
+import java.awt.*;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
@@ -18,6 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack.AutoModpack.LOGGER;
+import static pl.skidam.automodpack.AutoModpack.preload;
 
 /**
  * Credits to jonafanho for the original code (https://github.com/jonafanho/Minecraft-Mod-Updater/blob/master/common/src/main/java/updater/Launcher.java)
@@ -129,8 +133,25 @@ public class ReLauncher {
 
 
         if (gameDir != null && (!command.contains(optionalModsProperty) && !command.contains(formatPath(optionalModsProperty)))) {
-            LOGGER.error("AutoModpack relauncher failed to add {} property to command!\nCommand: {}", optionalModsProperty, command);
+            LOGGER.error("AutoModpack relauncher failed to add {} property to command!\nCommand: {}", optionalModsProperty, censorPrivateInfo(command));
             System.exit(1);
+        }
+
+        if (!preload) {
+            Windows window = new Windows();
+            try { // FIXME
+                JFrame frame = new JFrame();
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    if (isWindows) {
+                        window.restartingWindow(frame);
+                    } else {
+                        window.errorRestartingWindow(frame);
+                    }
+                }));
+            } catch (HeadlessException ignored) {
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
         if (!isWindows) {
@@ -138,7 +159,7 @@ public class ReLauncher {
             LOGGER.warn("Check this issue: https://github.com/Skidamek/AutoModpack/issues/87");
         }
 
-        LOGGER.info("Restarting Minecraft with command:\n" + command);
+        LOGGER.info("Restarting Minecraft with command:\n" + censorPrivateInfo(command));
         try {
             Process process = Runtime.getRuntime().exec(command);
             CompletableFuture.runAsync(() -> {
@@ -165,10 +186,6 @@ public class ReLauncher {
         }
 
         CALLBACKS.forEach(Runnable::run);
-
-//        if (!AutoModpack.preload) {
-//            new Window().restartingWindow();
-//        }
 
         if (!isWindows) {
             LOGGER.warn("AutoModpack relauncher may not work on non-windows systems!");
@@ -225,54 +242,29 @@ public class ReLauncher {
             return "";
         }
     }
-
-    private static String removeAddModsProperties(String jvmArgs) {
-        StringBuilder sb = new StringBuilder();
-
-        if (jvmArgs.contains("-Dfabric.addMods=")) {
-            String[] args = jvmArgs.split("-Dfabric.addMods=");
-            for (int i = 0; i < args.length; i++) {
-                if (i == 0) {
-                    sb.append(args[i]);
-                    if (i < args.length - 1) {
-                        sb.append(" ");
-                    }
-                } else {
-                    String[] subArgs = args[i].split(" ");
-                    for (int j = 1; j < subArgs.length; j++) {
-                        sb.append(subArgs[j]);
-                        if (j < subArgs.length - 1) {
-                            sb.append(" ");
-                        }
-                    }
-                }
-            }
-        }
-
-        if (jvmArgs.contains("-Dloader.addMods=")) {
-            String[] args = jvmArgs.split("-Dloader.addMods=");
-            for (int i = 0; i < args.length; i++) {
-                if (i == 0) {
-                    sb.append(args[i]);
-                    if (i < args.length - 1) {
-                        sb.append(" ");
-                    }
-                } else {
-                    String[] subArgs = args[i].split(" ");
-                    for (int j = 1; j < subArgs.length; j++) {
-                        sb.append(subArgs[j]);
-                        if (j < subArgs.length - 1) {
-                            sb.append(" ");
-                        }
-                    }
-                }
-            }
-        }
-
-        if (sb.toString().equals("") || sb.toString().equals(" ")) {
+    private static String removeProperty(String jvmArgs, String property) {
+        int propertyIndex = jvmArgs.indexOf(property);
+        if (propertyIndex == -1) {
             return jvmArgs;
         }
 
-        return sb.toString();
+        int startIndex = propertyIndex + property.length();
+        int endIndex = jvmArgs.indexOf(" ", startIndex);
+        if (endIndex == -1) {
+            endIndex = jvmArgs.length();
+        }
+
+        return jvmArgs.substring(0, propertyIndex) + jvmArgs.substring(endIndex);
+    }
+    private static String removeAddModsProperties(String jvmArgs) {
+        jvmArgs = removeProperty(jvmArgs, "-Dfabric.addMods=");
+        jvmArgs = removeProperty(jvmArgs, "-Dloader.addMods=");
+        return jvmArgs;
+    }
+    private static String censorPrivateInfo(String command) {
+        return command.replaceAll("--username [^ ]+", "--username <censored>")
+                .replaceAll("--accessToken [^ ]+", "--accessToken <censored>")
+                .replaceAll("--uuid [^ ]+", "--uuid <censored>")
+                .replaceAll("--xuid [^ ]+", "--xuid <censored>");
     }
 }
