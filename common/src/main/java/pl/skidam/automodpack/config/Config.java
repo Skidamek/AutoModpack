@@ -20,7 +20,7 @@ public class Config {
         public String modpackName = "";
         public boolean modpackHost = true;
         public boolean generateModpackOnStart = true;
-        public List<String> syncedFiles = List.of("/mods/", "/config/");
+        public List<String> syncedFiles = List.of("/mods/", "/anyDifferent.file");
         public List<String> excludeSyncedFiles = List.of("/mods/iDontWantThisModInModpack.jar", "/config/andThisConfigToo.json", "/mods/andAllThisMods-*.jar");
         public List<String> allowEditsInFiles = List.of("/options.txt");
         public boolean optionalModpack = false;

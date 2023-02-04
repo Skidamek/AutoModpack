@@ -39,8 +39,10 @@ public class LinkC2SPacket {
         ModpackCheck.UpdateType updateType = ModpackCheck.isUpdate(link, modpackDir);
         boolean isLoaded = ModpackCheck.isLoaded(ModpackUpdater.getServerModpackContent(link));
 
+        boolean responseBoolean = updateType == ModpackCheck.UpdateType.NONE && isLoaded;
+
         PacketByteBuf response = PacketByteBufs.create();
-        response.writeBoolean(updateType == ModpackCheck.UpdateType.NONE && isLoaded);
+        response.writeBoolean(responseBoolean);
 
         CompletableFuture.runAsync(() -> {
             if (updateType == ModpackCheck.UpdateType.DELETE) {
@@ -75,21 +77,27 @@ public class LinkC2SPacket {
 
         sender.sendPacket(LINK, response);
 
+        // FIXME
         if (updateType == ModpackCheck.UpdateType.DELETE || updateType == ModpackCheck.UpdateType.FULL || !isLoaded) {
+
+            CompletableFuture.runAsync(() -> {
+                while (ScreenTools.getScreen() == null) {
+                    new Wait(100);
+                }
+            });
+
             // disconnect from server
-            if (client.world != null) {
-                MinecraftClient.getInstance().execute(() -> {
-                    client.world.disconnect();
-                    client.disconnect();
-                });
-            } else {
-                MinecraftClient.getInstance().execute(client::disconnect);
-            }
+            MinecraftClient.getInstance().execute(() -> {
+                if (client.world != null) client.world.disconnect();
+                client.disconnect();
+            });
 
             CompletableFuture.runAsync(() -> {
                 // wait until client got disconnected
-                while (ScreenTools.getScreen() == null) {
-                    new Wait(50);
+                if (ScreenTools.getScreen() == null) {
+                    while (ScreenTools.getScreen() == null) {
+                        new Wait(50);
+                    }
                 }
 
                 if (updateType == ModpackCheck.UpdateType.DELETE) {

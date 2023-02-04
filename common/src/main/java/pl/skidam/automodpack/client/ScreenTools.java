@@ -3,10 +3,7 @@ package pl.skidam.automodpack.client;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
-import pl.skidam.automodpack.client.ui.DangerScreen;
-import pl.skidam.automodpack.client.ui.DownloadScreen;
-import pl.skidam.automodpack.client.ui.ErrorScreen;
-import pl.skidam.automodpack.client.ui.RestartScreen;
+import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack.utils.Checks;
 
 import java.io.File;

@@ -38,18 +38,19 @@ public class LoginS2CPacket {
         String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
 
         if (!understood || !buf.readString().equals(correctResponse)) {
-            if (uniqueId != null) acceptLogin.put(uniqueId, false);
             if (AutoModpack.serverConfig.optionalModpack) {
+                acceptLogin.put(uniqueId, true);
                 AutoModpack.LOGGER.info("{} has not installed automodpack.", playerName);
                 return;
             }
             Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
+            acceptLogin.put(uniqueId, false);
             return;
         }
 
-        if (uniqueId != null) acceptLogin.put(uniqueId, true);
+        acceptLogin.put(uniqueId, true);
 
         if (!HttpServer.isRunning && AutoModpack.serverConfig.externalModpackHostLink.equals("")) return;
 

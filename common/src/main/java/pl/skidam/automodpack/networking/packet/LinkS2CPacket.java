@@ -24,12 +24,12 @@ public class LinkS2CPacket {
         UUID uniqueId = profile.getId();
 
         if (!buf.readBoolean()) { // disconnect
-            acceptLogin.put(uniqueId, false);
             Text reason = TextHelper.literal("[AutoModpack] Install/Update modpack to join");
             handler.connection.send(new LoginDisconnectS2CPacket(reason));
             handler.connection.disconnect(reason);
-        }
-        else { // let join
+
+            acceptLogin.put(uniqueId, false);
+        } else {
             acceptLogin.put(uniqueId, true);
         }
     }

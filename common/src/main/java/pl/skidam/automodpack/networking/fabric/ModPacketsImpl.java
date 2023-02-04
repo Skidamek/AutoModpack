@@ -27,6 +27,7 @@ import static pl.skidam.automodpack.networking.ModPackets.LINK;
 
 public class ModPacketsImpl {
 
+    // UUID, acceptLogin
     public static Map<UUID, Boolean> acceptLogin = new HashMap<>();
 
 

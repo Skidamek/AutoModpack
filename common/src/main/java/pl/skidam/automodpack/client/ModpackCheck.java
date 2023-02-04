@@ -8,10 +8,7 @@ import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static pl.skidam.automodpack.AutoModpack.LOGGER;
 import static pl.skidam.automodpack.client.ModpackUpdater.getServerModpackContent;
@@ -52,6 +49,7 @@ public class ModpackCheck {
             }
 
             if (!localMods.containsKey(mod.modId)) {
+                LOGGER.warn("An example of a missing mod: " + mod.file);
                 return false;
             }
         }
@@ -83,6 +81,12 @@ public class ModpackCheck {
             for (Config.ModpackContentFields.ModpackContentItems modpackFile : serverModpackContent.list) {
                 File file = new File(modpackDir + File.separator + modpackFile.file);
                 if (!file.exists()) {
+                    if (modpackFile.modId != null) {
+                        file = new File("./" + modpackFile.file);
+                    }
+                }
+
+                if (!file.exists()) {
                     isUpdate = true;
                     break;
                 }
@@ -95,12 +99,11 @@ public class ModpackCheck {
                 }
             }
 
-
             if (isUpdate) {
                 LOGGER.warn("Modpack update found!");
                 return UpdateType.FULL;
             } else if (deletedSomething && AutoModpack.preload) {
-                LOGGER.warn("Modpack is up to date, but some files were deleted. We need to restart the game to apply changes."); // TODO it might be problem with GameOptionsMixin
+                LOGGER.warn("Modpack is up to date, but some files were deleted. We need to restart the game to apply changes.");
                 new ReLauncher.Restart(modpackDir);
                 return UpdateType.DELETE;
             } else if (deletedSomething) { // and not preload
@@ -119,48 +122,53 @@ public class ModpackCheck {
 
     private static boolean deletedSomething = false;
 
-    private static boolean deleteUnwantedFiles(File directory, Config.ModpackContentFields serverModpackContent, File contentFile, File modpackDir) throws Exception {
+    private static boolean deleteUnwantedFiles(File directory, Config.ModpackContentFields serverModpackContent, File contentFile, File modpackFile) throws Exception {
         File[] files = directory.listFiles();
-        if (files != null) {
-            List<Config.ModpackContentFields.ModpackContentItems> serverModpackContentCopy = serverModpackContent.list;
-            for (File file : files) {
-                if (file.equals(contentFile)) continue;
-                if (file.isDirectory()) {
-                    deleteUnwantedFiles(file, serverModpackContent, contentFile, modpackDir);
-                } else {
-                    boolean found = false;
-                    for (Config.ModpackContentFields.ModpackContentItems modpackFile : serverModpackContentCopy) {
-                        String modpackPath = file.getAbsolutePath().replace(modpackDir.getAbsolutePath(), "").replace("\\", "/");
-//                        LOGGER.error(modpackPath + " <-> " + modpackFile.file);
-                        if (modpackPath.equals(modpackFile.file)) {
-                            found = true;
-                            serverModpackContentCopy.remove(modpackFile);
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        LOGGER.warn("Didn't found {} in modpack, deleting it", file.getName());
-                        deletedSomething = true;
-                        CustomFileUtils.forceDelete(file, true);
-                        ModpackUpdater.changelogList.put(file.getName(), false);
+        if (files == null) return false;
 
-                        // Deleting file from running directory if it's the same file as in modpack
-                        File runningFile = new File("." + modpackDir);
-                        if (runningFile.exists() && runningFile.isFile()) {
-                            String runningChecksum = CustomFileUtils.getHash(runningFile, "SHA-256");
-                            String modpackChecksum = CustomFileUtils.getHash(file, "SHA-256");
+        List<Config.ModpackContentFields.ModpackContentItems> serverModpackContentCopy = new ArrayList<>(serverModpackContent.list);
+        for (File file : files) {
 
-                            if (runningChecksum.equals(modpackChecksum)) {
-                                long runningSize = runningFile.length();
-                                long modpackSize = file.length();
-                                if (runningSize == modpackSize) {
-                                    LOGGER.warn("Found same file in running directory, deleting it");
-                                    CustomFileUtils.forceDelete(runningFile, true);
-                                }
-                            }
-                        }
-                    }
-                }
+            if (file.equals(contentFile)) continue;
+
+            if (file.isDirectory()) {
+                deleteUnwantedFiles(file, serverModpackContent, contentFile, modpackFile);
+                continue;
+            }
+
+            boolean found = false;
+            for (Config.ModpackContentFields.ModpackContentItems modpackFileFromContent : serverModpackContentCopy) {
+                String modpackPath = file.getAbsolutePath().replace(modpackFile.getAbsolutePath(), "").replace("\\", "/");
+
+                if (!modpackPath.equals(modpackFileFromContent.file)) continue;
+
+                found = true;
+                serverModpackContentCopy.remove(modpackFileFromContent);
+                break;
+            }
+
+            if (found) continue;
+
+            LOGGER.warn("Didn't found {} in modpack, deleting it", file.getName());
+            deletedSomething = true;
+            CustomFileUtils.forceDelete(file, true);
+            ModpackUpdater.changelogList.put(file.getName(), false);
+
+            // Deleting file from running directory if it's the same file as in modpack
+            File runningFile = new File("." + modpackFile);
+            if (!runningFile.exists() || !runningFile.isFile()) continue;
+
+            String runningChecksum = CustomFileUtils.getHash(runningFile, "SHA-256");
+            String modpackChecksum = CustomFileUtils.getHash(file, "SHA-256");
+
+            if (runningChecksum == null || modpackChecksum == null) continue;
+            if (!runningChecksum.equals(modpackChecksum)) continue;
+
+            long runningSize = runningFile.length();
+            long modpackSize = file.length();
+            if (runningSize == modpackSize) {
+                LOGGER.warn("Found same file in running directory, deleting it");
+                CustomFileUtils.forceDelete(runningFile, true);
             }
         }
 

@@ -46,7 +46,6 @@ public class CustomFileUtils {
             }
 
             if (deleteOnExit && file.exists()) {
-                AutoModpack.LOGGER.info("File {} will be deleted on exit", file.getName());
                 file.deleteOnExit();
             }
         }
