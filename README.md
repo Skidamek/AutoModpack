@@ -59,8 +59,9 @@ Launch the game your game/server.
 and you are good to go!
 
 **Want to add more content to your modpack?**
-- Just put it into `/automodpack/host-modpack/` directory on your server.
-- Or add whatever file/folder to the `syncedFiles` list in `/automodpack/automodpack-server.json`
+- To add mods to your server, place them in the `/automodpack/host-modpack/mods/` directory. 
+And so analogically to add shaderpacks, put them in `/automodpack/host-modpack/shaderpacks/`. You can create any subdirectories you need within `/automodpack/host-modpack/` folder.
+- Or add whatever file/folder from server main directory to the `syncedFiles` list in `/automodpack/automodpack-server.json`
 
 **Want to delete some mods from modpack?**
 - Just delete what you want from `/automodpack/host-modpack/` directory on your server.
@@ -74,33 +75,33 @@ and you are good to go!
 
 */automodpack/automodpack-server.json*
 
-| Name                        | Default Value                                                            | Description                                                                                                                              |
-|-----------------------------|--------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `modpackName`               |                                                                          | The name of the server modpack, currently doesn't do anything.                                                                           |
-| `modpackHost`               | `true`                                                                   | Starts HTTP server to host modpack.                                                                                                      |
-| `generateModpackOnStart`    | `true`                                                                   | Automatically generate modpack when the server starts.                                                                                   |
-| `syncedFiles`               | `"/mods/", "/config/"`                                                   | A list of files and directories that will be synced from the default server directory to the modpack.                                    |
-| `excludeSyncedFiles`        | `"/mods/idontwantthismodinmodpack.jar", "/config/andthisconfigtoo.json"` | A list of *only* files that will be excluded from the syncing process.                                                                   |
-| `allowEditsInFiles`         | `"/options.txt"`                                                         | List of files that clients are allowed to edit. In other words, just a files that are downloaded one time and then ignored from updating |
-| `optionalModpack`           | `false`                                                                  | Whether or not the modpack is optional for clients to download.                                                                          |
-| `autoExcludeServerSideMods` | `true`                                                                   | Automatically exclude server-side mods from the modpack.                                                                                 |
-| `velocitySupport`           | `false`                                                                  | Enable support for the Velocity proxy. *Currently won't work!*                                                                           |
-| `hostPort`                  | `30037`                                                                  | The port number on which the HTTP server listens.                                                                                        |
-| `hostThreads`               | `8`                                                                      | The number of threads used by the HTTP server.                                                                                           |
-| `hostIp`                    |                                                                          | The IP address on which the HTTP server binds.                                                                                           |
-| `hostLocalIp`               |                                                                          | The local IP address on which the HTTP server binds.                                                                                     |
-| `externalModpackHostLink`   |                                                                          | An external link to the modpack host, if it's hosted elsewhere. *Currently won't work!*                                                  |
-| `updateCheck`               | `true`                                                                   | Turn on/off all automodpack updates. This does not affect the mod's activity in installing modpacks.                                     |
-
+| Name                        | Default Value                                                                                          | Description                                                                                                                                                                   |
+|-----------------------------|--------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `modpackName`               |                                                                                                        | The name of the server modpack, currently doesn't do anything.                                                                                                                |
+| `modpackHost`               | `true`                                                                                                 | Starts HTTP server to host modpack.                                                                                                                                           |
+| `generateModpackOnStart`    | `true`                                                                                                 | Automatically generate modpack when the server starts.                                                                                                                        |
+| `syncedFiles`               | `"/mods/", "/config/"`                                                                                 | A list of files and directories that will be synced from the default server directory to the modpack.                                                                         |
+| `excludeSyncedFiles`        | `"/mods/iDontWantThisModInModpack.jar", "/config/andThisConfigToo.json", "/mods/andAllThisMods-*.jar"` | A list of *only* files that will be excluded from the syncing process. You can use wildcards `*` e.g. to exclude all files which starts with `mysupermod`, type `mysupermod*` |
+| `allowEditsInFiles`         | `"/options.txt"`                                                                                       | List of files that clients are allowed to edit. In other words, just a files that are downloaded one time and then ignored from updating                                      |
+| `optionalModpack`           | `false`                                                                                                | Whether or not the modpack is optional for clients to download.                                                                                                               |
+| `autoExcludeServerSideMods` | `true`                                                                                                 | Automatically exclude server-side mods from the modpack.                                                                                                                      |
+| `velocityMode`              | `false`                                                                                                | Enable support for the Velocity proxy, don't enable that if you don't use velocity! *Unstable*                                                                                |
+| `hostPort`                  | `30037`                                                                                                | The port number on which the HTTP server listens.                                                                                                                             |
+| `hostThreads`               | `8`                                                                                                    | The number of threads used by the HTTP server.                                                                                                                                |
+| `hostIp`                    |                                                                                                        | The IP address on which the HTTP server binds.                                                                                                                                |
+| `hostLocalIp`               |                                                                                                        | The local IP address on which the HTTP server binds.                                                                                                                          |
+| `externalModpackHostLink`   |                                                                                                        | An external link to the modpack host, if it's hosted elsewhere. *Currently won't work!*                                                                                       |
+| `selfUpdater`               | `true`                                                                                                 | Turn on/off all automodpack updates. This does not affect the mod's activity in installing modpacks.                                                                          |
+| `downloadDependency`        | `true`                                                                                                 | Turn on/off auto-installing dependencies, such as Fabric API which is required for the automodpack.                                                                           |
 
 */automodpack/automodpack-client.json*
 
 | Name                      | Default Value | Description                                                                                                                         |
 |---------------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | `selectedModpack`         |               | The main folder of the modpack that you want to play. Typing the name of the modpack here will cause it to be loaded.               |
-| `username`                |               | Your Minecraft username, currently unused, but there are plans to use it to notify the server admin who is downloading the modpack. |
 | `javaExecutablePath`      |               | The path to the Java executable that is used to relaunch Minecraft.                                                                 |
-| `updateCheck`             | `true`        | Turn on/off all automodpack updates. This does not affect the mod's activity in installing modpacks.                                |
+| `selfUpdater`             | `true`        | Turn on/off all automodpack updates. This does not affect the mod's activity in installing modpacks.                                |
+| `downloadDependency`      | `true`        | Turn on/off auto-installing dependencies, such as Fabric API which is required for the automodpack.                                 |
 | `autoRelaunchWhenUpdated` | `false`       | Auto relaunch Minecraft for seem lees automodpack self updating.                                                                    |
 
 
@@ -117,7 +118,7 @@ and you are good to go!
 
 ## Common problem
 
-**Got errors every time you try to download the modpack?**
+**Got errors every time you try to download the modpack / modpack-content is null?**
 
 - Take a look at your server log after starting the server. See if there's a notice about the modpack host launch and make sure the IP is correct (it may only be the last digits of the IP).
 

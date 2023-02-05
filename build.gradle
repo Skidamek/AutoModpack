@@ -2,7 +2,7 @@ plugins {
     id "architectury-plugin" version "3.4-SNAPSHOT"
     id "dev.architectury.loom" version "1.0-SNAPSHOT" apply false
     id 'io.github.juuxel.loom-quiltflower' version "${quilt_flower_version}" apply false
-//    id "io.github.pacifistmc.forgix" version "1.2.6"
+    id "io.github.pacifistmc.forgix" version "1.2.6"
 }
 
 architectury {
@@ -29,18 +29,18 @@ subprojects {
     }
 }
 
-//forgix { // Removed due problem with reforged fabric api for forge which loaded on fabric causes crash // TODO fix this, would be cool...
-//    group = "pl.skidam.automodpack"
-//    mergedJarName = "AutoModpack.jar"
-//}
+forgix {
+    group = "pl.skidam.automodpack"
+    mergedJarName = "automodpack-${rootProject.mod_version}-${rootProject.minecraft_version}.jar"
+}
 
 allprojects {
     apply plugin: "java"
     apply plugin: "architectury-plugin"
     apply plugin: "maven-publish"
 
-//    archivesBaseName = rootProject.archives_base_name
-//    version = rootProject.mod_version
+    archivesBaseName = rootProject.archives_base_name + "-${project.name}"
+    version = rootProject.mod_version
     group = rootProject.maven_group
 
     repositories {
@@ -55,6 +55,6 @@ allprojects {
         withSourcesJar()
     }
 
-//    build.finalizedBy(mergeJars)
-//    assemble.finalizedBy(mergeJars)
+    build.finalizedBy(mergeJars)
+    assemble.finalizedBy(mergeJars)
 }

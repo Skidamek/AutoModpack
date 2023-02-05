@@ -112,7 +112,7 @@ public class SelfUpdater {
                 return;
             }
 
-            // Shutdown hook to make it the most reliable way to update
+            // Shutdown hook to make it the most reliable way to update // TODO instead of zipping, try tricks with coping files while in use
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
                 File tempUpdateFileUnzipped = new File("./automodpack/temp/");
@@ -128,6 +128,7 @@ public class SelfUpdater {
                     System.out.println("Error while zipping file!");
                     e.printStackTrace();
                 }
+
                 CustomFileUtils.forceDelete(tempUpdateFileUnzipped, true);
                 CustomFileUtils.forceDelete(automodpackUpdateJar, true);
                 System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");

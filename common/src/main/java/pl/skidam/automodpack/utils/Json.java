@@ -42,7 +42,7 @@ public class Json {
         JsonElement element = null;
 
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/v3");
+        connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AutoModpack.VERSION);
         connection.setConnectTimeout(3000);
         connection.setReadTimeout(3000);
         connection.connect();
