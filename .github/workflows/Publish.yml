@@ -53,7 +53,10 @@ jobs:
         if: ${{ runner.os != 'Windows' }}
         run: chmod +x gradlew
 
-      - name: Build
+      - name: Build 1
+        run: ./gradlew build
+
+      - name: Build 2
         run: ./gradlew build
 
       - name: Publish (CurseForge/Modrinth/Github)
@@ -64,6 +67,8 @@ jobs:
 
           modrinth-id: k68glP2e
           modrinth-token: "${{secrets.MODRINTH_TOKEN}}"
+          modrinth-unfeature-mode: none
+          modrinth-featured: false
 
           github-tag: "v${{inputs.version}}"
           github-token: "${{secrets.GH_TOKEN}}"
