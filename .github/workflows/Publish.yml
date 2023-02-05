@@ -53,10 +53,7 @@ jobs:
         if: ${{ runner.os != 'Windows' }}
         run: chmod +x gradlew
 
-      - name: Build 1
-        run: ./gradlew build
-
-      - name: Build 2
+      - name: Build
         run: ./gradlew build
 
       - name: Publish (CurseForge/Modrinth/Github)
