@@ -53,6 +53,9 @@ jobs:
         if: ${{ runner.os != 'Windows' }}
         run: chmod +x gradlew
 
+      - name: Build
+        run: ./gradlew clean
+
       - name: Publish (CurseForge/Modrinth/Github)
         uses: Kir-Antipov/mc-publish@v3.2
         with:
@@ -65,7 +68,7 @@ jobs:
           github-tag: "v${{inputs.version}}"
           github-token: "${{secrets.GH_TOKEN}}"
 
-          files-primary: "Merged/*.jar"
+          files: "Merged/*.jar"
 
           name: "AutoModpack ${{inputs.version}} ${{env.MAIN_MINECRAFT_VERSION}}"
           version: "${{inputs.version}}"
