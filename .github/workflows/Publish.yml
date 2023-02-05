@@ -60,20 +60,23 @@ jobs:
         uses: Kir-Antipov/mc-publish@v3.2
         with:
           curseforge-id: 639211
-          curseforge-token: "${{secrets.CURSEFORGE_TOKEN}}"
+          curseforge-token: ${{secrets.CURSEFORGE_TOKEN}}
 
           modrinth-id: k68glP2e
-          modrinth-token: "${{secrets.MODRINTH_TOKEN}}"
+          modrinth-token: ${{secrets.MODRINTH_TOKEN}}
+          modrinth-unfeature-mode: none
+          modrinth-featured: false
 
-          github-tag: "v${{inputs.version}}"
-          github-token: "${{secrets.GH_TOKEN}}"
+          github-tag: v${{inputs.version}}
+          github-token: ${{secrets.GH_TOKEN}}
+          github-commitish: 1.19.3
 
-          files: "Merged/*.jar"
+          files: Merged/*.jar
 
-          name: "AutoModpack ${{inputs.version}} ${{env.MAIN_MINECRAFT_VERSION}}"
-          version: "${{inputs.version}}"
-          version-type: "${{inputs.release_type}}"
-          changelog: "${{inputs.change_log}}"
+          name: AutoModpack ${{inputs.version}} ${{env.MAIN_MINECRAFT_VERSION}}
+          version: ${{inputs.version}}
+          version-type: ${{inputs.release_type}}
+          changelog: ${{inputs.change_log}}
 
           loaders: |
             fabric
