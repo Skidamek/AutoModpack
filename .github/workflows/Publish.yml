@@ -22,7 +22,7 @@ on:
         default: ''
 
 env:
-    MAIN_MINECRAFT_VERSION: 1.19.3
+    MAIN_MINECRAFT_VERSION: 1.19.2
 
 permissions:
   contents: read
@@ -53,8 +53,11 @@ jobs:
         if: ${{ runner.os != 'Windows' }}
         run: chmod +x gradlew
 
-      - name: Build
-        run: ./gradlew clean
+      - name: Build 1
+        run: ./gradlew build
+
+      - name: Build 2
+        run: ./gradlew build
 
       - name: Publish (CurseForge/Modrinth/Github)
         uses: Kir-Antipov/mc-publish@v3.2
@@ -79,7 +82,9 @@ jobs:
             fabric
             quilt
           game-versions: |
-            1.19.3
+            1.19
+            1.19.1
+            1.19.2
           dependencies: |
             fabric-api | recommends | *
             qsl | recommends | *
