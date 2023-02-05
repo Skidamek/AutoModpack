@@ -9,18 +9,19 @@ public class Config {
 //        public boolean dangerScreen = true;
 //        public boolean checkUpdatesButton = true;
 //        public boolean deleteModpackButton = true;
-        public String username = "";
+//        public String username = "";
         public String javaExecutablePath = "";
-        public boolean selfUpdater = false;
+        public boolean selfUpdater = true;
         public boolean downloadDependency = true;
         public boolean autoRelaunchWhenUpdated = false;
+//        public boolean openWarningWindowOnAutoRelaunch = true;
     }
 
     public static class ServerConfigFields {
         public String modpackName = "";
         public boolean modpackHost = true;
         public boolean generateModpackOnStart = true;
-        public List<String> syncedFiles = List.of("/mods/", "/anyDifferent.file");
+        public List<String> syncedFiles = List.of("/mods/", "/config/");
         public List<String> excludeSyncedFiles = List.of("/mods/iDontWantThisModInModpack.jar", "/config/andThisConfigToo.json", "/mods/andAllThisMods-*.jar");
         public List<String> allowEditsInFiles = List.of("/options.txt");
         public boolean optionalModpack = false;
@@ -32,13 +33,14 @@ public class Config {
         public String hostIp = "";
         public String hostLocalIp = "";
         public String externalModpackHostLink = "";
-        public boolean selfUpdater = false;
+        public boolean selfUpdater = true;
         public boolean downloadDependency = true;
     }
 
     public static class ModpackContentFields {
         public String modpackName = "";
         public String link = "";
+        public String loader = "";
         public long timeStamp = -1;
         public List<ModpackContentItems> list;
         public ModpackContentFields(String link, List<ModpackContentItems> list) {

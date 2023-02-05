@@ -3,6 +3,10 @@ name: Publish
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: 'version'
+        required: true
+        default: 'x.x.x'
       release_type:
         description: 'alpha/beta/release'
         required: true
@@ -17,13 +21,19 @@ on:
         required: false
         default: ''
 
+env:
+    MAIN_MINECRAFT_VERSION: 1.19.3
+
 permissions:
-  contents: read
+  contents: read, write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+
+      - name: Check Environment Variables
+        run: env
 
       - name: Setup Java JDK
         uses: actions/setup-java@v3
@@ -33,6 +43,8 @@ jobs:
 
       - name: checkout repository
         uses: actions/checkout@v3
+        with:
+          submodules: true
 
       - name: configure gradle
         uses: gradle/wrapper-validation-action@v1
@@ -41,11 +53,31 @@ jobs:
         if: ${{ runner.os != 'Windows' }}
         run: chmod +x gradlew
 
-      - name: Do gradle release
-        uses: gradle/gradle-build-action@v2
+      - name: Publish (CurseForge/Modrinth/Github)
+        uses: Kir-Antipov/mc-publish@v3.2
         with:
-          arguments: publishMod -Prelease_type=${{ inputs.release_type }} -Pchange_log="${{ inputs.change_log }}"
-        env:
-          CURSEFORGE_TOKEN: ${{secrets.CURSEFORGE_TOKEN}}
-          MODRINTH_TOKEN: ${{secrets.MODRINTH_TOKEN}}
-          GH_TOKEN: ${{secrets.GH_TOKEN}}
+          curseforge-id: 639211
+          curseforge-token: "${{secrets.CURSEFORGE_TOKEN}}"
+
+          modrinth-id: k68glP2e
+          modrinth-token: "${{secrets.MODRINTH_TOKEN}}"
+
+          github-tag: "v${{inputs.version}}"
+          github-token: "${{secrets.GH_TOKEN}}"
+
+          files-primary: "Merged/*.jar"
+
+          name: "AutoModpack ${{inputs.version}} ${{env.MAIN_MINECRAFT_VERSION}}"
+          version: "${{inputs.version}}"
+          version-type: "${{inputs.release_type}}"
+          changelog: "${{inputs.change_log}}"
+
+          loaders: |
+            fabric
+            quilt
+          game-versions: |
+            1.19.3
+          dependencies: |
+            fabric-api | recommends | *
+            qsl | recommends | *
+          java: 17

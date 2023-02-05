@@ -47,6 +47,7 @@ public class ModpackUpdater {
         return alreadyDownloaded + "/" + wholeQueue;
     }
     private static final Map<String, String> defaultMods = getDefaultMods();
+    public static Map<String, String> failedDownloads = new HashMap<>(); // <file, url>
 
     public static int getTotalPercentageOfFileSizeDownloaded() {
         long totalBytes = 0;
@@ -109,7 +110,6 @@ public class ModpackUpdater {
         try {
             HttpRequest getContent = HttpRequest.newBuilder()
                     .timeout(Duration.ofSeconds(3))
-                    .setHeader("Accept-Encoding", "gzip")
                     .setHeader("Minecraft-Username", MinecraftUserName.get())
                     .setHeader("User-Agent", "github/skidamek/automodpack/" + AutoModpack.VERSION)
                     .uri(new URI(link))
@@ -117,7 +117,22 @@ public class ModpackUpdater {
 
             HttpClient httpClient = HttpClient.newHttpClient();
             HttpResponse<String> contentResponse = httpClient.send(getContent, HttpResponse.BodyHandlers.ofString());
-            return GSON.fromJson(contentResponse.body(), Config.ModpackContentFields.class);
+            Config.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse.body(), Config.ModpackContentFields.class);
+
+            if (serverModpackContent.list.size() < 1) {
+                LOGGER.error("Modpack content is empty!");
+                return null;
+            }
+            // check if modpackContent is valid/isn't malicious
+            for (Config.ModpackContentFields.ModpackContentItems modpackContentItem : serverModpackContent.list) {
+                String file = modpackContentItem.file.replace("\\", "/");
+                if (file.contains("/../")) {
+                    LOGGER.error("Modpack content is invalid, it contains /../ in file name");
+                    return null;
+                }
+            }
+
+            return serverModpackContent;
         } catch (ConnectException e) {
             LOGGER.error("Couldn't connect to modpack server " + link);
         } catch (Exception e) {
@@ -279,6 +294,16 @@ public class ModpackUpdater {
 
             DeleteDuplicatedMods(new File(modpackDir + File.separator + "mods"));
 
+            if (!failedDownloads.isEmpty()) {
+                StringBuilder failedFiles = new StringBuilder("null");
+                for (Map.Entry<String, String> entry : failedDownloads.entrySet()) {
+                    LOGGER.error("Failed to download: " + entry.getKey() + " from " + entry.getValue());
+                    failedFiles.append(entry.getKey());
+                }
+                ScreenTools.setTo.Error("Failed to download some files", "Failed to download: " + failedFiles, "More details in logs.");
+                return;
+            }
+
             LOGGER.info("Modpack is up-to-date! Took: " + (System.currentTimeMillis() - start) + " ms");
 
             if (loadIfItsNotLoaded) {
@@ -367,6 +392,7 @@ public class ModpackUpdater {
 
                 String ourChecksum = CustomFileUtils.getHash(downloadFile, "SHA-256");
 
+                // this shouldn't change, but just in case
                 long size = WebFileSize.getWebFileSize(url);
 
                 if (serverChecksum.equals(ourChecksum)) {
@@ -375,8 +401,11 @@ public class ModpackUpdater {
                     AutoModpack.LOGGER.warn("Checksums do not match, but size is correct so we will assume it is correct lol");
                     success = true;
                 } else {
-                    AutoModpack.LOGGER.warn("Checksums do not match, retrying... client: {} server: {}", ourChecksum, serverChecksum);
+                    if (attempts < maxAttempts) {
+                        AutoModpack.LOGGER.warn("Checksums do not match, retrying... client: {} server: {}", ourChecksum, serverChecksum);
+                    }
                     CustomFileUtils.forceDelete(downloadFile, false);
+                    totalBytesDownloaded -= size;
                 }
             } catch (SocketTimeoutException e) {
                 AutoModpack.LOGGER.error("Download of {} timed out, retrying...", downloadFile.getName());
@@ -391,6 +420,7 @@ public class ModpackUpdater {
             changelogList.put(downloadFile.getName(), true);
             alreadyDownloaded++;
         } else {
+            failedDownloads.put(downloadFile.getName(), url);
             AutoModpack.LOGGER.error("Failed to download {} after {} attempts", downloadFile.getName(), attempts);
         }
     }

@@ -108,6 +108,7 @@ public class Modpack {
                 modpackContent = new Config.ModpackContentFields(null, list);
                 modpackContent.timeStamp = modpackDir.toFile().lastModified();
                 modpackContent.modpackName = AutoModpack.serverConfig.modpackName;
+                modpackContent.loader = Platform.getPlatformType().toString().toLowerCase();
 
                 ConfigTools.saveConfig(modpackContentFile, modpackContent);
 

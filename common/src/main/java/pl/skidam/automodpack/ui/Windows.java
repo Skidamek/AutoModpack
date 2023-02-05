@@ -11,12 +11,7 @@ import java.util.Objects;
 // I use Linux btw
 public class Windows {
     public void restartWindow(String text) {
-        JFrame frame;
-        try {
-            frame = new JFrame();
-        } catch (Exception e) {
-            return;
-        }
+        JFrame frame = new JFrame();
         frame.setUndecorated(true);
         frame.setLayout(null);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -74,8 +69,8 @@ public class Windows {
         }
     }
 
-
-    public void restartingWindow(JFrame frame) {
+    public void restartingWindow() {
+        JFrame frame = new JFrame();
         frame.setUndecorated(true);
         frame.setLayout(null);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -133,7 +128,8 @@ public class Windows {
         }
     }
 
-    public void errorRestartingWindow(JFrame frame) {
+    public void errorRestartingWindow() {
+        JFrame frame = new JFrame();
         frame.setUndecorated(true);
         frame.setLayout(null);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);

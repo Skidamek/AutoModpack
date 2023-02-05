@@ -2,11 +2,8 @@ package pl.skidam.automodpack;
 
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.client.ScreenTools;
-import pl.skidam.automodpack.ui.Windows;
 import pl.skidam.automodpack.utils.JavaPath;
 
-import javax.swing.*;
-import java.awt.*;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
@@ -21,7 +18,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack.AutoModpack.LOGGER;
-import static pl.skidam.automodpack.AutoModpack.preload;
 
 /**
  * Credits to jonafanho for the original code (https://github.com/jonafanho/Minecraft-Mod-Updater/blob/master/common/src/main/java/updater/Launcher.java)
@@ -31,6 +27,7 @@ public class ReLauncher {
     private static final List<Runnable> CALLBACKS = new ArrayList<>();
     private static String command;
     private static String javaPath;
+    public static boolean openWindow = false;
 
     public static class Restart {
         public Restart(File gameDir) {
@@ -85,13 +82,8 @@ public class ReLauncher {
             )).replace(formatPath(oldLibraryPath.toString()), formatPath(newLibraryPath.toString()));
 
 
-            // Fix for Fabric/Fabric/Fabric/... in title screen (just removing --versionType property)
-            if (command.contains(" --versionType ")) {
-                String[] parts = command.split(" --versionType ");
-                String launchArgsBeforeVersionType = parts[0];
-                String launchArgsAfterVersionType = parts[1].replaceFirst("\\S+\\s*", "");
-                command = launchArgsBeforeVersionType + launchArgsAfterVersionType;
-            }
+            // Fix for Fabric/Fabric/Fabric/... in title screen (by just removing --versionType property)
+            command = command.replaceAll("--versionType [^ ]+", "");
         }
     }
 
@@ -137,22 +129,21 @@ public class ReLauncher {
             System.exit(1);
         }
 
-        if (!preload) {
-            Windows window = new Windows();
-            try { // FIXME
-                JFrame frame = new JFrame();
-                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                    if (isWindows) {
-                        window.restartingWindow(frame);
-                    } else {
-                        window.errorRestartingWindow(frame);
-                    }
-                }));
-            } catch (HeadlessException ignored) {
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
+//        if (!preload) {
+//            Windows window = new Windows();
+//            try { // FIXME
+//                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+//                    if (isWindows) {
+//                        window.restartingWindow();
+//                    } else {
+//                        window.errorRestartingWindow();
+//                    }
+//                }));
+//            } catch (HeadlessException ignored) {
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//        }
 
         if (!isWindows) {
             LOGGER.warn("AutoModpack relauncher may not work on non-windows systems!");
@@ -192,7 +183,13 @@ public class ReLauncher {
             LOGGER.warn("Check this issue: https://github.com/Skidamek/AutoModpack/issues/87");
         }
 
-        System.exit(0);
+//        if (Checks.properlyLoaded() && AutoModpack.clientConfig.openWarningWindowOnAutoRelaunch) {
+//            System.out.println("AutoModpack relauncher: openWarningWindowOnAutoRelaunch is true, opening warning window!");
+//            openWindow = true;
+//            MinecraftClient.getInstance().stop();
+//        } else {
+            System.exit(0);
+//        }
     }
 
     public static void addCallback(Runnable callback) {
@@ -242,6 +239,7 @@ public class ReLauncher {
             return "";
         }
     }
+
     private static String removeProperty(String jvmArgs, String property) {
         int propertyIndex = jvmArgs.indexOf(property);
         if (propertyIndex == -1) {
@@ -256,11 +254,13 @@ public class ReLauncher {
 
         return jvmArgs.substring(0, propertyIndex) + jvmArgs.substring(endIndex);
     }
+
     private static String removeAddModsProperties(String jvmArgs) {
         jvmArgs = removeProperty(jvmArgs, "-Dfabric.addMods=");
         jvmArgs = removeProperty(jvmArgs, "-Dloader.addMods=");
         return jvmArgs;
     }
+
     private static String censorPrivateInfo(String command) {
         return command.replaceAll("--username [^ ]+", "--username <censored>")
                 .replaceAll("--accessToken [^ ]+", "--accessToken <censored>")

@@ -129,12 +129,6 @@ public class Commands {
                                 .formatted(statusColor)
                         )
                 ), false);
-        context.getSource().sendFeedback(TextHelper.literal("/automodpack generate")
-                .formatted(Formatting.YELLOW), false);
-        context.getSource().sendFeedback(TextHelper.literal("/automodpack host start/stop/restart")
-                .formatted(Formatting.YELLOW), false);
-        context.getSource().sendFeedback(TextHelper.literal("/automodpack config reload")
-                .formatted(Formatting.YELLOW), false);
         return Command.SINGLE_SUCCESS;
     }
 
@@ -144,7 +138,9 @@ public class Commands {
                 .append(TextHelper.literal(" - " + AutoModpack.VERSION)
                         .formatted(Formatting.WHITE)
                 ), false);
-        context.getSource().sendFeedback(TextHelper.literal("/automodpack host")
+        context.getSource().sendFeedback(TextHelper.literal("/automodpack generate")
+                .formatted(Formatting.YELLOW), false);
+        context.getSource().sendFeedback(TextHelper.literal("/automodpack host start/stop/restart")
                 .formatted(Formatting.YELLOW), false);
         context.getSource().sendFeedback(TextHelper.literal("/automodpack config reload")
                 .formatted(Formatting.YELLOW), false);
@@ -154,7 +150,7 @@ public class Commands {
     private static int generateModpack(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
             context.getSource().sendFeedback(TextHelper.literal("Generating Modpack...")
-                            .formatted(Formatting.GREEN),
+                            .formatted(Formatting.YELLOW),
                     true);
             Modpack.generate();
             context.getSource().sendFeedback(TextHelper.literal("Modpack generated!")
