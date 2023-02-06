@@ -1,11 +1,14 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.EntryListWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.ui.widget.ScrollingListWidget;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.ModpackContentTools;
@@ -16,12 +19,11 @@ import java.util.List;
 import java.util.Map;
 
 public class ChangelogScreen extends Screen {
-    private List<String> changelogs;
+    private static List<String> changelogs;
     private TextFieldWidget searchField;
     private final Screen parent;
     private final File modpackDir;
-//    private int scrollLevel = 0;
-//    private static final int maxScroll = 1;
+    private ChangelogsList changelogsList;
     public ChangelogScreen(Screen parent, File modpackDir) {
         super(TextHelper.literal("ChangelogScreen"));
         this.parent = parent;
@@ -32,24 +34,30 @@ public class ChangelogScreen extends Screen {
     protected void init() {
         super.init();
 
-        // Retrieve the changelogs from a file or remote server
-        this.changelogs = getChangelogs();
+        assert this.client != null;
+
+        // TODO
+//        this.client.keyboard.setRepeatEvents(true); 1.19.3 bruh
+
+        // Retrieve the changelogs
+        changelogs = getChangelogs();
+
+        // Initialize the changelogs list
+        this.changelogsList = new ChangelogsList(client, this.width, this.height, 48, this.height - 64, 20);
+        this.addDrawableChild(this.changelogsList);
 
         // Initialize the search field
         this.searchField = new TextFieldWidget(this.textRenderer, this.width / 2 - 100, 20, 200, 20, TextHelper.literal(""));
-        this.searchField.setChangedListener((textField) -> {
-            // Update the changelogs display based on the search query
-            updateChangelogs();
-        });
+        this.searchField.setChangedListener((textField) -> updateChangelogs()); // Update the changelogs display based on the search query
         this.addDrawableChild(this.searchField);
-        this.setInitialFocus(this.searchField);
 
         // Add the back button
         this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> {
             assert this.client != null;
             this.client.setScreen(this.parent);
-        }).position(5, this.height - 20 - 5).size(50, 20).build());
+        }).position(5, this.height - 20 - 5).size(72, 20).build());
 
+        this.setInitialFocus(this.searchField);
     }
 
     @Override
@@ -60,38 +68,10 @@ public class ChangelogScreen extends Screen {
         // Draw summary of added/removed mods
         drawSummaryOfChanges(matrices);
 
-        // Display the changelogs
-        drawChangelogs(matrices);
-
-
-//        //Draw scrollbar.
-//        RenderSystem.setShader(GameRenderer::getPositionTexShader);
-//        if (isScrollBarHovered(mouseX, mouseY)) {
-//            this.drawTexture(matrices, (this.width / 2) -20, (int) ((this.height / 2) + 43 + ((double) scrollLevel / maxScroll * 138)), 33, 0, 12, 15);
-//        } else {
-//            this.drawTexture(matrices, (this.width / 2) -20, (int) ((this.height / 2) + 43 + ((double) scrollLevel / maxScroll * 138)), 21, 0, 12, 15);
-//        }
+        // Update and display the changelogs based on the search query
+        this.changelogsList = new ChangelogsList(client, this.width, this.height, 48, this.height - 64, 20);
+        this.changelogsList.render(matrices, mouseX, mouseY, delta);
     }
-
-//    public boolean isScrollBarHovered(int mouseX, int mouseY) {
-//        return mouseX >= (this.width) / 2 - 20 && mouseX <= this.width / 2 - 8 && mouseY >= (this.height) / 2 + 43 && mouseY <= this.height / 2 + 196;
-//    }
-
-//    @Override
-//    public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
-//        int oldScroll = scrollLevel;
-//        scrollLevel+=amount;
-//        if (scrollLevel < maxScroll) {
-//            scrollLevel = maxScroll;
-//        } else if (scrollLevel > 0) {scrollLevel = 0;}
-//        if (oldScroll != scrollLevel) {
-//            updateChangelogs();
-//            //May need to set visibility of all entries, if something breaks.
-//            return true;
-//        }
-//        return false;
-//    }
-
 
     private void drawSummaryOfChanges(MatrixStack matrices) {
 
@@ -119,33 +99,10 @@ public class ChangelogScreen extends Screen {
         drawCenteredText(matrices, textRenderer, TextHelper.literal(summary), this.width / 2, 5, 16777215);
     }
 
-    private void drawChangelogs(MatrixStack matrices) {
-
-        float scale = 1.0F;
-
-        matrices.push();
-        matrices.scale(scale, scale, scale);
-
-        int y = 50;
-        for (String changelog : this.changelogs) {
-            int color = 16777215;
-            if (changelog.startsWith("+")) {
-                color = 3706428;
-            } else if (changelog.startsWith("-")) {
-                color = 14687790;
-            }
-            drawCenteredText(matrices, this.textRenderer, TextHelper.literal(changelog), (int) (this.width / 2 * scale), y, color);
-            y += 10;
-        }
-
-
-        matrices.pop();
-    }
-
     private void updateChangelogs() {
         // If the search field is empty, reset the changelogs to the original list
         if (this.searchField.getText().isEmpty()) {
-            this.changelogs = getChangelogs();
+            changelogs = getChangelogs();
         } else {
             // Filter the changelogs based on the search query using a case-insensitive search
             List<String> filteredChangelogs = new ArrayList<>();
@@ -154,10 +111,9 @@ public class ChangelogScreen extends Screen {
                     filteredChangelogs.add(changelog);
                 }
             }
-            this.changelogs = filteredChangelogs;
+            changelogs = filteredChangelogs;
         }
     }
-
 
     private List<String> getChangelogs() {
         List<String> changelogs = new ArrayList<>();
@@ -174,7 +130,42 @@ public class ChangelogScreen extends Screen {
     }
 
     @Override
-    public boolean shouldCloseOnEsc() { return false; }
+    public boolean shouldCloseOnEsc() {
+        assert this.client != null;
+        this.client.setScreen(this.parent);
+        return false;
+    }
+
+    public static class ChangelogsList extends ScrollingListWidget<ChangelogsList.Entry> {
+        ChangelogsList(MinecraftClient client, int width, int height, int top, int bottom, int itemHeight) {
+            super(client, width, height, top, bottom, itemHeight);
+
+            for (String changelog : ChangelogScreen.changelogs) {
+                int color = 16777215;
+                if (changelog.startsWith("+")) {
+                    color = 3706428;
+                } else if (changelog.startsWith("-")) {
+                    color = 14687790;
+                }
+
+                this.children().add(new Entry(changelog, color));
+            }
+        }
+
+        public class Entry extends EntryListWidget.Entry<ChangelogsList.Entry> {
+            private final String text;
+            private final int color;
+            public Entry(String text, int color) {
+                this.text = text;
+                this.color = color;
+            }
+
+            @Override
+            public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+                drawStringWithShadow(matrices, ChangelogsList.this.client.textRenderer, text, x + 10, y, color);
+            }
+        }
+    }
 }
 
 
