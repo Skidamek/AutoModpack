@@ -265,6 +265,7 @@ public class ReLauncher {
         return command.replaceAll("--username [^ ]+", "--username <censored>")
                 .replaceAll("--accessToken [^ ]+", "--accessToken <censored>")
                 .replaceAll("--uuid [^ ]+", "--uuid <censored>")
-                .replaceAll("--xuid [^ ]+", "--xuid <censored>");
+                .replaceAll("--xuid [^ ]+", "--xuid <censored>")
+                .replaceAll("--clientId [^ ]+", "--clientId <censored>");
     }
 }

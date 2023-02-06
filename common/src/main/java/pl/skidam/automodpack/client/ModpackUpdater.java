@@ -213,9 +213,9 @@ public class ModpackUpdater {
         long start = System.currentTimeMillis();
 
         try {
-            int wholeQueue = serverModpackContent.list.size();
+            List<Config.ModpackContentFields.ModpackContentItems> copyModpackContentList = new ArrayList<>(serverModpackContent.list);
 
-            for (Config.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
+            for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
 
                 String fileName = modpackContentField.file;
                 String serverChecksum = modpackContentField.hash;
@@ -226,38 +226,41 @@ public class ModpackUpdater {
 
                 if (serverChecksum.equals(CustomFileUtils.getHash(fileInRunDir, "SHA-256"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
-                    wholeQueue--;
+                    totalBytesDownloaded += fileInRunDir.length();
+                    copyModpackContentList.remove(modpackContentField);
                 }
             }
 
-            ModpackUpdater.wholeQueue = wholeQueue;
+            ModpackUpdater.wholeQueue = copyModpackContentList.size();
 
             LOGGER.info("In queue left " + wholeQueue + " files to download");
 
-            for (Config.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
-                while (downloadFutures.size() >= MAX_DOWNLOADS) { // Async Setting - max `some` download at the same time
-                    downloadFutures = downloadFutures.stream()
-                            .filter(future -> !future.isDone())
-                            .collect(Collectors.toList());
+            if (wholeQueue > 0) {
+                for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
+                    while (downloadFutures.size() >= MAX_DOWNLOADS) { // Async Setting - max `some` download at the same time
+                        downloadFutures = downloadFutures.stream()
+                                .filter(future -> !future.isDone())
+                                .collect(Collectors.toList());
+                    }
+
+                    String fileName = modpackContentField.file;
+                    String serverChecksum = modpackContentField.hash;
+                    boolean isEditable = modpackContentField.isEditable;
+
+                    File downloadFile = new File(modpackDir + File.separator + fileName);
+                    String url;
+                    if (modpackContentField.link.startsWith("/")) { // AutoModpack host
+                        url = link + modpackContentField.link;
+                        url = Url.encode(url); // We need to change things like [ ] to %5B %5D etc.
+                    } else { // Other host
+                        url = modpackContentField.link; // This link just must work, so we don't need to encode it
+                    }
+
+                    downloadFutures.add(processAsync(url, downloadFile, isEditable, serverChecksum));
                 }
 
-                String fileName = modpackContentField.file;
-                String serverChecksum = modpackContentField.hash;
-                boolean isEditable = modpackContentField.isEditable;
-
-                File downloadFile = new File(modpackDir + File.separator + fileName);
-                String url;
-                if (modpackContentField.link.startsWith("/")) { // AutoModpack host
-                    url = link + modpackContentField.link;
-                    url = Url.encode(url); // We need to change things like [ ] to %5B %5D etc.
-                } else { // Other host
-                    url = modpackContentField.link; // This link just must work, so we don't need to encode it
-                }
-
-                downloadFutures.add(processAsync(url, downloadFile, isEditable, serverChecksum));
+                CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).get();
             }
-
-            CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).get();
 
             // Downloads completed
             if (update) {
