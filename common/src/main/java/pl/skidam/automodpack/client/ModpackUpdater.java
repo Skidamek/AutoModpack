@@ -37,17 +37,17 @@ public class ModpackUpdater {
     public static final int MAX_DOWNLOADS = 5; // at the same time
     public static List<CompletableFuture<Void>> downloadFutures = new ArrayList<>();
     public static Map<String, Boolean> changelogList = new HashMap<>(); // <file, true - downloaded, false - deleted>
-    private static final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS);
+    private static ExecutorService DOWNLOAD_EXECUTOR;
     public static boolean update;
     public static long totalBytesDownloaded = 0;
     private static int alreadyDownloaded = 0;
     private static int wholeQueue = 0;
     private static Config.ModpackContentFields serverModpackContent;
+    public static Map<String, String> failedDownloads = new HashMap<>(); // <file, url>
+
     public static String getStage() {
         return alreadyDownloaded + "/" + wholeQueue;
     }
-    private static final Map<String, String> defaultMods = getDefaultMods();
-    public static Map<String, String> failedDownloads = new HashMap<>(); // <file, url>
 
     public static int getTotalPercentageOfFileSizeDownloaded() {
         long totalBytes = 0;
@@ -126,8 +126,9 @@ public class ModpackUpdater {
             // check if modpackContent is valid/isn't malicious
             for (Config.ModpackContentFields.ModpackContentItems modpackContentItem : serverModpackContent.list) {
                 String file = modpackContentItem.file.replace("\\", "/");
-                if (file.contains("/../")) {
-                    LOGGER.error("Modpack content is invalid, it contains /../ in file name");
+                String url = modpackContentItem.link.replace("\\", "/");
+                if (file.contains("/../") || url.contains("/../")) {
+                    LOGGER.error("Modpack content is invalid, it contains /../ in file name or url");
                     return null;
                 }
             }
@@ -146,6 +147,8 @@ public class ModpackUpdater {
         if (link == null || link.isEmpty() || modpackDir.toString() == null || modpackDir.toString().isEmpty()) return;
 
         try {
+            DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS);
+
             serverModpackContent = getServerModpackContent(link);
 
             if (serverModpackContent == null)  { // server is down, or you don't have access to internet, but we still want to load selected modpack
@@ -210,7 +213,27 @@ public class ModpackUpdater {
         long start = System.currentTimeMillis();
 
         try {
-            wholeQueue = serverModpackContent.list.size();
+            int wholeQueue = serverModpackContent.list.size();
+
+            for (Config.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
+
+                String fileName = modpackContentField.file;
+                String serverChecksum = modpackContentField.hash;
+
+                File fileInRunDir = new File("./" + fileName);
+
+                if (!fileInRunDir.exists() || !fileInRunDir.isFile()) continue;
+
+                if (serverChecksum.equals(CustomFileUtils.getHash(fileInRunDir, "SHA-256"))) {
+                    LOGGER.info("Skipping already downloaded file: " + fileName);
+                    wholeQueue--;
+                }
+            }
+
+            ModpackUpdater.wholeQueue = wholeQueue;
+
+            LOGGER.info("In queue left " + wholeQueue + " files to download");
+
             for (Config.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
                 while (downloadFutures.size() >= MAX_DOWNLOADS) { // Async Setting - max `some` download at the same time
                     downloadFutures = downloadFutures.stream()
@@ -219,10 +242,7 @@ public class ModpackUpdater {
                 }
 
                 String fileName = modpackContentField.file;
-
-                String serverModId = modpackContentField.modId;
                 String serverChecksum = modpackContentField.hash;
-                boolean isMod = modpackContentField.type.equals("mod");
                 boolean isEditable = modpackContentField.isEditable;
 
                 File downloadFile = new File(modpackDir + File.separator + fileName);
@@ -234,23 +254,12 @@ public class ModpackUpdater {
                     url = modpackContentField.link; // This link just must work, so we don't need to encode it
                 }
 
-                CompletableFuture<Void> downloadFuture;
-                if (isMod && defaultMods != null) {
-                    if (defaultMods.containsKey(fileName) || defaultMods.containsValue(serverModId)) {
-                        File modFileInRunDir = new File("./" + fileName);
-                        if (serverChecksum.equals(CustomFileUtils.getHash(modFileInRunDir, "SHA-256"))) {
-                            LOGGER.info("Skipping already installed mod: " + fileName);
-                            continue;
-                        }
-                    }
-                }
-                downloadFuture = processAsync(url, downloadFile, isEditable, serverChecksum);
-
-                downloadFutures.add(downloadFuture);
+                downloadFutures.add(processAsync(url, downloadFile, isEditable, serverChecksum));
             }
 
             CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).get();
 
+            // Downloads completed
             if (update) {
                 // if was updated, delete old files from modpack
                 List<String> files = serverModpackContent.list.stream().map(modpackContentField -> new File(modpackContentField.file).getName()).toList();
@@ -392,16 +401,16 @@ public class ModpackUpdater {
 
                 String ourChecksum = CustomFileUtils.getHash(downloadFile, "SHA-256");
 
-                // this shouldn't change, but just in case
-                long size = WebFileSize.getWebFileSize(url);
+                long size = downloadInstance.getFileSize();
 
                 if (serverChecksum.equals(ourChecksum)) {
                     success = true;
-                } else if (attempts == maxAttempts && downloadFile.length() == size) { // FIXME
-                    AutoModpack.LOGGER.warn("Checksums do not match, but size is correct so we will assume it is correct lol");
+                } else if (attempts == maxAttempts && !downloadFile.toString().endsWith(".jar") && downloadFile.length() == size) {
+                    // FIXME it shouldn't even return wrong checksum if the size is correct...
+                    AutoModpack.LOGGER.warn("Checksums of {} do not match, but size is correct so we will assume it is correct lol", downloadFile.getName());
                     success = true;
                 } else {
-                    if (attempts < maxAttempts) {
+                    if (attempts != maxAttempts) {
                         AutoModpack.LOGGER.warn("Checksums do not match, retrying... client: {} server: {}", ourChecksum, serverChecksum);
                     }
                     CustomFileUtils.forceDelete(downloadFile, false);
@@ -442,13 +451,27 @@ public class ModpackUpdater {
 
     // This method cancels the current download by interrupting the thread pool
     public static void cancelDownload() { // TODO fix issue that after this operation, you can't download anything again
-        LOGGER.info("Cancelling download for " + downloadFutures.size() + " files...");
-        downloadFutures.forEach(future -> future.cancel(true));
-        DOWNLOAD_EXECUTOR.shutdownNow();
-        LOGGER.info("Download canceled");
+        try {
+            LOGGER.info("Cancelling download for " + downloadFutures.size() + " files...");
+            downloadFutures.forEach(future -> future.cancel(true));
+            DOWNLOAD_EXECUTOR.shutdownNow();
 
-        if (ScreenTools.getScreenString().contains("download")) {
-            ScreenTools.setTo.Title();
+            downloadFutures.clear();
+            downloadInfos.clear();
+            DOWNLOAD_EXECUTOR = null;
+            totalBytesDownloaded = 0;
+            alreadyDownloaded = 0;
+            failedDownloads.clear();
+            changelogList.clear();
+            update = false;
+
+            LOGGER.info("Download canceled");
+
+            if (ScreenTools.getScreenString().contains("download")) {
+                ScreenTools.setTo.Title();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 

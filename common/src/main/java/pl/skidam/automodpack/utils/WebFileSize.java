@@ -17,7 +17,7 @@ public class WebFileSize {
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(3000);
             connection.setReadTimeout(3000);
-            size = Long.parseLong(connection.getHeaderField("Content-Length"));
+            size = connection.getContentLengthLong();
             connection.disconnect();
         } catch (Exception e) {
             AutoModpack.LOGGER.error("Make sure that you have an internet connection! " + e);
