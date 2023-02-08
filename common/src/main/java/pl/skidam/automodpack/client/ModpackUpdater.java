@@ -40,6 +40,7 @@ public class ModpackUpdater {
     private static ExecutorService DOWNLOAD_EXECUTOR;
     public static boolean update;
     public static long totalBytesDownloaded = 0;
+    public static long totalBytesToDownload = 0;
     private static int alreadyDownloaded = 0;
     private static int wholeQueue = 0;
     private static Config.ModpackContentFields serverModpackContent;
@@ -50,12 +51,7 @@ public class ModpackUpdater {
     }
 
     public static int getTotalPercentageOfFileSizeDownloaded() {
-        long totalBytes = 0;
-        for (Config.ModpackContentFields.ModpackContentItems list : serverModpackContent.list) {
-            if (!list.size.matches("^[0-9]*$")) continue;
-            totalBytes += Long.parseLong(list.size);
-        }
-        return (int) ((double) totalBytesDownloaded / (double) totalBytes * 100);
+        return (int) ((double) totalBytesDownloaded / (double) totalBytesToDownload * 100);
     }
 
     public static double getTotalDownloadSpeed() {
@@ -76,12 +72,6 @@ public class ModpackUpdater {
 
     public static String getTotalETA() {
         double totalBytesPerSecond = 0;
-        long totalBytes = 0;
-
-        for (Config.ModpackContentFields.ModpackContentItems list : serverModpackContent.list) {
-            if (!list.size.matches("^[0-9]*$")) continue;
-            totalBytes += Long.parseLong(list.size);
-        }
 
         List<DownloadInfo> downloadInfosCopy = new ArrayList<>(downloadInfos);
         for (DownloadInfo downloadInfo : downloadInfosCopy) { // this is done like that to avoid ConcurrentModificationException
@@ -91,7 +81,7 @@ public class ModpackUpdater {
 
         if (totalBytesPerSecond <= 0) return "N/A";
 
-        double totalETA = (totalBytes - totalBytesDownloaded) / totalBytesPerSecond;
+        double totalETA = (totalBytesToDownload - totalBytesDownloaded) / totalBytesPerSecond;
 
         int hours = (int) (totalETA / 3600);
         int minutes = (int) ((totalETA % 3600) / 60);
@@ -215,8 +205,7 @@ public class ModpackUpdater {
         try {
             List<Config.ModpackContentFields.ModpackContentItems> copyModpackContentList = new ArrayList<>(serverModpackContent.list);
 
-            for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
-
+            for (Config.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
                 String fileName = modpackContentField.file;
                 String serverChecksum = modpackContentField.hash;
 
@@ -226,9 +215,13 @@ public class ModpackUpdater {
 
                 if (serverChecksum.equals(CustomFileUtils.getHash(fileInRunDir, "SHA-256"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
-                    totalBytesDownloaded += fileInRunDir.length();
                     copyModpackContentList.remove(modpackContentField);
                 }
+            }
+
+            for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
+                if (!modpackContentField.size.matches("^[0-9]*$")) continue;
+                totalBytesToDownload += Long.parseLong(modpackContentField.size);
             }
 
             ModpackUpdater.wholeQueue = copyModpackContentList.size();
