@@ -31,6 +31,7 @@ import java.util.stream.Stream;
 import static pl.skidam.automodpack.AutoModpack.LOGGER;
 import static pl.skidam.automodpack.AutoModpack.automodpackDir;
 import static pl.skidam.automodpack.config.ConfigTools.GSON;
+import static pl.skidam.automodpack.utils.RefactorStrings.getETA;
 
 public class ModpackUpdater {
     public static List<DownloadInfo> downloadInfos = new ArrayList<>();
@@ -57,18 +58,17 @@ public class ModpackUpdater {
     public static double getTotalDownloadSpeed() {
         double totalSpeed = 0;
         List<DownloadInfo> downloadInfosCopy = new ArrayList<>(downloadInfos);
-        for (DownloadInfo downloadInfo : downloadInfosCopy) { // this is done like that to avoid ConcurrentModificationException
-            if (downloadInfo == null) continue;
-            totalSpeed += downloadInfo.getDownloadSpeed();
+        for (DownloadInfo downloadInfo : downloadInfosCopy) {
+            if (downloadInfo != null) {
+                totalSpeed += downloadInfo.getDownloadSpeed();
+            }
         }
-        if (!String.valueOf(totalSpeed).matches("^[0-9]*(\\.[0-9]+)?$")) return -1;
-        try {
-            if (totalSpeed <= 0) return 0;
-            return Math.round(totalSpeed * 10.0) / 10.0;
-        } catch (NumberFormatException e) {
-            return -1;
+        if (totalSpeed <= 0) {
+            return 0;
         }
+        return Math.round(totalSpeed * 10.0) / 10.0;
     }
+
 
     public static String getTotalETA() {
         double totalBytesPerSecond = 0;
@@ -83,17 +83,7 @@ public class ModpackUpdater {
 
         double totalETA = (totalBytesToDownload - totalBytesDownloaded) / totalBytesPerSecond;
 
-        int hours = (int) (totalETA / 3600);
-        int minutes = (int) ((totalETA % 3600) / 60);
-        int seconds = (int) (totalETA % 60);
-
-        if (hours > 0) {
-            return String.format("%dh %02dm %02ds", hours, minutes, seconds);
-        } else if (minutes > 0) {
-            return String.format("%dm %02ds", minutes, seconds);
-        } else {
-            return String.format("%ds", seconds);
-        }
+        return getETA(totalETA);
     }
 
     public static Config.ModpackContentFields getServerModpackContent(String link) {
@@ -226,7 +216,7 @@ public class ModpackUpdater {
 
             ModpackUpdater.wholeQueue = copyModpackContentList.size();
 
-            LOGGER.info("In queue left " + wholeQueue + " files to download");
+            LOGGER.info("In queue left {} files to download which is {}", wholeQueue, totalBytesToDownload);
 
             if (wholeQueue > 0) {
                 for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {

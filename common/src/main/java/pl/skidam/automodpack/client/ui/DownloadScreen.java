@@ -16,6 +16,7 @@ import java.util.List;
 
 import static pl.skidam.automodpack.client.ModpackUpdater.downloadInfos;
 import static pl.skidam.automodpack.client.ModpackUpdater.getDownloadInfo;
+import static pl.skidam.automodpack.utils.RefactorStrings.getETA;
 
 public class DownloadScreen extends Screen {
 
@@ -76,7 +77,7 @@ public class DownloadScreen extends Screen {
 
     private Text getTotalETA() {
         String eta = ModpackUpdater.getTotalETA();
-        return TextHelper.literal("ETA: " + eta);
+        return TextHelper.literal("Time left: " + eta); // TODO translatable
     }
 
     private String getETAOfFile(String file) {
@@ -85,17 +86,7 @@ public class DownloadScreen extends Screen {
 
         if (getDownloadInfo(file).getEta() <= 0) return "N/A";
 
-        int hours = (int) (eta / 3600);
-        int minutes = (int) ((eta % 3600) / 60);
-        int seconds = (int) (eta % 60);
-
-        if (hours > 0) {
-            return String.format("%dh %02dm %02ds", hours, minutes, seconds);
-        } else if (minutes > 0) {
-            return String.format("%dm %02ds", minutes, seconds);
-        } else {
-            return String.format("%ds", seconds);
-        }
+        return getETA(eta);
     }
 
     private void drawDownloadingFiles(MatrixStack matrices) {
