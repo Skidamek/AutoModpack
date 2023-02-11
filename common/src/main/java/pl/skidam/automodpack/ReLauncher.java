@@ -2,8 +2,10 @@ package pl.skidam.automodpack;
 
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.client.ScreenTools;
+import pl.skidam.automodpack.ui.Windows;
 import pl.skidam.automodpack.utils.JavaPath;
 
+import java.awt.*;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
@@ -18,6 +20,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack.AutoModpack.LOGGER;
+import static pl.skidam.automodpack.AutoModpack.clientConfig;
 
 /**
  * Credits to jonafanho for the original code (https://github.com/jonafanho/Minecraft-Mod-Updater/blob/master/common/src/main/java/updater/Launcher.java)
@@ -27,14 +30,42 @@ public class ReLauncher {
     private static final List<Runnable> CALLBACKS = new ArrayList<>();
     private static String command;
     private static String javaPath;
-    public static boolean openWindow = false;
 
     public static class Restart {
+
         public Restart(File gameDir) {
-            if (AutoModpack.preload) {
-                ReLauncher.run(gameDir);
+            new Restart(gameDir, "Successfully applied the modpack!");
+        }
+        
+        public Restart(File gameDir, String guiMessage) {
+            String environment = Platform.getEnvironmentType();
+            boolean isClient = environment.equals("CLIENT");
+            boolean isHeadless = GraphicsEnvironment.isHeadless();
+            boolean autoRelaunch = clientConfig.autoRelauncher;
+
+            if (isClient) {
+                if (!AutoModpack.preload && !ScreenTools.getScreenString().contains("restartscreen")) {
+                    ScreenTools.setTo.restart(ScreenTools.getScreen(), gameDir);
+                    return;
+                }
+
+                if (autoRelaunch) {
+                    if (!Platform.Forge) {
+                        ReLauncher.run();
+                        return;
+                    }
+                }
+
+                if (!isHeadless) {
+                    new Windows().restartWindow(guiMessage);
+                    return;
+                }
+
+                LOGGER.info("Restart your client!");
+                System.exit(0);
             } else {
-                ScreenTools.setTo.Restart(ScreenTools.getScreen(), gameDir);
+                LOGGER.info("Please restart the server to apply updates!");
+                System.exit(0);
             }
         }
     }
@@ -55,23 +86,18 @@ public class ReLauncher {
             final RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
             final Path oldLibraryPath = Paths.get(runtimeMXBean.getLibraryPath());
 
-//            LOGGER.error("oldLibraryPath: " + oldLibraryPath);
-
             final Path newLibraryPath = oldLibraryPath.getParent().resolve("new-natives");
-
-//            LOGGER.error("newLibraryPath: " + newLibraryPath);
 
             try {
                 FileUtils.copyDirectory(oldLibraryPath.toFile(), newLibraryPath.toFile());
-            } catch (Exception e) {
-//                e.printStackTrace();
+            } catch (Exception ignored) {
             }
 
             javaPath = JavaPath.getJavaPath();
 
-            if (!JavaPath.checkJavaPath(new File(javaPath))) return;
-
-            AutoModpack.LOGGER.warn("Using this java executable path (if wrong/doesn't work change that in config) " + javaPath);
+            if (clientConfig.autoRelauncher) {
+                AutoModpack.LOGGER.warn("Using this java executable path (if wrong/doesn't work change that in config) " + javaPath);
+            }
 
             command = formatPath(String.format(
                     "%s -cp %s %s %s",
@@ -87,12 +113,7 @@ public class ReLauncher {
         }
     }
 
-    public static void run(File gameDir) {
-        if (Platform.getEnvironmentType().equals("SERVER")) {
-            LOGGER.info("Please restart the server to apply updates!");
-            System.exit(0);
-        }
-
+    public static void run() {
         if (command == null) {
             LOGGER.error("Can't relaunch, relauncher not initialized!");
             return;
@@ -105,45 +126,11 @@ public class ReLauncher {
             command = removeAddModsProperties(command);
         }
 
-        String optionalModsProperty = "";
-
-        if (gameDir != null) { // -Dfabric.addMods || -Dloader.modsDir
-            File modsDir = new File(gameDir + "/mods/");
-            if (modsDir.exists()) {
-                if (modsDir.listFiles() != null && modsDir.listFiles().length > 0) {
-                    optionalModsProperty = getOptionalModsProperty(modsDir);
-                }
-            }
-        }
-
         command = formatPath(String.format(
-                "%s %s %s",
+                "%s %s",
                 addQuotes(javaPath),
-                optionalModsProperty,
                 command
         ));
-
-
-        if (gameDir != null && (!command.contains(optionalModsProperty) && !command.contains(formatPath(optionalModsProperty)))) {
-            LOGGER.error("AutoModpack relauncher failed to add {} property to command!\nCommand: {}", optionalModsProperty, censorPrivateInfo(command));
-            System.exit(1);
-        }
-
-//        if (!preload) {
-//            Windows window = new Windows();
-//            try { // FIXME
-//                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-//                    if (isWindows) {
-//                        window.restartingWindow();
-//                    } else {
-//                        window.errorRestartingWindow();
-//                    }
-//                }));
-//            } catch (HeadlessException ignored) {
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
-//        }
 
         if (!isWindows) {
             LOGGER.warn("AutoModpack relauncher may not work on non-windows systems!");
@@ -183,13 +170,7 @@ public class ReLauncher {
             LOGGER.warn("Check this issue: https://github.com/Skidamek/AutoModpack/issues/87");
         }
 
-//        if (Checks.properlyLoaded() && AutoModpack.clientConfig.openWarningWindowOnAutoRelaunch) {
-//            System.out.println("AutoModpack relauncher: openWarningWindowOnAutoRelaunch is true, opening warning window!");
-//            openWindow = true;
-//            MinecraftClient.getInstance().stop();
-//        } else {
-            System.exit(0);
-//        }
+        System.exit(0);
     }
 
     public static void addCallback(Runnable callback) {

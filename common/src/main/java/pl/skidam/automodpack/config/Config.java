@@ -10,10 +10,10 @@ public class Config {
 //        public boolean checkUpdatesButton = true;
 //        public boolean deleteModpackButton = true;
 //        public String username = "";
-        public String javaExecutablePath = "";
         public boolean selfUpdater = true;
         public boolean downloadDependency = true;
-        public boolean autoRelaunchWhenUpdated = false;
+        public boolean autoRelauncher = false;
+        public String javaExecutablePath = "";
 //        public boolean openWarningWindowOnAutoRelaunch = true;
     }
 
@@ -24,6 +24,7 @@ public class Config {
         public List<String> syncedFiles = List.of("/mods/", "/config/");
         public List<String> excludeSyncedFiles = List.of("/mods/iDontWantThisModInModpack.jar", "/config/andThisConfigToo.json", "/mods/andAllTheseMods-*.jar");
         public List<String> allowEditsInFiles = List.of("/options.txt");
+//        public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
         public boolean optionalModpack = false;
         public boolean autoExcludeServerSideMods = true;
         public boolean velocityMode = false;

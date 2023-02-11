@@ -50,7 +50,7 @@ public class RestartScreen extends Screen {
             this.client.setScreen(null);
         });
         restartButton = new ButtonWidget(this.width / 2, this.height / 6 + 120, 150, 20, TextHelper.translatable("gui.automodpack.screen.restart.button.quit").formatted(Formatting.GREEN), (button) -> {
-            ReLauncher.run(gameDir);
+            new ReLauncher.Restart(gameDir);
         });
         changelogsButton = new ButtonWidget(this.width / 2 - 75, this.height / 6 + 145, 150, 20, TextHelper.translatable("gui.automodpack.screen.restart.button.changelogs").formatted(Formatting.DARK_AQUA), (button) -> {
             this.client.setScreen(new ChangelogScreen(this, gameDir));

@@ -98,7 +98,7 @@ public class AutoModpack {
             }
         }
 
-        new CompatCheck();
+        Platform.downloadDependencies();
 
         LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
     }

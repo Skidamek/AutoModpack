@@ -2,7 +2,6 @@ package pl.skidam.automodpack.utils;
 
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
-import pl.skidam.automodpack.AutoModpack;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -12,9 +11,12 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.security.MessageDigest;
 
+/**
+ * Everything in this class should force do the thing without throwing any exceptions.
+ */
+
 public class CustomFileUtils {
     public static void forceDelete(File file, boolean deleteOnExit) {
-
         if (file.exists()) {
             FileUtils.deleteQuietly(file);
 
@@ -25,15 +27,9 @@ public class CustomFileUtils {
                 }
             }
 
-            if (file.exists()) { // if mod to delete still exists
-                try {
-                    java.io.File emptyFolder = new File(AutoModpack.automodpackDir + File.separator + "empty");
-                    if (!emptyFolder.exists()) {
-                        emptyFolder.mkdirs();
-                    }
-                    ZipTools.zipFolder(emptyFolder, file);
-                    FileDeleteStrategy.FORCE.delete(emptyFolder);
-                    FileDeleteStrategy.FORCE.delete(file);
+            if (file.exists()) {
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(new byte[0]);
                 } catch (IOException ignored) {
                 }
             }
@@ -57,11 +53,29 @@ public class CustomFileUtils {
             Files.createFile(destination.toPath());
         }
         try (FileInputStream inputStream = new FileInputStream(source);
+             FileOutputStream outputStream = new FileOutputStream(destination)) {
+
              FileChannel sourceChannel = inputStream.getChannel();
-             FileOutputStream outputStream = new FileOutputStream(destination);
-             FileChannel destinationChannel = outputStream.getChannel()) {
+             FileChannel destinationChannel = outputStream.getChannel();
 
             destinationChannel.transferFrom(sourceChannel, 0, sourceChannel.size());
+        }
+    }
+
+    public static void deleteEmptyFiles(File directory, boolean deleteSubDirsToo) {
+        File[] files = directory.listFiles();
+        if (files == null) {
+            return;
+        }
+        for (File file : files) {
+            if (file.isDirectory()) {
+                if (deleteSubDirsToo && file.length() == 0) {
+                    CustomFileUtils.forceDelete(file, true);
+                }
+                deleteEmptyFiles(file, deleteSubDirsToo);
+            } else if (file.length() == 0) {
+                CustomFileUtils.forceDelete(file, true);
+            }
         }
     }
 
@@ -87,16 +101,14 @@ public class CustomFileUtils {
         return sb.toString();
     }
 
-    public static boolean compareHashWithFile(File file, String hash, String algorithm) throws Exception {
-        String fileHash = getHash(file, algorithm);
+    public static boolean compareFileHashes(File file1, File file2, String algorithm) throws Exception {
+        if (!file1.exists() || !file1.exists()) return false;
 
-        if (fileHash == null) return false;
+        String hash1 = getHash(file1, algorithm);
+        String hash2 = getHash(file2, algorithm);
 
-        if (!fileHash.equals(hash)) {
-            CustomFileUtils.forceDelete(file, false);
-            return false;
-        } else {
-            return true;
-        }
+        if (hash1 == null || hash2 == null) return false;
+
+        return hash1.equals(hash2);
     }
 }

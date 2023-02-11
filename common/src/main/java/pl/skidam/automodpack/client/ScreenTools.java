@@ -3,10 +3,12 @@ package pl.skidam.automodpack.client;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
+import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.client.ui.*;
-import pl.skidam.automodpack.utils.Checks;
 
 import java.io.File;
+
+import static pl.skidam.automodpack.AutoModpack.preload;
 
 public class ScreenTools {
 
@@ -17,29 +19,29 @@ public class ScreenTools {
 //            if (Checks.properlyLoaded()) Screens.setScreen(screen);
 //        }
 
-        public static void Download() {
-            if (Checks.properlyLoaded()) Screens.DownloadScreen();
+        public static void download() {
+            if (properlyLoaded()) Screens.DownloadScreen();
         }
 
-        public static void Restart(Screen parent, File gameDir) {
-            if (Checks.properlyLoaded()) Screens.RestartScreen(parent, gameDir);
+        public static void restart(Screen parent, File gameDir) {
+            if (properlyLoaded()) Screens.RestartScreen(parent, gameDir);
         }
 
-        public static void Danger(Screen parent, String link, File modpackDir, boolean loadIfItsNotLoaded, File modpackContentFile) {
-            if (Checks.properlyLoaded()) Screens.DangerScreen(parent, link, modpackDir, loadIfItsNotLoaded, modpackContentFile);
+        public static void danger(Screen parent, String link, File modpackDir, boolean loadIfItsNotLoaded, File modpackContentFile) {
+            if (properlyLoaded()) Screens.DangerScreen(parent, link, modpackDir, loadIfItsNotLoaded, modpackContentFile);
         }
 
-        public static void Error(String... error) {
-            if (Checks.properlyLoaded()) Screens.ErrorScreen(error);
+        public static void error(String... error) {
+            if (properlyLoaded()) Screens.ErrorScreen(error);
         }
 
-        public static void Title() {
-            if (Checks.properlyLoaded()) Screens.TitleScreen();
+        public static void title() {
+            if (properlyLoaded()) Screens.TitleScreen();
         }
     }
 
     public static String getScreenString() {
-        if (Checks.properlyLoaded()) {
+        if (properlyLoaded()) {
             Screen screen = Screens.getScreen();
             return screen.getTitle().getString().toLowerCase();
         }
@@ -47,10 +49,23 @@ public class ScreenTools {
     }
 
     public static Screen getScreen() {
-        if (Checks.properlyLoaded()) {
+        if (properlyLoaded()) {
             return Screens.getScreen();
         }
         return null;
+    }
+
+
+    public static boolean properlyLoaded() {
+        try {
+            if (preload) return false;
+            if (Platform.getEnvironmentType().equals("SERVER")) return false;
+            if (MinecraftClient.getInstance() == null) return false;
+            if (MinecraftClient.getInstance().currentScreen == null) return false;
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
 

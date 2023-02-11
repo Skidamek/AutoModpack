@@ -13,11 +13,9 @@ import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.client.ui.AutoModpackToast;
-import pl.skidam.automodpack.ui.Windows;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.ModrinthAPI;
 
-import java.awt.*;
 import java.io.*;
 import java.nio.file.FileSystem;
 import java.nio.file.Path;
@@ -27,7 +25,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import static pl.skidam.automodpack.AutoModpack.clientConfig;
 import static pl.skidam.automodpack.AutoModpack.modsPath;
 import static pl.skidam.automodpack.Platform.ModPlatform.FABRIC;
 
@@ -95,16 +92,7 @@ public class PlatformImpl {
             }
             LOGGER.info("Successfully installed latest version of Fabric API (FAPI)!");
 
-            if (Platform.getEnvironmentType().equals("CLIENT")) {
-                if (clientConfig.autoRelaunchWhenUpdated) {
-                    if (!Platform.Forge) ReLauncher.run(null);
-                } else if (!GraphicsEnvironment.isHeadless()) {
-                    new Windows().restartWindow(("Successfully installed latest FAPI!"));
-                }
-            } else {
-                LOGGER.info("Restart your server!");
-                System.exit(0);
-            }
+            new ReLauncher.Restart(null, "Successfully installed latest FAPI!");
         }
     }
 
@@ -140,6 +128,9 @@ public class PlatformImpl {
     }
 
     public static String getModEnvironmentFromNotLoadedJar(File file) {
+        if (!file.isFile()) return null;
+        if (!file.getName().endsWith(".jar")) return null;
+
         try {
             ZipFile zipFile = new ZipFile(file);
             ZipEntry entry = null;
