@@ -36,6 +36,7 @@ public class Config {
         public String externalModpackHostLink = "";
         public boolean selfUpdater = true;
         public boolean downloadDependency = true;
+        public boolean allowFabricQuiltPlayers = false;
     }
 
     public static class ModpackContentFields {

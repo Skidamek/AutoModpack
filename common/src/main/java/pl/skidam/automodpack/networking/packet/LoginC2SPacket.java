@@ -20,16 +20,19 @@ public class LoginC2SPacket {
 
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf, Consumer<GenericFutureListener<? extends Future<? super Void>>> genericFutureListenerConsumer) {
         // Client
-        String version = buf.readString();
+        String serverResponse = buf.readString();
 
-        String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
+        String loader = Platform.getPlatformType().toString().toLowerCase();
+
+        String correctResponse = AutoModpack.VERSION + "-" + loader;
 
         PacketByteBuf outBuf = PacketByteBufs.create();
         outBuf.writeString(correctResponse);
 
-        if (!version.equals(correctResponse)) {
-            AutoModpack.LOGGER.error("Versions mismatch " + version);
-//            handler.getConnection().getPacketListener().onDisconnected(Text.of("Versions mismatch " + version));
+        if (!serverResponse.equals(correctResponse) && !serverResponse.startsWith(AutoModpack.VERSION)) {
+            if (!serverResponse.contains(loader)) {
+                AutoModpack.LOGGER.error("Versions mismatch " + serverResponse);
+            }
         }
 
         return CompletableFuture.completedFuture(outBuf);
@@ -37,18 +40,20 @@ public class LoginC2SPacket {
 
     public static void receive(MinecraftClient client, ClientPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {
         // Client
-        String version = buf.readString();
+        String serverResponse = buf.readString();
 
-        String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
+        String loader = Platform.getPlatformType().toString().toLowerCase();
+
+        String correctResponse = AutoModpack.VERSION + "-" + loader;
 
         PacketByteBuf outBuf = PacketByteBufs.create();
         outBuf.writeString(correctResponse);
 
-        if (!version.equals(correctResponse)) {
-            AutoModpack.LOGGER.error("Versions mismatch " + version);
-//            handler.getConnection().getPacketListener().onDisconnected(Text.of("Versions mismatch " + version));
+        if (!serverResponse.equals(correctResponse) && !serverResponse.startsWith(AutoModpack.VERSION)) {
+            if (!serverResponse.contains(loader)) {
+                AutoModpack.LOGGER.error("Versions mismatch " + serverResponse);
+            }
         }
-
         sender.sendPacket(HANDSHAKE, outBuf);
     }
 }

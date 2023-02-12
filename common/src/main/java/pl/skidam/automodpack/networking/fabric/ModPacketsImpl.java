@@ -94,6 +94,9 @@ public class ModPacketsImpl {
 
             PacketByteBuf buf = PacketByteBufs.create();
             String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
+            if (AutoModpack.serverConfig.allowFabricQuiltPlayers) {
+                correctResponse = AutoModpack.VERSION + "-" + "fabric&quilt";
+            }
             buf.writeString(correctResponse);
             sender.sendPacket(HANDSHAKE, buf);
 
