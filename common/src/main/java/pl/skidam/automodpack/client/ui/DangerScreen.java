@@ -5,12 +5,13 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
 
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
+
+import static pl.skidam.automodpack.StaticVariables.LOGGER;
 
 public class DangerScreen extends Screen {
     private final Screen parent;
@@ -34,7 +35,7 @@ public class DangerScreen extends Screen {
         assert this.client != null;
         //                                                       - 210
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 110, this.height / 6 + 96, 120, 20, TextHelper.translatable("gui.automodpack.screen.danger.button.cancel").formatted(Formatting.RED), (button) -> {
-            AutoModpack.LOGGER.error("User canceled download, setting his to screen " + parent.getTitle().getString());
+            LOGGER.error("User canceled download, setting his to screen " + parent.getTitle().getString());
             this.client.setScreen(parent);
         }));
 

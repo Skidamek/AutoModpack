@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.modpack;
 
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.config.ConfigTools;
@@ -15,8 +14,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import static pl.skidam.automodpack.StaticVariables.*;
 public class Modpack {
-    public static Path hostModpackDir = Path.of(AutoModpack.automodpackDir + File.separator + "host-modpack");
+    public static Path hostModpackDir = Path.of(automodpackDir + File.separator + "host-modpack");
     static Path hostModpackMods = Path.of(hostModpackDir + File.separator + "mods");
     public static File hostModpackContentFile = new File(hostModpackDir + File.separator + "modpack-content.json");
 
@@ -32,7 +32,7 @@ public class Modpack {
 
         Content.create(hostModpackDir, hostModpackContentFile);
         if (!hostModpackContentFile.exists()) return;
-        AutoModpack.LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms");
+        LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms");
     }
 
     private static void autoExcludeServerMods(List<Config.ModpackContentFields.ModpackContentItems> list) {
@@ -51,7 +51,7 @@ public class Modpack {
                 list.removeIf(modpackContentItems -> {
                     if (modpackContentItems.modId == null) return false;
                     if (modpackContentItems.modId.equals(modId)) {
-                        AutoModpack.LOGGER.info("Mod {} has been auto excluded from modpack because it is server side mod", modId);
+                        LOGGER.info("Mod {} has been auto excluded from modpack because it is server side mod", modId);
                         removeSimilar.add(modId);
                         return true;
                     }
@@ -66,7 +66,7 @@ public class Modpack {
                 File contentFile = new File(hostModpackMods + File.separator + modpackContentItems.file);
                 String contentFileName = contentFile.getName();
                 if (contentFileName.contains(modId)) {
-                    AutoModpack.LOGGER.info("File {} has been auto excluded from modpack because mod of this file is already excluded", contentFileName);
+                    LOGGER.info("File {} has been auto excluded from modpack because mod of this file is already excluded", contentFileName);
                     return true;
                 }
                 return false;
@@ -85,9 +85,9 @@ public class Modpack {
             try {
                 List<Config.ModpackContentFields.ModpackContentItems> list = new ArrayList<>();
 
-                if (AutoModpack.serverConfig.syncedFiles.size() > 0) {
-                    for (String file : AutoModpack.serverConfig.syncedFiles) {
-                        AutoModpack.LOGGER.info("Syncing {}... ", file);
+                if (serverConfig.syncedFiles.size() > 0) {
+                    for (String file : serverConfig.syncedFiles) {
+                        LOGGER.info("Syncing {}... ", file);
                         File fileToSync = new File("." + file);
                         addAllContent(fileToSync, list);
                     }
@@ -96,18 +96,18 @@ public class Modpack {
                 addAllContent(modpackDir.toFile(), list);
 
                 if (list.size() == 0) {
-                    AutoModpack.LOGGER.warn("Modpack is empty! Nothing to generate!");
+                    LOGGER.warn("Modpack is empty! Nothing to generate!");
                     return;
                 }
 
                 removeAutoModpackFilesFromContent(list);
-                if (AutoModpack.serverConfig.autoExcludeServerSideMods) {
+                if (serverConfig.autoExcludeServerSideMods) {
                     autoExcludeServerMods(list);
                 }
 
                 modpackContent = new Config.ModpackContentFields(null, list);
                 modpackContent.timeStamp = modpackDir.toFile().lastModified();
-                modpackContent.modpackName = AutoModpack.serverConfig.modpackName;
+                modpackContent.modpackName = serverConfig.modpackName;
                 modpackContent.loader = Platform.getPlatformType().toString().toLowerCase();
 
                 ConfigTools.saveConfig(modpackContentFile, modpackContent);
@@ -146,32 +146,32 @@ public class Modpack {
 
                     if (!modpackDir.toString().startsWith("./automodpack/host-modpack/")) {
                         boolean excluded = false;
-                        for (String excludeFile : AutoModpack.serverConfig.excludeSyncedFiles) {
+                        for (String excludeFile : serverConfig.excludeSyncedFiles) {
                             if (matchesExclusionCriteria(modpackFile, excludeFile)) { // wild cards e.g. *.json or supermod-1.19-*.jar
                                 excluded = true;
                                 break;
                             }
                         }
                         if (excluded) {
-                            AutoModpack.LOGGER.info("File {} is excluded! Skipping..." + modpackFile);
+                            LOGGER.info("File {} is excluded! Skipping..." + modpackFile);
                             continue;
                         }
                     }
 
 
                     if (size.equals("0")) {
-                        AutoModpack.LOGGER.warn("File {} is empty! Skipping...", modpackFile);
+                        LOGGER.warn("File {} is empty! Skipping...", modpackFile);
                         continue;
                     }
 
                     if (!modpackDir.equals(hostModpackDir.toFile())) {
                         if (modpackFile.endsWith(".tmp")) {
-                            AutoModpack.LOGGER.warn("File {} is temporary! Skipping...", modpackFile);
+                            LOGGER.warn("File {} is temporary! Skipping...", modpackFile);
                             continue;
                         }
 
                         if (modpackFile.endsWith(".disabled")) {
-                            AutoModpack.LOGGER.warn("File {} is disabled! Skipping...", modpackFile);
+                            LOGGER.warn("File {} is disabled! Skipping...", modpackFile);
                             continue;
                         }
                     }
@@ -196,7 +196,7 @@ public class Modpack {
                         }
                     }
 
-                    for (String editableFile : AutoModpack.serverConfig.allowEditsInFiles) {
+                    for (String editableFile : serverConfig.allowEditsInFiles) {
                         if (modpackFile.endsWith(editableFile)) {
                             isEditable = true;
                             break;

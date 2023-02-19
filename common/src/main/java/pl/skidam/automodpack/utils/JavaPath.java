@@ -1,16 +1,17 @@
 package pl.skidam.automodpack.utils;
 
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.config.ConfigTools;
 
 import java.io.File;
+
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class JavaPath {
     public static String getJavaPath() {
         String javaPath;
 
-        if (AutoModpack.clientConfig.javaExecutablePath != null && !AutoModpack.clientConfig.javaExecutablePath.equals("")) {
-            javaPath = AutoModpack.clientConfig.javaExecutablePath;
+        if (clientConfig.javaExecutablePath != null && !clientConfig.javaExecutablePath.equals("")) {
+            javaPath = clientConfig.javaExecutablePath;
         } else {
             javaPath = System.getProperty("java.home");
         }
@@ -28,10 +29,10 @@ public class JavaPath {
         File javaFile = new File(javaPath);
 
         if (javaPath.contains(System.getProperty("java.home").replace("\\", "/")) || (javaFile.isFile() && javaFile.canExecute())) {
-            AutoModpack.clientConfig.javaExecutablePath = javaPath;
-            ConfigTools.saveConfig(AutoModpack.clientConfigFile, AutoModpack.clientConfig);
+            clientConfig.javaExecutablePath = javaPath;
+            ConfigTools.saveConfig(clientConfigFile, clientConfig);
         } else {
-            AutoModpack.LOGGER.error("Java executable path is invalid!");
+            LOGGER.error("Java executable path is invalid!");
         }
 
         return javaPath;

@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.utils;
 
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.modpack.Modpack;
@@ -9,6 +8,8 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class ModpackContentTools {
     public static String getFileType(String file, Config.ModpackContentFields list) {
@@ -24,7 +25,7 @@ public class ModpackContentTools {
         File modpackDir = getModpackDir(modpack);
 
         if (!modpackDir.exists() || !modpackDir.isDirectory()) {
-            AutoModpack.LOGGER.warn("Modpack {} doesn't exist!", modpack);
+            LOGGER.warn("Modpack {} doesn't exist!", modpack);
             return null;
         }
 
@@ -42,18 +43,18 @@ public class ModpackContentTools {
 
     public static File getModpackDir(String modpack) {
         if (modpack == null || modpack.equals("")) {
-            AutoModpack.LOGGER.warn("Modpack name is null or empty!");
+            LOGGER.warn("Modpack name is null or empty!");
             return null;
         }
 
         // eg. modpack = 192.168.0.113-30037 `directory`
 
-        return new File(AutoModpack.modpacksDir + File.separator + modpack);
+        return new File(modpacksDir + File.separator + modpack);
     }
 
     public static Map<String, File> getListOfModpacks() {
         Map<String, File> map = new HashMap<>();
-        for (File file : Objects.requireNonNull(AutoModpack.modpacksDir.listFiles())) {
+        for (File file : Objects.requireNonNull(modpacksDir.listFiles())) {
             if (file.isDirectory()) {
                 map.put(file.getName(), file);
             }

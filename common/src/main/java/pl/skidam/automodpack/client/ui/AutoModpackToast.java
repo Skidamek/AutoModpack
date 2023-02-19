@@ -7,7 +7,6 @@ import net.minecraft.client.toast.Toast;
 import net.minecraft.client.toast.ToastManager;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.Identifier;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.utils.Wait;
@@ -15,7 +14,8 @@ import pl.skidam.automodpack.utils.Wait;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
-import static pl.skidam.automodpack.AutoModpack.preload;
+import static pl.skidam.automodpack.StaticVariables.MOD_ID;
+import static pl.skidam.automodpack.StaticVariables.preload;
 
 public class AutoModpackToast {
 
@@ -52,7 +52,7 @@ public class AutoModpackToast {
                 return;
             }
 
-            TEXTURE = new Identifier(AutoModpack.MOD_ID, "gui/error.png");
+            TEXTURE = new Identifier(MOD_ID, "gui/error.png");
 
             InnerToast.whoAreYou = whoAreYou;
             if (whoAreYou == 0) {
@@ -65,7 +65,7 @@ public class AutoModpackToast {
                                 loadingAnimationStep = 0;
                             }
                             loadingAnimationStep++;
-                            TEXTURE = new Identifier(AutoModpack.MOD_ID, "gui/loading" + loadingAnimationStep + ".png");
+                            TEXTURE = new Identifier(MOD_ID, "gui/loading" + loadingAnimationStep + ".png");
 
                             new Wait(100); // 10 fps
                         }
@@ -74,16 +74,16 @@ public class AutoModpackToast {
                 }
             }
             if (whoAreYou == 1 || whoAreYou == 2) {
-                TEXTURE = new Identifier(AutoModpack.MOD_ID, "gui/found-update.png");
+                TEXTURE = new Identifier(MOD_ID, "gui/found-update.png");
             }
             if (whoAreYou == 3 || whoAreYou == 4) {
-                TEXTURE = new Identifier(AutoModpack.MOD_ID, "gui/no-update.png");
+                TEXTURE = new Identifier(MOD_ID, "gui/no-update.png");
             }
             if (whoAreYou == 5) {
-                TEXTURE = new Identifier(AutoModpack.MOD_ID, "gui/error.png");
+                TEXTURE = new Identifier(MOD_ID, "gui/error.png");
             }
             if (whoAreYou == 6) {
-                TEXTURE = new Identifier(AutoModpack.MOD_ID, "gui/cloth-config.png");
+                TEXTURE = new Identifier(MOD_ID, "gui/cloth-config.png");
             }
             ToastManager toastManager = MinecraftClient.getInstance().getToastManager();
             AutoModpackToast.InnerToast toast = toastManager.getToast(AutoModpackToast.InnerToast.class, Toast.TYPE);

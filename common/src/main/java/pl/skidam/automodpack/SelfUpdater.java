@@ -7,7 +7,7 @@ import pl.skidam.automodpack.utils.ModrinthAPI;
 
 import java.io.IOException;
 
-import static pl.skidam.automodpack.AutoModpack.automodpackUpdateJar;
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class SelfUpdater {
     public SelfUpdater() {
@@ -17,26 +17,26 @@ public class SelfUpdater {
         }
 
         if (Platform.getEnvironmentType().equals("SERVER")) {
-            if (!AutoModpack.serverConfig.selfUpdater) return;
+            if (!serverConfig.selfUpdater) return;
         }
 
         if (Platform.getEnvironmentType().equals("CLIENT")) {
-            if (!AutoModpack.clientConfig.selfUpdater) return;
+            if (!clientConfig.selfUpdater) return;
         }
 
         // TODO remove this when forge version will be published, if at all...
         if (Platform.Forge) {
-            AutoModpack.LOGGER.warn("Self updater is disabled for Forge version at the moment :/");
+            LOGGER.warn("Self updater is disabled for Forge version at the moment :/");
             return;
         }
 
-        AutoModpack.LOGGER.info("Checking if AutoModpack is up-to-date...");
+        LOGGER.info("Checking if AutoModpack is up-to-date...");
 
 
         ModrinthAPI automodpack = new ModrinthAPI("k68glP2e");
 
         if (automodpack == null || automodpack.modrinthAPIversion == null) {
-            AutoModpack.LOGGER.error("Couldn't get latest version of AutoModpack from Modrinth API (request url: {})", automodpack.modrinthAPIrequestUrl);
+            LOGGER.error("Couldn't get latest version of AutoModpack from Modrinth API (request url: {})", automodpack.modrinthAPIrequestUrl);
             return;
         }
 
@@ -47,30 +47,30 @@ public class SelfUpdater {
         }
 
         String LATEST_VERSION = automodpack.modrinthAPIversion.replace(".", "");
-        String VERSION = AutoModpack.VERSION.replace(".", "");
+        String OUR_VERSION = VERSION.replace(".", "");
 
-        if (LATEST_VERSION == null || VERSION == null) {
-            AutoModpack.LOGGER.error("Latest version or current version is null. Likely automodpack isn't updated to your version of minecraft yet");
+        if (LATEST_VERSION == null || OUR_VERSION == null) {
+            LOGGER.error("Latest version or current version is null. Likely automodpack isn't updated to your version of minecraft yet");
             AutoModpackToast.add(5);
             return;
         }
 
         try {
-            if (Integer.parseInt(VERSION) > Integer.parseInt(LATEST_VERSION)) {
-                AutoModpack.LOGGER.info("You are using pre-released or beta version of AutoModpack: " + AutoModpack.VERSION + " latest stable version is: " + automodpack.modrinthAPIversion);
+            if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
+                LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.modrinthAPIversion);
                 AutoModpackToast.add(4);
                 return;
             }
         } catch (NumberFormatException e) {
             // ignore
 
-            if (VERSION.contains("beta") && !LATEST_VERSION.contains("beta")) {
+            if (OUR_VERSION.contains("beta") && !LATEST_VERSION.contains("beta")) {
 
-                VERSION = VERSION.replaceAll("[^0-9]", "");
+                OUR_VERSION = OUR_VERSION.replaceAll("[^0-9]", "");
                 LATEST_VERSION = LATEST_VERSION.replaceAll("[^0-9]", "");
 
-                if (Integer.parseInt(VERSION) >= Integer.parseInt(LATEST_VERSION)) {
-                    AutoModpack.LOGGER.info("You are using pre-released or beta version of AutoModpack: " + AutoModpack.VERSION + " latest stable version is: " + automodpack.modrinthAPIversion);
+                if (Integer.parseInt(OUR_VERSION) >= Integer.parseInt(LATEST_VERSION)) {
+                    LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.modrinthAPIversion);
                     AutoModpackToast.add(4);
                     return;
                 }
@@ -78,13 +78,13 @@ public class SelfUpdater {
         }
 
 
-        if (VERSION.equals(LATEST_VERSION) || !automodpack.modrinthAPIversionType.equals("release")) {
-            AutoModpack.LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + AutoModpack.VERSION);
+        if (OUR_VERSION.equals(LATEST_VERSION) || !automodpack.modrinthAPIversionType.equals("release")) {
+            LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + VERSION);
             AutoModpackToast.add(4);
             return;
         }
 
-        AutoModpack.LOGGER.info("Update found! Updating to new version: " + automodpack.modrinthAPIversion);
+        LOGGER.info("Update found! Updating to new version: " + automodpack.modrinthAPIversion);
         AutoModpackToast.add(2);
         ScreenTools.setTo.download();
 
@@ -96,12 +96,12 @@ public class SelfUpdater {
             String localChecksum = CustomFileUtils.getHash(automodpackUpdateJar, "SHA-512");
 
             if (!localChecksum.equals(automodpack.modrinthAPISHA512Hash)) {
-                AutoModpack.LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
+                LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
                 AutoModpackToast.add(5);
                 return;
             }
         } catch (Exception e) {
-            AutoModpack.LOGGER.error("Failed to update myself!");
+            LOGGER.error("Failed to update myself!");
             AutoModpackToast.add(5);
             return;
         }
@@ -111,7 +111,7 @@ public class SelfUpdater {
             System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
 
             try {
-                CustomFileUtils.copyFile(automodpackUpdateJar, AutoModpack.automodpackJar);
+                CustomFileUtils.copyFile(automodpackUpdateJar, automodpackJar);
             } catch (IOException e) {
                 System.out.println("Error while copying file!");
                 e.printStackTrace();
@@ -121,7 +121,7 @@ public class SelfUpdater {
             System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
         }));
 
-        AutoModpack.LOGGER.info("Successfully downloaded update, waiting for shutdown");
+        LOGGER.info("Successfully downloaded update, waiting for shutdown");
 
         new ReLauncher.Restart(null, "Successfully updated AutoModpack - " + automodpack.modrinthAPIversion);
     }

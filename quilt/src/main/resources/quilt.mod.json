@@ -25,7 +25,7 @@
     "environment": "*",
     "entrypoints": {
       "main": ["pl.skidam.automodpack.AutoModpack::onInitialize"],
-      "preLaunch": ["pl.skidam.automodpack.AutoModpack::onPreInitialize"]
+      "preLaunch": ["pl.skidam.automodpack.Preload::onPreInitialize"]
     },
     "depends": [
       {
@@ -39,8 +39,6 @@
     ]
   },
   "mixin": [
-    "automodpack.mixins.json",
-    "automodpack.sharedresources.mixins.json",
-    "automodpack.sharedresources.compat.iris.mixins.json"
+    "automodpack.mixins.json"
   ]
 }

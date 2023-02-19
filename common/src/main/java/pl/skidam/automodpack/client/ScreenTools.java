@@ -8,7 +8,7 @@ import pl.skidam.automodpack.client.ui.*;
 
 import java.io.File;
 
-import static pl.skidam.automodpack.AutoModpack.preload;
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class ScreenTools {
 
@@ -20,28 +20,28 @@ public class ScreenTools {
 //        }
 
         public static void download() {
-            if (properlyLoaded()) Screens.DownloadScreen();
+            if (Check.properlyLoaded()) Screens.DownloadScreen();
         }
 
         public static void restart(Screen parent, File gameDir) {
-            if (properlyLoaded()) Screens.RestartScreen(parent, gameDir);
+            if (Check.properlyLoaded()) Screens.RestartScreen(parent, gameDir);
         }
 
         public static void danger(Screen parent, String link, File modpackDir, boolean loadIfItsNotLoaded, File modpackContentFile) {
-            if (properlyLoaded()) Screens.DangerScreen(parent, link, modpackDir, loadIfItsNotLoaded, modpackContentFile);
+            if (Check.properlyLoaded()) Screens.DangerScreen(parent, link, modpackDir, loadIfItsNotLoaded, modpackContentFile);
         }
 
         public static void error(String... error) {
-            if (properlyLoaded()) Screens.ErrorScreen(error);
+            if (Check.properlyLoaded()) Screens.ErrorScreen(error);
         }
 
         public static void title() {
-            if (properlyLoaded()) Screens.TitleScreen();
+            if (Check.properlyLoaded()) Screens.TitleScreen();
         }
     }
 
     public static String getScreenString() {
-        if (properlyLoaded()) {
+        if (Check.properlyLoaded()) {
             Screen screen = Screens.getScreen();
             return screen.getTitle().getString().toLowerCase();
         }
@@ -49,25 +49,26 @@ public class ScreenTools {
     }
 
     public static Screen getScreen() {
-        if (properlyLoaded()) {
+        if (Check.properlyLoaded()) {
             return Screens.getScreen();
         }
         return null;
     }
 
 
-    public static boolean properlyLoaded() {
-        try {
-            if (preload) return false;
-            if (Platform.getEnvironmentType().equals("SERVER")) return false;
-            if (MinecraftClient.getInstance() == null) return false;
-            if (MinecraftClient.getInstance().currentScreen == null) return false;
-            return true;
-        } catch (Exception e) {
-            return false;
+    private static class Check {
+        public static boolean properlyLoaded() {
+            try {
+                if (preload) return false;
+                if (Platform.getEnvironmentType().equals("SERVER")) return false;
+                if (MinecraftClient.getInstance() == null) return false;
+                if (MinecraftClient.getInstance().currentScreen == null) return false;
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
         }
     }
-
 
     private static class Screens { // It has to be in a separate class, or it will crash
         static Screen getScreen() {

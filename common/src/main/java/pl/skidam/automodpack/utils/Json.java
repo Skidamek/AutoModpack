@@ -4,7 +4,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import pl.skidam.automodpack.AutoModpack;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -12,13 +11,15 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 
+import static pl.skidam.automodpack.StaticVariables.VERSION;
+
 public class Json {
     public static JsonArray fromUrlAsArray(String url) {
         JsonElement element = null;
 
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AutoModpack.VERSION);
+            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + VERSION);
             connection.setConnectTimeout(3000);
             connection.setReadTimeout(3000);
             connection.connect();
@@ -42,7 +43,7 @@ public class Json {
         JsonElement element = null;
 
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AutoModpack.VERSION);
+        connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + VERSION);
         connection.setConnectTimeout(3000);
         connection.setReadTimeout(3000);
         connection.connect();

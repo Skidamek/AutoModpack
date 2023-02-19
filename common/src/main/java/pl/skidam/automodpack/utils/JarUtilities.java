@@ -1,10 +1,11 @@
 package pl.skidam.automodpack.utils;
 
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
 
 import java.io.File;
 import java.nio.file.Path;
+
+import static pl.skidam.automodpack.StaticVariables.LOGGER;
 
 public class JarUtilities {
 
@@ -19,7 +20,7 @@ public class JarUtilities {
         File jarDir = Platform.getModPath(modId);
 
         if (jarDir == null) {
-            AutoModpack.LOGGER.error("Could not find jar file for " + modId);
+            LOGGER.error("Could not find jar file for " + modId);
             return null;
         }
 
@@ -30,7 +31,7 @@ public class JarUtilities {
         File jarDir = Platform.getModPath(modId);
 
         if (jarDir == null) {
-            AutoModpack.LOGGER.error("Could not find jar file for " + modId);
+            LOGGER.error("Could not find jar file for " + modId);
             return null;
         }
 
@@ -73,7 +74,7 @@ public class JarUtilities {
             modsPath = jarDir.getParentFile(); // get parent directory, which should be a mods directory
 
             if (!modsPath.getName().equals("mods")) {
-                AutoModpack.LOGGER.warn("Found external mods folder ({})", modsPath);
+                LOGGER.warn("Found external mods folder ({})", modsPath);
             }
         }
         return modsPath;

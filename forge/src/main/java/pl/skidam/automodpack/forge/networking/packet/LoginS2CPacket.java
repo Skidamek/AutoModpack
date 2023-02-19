@@ -4,10 +4,12 @@ import net.minecraft.network.Packet;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.listener.ClientLoginPacketListener;
 import net.minecraftforge.network.NetworkEvent;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.forge.networking.ModPackets;
 
 import java.util.function.Supplier;
+
+import static pl.skidam.automodpack.StaticVariables.LOGGER;
+import static pl.skidam.automodpack.StaticVariables.VERSION;
 
 public class LoginS2CPacket implements Packet<ClientLoginPacketListener>  {
     private final String version;
@@ -27,17 +29,17 @@ public class LoginS2CPacket implements Packet<ClientLoginPacketListener>  {
 
         // This code runs on client
 
-        AutoModpack.LOGGER.error("Received login packet from server! " + version);
-        AutoModpack.LOGGER.error("Sending login packet to server! " + AutoModpack.VERSION);
-        listener.getConnection().send(new LoginC2SPacket(AutoModpack.VERSION));
-        AutoModpack.LOGGER.error("Sent login packet to server! " + AutoModpack.VERSION);
+        LOGGER.error("Received login packet from server! " + version);
+        LOGGER.error("Sending login packet to server! " + VERSION);
+        listener.getConnection().send(new LoginC2SPacket(VERSION));
+        LOGGER.error("Sent login packet to server! " + VERSION);
     }
 
     public void apply(Supplier<NetworkEvent.Context> supplier) {
         // This code runs on CLIENT
         NetworkEvent.Context context = supplier.get();
         context.enqueueWork(() -> {
-            ModPackets.sendToServer(new LoginC2SPacket(AutoModpack.VERSION));
+            ModPackets.sendToServer(new LoginC2SPacket(VERSION));
         });
     }
 }

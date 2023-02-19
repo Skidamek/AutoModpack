@@ -1,8 +1,9 @@
 package pl.skidam.automodpack.utils;
 
 import com.google.gson.JsonObject;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
+
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class ModrinthAPI {
 
@@ -16,7 +17,7 @@ public class ModrinthAPI {
 
     public ModrinthAPI(String modrinthID) {
 
-        String url = "https://api.modrinth.com/v2/project/" + modrinthID + "/version?loaders=[\"" + Platform.getPlatformType().toString().toLowerCase() + "\"]&game_versions=[\"" + AutoModpack.MC_VERSION + "\"]";
+        String url = "https://api.modrinth.com/v2/project/" + modrinthID + "/version?loaders=[\"" + Platform.getPlatformType().toString().toLowerCase() + "\"]&game_versions=[\"" + MC_VERSION + "\"]";
 
         url = url.replaceAll("\"", "%22"); // so important!
 
@@ -36,7 +37,7 @@ public class ModrinthAPI {
             this.modrinthAPISHA512Hash = JSONArrayFiles.get("hashes").getAsJsonObject().get("sha512").getAsString();
 
         } catch (IndexOutOfBoundsException e) {
-            AutoModpack.LOGGER.warn("Can't find mod for your client, tried link " + url);
+            LOGGER.warn("Can't find mod for your client, tried link " + url);
         } catch (Exception e) {
             e.printStackTrace();
         }

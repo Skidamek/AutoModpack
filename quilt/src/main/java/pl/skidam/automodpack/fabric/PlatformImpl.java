@@ -3,14 +3,11 @@ package pl.skidam.automodpack.fabric; // really don't know why it must be there 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
-import com.mojang.logging.LogUtils;
 import net.fabricmc.api.EnvType;
 import org.quiltmc.loader.api.LoaderValue;
 import org.quiltmc.loader.api.ModContainer;
 import org.quiltmc.loader.api.QuiltLoader;
 import org.quiltmc.loader.api.minecraft.MinecraftQuiltLoader;
-import org.slf4j.Logger;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.ReLauncher;
@@ -28,11 +25,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import static pl.skidam.automodpack.AutoModpack.modsPath;
 import static pl.skidam.automodpack.Platform.ModPlatform.QUILT;
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class PlatformImpl {
-    static final Logger LOGGER = LogUtils.getLogger();
 
     public static Platform.ModPlatform getPlatformType() {
         return QUILT;
@@ -54,15 +50,15 @@ public class PlatformImpl {
             LOGGER.warn("Dependency (QFAPI) was not found");
 
             if (Platform.getEnvironmentType().equals("SERVER")) {
-                if (!AutoModpack.serverConfig.downloadDependency) {
-                    AutoModpack.LOGGER.error("AutoModpack update check is disabled, you need to manually install quilted fabric api!");
+                if (!serverConfig.downloadDependency) {
+                    LOGGER.error("AutoModpack update check is disabled, you need to manually install quilted fabric api!");
                     return;
                 }
             }
 
             if (Platform.getEnvironmentType().equals("CLIENT")) {
-                if (!AutoModpack.clientConfig.downloadDependency) {
-                    AutoModpack.LOGGER.error("AutoModpack update check is disabled, you need to manually install quilted fabric api!");
+                if (!clientConfig.downloadDependency) {
+                    LOGGER.error("AutoModpack update check is disabled, you need to manually install quilted fabric api!");
                     return;
                 }
             }
@@ -83,7 +79,7 @@ public class PlatformImpl {
                 String localChecksum = CustomFileUtils.getHash(file, "SHA-512");
 
                 if (!localChecksum.equals(qfapi.modrinthAPISHA512Hash)) {
-                    AutoModpack.LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
+                    LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
                     AutoModpackToast.add(5);
                     return;
                 }
@@ -104,7 +100,7 @@ public class PlatformImpl {
         if (container != null) {
             for (Path path : Objects.requireNonNull(container.getSourcePaths().stream().findFirst().isPresent() ? container.getSourcePaths().stream().findFirst().get() : null)) {
                 if (path == null) {
-                    AutoModpack.LOGGER.error("Could not find jar file for " + modid);
+                    LOGGER.error("Could not find jar file for " + modid);
                     return null;
                 }
 

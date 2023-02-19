@@ -8,7 +8,6 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
 import net.minecraft.text.Text;
 import net.minecraft.util.Util;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
@@ -22,6 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.FutureTask;
 
+import static pl.skidam.automodpack.StaticVariables.*;
 import static pl.skidam.automodpack.networking.ModPackets.HANDSHAKE;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
 
@@ -43,13 +43,13 @@ public class ModPacketsImpl {
         // Server
 
         // For velocity support, velocity doest support login packets
-        if (AutoModpack.serverConfig.velocityMode)  {
+        if (serverConfig.velocityMode)  {
             ServerPlayNetworking.registerGlobalReceiver(HANDSHAKE, LoginS2CPacket::receive);
             ServerPlayNetworking.registerGlobalReceiver(LINK, LinkS2CPacket::receive);
 
             ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
                 PacketByteBuf buf = PacketByteBufs.create();
-                String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
+                String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
                 buf.writeString(correctResponse);
                 sender.sendPacket(HANDSHAKE, buf);
             });
@@ -79,7 +79,7 @@ public class ModPacketsImpl {
                     }
 
                     if (i == 300) {
-                        AutoModpack.LOGGER.error("Timeout login for " + profile.getName() + " (" + uniqueId.toString()  + ")");
+                        LOGGER.error("Timeout login for " + profile.getName() + " (" + uniqueId.toString()  + ")");
                         Text reason = TextHelper.literal("AutoModpack - timeout");
                         handler.connection.send(new LoginDisconnectS2CPacket(reason));
                         handler.connection.disconnect(reason);
@@ -93,9 +93,9 @@ public class ModPacketsImpl {
             Util.getMainWorkerExecutor().execute(future);
 
             PacketByteBuf buf = PacketByteBufs.create();
-            String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
-            if (AutoModpack.serverConfig.allowFabricQuiltPlayers) {
-                correctResponse = AutoModpack.VERSION + "-" + "fabric&quilt";
+            String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
+            if (serverConfig.allowFabricQuiltPlayers) {
+                correctResponse = VERSION + "-" + "fabric&quilt";
             }
             buf.writeString(correctResponse);
             sender.sendPacket(HANDSHAKE, buf);

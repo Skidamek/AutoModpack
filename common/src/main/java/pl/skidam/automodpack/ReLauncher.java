@@ -19,8 +19,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
-import static pl.skidam.automodpack.AutoModpack.LOGGER;
-import static pl.skidam.automodpack.AutoModpack.clientConfig;
+import static pl.skidam.automodpack.StaticVariables.*;
 
 /**
  * Credits to jonafanho for the original code (https://github.com/jonafanho/Minecraft-Mod-Updater/blob/master/common/src/main/java/updater/Launcher.java)
@@ -44,7 +43,7 @@ public class ReLauncher {
             boolean autoRelaunch = clientConfig.autoRelauncher;
 
             if (isClient) {
-                if (!AutoModpack.preload && !ScreenTools.getScreenString().contains("restartscreen")) {
+                if (!preload && !ScreenTools.getScreenString().contains("restartscreen")) {
                     ScreenTools.setTo.restart(ScreenTools.getScreen(), gameDir);
                     return;
                 }
@@ -96,7 +95,7 @@ public class ReLauncher {
             javaPath = JavaPath.getJavaPath();
 
             if (clientConfig.autoRelauncher) {
-                AutoModpack.LOGGER.warn("Using this java executable path (if wrong/doesn't work change that in config) " + javaPath);
+                LOGGER.warn("Using this java executable path (if wrong/doesn't work change that in config) " + javaPath);
             }
 
             command = formatPath(String.format(

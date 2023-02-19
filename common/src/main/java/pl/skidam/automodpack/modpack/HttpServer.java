@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.modpack;
 
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.config.Config;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.Ip;
@@ -19,11 +18,12 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static pl.skidam.automodpack.StaticVariables.*;
 import static pl.skidam.automodpack.modpack.Modpack.hostModpackContentFile;
 import static pl.skidam.automodpack.modpack.Modpack.hostModpackDir;
 
 public class HttpServer {
-    private static final int BUFFER_SIZE = 128 * 1024;
+    private static final int BUFFER_SIZE = 64 * 1024;
     public static List<String> filesList = new ArrayList<>();
     public static ExecutorService HTTPServerExecutor;
     public static boolean isRunning = false;
@@ -31,22 +31,22 @@ public class HttpServer {
     public static void start() {
         if (isRunning) return;
 
-        if (!AutoModpack.serverConfig.modpackHost) {
-            AutoModpack.LOGGER.warn("Modpack hosting is disabled in config");
+        if (!serverConfig.modpackHost) {
+            LOGGER.warn("Modpack hosting is disabled in config");
             return;
         }
 
-        if (AutoModpack.serverConfig.hostIp == null || AutoModpack.serverConfig.hostIp.equals("")) {
-            AutoModpack.serverConfig.hostIp = Ip.getPublic();
-            ConfigTools.saveConfig(AutoModpack.serverConfigFile, AutoModpack.serverConfig);
-            AutoModpack.LOGGER.warn("Host IP isn't set in config! Setting it to {}", AutoModpack.serverConfig.hostIp);
+        if (serverConfig.hostIp == null || serverConfig.hostIp.equals("")) {
+            serverConfig.hostIp = Ip.getPublic();
+            ConfigTools.saveConfig(serverConfigFile, serverConfig);
+            LOGGER.warn("Host IP isn't set in config! Setting it to {}", serverConfig.hostIp);
         }
 
-        if (AutoModpack.serverConfig.hostLocalIp == null || AutoModpack.serverConfig.hostLocalIp.equals("")) {
+        if (serverConfig.hostLocalIp == null || serverConfig.hostLocalIp.equals("")) {
             try {
-                AutoModpack.serverConfig.hostLocalIp = Ip.getLocal();
-                ConfigTools.saveConfig(AutoModpack.serverConfigFile, AutoModpack.serverConfig);
-                AutoModpack.LOGGER.warn("Host local IP isn't set in config! Setting it to {}", AutoModpack.serverConfig.hostLocalIp);
+                serverConfig.hostLocalIp = Ip.getLocal();
+                ConfigTools.saveConfig(serverConfigFile, serverConfig);
+                LOGGER.warn("Host local IP isn't set in config! Setting it to {}", serverConfig.hostLocalIp);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -60,14 +60,14 @@ public class HttpServer {
         if (!isRunning) return;
         isRunning = false;
         HTTPServerExecutor.shutdown();
-        AutoModpack.LOGGER.info("Stopped modpack hosting");
+        LOGGER.info("Stopped modpack hosting");
     }
 
     private HttpServer() {
         try {
             Config.ModpackContentFields serverModpackContent = ConfigTools.loadModpackContent(hostModpackContentFile);
             if (serverModpackContent == null) {
-                AutoModpack.LOGGER.error("Modpack content is null! Can't start hosting modpack");
+                LOGGER.error("Modpack content is null! Can't start hosting modpack");
                 return;
             }
 
@@ -76,8 +76,8 @@ public class HttpServer {
                 filesList.add(item.file);
             }
 
-            HTTPServerExecutor = Executors.newFixedThreadPool(AutoModpack.serverConfig.hostThreads);
-            InetSocketAddress address = new InetSocketAddress("0.0.0.0", AutoModpack.serverConfig.hostPort);
+            HTTPServerExecutor = Executors.newFixedThreadPool(serverConfig.hostThreads);
+            InetSocketAddress address = new InetSocketAddress("0.0.0.0", serverConfig.hostPort);
 
             HTTPServerExecutor.submit(() -> {
                 try {
@@ -88,7 +88,7 @@ public class HttpServer {
                     server.register(selector, SelectionKey.OP_ACCEPT);
 
                     isRunning = true;
-                    AutoModpack.LOGGER.info("Modpack hosting started!");
+                    LOGGER.info("Modpack hosting started!");
 
                     while (isRunning) {
                         selector.select();

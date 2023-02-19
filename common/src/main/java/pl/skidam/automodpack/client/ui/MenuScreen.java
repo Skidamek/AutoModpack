@@ -10,7 +10,6 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.config.ConfigTools;
@@ -18,6 +17,9 @@ import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
 import java.util.Map;
+
+import static pl.skidam.automodpack.StaticVariables.clientConfig;
+import static pl.skidam.automodpack.StaticVariables.clientConfigFile;
 
 @Environment(EnvType.CLIENT)
 public class MenuScreen extends Screen {
@@ -32,7 +34,7 @@ public class MenuScreen extends Screen {
     }
 
     public static String GetSelectedModpack() {
-        return AutoModpack.clientConfig.selectedModpack;
+        return clientConfig.selectedModpack;
     }
 
     @Override
@@ -45,7 +47,7 @@ public class MenuScreen extends Screen {
 
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.update"), (button) -> {
             AutoModpackToast.add(0);
-            String modpack = AutoModpack.clientConfig.selectedModpack;
+            String modpack = clientConfig.selectedModpack;
             new ModpackUpdater(ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack), true);
         }));
 
@@ -86,7 +88,7 @@ public class MenuScreen extends Screen {
 
             // for every entry in the list, check if it's the selected modpack and select it
             for (int i = 0; i < this.children().size(); i++) {
-                if (this.children().get(i).toString().equals(AutoModpack.clientConfig.selectedModpack)) {
+                if (this.children().get(i).toString().equals(clientConfig.selectedModpack)) {
                     this.setSelected(this.children().get(i));
                 }
             }
@@ -140,8 +142,8 @@ public class MenuScreen extends Screen {
 
             private void onPressed() {
                 ModpackSelectionListWidget.this.setSelected(this);
-                AutoModpack.clientConfig.selectedModpack = this.modpackDefinition;
-                ConfigTools.saveConfig(AutoModpack.clientConfigFile, AutoModpack.clientConfig);
+                clientConfig.selectedModpack = this.modpackDefinition;
+                ConfigTools.saveConfig(clientConfigFile, clientConfig);
             }
 
             public Text getNarration() {

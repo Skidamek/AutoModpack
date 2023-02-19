@@ -8,7 +8,6 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import org.slf4j.Logger;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.ReLauncher;
@@ -25,8 +24,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import static pl.skidam.automodpack.AutoModpack.modsPath;
 import static pl.skidam.automodpack.Platform.ModPlatform.FABRIC;
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class PlatformImpl {
     static final Logger LOGGER = LogUtils.getLogger();
@@ -51,15 +50,15 @@ public class PlatformImpl {
             LOGGER.warn("Dependency (FAPI) was not found");
 
             if (Platform.getEnvironmentType().equals("SERVER")) {
-                if (!AutoModpack.serverConfig.downloadDependency) {
-                    AutoModpack.LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
+                if (!serverConfig.downloadDependency) {
+                    LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
                     return;
                 }
             }
 
             if (Platform.getEnvironmentType().equals("CLIENT")) {
-                if (!AutoModpack.clientConfig.downloadDependency) {
-                    AutoModpack.LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
+                if (!clientConfig.downloadDependency) {
+                    LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
                     return;
                 }
             }
@@ -81,7 +80,7 @@ public class PlatformImpl {
 
 
                 if (!localChecksum.equals(fapi.modrinthAPISHA512Hash)) {
-                    AutoModpack.LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
+                    LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
                     AutoModpackToast.add(5);
                     return;
                 }
@@ -105,7 +104,7 @@ public class PlatformImpl {
                 Path jarPath = modContainer.getRootPaths().stream().findFirst().isPresent() ? modContainer.getRootPaths().stream().findFirst().get() : null;
 
                 if (jarPath == null) {
-                    AutoModpack.LOGGER.error("Could not find jar file for " + modid);
+                    LOGGER.error("Could not find jar file for " + modid);
                     return null;
                 }
 

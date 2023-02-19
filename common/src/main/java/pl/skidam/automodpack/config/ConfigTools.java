@@ -3,7 +3,6 @@ package pl.skidam.automodpack.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.apache.commons.io.IOUtils;
-import pl.skidam.automodpack.AutoModpack;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -11,6 +10,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
+
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class ConfigTools {
 
@@ -40,7 +41,7 @@ public class ConfigTools {
                 return obj;
             }
         } catch (Exception e) {
-            AutoModpack.LOGGER.error("Couldn't load config! " + configClass);
+            LOGGER.error("Couldn't load config! " + configClass);
             e.printStackTrace();
         }
 
@@ -49,7 +50,7 @@ public class ConfigTools {
             saveConfig(configFile, obj);
             return obj;
         } catch (Exception e) {
-            AutoModpack.LOGGER.error("Invalid config class! " + configClass);
+            LOGGER.error("Invalid config class! " + configClass);
             e.printStackTrace();
             return null;
         }
@@ -63,7 +64,7 @@ public class ConfigTools {
 
             Files.writeString(configFile.toPath(), GSON.toJson(configObject), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
-            AutoModpack.LOGGER.error("Couldn't save config! " + configObject.getClass());
+            LOGGER.error("Couldn't save config! " + configObject.getClass());
             e.printStackTrace();
         }
     }
@@ -77,7 +78,7 @@ public class ConfigTools {
                 return GSON.fromJson(json, Config.ModpackContentFields.class);
             }
         } catch (Exception e) {
-            AutoModpack.LOGGER.error("Couldn't load modpack content!");
+            LOGGER.error("Couldn't load modpack content!");
             e.printStackTrace();
         }
         return null;
@@ -91,7 +92,7 @@ public class ConfigTools {
 
             Files.writeString(modpackContentFile.toPath(), GSON.toJson(configObject), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
-            AutoModpack.LOGGER.error("Couldn't save modpack content! " + configObject.getClass());
+            LOGGER.error("Couldn't save modpack content! " + configObject.getClass());
             e.printStackTrace();
         }
     }

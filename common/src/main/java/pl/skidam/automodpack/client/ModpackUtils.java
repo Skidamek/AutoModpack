@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.client;
 
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.config.Config;
@@ -11,7 +10,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
-import static pl.skidam.automodpack.AutoModpack.LOGGER;
+import static pl.skidam.automodpack.StaticVariables.*;
 import static pl.skidam.automodpack.client.ModpackUpdater.getServerModpackContent;
 
 public class ModpackUtils {
@@ -42,7 +41,7 @@ public class ModpackUtils {
             if (mod.modId == null) continue;
 
             // check if file is in mods folder
-            File modpackDir = AutoModpack.selectedModpackDir;
+            File modpackDir = selectedModpackDir;
             File modFile = new File(modpackDir + mod.file);
             if (modFile.exists()) {
                 String env = Platform.getModEnvironmentFromNotLoadedJar(modFile);
@@ -95,15 +94,20 @@ public class ModpackUtils {
                 String serverChecksum = modpackFile.hash;
                 String localChecksum = CustomFileUtils.getHash(file, "SHA-256");
                 if (!serverChecksum.equals(localChecksum)) {
-                    isUpdate = true;
-                    break;
+                    if (modpackFile.type.equals("mod")) { // that's a bit broken, it shouldn't be like that, but it needs to be because some files returns different checksums somehow....
+                        isUpdate = true;
+                        break;
+                    } else if (Long.parseLong(modpackFile.size) != file.length()) {
+                        isUpdate = true;
+                        break;
+                    }
                 }
             }
 
             if (isUpdate) {
                 LOGGER.warn("Modpack update found!");
                 return UpdateType.FULL;
-            } else if (deletedSomething && AutoModpack.preload) {
+            } else if (deletedSomething && preload) {
                 LOGGER.warn("Modpack is up to date, but some files were deleted. We need to restart the game to apply changes.");
                 new ReLauncher.Restart(modpackDir);
                 return UpdateType.DELETE;
@@ -176,21 +180,18 @@ public class ModpackUtils {
         List<Config.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
 
         for (Config.ModpackContentFields.ModpackContentItems contentItem : contents) {
-            String type = contentItem.type;
-            if (!type.equals("shaderpack") && !type.equals("resourcepack") && !type.equals("mc_options")) {
-                String fileName = contentItem.file;
-                File sourceFile = new File(modpackDir + File.separator + fileName);
+            String fileName = contentItem.file;
+            File sourceFile = new File(modpackDir + File.separator + fileName);
 
-                if (sourceFile.exists()) {
-                    File destinationFile = new File("." + fileName);
+            if (sourceFile.exists()) {
+                File destinationFile = new File("." + fileName);
 
-                    if (destinationFile.exists()) {
-                        CustomFileUtils.forceDelete(destinationFile, false);
-                    }
-
-                    CustomFileUtils.copyFile(sourceFile, destinationFile);
-                    AutoModpack.LOGGER.info("Copied " + fileName + " to running directory");
+                if (destinationFile.exists()) {
+                    CustomFileUtils.forceDelete(destinationFile, false);
                 }
+
+                CustomFileUtils.copyFile(sourceFile, destinationFile);
+                LOGGER.info("Copied " + fileName + " to running directory");
             }
         }
     }
