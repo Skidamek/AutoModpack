@@ -21,8 +21,8 @@
     "gui.automodpack.screen.restart.title.modpack": "An update has been downloaded for your Modpack!",
     "gui.automodpack.screen.restart.title.automodpack": "An update has been downloaded for \"AutoModpack\" (this mod)!",
     "gui.automodpack.screen.restart.description": "To complete the update you must restart the game.",
-    "gui.automodpack.screen.restart.secDescription": "Do you want to auto-restart now?",
-    "gui.automodpack.screen.restart.button.quit": "Yes (Restart)",
+    "gui.automodpack.screen.restart.secDescription": "Do you want to do restart now?",
+    "gui.automodpack.screen.restart.button.quit": "Yes (Close the game)",
     "gui.automodpack.screen.restart.button.cancel": "No (Back to the game)",
   
     "gui.automodpack.screen.confirm.title": "❌ Delete Modpack ❌",

@@ -36,6 +36,12 @@
         "id": "minecraft",
         "versions": ">=1.19"
       }
+    ],
+    "breaks": [
+      {
+        "id": "quiltgoslightlyfasterlol",
+        "versions": "*"
+      }
     ]
   },
   "mixin": [

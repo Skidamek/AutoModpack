@@ -138,6 +138,9 @@ public class ModpackUpdater {
 
                 if (!ModpackUtils.isLoaded(modpackContent)) {
                     LOGGER.info("Modpack is not loaded, loading...");
+                    // copy files to running directory
+                    ModpackUtils.copyModpackFiles(modpackDir, serverModpackContent);
+                    checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
                     new ReLauncher.Restart(modpackDir);
                 }
 
@@ -156,6 +159,9 @@ public class ModpackUpdater {
                     if (loadIfItsNotLoaded) {
                         if (!ModpackUtils.isLoaded(serverModpackContent)) {
                             LOGGER.info("Modpack is not loaded, loading...");
+                            // copy files to running directory
+                            ModpackUtils.copyModpackFiles(modpackDir, serverModpackContent);
+                            checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
                             new ReLauncher.Restart(modpackDir);
                         }
                     }
@@ -195,7 +201,10 @@ public class ModpackUpdater {
 
                 File fileInRunDir = new File("./" + fileName);
 
-                if (!fileInRunDir.exists() || !fileInRunDir.isFile()) continue;
+                if (!fileInRunDir.exists() || !fileInRunDir.isFile()) {
+                    LOGGER.error("File " + fileName + " doesn't exist in run directory, skipping123");
+                    continue;
+                }
 
                 if (serverChecksum.equals(CustomFileUtils.getHash(fileInRunDir, "SHA-256"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
@@ -213,7 +222,7 @@ public class ModpackUpdater {
 
             ModpackUpdater.wholeQueue = copyModpackContentList.size();
 
-            LOGGER.info("In queue left {} files to download which is {}mb", wholeQueue, totalBytesToDownload / 1024 / 1024);
+            LOGGER.info("In queue left {} files to download which is {}kb", wholeQueue, totalBytesToDownload / 1024);
 
             if (wholeQueue > 0) {
                 for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
@@ -318,6 +327,7 @@ public class ModpackUpdater {
         return CompletableFuture.runAsync(() -> process(url, downloadFile, serverChecksum), DOWNLOAD_EXECUTOR);
     }
 
+    // TODO remove this method when we finally manage to fix weird issue with different checksums
     private static void process(String url, File downloadFile, String serverChecksum) {
         if (!downloadFile.exists()) {
             downloadFile(url, downloadFile, serverChecksum);

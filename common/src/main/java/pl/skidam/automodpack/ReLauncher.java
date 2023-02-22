@@ -55,7 +55,7 @@ public class ReLauncher {
                     }
                 }
 
-                if (!isHeadless) {
+                if (preload && !isHeadless) {
                     new Windows().restartWindow(guiMessage);
                     return;
                 }

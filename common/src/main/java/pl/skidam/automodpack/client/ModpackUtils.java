@@ -81,12 +81,11 @@ public class ModpackUtils {
             for (Config.ModpackContentFields.ModpackContentItems modpackFile : serverModpackContent.list) {
                 File file = new File(modpackDir + File.separator + modpackFile.file);
                 if (!file.exists()) {
-                    if (modpackFile.modId != null) {
-                        file = new File("./" + modpackFile.file);
-                    }
+                    file = new File("./" + modpackFile.file);
                 }
 
                 if (!file.exists()) {
+                    LOGGER.error(modpackFile.file + " -- update 3");
                     isUpdate = true;
                     break;
                 }
@@ -95,9 +94,11 @@ public class ModpackUtils {
                 String localChecksum = CustomFileUtils.getHash(file, "SHA-256");
                 if (!serverChecksum.equals(localChecksum)) {
                     if (modpackFile.type.equals("mod")) { // that's a bit broken, it shouldn't be like that, but it needs to be because some files returns different checksums somehow....
+                        LOGGER.error(modpackFile.file + " -- update 1");
                         isUpdate = true;
                         break;
-                    } else if (Long.parseLong(modpackFile.size) != file.length()) {
+                    } else if (Long.parseLong(modpackFile.size) != file.length() && !modpackFile.isEditable) {
+                        LOGGER.error(modpackFile.file + " -- update 2");
                         isUpdate = true;
                         break;
                     }
