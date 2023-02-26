@@ -2,6 +2,7 @@ package pl.skidam.automodpack.utils;
 
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
+import pl.skidam.automodpack.config.Config;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -10,6 +11,8 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.security.MessageDigest;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Everything in this class should force do the thing without throwing any exceptions.
@@ -62,18 +65,30 @@ public class CustomFileUtils {
         }
     }
 
-    public static void deleteEmptyFiles(File directory, boolean deleteSubDirsToo) {
+    public static void deleteEmptyFiles(File directory, boolean deleteSubDirsToo, List<Config.ModpackContentFields.ModpackContentItems> ignoreList) {
         File[] files = directory.listFiles();
         if (files == null) {
             return;
         }
+
+        File[] ignoreFiles = ignoreList.stream().map(modpackContentItems -> new File(directory + modpackContentItems.file)).toArray(File[]::new);
+
         for (File file : files) {
+
+            // skip files that should be ignored
+            if (Arrays.asList(ignoreFiles).contains(file)) {
+                System.out.println("Do not deleting ignored file: " + file + " <-> " + file.length());
+                continue;
+            }
+
             if (file.isDirectory()) {
                 if (deleteSubDirsToo && file.length() == 0) {
+                    System.out.println("Deleting empty directory: " + file);
                     CustomFileUtils.forceDelete(file, true);
                 }
-                deleteEmptyFiles(file, deleteSubDirsToo);
+                deleteEmptyFiles(file, deleteSubDirsToo, ignoreList);
             } else if (file.length() == 0) {
+                System.out.println("Deleting empty file: " + file);
                 CustomFileUtils.forceDelete(file, true);
             }
         }

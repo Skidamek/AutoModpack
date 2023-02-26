@@ -201,8 +201,7 @@ public class ModpackUpdater {
 
                 File fileInRunDir = new File("./" + fileName);
 
-                if (!fileInRunDir.exists() || !fileInRunDir.isFile()) {
-                    LOGGER.error("File " + fileName + " doesn't exist in run directory, skipping123");
+                if (!fileInRunDir.exists()) {
                     continue;
                 }
 
@@ -245,7 +244,7 @@ public class ModpackUpdater {
                         url = modpackContentField.link; // This link just must work, so we don't need to encode it
                     }
 
-                    downloadFutures.add(processAsync(url, downloadFile, isEditable, serverChecksum));
+                    downloadFutures.add(processAsync(url, downloadFile, serverChecksum));
                 }
 
                 CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).get();
@@ -274,9 +273,10 @@ public class ModpackUpdater {
                     LOGGER.error("An error occurred while trying to walk through the files in the modpack directory", e);
                 }
 
+
                 // clear empty directories
-                CustomFileUtils.deleteEmptyFiles(modpackDir, true);
-                CustomFileUtils.deleteEmptyFiles(new File("./"), false);
+                CustomFileUtils.deleteEmptyFiles(modpackDir, true, serverModpackContent.list);
+                CustomFileUtils.deleteEmptyFiles(new File("./"), false, serverModpackContent.list);
             }
 
             // Modpack updated
@@ -323,7 +323,7 @@ public class ModpackUpdater {
         }
     }
 
-    private static CompletableFuture<Void> processAsync(String url, File downloadFile, boolean isEditable, String serverChecksum) {
+    private static CompletableFuture<Void> processAsync(String url, File downloadFile, String serverChecksum) {
         return CompletableFuture.runAsync(() -> process(url, downloadFile, serverChecksum), DOWNLOAD_EXECUTOR);
     }
 
@@ -434,7 +434,7 @@ public class ModpackUpdater {
 
 
     // This method cancels the current download by interrupting the thread pool
-    public static void cancelDownload() { // TODO fix issue that after this operation, you can't download anything again
+    public static void cancelDownload() {
         try {
             LOGGER.info("Cancelling download for " + downloadFutures.size() + " files...");
             downloadFutures.forEach(future -> future.cancel(true));
