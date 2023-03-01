@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.security.MessageDigest;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -71,28 +70,43 @@ public class CustomFileUtils {
             return;
         }
 
-        File[] ignoreFiles = ignoreList.stream().map(modpackContentItems -> new File(directory + modpackContentItems.file)).toArray(File[]::new);
-
         for (File file : files) {
-
-            // skip files that should be ignored
-            if (Arrays.asList(ignoreFiles).contains(file)) {
-                System.out.println("Do not deleting ignored file: " + file + " <-> " + file.length());
+            if (shouldIgnore(file, ignoreList)) {
                 continue;
             }
 
             if (file.isDirectory()) {
-                if (deleteSubDirsToo && file.length() == 0) {
+                if (deleteSubDirsToo && isEmptyDirectory(file, ignoreList)) {
                     System.out.println("Deleting empty directory: " + file);
                     CustomFileUtils.forceDelete(file, true);
+                } else {
+                    deleteEmptyFiles(file, deleteSubDirsToo, ignoreList);
                 }
-                deleteEmptyFiles(file, deleteSubDirsToo, ignoreList);
             } else if (file.length() == 0) {
                 System.out.println("Deleting empty file: " + file);
                 CustomFileUtils.forceDelete(file, true);
             }
         }
     }
+
+    private static boolean shouldIgnore(File file, List<Config.ModpackContentFields.ModpackContentItems> ignoreList) {
+        return ignoreList.stream()
+                .anyMatch(item -> file.getAbsolutePath().replace("\\", "/").endsWith(item.file));
+    }
+
+    private static boolean isEmptyDirectory(File directory, List<Config.ModpackContentFields.ModpackContentItems> ignoreList) {
+        File[] files = directory.listFiles();
+        if (files == null) {
+            return true;
+        }
+        for (File file : files) {
+            if (!shouldIgnore(file, ignoreList)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
 
     public static String getHash(File file, String algorithm) throws Exception {
         if (!file.exists()) return null;
