@@ -73,7 +73,7 @@ public class Download {
 
             isDownloading = false;
 
-            if (fileAlreadyExists && outFile.toString().endsWith(".tmp")) {
+            if (fileAlreadyExists) {
                 File finalFile = new File(outFile.toString().replace(".tmp", ""));
                 CustomFileUtils.copyFile(outFile, finalFile);
                 CustomFileUtils.forceDelete(outFile, false);

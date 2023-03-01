@@ -48,7 +48,7 @@ public class MenuScreen extends Screen {
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.update"), (button) -> {
             AutoModpackToast.add(0);
             String modpack = clientConfig.selectedModpack;
-            new ModpackUpdater(ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack), true);
+            new ModpackUpdater(ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack));
         }));
 
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.delete"), (button) -> {

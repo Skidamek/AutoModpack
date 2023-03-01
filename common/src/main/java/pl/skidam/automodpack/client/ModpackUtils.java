@@ -17,16 +17,19 @@ public class ModpackUtils {
 
     public enum UpdateType { FULL, DELETE, NONE }
 
-    public static boolean isLoaded(Config.ModpackContentFields modpackContent) {
+    public static void printoutMissingMods(Config.ModpackContentFields modpackContent) {
         if (modpackContent == null) {
             LOGGER.error("Modpack content is null");
-            return false;
+            return;
         }
+
+        // We don't mind here if some mod isn't loaded, loader is broken lol
+        // This method returns false if some file is missing
 
         Collection modList = Platform.getModList();
         if (modList.size() == 0) {
             LOGGER.error("modList is empty");
-            return false;
+            return;
         }
 
         int i = 0;
@@ -49,12 +52,9 @@ public class ModpackUtils {
             }
 
             if (!loadedMods.containsKey(mod.modId)) {
-                LOGGER.warn("An example of a missing mod: " + mod.file);
-                return false;
+                LOGGER.warn(mod.file + " is missing!");
             }
         }
-
-        return true;
     }
 
     // If update to modpack found, returns true else false
@@ -80,6 +80,7 @@ public class ModpackUtils {
             // check if every file in server modpack content exists and has same checksum
             for (Config.ModpackContentFields.ModpackContentItems modpackFile : serverModpackContent.list) {
                 File file = new File(modpackDir + File.separator + modpackFile.file);
+
                 if (!file.exists()) {
                     file = new File("./" + modpackFile.file);
                 }
@@ -98,7 +99,7 @@ public class ModpackUtils {
                         isUpdate = true;
                         break;
                     } else if (Long.parseLong(modpackFile.size) != file.length() && !modpackFile.isEditable) {
-                        LOGGER.error(modpackFile.file + " -- update 2");
+                        LOGGER.error(modpackFile.file + " -- update 2 " + modpackFile.size + " <--> " + file.length());
                         isUpdate = true;
                         break;
                     }

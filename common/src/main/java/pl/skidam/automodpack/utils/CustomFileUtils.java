@@ -72,12 +72,13 @@ public class CustomFileUtils {
 
         for (File file : files) {
             if (shouldIgnore(file, ignoreList)) {
+                System.out.println("Ignoring: " + file);
                 continue;
             }
 
             if (file.isDirectory()) {
                 if (deleteSubDirsToo && isEmptyDirectory(file, ignoreList)) {
-                    System.out.println("Deleting empty directory: " + file);
+                    System.out.println("Deleting empty dir: " + file);
                     CustomFileUtils.forceDelete(file, true);
                 } else {
                     deleteEmptyFiles(file, deleteSubDirsToo, ignoreList);
@@ -96,15 +97,18 @@ public class CustomFileUtils {
 
     private static boolean isEmptyDirectory(File directory, List<Config.ModpackContentFields.ModpackContentItems> ignoreList) {
         File[] files = directory.listFiles();
-        if (files == null) {
+
+        if (files == null && directory.length() == 0) {
             return true;
-        }
-        for (File file : files) {
-            if (!shouldIgnore(file, ignoreList)) {
-                return false;
+        } else {
+            for (File file : files) {
+                if (!shouldIgnore(file, ignoreList)) {
+                    return false;
+                }
             }
         }
-        return true;
+        
+        return false;
     }
 
 
@@ -139,5 +143,22 @@ public class CustomFileUtils {
         if (hash1 == null || hash2 == null) return false;
 
         return hash1.equals(hash2);
+    }
+
+    public static List<File> mapAllFiles(File directory, List<File> files) {
+        File[] filesInDir = directory.listFiles();
+        if (filesInDir == null) {
+            return files;
+        }
+
+        for (File file : filesInDir) {
+            if (file.isDirectory()) {
+                mapAllFiles(file, files);
+            } else {
+                files.add(file);
+            }
+        }
+
+        return files;
     }
 }

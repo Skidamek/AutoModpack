@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 
 import static pl.skidam.automodpack.StaticVariables.*;
 import static pl.skidam.automodpack.config.ConfigTools.GSON;
+import static pl.skidam.automodpack.utils.CustomFileUtils.mapAllFiles;
 import static pl.skidam.automodpack.utils.RefactorStrings.getETA;
 
 public class ModpackUpdater {
@@ -117,17 +118,13 @@ public class ModpackUpdater {
         return null;
     }
 
-    public ModpackUpdater(String link, File modpackDir, boolean loadIfItsNotLoaded) {
+    public ModpackUpdater(String link, File modpackDir) {
         if (link == null || link.isEmpty() || modpackDir.toString() == null || modpackDir.toString().isEmpty()) return;
 
         try {
-            DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS);
-
             serverModpackContent = getServerModpackContent(link);
 
             if (serverModpackContent == null)  { // server is down, or you don't have access to internet, but we still want to load selected modpack
-
-                if (!loadIfItsNotLoaded) return;
 
                 File modpackContentFile = new File(modpackDir + File.separator + "modpack-content.json");
 
@@ -136,13 +133,18 @@ public class ModpackUpdater {
                 Config.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
                 if (modpackContent == null) return;
 
-                if (!ModpackUtils.isLoaded(modpackContent)) {
-                    LOGGER.info("Modpack is not loaded, loading...");
-                    // copy files to running directory
-                    ModpackUtils.copyModpackFiles(modpackDir, serverModpackContent);
-                    checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
-                    new ReLauncher.Restart(modpackDir);
+                List<File> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
+
+                // copy files to running directory
+                ModpackUtils.copyModpackFiles(modpackDir, serverModpackContent);
+                checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
+
+                if (mapAllFiles(modpackDir, new ArrayList<>()).equals(filesBefore)) {
+                    LOGGER.info("Modpack is already loaded");
+                    return;
                 }
+
+                new ReLauncher.Restart(modpackDir);
 
                 return;
             }
@@ -156,31 +158,38 @@ public class ModpackUpdater {
             if (modpackContentFile.exists()) {
                 if (ModpackUtils.isUpdate(link, modpackDir) == ModpackUtils.UpdateType.NONE) {
                     // check if modpack is loaded now loaded
-                    if (loadIfItsNotLoaded) {
-                        if (!ModpackUtils.isLoaded(serverModpackContent)) {
-                            LOGGER.info("Modpack is not loaded, loading...");
-                            // copy files to running directory
-                            ModpackUtils.copyModpackFiles(modpackDir, serverModpackContent);
-                            checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
-                            new ReLauncher.Restart(modpackDir);
-                        }
+
+                    List<File> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
+
+                    // copy files to running directory
+                    ModpackUtils.copyModpackFiles(modpackDir, serverModpackContent);
+                    checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
+
+                    if (mapAllFiles(modpackDir, new ArrayList<>()).equals(filesBefore)) {
+                        LOGGER.info("Modpack is already loaded");
+                        return;
                     }
+
+                    new ReLauncher.Restart(modpackDir);
+
                     return;
                 }
             } else if (!preload && ScreenTools.getScreen() != null) {
                 if (serverModpackContent == null) return;
                 CompletableFuture.runAsync(() -> {
                     while (!ScreenTools.getScreenString().contains("dangerscreen")) {
-                        ScreenTools.setTo.danger(ScreenTools.getScreen(), link, modpackDir, loadIfItsNotLoaded, modpackContentFile);
+                        ScreenTools.setTo.danger(ScreenTools.getScreen(), link, modpackDir, modpackContentFile);
                         new Wait(100);
                     }
                 });
                 return;
             }
 
-            if (serverModpackContent == null) return;
+            if (serverModpackContent == null) {
+                return;
+            }
 
-            ModpackUpdaterMain(link, modpackDir, loadIfItsNotLoaded, modpackContentFile);
+            ModpackUpdaterMain(link, modpackDir, modpackContentFile);
 
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater");
@@ -188,9 +197,11 @@ public class ModpackUpdater {
         }
     }
 
-    public static void ModpackUpdaterMain(String link, File modpackDir, boolean loadIfItsNotLoaded, File modpackContentFile) {
+    public static void ModpackUpdaterMain(String link, File modpackDir, File modpackContentFile) {
 
         long start = System.currentTimeMillis();
+
+        DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS);
 
         try {
             List<Config.ModpackContentFields.ModpackContentItems> copyModpackContentList = new ArrayList<>(serverModpackContent.list);
@@ -199,18 +210,27 @@ public class ModpackUpdater {
                 String fileName = modpackContentField.file;
                 String serverChecksum = modpackContentField.hash;
 
-                File fileInRunDir = new File("./" + fileName);
+                File file = new File(modpackDir + File.separator + fileName);
 
-                if (!fileInRunDir.exists()) {
+                if (!file.exists()) {
+                    file = new File("./" + fileName);
+                }
+
+                if (!file.exists()) {
                     continue;
                 }
 
-                if (serverChecksum.equals(CustomFileUtils.getHash(fileInRunDir, "SHA-256"))) {
+                if (serverChecksum.equals(CustomFileUtils.getHash(file, "SHA-256"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
                     copyModpackContentList.remove(modpackContentField);
                 } else if (modpackContentField.isEditable) {
                     LOGGER.info("Skipping editable file: " + fileName);
                     copyModpackContentList.remove(modpackContentField);
+                } else if (file.isFile() && !modpackContentField.type.equals("mod")) {
+                    if (file.length() == Long.parseLong(modpackContentField.size)) {
+                        LOGGER.info("Skipping* already downloaded file: " + fileName);
+                        copyModpackContentList.remove(modpackContentField);
+                    }
                 }
             }
 
@@ -221,7 +241,7 @@ public class ModpackUpdater {
 
             ModpackUpdater.wholeQueue = copyModpackContentList.size();
 
-            LOGGER.info("In queue left {} files to download which is {}kb", wholeQueue, totalBytesToDownload / 1024);
+            LOGGER.info("In queue left {} files to download ({}b)", wholeQueue, totalBytesToDownload);
 
             if (wholeQueue > 0) {
                 for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
@@ -233,7 +253,6 @@ public class ModpackUpdater {
 
                     String fileName = modpackContentField.file;
                     String serverChecksum = modpackContentField.hash;
-                    boolean isEditable = modpackContentField.isEditable;
 
                     File downloadFile = new File(modpackDir + File.separator + fileName);
                     String url;
@@ -302,18 +321,12 @@ public class ModpackUpdater {
                 return;
             }
 
-            LOGGER.info("Modpack is up-to-date! Took: " + (System.currentTimeMillis() - start) + " ms");
-
-            if (loadIfItsNotLoaded) {
-                if (!ModpackUtils.isLoaded(serverModpackContent)) {
-                    LOGGER.warn("Modpack is not loaded!");
-                    new ReLauncher.Restart(modpackDir);
-                }
-            }
-
             if (update) {
+                LOGGER.info("Update completed! Took: " + (System.currentTimeMillis() - start) + " ms");
                 new ReLauncher.Restart(modpackDir);
             }
+
+            LOGGER.info("Modpack is up-to-date! Took: " + (System.currentTimeMillis() - start) + " ms");
 
         } catch (SocketTimeoutException | ConnectException e) {
             LOGGER.error("Modpack host of " + link + " is not responding", e);
@@ -338,7 +351,7 @@ public class ModpackUpdater {
             String localChecksum = CustomFileUtils.getHash(downloadFile, "SHA-256");
 
             if (serverChecksum.equals(localChecksum)) { // up-to-date
-                LOGGER.info("File " + downloadFile.getName() + " is up-to-date!");
+                LOGGER.info("File " + downloadFile.getName() + " is up-to-date!"); // strange...
                 return;
             }
 

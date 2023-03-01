@@ -37,7 +37,7 @@ public class LinkS2CPacket implements Packet<ClientLoginPacketListener> {
             String modpackFileName = link.substring(link.lastIndexOf("/") + 1); // removes https:// and http://
             modpackFileName = modpackFileName.replace(":", "-"); // replaces : with -
             File modpackDir = new File(modpacksDir + File.separator + modpackFileName);
-            new Thread(() -> new ModpackUpdater(link, modpackDir, true)).start();
+            new Thread(() -> new ModpackUpdater(link, modpackDir)).start();
         });
     }
 }

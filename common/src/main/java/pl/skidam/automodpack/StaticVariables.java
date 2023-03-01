@@ -8,9 +8,7 @@ import pl.skidam.automodpack.utils.JarUtilities;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 public class StaticVariables {
     public static final Logger LOGGER = LoggerFactory.getLogger("AutoModpack");

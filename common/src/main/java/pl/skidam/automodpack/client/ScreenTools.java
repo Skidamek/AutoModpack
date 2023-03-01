@@ -27,8 +27,8 @@ public class ScreenTools {
             if (Check.properlyLoaded()) Screens.RestartScreen(parent, gameDir);
         }
 
-        public static void danger(Screen parent, String link, File modpackDir, boolean loadIfItsNotLoaded, File modpackContentFile) {
-            if (Check.properlyLoaded()) Screens.DangerScreen(parent, link, modpackDir, loadIfItsNotLoaded, modpackContentFile);
+        public static void danger(Screen parent, String link, File modpackDir, File modpackContentFile) {
+            if (Check.properlyLoaded()) Screens.DangerScreen(parent, link, modpackDir, modpackContentFile);
         }
 
         public static void error(String... error) {
@@ -87,8 +87,8 @@ public class ScreenTools {
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new RestartScreen(parent, gameDir)));
         }
 
-        public static void DangerScreen(Screen parent, String link, File modpackDir, boolean loadIfItsNotLoaded, File modpackContentFile) {
-            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new DangerScreen(parent, link, modpackDir, loadIfItsNotLoaded, modpackContentFile)));
+        public static void DangerScreen(Screen parent, String link, File modpackDir, File modpackContentFile) {
+            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new DangerScreen(parent, link, modpackDir, modpackContentFile)));
         }
 
         public static void TitleScreen() {

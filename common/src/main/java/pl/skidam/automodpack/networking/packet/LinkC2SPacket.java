@@ -36,9 +36,8 @@ public class LinkC2SPacket {
         ConfigTools.saveConfig(clientConfigFile, clientConfig);
 
         ModpackUtils.UpdateType updateType = ModpackUtils.isUpdate(link, modpackDir);
-        boolean isLoaded = ModpackUtils.isLoaded(ModpackUpdater.getServerModpackContent(link));
 
-        boolean responseBoolean = updateType == ModpackUtils.UpdateType.NONE && isLoaded;
+        boolean responseBoolean = updateType == ModpackUtils.UpdateType.NONE;
 
         PacketByteBuf response = PacketByteBufs.create();
         response.writeBoolean(responseBoolean);
@@ -47,9 +46,7 @@ public class LinkC2SPacket {
             if (updateType == ModpackUtils.UpdateType.DELETE) {
                 new ReLauncher.Restart(modpackDir);
             } else if (updateType == ModpackUtils.UpdateType.FULL) {
-                new ModpackUpdater(link, modpackDir, true);
-            } else if (!isLoaded) {
-                new ReLauncher.Restart(modpackDir);
+                new ModpackUpdater(link, modpackDir);
             }
         });
 
@@ -69,15 +66,14 @@ public class LinkC2SPacket {
         ConfigTools.saveConfig(clientConfigFile, clientConfig);
 
         ModpackUtils.UpdateType updateType = ModpackUtils.isUpdate(link, modpackDir);
-        boolean isLoaded = ModpackUtils.isLoaded(ModpackUpdater.getServerModpackContent(link));
 
         PacketByteBuf response = PacketByteBufs.create();
-        response.writeBoolean(updateType == ModpackUtils.UpdateType.NONE && isLoaded);
+        response.writeBoolean(updateType == ModpackUtils.UpdateType.NONE);
 
         sender.sendPacket(LINK, response);
 
         // FIXME
-        if (updateType == ModpackUtils.UpdateType.DELETE || updateType == ModpackUtils.UpdateType.FULL || !isLoaded) {
+        if (updateType == ModpackUtils.UpdateType.DELETE || updateType == ModpackUtils.UpdateType.FULL) {
 
             CompletableFuture.runAsync(() -> {
                 while (ScreenTools.getScreen() == null) {
@@ -102,7 +98,7 @@ public class LinkC2SPacket {
                 if (updateType == ModpackUtils.UpdateType.DELETE) {
                     new ReLauncher.Restart(modpackDir);
                 } else if (updateType == ModpackUtils.UpdateType.FULL) {
-                    new ModpackUpdater(link, modpackDir, true);
+                    new ModpackUpdater(link, modpackDir);
                 } else { // !isLoaded
                     new ReLauncher.Restart(modpackDir);
                 }

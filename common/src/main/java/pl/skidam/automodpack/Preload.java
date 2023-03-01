@@ -41,7 +41,7 @@ public class Preload {
             if (selectedModpack != null && !selectedModpack.equals("")) {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
-                new ModpackUpdater(selectedModpackLink, selectedModpackDir, true);
+                new ModpackUpdater(selectedModpackLink, selectedModpackDir);
             }
         }
 

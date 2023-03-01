@@ -17,15 +17,13 @@ public class DangerScreen extends Screen {
     private final Screen parent;
     private final String link;
     private final File modpackDir;
-    private final boolean loadIfItsNotLoaded;
     private final File modpackContentFile;
 
-    public DangerScreen(Screen parent, String link, File modpackDir, boolean loadIfItsNotLoaded, File modpackContentFile) {
+    public DangerScreen(Screen parent, String link, File modpackDir, File modpackContentFile) {
         super(TextHelper.translatable("gui.automodpack.screen.danger.title").formatted(Formatting.BOLD));
         this.parent = parent;
         this.link = link;
         this.modpackDir = modpackDir;
-        this.loadIfItsNotLoaded = loadIfItsNotLoaded;
         this.modpackContentFile = modpackContentFile;
     }
 
@@ -47,7 +45,7 @@ public class DangerScreen extends Screen {
         //                                                       + 100
         this.addDrawableChild(new ButtonWidget(this.width / 2 + 10, this.height / 6 + 96, 120, 20, TextHelper.translatable("gui.automodpack.screen.danger.button.accept").formatted(Formatting.GREEN), (button) -> {
             CompletableFuture.runAsync(() -> {
-                ModpackUpdater.ModpackUpdaterMain(link, modpackDir, loadIfItsNotLoaded, modpackContentFile);
+                ModpackUpdater.ModpackUpdaterMain(link, modpackDir, modpackContentFile);
             });
         }));
     }
