@@ -178,7 +178,7 @@ public class ModpackUtils {
         return deletedSomething;
     }
 
-    public static void copyModpackFiles(File modpackDir, Config.ModpackContentFields serverModpackContent) throws IOException {
+    public static void copyModpackFilesFromModpackDirToRunDir(File modpackDir, Config.ModpackContentFields serverModpackContent) throws IOException {
         List<Config.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
 
         for (Config.ModpackContentFields.ModpackContentItems contentItem : contents) {
@@ -194,6 +194,35 @@ public class ModpackUtils {
 
                 CustomFileUtils.copyFile(sourceFile, destinationFile);
                 LOGGER.info("Copied " + fileName + " to running directory");
+            }
+        }
+    }
+
+
+    public static void copyModpackFilesFromRunDirToModpackDir(File modpackDir, Config.ModpackContentFields serverModpackContent) throws Exception {
+        List<Config.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
+
+        for (Config.ModpackContentFields.ModpackContentItems contentItem : contents) {
+            File sourceFile = new File("./" + contentItem.file);
+
+            if (sourceFile.exists()) {
+
+                // check hash
+                String serverChecksum = contentItem.hash;
+                String localChecksum = CustomFileUtils.getHash(sourceFile, "SHA-256");
+
+                if (!serverChecksum.equals(localChecksum) && !contentItem.isEditable) {
+                    continue;
+                }
+
+                File destinationFile = new File(modpackDir + File.separator + contentItem.file);
+
+                if (destinationFile.exists()) {
+                    CustomFileUtils.forceDelete(destinationFile, false);
+                }
+
+                CustomFileUtils.copyFile(sourceFile, destinationFile);
+                LOGGER.info("Copied " + sourceFile.getName() + " to modpack directory");
             }
         }
     }

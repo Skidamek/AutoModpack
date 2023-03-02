@@ -136,7 +136,7 @@ public class ModpackUpdater {
                 List<File> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
 
                 // copy files to running directory
-                ModpackUtils.copyModpackFiles(modpackDir, serverModpackContent);
+                ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent);
                 checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
                 if (mapAllFiles(modpackDir, new ArrayList<>()).equals(filesBefore)) {
@@ -162,7 +162,7 @@ public class ModpackUpdater {
                     List<File> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
 
                     // copy files to running directory
-                    ModpackUtils.copyModpackFiles(modpackDir, serverModpackContent);
+                    ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, serverModpackContent);
                     checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
                     if (mapAllFiles(modpackDir, new ArrayList<>()).equals(filesBefore)) {
@@ -239,7 +239,7 @@ public class ModpackUpdater {
                 totalBytesToDownload += Long.parseLong(modpackContentField.size);
             }
 
-            ModpackUpdater.wholeQueue = copyModpackContentList.size();
+            wholeQueue = copyModpackContentList.size();
 
             LOGGER.info("In queue left {} files to download ({}b)", wholeQueue, totalBytesToDownload);
 
@@ -301,7 +301,12 @@ public class ModpackUpdater {
             // Modpack updated
 
             // copy files to running directory
-            ModpackUtils.copyModpackFiles(modpackDir, serverModpackContent);
+            ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, serverModpackContent);
+
+            // There is possibility that some files are in running directory, but not in modpack dir
+            // Because they were skipped from download (already downloaded before
+            // So copy files to modpack dir
+            ModpackUtils.copyModpackFilesFromRunDirToModpackDir(modpackDir, serverModpackContent);
 
             if (modpackContentFile.exists()) {
                 CustomFileUtils.forceDelete(modpackContentFile, false);

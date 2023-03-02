@@ -4,7 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import net.fabricmc.api.EnvType;
-import org.quiltmc.loader.api.LoaderValue;
+import net.fabricmc.loader.api.FabricLoader;
 import org.quiltmc.loader.api.ModContainer;
 import org.quiltmc.loader.api.QuiltLoader;
 import org.quiltmc.loader.api.minecraft.MinecraftQuiltLoader;
@@ -177,10 +177,12 @@ public class PlatformImpl {
 
     public static String getModEnvironment(String modid) {
         if (QuiltLoader.getModContainer(modid).isPresent()) {
-            LoaderValue env = QuiltLoader.getModContainer(modid).get().metadata().value("environment");
-            if (env == null) return "UNKNOWN";
+            String env = QuiltLoader.getModContainer(modid).get().metadata().value("environment").toString();
+            if (env == null) {
+                env = FabricLoader.getInstance().getModContainer(modid).isPresent() ?  FabricLoader.getInstance().getModContainer(modid).get().getMetadata().getEnvironment().toString().toUpperCase() : "*";
+            }
 
-            return env.asString().toUpperCase();
+            return env.toUpperCase();
         }
         return "UNKNOWN";
     }

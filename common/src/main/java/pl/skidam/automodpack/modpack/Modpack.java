@@ -46,6 +46,7 @@ public class Modpack {
         for (Object mod : modList) {
             String modId = mod.toString().split(" ")[0]; // mod is  "modid (version)" so we remove everything after space to get modid (modid can't have space in it)
             String modEnv = Platform.getModEnvironment(modId).toUpperCase();
+            LOGGER.warn("Mod {} has environment {}", modId, modEnv);
             if (modEnv == null) continue;
             if (modEnv.equals("SERVER")) {
                 list.removeIf(modpackContentItems -> {
