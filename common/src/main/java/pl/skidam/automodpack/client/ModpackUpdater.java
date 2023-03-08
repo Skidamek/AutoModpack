@@ -220,7 +220,7 @@ public class ModpackUpdater {
                     continue;
                 }
 
-                if (serverChecksum.equals(CustomFileUtils.getHash(file, "SHA-256"))) {
+                if (serverChecksum.equals(CustomFileUtils.getHashWithRetry(file, "SHA-256"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
                     copyModpackContentList.remove(modpackContentField);
                 } else if (modpackContentField.isEditable) {
@@ -353,7 +353,7 @@ public class ModpackUpdater {
         }
 
         try {
-            String localChecksum = CustomFileUtils.getHash(downloadFile, "SHA-256");
+            String localChecksum = CustomFileUtils.getHashWithRetry(downloadFile, "SHA-256");
 
             if (serverChecksum.equals(localChecksum)) { // up-to-date
                 LOGGER.info("File " + downloadFile.getName() + " is up-to-date!"); // strange...
@@ -402,7 +402,7 @@ public class ModpackUpdater {
 
                 downloadInstance.download(url, downloadFile);
 
-                String ourChecksum = CustomFileUtils.getHash(downloadFile, "SHA-256");
+                String ourChecksum = CustomFileUtils.getHashWithRetry(downloadFile, "SHA-256");
 
                 long size = downloadInstance.getFileSize();
 
@@ -419,8 +419,6 @@ public class ModpackUpdater {
                     CustomFileUtils.forceDelete(downloadFile, false);
                     totalBytesDownloaded -= size;
                 }
-            } catch (SocketTimeoutException e) {
-                LOGGER.error("Download of {} timed out, retrying...", downloadFile.getName());
             } catch (Exception e) {
                 e.printStackTrace();
             }

@@ -76,7 +76,7 @@ public class PlatformImpl {
 
                 downloadInstance.download(qfapi.modrinthAPIdownloadUrl, file); // Download it
 
-                String localChecksum = CustomFileUtils.getHash(file, "SHA-512");
+                String localChecksum = CustomFileUtils.getHashWithRetry(file, "SHA-512");
 
                 if (!localChecksum.equals(qfapi.modrinthAPISHA512Hash)) {
                     LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");

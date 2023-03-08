@@ -92,7 +92,7 @@ public class ModpackUtils {
                 }
 
                 String serverChecksum = modpackFile.hash;
-                String localChecksum = CustomFileUtils.getHash(file, "SHA-256");
+                String localChecksum = CustomFileUtils.getHashWithRetry(file, "SHA-256");
                 if (!serverChecksum.equals(localChecksum)) {
                     if (modpackFile.type.equals("mod")) { // that's a bit broken, it shouldn't be like that, but it needs to be because some files returns different checksums somehow....
                         LOGGER.error(modpackFile.file + " -- update 1");
@@ -165,8 +165,8 @@ public class ModpackUtils {
             File runningFile = new File("." + modpackFile);
             if (!runningFile.exists() || !runningFile.isFile()) continue;
 
-            String runningChecksum = CustomFileUtils.getHash(runningFile, "SHA-256");
-            String modpackChecksum = CustomFileUtils.getHash(file, "SHA-256");
+            String runningChecksum = CustomFileUtils.getHashWithRetry(runningFile, "SHA-256");
+            String modpackChecksum = CustomFileUtils.getHashWithRetry(file, "SHA-256");
 
             if (runningChecksum == null || modpackChecksum == null) continue;
             if (!runningChecksum.equals(modpackChecksum)) continue;
@@ -209,7 +209,7 @@ public class ModpackUtils {
 
                 // check hash
                 String serverChecksum = contentItem.hash;
-                String localChecksum = CustomFileUtils.getHash(sourceFile, "SHA-256");
+                String localChecksum = CustomFileUtils.getHashWithRetry(sourceFile, "SHA-256");
 
                 if (!serverChecksum.equals(localChecksum) && !contentItem.isEditable) {
                     continue;

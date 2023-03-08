@@ -2,15 +2,14 @@ package pl.skidam.automodpack.utils;
 
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
+import pl.skidam.automodpack.StaticVariables;
 import pl.skidam.automodpack.config.Config;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 /**
@@ -117,10 +116,10 @@ public class CustomFileUtils {
 
         MessageDigest md = MessageDigest.getInstance(algorithm);
 
-        try (FileInputStream fis = new FileInputStream(file)) {
+        try (FileInputStream inputStream = new FileInputStream(file)) {
             byte[] buffer = new byte[8192];
             int read;
-            while ((read = fis.read(buffer)) != -1) {
+            while ((read = inputStream.read(buffer)) != -1) {
                 md.update(buffer, 0, read);
             }
         }
@@ -134,11 +133,32 @@ public class CustomFileUtils {
         return sb.toString();
     }
 
+    public static String getHashWithRetry(File file, String algorithm) throws NoSuchAlgorithmException {
+        try {
+            return getHash(file, algorithm);
+        } catch (NoSuchAlgorithmException e) {
+            throw e;
+        } catch (Exception e) {
+            // ignore NullPointerException
+        }
+
+        File tempFile = new File(StaticVariables.automodpackDir + File.separator + file.getName() + ".tmp");
+        try {
+            CustomFileUtils.copyFile(file, tempFile);
+            return getHash(tempFile, algorithm);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("AutoModpack - Cannot copy file for hashing: " + file.getAbsolutePath(), e);
+        } finally {
+            tempFile.delete();
+        }
+    }
+
     public static boolean compareFileHashes(File file1, File file2, String algorithm) throws Exception {
         if (!file1.exists() || !file1.exists()) return false;
 
-        String hash1 = getHash(file1, algorithm);
-        String hash2 = getHash(file2, algorithm);
+        String hash1 = getHashWithRetry(file1, algorithm);
+        String hash2 = getHashWithRetry(file2, algorithm);
 
         if (hash1 == null || hash2 == null) return false;
 

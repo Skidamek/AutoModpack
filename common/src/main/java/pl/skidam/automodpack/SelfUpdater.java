@@ -93,7 +93,7 @@ public class SelfUpdater {
 
             downloadInstance.download(automodpack.modrinthAPIdownloadUrl, automodpackUpdateJar); // Download it
 
-            String localChecksum = CustomFileUtils.getHash(automodpackUpdateJar, "SHA-512");
+            String localChecksum = CustomFileUtils.getHashWithRetry(automodpackUpdateJar, "SHA-512");
 
             if (!localChecksum.equals(automodpack.modrinthAPISHA512Hash)) {
                 LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");

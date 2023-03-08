@@ -76,7 +76,7 @@ public class PlatformImpl {
 
                 downloadInstance.download(fapi.modrinthAPIdownloadUrl, file);
 
-                String localChecksum = CustomFileUtils.getHash(file, "SHA-512");
+                String localChecksum = CustomFileUtils.getHashWithRetry(file, "SHA-512");
 
 
                 if (!localChecksum.equals(fapi.modrinthAPISHA512Hash)) {
