@@ -23,10 +23,11 @@ import static pl.skidam.automodpack.modpack.Modpack.hostModpackContentFile;
 import static pl.skidam.automodpack.modpack.Modpack.hostModpackDir;
 
 public class HttpServer {
-    private static final int BUFFER_SIZE = 64 * 1024;
+    private static final int BUFFER_SIZE = 32 * 1024;
     public static List<String> filesList = new ArrayList<>();
     public static ExecutorService HTTPServerExecutor;
     public static boolean isRunning = false;
+    private static ServerSocketChannel server;
 
     public static void start() {
         if (isRunning) return;
@@ -59,6 +60,11 @@ public class HttpServer {
     public static void stop() {
         if (!isRunning) return;
         isRunning = false;
+        try {
+            server.socket().close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         HTTPServerExecutor.shutdown();
         LOGGER.info("Stopped modpack hosting");
     }
@@ -82,7 +88,7 @@ public class HttpServer {
             HTTPServerExecutor.submit(() -> {
                 try {
                     Selector selector = Selector.open();
-                    ServerSocketChannel server = ServerSocketChannel.open();
+                    server = ServerSocketChannel.open();
                     server.bind(address);
                     server.configureBlocking(false);
                     server.register(selector, SelectionKey.OP_ACCEPT);
@@ -133,16 +139,9 @@ public class HttpServer {
         }
     }
 
-    private static class RequestHandler implements Runnable {
-        private final SocketChannel client;
-        private final String request;
+    private record RequestHandler(SocketChannel client, String request) implements Runnable {
 
-        public RequestHandler(SocketChannel client, String request) {
-            this.client = client;
-            this.request = request;
-        }
-
-        @Override
+    @Override
         public void run() {
             String[] requestLines = request.split("\r\n");
             String[] requestFirstLine = requestLines[0].split(" ");
@@ -157,24 +156,24 @@ public class HttpServer {
                     if (requestUrl.equals("") || requestUrl.equals("/")) {
                         file = hostModpackContentFile;
                     } else if (requestUrl.contains("..")) {
-                        sendError(client,403);
+                        sendError(client, 403);
                         return;
                     } else if (filesList.contains(requestUrl)) {
                         file = new File(hostModpackDir + File.separator + requestUrl);
                         if (!file.exists()) {
                             file = new File("./" + requestUrl);
                             if (!file.exists()) {
-                                sendError(client,404);
+                                sendError(client, 404);
                                 return;
                             }
                         }
                     } else {
-                        sendError(client,404);
+                        sendError(client, 404);
                         return;
                     }
 
                     if (!file.exists() || !file.isFile()) {
-                        sendError(client,404);
+                        sendError(client, 404);
                         return;
                     }
 
@@ -187,16 +186,17 @@ public class HttpServer {
             } catch (IOException e) {
                 try {
                     sendError(client, 400);
-                } catch (IOException ignore) { }
+                } catch (IOException ignore) {
+                }
                 e.printStackTrace();
             }
         }
 
         private static final String ERROR_RESPONSE =
                 "HTTP/1.1 %d\r\n" +
-                "Content-Type: text/html\r\n" +
-                "Content-Length: 0\r\n" +
-                "\r\n";
+                        "Content-Type: text/html\r\n" +
+                        "Content-Length: 0\r\n" +
+                        "\r\n";
 
         private static void sendError(SocketChannel client, int code) throws IOException {
             if (!client.isOpen()) return;
@@ -209,9 +209,9 @@ public class HttpServer {
 
         private static final String OK_RESPONSE =
                 "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: application/octet-stream\r\n" +
-                "Content-Length: %d\r\n" +
-                "\r\n";
+                        "Content-Type: application/octet-stream\r\n" +
+                        "Content-Length: %d\r\n" +
+                        "\r\n";
 
         private static void sendFile(SocketChannel client, File file) throws IOException {
             if (!client.isOpen()) return;
@@ -224,18 +224,21 @@ public class HttpServer {
             try (client; FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ)) {
                 long fileSize = fileChannel.size();
                 String response = String.format(OK_RESPONSE, fileSize);
-                client.write(StandardCharsets.UTF_8.encode(response));
+                client.write(ByteBuffer.wrap(response.getBytes(StandardCharsets.UTF_8)));
 
                 ByteBuffer buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
-                while (fileChannel.read(buffer) > 0) {
+                while (fileChannel.read(buffer) > 0 || buffer.position() > 0) {
                     buffer.flip();
                     while (buffer.hasRemaining() && client.isOpen() && fileChannel.isOpen()) {
                         client.write(buffer);
                     }
-                    buffer.clear();
+                    buffer.compact();
                 }
-            } catch (Exception e) {
-                if (!e.getMessage().contains("Broken pipe")) e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+                if (client.isOpen()) {
+                    sendError(client, 500);
+                }
             }
         }
     }

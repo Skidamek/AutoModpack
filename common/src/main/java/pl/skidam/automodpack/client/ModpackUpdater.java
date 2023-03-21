@@ -241,7 +241,7 @@ public class ModpackUpdater {
 
             wholeQueue = copyModpackContentList.size();
 
-            LOGGER.info("In queue left {} files to download ({}b)", wholeQueue, totalBytesToDownload);
+            LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
             if (wholeQueue > 0) {
                 for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
@@ -280,12 +280,14 @@ public class ModpackUpdater {
                         if (file.equals(modpackContentFile.toPath())) continue;
                         if (!files.contains(file.toFile().getName())) {
                             LOGGER.info("Deleting " + file.toFile().getName());
+
+                            File fileInRunningDir = new File("." + file.toFile());
+                            if (fileInRunningDir.exists() && CustomFileUtils.compareFileHashes(file.toFile(), fileInRunningDir, "SHA-256")) {
+                                CustomFileUtils.forceDelete(fileInRunningDir, true);
+                            }
+
                             CustomFileUtils.forceDelete(file.toFile(), true);
                             changelogList.put(file.toFile().getName(), false);
-                        }
-                        File fileInRunningDir = new File("." + file.toFile());
-                        if (fileInRunningDir.exists() && CustomFileUtils.compareFileHashes(file.toFile(), fileInRunningDir, "SHA-256")) {
-                            CustomFileUtils.forceDelete(fileInRunningDir, false);
                         }
                     }
                 } catch (IOException e) {

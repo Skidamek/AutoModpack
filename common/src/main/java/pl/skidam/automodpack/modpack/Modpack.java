@@ -145,6 +145,12 @@ public class Modpack {
                     String version = null;
                     boolean isEditable = false;
 
+
+                    if (modpackFile.startsWith(".")) {
+                        LOGGER.warn("Skipping file {}", modpackFile);
+                        continue;
+                    }
+
                     if (!modpackDir.toString().startsWith("./automodpack/host-modpack/")) {
                         boolean excluded = false;
                         for (String excludeFile : serverConfig.excludeSyncedFiles) {
@@ -158,7 +164,6 @@ public class Modpack {
                             continue;
                         }
                     }
-
 
                     if (size.equals("0")) {
                         LOGGER.warn("File {} is empty! Skipping...", modpackFile);
