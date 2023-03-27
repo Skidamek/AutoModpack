@@ -44,11 +44,15 @@ public class LinkC2SPacket {
 
         CompletableFuture.runAsync(() -> {
             if (updateType == ModpackUtils.UpdateType.DELETE) {
+                LOGGER.warn("47 - LinkC2SPacket");
                 new ReLauncher.Restart(modpackDir);
             } else if (updateType == ModpackUtils.UpdateType.FULL) {
+                LOGGER.warn("50 - LinkC2SPacket");
                 new ModpackUpdater(link, modpackDir);
             }
         });
+
+        LOGGER.warn("responseBoolean: " + responseBoolean);
 
         return CompletableFuture.completedFuture(response);
     }

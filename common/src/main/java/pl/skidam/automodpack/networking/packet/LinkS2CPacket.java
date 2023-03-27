@@ -25,12 +25,9 @@ public class LinkS2CPacket {
 
         if (!buf.readBoolean()) { // disconnect
             Text reason = TextHelper.literal("[AutoModpack] Install/Update modpack to join");
+            acceptLogin.add(uniqueId);
             handler.connection.send(new LoginDisconnectS2CPacket(reason));
             handler.connection.disconnect(reason);
-
-            acceptLogin.put(uniqueId, false);
-        } else {
-            acceptLogin.put(uniqueId, true);
         }
     }
     public static void receive(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {

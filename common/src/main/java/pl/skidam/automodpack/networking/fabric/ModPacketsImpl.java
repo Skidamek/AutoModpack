@@ -16,9 +16,7 @@ import pl.skidam.automodpack.networking.packet.LinkS2CPacket;
 import pl.skidam.automodpack.networking.packet.LoginC2SPacket;
 import pl.skidam.automodpack.networking.packet.LoginS2CPacket;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.FutureTask;
 
 import static pl.skidam.automodpack.StaticVariables.*;
@@ -28,7 +26,7 @@ import static pl.skidam.automodpack.networking.ModPackets.LINK;
 public class ModPacketsImpl {
 
     // UUID, acceptLogin
-    public static Map<UUID, Boolean> acceptLogin = new HashMap<>();
+    public static List<UUID> acceptLogin = new ArrayList<>();
 
 
     public static void registerC2SPackets() {
@@ -65,15 +63,10 @@ public class ModPacketsImpl {
             UUID uniqueId = profile.getId();
 
             FutureTask<?> future = new FutureTask<>(() -> {
-                for (int i = 0; i <= 301; i++) {
+                for (int i = 0; i <= 300; i++) {
                     Thread.sleep(50);
 
-                    if (acceptLogin.containsKey(uniqueId)) {
-                        if (!acceptLogin.get(uniqueId)) {
-                            Text reason = TextHelper.literal("Modpack is not the same as on server");
-                            handler.connection.send(new LoginDisconnectS2CPacket(reason));
-                            handler.connection.disconnect(reason);
-                        }
+                    if (acceptLogin.contains(uniqueId)) {
                         acceptLogin.remove(uniqueId);
                         break;
                     }

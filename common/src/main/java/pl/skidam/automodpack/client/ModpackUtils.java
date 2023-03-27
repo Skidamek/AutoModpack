@@ -17,7 +17,7 @@ public class ModpackUtils {
 
     public enum UpdateType { FULL, DELETE, NONE }
 
-    public static void printoutMissingMods(Config.ModpackContentFields modpackContent) {
+    public static void printoutMissingFiles(Config.ModpackContentFields modpackContent) {
         if (modpackContent == null) {
             LOGGER.error("Modpack content is null");
             return;
@@ -40,19 +40,22 @@ public class ModpackUtils {
             loadedMods.put(modId, i);
         }
 
-        for (Config.ModpackContentFields.ModpackContentItems mod : modpackContent.list) {
-            if (mod.modId == null) continue;
-
+        for (Config.ModpackContentFields.ModpackContentItems modpackFile : modpackContent.list) {
             // check if file is in mods folder
             File modpackDir = selectedModpackDir;
-            File modFile = new File(modpackDir + mod.file);
+            File modFile = new File(modpackDir + modpackFile.file);
             if (modFile.exists()) {
                 String env = Platform.getModEnvironmentFromNotLoadedJar(modFile);
                 if (env.equals("SERVER")) continue;
             }
 
-            if (!loadedMods.containsKey(mod.modId)) {
-                LOGGER.warn(mod.file + " is missing!");
+            if (!loadedMods.containsKey(modpackFile.modId)) {
+                LOGGER.warn(modpackFile.file + " is missing!");
+            } else {
+                File modFile2 = new File("./" + modpackFile.file);
+                if (!modFile.exists() || !modFile2.exists()) {
+                    LOGGER.warn(modpackFile.file + " is missing! 1 - " + modFile.exists() + " 2 - " + modFile2.exists());
+                }
             }
         }
     }
@@ -70,6 +73,8 @@ public class ModpackUtils {
             LOGGER.error("Server modpack content list is null");
             return UpdateType.NONE;
         }
+
+        printoutMissingFiles(serverModpackContent);
 
         try {
             // delete files that are not in server modpack content
