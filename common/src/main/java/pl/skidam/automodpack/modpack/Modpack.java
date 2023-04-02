@@ -1,10 +1,11 @@
 package pl.skidam.automodpack.modpack;
 
 import pl.skidam.automodpack.Platform;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.JarUtilities;
+import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,7 +36,7 @@ public class Modpack {
         LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms");
     }
 
-    private static void autoExcludeServerMods(List<Config.ModpackContentFields.ModpackContentItems> list) {
+    private static void autoExcludeServerMods(List<Jsons.ModpackContentFields.ModpackContentItems> list) {
 
         if (Platform.Forge) return;
 
@@ -46,7 +47,7 @@ public class Modpack {
         for (Object mod : modList) {
             String modId = mod.toString().split(" ")[0]; // mod is  "modid (version)" so we remove everything after space to get modid (modid can't have space in it)
             String modEnv = Platform.getModEnvironment(modId).toUpperCase();
-            LOGGER.warn("Mod {} has environment {}", modId, modEnv);
+//            LOGGER.warn("Mod {} has environment {}", modId, modEnv);
             if (modEnv == null) continue;
             if (modEnv.equals("SERVER")) {
                 list.removeIf(modpackContentItems -> {
@@ -75,16 +76,16 @@ public class Modpack {
         }
     }
 
-    private static void removeAutoModpackFilesFromContent(List<Config.ModpackContentFields.ModpackContentItems> list) {
+    private static void removeAutoModpackFilesFromContent(List<Jsons.ModpackContentFields.ModpackContentItems> list) {
         list.removeIf(modpackContentItems -> modpackContentItems.file.toLowerCase().contains("automodpack"));
     }
 
     public static class Content {
-        public static Config.ModpackContentFields modpackContent;
+        public static Jsons.ModpackContentFields modpackContent;
 
         public static void create(Path modpackDir, File modpackContentFile) {
             try {
-                List<Config.ModpackContentFields.ModpackContentItems> list = new ArrayList<>();
+                List<Jsons.ModpackContentFields.ModpackContentItems> list = new ArrayList<>();
 
                 if (serverConfig.syncedFiles.size() > 0) {
                     for (String file : serverConfig.syncedFiles) {
@@ -106,15 +107,16 @@ public class Modpack {
                     autoExcludeServerMods(list);
                 }
 
-                modpackContent = new Config.ModpackContentFields(null, list);
+                modpackContent = new Jsons.ModpackContentFields(null, list);
                 modpackContent.timeStamp = modpackDir.toFile().lastModified();
                 modpackContent.modpackName = serverConfig.modpackName;
                 modpackContent.loader = Platform.getPlatformType().toString().toLowerCase();
+                modpackContent.modpackHash = CustomFileUtils.getHashFromStringOfHashes(ModpackContentTools.getStringOfAllHashes(modpackContent));
 
                 ConfigTools.saveConfig(modpackContentFile, modpackContent);
 
                 HttpServer.filesList.clear();
-                for (Config.ModpackContentFields.ModpackContentItems item : list) {
+                for (Jsons.ModpackContentFields.ModpackContentItems item : list) {
                     HttpServer.filesList.add(item.file);
                 }
 
@@ -124,7 +126,7 @@ public class Modpack {
         }
 
 
-        private static void addAllContent(File modpackDir, List<Config.ModpackContentFields.ModpackContentItems> list) throws Exception {
+        private static void addAllContent(File modpackDir, List<Jsons.ModpackContentFields.ModpackContentItems> list) throws Exception {
             if (!modpackDir.exists() || modpackDir.listFiles() == null) return;
 
             File[] modpackDirFiles = modpackDir.listFiles();
@@ -160,7 +162,7 @@ public class Modpack {
                             }
                         }
                         if (excluded) {
-                            LOGGER.info("File {} is excluded! Skipping..." + modpackFile);
+                            LOGGER.info("File {} is excluded! Skipping...", modpackFile);
                             continue;
                         }
                     }
@@ -214,14 +216,14 @@ public class Modpack {
                     // And then it gets files from host-modpack dir
                     // So we want to overwrite files from server running dir with files from host-modpack dir
                     // if there are likely same or a bit changed
-                    for (Config.ModpackContentFields.ModpackContentItems item : list) {
+                    for (Jsons.ModpackContentFields.ModpackContentItems item : list) {
                         if (item.file.equals(modpackFile)) {
                             list.remove(item);
                             break;
                         }
                     }
 
-                    list.add(new Config.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, hash));
+                    list.add(new Jsons.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, hash));
                 }
             }
         }

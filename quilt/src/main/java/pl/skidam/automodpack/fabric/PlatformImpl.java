@@ -177,12 +177,11 @@ public class PlatformImpl {
 
     public static String getModEnvironment(String modid) {
         if (QuiltLoader.getModContainer(modid).isPresent()) {
-            String env = QuiltLoader.getModContainer(modid).get().metadata().value("environment").toString();
+            var env = QuiltLoader.getModContainer(modid).get().metadata().value("environment");
             if (env == null) {
-                env = FabricLoader.getInstance().getModContainer(modid).isPresent() ?  FabricLoader.getInstance().getModContainer(modid).get().getMetadata().getEnvironment().toString().toUpperCase() : "*";
+                return FabricLoader.getInstance().getModContainer(modid).isPresent() ?  FabricLoader.getInstance().getModContainer(modid).get().getMetadata().getEnvironment().toString().toUpperCase() : "*";
             }
-
-            return env.toUpperCase();
+            return env.toString().toUpperCase();
         }
         return "UNKNOWN";
     }

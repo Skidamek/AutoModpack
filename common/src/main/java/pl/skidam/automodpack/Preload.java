@@ -3,7 +3,7 @@ package pl.skidam.automodpack;
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.launch.FabricLauncherBase;
 import pl.skidam.automodpack.client.ModpackUpdater;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.ModpackContentTools;
@@ -25,8 +25,8 @@ public class Preload {
         automodpackJar = new File(modsPath + File.separator + JAR_NAME); // set as correct jar file
 
         long startTime = System.currentTimeMillis();
-        clientConfig = ConfigTools.loadConfig(clientConfigFile, Config.ClientConfigFields.class); // load client config
-        serverConfig = ConfigTools.loadConfig(serverConfigFile, Config.ServerConfigFields.class); // load server config
+        clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
+        serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
 
         if (clientConfig.autoRelauncher) {

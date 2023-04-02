@@ -6,7 +6,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.TextHelper;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 
 import java.util.concurrent.CompletableFuture;
@@ -51,7 +51,7 @@ public class Commands {
 
     private static int reload(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
-            serverConfig = ConfigTools.loadConfig(serverConfigFile, Config.ServerConfigFields.class);
+            serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class);
             context.getSource().sendFeedback(TextHelper.literal("AutoModpack server config reloaded!").formatted(Formatting.GREEN), true);
         });
         return Command.SINGLE_SUCCESS;

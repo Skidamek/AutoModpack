@@ -9,7 +9,7 @@ import net.minecraft.client.util.math.MatrixStack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ui.widget.ScrollingListWidget;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
@@ -72,7 +72,7 @@ public class ChangelogScreen extends Screen {
     private void drawSummaryOfChanges(MatrixStack matrices) {
 
         File modpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
-        Config.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         int modsAdded = 0;
         int modsRemoved = 0;

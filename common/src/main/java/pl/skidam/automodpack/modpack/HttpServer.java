@@ -1,13 +1,15 @@
 package pl.skidam.automodpack.modpack;
 
-import pl.skidam.automodpack.config.Config;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.Ip;
 import pl.skidam.automodpack.utils.Url;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +19,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 import static pl.skidam.automodpack.StaticVariables.*;
 import static pl.skidam.automodpack.modpack.Modpack.hostModpackContentFile;
@@ -27,7 +31,7 @@ public class HttpServer {
     public static List<String> filesList = new ArrayList<>();
     public static ExecutorService HTTPServerExecutor;
     public static boolean isRunning = false;
-    private static ServerSocketChannel server;
+    public static Object server = null;
 
     public static void start() {
         if (isRunning) return;
@@ -53,85 +57,131 @@ public class HttpServer {
             }
         }
 
-        isRunning = true;
         new HttpServer();
     }
 
     public static void stop() {
+
+        if (server == null) return;
+
+        ServerSocketChannel serverSocketChannel = (ServerSocketChannel) server;
+
         if (!isRunning) return;
         isRunning = false;
+
         try {
-            server.socket().close();
-        } catch (IOException e) {
+            serverSocketChannel.close();
+            serverSocketChannel.socket().close();
+        } catch (Exception e) {
             e.printStackTrace();
         }
-        HTTPServerExecutor.shutdown();
-        LOGGER.info("Stopped modpack hosting");
+
+        HTTPServerExecutor.shutdownNow();
+        try {
+            if (!HTTPServerExecutor.awaitTermination(3, TimeUnit.SECONDS)) {
+                LOGGER.warn("Forcing shutdown of HTTPServerExecutor");
+            }
+        } catch (InterruptedException ignored) {
+        }
+
+        if (serverSocketChannel.isOpen()) {
+            try {
+                serverSocketChannel.close();
+                serverSocketChannel.socket().close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        if (serverSocketChannel.socket().isClosed() && HTTPServerExecutor.isTerminated()) {
+            LOGGER.info("Stopped modpack hosting");
+            isRunning = false;
+        } else {
+            LOGGER.error("Failed to stop modpack hosting");
+        }
     }
 
     private HttpServer() {
         try {
-            Config.ModpackContentFields serverModpackContent = ConfigTools.loadModpackContent(hostModpackContentFile);
+            Jsons.ModpackContentFields serverModpackContent = ConfigTools.loadModpackContent(hostModpackContentFile);
             if (serverModpackContent == null) {
                 LOGGER.error("Modpack content is null! Can't start hosting modpack");
                 return;
             }
 
             filesList.clear();
-            for (Config.ModpackContentFields.ModpackContentItems item : serverModpackContent.list) {
+            for (Jsons.ModpackContentFields.ModpackContentItems item : serverModpackContent.list) {
                 filesList.add(item.file);
             }
 
-            HTTPServerExecutor = Executors.newFixedThreadPool(serverConfig.hostThreads);
+            ThreadFactory threadFactory = new ThreadFactoryBuilder()
+                    .setNameFormat("AutoModpackHost-%d")
+                    .build();
+
+            HTTPServerExecutor = Executors.newFixedThreadPool(
+                    serverConfig.hostThreads,
+                    threadFactory
+            );
+
             InetSocketAddress address = new InetSocketAddress("0.0.0.0", serverConfig.hostPort);
 
+
             HTTPServerExecutor.submit(() -> {
+
                 try {
                     Selector selector = Selector.open();
-                    server = ServerSocketChannel.open();
-                    server.bind(address);
-                    server.configureBlocking(false);
-                    server.register(selector, SelectionKey.OP_ACCEPT);
 
-                    isRunning = true;
-                    LOGGER.info("Modpack hosting started!");
+                    try (ServerSocketChannel serverSocketChannel = ServerSocketChannel.open()) {
+                        ServerSocket serverSocket = serverSocketChannel.socket();
+                        serverSocket.setReuseAddress(true);
+                        serverSocket.bind(address);
+                        serverSocketChannel.configureBlocking(false);
+                        serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
 
-                    while (isRunning) {
-                        selector.select();
-                        Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-                        while (keys.hasNext()) {
-                            SelectionKey key = keys.next();
-                            keys.remove();
+                        LOGGER.info("Modpack hosting started!");
+                        isRunning = true;
 
-                            if (!key.isValid()) {
-                                continue;
-                            }
+                        server = serverSocketChannel;
 
-                            if (key.isAcceptable()) {
-                                SocketChannel client = server.accept();
-                                client.configureBlocking(false);
-                                client.register(selector, SelectionKey.OP_READ);
-                            } else if (key.isReadable()) {
-                                SocketChannel client = (SocketChannel) key.channel();
 
-                                if (!client.isOpen()) continue;
+                        while (isRunning) {
+                            selector.select();
+                            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+                            while (keys.hasNext()) {
+                                SelectionKey key = keys.next();
+                                keys.remove();
 
-                                ByteBuffer buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
-                                int read = client.read(buffer);
-                                if (read == -1) {
-                                    client.close();
+                                if (!key.isValid()) {
                                     continue;
                                 }
 
-                                buffer.flip();
-                                String request = StandardCharsets.UTF_8.decode(buffer).toString();
+                                if (key.isAcceptable()) {
+                                    SocketChannel client = serverSocketChannel.accept();
+                                    client.configureBlocking(false);
+                                    client.register(selector, SelectionKey.OP_READ);
+                                } else if (key.isReadable()) {
+                                    SocketChannel client = (SocketChannel) key.channel();
 
-                                HTTPServerExecutor.submit(new RequestHandler(client, request));
+                                    if (!client.isOpen()) continue;
+
+                                    ByteBuffer buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
+                                    int read = client.read(buffer);
+                                    if (read == -1) {
+                                        client.close();
+                                        continue;
+                                    }
+
+                                    buffer.flip();
+                                    String request = StandardCharsets.UTF_8.decode(buffer).toString();
+
+                                    HTTPServerExecutor.submit(new RequestHandler(client, request));
+                                }
                             }
                         }
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
+                    stop();
                 }
             });
         } catch (Exception e) {

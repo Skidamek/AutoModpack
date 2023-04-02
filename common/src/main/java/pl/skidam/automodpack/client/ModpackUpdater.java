@@ -2,7 +2,7 @@ package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.ReLauncher;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.*;
 
@@ -40,7 +40,7 @@ public class ModpackUpdater {
     public static long totalBytesToDownload = 0;
     private static int alreadyDownloaded = 0;
     private static int wholeQueue = 0;
-    private static Config.ModpackContentFields serverModpackContent;
+    private static Jsons.ModpackContentFields serverModpackContent;
     public static Map<String, String> failedDownloads = new HashMap<>(); // <file, url>
 
     public static String getStage() {
@@ -81,7 +81,7 @@ public class ModpackUpdater {
         return getETA(totalETA);
     }
 
-    public static Config.ModpackContentFields getServerModpackContent(String link) {
+    public static Jsons.ModpackContentFields getServerModpackContent(String link) {
         try {
             HttpRequest getContent = HttpRequest.newBuilder()
                     .timeout(Duration.ofSeconds(3))
@@ -92,14 +92,14 @@ public class ModpackUpdater {
 
             HttpClient httpClient = HttpClient.newHttpClient();
             HttpResponse<String> contentResponse = httpClient.send(getContent, HttpResponse.BodyHandlers.ofString());
-            Config.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse.body(), Config.ModpackContentFields.class);
+            Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse.body(), Jsons.ModpackContentFields.class);
 
             if (serverModpackContent.list.size() < 1) {
                 LOGGER.error("Modpack content is empty!");
                 return null;
             }
             // check if modpackContent is valid/isn't malicious
-            for (Config.ModpackContentFields.ModpackContentItems modpackContentItem : serverModpackContent.list) {
+            for (Jsons.ModpackContentFields.ModpackContentItems modpackContentItem : serverModpackContent.list) {
                 String file = modpackContentItem.file.replace("\\", "/");
                 String url = modpackContentItem.link.replace("\\", "/");
                 if (file.contains("/../") || url.contains("/../")) {
@@ -130,7 +130,7 @@ public class ModpackUpdater {
 
                 if (!modpackContentFile.exists()) return;
 
-                Config.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+                Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
                 if (modpackContent == null) return;
 
                 List<File> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
@@ -204,9 +204,9 @@ public class ModpackUpdater {
         DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS);
 
         try {
-            List<Config.ModpackContentFields.ModpackContentItems> copyModpackContentList = new ArrayList<>(serverModpackContent.list);
+            List<Jsons.ModpackContentFields.ModpackContentItems> copyModpackContentList = new ArrayList<>(serverModpackContent.list);
 
-            for (Config.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
+            for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
                 String fileName = modpackContentField.file;
                 String serverChecksum = modpackContentField.hash;
 
@@ -234,7 +234,7 @@ public class ModpackUpdater {
                 }
             }
 
-            for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
+            for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
                 if (!modpackContentField.size.matches("^[0-9]*$")) continue;
                 totalBytesToDownload += Long.parseLong(modpackContentField.size);
             }
@@ -244,7 +244,7 @@ public class ModpackUpdater {
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
             if (wholeQueue > 0) {
-                for (Config.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
+                for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
                     while (downloadFutures.size() >= MAX_DOWNLOADS) { // Async Setting - max `some` download at the same time
                         downloadFutures = downloadFutures.stream()
                                 .filter(future -> !future.isDone())
@@ -270,37 +270,33 @@ public class ModpackUpdater {
             }
 
             // Downloads completed
-            if (update) {
-                // if was updated, delete old files from modpack
-                List<String> files = serverModpackContent.list.stream().map(modpackContentField -> new File(modpackContentField.file).getName()).toList();
+            // if was updated, delete old files from modpack
+            List<String> files = serverModpackContent.list.stream().map(modpackContentField -> new File(modpackContentField.file).getName()).toList();
 
-                try (Stream<Path> stream = Files.walk(modpackDir.toPath(), 10)) {
-                    for (Path file : stream.toList()) {
-                        if (Files.isDirectory(file)) continue;
-                        if (file.equals(modpackContentFile.toPath())) continue;
-                        if (!files.contains(file.toFile().getName())) {
-                            LOGGER.info("Deleting " + file.toFile().getName());
+            try (Stream<Path> stream = Files.walk(modpackDir.toPath(), 10)) {
+                for (Path file : stream.toList()) {
+                    if (Files.isDirectory(file)) continue;
+                    if (file.equals(modpackContentFile.toPath())) continue;
+                    if (!files.contains(file.toFile().getName())) {
+                        LOGGER.info("Deleting " + file.toFile().getName());
 
-                            File fileInRunningDir = new File("." + file.toFile());
-                            if (fileInRunningDir.exists() && CustomFileUtils.compareFileHashes(file.toFile(), fileInRunningDir, "SHA-256")) {
-                                CustomFileUtils.forceDelete(fileInRunningDir, true);
-                            }
-
-                            CustomFileUtils.forceDelete(file.toFile(), true);
-                            changelogList.put(file.toFile().getName(), false);
+                        File fileInRunningDir = new File("." + file.toFile());
+                        if (fileInRunningDir.exists() && CustomFileUtils.compareFileHashes(file.toFile(), fileInRunningDir, "SHA-256")) {
+                            CustomFileUtils.forceDelete(fileInRunningDir, true);
                         }
+
+                        CustomFileUtils.forceDelete(file.toFile(), true);
+                        changelogList.put(file.toFile().getName(), false);
                     }
-                } catch (IOException e) {
-                    LOGGER.error("An error occurred while trying to walk through the files in the modpack directory", e);
                 }
-
-
-                // clear empty directories
-                CustomFileUtils.deleteEmptyFiles(modpackDir, true, serverModpackContent.list);
-                CustomFileUtils.deleteEmptyFiles(new File("./"), false, serverModpackContent.list);
+            } catch (IOException e) {
+                LOGGER.error("An error occurred while trying to walk through the files in the modpack directory", e);
             }
 
-            // Modpack updated
+
+            // clear empty directories
+            CustomFileUtils.deleteEmptyFiles(modpackDir, true, serverModpackContent.list);
+            CustomFileUtils.deleteEmptyFiles(new File("./"), false, serverModpackContent.list);
 
             // copy files to running directory
             ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, serverModpackContent);

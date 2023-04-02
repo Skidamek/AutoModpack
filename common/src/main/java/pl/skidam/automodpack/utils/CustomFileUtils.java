@@ -3,10 +3,14 @@ package pl.skidam.automodpack.utils;
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.StaticVariables;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.Jsons;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -63,7 +67,7 @@ public class CustomFileUtils {
         }
     }
 
-    public static void deleteEmptyFiles(File directory, boolean deleteSubDirsToo, List<Config.ModpackContentFields.ModpackContentItems> ignoreList) {
+    public static void deleteEmptyFiles(File directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
         File[] files = directory.listFiles();
         if (files == null) {
             return;
@@ -89,12 +93,12 @@ public class CustomFileUtils {
         }
     }
 
-    private static boolean shouldIgnore(File file, List<Config.ModpackContentFields.ModpackContentItems> ignoreList) {
+    private static boolean shouldIgnore(File file, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
         return ignoreList.stream()
                 .anyMatch(item -> file.getAbsolutePath().replace("\\", "/").endsWith(item.file));
     }
 
-    private static boolean isEmptyDirectory(File directory, List<Config.ModpackContentFields.ModpackContentItems> ignoreList) {
+    private static boolean isEmptyDirectory(File directory, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
         File[] files = directory.listFiles();
 
         if (files == null && directory.length() == 0) {
@@ -108,6 +112,21 @@ public class CustomFileUtils {
         }
         
         return false;
+    }
+
+    public static String getHashFromStringOfHashes(String hashes) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(hashes.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hashBytes) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
 

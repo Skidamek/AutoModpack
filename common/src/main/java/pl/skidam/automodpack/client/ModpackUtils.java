@@ -1,64 +1,23 @@
 package pl.skidam.automodpack.client;
 
-import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.ReLauncher;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.StaticVariables.LOGGER;
+import static pl.skidam.automodpack.StaticVariables.preload;
 import static pl.skidam.automodpack.client.ModpackUpdater.getServerModpackContent;
 
 public class ModpackUtils {
 
     public enum UpdateType { FULL, DELETE, NONE }
-
-    public static void printoutMissingFiles(Config.ModpackContentFields modpackContent) {
-        if (modpackContent == null) {
-            LOGGER.error("Modpack content is null");
-            return;
-        }
-
-        // We don't mind here if some mod isn't loaded, loader is broken lol
-        // This method returns false if some file is missing
-
-        Collection modList = Platform.getModList();
-        if (modList.size() == 0) {
-            LOGGER.error("modList is empty");
-            return;
-        }
-
-        int i = 0;
-        Map<String, Integer> loadedMods = new HashMap<>();
-        for (Object mod : modList) {
-            i++;
-            String modId = mod.toString().split(" ")[0]; // mod is  "modid (version)" so we remove everything after space to get modid (modid can't have space in it)
-            loadedMods.put(modId, i);
-        }
-
-        for (Config.ModpackContentFields.ModpackContentItems modpackFile : modpackContent.list) {
-            // check if file is in mods folder
-            File modpackDir = selectedModpackDir;
-            File modFile = new File(modpackDir + modpackFile.file);
-            if (modFile.exists()) {
-                String env = Platform.getModEnvironmentFromNotLoadedJar(modFile);
-                if (env.equals("SERVER")) continue;
-            }
-
-            if (!loadedMods.containsKey(modpackFile.modId)) {
-                LOGGER.warn(modpackFile.file + " is missing!");
-            } else {
-                File modFile2 = new File("./" + modpackFile.file);
-                if (!modFile.exists() || !modFile2.exists()) {
-                    LOGGER.warn(modpackFile.file + " is missing! 1 - " + modFile.exists() + " 2 - " + modFile2.exists());
-                }
-            }
-        }
-    }
 
     // If update to modpack found, returns true else false
     public static UpdateType isUpdate(String link, File modpackDir) {
@@ -67,14 +26,39 @@ public class ModpackUtils {
             return UpdateType.NONE;
         }
 
-        Config.ModpackContentFields serverModpackContent = getServerModpackContent(link);
+        Jsons.ModpackContentFields serverModpackContent = getServerModpackContent(link);
 
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
             return UpdateType.NONE;
         }
 
-        printoutMissingFiles(serverModpackContent);
+
+        // get client modpack content
+        File clientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
+        if (clientModpackContentFile != null && clientModpackContentFile.exists()) {
+
+            Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadConfig(clientModpackContentFile, Jsons.ModpackContentFields.class);
+
+            assert clientModpackContent != null;
+            String hashes = ModpackContentTools.getStringOfAllHashes(clientModpackContent);
+            if (!hashes.equals("")) {
+                String modpackHash = CustomFileUtils.getHashFromStringOfHashes(hashes);
+                if (modpackHash == null) {
+                    LOGGER.error("Modpack hash is null");
+                    return UpdateType.NONE;
+                }
+
+                if (!modpackHash.equals(serverModpackContent.modpackHash)) {
+                    LOGGER.warn("Modpack hash is different than server modpack hash");
+                    // don't return here, we need to check if every file is the same
+
+                } else {
+                    LOGGER.info("Modpack hash is the same as server modpack hash");
+                    return UpdateType.NONE;
+                }
+            }
+        }
 
         try {
             // delete files that are not in server modpack content
@@ -83,7 +67,7 @@ public class ModpackUtils {
             boolean isUpdate = false;
 
             // check if every file in server modpack content exists and has same checksum
-            for (Config.ModpackContentFields.ModpackContentItems modpackFile : serverModpackContent.list) {
+            for (Jsons.ModpackContentFields.ModpackContentItems modpackFile : serverModpackContent.list) {
                 File file = new File(modpackDir + File.separator + modpackFile.file);
 
                 if (!file.exists()) {
@@ -134,11 +118,11 @@ public class ModpackUtils {
 
     private static boolean deletedSomething = false;
 
-    private static boolean deleteUnwantedFiles(File directory, Config.ModpackContentFields serverModpackContent, File contentFile, File modpackFile) throws Exception {
+    private static boolean deleteUnwantedFiles(File directory, Jsons.ModpackContentFields serverModpackContent, File contentFile, File modpackFile) throws Exception {
         File[] files = directory.listFiles();
         if (files == null) return false;
 
-        List<Config.ModpackContentFields.ModpackContentItems> serverModpackContentCopy = new ArrayList<>(serverModpackContent.list);
+        List<Jsons.ModpackContentFields.ModpackContentItems> serverModpackContentCopy = new ArrayList<>(serverModpackContent.list);
         for (File file : files) {
 
             if (file.equals(contentFile)) continue;
@@ -149,7 +133,7 @@ public class ModpackUtils {
             }
 
             boolean found = false;
-            for (Config.ModpackContentFields.ModpackContentItems modpackFileFromContent : serverModpackContentCopy) {
+            for (Jsons.ModpackContentFields.ModpackContentItems modpackFileFromContent : serverModpackContentCopy) {
                 String modpackPath = file.getAbsolutePath().replace(modpackFile.getAbsolutePath(), "").replace("\\", "/");
 
                 if (!modpackPath.equals(modpackFileFromContent.file)) continue;
@@ -183,10 +167,10 @@ public class ModpackUtils {
         return deletedSomething;
     }
 
-    public static void copyModpackFilesFromModpackDirToRunDir(File modpackDir, Config.ModpackContentFields serverModpackContent) throws IOException {
-        List<Config.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
+    public static void copyModpackFilesFromModpackDirToRunDir(File modpackDir, Jsons.ModpackContentFields serverModpackContent) throws IOException {
+        List<Jsons.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
 
-        for (Config.ModpackContentFields.ModpackContentItems contentItem : contents) {
+        for (Jsons.ModpackContentFields.ModpackContentItems contentItem : contents) {
             String fileName = contentItem.file;
             File sourceFile = new File(modpackDir + File.separator + fileName);
 
@@ -204,10 +188,10 @@ public class ModpackUtils {
     }
 
 
-    public static void copyModpackFilesFromRunDirToModpackDir(File modpackDir, Config.ModpackContentFields serverModpackContent) throws Exception {
-        List<Config.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
+    public static void copyModpackFilesFromRunDirToModpackDir(File modpackDir, Jsons.ModpackContentFields serverModpackContent) throws Exception {
+        List<Jsons.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
 
-        for (Config.ModpackContentFields.ModpackContentItems contentItem : contents) {
+        for (Jsons.ModpackContentFields.ModpackContentItems contentItem : contents) {
             File sourceFile = new File("./" + contentItem.file);
 
             if (sourceFile.exists()) {

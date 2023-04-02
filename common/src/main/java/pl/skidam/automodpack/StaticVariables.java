@@ -3,7 +3,7 @@ package pl.skidam.automodpack;
 import net.minecraft.MinecraftVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.JarUtilities;
 
 import java.io.File;
@@ -28,6 +28,6 @@ public class StaticVariables {
     public static boolean preload;
     public static File selectedModpackDir;
     public static String selectedModpackLink;
-    public static Config.ServerConfigFields serverConfig;
-    public static Config.ClientConfigFields clientConfig;
+    public static Jsons.ServerConfigFields serverConfig;
+    public static Jsons.ClientConfigFields clientConfig;
 }
