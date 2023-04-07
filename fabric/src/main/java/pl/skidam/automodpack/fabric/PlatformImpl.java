@@ -11,7 +11,6 @@ import org.slf4j.Logger;
 import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.ReLauncher;
-import pl.skidam.automodpack.client.ui.AutoModpackToast;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.ModrinthAPI;
 
@@ -81,7 +80,6 @@ public class PlatformImpl {
 
                 if (!localChecksum.equals(fapi.modrinthAPISHA512Hash)) {
                     LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
-                    AutoModpackToast.add(5);
                     return;
                 }
             } catch (Exception e) {

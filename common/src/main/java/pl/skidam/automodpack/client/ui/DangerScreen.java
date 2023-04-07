@@ -31,18 +31,12 @@ public class DangerScreen extends Screen {
     protected void init() {
         super.init();
         assert this.client != null;
-        //                                                       - 210
+
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 110, this.height / 6 + 96, 120, 20, TextHelper.translatable("gui.automodpack.screen.danger.button.cancel").formatted(Formatting.RED), (button) -> {
             LOGGER.error("User canceled download, setting his to screen " + parent.getTitle().getString());
             this.client.setScreen(parent);
         }));
 
-//        this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height / 6 + 96, 190, 20, TextHelper.translatable("gui.automodpack.screen.danger.button.dontshowagain").formatted(Formatting.GRAY), (button) -> {
-//            AutoModpack.clientConfig.dangerScreen
-//            CompletableFuture.runAsync(DownloadModpack::new);
-//            this.client.setScreen(new LoadingScreen());
-//        }));
-        //                                                       + 100
         this.addDrawableChild(new ButtonWidget(this.width / 2 + 10, this.height / 6 + 96, 120, 20, TextHelper.translatable("gui.automodpack.screen.danger.button.accept").formatted(Formatting.GREEN), (button) -> {
             CompletableFuture.runAsync(() -> {
                 ModpackUpdater.ModpackUpdaterMain(link, modpackDir, modpackContentFile);

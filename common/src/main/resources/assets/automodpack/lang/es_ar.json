@@ -1,25 +1,5 @@
 {
-  "gui.automodpack.toast.up.0": "Comprobando las actualizaciones...",
-  "gui.automodpack.toast.down.0": "Un momento...",
-  "gui.automodpack.toast.up.1": "¡Actualización encontrada!",
-  "gui.automodpack.toast.down.1": "Nueva versión del Modpack...",
-  "gui.automodpack.toast.up.2": "¡Actualización encontrada!",
-  "gui.automodpack.toast.down.2": "Nueva versión de AutoModpack...",
-  "gui.automodpack.toast.up.3": "No se han encontrado actualizaciones.",
-  "gui.automodpack.toast.down.3": "¡El modpack está actualizado!",
-  "gui.automodpack.toast.up.4": "¡No se han encontrado actualizaciones!",
-  "gui.automodpack.toast.down.4": "¡AutoModpack está actualizado!",
-  "gui.automodpack.toast.up.5": "Error!",
-  "gui.automodpack.toast.down.5": "Vuelve a intentarlo más tarde!",
-  "gui.automodpack.toast.up.6": "No se puede abrir la configuración del mod",
-  "gui.automodpack.toast.down.6": "Necesita instalar Cloth Config",
-
-  "gui.automodpack.button.update": "Comprobar las actualizaciones",
-  "gui.automodpack.button.delete": "Eliminar modpack",
-
-  "gui.automodpack.screen.restart.title.all": "¡Descargue las actualizaciones para su Modpack y \"AutoModpack\" (este mod)!",
   "gui.automodpack.screen.restart.title.modpack": "¡Se ha descargado una actualización para tu Modpack!",
-  "gui.automodpack.screen.restart.title.automodpack": "¡Se ha descargado una actualización para \"AutoModpack\" (este mod)!",
   "gui.automodpack.screen.restart.description":  "Para completar la actualización es necesario reiniciar el juego",
   "gui.automodpack.screen.restart.secDescription": "¿Desea reiniciar automáticamente ahora?",
   "gui.automodpack.screen.restart.button.quit": "Sí (Reiniciar)",
@@ -42,7 +22,6 @@
   "gui.automodpack.screen.danger.description": "¿Desea descargar la actualización de la misma?",
   "gui.automodpack.screen.danger.secDescription": "Puede ser arriesgado. No lo descargue si no confía en los administradores del servidor!",
   "gui.automodpack.screen.danger.button.accept": "Descargar",
-  "gui.automodpack.screen.danger.button.dontshowagain": "Descargar y no volver a mostrarlo",
   "gui.automodpack.screen.danger.button.cancel": "No descargar",
 
   "gui.automodpack.screen.changelog.button.back": "Volver",

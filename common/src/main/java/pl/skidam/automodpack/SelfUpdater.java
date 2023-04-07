@@ -1,7 +1,6 @@
 package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.ScreenTools;
-import pl.skidam.automodpack.client.ui.AutoModpackToast;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.ModrinthAPI;
 
@@ -51,14 +50,12 @@ public class SelfUpdater {
 
         if (LATEST_VERSION == null || OUR_VERSION == null) {
             LOGGER.error("Latest version or current version is null. Likely automodpack isn't updated to your version of minecraft yet");
-            AutoModpackToast.add(5);
             return;
         }
 
         try {
             if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
                 LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.modrinthAPIversion);
-                AutoModpackToast.add(4);
                 return;
             }
         } catch (NumberFormatException e) {
@@ -71,7 +68,6 @@ public class SelfUpdater {
 
                 if (Integer.parseInt(OUR_VERSION) >= Integer.parseInt(LATEST_VERSION)) {
                     LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.modrinthAPIversion);
-                    AutoModpackToast.add(4);
                     return;
                 }
             } // we don't want to auto update to beta version, but from beta to newer release, yes.
@@ -80,12 +76,10 @@ public class SelfUpdater {
 
         if (OUR_VERSION.equals(LATEST_VERSION) || !automodpack.modrinthAPIversionType.equals("release")) {
             LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + VERSION);
-            AutoModpackToast.add(4);
             return;
         }
 
         LOGGER.info("Update found! Updating to new version: " + automodpack.modrinthAPIversion);
-        AutoModpackToast.add(2);
         ScreenTools.setTo.download();
 
         try {
@@ -97,12 +91,10 @@ public class SelfUpdater {
 
             if (!localChecksum.equals(automodpack.modrinthAPISHA512Hash)) {
                 LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
-                AutoModpackToast.add(5);
                 return;
             }
         } catch (Exception e) {
             LOGGER.error("Failed to update myself!");
-            AutoModpackToast.add(5);
             return;
         }
 

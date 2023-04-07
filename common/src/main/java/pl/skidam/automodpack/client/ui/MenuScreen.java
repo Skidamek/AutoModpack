@@ -47,7 +47,6 @@ public class MenuScreen extends Screen {
         assert this.client != null;
 
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.update"), (button) -> {
-            AutoModpackToast.add(0);
             String modpack = clientConfig.selectedModpack;
             Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
             new ModpackUpdater(serverModpackContent, ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack));
