@@ -12,6 +12,7 @@ import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.client.ScreenTools;
 import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.Wait;
 
 import java.io.File;
@@ -34,15 +35,16 @@ public class LinkC2SPacket {
         clientConfig.selectedModpack = modpackFileName;
         ConfigTools.saveConfig(clientConfigFile, clientConfig);
 
-        boolean isUpdate = ModpackUtils.isUpdate(link, modpackDir);
+        Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(link);
+
+        boolean isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
         PacketByteBuf response = PacketByteBufs.create();
         response.writeBoolean(isUpdate);
 
         CompletableFuture.runAsync(() -> {
             if (isUpdate) {
-                LOGGER.warn("45 - LinkC2SPacket");
-                new ModpackUpdater(link, modpackDir);
+                new ModpackUpdater(serverModpackContent, link, modpackDir);
             }
         });
 
@@ -63,7 +65,9 @@ public class LinkC2SPacket {
         clientConfig.selectedModpack = modpackFileName;
         ConfigTools.saveConfig(clientConfigFile, clientConfig);
 
-        boolean isUpdate = ModpackUtils.isUpdate(link, modpackDir);
+        Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(link);
+
+        boolean isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
         PacketByteBuf response = PacketByteBufs.create();
         response.writeBoolean(isUpdate);
@@ -92,7 +96,7 @@ public class LinkC2SPacket {
                     }
                 }
 
-                new ModpackUpdater(link, modpackDir);
+                new ModpackUpdater(serverModpackContent, link, modpackDir);
             });
         }
     }

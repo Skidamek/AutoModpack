@@ -18,7 +18,8 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.StaticVariables.LOGGER;
+import static pl.skidam.automodpack.StaticVariables.preload;
 import static pl.skidam.automodpack.config.ConfigTools.GSON;
 import static pl.skidam.automodpack.utils.CustomFileUtils.mapAllFiles;
 import static pl.skidam.automodpack.utils.RefactorStrings.getETA;
@@ -75,13 +76,15 @@ public class ModpackUpdater {
         return getETA(totalETA);
     }
 
-    public ModpackUpdater(String link, File modpackDir) {
+    public ModpackUpdater(Jsons.ModpackContentFields serverModpackContent, String link, File modpackDir) {
         if (link == null || link.isEmpty() || modpackDir.toString() == null || modpackDir.toString().isEmpty()) return;
 
         try {
-            serverModpackContent = ModpackUtils.getServerModpackContent(link);
+            ModpackUpdater.serverModpackContent = serverModpackContent;
 
             if (serverModpackContent == null)  { // server is down, or you don't have access to internet, but we still want to load selected modpack
+
+                LOGGER.warn("Server is down, or you don't have access to internet, but we still want to load selected modpack");
 
                 File modpackContentFile = new File(modpackDir + File.separator + "modpack-content.json");
 
@@ -120,8 +123,10 @@ public class ModpackUpdater {
             File modpackContentFile = new File(modpackDir + File.separator + "modpack-content.json");
 
             if (modpackContentFile.exists()) {
-                if (!ModpackUtils.isUpdate(link, modpackDir)) {
+                if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     // check if modpack is loaded now loaded
+
+                    LOGGER.warn("Modpack is up to date");
 
                     List<File> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
 
@@ -146,7 +151,6 @@ public class ModpackUpdater {
                     return;
                 }
             } else if (!preload && ScreenTools.getScreen() != null) {
-                if (serverModpackContent == null) return;
                 CompletableFuture.runAsync(() -> {
                     while (!ScreenTools.getScreenString().contains("dangerscreen")) {
                         ScreenTools.setTo.danger(ScreenTools.getScreen(), link, modpackDir, modpackContentFile);
@@ -156,9 +160,7 @@ public class ModpackUpdater {
                 return;
             }
 
-            if (serverModpackContent == null) {
-                return;
-            }
+            LOGGER.warn("Modpack update found");
 
             ModpackUpdaterMain(link, modpackDir, modpackContentFile);
 
@@ -171,8 +173,6 @@ public class ModpackUpdater {
     public static void ModpackUpdaterMain(String link, File modpackDir, File modpackContentFile) {
 
         long start = System.currentTimeMillis();
-
-        DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS);
 
         try {
             List<Jsons.ModpackContentFields.ModpackContentItems> copyModpackContentList = new ArrayList<>(serverModpackContent.list);
@@ -215,6 +215,9 @@ public class ModpackUpdater {
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
             if (wholeQueue > 0) {
+
+                DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS);
+
                 for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
                     while (downloadFutures.size() >= MAX_DOWNLOADS) { // Async Setting - max `some` download at the same time
                         downloadFutures = downloadFutures.stream()
@@ -241,9 +244,8 @@ public class ModpackUpdater {
             }
 
             // Downloads completed
-            finishModpackUpdate(modpackDir, modpackContentFile);
-
             Files.write(modpackContentFile.toPath(), GSON.toJson(serverModpackContent).getBytes());
+            finishModpackUpdate(modpackDir, modpackContentFile);
 
             if (!failedDownloads.isEmpty()) {
                 StringBuilder failedFiles = new StringBuilder("null");
@@ -278,16 +280,30 @@ public class ModpackUpdater {
             return;
         }
 
+        // clear empty directories
+        CustomFileUtils.deleteEmptyFiles(modpackDir, true, modpackContent.list);
+        CustomFileUtils.deleteEmptyFiles(new File("./"), false, modpackContent.list);
+
+        checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
+
+        // copy files to running directory
+        // map running dir files
+        List<File> filesBefore = mapAllFiles(new File("./"), new ArrayList<>());
+        ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent);
+        if (!mapAllFiles(new File("./"), new ArrayList<>()).equals(filesBefore)) {
+            update = true;
+        }
+
         List<String> files = modpackContent.list.stream().map(modpackContentField -> new File(modpackContentField.file).getName()).toList();
 
         try (Stream<Path> stream = Files.walk(modpackDir.toPath(), 10)) {
             for (Path file : stream.toList()) {
                 if (Files.isDirectory(file)) continue;
                 if (file.equals(modpackContentFile.toPath())) continue;
-//                LOGGER.warn("File: " + file.toFile().getName());
                 if (!files.contains(file.toFile().getName())) {
 
-                    File fileInRunningDir = new File("." + file.toFile());
+                    File fileInRunningDir = new File("." + file.toFile().toString().replace(modpackDir.toString(), ""));
+//                    LOGGER.warn("File in running dir: " + fileInRunningDir + " exists: " + fileInRunningDir.exists() + " hash same? " + CustomFileUtils.compareFileHashes(file.toFile(), fileInRunningDir, "SHA-256"));
                     if (fileInRunningDir.exists() && CustomFileUtils.compareFileHashes(file.toFile(), fileInRunningDir, "SHA-256")) {
                         LOGGER.info("Deleting {} and {}", file.toFile(), fileInRunningDir);
                         CustomFileUtils.forceDelete(fileInRunningDir, true);
@@ -303,20 +319,6 @@ public class ModpackUpdater {
             LOGGER.error("An error occurred while trying to walk through the files in the modpack directory", e);
         }
 
-
-        // clear empty directories
-        CustomFileUtils.deleteEmptyFiles(modpackDir, true, modpackContent.list);
-        CustomFileUtils.deleteEmptyFiles(new File("./"), false, modpackContent.list);
-
-        checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
-
-        // copy files to running directory
-        // map running dir files
-        List<File> filesBefore = mapAllFiles(new File("./"), new ArrayList<>());
-        ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent);
-        if (!mapAllFiles(new File("./"), new ArrayList<>()).equals(filesBefore)) {
-            update = true;
-        }
 
         // There is possibility that some files are in running directory, but not in modpack dir
         // Because they were already downloaded before

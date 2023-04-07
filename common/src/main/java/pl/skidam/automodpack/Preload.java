@@ -3,6 +3,7 @@ package pl.skidam.automodpack;
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.launch.FabricLauncherBase;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.JarUtilities;
@@ -41,7 +42,8 @@ public class Preload {
             if (selectedModpack != null && !selectedModpack.equals("")) {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
-                new ModpackUpdater(selectedModpackLink, selectedModpackDir);
+                Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
+                new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
             }
         }
 

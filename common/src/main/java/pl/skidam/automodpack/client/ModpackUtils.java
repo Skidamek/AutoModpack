@@ -24,13 +24,11 @@ public class ModpackUtils {
 
 
     // If update to modpack found, returns true else false
-    public static Boolean isUpdate(String link, File modpackDir) {
-        if (link == null || modpackDir.toString() == null) {
-            LOGGER.error("Modpack link or modpack directory is null");
+    public static Boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, File modpackDir) {
+        if ( modpackDir.toString() == null) {
+            LOGGER.error("Modpack directory is null");
             return false;
         }
-
-        Jsons.ModpackContentFields serverModpackContent = getServerModpackContent(link);
 
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
@@ -47,9 +45,6 @@ public class ModpackUtils {
             if (clientModpackContent == null) {
                 return true;
             }
-
-            LOGGER.error("Server hash is " + serverModpackContent.modpackHash);
-            LOGGER.error("Client hash is " + clientModpackContent.modpackHash);
 
             if (clientModpackContent.modpackHash == null) {
                 LOGGER.error("Modpack hash is null");

@@ -86,8 +86,8 @@ public class CustomFileUtils {
                 }
 
                 if (deleteSubDirsToo && isEmptyDirectory(file, ignoreList)) {
-                    System.out.println("Deleting empty dir: " + file);
-                    CustomFileUtils.forceDelete(file, true);
+//                    System.out.println("Deleting empty dir: " + file);
+                    CustomFileUtils.forceDelete(file, false);
                 }
 
                 else {
@@ -95,8 +95,8 @@ public class CustomFileUtils {
                 }
 
             } else if (file.length() == 0) {
-                System.out.println("Deleting empty file: " + file);
-                CustomFileUtils.forceDelete(file, true);
+//                System.out.println("Deleting empty file: " + file);
+                CustomFileUtils.forceDelete(file, false);
             }
         }
     }

@@ -5,6 +5,8 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.listener.ClientLoginPacketListener;
 import net.minecraftforge.network.NetworkEvent;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.ModpackUtils;
+import pl.skidam.automodpack.config.Jsons;
 
 import java.io.File;
 import java.util.function.Supplier;
@@ -37,7 +39,8 @@ public class LinkS2CPacket implements Packet<ClientLoginPacketListener> {
             String modpackFileName = link.substring(link.lastIndexOf("/") + 1); // removes https:// and http://
             modpackFileName = modpackFileName.replace(":", "-"); // replaces : with -
             File modpackDir = new File(modpacksDir + File.separator + modpackFileName);
-            new Thread(() -> new ModpackUpdater(link, modpackDir)).start();
+            Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
+            new Thread(() -> new ModpackUpdater(serverModpackContent, link, modpackDir)).start();
         });
     }
 }

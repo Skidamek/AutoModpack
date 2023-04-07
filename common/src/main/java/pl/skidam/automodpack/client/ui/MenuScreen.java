@@ -12,14 +12,15 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
 import java.util.Map;
 
-import static pl.skidam.automodpack.StaticVariables.clientConfig;
-import static pl.skidam.automodpack.StaticVariables.clientConfigFile;
+import static pl.skidam.automodpack.StaticVariables.*;
 
 @Environment(EnvType.CLIENT)
 public class MenuScreen extends Screen {
@@ -48,7 +49,8 @@ public class MenuScreen extends Screen {
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.update"), (button) -> {
             AutoModpackToast.add(0);
             String modpack = clientConfig.selectedModpack;
-            new ModpackUpdater(ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack));
+            Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
+            new ModpackUpdater(serverModpackContent, ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack));
         }));
 
         this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.delete"), (button) -> {
