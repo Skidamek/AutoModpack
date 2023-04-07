@@ -10,6 +10,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.zip.GZIPInputStream;
 
+import static pl.skidam.automodpack.StaticVariables.*;
+
 public class Download {
     private double bytesPerSecond;
     private long totalBytesRead;
@@ -25,7 +27,7 @@ public class Download {
             URLConnection connection = url.openConnection();
             connection.addRequestProperty("Accept-Encoding", "gzip");
             connection.addRequestProperty("Minecraft-Username", MinecraftUserName.get());
-            connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + AutoModpack.VERSION);
+            connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + VERSION);
             connection.setConnectTimeout(8000);
             connection.setReadTimeout(5000);
             fileSize = connection.getContentLengthLong();
@@ -35,8 +37,11 @@ public class Download {
                 outFile.getParentFile().mkdirs();
             }
 
+            boolean fileAlreadyExists = outFile.exists();
+
             if (outFile.exists()) {
                 CustomFileUtils.forceDelete(outFile, false);
+                outFile = new File(outFile + ".tmp");
             }
 
             OutputStream outputStream = new FileOutputStream(outFile);
@@ -67,6 +72,12 @@ public class Download {
             outputStream.close();
 
             isDownloading = false;
+
+            if (fileAlreadyExists) {
+                File finalFile = new File(outFile.toString().replace(".tmp", ""));
+                CustomFileUtils.copyFile(outFile, finalFile);
+                CustomFileUtils.forceDelete(outFile, false);
+            }
         } catch (IOException e) {
             if (outFile.exists()) {
                 CustomFileUtils.forceDelete(outFile, false);

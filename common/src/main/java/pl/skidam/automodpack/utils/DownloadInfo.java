@@ -2,13 +2,12 @@ package pl.skidam.automodpack.utils;
 
 public class DownloadInfo {
     private final String fileName;
-    private double bytesDownloaded = -1;
-    private double downloadSpeed = -1;
-    private boolean isDownloading = true;
-    private boolean isCancelled = false;
-    private long fileSize = -1;
-    private double eta = -1;
-    private double bytesPerSecond = -1;
+    private double bytesDownloaded;
+    private double downloadSpeed;
+    private boolean isDownloading;
+    private long fileSize;
+    private double eta;
+    private double bytesPerSecond;
 
     public DownloadInfo(String fileName) {
         this.fileName = fileName;
@@ -26,10 +25,6 @@ public class DownloadInfo {
 
     public void setDownloading(boolean isDownloading) {
         this.isDownloading = isDownloading;
-    }
-
-    public void setCancelled(boolean isCancelled) {
-        this.isCancelled = isCancelled;
     }
 
     public long setFileSize(long fileSize) {
@@ -56,10 +51,6 @@ public class DownloadInfo {
 
     public boolean isDownloading() {
         return isDownloading;
-    }
-
-    public boolean isCancelled() {
-        return isCancelled;
     }
 
     public long getFileSize() {

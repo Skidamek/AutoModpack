@@ -9,7 +9,7 @@ import net.minecraft.client.util.math.MatrixStack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ui.widget.ScrollingListWidget;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
@@ -24,6 +24,7 @@ public class ChangelogScreen extends Screen {
     private final Screen parent;
     private final File modpackDir;
     private ChangelogsList changelogsList;
+
     public ChangelogScreen(Screen parent, File modpackDir) {
         super(TextHelper.literal("ChangelogScreen"));
         this.parent = parent;
@@ -33,11 +34,9 @@ public class ChangelogScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-
         assert this.client != null;
 
-        // TODO
-//        this.client.keyboard.setRepeatEvents(true); 1.19.3 bruh
+        this.client.keyboard.setRepeatEvents(true);
 
         // Retrieve the changelogs
         changelogs = getChangelogs();
@@ -52,10 +51,7 @@ public class ChangelogScreen extends Screen {
         this.addDrawableChild(this.searchField);
 
         // Add the back button
-        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> {
-            assert this.client != null;
-            this.client.setScreen(this.parent);
-        }).position(5, this.height - 20 - 5).size(72, 20).build());
+        this.addDrawableChild(new ButtonWidget(5, this.height - 20, 72, 20, TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> this.client.setScreen(this.parent)));
 
         this.setInitialFocus(this.searchField);
     }
@@ -76,7 +72,10 @@ public class ChangelogScreen extends Screen {
     private void drawSummaryOfChanges(MatrixStack matrices) {
 
         File modpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
-        Config.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+
+        if (modpackContentFile == null) return;
+
+        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         int modsAdded = 0;
         int modsRemoved = 0;

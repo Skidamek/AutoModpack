@@ -8,16 +8,12 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import org.slf4j.Logger;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.ReLauncher;
-import pl.skidam.automodpack.client.ui.AutoModpackToast;
-import pl.skidam.automodpack.ui.Windows;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.ModrinthAPI;
 
-import java.awt.*;
 import java.io.*;
 import java.nio.file.FileSystem;
 import java.nio.file.Path;
@@ -27,9 +23,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import static pl.skidam.automodpack.AutoModpack.clientConfig;
-import static pl.skidam.automodpack.AutoModpack.modsPath;
 import static pl.skidam.automodpack.Platform.ModPlatform.FABRIC;
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class PlatformImpl {
     static final Logger LOGGER = LogUtils.getLogger();
@@ -54,15 +49,15 @@ public class PlatformImpl {
             LOGGER.warn("Dependency (FAPI) was not found");
 
             if (Platform.getEnvironmentType().equals("SERVER")) {
-                if (!AutoModpack.serverConfig.downloadDependency) {
-                    AutoModpack.LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
+                if (!serverConfig.downloadDependency) {
+                    LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
                     return;
                 }
             }
 
             if (Platform.getEnvironmentType().equals("CLIENT")) {
-                if (!AutoModpack.clientConfig.downloadDependency) {
-                    AutoModpack.LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
+                if (!clientConfig.downloadDependency) {
+                    LOGGER.error("AutoModpack update check is disabled, you need to manually install fabric api!");
                     return;
                 }
             }
@@ -80,12 +75,11 @@ public class PlatformImpl {
 
                 downloadInstance.download(fapi.modrinthAPIdownloadUrl, file);
 
-                String localChecksum = CustomFileUtils.getHash(file, "SHA-512");
+                String localChecksum = CustomFileUtils.getHashWithRetry(file, "SHA-512");
 
 
                 if (!localChecksum.equals(fapi.modrinthAPISHA512Hash)) {
-                    AutoModpack.LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
-                    AutoModpackToast.add(5);
+                    LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
                     return;
                 }
             } catch (Exception e) {
@@ -95,16 +89,7 @@ public class PlatformImpl {
             }
             LOGGER.info("Successfully installed latest version of Fabric API (FAPI)!");
 
-            if (Platform.getEnvironmentType().equals("CLIENT")) {
-                if (clientConfig.autoRelaunchWhenUpdated) {
-                    if (!Platform.Forge) ReLauncher.run(null);
-                } else if (!GraphicsEnvironment.isHeadless()) {
-                    new Windows().restartWindow(("Successfully installed latest FAPI!"));
-                }
-            } else {
-                LOGGER.info("Restart your server!");
-                System.exit(0);
-            }
+            new ReLauncher.Restart(null, "Successfully installed latest FAPI!");
         }
     }
 
@@ -117,7 +102,7 @@ public class PlatformImpl {
                 Path jarPath = modContainer.getRootPaths().stream().findFirst().isPresent() ? modContainer.getRootPaths().stream().findFirst().get() : null;
 
                 if (jarPath == null) {
-                    AutoModpack.LOGGER.error("Could not find jar file for " + modid);
+                    LOGGER.error("Could not find jar file for " + modid);
                     return null;
                 }
 
@@ -140,6 +125,9 @@ public class PlatformImpl {
     }
 
     public static String getModEnvironmentFromNotLoadedJar(File file) {
+        if (!file.isFile()) return null;
+        if (!file.getName().endsWith(".jar")) return null;
+
         try {
             ZipFile zipFile = new ZipFile(file);
             ZipEntry entry = null;

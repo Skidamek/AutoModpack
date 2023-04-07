@@ -23,22 +23,20 @@ public class LinkS2CPacket {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         UUID uniqueId = profile.getId();
 
-        if (!buf.readBoolean()) { // disconnect
+        if (buf.readBoolean()) { // disconnect
             Text reason = TextHelper.literal("[AutoModpack] Install/Update modpack to join");
+            acceptLogin.add(uniqueId);
             handler.connection.send(new LoginDisconnectS2CPacket(reason));
             handler.connection.disconnect(reason);
-
-            acceptLogin.put(uniqueId, false);
-        } else {
-            acceptLogin.put(uniqueId, true);
         }
     }
     public static void receive(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {
-        // just join the server
-        if (!buf.readBoolean()) { // disconnect
+        if (buf.readBoolean()) { // disconnect
             Text reason = TextHelper.literal("[AutoModpack] Install/Update modpack to join");
             handler.connection.send(new DisconnectS2CPacket(reason));
             handler.connection.disconnect(reason);
         }
+
+        // otherwise just join the server
     }
 }

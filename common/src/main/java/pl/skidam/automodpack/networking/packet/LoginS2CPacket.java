@@ -13,7 +13,6 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
@@ -21,11 +20,11 @@ import pl.skidam.automodpack.modpack.HttpServer;
 
 import java.util.UUID;
 
+import static pl.skidam.automodpack.StaticVariables.*;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
 import static pl.skidam.automodpack.networking.fabric.ModPacketsImpl.acceptLogin;
 
 public class LoginS2CPacket {
-
 
     // Login packet (the best way)
     public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer sync, PacketSender sender) {
@@ -35,27 +34,41 @@ public class LoginS2CPacket {
         UUID uniqueId = profile.getId();
         String playerName = profile.getName();
 
-        String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
+        String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
 
-        if (!understood || !buf.readString().equals(correctResponse)) {
-            if (AutoModpack.serverConfig.optionalModpack) {
-                acceptLogin.put(uniqueId, true);
-                AutoModpack.LOGGER.info("{} has not installed automodpack.", playerName);
+        if (!understood) {
+            if (serverConfig.optionalModpack) {
+                acceptLogin.add(uniqueId);
+                LOGGER.info("{} has not installed AutoModpack.", playerName);
                 return;
             }
-            Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
-            connection.send(new LoginDisconnectS2CPacket(reason));
-            connection.disconnect(reason);
-            acceptLogin.put(uniqueId, false);
-            return;
+        } else {
+
+            String clientResponse = buf.readString();
+
+            if (!clientResponse.equals(correctResponse)) {
+                if (!serverConfig.allowFabricQuiltPlayers && !clientResponse.startsWith(VERSION)) {
+                    Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                    acceptLogin.add(uniqueId);
+                    connection.send(new LoginDisconnectS2CPacket(reason));
+                    connection.disconnect(reason);
+                    return;
+                } else if (clientResponse.startsWith(VERSION)) {
+                    Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                    acceptLogin.add(uniqueId);
+                    connection.send(new LoginDisconnectS2CPacket(reason));
+                    connection.disconnect(reason);
+                    return;
+                }
+            }
         }
 
-        acceptLogin.put(uniqueId, true);
+        acceptLogin.add(uniqueId);
 
-        if (!HttpServer.isRunning && AutoModpack.serverConfig.externalModpackHostLink.equals("")) return;
+        if (!HttpServer.isRunning && serverConfig.externalModpackHostLink.equals("")) return;
 
         String playerIp = connection.getAddress().toString();
-        String HostIPForLocal = AutoModpack.serverConfig.hostLocalIp.replaceFirst("(https?://)", ""); // Removes HTTP:// or HTTPS://
+        String HostIPForLocal = serverConfig.hostLocalIp.replaceFirst("(https?://)", ""); // Removes HTTP:// or HTTPS://
         String HostNetwork = "";
         if (HostIPForLocal.chars().filter(ch -> ch == '.').count() > 3) {
             String[] parts = HostIPForLocal.split("\\.");
@@ -64,18 +77,18 @@ public class LoginS2CPacket {
 
         String linkToSend;
 
-        if (!AutoModpack.serverConfig.externalModpackHostLink.equals("")) {
+        if (!serverConfig.externalModpackHostLink.equals("")) {
             // If an external modpack host link has been specified, use it
-            linkToSend = AutoModpack.serverConfig.externalModpackHostLink;
-            AutoModpack.LOGGER.info("Sending external modpack host link: " + linkToSend);
+            linkToSend = serverConfig.externalModpackHostLink;
+            LOGGER.info("Sending external modpack host link: " + linkToSend);
         } else {
             // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
             if (playerIp.startsWith("/127.0.0.1") || playerIp.startsWith("/[0:0:0:0:")) { // local
-                linkToSend = "http://" + AutoModpack.serverConfig.hostLocalIp + ":" + AutoModpack.serverConfig.hostPort;
+                linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
             } else if (!HostNetwork.equals("") && playerIp.startsWith("/" + HostNetwork)) { // local
-                linkToSend = "http://" + AutoModpack.serverConfig.hostLocalIp + ":" + AutoModpack.serverConfig.hostPort;
+                linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
             } else { // Otherwise, use the public host IP and port
-                linkToSend = "http://" + AutoModpack.serverConfig.hostIp + ":" + AutoModpack.serverConfig.hostPort;
+                linkToSend = "http://" + serverConfig.hostIp + ":" + serverConfig.hostPort;
             }
         }
 
@@ -88,23 +101,36 @@ public class LoginS2CPacket {
     // Join packet (velocity support)
     public static void receive(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {
         ClientConnection connection = handler.connection;
-        String correctResponse = AutoModpack.VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
 
-        if (!buf.readString().equals(correctResponse)) {
-            if (AutoModpack.serverConfig.optionalModpack) {
-                AutoModpack.LOGGER.info("{} has not installed automodpack.", player.getName().getString());
+        String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
+        String clientResponse = buf.readString();
+
+
+//        if (!understood) { TODO
+//            if (AutoModpack.serverConfig.optionalModpack) {
+//                acceptLogin.put(uniqueId, true);
+//                AutoModpack.LOGGER.info("{} has not installed automodpack.", playerName);
+//                return;
+//            }
+//        } else
+        if (!clientResponse.equals(correctResponse)) {
+            if (!serverConfig.allowFabricQuiltPlayers && !clientResponse.startsWith(VERSION)) {
+                Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                connection.send(new DisconnectS2CPacket(reason));
+                connection.disconnect(reason);
+                return;
+            } else if (clientResponse.startsWith(VERSION)) {
+                Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                connection.send(new DisconnectS2CPacket(reason));
+                connection.disconnect(reason);
                 return;
             }
-            Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + AutoModpack.VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
-            connection.send(new DisconnectS2CPacket(reason));
-            connection.disconnect(reason);
-            return;
         }
 
-        if (!HttpServer.isRunning && AutoModpack.serverConfig.externalModpackHostLink.equals("")) return;
+        if (!HttpServer.isRunning && serverConfig.externalModpackHostLink.equals("")) return;
 
         String playerIp = connection.getAddress().toString();
-        String HostIPForLocal = AutoModpack.serverConfig.hostLocalIp.replaceFirst("(https?://)", ""); // Removes HTTP:// or HTTPS://
+        String HostIPForLocal = serverConfig.hostLocalIp.replaceFirst("(https?://)", ""); // Removes HTTP:// or HTTPS://
         String HostNetwork = "";
         if (HostIPForLocal.chars().filter(ch -> ch == '.').count() > 3) {
             String[] parts = HostIPForLocal.split("\\.");
@@ -113,18 +139,18 @@ public class LoginS2CPacket {
 
         String linkToSend;
 
-        if (!AutoModpack.serverConfig.externalModpackHostLink.equals("")) {
+        if (!serverConfig.externalModpackHostLink.equals("")) {
             // If an external modpack host link has been specified, use it
-            linkToSend = AutoModpack.serverConfig.externalModpackHostLink;
-            AutoModpack.LOGGER.info("Sending external modpack host link: " + linkToSend);
+            linkToSend = serverConfig.externalModpackHostLink;
+            LOGGER.info("Sending external modpack host link: " + linkToSend);
         } else {
             // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
             if (playerIp.startsWith("/127.0.0.1")) { // local
-                linkToSend = "http://" + AutoModpack.serverConfig.hostLocalIp + ":" + AutoModpack.serverConfig.hostPort;
+                linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
             } else if (!HostNetwork.equals("") && playerIp.startsWith("/" + HostNetwork)) { // local
-                linkToSend = "http://" + AutoModpack.serverConfig.hostLocalIp + ":" + AutoModpack.serverConfig.hostPort;
+                linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
             } else { // Otherwise, use the public host IP and port
-                linkToSend = "http://" + AutoModpack.serverConfig.hostIp + ":" + AutoModpack.serverConfig.hostPort;
+                linkToSend = "http://" + serverConfig.hostIp + ":" + serverConfig.hostPort;
             }
         }
 

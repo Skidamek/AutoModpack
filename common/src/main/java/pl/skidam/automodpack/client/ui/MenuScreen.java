@@ -10,14 +10,17 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
 import java.util.Map;
+
+import static pl.skidam.automodpack.StaticVariables.*;
 
 @Environment(EnvType.CLIENT)
 public class MenuScreen extends Screen {
@@ -32,7 +35,7 @@ public class MenuScreen extends Screen {
     }
 
     public static String GetSelectedModpack() {
-        return AutoModpack.clientConfig.selectedModpack;
+        return clientConfig.selectedModpack;
     }
 
     @Override
@@ -43,20 +46,20 @@ public class MenuScreen extends Screen {
         super.init();
         assert this.client != null;
 
-        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.button.update"), button -> {
-            AutoModpackToast.add(0);
-            String modpack = AutoModpack.clientConfig.selectedModpack;
-            new ModpackUpdater(ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack), true);
-        }).position(this.width / 2 - 210, this.height - 38).size(115, 20).build());
+        this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.update"), (button) -> {
+            String modpack = clientConfig.selectedModpack;
+            Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
+            new ModpackUpdater(serverModpackContent, ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack));
+        }));
 
-        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.button.delete"), button -> {
+        this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.delete"), (button) -> {
 //            this.client.setScreen(new ConfirmScreen());
-        }).position(this.width / 2 - 90, this.height - 38).size(115, 20).build());
+        }));
 
         // make back to the main menu button
-        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.button.back"), button -> {
+        this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.back"), (button) -> {
             this.client.setScreen(new TitleScreen());
-        }).position(this.width / 2 + 100, this.height - 38).size(115, 20).build());
+        }));
     }
 
 
@@ -86,7 +89,7 @@ public class MenuScreen extends Screen {
 
             // for every entry in the list, check if it's the selected modpack and select it
             for (int i = 0; i < this.children().size(); i++) {
-                if (this.children().get(i).toString().equals(AutoModpack.clientConfig.selectedModpack)) {
+                if (this.children().get(i).toString().equals(clientConfig.selectedModpack)) {
                     this.setSelected(this.children().get(i));
                 }
             }
@@ -140,8 +143,8 @@ public class MenuScreen extends Screen {
 
             private void onPressed() {
                 ModpackSelectionListWidget.this.setSelected(this);
-                AutoModpack.clientConfig.selectedModpack = this.modpackDefinition;
-                ConfigTools.saveConfig(AutoModpack.clientConfigFile, AutoModpack.clientConfig);
+                clientConfig.selectedModpack = this.modpackDefinition;
+                ConfigTools.saveConfig(clientConfigFile, clientConfig);
             }
 
             public Text getNarration() {

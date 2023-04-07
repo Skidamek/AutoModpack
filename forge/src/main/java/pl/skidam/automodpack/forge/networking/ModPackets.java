@@ -6,10 +6,11 @@ import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.forge.networking.packet.LinkS2CPacket;
 import pl.skidam.automodpack.forge.networking.packet.LoginC2SPacket;
 import pl.skidam.automodpack.forge.networking.packet.LoginS2CPacket;
+
+import static pl.skidam.automodpack.StaticVariables.MOD_ID;
 
 public class ModPackets {
     private static SimpleChannel INSTANCE;
@@ -22,7 +23,7 @@ public class ModPackets {
 
     public static void register() {
         SimpleChannel net = NetworkRegistry.ChannelBuilder
-                .named(new Identifier(AutoModpack.MOD_ID, "packets"))
+                .named(new Identifier(MOD_ID, "packets"))
                 .networkProtocolVersion(() -> "1")
                 .clientAcceptedVersions(s -> true)
                 .serverAcceptedVersions(s -> true)

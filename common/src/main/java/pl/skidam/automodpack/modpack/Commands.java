@@ -5,14 +5,14 @@ import com.mojang.brigadier.context.CommandContext;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.util.Formatting;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.TextHelper;
-import pl.skidam.automodpack.config.Config;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 
 import java.util.concurrent.CompletableFuture;
 
 import static net.minecraft.server.command.CommandManager.literal;
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class Commands {
     public static void register() {
@@ -51,7 +51,7 @@ public class Commands {
 
     private static int reload(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
-            AutoModpack.serverConfig = ConfigTools.loadConfig(AutoModpack.serverConfigFile, Config.ServerConfigFields.class);
+            serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class);
             context.getSource().sendFeedback(TextHelper.literal("AutoModpack server config reloaded!").formatted(Formatting.GREEN), true);
         });
         return Command.SINGLE_SUCCESS;
@@ -103,7 +103,7 @@ public class Commands {
             if (HttpServer.isRunning) {
                 HttpServer.stop();
                 HttpServer.start();
-            } else if (AutoModpack.serverConfig.modpackHost){
+            } else if (serverConfig.modpackHost){
                 HttpServer.start();
                 context.getSource().sendFeedback(TextHelper.literal("Modpack hosting restarted!")
                                 .formatted(Formatting.GREEN),
@@ -135,7 +135,7 @@ public class Commands {
     private static int about(CommandContext<ServerCommandSource> context) {
         context.getSource().sendFeedback(TextHelper.literal("AutoModpack")
                 .formatted(Formatting.GREEN)
-                .append(TextHelper.literal(" - " + AutoModpack.VERSION)
+                .append(TextHelper.literal(" - " + VERSION)
                         .formatted(Formatting.WHITE)
                 ), false);
         context.getSource().sendFeedback(TextHelper.literal("/automodpack generate")

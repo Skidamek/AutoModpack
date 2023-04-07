@@ -1,10 +1,11 @@
 package pl.skidam.automodpack.utils;
 
 import com.google.gson.JsonObject;
-import pl.skidam.automodpack.AutoModpack;
 
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+
+import static pl.skidam.automodpack.StaticVariables.LOGGER;
 
 public class Ip {
     public static String getPublic() {
@@ -15,7 +16,7 @@ public class Ip {
             try {
                 JSON = Json.fromUrl("https://api.ipify.org?format=json");
             } catch (Exception ex) {
-                AutoModpack.LOGGER.error("Can't get your IP address, you need to type it manually into config");
+                LOGGER.error("Can't get your IP address, you need to type it manually into config");
                 ex.printStackTrace();
             }
         }

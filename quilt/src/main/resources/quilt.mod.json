@@ -11,8 +11,7 @@
         "Skidam": "Owner",
         "Pipelek": "Graphic artist",
         "Merith" : "Great ideas",
-        "SinisterEmber": "Contributor",
-        "enjarai": "shared-resources"
+        "SinisterEmber": "Contributor"
       },
       "license": "LGPL-3.0-or-later",
       "contact": {
@@ -25,7 +24,7 @@
     "environment": "*",
     "entrypoints": {
       "main": ["pl.skidam.automodpack.AutoModpack::onInitialize"],
-      "preLaunch": ["pl.skidam.automodpack.AutoModpack::onPreInitialize"]
+      "preLaunch": ["pl.skidam.automodpack.Preload::onPreInitialize"]
     },
     "depends": [
       {
@@ -36,11 +35,15 @@
         "id": "minecraft",
         "versions": "1.19.3"
       }
+    ],
+    "breaks": [
+      {
+        "id": "quiltgoslightlyfasterlol",
+        "versions": "*"
+      }
     ]
   },
   "mixin": [
-    "automodpack.mixins.json",
-    "automodpack.sharedresources.mixins.json",
-    "automodpack.sharedresources.compat.iris.mixins.json"
+    "automodpack.mixins.json"
   ]
 }

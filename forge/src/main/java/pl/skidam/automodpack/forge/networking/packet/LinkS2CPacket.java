@@ -4,13 +4,14 @@ import net.minecraft.network.Packet;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.listener.ClientLoginPacketListener;
 import net.minecraftforge.network.NetworkEvent;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.ModpackUtils;
+import pl.skidam.automodpack.config.Jsons;
 
 import java.io.File;
 import java.util.function.Supplier;
 
-import static pl.skidam.automodpack.AutoModpack.modpacksDir;
+import static pl.skidam.automodpack.StaticVariables.*;
 
 public class LinkS2CPacket implements Packet<ClientLoginPacketListener> {
     private final String link;
@@ -27,18 +28,19 @@ public class LinkS2CPacket implements Packet<ClientLoginPacketListener> {
     }
 
     public void apply(ClientLoginPacketListener listener) {
-        AutoModpack.LOGGER.error("Received link packet from server! " + link);
+        LOGGER.error("Received link packet from server! " + link);
     }
 
     public void apply(Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get();
         context.enqueueWork(() -> {
-            AutoModpack.LOGGER.error("Received link packet from server! " + link);
-            AutoModpack.ClientLink = link;
+            LOGGER.error("Received link packet from server! " + link);
+            ClientLink = link;
             String modpackFileName = link.substring(link.lastIndexOf("/") + 1); // removes https:// and http://
             modpackFileName = modpackFileName.replace(":", "-"); // replaces : with -
             File modpackDir = new File(modpacksDir + File.separator + modpackFileName);
-            new Thread(() -> new ModpackUpdater(link, modpackDir, true)).start();
+            Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
+            new Thread(() -> new ModpackUpdater(serverModpackContent, link, modpackDir)).start();
         });
     }
 }

@@ -33,12 +33,6 @@ public class RestartScreen extends Screen {
         this.addDrawableChild(restartButton);
         this.addDrawableChild(changelogsButton);
 
-        // Check if user using windows because restarter works only on windows for now
-//        String os = System.getProperty("os.name").toLowerCase();
-//        if (!JavaPath.checkJavaPath(new File(JavaPath.getJavaPath())) || !os.contains("windows")) {
-//            restartButton.active = false;
-//        }
-
         if (ModpackUpdater.changelogList.isEmpty()) {
             changelogsButton.active = false;
         }
@@ -52,17 +46,15 @@ public class RestartScreen extends Screen {
     }
     public void initWidgets() {
         assert this.client != null;
-        cancelButton = ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.restart.button.cancel").formatted(Formatting.RED), button -> {
+        cancelButton = new ButtonWidget(this.width / 2 - 150, this.height / 6 + 120, 150, 20, TextHelper.translatable("gui.automodpack.screen.restart.button.cancel").formatted(Formatting.RED), (button) -> {
             this.client.setScreen(null);
-        }).position(this.width / 2 - 150, this.height / 6 + 120).size(150, 20).build();
-
-        restartButton = ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.restart.button.quit").formatted(Formatting.GREEN), button -> {
-            ReLauncher.run(gameDir);
-        }).position(this.width / 2, this.height / 6 + 120).size(150, 20).build();
-
-        changelogsButton = ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.restart.button.changelogs").formatted(Formatting.DARK_AQUA), button -> {
+        });
+        restartButton = new ButtonWidget(this.width / 2, this.height / 6 + 120, 150, 20, TextHelper.translatable("gui.automodpack.screen.restart.button.quit").formatted(Formatting.GREEN), (button) -> {
+            new ReLauncher.Restart(gameDir);
+        });
+        changelogsButton = new ButtonWidget(this.width / 2 - 75, this.height / 6 + 145, 150, 20, TextHelper.translatable("gui.automodpack.screen.restart.button.changelogs").formatted(Formatting.DARK_AQUA), (button) -> {
             this.client.setScreen(new ChangelogScreen(this, gameDir));
-        }).position(this.width / 2 - 75, this.height / 6 + 145).size(150, 20).build();
+        });
     }
     @Override
     public boolean shouldCloseOnEsc() {

@@ -1,25 +1,5 @@
 {
-  "gui.automodpack.toast.up.0": "Перевірка наявності оновлень...",
-  "gui.automodpack.toast.down.0": "Зачекайте, будь ласка.",
-  "gui.automodpack.toast.up.1": "Оновлення знайдено!",
-  "gui.automodpack.toast.down.1": "Завантажую модпак...",
-  "gui.automodpack.toast.up.2": "Оновлення знайдено!",
-  "gui.automodpack.toast.down.2": "Завантажую модифікацію...",
-  "gui.automodpack.toast.up.3": "Оновлень не знайдено!",
-  "gui.automodpack.toast.down.3": "Модпак уже оновлено до актуальної версії!",
-  "gui.automodpack.toast.up.4": "Оновлень не знайдено!",
-  "gui.automodpack.toast.down.4": "Модифікація уже оновлена до актуальної версії!",
-  "gui.automodpack.toast.up.5": "Помилка!",
-  "gui.automodpack.toast.down.5": "Спробуйте пізніше!",
-  "gui.automodpack.toast.up.6": "Неможу відкрити файл конфігурації!",
-  "gui.automodpack.toast.down.6": "Тобі потрібно установити Cloth Config",
-
-  "gui.automodpack.button.update": "Перевірити оновлення",
-  "gui.automodpack.button.delete": "Видалити модпак.",
-
-  "gui.automodpack.screen.restart.title.all": "Завантажено оновлення для вашого модпаку та \"AutoModpack\" (цей мод)!",
   "gui.automodpack.screen.restart.title.modpack": "Ваш модпак було оновлено!",
-  "gui.automodpack.screen.restart.title.automodpack": "Оновлення було завантажо для \"AutoModpack\" (цей мод)!",
 
   "gui.automodpack.screen.restart.button.cancel": "Ні (Повернутися назад)",
 
@@ -40,6 +20,5 @@
   "gui.automodpack.screen.danger.description": "Ви хочете оновити його?",
   "gui.automodpack.screen.danger.secDescription": "Це може бути ризиковано! Не завантажуйте, якщо не довіряєте адміністрації серверу!",
   "gui.automodpack.screen.danger.button.accept": "Завантажити",
-  "gui.automodpack.screen.danger.button.dontshowagain": "Завантажити, та не показувати це попередження знову.",
   "gui.automodpack.screen.danger.button.cancel": "Не завантажувати"
 }

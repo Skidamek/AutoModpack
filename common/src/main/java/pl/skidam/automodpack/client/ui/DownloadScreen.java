@@ -6,21 +6,22 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
-import pl.skidam.automodpack.AutoModpack;
 import pl.skidam.automodpack.TextHelper;
-import pl.skidam.automodpack.utils.DownloadInfo;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.utils.DownloadInfo;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import static pl.skidam.automodpack.StaticVariables.MOD_ID;
 import static pl.skidam.automodpack.client.ModpackUpdater.downloadInfos;
 import static pl.skidam.automodpack.client.ModpackUpdater.getDownloadInfo;
+import static pl.skidam.automodpack.utils.RefactorStrings.getETA;
 
 public class DownloadScreen extends Screen {
 
-    private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = new Identifier(AutoModpack.MOD_ID, "gui/progress-bar-empty.png");
-    private static final Identifier PROGRESS_BAR_FULL_TEXTURE = new Identifier(AutoModpack.MOD_ID, "gui/progress-bar-full.png");
+    private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = new Identifier(MOD_ID, "gui/progress-bar-empty.png");
+    private static final Identifier PROGRESS_BAR_FULL_TEXTURE = new Identifier(MOD_ID, "gui/progress-bar-full.png");
     private static final int PROGRESS_BAR_WIDTH = 250;
     private static final int PROGRESS_BAR_HEIGHT = 20;
 
@@ -76,7 +77,7 @@ public class DownloadScreen extends Screen {
 
     private Text getTotalETA() {
         String eta = ModpackUpdater.getTotalETA();
-        return TextHelper.literal("ETA: " + eta);
+        return TextHelper.literal("Time left: " + eta); // TODO translatable
     }
 
     private String getETAOfFile(String file) {
@@ -85,17 +86,7 @@ public class DownloadScreen extends Screen {
 
         if (getDownloadInfo(file).getEta() <= 0) return "N/A";
 
-        int hours = (int) (eta / 3600);
-        int minutes = (int) ((eta % 3600) / 60);
-        int seconds = (int) (eta % 60);
-
-        if (hours > 0) {
-            return String.format("%dh %02dm %02ds", hours, minutes, seconds);
-        } else if (minutes > 0) {
-            return String.format("%dm %02ds", minutes, seconds);
-        } else {
-            return String.format("%ds", seconds);
-        }
+        return getETA(eta);
     }
 
     private void drawDownloadingFiles(MatrixStack matrices) {
