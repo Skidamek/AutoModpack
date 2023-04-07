@@ -35,7 +35,6 @@ public class LoginS2CPacket {
         String playerName = profile.getName();
 
         String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
-        String clientResponse = buf.readString();
 
         if (!understood) {
             if (serverConfig.optionalModpack) {
@@ -43,19 +42,24 @@ public class LoginS2CPacket {
                 LOGGER.info("{} has not installed AutoModpack.", playerName);
                 return;
             }
-        } else if (!clientResponse.equals(correctResponse)) {
-            if (!serverConfig.allowFabricQuiltPlayers && !clientResponse.startsWith(VERSION)) {
-                Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
-                acceptLogin.add(uniqueId);
-                connection.send(new LoginDisconnectS2CPacket(reason));
-                connection.disconnect(reason);
-                return;
-            } else if (clientResponse.startsWith(VERSION)) {
-                Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
-                acceptLogin.add(uniqueId);
-                connection.send(new LoginDisconnectS2CPacket(reason));
-                connection.disconnect(reason);
-                return;
+        } else {
+
+            String clientResponse = buf.readString();
+
+            if (!clientResponse.equals(correctResponse)) {
+                if (!serverConfig.allowFabricQuiltPlayers && !clientResponse.startsWith(VERSION)) {
+                    Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                    acceptLogin.add(uniqueId);
+                    connection.send(new LoginDisconnectS2CPacket(reason));
+                    connection.disconnect(reason);
+                    return;
+                } else if (clientResponse.startsWith(VERSION)) {
+                    Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                    acceptLogin.add(uniqueId);
+                    connection.send(new LoginDisconnectS2CPacket(reason));
+                    connection.disconnect(reason);
+                    return;
+                }
             }
         }
 
