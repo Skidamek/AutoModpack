@@ -8,7 +8,6 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
-import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.client.ScreenTools;
@@ -35,24 +34,19 @@ public class LinkC2SPacket {
         clientConfig.selectedModpack = modpackFileName;
         ConfigTools.saveConfig(clientConfigFile, clientConfig);
 
-        ModpackUtils.UpdateType updateType = ModpackUtils.isUpdate(link, modpackDir);
-
-        boolean responseBoolean = updateType == ModpackUtils.UpdateType.NONE;
+        boolean isUpdate = ModpackUtils.isUpdate(link, modpackDir);
 
         PacketByteBuf response = PacketByteBufs.create();
-        response.writeBoolean(responseBoolean);
+        response.writeBoolean(isUpdate);
 
         CompletableFuture.runAsync(() -> {
-            if (updateType == ModpackUtils.UpdateType.DELETE) {
-                LOGGER.warn("47 - LinkC2SPacket");
-                new ReLauncher.Restart(modpackDir);
-            } else if (updateType == ModpackUtils.UpdateType.FULL) {
-                LOGGER.warn("50 - LinkC2SPacket");
+            if (isUpdate) {
+                LOGGER.warn("45 - LinkC2SPacket");
                 new ModpackUpdater(link, modpackDir);
             }
         });
 
-        LOGGER.warn("responseBoolean: " + responseBoolean);
+        LOGGER.warn("isUpdate: " + isUpdate);
 
         return CompletableFuture.completedFuture(response);
     }
@@ -69,15 +63,14 @@ public class LinkC2SPacket {
         clientConfig.selectedModpack = modpackFileName;
         ConfigTools.saveConfig(clientConfigFile, clientConfig);
 
-        ModpackUtils.UpdateType updateType = ModpackUtils.isUpdate(link, modpackDir);
+        boolean isUpdate = ModpackUtils.isUpdate(link, modpackDir);
 
         PacketByteBuf response = PacketByteBufs.create();
-        response.writeBoolean(updateType == ModpackUtils.UpdateType.NONE);
+        response.writeBoolean(isUpdate);
 
         sender.sendPacket(LINK, response);
 
-        // FIXME
-        if (updateType == ModpackUtils.UpdateType.DELETE || updateType == ModpackUtils.UpdateType.FULL) {
+        if (isUpdate) {
 
             CompletableFuture.runAsync(() -> {
                 while (ScreenTools.getScreen() == null) {
@@ -99,13 +92,7 @@ public class LinkC2SPacket {
                     }
                 }
 
-                if (updateType == ModpackUtils.UpdateType.DELETE) {
-                    new ReLauncher.Restart(modpackDir);
-                } else if (updateType == ModpackUtils.UpdateType.FULL) {
-                    new ModpackUpdater(link, modpackDir);
-                } else { // !isLoaded
-                    new ReLauncher.Restart(modpackDir);
-                }
+                new ModpackUpdater(link, modpackDir);
             });
         }
     }

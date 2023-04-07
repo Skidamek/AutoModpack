@@ -46,9 +46,9 @@ public class ChangelogScreen extends Screen {
         this.addDrawableChild(this.changelogsList);
 
         // Initialize the search field
-        this.searchField = new TextFieldWidget(this.textRenderer, this.width / 2 - 100, 20, 200, 20, TextHelper.literal(""));
-        this.searchField.setChangedListener((textField) -> updateChangelogs()); // Update the changelogs display based on the search query
-        this.addDrawableChild(this.searchField);
+//        this.searchField = new TextFieldWidget(this.textRenderer, this.width / 2 - 100, 20, 200, 20, TextHelper.literal(""));
+//        this.searchField.setChangedListener((textField) -> updateChangelogs()); // Update the changelogs display based on the search query
+//        this.addDrawableChild(this.searchField);
 
         // Add the back button
         this.addDrawableChild(new ButtonWidget(5, this.height - 20, 72, 20, TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> this.client.setScreen(this.parent)));
@@ -72,6 +72,9 @@ public class ChangelogScreen extends Screen {
     private void drawSummaryOfChanges(MatrixStack matrices) {
 
         File modpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
+
+        if (modpackContentFile == null) return;
+
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         int modsAdded = 0;

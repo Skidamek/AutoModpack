@@ -138,7 +138,7 @@ public class HttpServer {
                         serverSocketChannel.configureBlocking(false);
                         serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
 
-                        LOGGER.info("Modpack hosting started!");
+                        LOGGER.info("Modpack hosting started! on port {}", serverConfig.hostPort);
                         isRunning = true;
 
                         server = serverSocketChannel;

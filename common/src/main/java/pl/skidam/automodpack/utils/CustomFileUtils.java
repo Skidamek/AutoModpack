@@ -75,17 +75,25 @@ public class CustomFileUtils {
 
         for (File file : files) {
             if (shouldIgnore(file, ignoreList)) {
-                System.out.println("Ignoring: " + file);
+//                System.out.println("Ignoring: " + file);
                 continue;
             }
 
             if (file.isDirectory()) {
+
+                if (file.getName().startsWith(".")) {
+                    continue;
+                }
+
                 if (deleteSubDirsToo && isEmptyDirectory(file, ignoreList)) {
                     System.out.println("Deleting empty dir: " + file);
                     CustomFileUtils.forceDelete(file, true);
-                } else {
+                }
+
+                else {
                     deleteEmptyFiles(file, deleteSubDirsToo, ignoreList);
                 }
+
             } else if (file.length() == 0) {
                 System.out.println("Deleting empty file: " + file);
                 CustomFileUtils.forceDelete(file, true);

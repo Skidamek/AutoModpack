@@ -182,6 +182,11 @@ public class Modpack {
                             LOGGER.warn("File {} is disabled! Skipping...", modpackFile);
                             continue;
                         }
+
+                        if (modpackFile.endsWith(".bak")) {
+                            LOGGER.warn("File {} is backup file, unnecessary on client! Skipping...", modpackFile);
+                            continue;
+                        }
                     }
 
                     String hash = CustomFileUtils.getHashWithRetry(file, "SHA-256");
