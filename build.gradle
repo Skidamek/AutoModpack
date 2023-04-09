@@ -14,6 +14,9 @@ subprojects {
     apply plugin: "io.github.juuxel.loom-quiltflower"
 
 //    loom {
+
+//        accessWidenerPath = file("src/main/resources/automodpack.accesswidener")
+
 //        silentMojangMappingsLicense()
 //    }
 

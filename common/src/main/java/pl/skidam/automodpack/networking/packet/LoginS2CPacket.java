@@ -28,7 +28,7 @@ public class LoginS2CPacket {
 
     // Login packet (the best way)
     public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer sync, PacketSender sender) {
-        ClientConnection connection = handler.connection;
+        ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         UUID uniqueId = profile.getId();
@@ -100,7 +100,7 @@ public class LoginS2CPacket {
 
     // Join packet (velocity support)
     public static void receive(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {
-        ClientConnection connection = handler.connection;
+        ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
         String clientResponse = buf.readString();

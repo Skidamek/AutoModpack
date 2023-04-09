@@ -1,17 +1,19 @@
 package pl.skidam.automodpack.forge.networking.packet;
 
-import net.minecraft.network.Packet;
+import net.minecraft.network.ClientConnection;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.listener.ClientLoginPacketListener;
+import net.minecraft.network.packet.Packet;
 import net.minecraftforge.network.NetworkEvent;
 import pl.skidam.automodpack.forge.networking.ModPackets;
+import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 
 import java.util.function.Supplier;
 
 import static pl.skidam.automodpack.StaticVariables.LOGGER;
 import static pl.skidam.automodpack.StaticVariables.VERSION;
 
-public class LoginS2CPacket implements Packet<ClientLoginPacketListener>  {
+public class LoginS2CPacket implements Packet<ClientLoginPacketListener> {
     private final String version;
     public LoginS2CPacket(String version) {
         this.version = version;
@@ -31,7 +33,8 @@ public class LoginS2CPacket implements Packet<ClientLoginPacketListener>  {
 
         LOGGER.error("Received login packet from server! " + version);
         LOGGER.error("Sending login packet to server! " + VERSION);
-        listener.getConnection().send(new LoginC2SPacket(VERSION));
+        ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) listener).getConnection();
+        connection.send(new LoginC2SPacket(VERSION));
         LOGGER.error("Sent login packet to server! " + VERSION);
     }
 

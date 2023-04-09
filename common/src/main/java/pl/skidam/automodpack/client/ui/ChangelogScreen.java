@@ -1,16 +1,18 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.Element;
+import net.minecraft.client.gui.Selectable;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.EntryListWidget;
+import net.minecraft.client.gui.widget.ElementListWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ui.widget.ScrollingListWidget;
-import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
@@ -98,7 +100,7 @@ public class ChangelogScreen extends Screen {
 
         String summary = "Mods + " + modsAdded + " | - " + modsRemoved;
 
-        drawCenteredText(matrices, textRenderer, TextHelper.literal(summary), this.width / 2, 5, 16777215);
+        drawCenteredTextWithShadow(matrices, textRenderer, TextHelper.literal(summary), this.width / 2, 5, 16777215);
     }
 
     private void updateChangelogs() {
@@ -154,7 +156,7 @@ public class ChangelogScreen extends Screen {
             }
         }
 
-        public class Entry extends EntryListWidget.Entry<ChangelogsList.Entry> {
+        public class Entry extends ElementListWidget.Entry<ChangelogsList.Entry> {
             private final String text;
             private final int color;
             public Entry(String text, int color) {
@@ -164,7 +166,17 @@ public class ChangelogScreen extends Screen {
 
             @Override
             public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-                drawStringWithShadow(matrices, ChangelogsList.this.client.textRenderer, text, x + 10, y, color);
+                drawCenteredTextWithShadow(matrices, ChangelogsList.this.client.textRenderer, text, x + 10, y, color);
+            }
+
+            @Override
+            public List<? extends Selectable> selectableChildren() {
+                return null;
+            }
+
+            @Override
+            public List<? extends Element> children() {
+                return null;
             }
         }
     }

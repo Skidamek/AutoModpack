@@ -4,6 +4,7 @@ import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.*;
+import net.minecraft.network.ClientConnection;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
 import net.minecraft.text.Text;
@@ -74,8 +75,9 @@ public class ModPacketsImpl {
                     if (i == 300) {
                         LOGGER.error("Timeout login for " + profile.getName() + " (" + uniqueId.toString()  + ")");
                         Text reason = TextHelper.literal("AutoModpack - timeout");
-                        handler.connection.send(new LoginDisconnectS2CPacket(reason));
-                        handler.connection.disconnect(reason);
+                        ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+                        connection.send(new LoginDisconnectS2CPacket(reason));
+                        connection.disconnect(reason);
                     }
                 }
 

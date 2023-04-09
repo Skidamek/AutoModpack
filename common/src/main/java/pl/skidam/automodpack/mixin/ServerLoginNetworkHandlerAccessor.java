@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.mixin;
 
 import com.mojang.authlib.GameProfile;
+import net.minecraft.network.ClientConnection;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
@@ -9,4 +10,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface ServerLoginNetworkHandlerAccessor {
     @Accessor("profile")
     GameProfile getGameProfile();
+
+    @Accessor("connection")
+    ClientConnection getConnection();
 }

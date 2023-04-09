@@ -1,8 +1,8 @@
 package pl.skidam.automodpack.forge.networking.packet;
 
-import net.minecraft.network.Packet;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.listener.ClientLoginPacketListener;
+import net.minecraft.network.packet.Packet;
 import net.minecraftforge.network.NetworkEvent;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ModpackUtils;

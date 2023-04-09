@@ -1,14 +1,15 @@
 package pl.skidam.automodpack.forge.networking.packet;
 
 import net.minecraft.network.ClientConnection;
-import net.minecraft.network.Packet;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.listener.ServerLoginPacketListener;
+import net.minecraft.network.packet.Packet;
 import net.minecraftforge.network.NetworkEvent;
+import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 
 import java.util.function.Supplier;
 
-public class LoginC2SPacket implements Packet<ServerLoginPacketListener>  {
+public class LoginC2SPacket implements Packet<ServerLoginPacketListener> {
     private final String version;
     public LoginC2SPacket(String version) {
         this.version = version;
@@ -23,7 +24,7 @@ public class LoginC2SPacket implements Packet<ServerLoginPacketListener>  {
     }
 
     public void apply(ServerLoginPacketListener listener) {
-        ClientConnection connection = listener.getConnection();
+        ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) listener).getConnection();
 
     }
 

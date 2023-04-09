@@ -3,10 +3,10 @@ package pl.skidam.automodpack.client.ui.widget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.narration.NarrationMessageBuilder;
-import net.minecraft.client.gui.widget.EntryListWidget;
+import net.minecraft.client.gui.widget.ElementListWidget;
 import net.minecraft.client.util.math.MatrixStack;
 
-public class ScrollingListWidget<E extends EntryListWidget.Entry<E>> extends EntryListWidget<E> {
+public class ScrollingListWidget<E extends ElementListWidget.Entry<E>> extends ElementListWidget<E> {
 
     public ScrollingListWidget(MinecraftClient client, int width, int height, int top, int bottom, int itemHeight) {
         super(client, width, height, top, bottom, itemHeight);

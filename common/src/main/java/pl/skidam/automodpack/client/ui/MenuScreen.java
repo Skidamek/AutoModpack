@@ -67,7 +67,7 @@ public class MenuScreen extends Screen {
         //drawCenteredText(matrices, this.textRenderer, selectedServerIP, this.width / 2, 60, 16777215);
         //drawCenteredText(matrices, this.textRenderer, selectedModpack, this.width / 2, 70, 16777215);
 
-        drawCenteredText(matrices, this.textRenderer, this.title, this.width / 2, 15, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, this.title, this.width / 2, 15, 16777215);
         //drawCenteredText(matrices, this.textRenderer, new TranslatableText("gui.automodpack.screen.menu.description"), this.width / 2, 20, 16777215);
         super.render(matrices, mouseX, mouseY, delta);
     }
@@ -103,7 +103,7 @@ public class MenuScreen extends Screen {
             MenuScreen.this.renderBackground(matrices);
         }
 
-        protected boolean isFocused() {
+        public boolean isFocused() {
             return MenuScreen.this.getFocused() == this;
         }
 

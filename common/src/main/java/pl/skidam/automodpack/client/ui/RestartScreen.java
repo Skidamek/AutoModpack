@@ -39,9 +39,9 @@ public class RestartScreen extends Screen {
     }
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        drawCenteredText(matrices, this.textRenderer, TextHelper.literal("Restart"), this.width / 2, 55, 16777215);
-        drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.restart.description"), this.width / 2, 80, 16777215);
-        drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.restart.secDescription"), this.width / 2, 90, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.literal("Restart"), this.width / 2, 55, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.restart.description"), this.width / 2, 80, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.restart.secDescription"), this.width / 2, 90, 16777215);
         super.render(matrices, mouseX, mouseY, delta);
     }
 
