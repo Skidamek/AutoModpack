@@ -4,23 +4,19 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.widget.AlwaysSelectedEntryListWidget;
-import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.TextHelper;
-import pl.skidam.automodpack.client.ModpackUpdater;
-import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.config.ConfigTools;
-import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
 import java.util.Map;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.StaticVariables.clientConfig;
+import static pl.skidam.automodpack.StaticVariables.clientConfigFile;
 
 @Environment(EnvType.CLIENT)
 public class MenuScreen extends Screen {
@@ -46,20 +42,20 @@ public class MenuScreen extends Screen {
         super.init();
         assert this.client != null;
 
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.update"), (button) -> {
-            String modpack = clientConfig.selectedModpack;
-            Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
-            new ModpackUpdater(serverModpackContent, ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack));
-        }));
+//        this.addDrawableChild(new ButtonWidget(this.width / 2 - 210, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.update"), (button) -> {
+//            String modpack = clientConfig.selectedModpack;
+//            Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
+//            new ModpackUpdater(serverModpackContent, ModpackContentTools.getModpackLink(modpack), ModpackContentTools.getModpackDir(modpack));
+//        }));
 
-        this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.delete"), (button) -> {
+//        this.addDrawableChild(new ButtonWidget(this.width / 2 - 90, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.delete"), (button) -> {
 //            this.client.setScreen(new ConfirmScreen());
-        }));
+//        }));
 
         // make back to the main menu button
-        this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.back"), (button) -> {
-            this.client.setScreen(new TitleScreen());
-        }));
+//        this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.back"), (button) -> {
+//            this.client.setScreen(new TitleScreen());
+//        }));
     }
 
 

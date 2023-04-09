@@ -36,7 +36,7 @@ public class ChangelogScreen extends Screen {
         super.init();
         assert this.client != null;
 
-        this.client.keyboard.setRepeatEvents(true);
+//        this.client.keyboard.setRepeatEvents(true);
 
         // Retrieve the changelogs
         changelogs = getChangelogs();
@@ -51,7 +51,10 @@ public class ChangelogScreen extends Screen {
         this.addDrawableChild(this.searchField);
 
         // Add the back button
-        this.addDrawableChild(new ButtonWidget(5, this.height - 20, 72, 20, TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> this.client.setScreen(this.parent)));
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> {
+            assert this.client != null;
+            this.client.setScreen(this.parent);
+        }).position(5, this.height - 20).size(72, 20).build());
 
         this.setInitialFocus(this.searchField);
     }
