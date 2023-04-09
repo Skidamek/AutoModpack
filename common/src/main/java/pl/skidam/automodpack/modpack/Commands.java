@@ -103,6 +103,9 @@ public class Commands {
             if (HttpServer.isRunning) {
                 HttpServer.stop();
                 HttpServer.start();
+                context.getSource().sendFeedback(TextHelper.literal("Modpack hosting restarted!")
+                                .formatted(Formatting.GREEN),
+                        true);
             } else if (serverConfig.modpackHost){
                 HttpServer.start();
                 context.getSource().sendFeedback(TextHelper.literal("Modpack hosting restarted!")
