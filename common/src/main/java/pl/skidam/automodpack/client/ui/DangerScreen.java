@@ -7,6 +7,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.audio.AudioManager;
 
 import java.io.File;
 import java.util.concurrent.CompletableFuture;
@@ -25,6 +26,10 @@ public class DangerScreen extends Screen {
         this.link = link;
         this.modpackDir = modpackDir;
         this.modpackContentFile = modpackContentFile;
+
+        if (AudioManager.isMusicPlaying()) {
+            AudioManager.stopMusic();
+        }
     }
 
     @Override

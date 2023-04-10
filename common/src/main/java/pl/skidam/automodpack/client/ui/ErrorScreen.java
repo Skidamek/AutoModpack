@@ -6,6 +6,7 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.TextHelper;
+import pl.skidam.automodpack.client.audio.AudioManager;
 
 public class ErrorScreen extends Screen {
     private final String[] errorMessage;
@@ -13,6 +14,10 @@ public class ErrorScreen extends Screen {
     public ErrorScreen(String... errorMessage) {
         super(TextHelper.literal(""));
         this.errorMessage = errorMessage;
+
+        if (AudioManager.isMusicPlaying()) {
+            AudioManager.stopMusic();
+        }
     }
 
     @Override

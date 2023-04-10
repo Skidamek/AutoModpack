@@ -1,6 +1,7 @@
 package pl.skidam.automodpack;
 
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.modpack.Modpack;
@@ -28,6 +29,7 @@ public class AutoModpack {
         } else {
             MinecraftUserName.get(); // To save the username` to variable in MinecraftUserName class for later use
             ModPackets.registerC2SPackets();
+            new AudioManager();
         }
     }
 }

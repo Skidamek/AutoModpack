@@ -10,6 +10,7 @@ import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.widget.ScrollingListWidget;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
@@ -31,6 +32,10 @@ public class ChangelogScreen extends Screen {
         super(TextHelper.literal("ChangelogScreen"));
         this.parent = parent;
         this.modpackDir = modpackDir;
+
+        if (AudioManager.isMusicPlaying()) {
+            AudioManager.stopMusic();
+        }
     }
 
     @Override

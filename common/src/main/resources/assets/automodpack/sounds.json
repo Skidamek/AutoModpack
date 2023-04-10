@@ -1,0 +1,10 @@
+{
+  "waiting_music": {
+    "sounds": [
+      {
+        "name": "automodpack:music/waiting",
+        "stream": false
+      }
+    ]
+  }
+}
