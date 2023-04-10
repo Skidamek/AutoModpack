@@ -13,6 +13,7 @@ import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ModpackUtils;
+import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.ModpackContentTools;
@@ -60,6 +61,10 @@ public class MenuScreen extends Screen {
         this.addDrawableChild(new ButtonWidget(this.width / 2 + 100, this.height - 38, 115, 20, TextHelper.translatable("gui.automodpack.button.back"), (button) -> {
             this.client.setScreen(new TitleScreen());
         }));
+
+        if (AudioManager.isMusicPlaying()) {
+            AudioManager.stopMusic();
+        }
     }
 
 

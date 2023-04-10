@@ -7,6 +7,7 @@ import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.audio.AudioManager;
 
 import java.io.File;
 
@@ -21,6 +22,10 @@ public class RestartScreen extends Screen {
         super(TextHelper.literal("RestartScreen"));
         this.gameDir = gameDir;
         this.parent = parent;
+
+        if (AudioManager.isMusicPlaying()) {
+            AudioManager.stopMusic();
+        }
     }
 
     @Override

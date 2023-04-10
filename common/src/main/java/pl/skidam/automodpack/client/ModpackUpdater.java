@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.ReLauncher;
+import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.*;
@@ -246,6 +247,10 @@ public class ModpackUpdater {
             // Downloads completed
             Files.write(modpackContentFile.toPath(), GSON.toJson(serverModpackContent).getBytes());
             finishModpackUpdate(modpackDir, modpackContentFile);
+
+            if (AudioManager.isMusicPlaying()) {
+                AudioManager.stopMusic();
+            }
 
             if (!failedDownloads.isEmpty()) {
                 StringBuilder failedFiles = new StringBuilder("null");

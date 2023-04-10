@@ -8,6 +8,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.utils.DownloadInfo;
 
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ public class DownloadScreen extends Screen {
     private static final Identifier PROGRESS_BAR_FULL_TEXTURE = new Identifier(MOD_ID, "gui/progress-bar-full.png");
     private static final int PROGRESS_BAR_WIDTH = 250;
     private static final int PROGRESS_BAR_HEIGHT = 20;
+    private static int ticks = 0;
 
     public DownloadScreen() {
         super(TextHelper.literal("DownloadScreen"));
@@ -116,6 +118,22 @@ public class DownloadScreen extends Screen {
         matrices.pop();
     }
 
+    private void checkAndStartMusic() {
+        if (ticks <= 60) {
+            ticks++;
+            return;
+        }
+
+        String eta = ModpackUpdater.getTotalETA();
+        try {
+            int etaInSeconds = Integer.parseInt(eta.substring(0, eta.length() - 1));
+            if (etaInSeconds > 3) {
+                AudioManager.playMusic();
+            }
+        } catch (NumberFormatException ignored) {
+        }
+    }
+
 
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
@@ -138,6 +156,8 @@ public class DownloadScreen extends Screen {
         drawTexture(matrices, x, y, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
         RenderSystem.setShaderTexture(0, PROGRESS_BAR_FULL_TEXTURE);
         drawTexture(matrices, x, y, 0, 0, (int)(PROGRESS_BAR_WIDTH * ((float) ModpackUpdater.getTotalPercentageOfFileSizeDownloaded() / 100)), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+
+        checkAndStartMusic();
 
         super.render(matrices, mouseX, mouseY, delta);
     }
