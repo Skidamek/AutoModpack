@@ -30,14 +30,19 @@ public class ModpackUtils {
             return false;
         }
 
+        // get client modpack content
+        File clientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
+
         if (serverModpackContent == null || serverModpackContent.list == null) {
-            LOGGER.error("Server modpack content list is null");
+            LOGGER.error("Server modpack content is null");
+            if (clientModpackContentFile == null || !clientModpackContentFile.exists()) {
+                LOGGER.error("Client modpack content file doesn't exist");
+                return true;
+            }
             return false;
         }
 
 
-        // get client modpack content
-        File clientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
         if (clientModpackContentFile != null && clientModpackContentFile.exists()) {
 
             Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadConfig(clientModpackContentFile, Jsons.ModpackContentFields.class);
