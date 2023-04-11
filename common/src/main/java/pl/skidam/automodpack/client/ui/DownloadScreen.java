@@ -119,7 +119,7 @@ public class DownloadScreen extends Screen {
     }
 
     private void checkAndStartMusic() {
-        if (ticks <= 60) {
+        if (ticks <= 100) {
             ticks++;
             return;
         }
@@ -127,7 +127,7 @@ public class DownloadScreen extends Screen {
         String eta = ModpackUpdater.getTotalETA();
         try {
             int etaInSeconds = Integer.parseInt(eta.substring(0, eta.length() - 1));
-            if (etaInSeconds > 3) {
+            if (etaInSeconds > 10) {
                 AudioManager.playMusic();
             }
         } catch (NumberFormatException ignored) {
