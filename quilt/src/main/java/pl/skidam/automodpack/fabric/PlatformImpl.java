@@ -158,6 +158,7 @@ public class PlatformImpl {
         } catch (ZipException ignored) {
             return null;
         } catch (IOException | JsonSyntaxException e) {
+            LOGGER.error("Failed to get mod version from file: " + file.getName());
             e.printStackTrace();
         }
 
@@ -230,6 +231,7 @@ public class PlatformImpl {
         } catch (ZipException ignored) {
             return "UNKNOWN";
         } catch (IOException e) {
+            LOGGER.error("Failed to get mod env from file: " + file.getName());
             e.printStackTrace();
         }
 
@@ -289,6 +291,7 @@ public class PlatformImpl {
         } catch (ZipException ignored) {
             return null;
         } catch (IOException e) {
+            LOGGER.error("Failed to get mod id from file: " + file.getName());
             e.printStackTrace();
         }
 
