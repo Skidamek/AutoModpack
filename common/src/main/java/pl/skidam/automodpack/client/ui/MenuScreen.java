@@ -4,23 +4,19 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.client.gui.widget.AlwaysSelectedEntryListWidget;
-import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.TextHelper;
-import pl.skidam.automodpack.client.ModpackUpdater;
-import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.config.ConfigTools;
-import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
 import java.util.Map;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.StaticVariables.clientConfig;
+import static pl.skidam.automodpack.StaticVariables.clientConfigFile;
 
 @Environment(EnvType.CLIENT)
 public class MenuScreen extends Screen {
@@ -107,7 +103,7 @@ public class MenuScreen extends Screen {
             MenuScreen.this.renderBackground(matrices);
         }
 
-        protected boolean isFocused() {
+        public boolean isFocused() {
             return MenuScreen.this.getFocused() == this;
         }
 
