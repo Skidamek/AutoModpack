@@ -119,7 +119,7 @@ public class DownloadScreen extends Screen {
     }
 
     private void checkAndStartMusic() {
-        if (ticks <= 100) {
+        if (ticks <= 65) {
             ticks++;
             return;
         }
