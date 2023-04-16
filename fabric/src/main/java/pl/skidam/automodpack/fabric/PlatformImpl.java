@@ -248,6 +248,7 @@ public class PlatformImpl {
             return null;
         } catch (IOException e) {
             e.printStackTrace();
+            return null;
         }
 
         return null;

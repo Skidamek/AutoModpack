@@ -70,6 +70,12 @@ public class Jsons {
                 this.version = version;
                 this.hash = hash;
             }
+
+
+            @Override
+            public String toString() {
+                return String.format("ModpackContentItems(file=%s, link=%s, size=%s, hash%s)", file, link, size, hash);
+            }
         }
     }
 }
