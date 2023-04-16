@@ -45,16 +45,23 @@ public class LoginS2CPacket {
         } else {
 
             String clientResponse = buf.readString();
+            boolean isClientVersionHigher = isClientVersionHigher(clientResponse);
 
             if (!clientResponse.equals(correctResponse)) {
                 if (!serverConfig.allowFabricQuiltPlayers && !clientResponse.startsWith(VERSION)) {
                     Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                    if (isClientVersionHigher) {
+                        reason = TextHelper.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
+                    }
                     acceptLogin.add(uniqueId);
                     connection.send(new LoginDisconnectS2CPacket(reason));
                     connection.disconnect(reason);
                     return;
                 } else if (clientResponse.startsWith(VERSION)) {
                     Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                    if (isClientVersionHigher) {
+                        reason = TextHelper.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
+                    }
                     acceptLogin.add(uniqueId);
                     connection.send(new LoginDisconnectS2CPacket(reason));
                     connection.disconnect(reason);
@@ -104,6 +111,7 @@ public class LoginS2CPacket {
 
         String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
         String clientResponse = buf.readString();
+        boolean isClientVersionHigher = isClientVersionHigher(clientResponse);
 
 
 //        if (!understood) { TODO
@@ -116,11 +124,17 @@ public class LoginS2CPacket {
         if (!clientResponse.equals(correctResponse)) {
             if (!serverConfig.allowFabricQuiltPlayers && !clientResponse.startsWith(VERSION)) {
                 Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                if (isClientVersionHigher) {
+                    reason = TextHelper.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
+                }
                 connection.send(new DisconnectS2CPacket(reason));
                 connection.disconnect(reason);
                 return;
             } else if (clientResponse.startsWith(VERSION)) {
                 Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                if (isClientVersionHigher) {
+                    reason = TextHelper.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
+                }
                 connection.send(new DisconnectS2CPacket(reason));
                 connection.disconnect(reason);
                 return;
@@ -158,5 +172,27 @@ public class LoginS2CPacket {
         outBuf.writeString(linkToSend);
 
         sender.sendPacket(LINK, outBuf);
+    }
+
+
+    public static boolean isClientVersionHigher(String clientResponse) {
+        String clientVersion = clientResponse.substring(0, clientResponse.indexOf("-"));
+        boolean isClientVersionHigher = false;
+
+        if (!clientVersion.equals(VERSION)) {
+            String[] clientVersionComponents = clientVersion.split("\\.");
+            String[] serverVersionComponents = VERSION.split("\\.");
+
+            for (int i = 0, n = clientVersionComponents.length; i < n; i++) {
+                if (clientVersionComponents[i].compareTo(serverVersionComponents[i]) > 0) {
+                    isClientVersionHigher = true;
+                    break;
+                } else if (clientVersionComponents[i].compareTo(serverVersionComponents[i]) < 0) {
+                    break;
+                }
+            }
+        }
+
+        return isClientVersionHigher;
     }
 }
