@@ -13,6 +13,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 
@@ -117,13 +118,14 @@ public class ModpackUtils {
         try {
             HttpRequest getContent = HttpRequest.newBuilder()
                     .timeout(Duration.ofSeconds(3))
+                    .setHeader("Content-Type", "application/json")
                     .setHeader("Minecraft-Username", MinecraftUserName.get())
                     .setHeader("User-Agent", "github/skidamek/automodpack/" + VERSION)
                     .uri(new URI(link))
                     .build();
 
             HttpClient httpClient = HttpClient.newHttpClient();
-            HttpResponse<String> contentResponse = httpClient.send(getContent, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> contentResponse = httpClient.send(getContent, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse.body(), Jsons.ModpackContentFields.class);
 
             if (serverModpackContent.list.size() < 1) {

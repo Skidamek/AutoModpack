@@ -15,12 +15,16 @@ import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * Everything in this class should force do the thing without throwing any exceptions.
  */
 
 public class CustomFileUtils {
+    private static final long maxEmptyZipFolderSize = 168;
+
     public static void forceDelete(File file, boolean deleteOnExit) {
         if (file.exists()) {
             FileUtils.deleteQuietly(file);
@@ -32,10 +36,15 @@ public class CustomFileUtils {
                 }
             }
 
-            if (file.exists()) {
-                try (FileOutputStream fos = new FileOutputStream(file)) {
-                    fos.write(new byte[0]);
-                } catch (IOException ignored) {
+
+            if (file.exists() && file.length() > maxEmptyZipFolderSize) {
+                if (file.toString().endsWith(".jar")) {
+                    ZipIntoEmptyFolder(file);
+                } else {
+                    try (FileOutputStream fos = new FileOutputStream(file)) {
+                        fos.write(new byte[0]);
+                    } catch (IOException ignored) {
+                    }
                 }
             }
 
@@ -96,7 +105,9 @@ public class CustomFileUtils {
 
             } else if (file.length() == 0) {
 //                System.out.println("Deleting empty file: " + file);
-                CustomFileUtils.forceDelete(file, false);
+                CustomFileUtils.forceDelete(file, true);
+            } else if (file.length() <= maxEmptyZipFolderSize) {
+                deleteEmptyZipFolder(file);
             }
         }
     }
@@ -120,6 +131,40 @@ public class CustomFileUtils {
         }
         
         return false;
+    }
+
+    public static void ZipIntoEmptyFolder(File zipFile) {
+        File folderPath = new File(StaticVariables.automodpackDir + File.separator + "empty");
+        folderPath.mkdirs();
+
+        try {
+            // Get a reference to the existing ZIP file
+            ZipOutputStream zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile));
+
+            // Create a new ZIP entry for the empty folder
+            ZipEntry zipEntry = new ZipEntry(folderPath + File.separator);
+            zipOutputStream.putNextEntry(zipEntry);
+
+            // Close the ZIP output stream
+            zipOutputStream.close();
+
+            folderPath.delete();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static void deleteEmptyZipFolder(File file) {
+        if (!file.toString().endsWith(".jar")) {
+            return;
+        }
+
+        if (JarUtilities.getModIdFromJar(file, true) != null) {
+            return;
+        }
+
+        CustomFileUtils.forceDelete(file, true);
+        System.out.println("Deleted empty zip folder: " + file);
     }
 
     public static String getHashFromStringOfHashes(String hashes) {

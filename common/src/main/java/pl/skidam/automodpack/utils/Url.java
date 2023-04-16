@@ -15,6 +15,7 @@ public class Url {
         url = url.replace("&", "%26");
         url = url.replace("$", "%24");
         url = url.replace("~", "%7E");
+        url = url.replace("‐", "%E2%80%90");
         return url;
     }
 
@@ -30,6 +31,7 @@ public class Url {
         url = url.replace("%26", "&");
         url = url.replace("%24", "$");
         url = url.replace("%7E", "~");
+        url = url.replace("%E2%80%90", "‐");
         return url;
     }
 }

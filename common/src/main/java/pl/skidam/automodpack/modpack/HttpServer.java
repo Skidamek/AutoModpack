@@ -263,6 +263,12 @@ public class HttpServer {
                         "Content-Length: %d\r\n" +
                         "\r\n";
 
+        private static final String OK_RESPONSE_JSON =
+                "HTTP/1.1 200 OK\r\n" +
+                        "Content-Type: application/json\r\n" +
+                        "Content-Length: %d\r\n" +
+                        "\r\n";
+
         private static void sendFile(SocketChannel client, File file) throws IOException {
             if (!client.isOpen()) return;
 
@@ -274,6 +280,11 @@ public class HttpServer {
             try (client; FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ)) {
                 long fileSize = fileChannel.size();
                 String response = String.format(OK_RESPONSE, fileSize);
+
+                if (file.getName().endsWith(".json")) {
+                    response = String.format(OK_RESPONSE_JSON, fileSize);
+                }
+
                 client.write(ByteBuffer.wrap(response.getBytes(StandardCharsets.UTF_8)));
 
                 ByteBuffer buffer = ByteBuffer.allocateDirect(BUFFER_SIZE);

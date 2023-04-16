@@ -251,6 +251,7 @@ public class PlatformImpl {
         } catch (IOException e) {
             LOGGER.error("Failed to get mod id from file: " + file.getName());
             e.printStackTrace();
+            return null;
         }
 
         return null;

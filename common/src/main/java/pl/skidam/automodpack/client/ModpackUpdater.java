@@ -253,12 +253,18 @@ public class ModpackUpdater {
             }
 
             if (!failedDownloads.isEmpty()) {
-                StringBuilder failedFiles = new StringBuilder("null");
+                StringBuilder failedFiles = new StringBuilder();
                 for (Map.Entry<String, String> entry : failedDownloads.entrySet()) {
                     LOGGER.error("Failed to download: " + entry.getKey() + " from " + entry.getValue());
                     failedFiles.append(entry.getKey());
                 }
                 ScreenTools.setTo.error("Failed to download some files", "Failed to download: " + failedFiles, "More details in logs.");
+
+                if (preload && update) {
+                    LOGGER.warn("Update completed with errors! Took: " + (System.currentTimeMillis() - start) + " ms");
+                    new ReLauncher.Restart(modpackDir);
+                }
+
                 return;
             }
 

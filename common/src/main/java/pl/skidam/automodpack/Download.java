@@ -10,7 +10,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.zip.GZIPInputStream;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.StaticVariables.VERSION;
 
 public class Download {
     private double bytesPerSecond;
@@ -25,6 +25,7 @@ public class Download {
             isDownloading = false;
             URL url = new URL(downloadUrl);
             URLConnection connection = url.openConnection();
+            connection.setRequestProperty("Content-Type", "application/octet-stream; charset=UTF-8");
             connection.addRequestProperty("Accept-Encoding", "gzip");
             connection.addRequestProperty("Minecraft-Username", MinecraftUserName.get());
             connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + VERSION);
