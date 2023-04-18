@@ -72,7 +72,7 @@ jobs:
 
           github-tag: v${{inputs.version}}
           github-token: ${{secrets.GH_TOKEN}}
-          github-commitish: 1.19.3
+          github-commitish: 1.19.4
 
           files: Merged/*.jar
 
