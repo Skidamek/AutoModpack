@@ -297,10 +297,26 @@ public class ModpackUpdater {
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
+        // make list of editable files if they does not exists in changelog
+        List<String> editableFiles = new ArrayList<>();
+        for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : modpackContent.list) {
+
+            String fileName = new File(modpackContentField.file).getName();
+
+            if (changelogList.containsKey(fileName)) {
+                continue;
+            }
+
+            if (modpackContentField.isEditable) {
+                editableFiles.add(modpackContentField.file);
+            }
+        }
+
+
         // copy files to running directory
         // map running dir files
         List<File> filesBefore = mapAllFiles(new File("./"), new ArrayList<>());
-        ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent);
+        ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent, editableFiles);
         if (!mapAllFiles(new File("./"), new ArrayList<>()).equals(filesBefore)) {
             update = true;
         }
@@ -334,7 +350,7 @@ public class ModpackUpdater {
         // There is possibility that some files are in running directory, but not in modpack dir
         // Because they were already downloaded before
         // So copy files to modpack dir
-        ModpackUtils.copyModpackFilesFromRunDirToModpackDir(modpackDir, modpackContent);
+        ModpackUtils.copyModpackFilesFromRunDirToModpackDir(modpackDir, modpackContent, editableFiles);
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
     }

@@ -71,11 +71,16 @@ public class ModpackUtils {
         }
     }
 
-    public static void copyModpackFilesFromModpackDirToRunDir(File modpackDir, Jsons.ModpackContentFields serverModpackContent) throws IOException {
+    public static void copyModpackFilesFromModpackDirToRunDir(File modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
         List<Jsons.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
 
         for (Jsons.ModpackContentFields.ModpackContentItems contentItem : contents) {
             String fileName = contentItem.file;
+
+            if (ignoreFiles.contains(fileName)) {
+                continue;
+            }
+
             File sourceFile = new File(modpackDir + File.separator + fileName);
 
             if (sourceFile.exists()) {
@@ -92,10 +97,15 @@ public class ModpackUtils {
     }
 
 
-    public static void copyModpackFilesFromRunDirToModpackDir(File modpackDir, Jsons.ModpackContentFields serverModpackContent) throws Exception {
+    public static void copyModpackFilesFromRunDirToModpackDir(File modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws Exception {
         List<Jsons.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
 
         for (Jsons.ModpackContentFields.ModpackContentItems contentItem : contents) {
+
+            if (ignoreFiles.contains(contentItem.file)) {
+                continue;
+            }
+
             File sourceFile = new File("./" + contentItem.file);
 
             if (sourceFile.exists()) {
