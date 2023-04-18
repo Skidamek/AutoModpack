@@ -297,7 +297,7 @@ public class ModpackUpdater {
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
-        // make list of editable files if they does not exists in changelog
+        // make list of editable files if they do not exist in changelog
         List<String> editableFiles = new ArrayList<>();
         for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : modpackContent.list) {
 
