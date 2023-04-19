@@ -189,12 +189,16 @@ public class Modpack {
                         }
                     }
 
-                    String hash = CustomFileUtils.getHashWithRetry(file, "SHA-256");
+                    String sha512 = CustomFileUtils.getHashWithRetry(file, "SHA-512");
+                    String murmurHash = null;
 
                     if (file.getName().endsWith(".jar")) {
                         modId = JarUtilities.getModIdFromJar(file, true);
                         type = modId == null ? "other" : "mod";
-                        version = JarUtilities.getModVersion(file);
+                        if (type.equals("mod")) {
+                            version = JarUtilities.getModVersion(file);
+                            murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
+                        }
                     }
 
                     if (type.equals("other")) {
@@ -228,7 +232,7 @@ public class Modpack {
                         }
                     }
 
-                    list.add(new Jsons.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, hash));
+                    list.add(new Jsons.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, sha512, murmurHash));
                 }
             }
         }
