@@ -22,6 +22,7 @@ public class Json {
             connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + VERSION);
             connection.setConnectTimeout(3000);
             connection.setReadTimeout(3000);
+            connection.setDoOutput(true);
             connection.connect();
             if (connection.getResponseCode() == 200) {
                 try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
@@ -46,6 +47,7 @@ public class Json {
         connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + VERSION);
         connection.setConnectTimeout(3000);
         connection.setReadTimeout(3000);
+        connection.setDoOutput(true);
         connection.connect();
         if (connection.getResponseCode() == 200) {
             try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {

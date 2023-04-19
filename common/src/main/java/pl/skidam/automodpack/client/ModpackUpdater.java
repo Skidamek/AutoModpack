@@ -5,6 +5,8 @@ import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
+import pl.skidam.automodpack.modPlatforms.CurseForgeAPI;
+import pl.skidam.automodpack.modPlatforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.*;
 
 import java.io.File;
@@ -180,7 +182,7 @@ public class ModpackUpdater {
 
             for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
                 String fileName = modpackContentField.file;
-                String serverChecksum = modpackContentField.hash;
+                String serverSHA512 = modpackContentField.sha512;
 
                 File file = new File(modpackDir + File.separator + fileName);
 
@@ -192,7 +194,7 @@ public class ModpackUpdater {
                     continue;
                 }
 
-                if (serverChecksum.equals(CustomFileUtils.getHashWithRetry(file, "SHA-256"))) {
+                if (serverSHA512.equals(CustomFileUtils.getHashWithRetry(file, "SHA-512"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
                     copyModpackContentList.remove(modpackContentField);
                 } else if (modpackContentField.isEditable) {
@@ -227,7 +229,8 @@ public class ModpackUpdater {
                     }
 
                     String fileName = modpackContentField.file;
-                    String serverChecksum = modpackContentField.hash;
+                    String serverSHA512 = modpackContentField.sha512;
+                    String serverMurmur = modpackContentField.murmur;
 
                     File downloadFile = new File(modpackDir + File.separator + fileName);
                     String url;
@@ -238,7 +241,7 @@ public class ModpackUpdater {
                         url = modpackContentField.link; // This link just must work, so we don't need to encode it
                     }
 
-                    downloadFutures.add(processAsync(url, downloadFile, serverChecksum));
+                    downloadFutures.add(processAsync(url, downloadFile, serverSHA512, serverMurmur));
                 }
 
                 CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).get();
@@ -355,30 +358,53 @@ public class ModpackUpdater {
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
     }
 
-    private static CompletableFuture<Void> processAsync(String url, File downloadFile, String serverChecksum) {
-        return CompletableFuture.runAsync(() -> process(url, downloadFile, serverChecksum), DOWNLOAD_EXECUTOR);
+    private static CompletableFuture<Void> processAsync(String url, File downloadFile, String serverSHA512, String serverMurmur) {
+        return CompletableFuture.runAsync(() -> process(url, downloadFile, serverSHA512, serverMurmur), DOWNLOAD_EXECUTOR);
     }
 
     // TODO remove this method when we finally manage to fix weird issue with different checksums
-    private static void process(String url, File downloadFile, String serverChecksum) {
+    private static void process(String url, File downloadFile, String serverSHA512, String serverMurmur) {
+
+        // Try to get direct url from modrinth or curseforge
+        String modPlatformUrl = tryModPlatforms(serverSHA512, serverMurmur);
+        if (modPlatformUrl != null && !modPlatformUrl.isEmpty()) {
+            url = modPlatformUrl;
+        }
+
         if (!downloadFile.exists()) {
-            downloadFile(url, downloadFile, serverChecksum);
+            downloadFile(url, downloadFile, serverSHA512);
             return;
         }
 
         try {
-            String localChecksum = CustomFileUtils.getHashWithRetry(downloadFile, "SHA-256");
+            String localChecksum = CustomFileUtils.getHashWithRetry(downloadFile, "SHA-512");
 
-            if (serverChecksum.equals(localChecksum)) { // up-to-date
+            if (serverSHA512.equals(localChecksum)) { // up-to-date
                 LOGGER.info("File " + downloadFile.getName() + " is up-to-date!"); // strange...
                 return;
             }
 
-            LOGGER.warn(downloadFile.getName() + " Local checksum: " + localChecksum + " Server checksum: " + serverChecksum);
-            downloadFile(url, downloadFile, serverChecksum);
+            downloadFile(url, downloadFile, serverSHA512);
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private static String tryModPlatforms(String sha512, String murmur) {
+
+        ModrinthAPI ModrinthFileInfo = ModrinthAPI.getModInfoFromSHA512(sha512);
+        if (ModrinthFileInfo != null) {
+            LOGGER.info("Found {} on Modrinth downloading from there", ModrinthFileInfo.fileName);
+            return ModrinthFileInfo.downloadUrl;
+        }
+
+        CurseForgeAPI curseforgeFileInfo = CurseForgeAPI.getModInfoFromMurmur(murmur);
+        if (curseforgeFileInfo != null) {
+            LOGGER.info("Found {} on CurseForge downloading from there", curseforgeFileInfo.fileName);
+            return curseforgeFileInfo.downloadUrl;
+        }
+
+        return null;
     }
 
     private static void downloadFile(String url, File downloadFile, String serverChecksum) {
@@ -416,7 +442,7 @@ public class ModpackUpdater {
 
                 downloadInstance.download(url, downloadFile);
 
-                String ourChecksum = CustomFileUtils.getHashWithRetry(downloadFile, "SHA-256");
+                String ourChecksum = CustomFileUtils.getHashWithRetry(downloadFile, "SHA-512");
 
                 long size = downloadInstance.getFileSize();
 

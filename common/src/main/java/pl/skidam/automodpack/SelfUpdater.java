@@ -1,8 +1,8 @@
 package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.ScreenTools;
+import pl.skidam.automodpack.modPlatforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.CustomFileUtils;
-import pl.skidam.automodpack.utils.ModrinthAPI;
 
 import java.io.IOException;
 
@@ -32,20 +32,20 @@ public class SelfUpdater {
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
 
-        ModrinthAPI automodpack = new ModrinthAPI("k68glP2e");
+        ModrinthAPI automodpack = ModrinthAPI.getModInfoFromID("k68glP2e");
 
-        if (automodpack == null || automodpack.modrinthAPIversion == null) {
-            LOGGER.error("Couldn't get latest version of AutoModpack from Modrinth API (request url: {})", automodpack.modrinthAPIrequestUrl);
+        if (automodpack == null || automodpack.fileVersion == null) {
+            LOGGER.error("Couldn't get latest version of AutoModpack from Modrinth API (request url: {})", automodpack.requestUrl);
             return;
         }
 
         // If latest mod is not same as current mod download new mod.
         // Check how big the mod file is
-        if (automodpack.modrinthAPIversion.contains("-")) {
-            automodpack.modrinthAPIversion = automodpack.modrinthAPIversion.split("-")[0];
+        if (automodpack.fileVersion.contains("-")) {
+            automodpack.fileVersion = automodpack.fileVersion.split("-")[0];
         }
 
-        String LATEST_VERSION = automodpack.modrinthAPIversion.replace(".", "");
+        String LATEST_VERSION = automodpack.fileVersion.replace(".", "");
         String OUR_VERSION = VERSION.replace(".", "");
 
         if (LATEST_VERSION == null || OUR_VERSION == null) {
@@ -55,7 +55,7 @@ public class SelfUpdater {
 
         try {
             if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
-                LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.modrinthAPIversion);
+                LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.fileVersion);
                 return;
             }
         } catch (NumberFormatException e) {
@@ -67,29 +67,29 @@ public class SelfUpdater {
                 LATEST_VERSION = LATEST_VERSION.replaceAll("[^0-9]", "");
 
                 if (Integer.parseInt(OUR_VERSION) >= Integer.parseInt(LATEST_VERSION)) {
-                    LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.modrinthAPIversion);
+                    LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.fileVersion);
                     return;
                 }
             } // we don't want to auto update to beta version, but from beta to newer release, yes.
         }
 
 
-        if (OUR_VERSION.equals(LATEST_VERSION) || !automodpack.modrinthAPIversionType.equals("release")) {
+        if (OUR_VERSION.equals(LATEST_VERSION) || !automodpack.releaseType.equals("release")) {
             LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + VERSION);
             return;
         }
 
-        LOGGER.info("Update found! Updating to new version: " + automodpack.modrinthAPIversion);
+        LOGGER.info("Update found! Updating to new version: " + automodpack.fileVersion);
         ScreenTools.setTo.download();
 
         try {
             Download downloadInstance = new Download();
 
-            downloadInstance.download(automodpack.modrinthAPIdownloadUrl, automodpackUpdateJar); // Download it
+            downloadInstance.download(automodpack.downloadUrl, automodpackUpdateJar); // Download it
 
             String localChecksum = CustomFileUtils.getHashWithRetry(automodpackUpdateJar, "SHA-512");
 
-            if (!localChecksum.equals(automodpack.modrinthAPISHA512Hash)) {
+            if (!localChecksum.equals(automodpack.SHA512Hash)) {
                 LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
                 return;
             }
@@ -115,6 +115,6 @@ public class SelfUpdater {
 
         LOGGER.info("Successfully downloaded update, waiting for shutdown");
 
-        new ReLauncher.Restart(null, "Successfully updated AutoModpack - " + automodpack.modrinthAPIversion);
+        new ReLauncher.Restart(null, "Successfully updated AutoModpack - " + automodpack.fileVersion);
     }
 }

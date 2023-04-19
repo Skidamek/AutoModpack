@@ -105,8 +105,8 @@ public class ModpackUtils {
             if (sourceFile.exists()) {
 
                 // check hash
-                String serverChecksum = contentItem.hash;
-                String localChecksum = CustomFileUtils.getHashWithRetry(sourceFile, "SHA-256");
+                String serverChecksum = contentItem.sha512;
+                String localChecksum = CustomFileUtils.getHashWithRetry(sourceFile, "SHA-512");
 
                 if (!serverChecksum.equals(localChecksum) && !contentItem.isEditable) {
                     continue;

@@ -58,9 +58,10 @@ public class Jsons {
             public boolean isEditable;
             public String modId;
             public String version;
-            public String hash;
+            public String sha512;
+            public String murmur;
 
-            public ModpackContentItems(String file, String link, String size, String type, boolean isEditable, String modId, String version, String hash) {
+            public ModpackContentItems(String file, String link, String size, String type, boolean isEditable, String modId, String version, String sha512, String murmur) {
                 this.file = file;
                 this.link = link;
                 this.size = size;
@@ -68,13 +69,14 @@ public class Jsons {
                 this.isEditable = isEditable;
                 this.modId = modId;
                 this.version = version;
-                this.hash = hash;
+                this.sha512 = sha512;
+                this.murmur = murmur;
             }
 
 
             @Override
             public String toString() {
-                return String.format("ModpackContentItems(file=%s, link=%s, size=%s, hash%s)", file, link, size, hash);
+                return String.format("ModpackContentItems(file=%s, link=%s, size=%s, sha512%s, murmur%s)", file, link, size, sha512, murmur);
             }
         }
     }

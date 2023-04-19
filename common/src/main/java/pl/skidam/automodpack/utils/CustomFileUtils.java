@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
@@ -169,7 +170,7 @@ public class CustomFileUtils {
 
     public static String getHashFromStringOfHashes(String hashes) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            MessageDigest digest = MessageDigest.getInstance("SHA-512");
             byte[] hashBytes = digest.digest(hashes.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hashBytes) {
@@ -180,29 +181,6 @@ public class CustomFileUtils {
             e.printStackTrace();
             return null;
         }
-    }
-
-
-    public static String getHash(File file, String algorithm) throws Exception {
-        if (!file.exists()) return null;
-
-        MessageDigest md = MessageDigest.getInstance(algorithm);
-
-        try (FileInputStream inputStream = new FileInputStream(file)) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = inputStream.read(buffer)) != -1) {
-                md.update(buffer, 0, read);
-            }
-        }
-
-        byte[] digest = md.digest();
-        StringBuilder sb = new StringBuilder();
-        for (byte b : digest) {
-            sb.append(String.format("%02x", b & 0xff));
-        }
-
-        return sb.toString();
     }
 
     public static String getHashWithRetry(File file, String algorithm) throws NoSuchAlgorithmException {
@@ -225,6 +203,124 @@ public class CustomFileUtils {
             tempFile.delete();
         }
     }
+
+    public static String getHash(File file, String algorithm) throws Exception {
+
+        if (!file.exists()) return null;
+
+        if (algorithm.equals("murmur")) {
+            return getCurseforgeMurmurHash(file.toPath());
+        }
+
+        MessageDigest md = MessageDigest.getInstance(algorithm);
+
+        try (FileInputStream inputStream = new FileInputStream(file)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                md.update(buffer, 0, read);
+            }
+        }
+
+        byte[] digest = md.digest();
+        StringBuilder sb = new StringBuilder();
+        for (byte b : digest) {
+            sb.append(String.format("%02x", b & 0xff));
+        }
+
+        return sb.toString();
+    }
+
+    private static String getCurseforgeMurmurHash(Path file) throws IOException {
+
+        if (!Files.exists(file)) return null;
+
+        final int m = 0x5bd1e995;
+        final int r = 24;
+        long k = 0x0L;
+        int seed = 1;
+        int shift = 0x0;
+
+        // get file size
+        long flength = Files.size(file);
+
+        // convert file to byte array
+        byte[] byteFile = Files.readAllBytes(file);
+
+        long length = 0;
+        char b;
+        // get good bytes from file
+        for (int i = 0; i < flength; i++) {
+            b = (char) byteFile[i];
+
+            if (b == 0x9 || b == 0xa || b == 0xd || b == 0x20) {
+                continue;
+            }
+
+            length += 1;
+        }
+        long h = (seed ^ length);
+
+        for (int i = 0; i < flength; i++) {
+            b = (char) byteFile[i];
+
+            if (b == 0x9 || b == 0xa || b == 0xd || b == 0x20) {
+                continue;
+            }
+
+            if (b > 255) {
+                while (b > 255) {
+                    b -= 255;
+                }
+            }
+
+            k = k | ((long) b << shift);
+
+            shift = shift + 0x8;
+
+            if (shift == 0x20) {
+                h = 0x00000000FFFFFFFFL & h;
+
+                k = k * m;
+                k = 0x00000000FFFFFFFFL & k;
+
+                k = k ^ (k >> r);
+                k = 0x00000000FFFFFFFFL & k;
+
+                k = k * m;
+                k = 0x00000000FFFFFFFFL & k;
+
+                h = h * m;
+                h = 0x00000000FFFFFFFFL & h;
+
+                h = h ^ k;
+                h = 0x00000000FFFFFFFFL & h;
+
+                k = 0x0;
+                shift = 0x0;
+            }
+        }
+
+        if (shift > 0) {
+            h = h ^ k;
+            h = 0x00000000FFFFFFFFL & h;
+
+            h = h * m;
+            h = 0x00000000FFFFFFFFL & h;
+        }
+
+        h = h ^ (h >> 13);
+        h = 0x00000000FFFFFFFFL & h;
+
+        h = h * m;
+        h = 0x00000000FFFFFFFFL & h;
+
+        h = h ^ (h >> 15);
+        h = 0x00000000FFFFFFFFL & h;
+
+        return String.valueOf(h);
+    }
+
 
     public static boolean compareFileHashes(File file1, File file2, String algorithm) throws Exception {
         if (!file1.exists() || !file1.exists()) return false;
