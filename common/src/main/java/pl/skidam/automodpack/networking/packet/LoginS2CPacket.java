@@ -40,8 +40,13 @@ public class LoginS2CPacket {
             if (serverConfig.optionalModpack) {
                 acceptLogin.add(uniqueId);
                 LOGGER.info("{} has not installed AutoModpack.", playerName);
-                return;
+            } else {
+                Text reason = TextHelper.literal("AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
+                acceptLogin.add(uniqueId);
+                connection.send(new LoginDisconnectS2CPacket(reason));
+                connection.disconnect(reason);
             }
+            return;
         } else {
 
             String clientResponse = buf.readString();
