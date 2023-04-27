@@ -69,16 +69,15 @@ public class PlatformImpl {
             LOGGER.info("Installing latest Quilted Fabric API (QFAPI)! " + qfapi.fileVersion);
             LOGGER.info("Download URL: " + qfapi.downloadUrl);
             try {
-                Download downloadInstance = new Download();
-
                 File file = new File(modsPath.toFile() + File.separator + qfapi.fileName);
 
+                Download downloadInstance = new Download();
                 downloadInstance.download(qfapi.downloadUrl, file); // Download it
 
-                String localChecksum = CustomFileUtils.getHashWithRetry(file, "SHA-512");
+                String localHash = CustomFileUtils.getHashWithRetry(file, "SHA-1");
 
-                if (!localChecksum.equals(qfapi.SHA512Hash)) {
-                    LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
+                if (!localHash.equals(qfapi.SHA1Hash)) {
+                    LOGGER.error("Hashes are not the same! Downloaded file is corrupted!");
                     return;
                 }
             } catch (Exception e) {

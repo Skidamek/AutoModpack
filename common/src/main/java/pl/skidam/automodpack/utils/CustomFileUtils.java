@@ -41,11 +41,6 @@ public class CustomFileUtils {
             if (file.exists() && file.length() > maxEmptyZipFolderSize) {
                 if (file.toString().endsWith(".jar")) {
                     ZipIntoEmptyFolder(file);
-                } else {
-                    try (FileOutputStream fos = new FileOutputStream(file)) {
-                        fos.write(new byte[0]);
-                    } catch (IOException ignored) {
-                    }
                 }
             }
 
@@ -57,6 +52,7 @@ public class CustomFileUtils {
             }
 
             if (deleteOnExit && file.exists()) {
+                System.out.println("Deleting on exit: " + file);
                 file.deleteOnExit();
             }
         }
@@ -64,7 +60,9 @@ public class CustomFileUtils {
 
     public static void copyFile(File source, File destination) throws IOException {
         if (!destination.exists()) {
-            if (!destination.getParentFile().exists()) destination.getParentFile().mkdirs();
+            if (!destination.getParentFile().exists()) {
+                destination.getParentFile().mkdirs();
+            }
             Files.createFile(destination.toPath());
         }
         try (FileInputStream inputStream = new FileInputStream(source);
@@ -150,6 +148,8 @@ public class CustomFileUtils {
             zipOutputStream.close();
 
             folderPath.delete();
+
+            System.out.println("Zipped into empty folder: " + zipFile);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -170,7 +170,7 @@ public class CustomFileUtils {
 
     public static String getHashFromStringOfHashes(String hashes) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-512");
+            MessageDigest digest = MessageDigest.getInstance("SHA-1");
             byte[] hashBytes = digest.digest(hashes.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hashBytes) {
@@ -230,6 +230,7 @@ public class CustomFileUtils {
 
         return sb.toString();
     }
+
 
     private static String getCurseforgeMurmurHash(Path file) throws IOException {
 
@@ -320,7 +321,6 @@ public class CustomFileUtils {
 
         return String.valueOf(h);
     }
-
 
     public static boolean compareFileHashes(File file1, File file2, String algorithm) throws Exception {
         if (!file1.exists() || !file1.exists()) return false;

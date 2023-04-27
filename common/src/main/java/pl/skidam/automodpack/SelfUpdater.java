@@ -84,13 +84,12 @@ public class SelfUpdater {
 
         try {
             Download downloadInstance = new Download();
-
             downloadInstance.download(automodpack.downloadUrl, automodpackUpdateJar); // Download it
 
-            String localChecksum = CustomFileUtils.getHashWithRetry(automodpackUpdateJar, "SHA-512");
+            String localHash = CustomFileUtils.getHashWithRetry(automodpackUpdateJar, "SHA-1");
 
-            if (!localChecksum.equals(automodpack.SHA512Hash)) {
-                LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
+            if (!localHash.equals(automodpack.SHA1Hash)) {
+                LOGGER.error("Hashes are not the same! Downloaded file is corrupted!");
                 return;
             }
         } catch (Exception e) {

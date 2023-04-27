@@ -86,9 +86,9 @@ public class ModpackUtils {
             if (sourceFile.exists()) {
                 File destinationFile = new File("." + fileName);
 
-                if (destinationFile.exists()) {
-                    CustomFileUtils.forceDelete(destinationFile, false);
-                }
+//                if (destinationFile.exists()) {
+//                    CustomFileUtils.forceDelete(destinationFile, false);
+//                }
 
                 CustomFileUtils.copyFile(sourceFile, destinationFile);
 //                LOGGER.info("Copied " + fileName + " to running directory");
@@ -111,18 +111,18 @@ public class ModpackUtils {
             if (sourceFile.exists()) {
 
                 // check hash
-                String serverChecksum = contentItem.sha512;
-                String localChecksum = CustomFileUtils.getHashWithRetry(sourceFile, "SHA-512");
+                String serverHash = contentItem.sha1;
+                String localHash = CustomFileUtils.getHashWithRetry(sourceFile, "SHA-1");
 
-                if (!serverChecksum.equals(localChecksum) && !contentItem.isEditable) {
+                if (!serverHash.equals(localHash) && !contentItem.isEditable) {
                     continue;
                 }
 
                 File destinationFile = new File(modpackDir + File.separator + contentItem.file);
 
-                if (destinationFile.exists()) {
-                    CustomFileUtils.forceDelete(destinationFile, false);
-                }
+//                if (destinationFile.exists()) {
+//                    CustomFileUtils.forceDelete(destinationFile, false);
+//                }
 
                 CustomFileUtils.copyFile(sourceFile, destinationFile);
 //                LOGGER.info("Copied " + sourceFile.getName() + " to modpack directory");

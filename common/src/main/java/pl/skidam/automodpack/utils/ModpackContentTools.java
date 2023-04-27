@@ -77,7 +77,7 @@ public class ModpackContentTools {
     public static String getStringOfAllHashes(Jsons.ModpackContentFields modpackContent) {
         StringBuilder sb = new StringBuilder();
         for (Jsons.ModpackContentFields.ModpackContentItems item : modpackContent.list) {
-            sb.append(item.sha512).append("\n");
+            sb.append(item.sha1).append("\n");
         }
         return sb.toString();
     }
