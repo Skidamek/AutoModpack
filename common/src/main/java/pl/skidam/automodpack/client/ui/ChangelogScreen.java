@@ -24,7 +24,7 @@ public class ChangelogScreen extends Screen {
     private TextFieldWidget searchField;
     private final Screen parent;
     private final File modpackDir;
-    private ChangelogsList changelogsList;
+    private ChangelogsList changelogsList = null;
 
     public ChangelogScreen(Screen parent, File modpackDir) {
         super(TextHelper.literal("ChangelogScreen"));
@@ -55,23 +55,30 @@ public class ChangelogScreen extends Screen {
         this.searchField.setChangedListener((textField) -> updateChangelogs()); // Update the changelogs display based on the search query
         this.addDrawableChild(this.searchField);
 
-        // Add the back button
-        this.addDrawableChild(new ButtonWidget(5, this.height - 20, 72, 20, TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> this.client.setScreen(this.parent)));
+        addBackButton(false);
 
         this.setInitialFocus(this.searchField);
+    }
+
+    private void addBackButton(boolean removeBefore) {
+        // Add the back button
+        var backButton = new ButtonWidget(10, this.height - 30, 72, 20, TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> this.client.setScreen(this.parent));
+        if (removeBefore) {
+            this.remove(backButton);
+        }
+        this.addDrawableChild(backButton);
     }
 
     @Override
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        super.render(matrices, mouseX, mouseY, delta);
+
+        this.changelogsList.render(matrices, mouseX, mouseY, delta);
 
         // Draw summary of added/removed mods
         drawSummaryOfChanges(matrices);
 
-        // Update and display the changelogs based on the search query
-        this.changelogsList = new ChangelogsList(client, this.width, this.height, 48, this.height - 64, 20);
-        this.changelogsList.render(matrices, mouseX, mouseY, delta);
+        super.render(matrices, mouseX, mouseY, delta);
     }
 
     private void drawSummaryOfChanges(MatrixStack matrices) {
@@ -117,6 +124,14 @@ public class ChangelogScreen extends Screen {
             }
             changelogs = filteredChangelogs;
         }
+
+        // Remove the old changelogs list and add the new one
+
+        this.remove(this.changelogsList);
+        this.changelogsList = new ChangelogsList(client, this.width, this.height, 48, this.height - 64, 20);
+        this.addDrawableChild(this.changelogsList);
+
+        addBackButton(true); // it makes it invisible because of re-added changelog list
     }
 
     private List<String> getChangelogs() {
@@ -144,7 +159,9 @@ public class ChangelogScreen extends Screen {
         ChangelogsList(MinecraftClient client, int width, int height, int top, int bottom, int itemHeight) {
             super(client, width, height, top, bottom, itemHeight);
 
-            for (String changelog : ChangelogScreen.changelogs) {
+            this.children().removeAll(this.children()); // idk if it is necessary
+
+            for (String changelog : changelogs) {
                 int color = 16777215;
                 if (changelog.startsWith("+")) {
                     color = 3706428;
@@ -154,6 +171,10 @@ public class ChangelogScreen extends Screen {
 
                 this.children().add(new Entry(changelog, color));
             }
+        }
+
+        public void addChangelog(String changelog, int color) {
+            this.children().add(new Entry(changelog, color));
         }
 
         public class Entry extends EntryListWidget.Entry<ChangelogsList.Entry> {

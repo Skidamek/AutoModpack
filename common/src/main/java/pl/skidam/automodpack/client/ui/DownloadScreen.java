@@ -114,6 +114,9 @@ public class DownloadScreen extends Screen {
             }
         } else {
             drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.no_files").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y, 16777215);
+
+            // please wait // TODO change it to translatable
+            drawCenteredText(matrices, this.textRenderer, TextHelper.literal("Please wait.").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 15, 16777215);
         }
 
         matrices.pop();
