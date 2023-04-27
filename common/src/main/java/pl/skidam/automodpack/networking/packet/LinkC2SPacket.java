@@ -25,7 +25,7 @@ import static pl.skidam.automodpack.networking.ModPackets.LINK;
 public class LinkC2SPacket {
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf, Consumer<GenericFutureListener<? extends Future<? super Void>>> genericFutureListenerConsumer) {
         String link = buf.readString();
-        LOGGER.warn("Received link packet from server! " + link);
+        LOGGER.info("Received link packet from server! " + link);
         ClientLink = link;
 
         String modpackFileName = link.replaceFirst("(https?://)", ""); // removes https:// and http://
@@ -48,14 +48,12 @@ public class LinkC2SPacket {
             }
         });
 
-        LOGGER.warn("isUpdate: " + isUpdate);
-
         return CompletableFuture.completedFuture(response);
     }
 
     public static void receive(MinecraftClient client, ClientPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {
         String link = buf.readString();
-        LOGGER.warn("Received link packet from server! " + link);
+        LOGGER.info("Received link packet from server! " + link);
         ClientLink = link;
 
         String modpackFileName = link.replaceFirst("(https?://)", ""); // removes https:// and http://

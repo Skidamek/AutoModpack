@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.client.audio.AudioManager;
@@ -18,6 +19,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -137,7 +139,7 @@ public class ModpackUpdater {
                 if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     // check if modpack is loaded now loaded
 
-                    LOGGER.warn("Modpack is up to date");
+                    LOGGER.info("Modpack is up to date");
 
                     List<File> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
 
@@ -219,7 +221,15 @@ public class ModpackUpdater {
 
             long startTime = System.currentTimeMillis();
 
-            FETCH_EXECUTOR = Executors.newFixedThreadPool(MAX_FETCHES);
+            ThreadFactory threadFactoryFetches = new ThreadFactoryBuilder()
+                    .setNameFormat("AutoModpackFetch-%d")
+                    .build();
+
+            FETCH_EXECUTOR = Executors.newFixedThreadPool(
+                    MAX_FETCHES,
+                    threadFactoryFetches
+            );
+
             totalFetchedFiles = 0;
 
             for (Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField : copyModpackContentList) {
@@ -245,7 +255,14 @@ public class ModpackUpdater {
 
             if (wholeQueue > 0) {
 
-                DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS);
+                ThreadFactory threadFactoryDownloads = new ThreadFactoryBuilder()
+                        .setNameFormat("AutoModpackDownload-%d")
+                        .build();
+
+                DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(
+                        MAX_DOWNLOADS,
+                        threadFactoryDownloads
+                );
 
                 for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
                     while (downloadFutures.size() >= MAX_DOWNLOADS) { // Async Setting - max `some` download at the same time

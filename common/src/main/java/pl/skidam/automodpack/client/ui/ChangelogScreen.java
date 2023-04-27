@@ -1,19 +1,17 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.Element;
-import net.minecraft.client.gui.Selectable;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.ElementListWidget;
+import net.minecraft.client.gui.widget.EntryListWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.widget.ScrollingListWidget;
-import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
+import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
@@ -26,7 +24,7 @@ public class ChangelogScreen extends Screen {
     private TextFieldWidget searchField;
     private final Screen parent;
     private final File modpackDir;
-    private ChangelogsList changelogsList;
+    private ChangelogsList changelogsList = null;
 
     public ChangelogScreen(Screen parent, File modpackDir) {
         super(TextHelper.literal("ChangelogScreen"));
@@ -43,7 +41,7 @@ public class ChangelogScreen extends Screen {
         super.init();
         assert this.client != null;
 
-//        this.client.keyboard.setRepeatEvents(true);
+        this.client.keyboard.setRepeatEvents(true);
 
         // Retrieve the changelogs
         changelogs = getChangelogs();
@@ -57,6 +55,7 @@ public class ChangelogScreen extends Screen {
         this.searchField.setChangedListener((textField) -> updateChangelogs()); // Update the changelogs display based on the search query
         this.addDrawableChild(this.searchField);
 
+        addBackButton(false);
         // Add the back button
         this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> {
             assert this.client != null;
@@ -66,17 +65,25 @@ public class ChangelogScreen extends Screen {
         this.setInitialFocus(this.searchField);
     }
 
+    private void addBackButton(boolean removeBefore) {
+        // Add the back button
+        var backButton = new ButtonWidget(10, this.height - 30, 72, 20, TextHelper.translatable("gui.automodpack.screen.changelog.button.back"), button -> this.client.setScreen(this.parent));
+        if (removeBefore) {
+            this.remove(backButton);
+        }
+        this.addDrawableChild(backButton);
+    }
+
     @Override
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        super.render(matrices, mouseX, mouseY, delta);
+
+        this.changelogsList.render(matrices, mouseX, mouseY, delta);
 
         // Draw summary of added/removed mods
         drawSummaryOfChanges(matrices);
 
-        // Update and display the changelogs based on the search query
-        this.changelogsList = new ChangelogsList(client, this.width, this.height, 48, this.height - 64, 20);
-        this.changelogsList.render(matrices, mouseX, mouseY, delta);
+        super.render(matrices, mouseX, mouseY, delta);
     }
 
     private void drawSummaryOfChanges(MatrixStack matrices) {
@@ -105,7 +112,7 @@ public class ChangelogScreen extends Screen {
 
         String summary = "Mods + " + modsAdded + " | - " + modsRemoved;
 
-        drawCenteredTextWithShadow(matrices, textRenderer, TextHelper.literal(summary), this.width / 2, 5, 16777215);
+        drawCenteredText(matrices, textRenderer, TextHelper.literal(summary), this.width / 2, 5, 16777215);
     }
 
     private void updateChangelogs() {
@@ -122,6 +129,14 @@ public class ChangelogScreen extends Screen {
             }
             changelogs = filteredChangelogs;
         }
+
+        // Remove the old changelogs list and add the new one
+
+        this.remove(this.changelogsList);
+        this.changelogsList = new ChangelogsList(client, this.width, this.height, 48, this.height - 64, 20);
+        this.addDrawableChild(this.changelogsList);
+
+        addBackButton(true); // it makes it invisible because of re-added changelog list
     }
 
     private List<String> getChangelogs() {
@@ -149,7 +164,9 @@ public class ChangelogScreen extends Screen {
         ChangelogsList(MinecraftClient client, int width, int height, int top, int bottom, int itemHeight) {
             super(client, width, height, top, bottom, itemHeight);
 
-            for (String changelog : ChangelogScreen.changelogs) {
+            this.children().removeAll(this.children()); // idk if it is necessary
+
+            for (String changelog : changelogs) {
                 int color = 16777215;
                 if (changelog.startsWith("+")) {
                     color = 3706428;
@@ -161,7 +178,11 @@ public class ChangelogScreen extends Screen {
             }
         }
 
-        public class Entry extends ElementListWidget.Entry<ChangelogsList.Entry> {
+        public void addChangelog(String changelog, int color) {
+            this.children().add(new Entry(changelog, color));
+        }
+
+        public class Entry extends EntryListWidget.Entry<ChangelogsList.Entry> {
             private final String text;
             private final int color;
             public Entry(String text, int color) {
@@ -171,17 +192,7 @@ public class ChangelogScreen extends Screen {
 
             @Override
             public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-                drawCenteredTextWithShadow(matrices, ChangelogsList.this.client.textRenderer, text, x + 10, y, color);
-            }
-
-            @Override
-            public List<? extends Selectable> selectableChildren() {
-                return null;
-            }
-
-            @Override
-            public List<? extends Element> children() {
-                return null;
+                drawStringWithShadow(matrices, ChangelogsList.this.client.textRenderer, text, x + 10, y, color);
             }
         }
     }

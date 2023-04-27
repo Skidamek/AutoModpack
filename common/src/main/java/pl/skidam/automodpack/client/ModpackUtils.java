@@ -63,7 +63,7 @@ public class ModpackUtils {
             }
 
             else {
-                LOGGER.warn("Modpack hash is different than server modpack hash");
+                LOGGER.info("Modpack hash is different than server modpack hash");
                 return true;
             }
         } else {
