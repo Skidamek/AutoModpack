@@ -16,12 +16,10 @@ public class RestartScreen extends Screen {
     private static ButtonWidget cancelButton;
     private static ButtonWidget restartButton;
     private static ButtonWidget changelogsButton;
-    private final Screen parent;
 
     public RestartScreen(Screen parent, File gameDir) {
         super(TextHelper.literal("RestartScreen"));
         this.gameDir = gameDir;
-        this.parent = parent;
 
         if (AudioManager.isMusicPlaying()) {
             AudioManager.stopMusic();
@@ -44,9 +42,9 @@ public class RestartScreen extends Screen {
     }
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        drawCenteredText(matrices, this.textRenderer, TextHelper.literal("Restart").formatted(Formatting.BOLD), this.width / 2, 55, 16777215);
-        drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.restart.description"), this.width / 2, 80, 16777215);
-        drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.restart.secDescription"), this.width / 2, 90, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.literal("Restart").formatted(Formatting.BOLD), this.width / 2, 55, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.restart.description"), this.width / 2, 80, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.restart.secDescription"), this.width / 2, 90, 16777215);
         super.render(matrices, mouseX, mouseY, delta);
     }
 

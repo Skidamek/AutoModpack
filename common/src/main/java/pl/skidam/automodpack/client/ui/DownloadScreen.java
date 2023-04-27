@@ -102,21 +102,21 @@ public class DownloadScreen extends Screen {
         List<DownloadInfo> downloadInfosCopy = new ArrayList<>(downloadInfos);
 
         if (downloadInfosCopy.size() > 0) {
-            drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.downloading").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.downloading").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y, 16777215);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
             for (DownloadInfo file : downloadInfosCopy) {
                 if (file == null) continue;
                 String fileName = file.getFileName();
-                drawCenteredText(matrices, this.textRenderer, fileName + " (" + getDownloadedSize(fileName) + ")" + " - " + getETAOfFile(fileName), (int) (this.width / 2 * scale), currentY, 16777215);
+                drawCenteredTextWithShadow(matrices, this.textRenderer, fileName + " (" + getDownloadedSize(fileName) + ")" + " - " + getETAOfFile(fileName), (int) (this.width / 2 * scale), currentY, 16777215);
                 currentY += 10;
             }
         } else {
-            drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.no_files").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.no_files").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y, 16777215);
 
             // please wait // TODO change it to translatable
-            drawCenteredText(matrices, this.textRenderer, TextHelper.literal("Please wait.").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 15, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.literal("Please wait.").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 15, 16777215);
         }
 
         matrices.pop();
@@ -145,15 +145,15 @@ public class DownloadScreen extends Screen {
         Text stage = this.getStage();
         Text eta = this.getTotalETA();
         Text speed = this.getTotalDownloadSpeed();
-        drawCenteredText(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
-        drawCenteredText(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
-        drawCenteredText(matrices, this.textRenderer, percentage, this.width / 2, this.height / 2 + 30, 16777215);
-        drawCenteredText(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 80, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, percentage, this.width / 2, this.height / 2 + 30, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 80, 16777215);
 
         drawDownloadingFiles(matrices);
 
         Text modpackName = TextHelper.literal(ModpackUpdater.getModpackName()).formatted(Formatting.BOLD);
-        drawCenteredText(matrices, this.textRenderer, modpackName, this.width / 2, this.height / 2 - 110, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, modpackName, this.width / 2, this.height / 2 - 110, 16777215);
 
         // Render progress bar
         int x = this.width / 2 - PROGRESS_BAR_WIDTH / 2;

@@ -26,9 +26,9 @@ public class FetchScreen extends Screen {
 
         // draw bold text
         Text text = TextHelper.literal("Fetching direct url's from Modrinth and CurseForge.").formatted(Formatting.BOLD);
-        drawCenteredText(matrices, this.textRenderer, text, this.width / 2, this.height / 2 - 60, 16777215);
-        drawCenteredText(matrices, this.textRenderer, "Please wait...", this.width / 2, this.height / 2 - 48, 16777215);
-        drawCenteredText(matrices, this.textRenderer, "Found " + totalFetchedFiles + " files.", this.width / 2, this.height / 2 - 30, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, text, this.width / 2, this.height / 2 - 60, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, "Please wait...", this.width / 2, this.height / 2 - 48, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, "Found " + totalFetchedFiles + " files.", this.width / 2, this.height / 2 - 30, 16777215);
 
         super.render(matrices, mouseX, mouseY, delta);
     }
