@@ -69,17 +69,16 @@ public class PlatformImpl {
             LOGGER.info("Installing latest Fabric API (FAPI)! " + fapi.fileVersion);
             LOGGER.info("Download URL: " + fapi.downloadUrl);
             try {
-                Download downloadInstance = new Download();
-
                 File file = new File(modsPath.toFile() + File.separator + fapi.fileName);
 
+                Download downloadInstance = new Download();
                 downloadInstance.download(fapi.downloadUrl, file);
 
-                String localChecksum = CustomFileUtils.getHashWithRetry(file, "SHA-512");
+                String localHash = CustomFileUtils.getHashWithRetry(file, "SHA-1");
 
 
-                if (!localChecksum.equals(fapi.SHA512Hash)) {
-                    LOGGER.error("Checksums are not the same! Downloaded file is corrupted!");
+                if (!localHash.equals(fapi.SHA1Hash)) {
+                    LOGGER.error("Hashes are not the same! Downloaded file is corrupted!");
                     return;
                 }
             } catch (Exception e) {

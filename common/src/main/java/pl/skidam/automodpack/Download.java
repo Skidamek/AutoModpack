@@ -1,6 +1,8 @@
 package pl.skidam.automodpack;
 
+import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.utils.CustomFileUtils;
+import pl.skidam.automodpack.utils.DownloadInfo;
 import pl.skidam.automodpack.utils.MinecraftUserName;
 
 import java.io.*;
@@ -20,7 +22,7 @@ public class Download {
     private double downloadETA;
     private static final int BUFFER_SIZE = 16 * 1024;
 
-    public void download(String downloadUrl, File outFile) {
+    public void download(String downloadUrl, File outFile, DownloadInfo downloadInfo) {
         try {
             isDownloading = false;
             URL url = new URL(downloadUrl);
@@ -67,6 +69,16 @@ public class Download {
                 downloadETA = -1;
                 if (bytesPerSecond > 0) downloadETA = (fileSize - totalBytesRead) / bytesPerSecond;
                 if (downloadETA > 0) downloadETA = Math.ceil(downloadETA);
+
+                if (downloadInfo != null) {
+                    downloadInfo.setBytesDownloaded(totalBytesRead);
+                    downloadInfo.setDownloadSpeed(bytesPerSecond / 1024 / 1024);
+                    downloadInfo.setEta(downloadETA);
+                    downloadInfo.setFileSize(fileSize);
+                    downloadInfo.setBytesPerSecond(bytesPerSecond);
+
+                    ModpackUpdater.totalBytesDownloaded += bytesRead;
+                }
             }
 
             inputStream.close();
@@ -87,6 +99,9 @@ public class Download {
         }
     }
 
+    public void download(String downloadUrl, File outFile) {
+        download(downloadUrl, outFile, null);
+    }
 
     public double getBytesPerSecond() {
         return bytesPerSecond;

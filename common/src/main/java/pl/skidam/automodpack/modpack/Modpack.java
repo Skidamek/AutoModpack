@@ -1,8 +1,8 @@
 package pl.skidam.automodpack.modpack;
 
 import pl.skidam.automodpack.Platform;
-import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.ModpackContentTools;
@@ -14,13 +14,20 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack.StaticVariables.*;
 public class Modpack {
     public static Path hostModpackDir = Path.of(automodpackDir + File.separator + "host-modpack");
     static Path hostModpackMods = Path.of(hostModpackDir + File.separator + "mods");
     public static File hostModpackContentFile = new File(hostModpackDir + File.separator + "modpack-content.json");
-
+    public static final int MAX_MODPACK_ADDITIONS = 10; // at the same time
+    private static ExecutorService CREATION_EXECUTOR;
+    public static List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
     public static void generate() {
 
         long start = System.currentTimeMillis();
@@ -87,6 +94,8 @@ public class Modpack {
             try {
                 List<Jsons.ModpackContentFields.ModpackContentItems> list = new ArrayList<>();
 
+                CREATION_EXECUTOR = Executors.newFixedThreadPool(MAX_MODPACK_ADDITIONS);
+
                 if (serverConfig.syncedFiles.size() > 0) {
                     for (String file : serverConfig.syncedFiles) {
                         LOGGER.info("Syncing {}... ", file);
@@ -126,114 +135,150 @@ public class Modpack {
         }
 
 
-        private static void addAllContent(File modpackDir, List<Jsons.ModpackContentFields.ModpackContentItems> list) throws Exception {
+        private static void addAllContent(File modpackDir, List<Jsons.ModpackContentFields.ModpackContentItems> list) throws ExecutionException, InterruptedException {
             if (!modpackDir.exists() || modpackDir.listFiles() == null) return;
 
             File[] modpackDirFiles = modpackDir.listFiles();
             if (modpackDirFiles == null) return;
 
             for (File file : modpackDirFiles) {
-                if (file.isDirectory()) {
-                    if (file.getName().startsWith(".")) continue;
-                    addAllContent(file, list);
-                } else if (file.isFile()) {
-                    if (file.equals(hostModpackContentFile)) continue;
-                    String modpackFile = file.toString().replace(hostModpackDir.toString(), "").replace("\\", "/");
-                    if (modpackFile.charAt(0) == '.') modpackFile = modpackFile.substring(1);
-                    String link = modpackFile;
-                    String size = file.length() + "";
-                    String type = "other";
-                    String modId = null;
-                    String version = null;
-                    boolean isEditable = false;
 
-
-                    if (modpackFile.startsWith(".")) {
-                        LOGGER.warn("Skipping file {}", modpackFile);
-                        continue;
-                    }
-
-                    if (!modpackDir.toString().startsWith("./automodpack/host-modpack/")) {
-                        boolean excluded = false;
-                        for (String excludeFile : serverConfig.excludeSyncedFiles) {
-                            if (matchesExclusionCriteria(modpackFile, excludeFile)) { // wild cards e.g. *.json or supermod-1.19-*.jar
-                                excluded = true;
-                                break;
-                            }
-                        }
-                        if (excluded) {
-                            LOGGER.info("File {} is excluded! Skipping...", modpackFile);
-                            continue;
-                        }
-                    }
-
-                    if (size.equals("0")) {
-                        LOGGER.warn("File {} is empty! Skipping...", modpackFile);
-                        continue;
-                    }
-
-                    if (!modpackDir.equals(hostModpackDir.toFile())) {
-                        if (modpackFile.endsWith(".tmp")) {
-                            LOGGER.warn("File {} is temporary! Skipping...", modpackFile);
-                            continue;
-                        }
-
-                        if (modpackFile.endsWith(".disabled")) {
-                            LOGGER.warn("File {} is disabled! Skipping...", modpackFile);
-                            continue;
-                        }
-
-                        if (modpackFile.endsWith(".bak")) {
-                            LOGGER.warn("File {} is backup file, unnecessary on client! Skipping...", modpackFile);
-                            continue;
-                        }
-                    }
-
-                    String sha512 = CustomFileUtils.getHashWithRetry(file, "SHA-512");
-                    String murmurHash = null;
-
-                    if (file.getName().endsWith(".jar")) {
-                        modId = JarUtilities.getModIdFromJar(file, true);
-                        type = modId == null ? "other" : "mod";
-                        if (type.equals("mod")) {
-                            version = JarUtilities.getModVersion(file);
-                            murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
-                        }
-                    }
-
-                    if (type.equals("other")) {
-                        if (modpackFile.contains("/config/")) {
-                            type = "config";
-                        } else if (modpackFile.contains("/shaderpacks/")) {
-                            type = "shaderpack";
-                        } else if (modpackFile.contains("/resourcepacks/")) {
-                            type = "resourcepack";
-                        } else if (modpackFile.endsWith("/options.txt")) {
-                            type = "mc_options";
-                        }
-                    }
-
-                    for (String editableFile : serverConfig.allowEditsInFiles) {
-                        if (modpackFile.endsWith(editableFile)) {
-                            isEditable = true;
-                            break;
-                        }
-                    }
-
-                    // It should overwrite existing file in the list
-                    // because first this syncs files from server running dir
-                    // And then it gets files from host-modpack dir
-                    // So we want to overwrite files from server running dir with files from host-modpack dir
-                    // if there are likely same or a bit changed
-                    for (Jsons.ModpackContentFields.ModpackContentItems item : list) {
-                        if (item.file.equals(modpackFile)) {
-                            list.remove(item);
-                            break;
-                        }
-                    }
-
-                    list.add(new Jsons.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, sha512, murmurHash));
+                while (creationFutures.size() >= MAX_MODPACK_ADDITIONS) { // Async Setting - max `some` fetches at the same time
+                    creationFutures = creationFutures.stream()
+                            .filter(future -> !future.isDone())
+                            .collect(Collectors.toList());
                 }
+
+                creationFutures.add(addContentAsync(modpackDir, file, list));
+            }
+
+            CompletableFuture.allOf(creationFutures.toArray(new CompletableFuture[0])).get();
+        }
+
+        private static CompletableFuture<Void> addContentAsync(File modpackDir, File file, List<Jsons.ModpackContentFields.ModpackContentItems> list) {
+            return CompletableFuture.runAsync(() -> {
+                try {
+                    addContent(modpackDir, file, list);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }, CREATION_EXECUTOR);
+        }
+
+        private static void addContent(File modpackDir, File file, List<Jsons.ModpackContentFields.ModpackContentItems> list) throws Exception {
+            if (file.isDirectory()) {
+                if (file.getName().startsWith(".")) {
+                    return;
+                }
+
+                File[] childFiles = file.listFiles();
+                if (childFiles == null) return;
+
+                for (File childFile : childFiles) {
+                    addContent(modpackDir, childFile, list);
+                }
+            } else if (file.isFile()) {
+                if (file.equals(hostModpackContentFile)) {
+                    return;
+                }
+                String modpackFile = file.toString().replace(hostModpackDir.toString(), "").replace("\\", "/");
+                if (modpackFile.charAt(0) == '.') modpackFile = modpackFile.substring(1);
+                String link = modpackFile;
+                String size = String.valueOf(file.length());
+                String type = "other";
+                String modId = null;
+                String version = null;
+                boolean isEditable = false;
+
+
+                if (modpackFile.startsWith(".")) {
+                    LOGGER.warn("Skipping file {}", modpackFile);
+                    return;
+                }
+
+                if (!modpackDir.toString().startsWith("./automodpack/host-modpack/")) {
+                    boolean excluded = false;
+                    for (String excludeFile : serverConfig.excludeSyncedFiles) {
+                        if (matchesExclusionCriteria(modpackFile, excludeFile)) { // wild cards e.g. *.json or supermod-1.19-*.jar
+                            excluded = true;
+                            break;
+                        }
+                    }
+                    if (excluded) {
+                        LOGGER.info("File {} is excluded! Skipping...", modpackFile);
+                        return;
+                    }
+                }
+
+                if (size.equals("0")) {
+                    LOGGER.warn("File {} is empty! Skipping...", modpackFile);
+                    return;
+                }
+
+                if (!modpackDir.equals(hostModpackDir.toFile())) {
+                    if (modpackFile.endsWith(".tmp")) {
+                        LOGGER.warn("File {} is temporary! Skipping...", modpackFile);
+                        return;
+                    }
+
+                    if (modpackFile.endsWith(".disabled")) {
+                        LOGGER.warn("File {} is disabled! Skipping...", modpackFile);
+                        return;
+                    }
+
+                    if (modpackFile.endsWith(".bak")) {
+                        LOGGER.warn("File {} is backup file, unnecessary on client! Skipping...", modpackFile);
+                        return;
+                    }
+                }
+
+                String sha1 = CustomFileUtils.getHashWithRetry(file, "SHA-1");
+                String murmurHash = null;
+
+                if (file.getName().endsWith(".jar")) {
+                    modId = JarUtilities.getModIdFromJar(file, true);
+                    type = modId == null ? "other" : "mod";
+                    if (type.equals("mod")) {
+                        version = JarUtilities.getModVersion(file);
+                        murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
+                    }
+                }
+
+                if (type.equals("other")) {
+                    if (modpackFile.contains("/config/")) {
+                        type = "config";
+                    } else if (modpackFile.contains("/shaderpacks/")) {
+                        type = "shaderpack";
+                        murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
+                    } else if (modpackFile.contains("/resourcepacks/")) {
+                        type = "resourcepack";
+                        murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
+                    } else if (modpackFile.endsWith("/options.txt")) {
+                        type = "mc_options";
+                    }
+                }
+
+                for (String editableFile : serverConfig.allowEditsInFiles) {
+                    if (modpackFile.endsWith(editableFile)) {
+                        isEditable = true;
+                        break;
+                    }
+                }
+
+                // It should overwrite existing file in the list
+                // because first this syncs files from server running dir
+                // And then it gets files from host-modpack dir
+                // So we want to overwrite files from server running dir with files from host-modpack dir
+                // if there are likely same or a bit changed
+                List<Jsons.ModpackContentFields.ModpackContentItems> copyList = new ArrayList<>(list);
+                for (Jsons.ModpackContentFields.ModpackContentItems item : copyList) {
+                    if (item.file.equals(modpackFile)) {
+                        list.remove(item);
+                        break;
+                    }
+                }
+
+                list.add(new Jsons.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, sha1, murmurHash));
             }
         }
 

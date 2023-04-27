@@ -18,16 +18,16 @@ public class ModrinthAPI {
     public String fileName;
     public long fileSize;
     public String releaseType;
-    public String SHA512Hash;
+    public String SHA1Hash;
 
-    public ModrinthAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType, String SHA512Hash) {
+    public ModrinthAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType, String SHA1Hash) {
         this.requestUrl = requestUrl;
         this.downloadUrl = downloadUrl;
         this.fileVersion = fileVersion;
         this.fileName = fileName;
         this.fileSize = fileSize;
         this.releaseType = releaseType;
-        this.SHA512Hash = SHA512Hash;
+        this.SHA1Hash = SHA1Hash;
     }
 
     public static ModrinthAPI getModInfoFromID(String modrinthID) {
@@ -56,9 +56,9 @@ public class ModrinthAPI {
             String downloadUrl = JSONObjectFiles.get("url").getAsString();
             String fileName = JSONObjectFiles.get("filename").getAsString();
             long fileSize = JSONObjectFiles.get("size").getAsLong();
-            String SHA512Hash = JSONObjectFiles.get("hashes").getAsJsonObject().get("sha512").getAsString();
+            String SHA1Hash = JSONObjectFiles.get("hashes").getAsJsonObject().get("sha1").getAsString();
 
-            return new ModrinthAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA512Hash);
+            return new ModrinthAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA1Hash);
 
         } catch (IndexOutOfBoundsException e) {
             LOGGER.warn("Can't find mod for your client, tried link " + requestUrl);
@@ -68,13 +68,13 @@ public class ModrinthAPI {
         return null;
     }
 
-    public static ModrinthAPI getModInfoFromSHA512(String sha512) {
+    public static ModrinthAPI getModInfoFromSHA512(String sha1) {
 
-        if (sha512 == null || sha512.isEmpty()) {
+        if (sha1 == null || sha1.isEmpty()) {
             return null;
         }
 
-        String requestUrl = BASE_URL + "/version_file/" + sha512 + "?algorithm=sha512";
+        String requestUrl = BASE_URL + "/version_file/" + sha1 + "?algorithm=sha1";
 
         requestUrl = requestUrl.replaceAll("\"", "%22"); // so important!
 
@@ -93,7 +93,7 @@ public class ModrinthAPI {
             String downloadUrl = JSONObjectFiles.get("url").getAsString();
             String fileName = JSONObjectFiles.get("filename").getAsString();
             long fileSize = JSONObjectFiles.get("size").getAsLong();
-            String SHA512Hash = JSONObjectFiles.get("hashes").getAsJsonObject().get("sha512").getAsString();
+            String SHA512Hash = JSONObjectFiles.get("hashes").getAsJsonObject().get("sha1").getAsString();
 
             return new ModrinthAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA512Hash);
 

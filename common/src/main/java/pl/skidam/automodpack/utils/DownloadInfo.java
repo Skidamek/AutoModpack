@@ -4,7 +4,6 @@ public class DownloadInfo {
     private final String fileName;
     private double bytesDownloaded;
     private double downloadSpeed;
-    private boolean isDownloading;
     private long fileSize;
     private double eta;
     private double bytesPerSecond;
@@ -21,10 +20,6 @@ public class DownloadInfo {
 
     public void setDownloadSpeed(double downloadSpeed) {
         this.downloadSpeed = downloadSpeed;
-    }
-
-    public void setDownloading(boolean isDownloading) {
-        this.isDownloading = isDownloading;
     }
 
     public long setFileSize(long fileSize) {
@@ -47,10 +42,6 @@ public class DownloadInfo {
 
     public double getDownloadSpeed() {
         return downloadSpeed;
-    }
-
-    public boolean isDownloading() {
-        return isDownloading;
     }
 
     public long getFileSize() {

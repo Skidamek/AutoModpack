@@ -5,6 +5,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
@@ -101,7 +102,7 @@ public class DownloadScreen extends Screen {
         List<DownloadInfo> downloadInfosCopy = new ArrayList<>(downloadInfos);
 
         if (downloadInfosCopy.size() > 0) {
-            drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.downloading"), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.downloading").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y, 16777215);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
@@ -112,7 +113,7 @@ public class DownloadScreen extends Screen {
                 currentY += 10;
             }
         } else {
-            drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.no_files"), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredText(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.no_files").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y, 16777215);
         }
 
         matrices.pop();
@@ -147,6 +148,9 @@ public class DownloadScreen extends Screen {
         drawCenteredText(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 80, 16777215);
 
         drawDownloadingFiles(matrices);
+
+        Text modpackName = TextHelper.literal(ModpackUpdater.getModpackName()).formatted(Formatting.BOLD);
+        drawCenteredText(matrices, this.textRenderer, modpackName, this.width / 2, this.height / 2 - 110, 16777215);
 
         // Render progress bar
         int x = this.width / 2 - PROGRESS_BAR_WIDTH / 2;
