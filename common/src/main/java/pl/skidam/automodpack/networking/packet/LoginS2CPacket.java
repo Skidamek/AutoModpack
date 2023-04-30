@@ -28,7 +28,7 @@ public class LoginS2CPacket {
 
     // Login packet (the best way)
     public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer sync, PacketSender sender) {
-        ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+        ClientConnection connection = handler.connection;
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         UUID uniqueId = profile.getId();
@@ -95,7 +95,7 @@ public class LoginS2CPacket {
             LOGGER.info("Sending external modpack host link: " + linkToSend);
         } else {
             // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
-            if (playerIp.startsWith("/127.0.0.1") || playerIp.startsWith("/[0:0:0:0:")) { // local
+            if (playerIp.startsWith("/127.0.0.1") || playerIp.startsWith("/[0:0:0:0:") || playerIp.startsWith("/" + serverConfig.hostLocalIp)) { // local
                 linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
             } else if (!HostNetwork.equals("") && playerIp.startsWith("/" + HostNetwork)) { // local
                 linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
@@ -109,76 +109,6 @@ public class LoginS2CPacket {
 
         sender.sendPacket(LINK, outBuf);
     }
-
-    // Join packet (velocity support)
-    public static void receive(MinecraftServer server, ServerPlayerEntity player, ServerPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {
-        ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
-
-        String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
-        String clientResponse = buf.readString();
-        boolean isClientVersionHigher = isClientVersionHigher(clientResponse);
-
-
-//        if (!understood) { TODO
-//            if (AutoModpack.serverConfig.optionalModpack) {
-//                acceptLogin.put(uniqueId, true);
-//                AutoModpack.LOGGER.info("{} has not installed automodpack.", playerName);
-//                return;
-//            }
-//        } else
-        if (!clientResponse.equals(correctResponse)) {
-            if (!serverConfig.allowFabricQuiltPlayers && !clientResponse.startsWith(VERSION)) {
-                Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
-                if (isClientVersionHigher) {
-                    reason = TextHelper.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
-                }
-                connection.send(new DisconnectS2CPacket(reason));
-                connection.disconnect(reason);
-                return;
-            } else if (clientResponse.startsWith(VERSION)) {
-                Text reason = TextHelper.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " to play on this server!");
-                if (isClientVersionHigher) {
-                    reason = TextHelper.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
-                }
-                connection.send(new DisconnectS2CPacket(reason));
-                connection.disconnect(reason);
-                return;
-            }
-        }
-
-        if (!HttpServer.isRunning && serverConfig.externalModpackHostLink.equals("")) return;
-
-        String playerIp = connection.getAddress().toString();
-        String HostIPForLocal = serverConfig.hostLocalIp.replaceFirst("(https?://)", ""); // Removes HTTP:// or HTTPS://
-        String HostNetwork = "";
-        if (HostIPForLocal.chars().filter(ch -> ch == '.').count() > 3) {
-            String[] parts = HostIPForLocal.split("\\.");
-            HostNetwork =  parts[0] + "." + parts[1] + "." + parts[2]; // Reduces ip from x.x.x.x to x.x.x
-        }
-
-        String linkToSend;
-
-        if (!serverConfig.externalModpackHostLink.equals("")) {
-            // If an external modpack host link has been specified, use it
-            linkToSend = serverConfig.externalModpackHostLink;
-            LOGGER.info("Sending external modpack host link: " + linkToSend);
-        } else {
-            // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
-            if (playerIp.startsWith("/127.0.0.1")) { // local
-                linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
-            } else if (!HostNetwork.equals("") && playerIp.startsWith("/" + HostNetwork)) { // local
-                linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
-            } else { // Otherwise, use the public host IP and port
-                linkToSend = "http://" + serverConfig.hostIp + ":" + serverConfig.hostPort;
-            }
-        }
-
-        PacketByteBuf outBuf = PacketByteBufs.create();
-        outBuf.writeString(linkToSend);
-
-        sender.sendPacket(LINK, outBuf);
-    }
-
 
     public static boolean isClientVersionHigher(String clientResponse) {
         String clientVersion = clientResponse.substring(0, clientResponse.indexOf("-"));

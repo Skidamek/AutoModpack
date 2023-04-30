@@ -38,23 +38,4 @@ public class LoginC2SPacket {
 
         return CompletableFuture.completedFuture(outBuf);
     }
-
-    public static void receive(MinecraftClient client, ClientPlayNetworkHandler handler, PacketByteBuf buf, PacketSender sender) {
-        // Client
-        String serverResponse = buf.readString();
-
-        String loader = Platform.getPlatformType().toString().toLowerCase();
-
-        String correctResponse = VERSION + "-" + loader;
-
-        PacketByteBuf outBuf = PacketByteBufs.create();
-        outBuf.writeString(correctResponse);
-
-        if (!serverResponse.equals(correctResponse) && !serverResponse.startsWith(VERSION)) {
-            if (!serverResponse.contains(loader)) {
-                LOGGER.error("Versions mismatch " + serverResponse);
-            }
-        }
-        sender.sendPacket(HANDSHAKE, outBuf);
-    }
 }

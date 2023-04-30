@@ -1,7 +1,7 @@
 package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.ScreenTools;
-import pl.skidam.automodpack.modPlatforms.ModrinthAPI;
+import pl.skidam.automodpack.platforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 
 import java.io.IOException;

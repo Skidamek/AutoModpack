@@ -29,32 +29,14 @@ public class ModPacketsImpl {
     // UUID, acceptLogin
     public static List<UUID> acceptLogin = new ArrayList<>();
 
-
     public static void registerC2SPackets() {
         // Client
         ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, LoginC2SPacket::receive);
-        ClientPlayNetworking.registerGlobalReceiver(HANDSHAKE, LoginC2SPacket::receive);
         ClientLoginNetworking.registerGlobalReceiver(LINK, LinkC2SPacket::receive);
-        ClientPlayNetworking.registerGlobalReceiver(LINK, LinkC2SPacket::receive);
     }
 
     public static void registerS2CPackets() {
         // Server
-
-        // For velocity support, velocity doest support login packets
-        if (serverConfig.velocityMode)  {
-            ServerPlayNetworking.registerGlobalReceiver(HANDSHAKE, LoginS2CPacket::receive);
-            ServerPlayNetworking.registerGlobalReceiver(LINK, LinkS2CPacket::receive);
-
-            ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-                PacketByteBuf buf = PacketByteBufs.create();
-                String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
-                buf.writeString(correctResponse);
-                sender.sendPacket(HANDSHAKE, buf);
-            });
-            return;
-        }
-
         ServerLoginNetworking.registerGlobalReceiver(HANDSHAKE, LoginS2CPacket::receive);
         ServerLoginNetworking.registerGlobalReceiver(LINK, LinkS2CPacket::receive);
 

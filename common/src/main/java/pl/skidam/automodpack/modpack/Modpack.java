@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.modpack;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
@@ -14,10 +15,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack.StaticVariables.*;
@@ -94,7 +92,14 @@ public class Modpack {
             try {
                 List<Jsons.ModpackContentFields.ModpackContentItems> list = new ArrayList<>();
 
-                CREATION_EXECUTOR = Executors.newFixedThreadPool(MAX_MODPACK_ADDITIONS);
+                ThreadFactory threadFactoryDownloads = new ThreadFactoryBuilder()
+                        .setNameFormat("AutoModpackCreation-%d")
+                        .build();
+
+                CREATION_EXECUTOR = Executors.newFixedThreadPool(
+                        MAX_MODPACK_ADDITIONS,
+                        threadFactoryDownloads
+                );
 
                 if (serverConfig.syncedFiles.size() > 0) {
                     for (String file : serverConfig.syncedFiles) {

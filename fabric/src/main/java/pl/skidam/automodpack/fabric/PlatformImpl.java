@@ -11,7 +11,7 @@ import org.slf4j.Logger;
 import pl.skidam.automodpack.Download;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.ReLauncher;
-import pl.skidam.automodpack.modPlatforms.ModrinthAPI;
+import pl.skidam.automodpack.platforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 
 import java.io.*;

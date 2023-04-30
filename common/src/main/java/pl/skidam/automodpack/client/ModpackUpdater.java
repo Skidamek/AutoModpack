@@ -6,8 +6,8 @@ import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
-import pl.skidam.automodpack.modPlatforms.CurseForgeAPI;
-import pl.skidam.automodpack.modPlatforms.ModrinthAPI;
+import pl.skidam.automodpack.platforms.CurseForgeAPI;
+import pl.skidam.automodpack.platforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.*;
 
 import java.io.File;

@@ -27,7 +27,7 @@ public class Jsons {
 //        public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
         public boolean optionalModpack = false;
         public boolean autoExcludeServerSideMods = true;
-        public boolean velocityMode = false;
+//        public boolean velocityMode = false; compat plugin :)
         // public boolean forceToDisableAllOtherModsOnClients = false;
         public int hostPort = 30037;
         public int hostThreads = 8;
