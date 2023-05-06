@@ -34,6 +34,7 @@ public class Jsons {
         public String hostIp = "";
         public String hostLocalIp = "";
         public String externalModpackHostLink = "";
+        public boolean reverseProxy = false;
         public boolean selfUpdater = true;
         public boolean downloadDependency = true;
         public boolean allowFabricQuiltPlayers = false;

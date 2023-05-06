@@ -89,6 +89,13 @@ public class LoginS2CPacket {
         if (!serverConfig.externalModpackHostLink.equals("")) {
             // If an external modpack host link has been specified, use it
             linkToSend = serverConfig.externalModpackHostLink;
+            if (!linkToSend.startsWith("http://") && !linkToSend.startsWith("https://")) {
+                linkToSend = "http://" + linkToSend;
+            }
+            if (!serverConfig.reverseProxy) {
+                // add port to link
+                linkToSend += ":" + serverConfig.hostPort;
+            }
             LOGGER.info("Sending external modpack host link: " + linkToSend);
         } else {
             // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
