@@ -23,8 +23,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static pl.skidam.automodpack.StaticVariables.LOGGER;
-import static pl.skidam.automodpack.StaticVariables.preload;
+import static pl.skidam.automodpack.StaticVariables.*;
 import static pl.skidam.automodpack.config.ConfigTools.GSON;
 import static pl.skidam.automodpack.utils.CustomFileUtils.mapAllFiles;
 import static pl.skidam.automodpack.utils.RefactorStrings.getETA;
@@ -188,6 +187,18 @@ public class ModpackUpdater {
         long start = System.currentTimeMillis();
 
         try {
+
+            if (quest) {
+                String modsPathString = modsPath.toString().substring(1) + "/";
+                LOGGER.info("Quest mode is enabled, changing /mods/ path to {}", modsPathString);
+                for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
+                    if (modpackContentFile.toString().startsWith("/mods/")) {
+                        modpackContentField.file = modpackContentField.file.replace("/mods/", modsPathString);
+                    }
+                }
+            }
+
+
             byte[] serverModpackContentByteArray = GSON.toJson(serverModpackContent).getBytes();
             List<Jsons.ModpackContentFields.ModpackContentItems> copyModpackContentList = new ArrayList<>(serverModpackContent.list);
 
