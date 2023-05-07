@@ -8,9 +8,17 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Objects;
 
+import pl.skidam.automodpack.AutoModpack;
+
+import static pl.skidam.automodpack.StaticVariables.*;
+
 // I use Linux btw
 public class Windows {
     public void restartWindow(String text) {
+        if (AutoModpack.quest) {
+            LOGGER.info("Quest mode is enabled, skipping restart window");
+            return;
+        }
         JFrame frame = new JFrame();
         frame.setUndecorated(true);
         frame.setLayout(null);
@@ -70,6 +78,10 @@ public class Windows {
     }
 
     public void restartingWindow() {
+        if (AutoModpack.quest) {
+            LOGGER.info("Quest mode is enabled, skipping restarting window");
+            return;
+        }
         JFrame frame = new JFrame();
         frame.setUndecorated(true);
         frame.setLayout(null);
@@ -129,6 +141,10 @@ public class Windows {
     }
 
     public void errorRestartingWindow() {
+        if (AutoModpack.quest) {
+            LOGGER.warn("Re-launcher don't work on Quest!");
+            return;
+        }
         JFrame frame = new JFrame();
         frame.setUndecorated(true);
         frame.setLayout(null);

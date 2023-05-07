@@ -9,6 +9,7 @@ import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 import pl.skidam.automodpack.utils.SetupFiles;
+import pl.skidam.automodpack.AutoModpack;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -35,9 +36,17 @@ public class Preload {
         }
 
         new SetupFiles();
-        new SelfUpdater();
-
-        if (Platform.getEnvironmentType().equals("CLIENT")) {
+        String workingDirectory = System.getProperty("user.dir");
+        LOGGER.info("Working directory: " + workingDirectory);
+        if (workingDirectory.contains("com.qcxr.qcxr")) {
+            AutoModpack.quest = true;
+            LOGGER.info("QuestCraft detected!");
+        } else {
+            AutoModpack.quest = false;
+            Platform.downloadDependencies();
+            new SelfUpdater();
+        }
+        if (Platform.getEnvironmentType().equals("CLIENT") && !AutoModpack.quest) {
             String selectedModpack = clientConfig.selectedModpack;
             if (selectedModpack != null && !selectedModpack.equals("")) {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
@@ -46,9 +55,6 @@ public class Preload {
                 new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
             }
         }
-
-        Platform.downloadDependencies();
-
         LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
     }
 }

@@ -11,6 +11,9 @@ import pl.skidam.automodpack.utils.MinecraftUserName;
 import static pl.skidam.automodpack.StaticVariables.*;
 
 public class AutoModpack {
+
+    public static boolean quest;
+
     public static void onInitialize() {
         preload = false;
         LOGGER.info("AutoModpack is running on " + Platform.getPlatformType() + "!");
