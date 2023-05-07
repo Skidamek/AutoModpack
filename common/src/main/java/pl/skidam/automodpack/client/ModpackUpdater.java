@@ -193,7 +193,7 @@ public class ModpackUpdater {
                 LOGGER.info("Quest mode is enabled, changing /mods/ path to {}", modsPathString);
                 for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
                     if (modpackContentFile.toString().startsWith("/mods/")) {
-                        modpackContentField.file = modpackContentField.file.replace("/mods/", modsPathString);
+                        modpackContentField.file = modpackContentField.file.replaceFirst("/mods/", modsPathString);
                     }
                 }
             }
