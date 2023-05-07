@@ -1,6 +1,6 @@
 plugins {
     id "architectury-plugin" version "3.4-SNAPSHOT"
-    id "dev.architectury.loom" version "1.0-SNAPSHOT" apply false // 1.1-SNAPSHOT is broken
+    id "dev.architectury.loom" version "1.1-SNAPSHOT" apply false
     id 'io.github.juuxel.loom-quiltflower' version "${quilt_flower_version}" apply false
     id "io.github.pacifistmc.forgix" version "1.2.6"
 }
@@ -11,14 +11,7 @@ architectury {
 
 subprojects {
     apply plugin: "dev.architectury.loom"
-    apply plugin: "io.github.juuxel.loom-quiltflower"
-
-//    loom {
-
-//        accessWidenerPath = file("src/main/resources/automodpack.accesswidener")
-
-//        silentMojangMappingsLicense()
-//    }
+//    apply plugin: "io.github.juuxel.loom-quiltflower"
 
     archivesBaseName = rootProject.archives_base_name + "-${project.name}"
     version = rootProject.mod_version
