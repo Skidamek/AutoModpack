@@ -8,14 +8,12 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Objects;
 
-import pl.skidam.automodpack.AutoModpack;
-
 import static pl.skidam.automodpack.StaticVariables.*;
 
 // I use Linux btw
 public class Windows {
     public void restartWindow(String text) {
-        if (AutoModpack.quest) {
+        if (quest) {
             LOGGER.info("Quest mode is enabled, skipping restart window");
             return;
         }
@@ -78,7 +76,7 @@ public class Windows {
     }
 
     public void restartingWindow() {
-        if (AutoModpack.quest) {
+        if (quest) {
             LOGGER.info("Quest mode is enabled, skipping restarting window");
             return;
         }
@@ -141,7 +139,7 @@ public class Windows {
     }
 
     public void errorRestartingWindow() {
-        if (AutoModpack.quest) {
+        if (quest) {
             LOGGER.warn("Re-launcher don't work on Quest!");
             return;
         }

@@ -30,4 +30,5 @@ public class StaticVariables {
     public static String selectedModpackLink;
     public static Jsons.ServerConfigFields serverConfig;
     public static Jsons.ClientConfigFields clientConfig;
+    public static boolean quest;
 }
