@@ -25,11 +25,12 @@ public class Preload {
         if (workingDirectory.contains("com.qcxr.qcxr")) {
             quest = true;
             LOGGER.info("QuestCraft detected!");
+            modsPath = Path.of("./mods/" + MC_VERSION + "/");
         } else {
             quest = false;
+            modsPath = Path.of("./mods/");
         }
 
-        modsPath = Path.of("./mods/" + MC_VERSION + "/");
         JAR_NAME = JarUtilities.getJarFileOfMod("automodpack"); // set as correct name
         automodpackJar = new File(modsPath + File.separator + JAR_NAME); // set as correct jar file
 
