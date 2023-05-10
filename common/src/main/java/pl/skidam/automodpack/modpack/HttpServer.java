@@ -42,9 +42,15 @@ public class HttpServer {
         }
 
         if (serverConfig.hostIp == null || serverConfig.hostIp.equals("")) {
-            serverConfig.hostIp = Ip.getPublic();
-            ConfigTools.saveConfig(serverConfigFile, serverConfig);
-            LOGGER.warn("Host IP isn't set in config! Setting it to {}", serverConfig.hostIp);
+            String publicIp = Ip.getPublic();
+            if (publicIp != null) {
+                serverConfig.hostIp = publicIp;
+                ConfigTools.saveConfig(serverConfigFile, serverConfig);
+                LOGGER.warn("Host IP isn't set in config! Setting it to {}", serverConfig.hostIp);
+            } else {
+                LOGGER.error("Host IP isn't set in config, please change it manually! Couldn't get public IP");
+                return;
+            }
         }
 
         if (serverConfig.hostLocalIp == null || serverConfig.hostLocalIp.equals("")) {

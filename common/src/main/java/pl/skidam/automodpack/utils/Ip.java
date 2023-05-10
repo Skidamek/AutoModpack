@@ -23,7 +23,7 @@ public class Ip {
         if (JSON != null) {
             return JSON.get("ip").getAsString();
         }
-        return "null";
+        return null;
     }
 
     public static String getLocal() {
