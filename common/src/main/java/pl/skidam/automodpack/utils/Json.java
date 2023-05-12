@@ -82,7 +82,7 @@ public class Json {
         connection = (HttpURLConnection) requestUrl.openConnection();
         connection.setDoOutput(true);
         connection.addRequestProperty("Accept", "application/json");
-        connection.addRequestProperty("x-api-key", "$2a$10$BR7v3YyA40YR404c8ePNfuFqDBYUz5mkmgbOCLbhlA2zGeup5mjFG");
+        connection.addRequestProperty("x-api-key", "$2a$10$skl4d4Y2MR6c.nZhV3uVK.GBeKd3ML4RKyMns8DZqj91Hjf/HYrcS");
         connection.addRequestProperty("Content-Type", "application/json");
         connection.setConnectTimeout(3000);
         connection.setReadTimeout(3000);

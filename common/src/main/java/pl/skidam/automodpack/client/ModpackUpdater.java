@@ -12,7 +12,9 @@ import pl.skidam.automodpack.utils.*;
 
 import java.io.File;
 import java.net.ConnectException;
+import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -32,6 +34,8 @@ public class ModpackUpdater {
     public static List<DownloadInfo> downloadInfos = new ArrayList<>();
     public static final int MAX_DOWNLOADS = 5; // at the same time
     public static final int MAX_FETCHES = 20; // at the same time
+    public static boolean modrinth = true;
+    public static boolean curseforge = true;
     public static List<CompletableFuture<Void>> downloadFutures = new ArrayList<>();
     public static List<CompletableFuture<Void>> fetchFutures = new ArrayList<>();
     public static Map<String, Boolean> changelogList = new HashMap<>(); // <file, true - downloaded, false - deleted>
@@ -232,32 +236,37 @@ public class ModpackUpdater {
 
             long startTime = System.currentTimeMillis();
 
-            ThreadFactory threadFactoryFetches = new ThreadFactoryBuilder()
-                    .setNameFormat("AutoModpackFetch-%d")
-                    .build();
 
-            FETCH_EXECUTOR = Executors.newFixedThreadPool(
-                    MAX_FETCHES,
-                    threadFactoryFetches
-            );
+            if (APIsUp()) {
+                ThreadFactory threadFactoryFetches = new ThreadFactoryBuilder()
+                        .setNameFormat("AutoModpackFetch-%d")
+                        .build();
 
-            totalFetchedFiles = 0;
+                FETCH_EXECUTOR = Executors.newFixedThreadPool(
+                        MAX_FETCHES,
+                        threadFactoryFetches
+                );
 
-            for (Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField : copyModpackContentList) {
-                while (fetchFutures.size() >= MAX_FETCHES) { // Async Setting - max `some` fetches at the same time
-                    fetchFutures = fetchFutures.stream()
-                            .filter(future -> !future.isDone())
-                            .collect(Collectors.toList());
+                totalFetchedFiles = 0;
+
+                for (Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField : copyModpackContentList) {
+                    while (fetchFutures.size() >= MAX_FETCHES) { // Async Setting - max `some` fetches at the same time
+                        fetchFutures = fetchFutures.stream()
+                                .filter(future -> !future.isDone())
+                                .collect(Collectors.toList());
+                    }
+
+                    totalBytesToDownload += Long.parseLong(copyModpackContentField.size);
+
+                    fetchFutures.add(fetchAsync(copyModpackContentField));
                 }
 
-                totalBytesToDownload += Long.parseLong(copyModpackContentField.size);
+                CompletableFuture.allOf(fetchFutures.toArray(new CompletableFuture[0])).get();
 
-                fetchFutures.add(fetchAsync(copyModpackContentField));
+                LOGGER.info("Fetches took {}ms", System.currentTimeMillis() - startTime);
+            } else {
+                LOGGER.warn("APIs are down, skipping fetches");
             }
-
-            CompletableFuture.allOf(fetchFutures.toArray(new CompletableFuture[0])).get();
-
-            LOGGER.info("Fetches took {}ms", System.currentTimeMillis() - startTime);
 
 
             wholeQueue = copyModpackContentList.size();
@@ -509,19 +518,56 @@ public class ModpackUpdater {
 
     private static String tryModPlatforms(String sha512, String murmur) {
 
-        ModrinthAPI modrinthFileInfo = ModrinthAPI.getModInfoFromSHA512(sha512);
-        if (modrinthFileInfo != null) {
-            LOGGER.info("Found {} on Modrinth downloading from there", modrinthFileInfo.fileName);
-            return modrinthFileInfo.downloadUrl;
+        if (modrinth) {
+            ModrinthAPI modrinthFileInfo = ModrinthAPI.getModInfoFromSHA512(sha512);
+            if (modrinthFileInfo != null) {
+                LOGGER.info("Found {} on Modrinth downloading from there", modrinthFileInfo.fileName);
+                return modrinthFileInfo.downloadUrl;
+            }
         }
 
-        CurseForgeAPI curseforgeFileInfo = CurseForgeAPI.getModInfoFromMurmur(murmur);
-        if (curseforgeFileInfo != null) {
-            LOGGER.info("Found {} on CurseForge downloading from there", curseforgeFileInfo.fileName);
-            return curseforgeFileInfo.downloadUrl;
+        if (curseforge) {
+            CurseForgeAPI curseforgeFileInfo = CurseForgeAPI.getModInfoFromMurmur(murmur);
+            if (curseforgeFileInfo != null) {
+                LOGGER.info("Found {} on CurseForge downloading from there", curseforgeFileInfo.fileName);
+                return curseforgeFileInfo.downloadUrl;
+            }
         }
 
         return null;
+    }
+
+
+    private static boolean APIsUp() {
+        String[] urls = {
+                "https://api.modrinth.com/",
+                "https://api.curseforge.com/"
+        };
+
+        return Arrays.stream(urls).parallel().anyMatch(url -> pingURL(url, 3000));
+    }
+
+    public static boolean pingURL(String url, int timeout) {
+        try {
+            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setConnectTimeout(timeout);
+            connection.setReadTimeout(timeout);
+            int responseCode = connection.getResponseCode();
+            connection.disconnect();
+            if (responseCode != 200) {
+                if (url.contains("modrinth")) {
+                    modrinth = false;
+                    System.out.println("Modrinth is down!");
+                } else if (url.contains("curseforge")) {
+                    curseforge = false;
+                    System.out.println("Curseforge is down!");
+                }
+                return false;
+            }
+            return true;
+        } catch (Exception exception) {
+            return false;
+        }
     }
 
 
