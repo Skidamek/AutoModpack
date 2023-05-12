@@ -34,8 +34,8 @@ public class ModpackUpdater {
     public static List<DownloadInfo> downloadInfos = new ArrayList<>();
     public static final int MAX_DOWNLOADS = 5; // at the same time
     public static final int MAX_FETCHES = 20; // at the same time
-    public static boolean modrinth = true;
-    public static boolean curseforge = true;
+    public static boolean modrinthAPI = true;
+    public static boolean curseforgeAPI = true;
     public static List<CompletableFuture<Void>> downloadFutures = new ArrayList<>();
     public static List<CompletableFuture<Void>> fetchFutures = new ArrayList<>();
     public static Map<String, Boolean> changelogList = new HashMap<>(); // <file, true - downloaded, false - deleted>
@@ -518,7 +518,7 @@ public class ModpackUpdater {
 
     private static String tryModPlatforms(String sha512, String murmur) {
 
-        if (modrinth) {
+        if (modrinthAPI) {
             ModrinthAPI modrinthFileInfo = ModrinthAPI.getModInfoFromSHA512(sha512);
             if (modrinthFileInfo != null) {
                 LOGGER.info("Found {} on Modrinth downloading from there", modrinthFileInfo.fileName);
@@ -526,7 +526,7 @@ public class ModpackUpdater {
             }
         }
 
-        if (curseforge) {
+        if (curseforgeAPI) {
             CurseForgeAPI curseforgeFileInfo = CurseForgeAPI.getModInfoFromMurmur(murmur);
             if (curseforgeFileInfo != null) {
                 LOGGER.info("Found {} on CurseForge downloading from there", curseforgeFileInfo.fileName);
@@ -556,10 +556,10 @@ public class ModpackUpdater {
             connection.disconnect();
             if (responseCode != 200) {
                 if (url.contains("modrinth")) {
-                    modrinth = false;
+                    modrinthAPI = false;
                     System.out.println("Modrinth is down!");
                 } else if (url.contains("curseforge")) {
-                    curseforge = false;
+                    curseforgeAPI = false;
                     System.out.println("Curseforge is down!");
                 }
                 return false;
