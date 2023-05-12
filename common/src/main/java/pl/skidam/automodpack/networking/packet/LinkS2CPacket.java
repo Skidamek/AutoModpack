@@ -12,21 +12,20 @@ import net.minecraft.text.Text;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 
-import java.util.UUID;
-
-import static pl.skidam.automodpack.networking.fabric.ModPacketsImpl.acceptLogin;
+import static pl.skidam.automodpack.StaticVariables.LOGGER;
 
 public class LinkS2CPacket {
     public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean b, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer sync, PacketSender sender) {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
-        UUID uniqueId = profile.getId();
 
         if (buf.readBoolean()) { // disconnect
+            LOGGER.warn("{} has not installed modpack", profile.getName());
             Text reason = TextHelper.literal("[AutoModpack] Install/Update modpack to join");
-            acceptLogin.add(uniqueId);
             ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
+        } else {
+            LOGGER.info("{} has installed whole modpack", profile.getName());
         }
     }
 }

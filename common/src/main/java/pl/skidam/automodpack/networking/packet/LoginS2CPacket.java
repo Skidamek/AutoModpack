@@ -34,9 +34,9 @@ public class LoginS2CPacket {
         String correctResponse = VERSION + "-" + Platform.getPlatformType().toString().toLowerCase();
 
         if (!understood) {
+            LOGGER.warn("{} has not installed AutoModpack.", playerName);
             if (serverConfig.optionalModpack) {
                 acceptLogin.add(uniqueId);
-                LOGGER.info("{} has not installed AutoModpack.", playerName);
             } else {
                 Text reason = TextHelper.literal("AutoModpack mod for " + Platform.getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
                 acceptLogin.add(uniqueId);
@@ -45,6 +45,8 @@ public class LoginS2CPacket {
             }
             return;
         } else {
+
+            LOGGER.info("{} has installed AutoModpack.", playerName);
 
             String clientResponse = buf.readString();
             boolean isClientVersionHigher = isClientVersionHigher(clientResponse);

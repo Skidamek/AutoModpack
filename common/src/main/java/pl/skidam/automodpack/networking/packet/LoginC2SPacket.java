@@ -3,10 +3,8 @@ package pl.skidam.automodpack.networking.packet;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
-import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.Platform;
 
@@ -15,7 +13,6 @@ import java.util.function.Consumer;
 
 import static pl.skidam.automodpack.StaticVariables.LOGGER;
 import static pl.skidam.automodpack.StaticVariables.VERSION;
-import static pl.skidam.automodpack.networking.ModPackets.HANDSHAKE;
 
 public class LoginC2SPacket {
 
@@ -34,6 +31,8 @@ public class LoginC2SPacket {
             if (!serverResponse.contains(loader)) {
                 LOGGER.error("Versions mismatch " + serverResponse);
             }
+        } else {
+            LOGGER.info("Versions match " + serverResponse);
         }
 
         return CompletableFuture.completedFuture(outBuf);

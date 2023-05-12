@@ -2,8 +2,9 @@ package pl.skidam.automodpack.networking.fabric;
 
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.fabricmc.fabric.api.networking.v1.*;
+import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
@@ -17,7 +18,9 @@ import pl.skidam.automodpack.networking.packet.LinkS2CPacket;
 import pl.skidam.automodpack.networking.packet.LoginC2SPacket;
 import pl.skidam.automodpack.networking.packet.LoginS2CPacket;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.FutureTask;
 
 import static pl.skidam.automodpack.StaticVariables.*;
@@ -75,7 +78,7 @@ public class ModPacketsImpl {
                 correctResponse = VERSION + "-" + "fabric&quilt";
             }
             buf.writeString(correctResponse);
-            sender.sendPacket(HANDSHAKE, buf);
+            sender.sendPacket(HANDSHAKE, buf); // -> LoginC2SPacket -> LoginS2CPacket -> LinkC2SPacket -> LinkS2CPacket -> joined/disconnected
 
             sync.waitFor(future);
         });
