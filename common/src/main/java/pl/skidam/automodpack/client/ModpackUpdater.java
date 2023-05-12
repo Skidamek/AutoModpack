@@ -557,10 +557,10 @@ public class ModpackUpdater {
             if (responseCode != 200) {
                 if (url.contains("modrinth")) {
                     modrinthAPI = false;
-                    System.out.println("Modrinth is down!");
+                    LOGGER.warn("Modrinth API is down!");
                 } else if (url.contains("curseforge")) {
                     curseforgeAPI = false;
-                    System.out.println("Curseforge is down!");
+                    LOGGER.warn("Curseforge API is down!");
                 }
                 return false;
             }
