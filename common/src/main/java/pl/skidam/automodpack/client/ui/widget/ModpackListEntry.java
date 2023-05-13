@@ -18,12 +18,17 @@ public class ModpackListEntry extends AlwaysSelectedEntryListWidget.Entry<Modpac
     public final Modpack.ModpackObject modpack;
     public final Path modpackPath;
     private final MutableText text;
+    private boolean nullEntry = false;
 
     public ModpackListEntry(MutableText text, Modpack.ModpackObject modpack, Path modpackPath, MinecraftClient client) {
         this.text = text;
         this.modpack = modpack;
         this.modpackPath = modpackPath;
         this.client = client;
+
+        if (modpack == null && modpackPath == null) {
+            nullEntry = true;
+        }
     }
 
     @Override
@@ -33,8 +38,19 @@ public class ModpackListEntry extends AlwaysSelectedEntryListWidget.Entry<Modpac
 
     @Override
     public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+
+        matrices.push();
+
         int centeredX = x + entryWidth / 2;
+        if (nullEntry) {
+            float scale = 1.5f;
+            matrices.scale(scale, scale, scale);
+            centeredX = (int) (x + entryWidth / (2 * scale));
+        }
+
         DrawableHelper.drawCenteredTextWithShadow(matrices, client.textRenderer, text, centeredX, y, 16777215);
+
+        matrices.pop();
     }
 
     @Nullable
@@ -50,7 +66,6 @@ public class ModpackListEntry extends AlwaysSelectedEntryListWidget.Entry<Modpac
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int delta) {
-        return true;
+        return nullEntry;
     }
-
 }

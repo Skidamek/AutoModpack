@@ -33,7 +33,6 @@ public class MenuWidgetWidget extends AlwaysSelectedEntryListWidget<ModpackListE
         if (modpacks == null || modpacks.isEmpty()) {
             ModpackListEntry entry = new ModpackListEntry(TextHelper.literal("No modpacks found").formatted(Formatting.BOLD), null, null, this.client);
             this.addEntry(entry);
-            this.setSelected(entry);
             return;
         }
 
