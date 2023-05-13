@@ -44,7 +44,7 @@ public class ReLauncher {
 
             if (isClient) {
                 if (!preload && !ScreenTools.getScreenString().contains("restartscreen")) {
-                    ScreenTools.setTo.restart(ScreenTools.getScreen(), gameDir);
+                    ScreenTools.setTo.restart(gameDir);
                     return;
                 }
 

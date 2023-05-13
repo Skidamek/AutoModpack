@@ -26,8 +26,8 @@ public class ScreenTools {
             if (Check.properlyLoaded()) Screens.setScreen(new FetchScreen());
         }
 
-        public static void restart(Screen parent, File gameDir) {
-            if (Check.properlyLoaded()) Screens.setScreen(new RestartScreen(parent, gameDir));
+        public static void restart(File gameDir) {
+            if (Check.properlyLoaded()) Screens.setScreen(new RestartScreen(gameDir));
         }
 
         public static void danger(Screen parent, String link, File modpackDir, File modpackContentFile) {
@@ -40,6 +40,10 @@ public class ScreenTools {
 
         public static void title() {
             if (Check.properlyLoaded()) Screens.setScreen(new TitleScreen());
+        }
+
+        public static void menu() {
+            if (Check.properlyLoaded()) Screens.setScreen(new MenuScreen());
         }
     }
 

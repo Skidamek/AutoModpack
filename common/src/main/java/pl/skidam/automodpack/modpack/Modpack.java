@@ -9,12 +9,11 @@ import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
@@ -122,7 +121,7 @@ public class Modpack {
                 }
 
                 modpackContent = new Jsons.ModpackContentFields(null, list);
-                modpackContent.timeStamp = modpackDir.toFile().lastModified();
+                modpackContent.version = MC_VERSION;
                 modpackContent.modpackName = serverConfig.modpackName;
                 modpackContent.loader = Platform.getPlatformType().toString().toLowerCase();
                 modpackContent.modpackHash = CustomFileUtils.getHashFromStringOfHashes(ModpackContentTools.getStringOfAllHashes(modpackContent));
@@ -301,6 +300,81 @@ public class Modpack {
                 return true;
             } else {
                 return excludeFile.contains(modpackFile);
+            }
+        }
+    }
+
+    public static class ModpackObject {
+        private String NAME;
+        private String LINK;
+        private String LOADER;
+        private String VERSION;
+        private String HASH;
+        private List<Jsons.ModpackContentFields.ModpackContentItems> CONTENT;
+
+        public String getName() { return NAME; }
+        public String getLink() { return LINK; }
+        public String getLoader() { return LOADER; }
+        public String getVersion() { return VERSION; }
+        public String getHash() { return HASH; }
+        public List<Jsons.ModpackContentFields.ModpackContentItems> getContent() { return CONTENT; }
+
+        public void setName(String name) { NAME = name; }
+        public void setLink(String link) { LINK = link; }
+        public void setLoader(String loader) { LOADER = loader; }
+        public void setVersion(String version) { VERSION = version; }
+        public void setHash(String hash) { HASH = hash; }
+        public void setContent(List<Jsons.ModpackContentFields.ModpackContentItems> content) { CONTENT = content; }
+    }
+
+    public static Map<Path, ModpackObject> getModpacksMap() {
+
+        File[] modpacks = modpacksDir.listFiles();
+
+        if (modpacks == null) {
+            LOGGER.error("Failed to list files in modpacks dir!");
+            return null;
+        }
+
+        Map<Path, ModpackObject> modpacksMap = new HashMap<>();
+
+        for (File modpack : modpacks) {
+            if (modpack.isDirectory()) {
+                File modpackJson = new File(modpack, hostModpackContentFile.getName());
+                if (modpackJson.exists()) {
+                    modpacksMap.put(modpack.toPath(), new ModpackObject());
+                }
+            }
+        }
+
+        return modpacksMap;
+    }
+
+    public static void setModpackObject(Map<Path, ModpackObject> modpacksMap) {
+
+        if (modpacksMap == null) {
+            LOGGER.error("Failed to get modpacks map!");
+            return;
+        }
+
+        for (Map.Entry<Path, ModpackObject> entry : modpacksMap.entrySet()) {
+            Path modpackDir = entry.getKey();
+            ModpackObject modpackObject = entry.getValue();
+
+            File modpackJson = new File(modpackDir.toFile(), hostModpackContentFile.getName());
+
+            try {
+                Jsons.ModpackContentFields modpackContentFields = ConfigTools.GSON.fromJson(new FileReader(modpackJson), Jsons.ModpackContentFields.class);
+
+                modpackObject.setName(modpackContentFields.modpackName);
+                modpackObject.setLink(modpackContentFields.link);
+                modpackObject.setLoader(modpackContentFields.loader);
+                modpackObject.setVersion(modpackContentFields.version);
+                modpackObject.setHash(modpackContentFields.modpackHash);
+                modpackObject.setContent(modpackContentFields.list);
+
+            } catch (IOException e) {
+                LOGGER.error("Failed to read modpack content file {}", modpackJson, e);
             }
         }
     }

@@ -31,7 +31,8 @@ public class ErrorScreen extends Screen {
     @Override
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.literal("[AutoModpack] Error! Something went wrong!").formatted(Formatting.RED), this.width / 2, this.height / 2 - 40, 16777215);
+        // Something went wrong!
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.literal("[AutoModpack] Error! ").append(TextHelper.translatable("gui.automodpack.error").formatted(Formatting.RED)), this.width / 2, this.height / 2 - 40, 16777215);
         for (int i = 0; i < this.errorMessage.length; i++) {
             drawCenteredTextWithShadow(matrices, this.textRenderer, this.errorMessage[i], this.width / 2, this.height / 2 - 20 + i * 10, 14687790);
         }

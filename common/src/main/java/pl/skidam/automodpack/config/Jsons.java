@@ -44,7 +44,7 @@ public class Jsons {
         public String modpackName = "";
         public String link = "";
         public String loader = "";
-        public long timeStamp = -1;
+        public String version = "";
         public String modpackHash = "";
         public List<ModpackContentItems> list;
         public ModpackContentFields(String link, List<ModpackContentItems> list) {

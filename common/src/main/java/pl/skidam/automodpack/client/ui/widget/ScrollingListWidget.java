@@ -29,6 +29,10 @@ public class ScrollingListWidget<E extends ElementListWidget.Entry<E>> extends E
 
     @Override
     public void appendNarrations(NarrationMessageBuilder builder) {
+    }
 
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        return false;
     }
 }

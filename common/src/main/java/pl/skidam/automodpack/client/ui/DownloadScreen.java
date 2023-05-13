@@ -35,7 +35,7 @@ public class DownloadScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.screen.download.button.cancel"), button -> ModpackUpdater.cancelDownload()).position(this.width / 2 - 50, this.height - 25).size(100, 20).build());
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.cancel"), button -> ModpackUpdater.cancelDownload()).position(this.width / 2 - 50, this.height - 25).size(100, 20).build());
     }
 
     private Text getStage() {
@@ -75,12 +75,12 @@ public class DownloadScreen extends Screen {
             return TextHelper.literal(speed + " MB/s");
         }
 
-        return TextHelper.translatable("gui.automodpack.screen.download.text.calculating"); // Calculating...
+        return TextHelper.translatable("gui.automodpack.calculating"); // Calculating...
     }
 
     private Text getTotalETA() {
         String eta = ModpackUpdater.getTotalETA();
-        return TextHelper.literal("Time left: " + eta); // TODO translatable
+        return TextHelper.translatable("gui.automodpack.eta " + eta); // Time left: %s
     }
 
     private String getETAOfFile(String file) {
@@ -102,7 +102,7 @@ public class DownloadScreen extends Screen {
         List<DownloadInfo> downloadInfosCopy = new ArrayList<>(downloadInfos);
 
         if (downloadInfosCopy.size() > 0) {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.downloading").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.downloading"), (int) (this.width / 2 * scale), y, 16777215);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
@@ -113,10 +113,10 @@ public class DownloadScreen extends Screen {
                 currentY += 10;
             }
         } else {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.screen.download.text.no_files").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.nofiles"), (int) (this.width / 2 * scale), y, 16777215);
 
-            // please wait // TODO change it to translatable
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.literal("Please wait.").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 15, 16777215);
+            // Please wait...
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.wait").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 25, 16777215);
         }
 
         matrices.pop();
