@@ -9,7 +9,7 @@
   "gui.automodpack.screen.confirm.description": "Perderás todas las cosas del modpack descargado.",
   "gui.automodpack.screen.confirm.secDescription": "Tendrás que reiniciar el juego.",
   "gui.automodpack.screen.confirm.thiDescription": "¿Estás seguro de que quieres borrarlo?",
-  "gui.automodpack.screen.confirm.button.sure": "Sí (borrar y salir)",
+  "gui.automodpack.screen.confirm.button.sure": "Sí (Borrar y salir)",
   "gui.automodpack.screen.confirm.button.cancel": "No (Volver al juego)",
 
   "gui.automodpack.screen.loading.title": "Descargando actualizaciones...",
@@ -20,7 +20,7 @@
 
   "gui.automodpack.screen.danger.title": "¡Atención! ¡Modpack encontrado!",
   "gui.automodpack.screen.danger.description": "¿Desea descargar la actualización de la misma?",
-  "gui.automodpack.screen.danger.secDescription": "Puede ser arriesgado. No lo descargue si no confía en los administradores del servidor!",
+  "gui.automodpack.screen.danger.secDescription": "Puede ser arriesgado. ¡No lo descargue si no confía en los administradores del servidor!",
   "gui.automodpack.screen.danger.button.accept": "Descargar",
   "gui.automodpack.screen.danger.button.cancel": "No descargar",
 
@@ -30,5 +30,5 @@
   "gui.automodpack.screen.download.text.calculating": "Calculando...",
   "gui.automodpack.screen.download.text.downloading": "Descargando:",
   "gui.automodpack.screen.download.text.no_files": "¡No hay archivos para descargar!",
-  "gui.automodpack.screen.changelog.button.back": "Back"
+  "gui.automodpack.screen.changelog.button.back": "Atrás"
 }
