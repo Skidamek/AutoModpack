@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.platforms;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import pl.skidam.automodpack.Platform;
 import pl.skidam.automodpack.utils.Json;
@@ -88,12 +89,35 @@ public class ModrinthAPI {
             String fileVersion = JSONObject.get("version_number").getAsString();
             String releaseType = JSONObject.get("version_type").getAsString();
 
-            JsonObject JSONObjectFiles = JSONObject.getAsJsonArray("files").get(0).getAsJsonObject();
+            JsonArray filesArray = JSONObject.getAsJsonArray("files");
+            JsonObject JSONObjectFile = null;
 
-            String downloadUrl = JSONObjectFiles.get("url").getAsString();
-            String fileName = JSONObjectFiles.get("filename").getAsString();
-            long fileSize = JSONObjectFiles.get("size").getAsLong();
-            String SHA512Hash = JSONObjectFiles.get("hashes").getAsJsonObject().get("sha1").getAsString();
+
+            // some projects can have more than one file under the same version
+            if (filesArray.size() == 1) {
+                JSONObjectFile = filesArray.get(0).getAsJsonObject();
+            } else {
+                for (JsonElement fileElement : filesArray) {
+                    JsonObject fileObject = fileElement.getAsJsonObject();
+                    JsonObject hashesObject = fileObject.getAsJsonObject("hashes");
+                    String sha1Hash = hashesObject.get("sha1").getAsString();
+
+                    if (sha1Hash.equals(sha1)) {
+                        JSONObjectFile = fileObject;
+                        break;
+                    }
+                }
+            }
+
+            if (JSONObjectFile == null) {
+                LOGGER.error("Can't find file with SHA1 hash: {}", sha1);
+                return null;
+            }
+
+            String downloadUrl = JSONObjectFile.get("url").getAsString();
+            String fileName = JSONObjectFile.get("filename").getAsString();
+            long fileSize = JSONObjectFile.get("size").getAsLong();
+            String SHA512Hash = JSONObjectFile.get("hashes").getAsJsonObject().get("sha1").getAsString();
 
             return new ModrinthAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA512Hash);
 

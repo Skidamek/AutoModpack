@@ -49,6 +49,7 @@ public class ModpackUpdater {
     public static boolean update;
     private static Jsons.ModpackContentFields serverModpackContent;
     public static Map<String, String> failedDownloads = new HashMap<>(); // <file, url>
+    private static byte[] serverModpackContentByteArray = new byte[0];
 
     public static String getStage() {
         return alreadyDownloaded + "/" + wholeQueue;
@@ -97,6 +98,7 @@ public class ModpackUpdater {
 
         try {
             ModpackUpdater.serverModpackContent = serverModpackContent;
+            serverModpackContentByteArray = GSON.toJson(serverModpackContent).getBytes();
 
             if (serverModpackContent == null)  { // server is down, or you don't have access to internet, but we still want to load selected modpack
 
@@ -203,7 +205,7 @@ public class ModpackUpdater {
             }
 
 
-            byte[] serverModpackContentByteArray = GSON.toJson(serverModpackContent).getBytes();
+//            serverModpackContentByteArray = GSON.toJson(serverModpackContent).getBytes();
             List<Jsons.ModpackContentFields.ModpackContentItems> copyModpackContentList = new ArrayList<>(serverModpackContent.list);
 
             for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
@@ -481,8 +483,11 @@ public class ModpackUpdater {
         } else {
 
             // Download from our server if we can't download from mod platforms
-            String serverUrl = serverModpackContent.list.stream().filter(modpackContentField -> modpackContentField.sha1.equals(serverSHA1)).findFirst().get().link;
+            List<Jsons.ModpackContentFields.ModpackContentItems> list = CustomFileUtils.byteArrayToArrayList(serverModpackContentByteArray);
+            String serverUrl = list.stream().filter(modpackContentField -> modpackContentField.sha1.equals(serverSHA1)).findFirst().get().link;
+
             if (!url.equals(serverUrl)) {
+                LOGGER.info("Couldn't download from {}. Downloading {} from {}", url, downloadFile.getName(), serverUrl);
                 downloadFile(serverUrl, downloadFile, serverSHA1);
                 return;
             }

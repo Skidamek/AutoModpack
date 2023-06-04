@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -348,5 +349,13 @@ public class CustomFileUtils {
         }
 
         return files;
+    }
+
+    public static List byteArrayToArrayList(byte[] byteArray) {
+        var byteList = new ArrayList<>();
+        for (byte b : byteArray) {
+            byteList.add(b);
+        }
+        return byteList;
     }
 }
