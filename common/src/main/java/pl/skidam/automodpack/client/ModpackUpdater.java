@@ -204,10 +204,6 @@ public class ModpackUpdater {
                 }
             }
 
-
-//            serverModpackContentByteArray = GSON.toJson(serverModpackContent).getBytes();
-            List<Jsons.ModpackContentFields.ModpackContentItems> copyModpackContentList = new ArrayList<>(serverModpackContent.list);
-
             for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
                 String fileName = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
@@ -224,14 +220,14 @@ public class ModpackUpdater {
 
                 if (serverSHA1.equals(CustomFileUtils.getHashWithRetry(file, "SHA-1"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
-                    copyModpackContentList.remove(modpackContentField);
+                    serverModpackContent.list.remove(modpackContentField);
                 } else if (modpackContentField.isEditable) {
                     LOGGER.info("Skipping editable file: " + fileName);
-                    copyModpackContentList.remove(modpackContentField);
+                    serverModpackContent.list.remove(modpackContentField);
                 } else if (file.isFile() && !modpackContentField.type.equals("mod")) {
                     if (file.length() == Long.parseLong(modpackContentField.size)) {
                         LOGGER.info("Skipping* already downloaded file: " + fileName);
-                        copyModpackContentList.remove(modpackContentField);
+                        serverModpackContent.list.remove(modpackContentField);
                     }
                 }
             }
@@ -251,7 +247,7 @@ public class ModpackUpdater {
 
                 totalFetchedFiles = 0;
 
-                for (Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField : copyModpackContentList) {
+                for (Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField : serverModpackContent.list) {
                     while (fetchFutures.size() >= MAX_FETCHES) { // Async Setting - max `some` fetches at the same time
                         fetchFutures = fetchFutures.stream()
                                 .filter(future -> !future.isDone())
@@ -271,7 +267,7 @@ public class ModpackUpdater {
             }
 
 
-            wholeQueue = copyModpackContentList.size();
+            wholeQueue = serverModpackContent.list.size();
 
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
@@ -286,7 +282,7 @@ public class ModpackUpdater {
                         threadFactoryDownloads
                 );
 
-                for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : copyModpackContentList) {
+                for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
                     while (downloadFutures.size() >= MAX_DOWNLOADS) { // Async Setting - max `some` download at the same time
                         downloadFutures = downloadFutures.stream()
                                 .filter(future -> !future.isDone())
