@@ -56,7 +56,9 @@ public class Preload {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
                 Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
-                new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
+                if (serverModpackContent != null) {
+                    new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
+                }
             }
         }
 

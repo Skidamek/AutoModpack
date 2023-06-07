@@ -5,6 +5,8 @@
   "plugin": "pl.skidam.automodpack.mixin.MixinPlugin",
   "compatibilityLevel": "JAVA_17",
   "client": [
+    "MusicTrackerMixin",
+    "TestButton"
   ],
   "server": [
     "DisconnectDisabler",

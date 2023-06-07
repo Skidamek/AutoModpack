@@ -4,6 +4,8 @@ public class Url {
     // This class make sure to prevent issues like this
     // https://github.com/Skidamek/AutoModpack/issues/70
 
+    // TODO change it to base64 encoding
+
     private static final String[][] ENCODING_TABLE = {
             { " ", "%20" },
             { "[", "%5B" },

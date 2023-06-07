@@ -14,7 +14,6 @@ public class AutoModpack {
 
     public static void onInitialize() {
         preload = false;
-        LOGGER.info("AutoModpack is running on " + Platform.getPlatformType() + "!");
 
         Commands.register();
 

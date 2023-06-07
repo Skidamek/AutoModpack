@@ -61,7 +61,7 @@ public class ChangelogScreen extends Screen {
 
     private void addBackButton(boolean removeBefore) {
         // Add the back button
-        var backButton = ButtonWidget.builder(TextHelper.translatable("gui.automodpack.back"), button -> {
+        var backButton = ButtonWidget.builder(TextHelper.translatable("automodpack.back"), button -> {
             assert this.client != null;
             this.client.setScreen(this.parent);
         }).position(10, this.height - 30).size(72, 20).build();
@@ -133,6 +133,7 @@ public class ChangelogScreen extends Screen {
         this.remove(this.changelogsList);
         this.changelogsList = new ChangelogsList(client, this.width, this.height, 48, this.height - 64, 20);
         this.addDrawableChild(this.changelogsList);
+        this.addDrawableChild(this.searchField);
 
         addBackButton(true); // it makes it invisible because of re-added changelog list
     }

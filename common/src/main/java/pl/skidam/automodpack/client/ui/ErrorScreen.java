@@ -23,18 +23,18 @@ public class ErrorScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.toMenu"),
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("automodpack.back"),
                 button -> client.setScreen(null)
-        ).position(this.width / 2 - 100, this.height / 4 + 40).size(200, 20).build());
+        ).position(this.width / 2 - 100, this.height / 2 + 50).size(200, 20).build());
     }
 
     @Override
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
         // Something went wrong!
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.literal("[AutoModpack] Error! ").append(TextHelper.translatable("gui.automodpack.error").formatted(Formatting.RED)), this.width / 2, this.height / 2 - 40, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.literal("[AutoModpack] Error! ").append(TextHelper.translatable("automodpack.error").formatted(Formatting.RED)), this.width / 2, this.height / 2 - 40, 16777215);
         for (int i = 0; i < this.errorMessage.length; i++) {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, this.errorMessage[i], this.width / 2, this.height / 2 - 20 + i * 10, 14687790);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable(this.errorMessage[i]), this.width / 2, this.height / 2 - 20 + i * 10, 14687790);
         }
         super.render(matrices, mouseX, mouseY, delta);
     }

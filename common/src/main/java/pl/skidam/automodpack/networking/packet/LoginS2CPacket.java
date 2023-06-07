@@ -76,7 +76,7 @@ public class LoginS2CPacket {
 
         acceptLogin.add(uniqueId);
 
-        if (!HttpServer.isRunning && serverConfig.externalModpackHostLink.equals("")) return;
+        if (!HttpServer.isRunning() && serverConfig.externalModpackHostLink.equals("")) return;
 
         String playerIp = connection.getAddress().toString();
         String HostIPForLocal = serverConfig.hostLocalIp.replaceFirst("(https?://)", ""); // Removes HTTP:// or HTTPS://

@@ -87,7 +87,7 @@ public class PlatformImpl {
             }
             LOGGER.info("Successfully installed latest version of Quilted Fabric API (QFAPI)!");
 
-            new ReLauncher.Restart(null, "Successfully installed latest (QFAPI)!");
+            new ReLauncher.Restart(null, "Successfully installed latest (QFAPI)!", false);
         }
     }
 

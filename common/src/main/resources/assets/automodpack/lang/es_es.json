@@ -1,4 +1,10 @@
 {
+
+
+  "EVERYTHING HERE NEEDS TO BE RE-TRANSLATED": "TAKE A LOOK AT en_us.json FILE",
+  "THANK YOU": "SO MUCH!",
+
+
   "gui.automodpack.screen.restart.title.modpack": "¡Se ha descargado una actualización para tu Modpack!",
   "gui.automodpack.screen.restart.description":  "Para completar la actualización es necesario reiniciar el juego",
   "gui.automodpack.screen.restart.secDescription": "¿Desea reiniciar automáticamente ahora?",

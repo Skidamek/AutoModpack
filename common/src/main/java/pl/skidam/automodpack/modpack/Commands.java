@@ -59,7 +59,7 @@ public class Commands {
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
-            if (!HttpServer.isRunning) {
+            if (!HttpServer.isRunning()) {
                 context.getSource().sendFeedback(TextHelper.literal("Starting modpack hosting...")
                                 .formatted(Formatting.YELLOW),
                         true);
@@ -78,7 +78,7 @@ public class Commands {
 
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
-            if (HttpServer.isRunning) {
+            if (HttpServer.isRunning()) {
                 context.getSource().sendFeedback(TextHelper.literal("Stopping modpack hosting...")
                                 .formatted(Formatting.RED),
                         true);
@@ -100,7 +100,7 @@ public class Commands {
             context.getSource().sendFeedback(TextHelper.literal("Restarting modpack hosting...")
                             .formatted(Formatting.YELLOW),
                     true);
-            if (HttpServer.isRunning) {
+            if (HttpServer.isRunning()) {
                 HttpServer.stop();
                 HttpServer.start();
                 context.getSource().sendFeedback(TextHelper.literal("Modpack hosting restarted!")
@@ -122,8 +122,8 @@ public class Commands {
 
 
     private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
-        Formatting statusColor = HttpServer.isRunning ? Formatting.GREEN : Formatting.RED;
-        String status = HttpServer.isRunning ? "running" : "not running";
+        Formatting statusColor = HttpServer.isRunning() ? Formatting.GREEN : Formatting.RED;
+        String status = HttpServer.isRunning() ? "running" : "not running";
         context.getSource().sendFeedback(TextHelper.literal("Modpack hosting status")
                 .formatted(Formatting.GREEN)
                 .append(TextHelper.literal(" - ")

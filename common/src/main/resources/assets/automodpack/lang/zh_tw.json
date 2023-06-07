@@ -1,4 +1,10 @@
 {
+
+
+  "EVERYTHING HERE NEEDS TO BE RE-TRANSLATED": "TAKE A LOOK AT en_us.json FILE",
+  "THANK YOU": "SO MUCH!",
+
+
   "gui.automodpack.screen.restart.title.modpack": "已為你的模組包下載更新！",
   "gui.automodpack.screen.restart.description": "要完成此次更新，你必須重啟遊戲。",
   "gui.automodpack.screen.restart.secDescription": "你想要現在自動重啟嗎？",

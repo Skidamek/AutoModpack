@@ -1,34 +1,48 @@
 {
-    "gui.automodpack.screen.restart.title.modpack": "An update has been downloaded for your Modpack!",
-    "gui.automodpack.screen.restart.description": "To complete the update you must restart the game.",
-    "gui.automodpack.screen.restart.secDescription": "Do you want to do restart now?",
-    "gui.automodpack.screen.restart.button.quit": "Yes (Close the game)",
-    "gui.automodpack.screen.restart.button.cancel": "No (Back to the game)",
+    "automodpack.restart.full": "Modpack has been downloaded!",
+    "automodpack.restart.update": "An update has been downloaded to Modpack!",
+    "automodpack.restart.description": "To complete you must restart the game.",
+    "automodpack.restart.secDescription": "Do you want to do restart now?",
+    "automodpack.restart.confirm": "Yes, close the game",
+    "automodpack.restart.cancel": "No, back to the game",
   
-    "gui.automodpack.screen.confirm.title": "❌ Delete Modpack ❌",
-    "gui.automodpack.screen.confirm.description": "You will lose all stuff from downloaded modpack.",
-    "gui.automodpack.screen.confirm.secDescription": "You will need to restart game.",
-    "gui.automodpack.screen.confirm.thiDescription": "Are you sure you want to delete it?",
-    "gui.automodpack.screen.confirm.button.sure": "Yes (Delete and quit)",
-    "gui.automodpack.screen.confirm.button.cancel": "No (Back to the game)",
+    "automodpack.delete": "Delete Modpack",
+    "automodpack.delete.description": "You will lose all stuff from downloaded modpack.",
+    "automodpack.delete.secDescription": "You will need to restart game.",
+    "automodpack.delete.thiDescription": "Are you sure you want to delete it?",
+    "automodpack.delete.confirm": "Delete and quit",
+    "automodpack.delete.cancel": "Back to the game",
   
-    "gui.automodpack.screen.loading.title": "Downloading updates...",
-    "gui.automodpack.screen.loading.wait": "Please wait...",
-    "gui.automodpack.screen.loading.download": "Downloading...",
-    "gui.automodpack.screen.loading.extract": "Extracting modpack...",
-    "gui.automodpack.screen.loading.finish": "Finishing...",
-  
-    "gui.automodpack.screen.danger.title": "Attention! Modpack found!",
-    "gui.automodpack.screen.danger.description": "Do you want to download the update?",
-    "gui.automodpack.screen.danger.secDescription": "It might be risky! Don't download if don't trust the server admins!",
-    "gui.automodpack.screen.danger.button.accept": "Download",
-    "gui.automodpack.screen.danger.button.cancel": "Don't download",
+    "automodpack.danger": "This server provides an external modpack!",
+    "automodpack.danger.description": "Do you want to download it?",
+    "automodpack.danger.secDescription": "It might be risky! Do NOT download if don't trust the server owners!",
+    "automodpack.danger.confirm": "Download",
+    "automodpack.danger.cancel": "Don't download",
 
-    "gui.automodpack.screen.changelog.button.back": "Back",
-    "gui.automodpack.screen.restart.button.changelogs": "View changelogs",
-    "gui.automodpack.screen.changelog.no_changes": "No changes found",
-    "gui.automodpack.screen.download.button.cancel": "Cancel",
-    "gui.automodpack.screen.download.text.calculating": "Calculating...",
-    "gui.automodpack.screen.download.text.downloading": "Downloading:",
-    "gui.automodpack.screen.download.text.no_files": "No files to download!"
+    "automodpack.changelog.view": "View changelogs",
+    "automodpack.changelog.noChanges": "No changes found.",
+
+    "automodpack.download.calculating": "Calculating...",
+    "automodpack.download.eta": "Time left: %s",
+    "automodpack.download.downloading": "Downloading:",
+    "automodpack.download.noFiles": "No files to download!",
+
+    "automodpack.redownload": "Redownload Modpack",
+    "automodpack.redownload.description": "It may fix issues with modpack.",
+
+    "automodpack.error": "Something went wrong!",
+    "automodpack.error.files": "Failed to download some files.",
+    "automodpack.error.critical": "Critical error while downloading modpack.",
+    "automodpack.error.logs": "Check for more details in logs.",
+
+    "automodpack.fetch": "Fetching direct url's from Modrinth and CurseForge...",
+    "automodpack.fetch.found": "Found %s direct url's.",
+
+    "automodpack.select": "Select Modpack",
+
+    "automodpack.yes": "Yes",
+    "automodpack.no": "No",
+    "automodpack.cancel": "Cancel",
+    "automodpack.back": "Back",
+    "automodpack.wait": "Please wait..."
   }

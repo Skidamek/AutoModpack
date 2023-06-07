@@ -114,6 +114,6 @@ public class SelfUpdater {
 
         LOGGER.info("Successfully downloaded update, waiting for shutdown");
 
-        new ReLauncher.Restart(null, "Successfully updated AutoModpack - " + automodpack.fileVersion);
+        new ReLauncher.Restart(null, "Successfully updated AutoModpack - " + automodpack.fileVersion, false);
     }
 }

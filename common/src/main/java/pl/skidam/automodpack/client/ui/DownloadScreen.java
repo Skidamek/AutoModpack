@@ -35,7 +35,7 @@ public class DownloadScreen extends Screen {
     @Override
     protected void init() {
         super.init();
-        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.cancel"), button -> ModpackUpdater.cancelDownload()).position(this.width / 2 - 50, this.height - 25).size(100, 20).build());
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("automodpack.cancel"), button -> ModpackUpdater.cancelDownload()).position(this.width / 2 - 50, this.height - 25).size(100, 20).build());
     }
 
     private Text getStage() {
@@ -59,28 +59,35 @@ public class DownloadScreen extends Screen {
         String[] units = {"B", "KB", "MB", "GB"};
         int unitIndex = 0;
 
-        while (fileSize >= 1024) {
-            fileSize /= 1024;
+        long boostedFileSize = fileSize / 512;
+
+        while (boostedFileSize >= 1024) {
+            boostedFileSize /= 1024;
             unitIndex++;
         }
 
-        bytesDownloaded /= Math.pow(1024, unitIndex);
-        bytesDownloaded = Math.ceil(bytesDownloaded);
-        return (long) bytesDownloaded + "/" + fileSize + units[unitIndex];
+        long roundedFileSize = Math.round(fileSize);
+        long roundedBytesDownloaded = Math.round(bytesDownloaded);
+        if (roundedBytesDownloaded > roundedFileSize) {
+            roundedBytesDownloaded = roundedFileSize;
+        }
+
+        return roundedBytesDownloaded + "/" + roundedFileSize + " " + units[unitIndex];
     }
 
     private Text getTotalDownloadSpeed() {
         double speed = ModpackUpdater.getTotalDownloadSpeed();
         if (speed > 0) {
-            return TextHelper.literal(speed + " MB/s");
+            int roundedSpeed = (int) Math.round(speed);
+            return TextHelper.literal(roundedSpeed + " MB/s");
         }
 
-        return TextHelper.translatable("gui.automodpack.calculating"); // Calculating...
+        return TextHelper.translatable("automodpack.download.calculating"); // Calculating...
     }
 
     private Text getTotalETA() {
         String eta = ModpackUpdater.getTotalETA();
-        return TextHelper.translatable("gui.automodpack.eta " + eta); // Time left: %s
+        return TextHelper.translatable("automodpack.download.eta", eta); // Time left: %s
     }
 
     private String getETAOfFile(String file) {
@@ -102,7 +109,7 @@ public class DownloadScreen extends Screen {
         List<DownloadInfo> downloadInfosCopy = new ArrayList<>(downloadInfos);
 
         if (downloadInfosCopy.size() > 0) {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.downloading"), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.download.downloading"), (int) (this.width / 2 * scale), y, 16777215);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
@@ -113,10 +120,10 @@ public class DownloadScreen extends Screen {
                 currentY += 10;
             }
         } else {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.nofiles"), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.download.noFiles"), (int) (this.width / 2 * scale), y, 16777215);
 
             // Please wait...
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.wait").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 25, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 25, 16777215);
         }
 
         matrices.pop();

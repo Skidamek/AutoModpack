@@ -63,9 +63,13 @@ public class ModpackListEntry extends AlwaysSelectedEntryListWidget.Entry<Modpac
         return modpackPath;
     }
 
-
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int delta) {
-        return nullEntry;
+        return !nullEntry;
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        return false;
     }
 }

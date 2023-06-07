@@ -88,7 +88,7 @@ public class PlatformImpl {
             }
             LOGGER.info("Successfully installed latest version of Fabric API (FAPI)!");
 
-            new ReLauncher.Restart(null, "Successfully installed latest FAPI!");
+            new ReLauncher.Restart(null, "Successfully installed latest FAPI!", false);
         }
     }
 

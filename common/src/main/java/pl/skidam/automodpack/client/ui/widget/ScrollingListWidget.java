@@ -35,4 +35,9 @@ public class ScrollingListWidget<E extends ElementListWidget.Entry<E>> extends E
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         return false;
     }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        return false;
+    }
 }

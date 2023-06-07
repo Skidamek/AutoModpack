@@ -104,7 +104,12 @@ public class Modpack {
                     for (String file : serverConfig.syncedFiles) {
                         LOGGER.info("Syncing {}... ", file);
                         File fileToSync = new File("." + file);
-                        addAllContent(fileToSync, list);
+
+                        if (fileToSync.isDirectory()) {
+                            addAllContent(fileToSync, list);
+                        } else {
+                            addContent(fileToSync.getParentFile(), fileToSync, list);
+                        }
                     }
                 }
 
@@ -185,7 +190,7 @@ public class Modpack {
                 if (file.equals(hostModpackContentFile)) {
                     return;
                 }
-                String modpackFile = file.toString().replace(hostModpackDir.toString(), "").replace("\\", "/");
+                String modpackFile = file.toString().replace(hostModpackDir.toAbsolutePath().normalize().toString(), "").replace("\\", "/");
                 if (modpackFile.charAt(0) == '.') modpackFile = modpackFile.substring(1);
                 String link = modpackFile;
                 String size = String.valueOf(file.length());
@@ -195,7 +200,8 @@ public class Modpack {
                 boolean isEditable = false;
 
 
-                if (modpackFile.startsWith(".")) {
+                File actualFile = new File(modpackFile);
+                if (actualFile.toString().startsWith(".")) {
                     LOGGER.warn("Skipping file {}", modpackFile);
                     return;
                 }
@@ -249,12 +255,12 @@ public class Modpack {
                 }
 
                 if (type.equals("other")) {
-                    if (modpackFile.contains("/config/")) {
+                    if (modpackFile.startsWith("/config/")) {
                         type = "config";
-                    } else if (modpackFile.contains("/shaderpacks/")) {
+                    } else if (modpackFile.startsWith("/shaderpacks/")) {
                         type = "shaderpack";
                         murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
-                    } else if (modpackFile.contains("/resourcepacks/")) {
+                    } else if (modpackFile.startsWith("/resourcepacks/")) {
                         type = "resourcepack";
                         murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
                     } else if (modpackFile.endsWith("/options.txt")) {
@@ -263,7 +269,7 @@ public class Modpack {
                 }
 
                 for (String editableFile : serverConfig.allowEditsInFiles) {
-                    if (modpackFile.endsWith(editableFile)) {
+                    if (modpackFile.equals(editableFile)) {
                         isEditable = true;
                         break;
                     }

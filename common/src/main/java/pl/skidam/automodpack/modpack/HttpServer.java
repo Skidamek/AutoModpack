@@ -30,11 +30,17 @@ public class HttpServer {
     private static final int BUFFER_SIZE = 32 * 1024;
     public static List<String> filesList = new ArrayList<>();
     public static ExecutorService HTTPServerExecutor;
-    public static boolean isRunning = false;
     public static Object server = null;
 
+    public static boolean isRunning() {
+        if (server == null) return false;
+
+        ServerSocketChannel serverSocketChannel = (ServerSocketChannel) server;
+        return serverSocketChannel.isOpen();
+    }
+
     public static void start() {
-        if (isRunning) return;
+        if (isRunning()) return;
 
         if (!serverConfig.modpackHost) {
             LOGGER.warn("Modpack hosting is disabled in config");
@@ -72,8 +78,10 @@ public class HttpServer {
 
         ServerSocketChannel serverSocketChannel = (ServerSocketChannel) server;
 
-        if (!isRunning) return;
-        isRunning = false;
+        if (!isRunning()) {
+            LOGGER.warn("Modpack hosting isn't running, can't stop it");
+            return;
+        }
 
         try {
             serverSocketChannel.close();
@@ -101,7 +109,6 @@ public class HttpServer {
 
         if (serverSocketChannel.socket().isClosed() && HTTPServerExecutor.isTerminated()) {
             LOGGER.info("Stopped modpack hosting");
-            isRunning = false;
         } else {
             LOGGER.error("Failed to stop modpack hosting");
         }
@@ -145,12 +152,10 @@ public class HttpServer {
                         serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
 
                         LOGGER.info("Modpack hosting started! on port {}", serverConfig.hostPort);
-                        isRunning = true;
 
                         server = serverSocketChannel;
 
-
-                        while (isRunning) {
+                        while (isRunning()) {
                             selector.select();
                             Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
                             while (keys.hasNext()) {

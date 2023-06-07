@@ -21,7 +21,7 @@ public class DangerScreen extends Screen {
     private final File modpackContentFile;
 
     public DangerScreen(Screen parent, String link, File modpackDir, File modpackContentFile) {
-        super(TextHelper.translatable("gui.automodpack.danger").formatted(Formatting.BOLD));
+        super(TextHelper.translatable("automodpack.danger").formatted(Formatting.BOLD));
         this.parent = parent;
         this.link = link;
         this.modpackDir = modpackDir;
@@ -37,24 +37,24 @@ public class DangerScreen extends Screen {
         super.init();
         assert this.client != null;
 
-        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.dontdownload").formatted(Formatting.RED), button -> {
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("automodpack.danger.cancel").formatted(Formatting.RED), button -> {
             LOGGER.error("User canceled download, setting his to screen " + parent.getTitle().getString());
             this.client.setScreen(parent);
-        }).position(this.width / 2 - 110, this.height / 6 + 96).size(120, 20).build());
+        }).position(this.width / 2 - 115, this.height / 2 + 50).size(120, 20).build());
 
-        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("gui.automodpack.download").formatted(Formatting.GREEN), button -> {
+        this.addDrawableChild(ButtonWidget.builder(TextHelper.translatable("automodpack.danger.confirm").formatted(Formatting.GREEN), button -> {
             CompletableFuture.runAsync(() -> {
                 ModpackUpdater.ModpackUpdaterMain(link, modpackDir, modpackContentFile);
             });
-        }).position(this.width / 2 + 10, this.height / 6 + 96).size(120, 20).build());
+        }).position(this.width / 2 + 15, this.height / 2 + 50).size(120, 20).build());
     }
 
     @Override
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, this.title, this.width / 2, 55, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.danger.description"), this.width / 2, 80, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("gui.automodpack.danger.secDescription"), this.width / 2, 90, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, this.title, this.width / 2, this.height / 2 - 60, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.danger.description"), this.width / 2, this.height / 2 - 35, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.danger.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);
         super.render(matrices, mouseX, mouseY, delta);
     }
 

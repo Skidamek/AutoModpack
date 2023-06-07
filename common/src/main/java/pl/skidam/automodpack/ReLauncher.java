@@ -32,11 +32,11 @@ public class ReLauncher {
 
     public static class Restart {
 
-        public Restart(File gameDir) {
-            new Restart(gameDir, "Successfully applied the modpack!");
+        public Restart(File gameDir, boolean fullDownload) {
+            new Restart(gameDir, "Successfully applied the modpack!", fullDownload);
         }
         
-        public Restart(File gameDir, String guiMessage) {
+        public Restart(File gameDir, String guiMessage, boolean fullDownload) {
             String environment = Platform.getEnvironmentType();
             boolean isClient = environment.equals("CLIENT");
             boolean isHeadless = GraphicsEnvironment.isHeadless();
@@ -44,7 +44,7 @@ public class ReLauncher {
 
             if (isClient) {
                 if (!preload && !ScreenTools.getScreenString().contains("restartscreen")) {
-                    ScreenTools.setTo.restart(gameDir);
+                    ScreenTools.setTo.restart(gameDir, fullDownload);
                     return;
                 }
 

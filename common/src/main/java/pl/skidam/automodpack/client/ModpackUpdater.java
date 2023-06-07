@@ -47,6 +47,7 @@ public class ModpackUpdater {
     private static int alreadyDownloaded = 0;
     private static int wholeQueue = 0;
     public static boolean update;
+    public static boolean fullDownload = false;
     private static Jsons.ModpackContentFields serverModpackContent;
     public static Map<String, String> failedDownloads = new HashMap<>(); // <file, url>
     private static byte[] serverModpackContentByteArray = new byte[0];
@@ -129,7 +130,7 @@ public class ModpackUpdater {
                 LOGGER.info("Added files: " + addedFiles);
                 LOGGER.info("Deleted files: " + deletedFiles);
 
-                new ReLauncher.Restart(modpackDir);
+                new ReLauncher.Restart(modpackDir, fullDownload);
 
                 return;
             }
@@ -164,11 +165,14 @@ public class ModpackUpdater {
                     LOGGER.info("Added files: " + addedFiles);
                     LOGGER.info("Deleted files: " + deletedFiles);
 
-                    new ReLauncher.Restart(modpackDir);
+                    new ReLauncher.Restart(modpackDir, fullDownload);
 
                     return;
                 }
             } else if (!preload && ScreenTools.getScreen() != null) {
+
+                fullDownload = true;
+
                 CompletableFuture.runAsync(() -> {
                     while (!ScreenTools.getScreenString().contains("dangerscreen")) {
                         ScreenTools.setTo.danger(ScreenTools.getScreen(), link, modpackDir, modpackContentFile);
@@ -204,7 +208,9 @@ public class ModpackUpdater {
                 }
             }
 
-            for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
+            Iterator<Jsons.ModpackContentFields.ModpackContentItems> iterator = serverModpackContent.list.iterator();
+            while (iterator.hasNext()) {
+                Jsons.ModpackContentFields.ModpackContentItems modpackContentField = iterator.next();
                 String fileName = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
@@ -220,14 +226,14 @@ public class ModpackUpdater {
 
                 if (serverSHA1.equals(CustomFileUtils.getHashWithRetry(file, "SHA-1"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
-                    serverModpackContent.list.remove(modpackContentField);
+                    iterator.remove();
                 } else if (modpackContentField.isEditable) {
                     LOGGER.info("Skipping editable file: " + fileName);
-                    serverModpackContent.list.remove(modpackContentField);
+                    iterator.remove();
                 } else if (file.isFile() && !modpackContentField.type.equals("mod")) {
                     if (file.length() == Long.parseLong(modpackContentField.size)) {
                         LOGGER.info("Skipping* already downloaded file: " + fileName);
-                        serverModpackContent.list.remove(modpackContentField);
+                        iterator.remove();
                     }
                 }
             }
@@ -321,11 +327,11 @@ public class ModpackUpdater {
                     LOGGER.error("Failed to download: " + entry.getKey() + " from " + entry.getValue());
                     failedFiles.append(entry.getKey());
                 }
-                ScreenTools.setTo.error("Failed to download some files", "Failed to download: " + failedFiles, "More details in logs.");
+                ScreenTools.setTo.error("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");
 
                 if (preload && update) {
                     LOGGER.warn("Update completed with errors! Took: " + (System.currentTimeMillis() - start) + " ms");
-                    new ReLauncher.Restart(modpackDir);
+                    new ReLauncher.Restart(modpackDir, fullDownload);
                 }
 
                 return;
@@ -333,7 +339,9 @@ public class ModpackUpdater {
 
             if (update) {
                 LOGGER.info("Update completed! Took: " + (System.currentTimeMillis() - start) + " ms");
-                new ReLauncher.Restart(modpackDir);
+                new ReLauncher.Restart(modpackDir, fullDownload);
+            } else if (ScreenTools.getScreenString().contains("dangerscreen") || ScreenTools.getScreenString().contains("downloadscreen")) {
+                new ReLauncher.Restart(modpackDir, fullDownload);
             }
 
             LOGGER.info("Modpack is up-to-date! Took: " + (System.currentTimeMillis() - start) + " ms");
@@ -341,7 +349,7 @@ public class ModpackUpdater {
         } catch (SocketTimeoutException | ConnectException e) {
             LOGGER.error("Modpack host of " + link + " is not responding", e);
         } catch (Exception e) {
-            ScreenTools.setTo.error("Critical error while downloading modpack.", "\"" + e.getMessage() + "\"", "More details in logs.");
+            ScreenTools.setTo.error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
             e.printStackTrace();
         }
     }
@@ -591,7 +599,7 @@ public class ModpackUpdater {
 
             LOGGER.info("Download canceled");
 
-            if (ScreenTools.getScreenString().contains("download")) {
+            if (ScreenTools.getScreenString().contains("downloadscreen")) {
                 ScreenTools.setTo.title();
             }
         } catch (Exception e) {
