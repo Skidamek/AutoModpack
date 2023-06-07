@@ -1,9 +1,8 @@
 package pl.skidam.automodpack.client.ui;
 
-import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
@@ -99,34 +98,34 @@ public class DownloadScreen extends Screen {
         return getETA(eta);
     }
 
-    private void drawDownloadingFiles(MatrixStack matrices) {
+    private void drawDownloadingFiles(DrawContext context) {
         float scale = 1.0F;
         int y = this.height / 2 - 90;
 
-        matrices.push();
-        matrices.scale(scale, scale, scale);
+        context.getMatrices().push();
+        context.getMatrices().scale(scale, scale, scale);
 
         List<DownloadInfo> downloadInfosCopy = new ArrayList<>(downloadInfos);
 
         if (downloadInfosCopy.size() > 0) {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.download.downloading"), (int) (this.width / 2 * scale), y, 16777215);
+            context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable("automodpack.download.downloading"), (int) (this.width / 2 * scale), y, 16777215);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
             for (DownloadInfo file : downloadInfosCopy) {
                 if (file == null) continue;
                 String fileName = file.getFileName();
-                drawCenteredTextWithShadow(matrices, this.textRenderer, fileName + " (" + getDownloadedSize(fileName) + ")" + " - " + getETAOfFile(fileName), (int) (this.width / 2 * scale), currentY, 16777215);
+                context.drawCenteredTextWithShadow(this.textRenderer, fileName + " (" + getDownloadedSize(fileName) + ")" + " - " + getETAOfFile(fileName), (int) (this.width / 2 * scale), currentY, 16777215);
                 currentY += 10;
             }
         } else {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.download.noFiles"), (int) (this.width / 2 * scale), y, 16777215);
+            context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable("automodpack.download.noFiles"), (int) (this.width / 2 * scale), y, 16777215);
 
             // Please wait...
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 25, 16777215);
+            context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 25, 16777215);
         }
 
-        matrices.pop();
+        context.getMatrices().pop();
     }
 
     private void checkAndStartMusic() {
@@ -146,34 +145,32 @@ public class DownloadScreen extends Screen {
     }
 
 
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
-        this.renderBackground(matrices);
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        this.renderBackground(context);
         Text percentage = this.getPercentage();
         Text stage = this.getStage();
         Text eta = this.getTotalETA();
         Text speed = this.getTotalDownloadSpeed();
-        drawCenteredTextWithShadow(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, percentage, this.width / 2, this.height / 2 + 30, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 80, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, percentage, this.width / 2, this.height / 2 + 30, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, speed, this.width / 2, this.height / 2 + 80, 16777215);
 
-        drawDownloadingFiles(matrices);
+        drawDownloadingFiles(context);
 
         Text modpackName = TextHelper.literal(ModpackUpdater.getModpackName()).formatted(Formatting.BOLD);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, modpackName, this.width / 2, this.height / 2 - 110, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, modpackName, this.width / 2, this.height / 2 - 110, 16777215);
 
         // Render progress bar
         int x = this.width / 2 - PROGRESS_BAR_WIDTH / 2;
         int y = this.height / 2 + 50;
 
-        RenderSystem.setShaderTexture(0, PROGRESS_BAR_EMPTY_TEXTURE);
-        drawTexture(matrices, x, y, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
-        RenderSystem.setShaderTexture(0, PROGRESS_BAR_FULL_TEXTURE);
-        drawTexture(matrices, x, y, 0, 0, (int)(PROGRESS_BAR_WIDTH * ((float) ModpackUpdater.getTotalPercentageOfFileSizeDownloaded() / 100)), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+        context.drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, x, y, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+        context.drawTexture(PROGRESS_BAR_FULL_TEXTURE, x, y, 0, 0, (int)(PROGRESS_BAR_WIDTH * ((float) ModpackUpdater.getTotalPercentageOfFileSizeDownloaded() / 100)), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
 
         checkAndStartMusic();
 
-        super.render(matrices, mouseX, mouseY, delta);
+        super.render(context, mouseX, mouseY, delta);
     }
 
     public boolean shouldCloseOnEsc() {

@@ -1,8 +1,8 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.TextHelper;
@@ -42,12 +42,12 @@ public class RestartScreen extends Screen {
             changelogsButton.active = false;
         }
     }
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
-        this.renderBackground(matrices);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.restart." + (fullDownload ? "full" : "update")).formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.restart.description"), this.width / 2, this.height / 2 - 35, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.restart.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);
-        super.render(matrices, mouseX, mouseY, delta);
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        this.renderBackground(context);
+        context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable("automodpack.restart." + (fullDownload ? "full" : "update")).formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable("automodpack.restart.description"), this.width / 2, this.height / 2 - 35, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable("automodpack.restart.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);
+        super.render(context, mouseX, mouseY, delta);
     }
 
     public void initWidgets() {

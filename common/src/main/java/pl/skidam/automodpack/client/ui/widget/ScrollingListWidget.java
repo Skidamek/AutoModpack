@@ -2,9 +2,9 @@ package pl.skidam.automodpack.client.ui.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.narration.NarrationMessageBuilder;
 import net.minecraft.client.gui.widget.ElementListWidget;
-import net.minecraft.client.util.math.MatrixStack;
 
 public class ScrollingListWidget<E extends ElementListWidget.Entry<E>> extends ElementListWidget<E> {
 
@@ -19,11 +19,11 @@ public class ScrollingListWidget<E extends ElementListWidget.Entry<E>> extends E
     }
 
     @Override
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         double scale = this.client.getWindow().getScaleFactor();
 
         RenderSystem.enableScissor((int) (this.left * scale), (int) (this.client.getWindow().getFramebufferHeight() - ((this.top + this.height) * scale)), (int) (this.width * scale), (int) (this.height * scale));
-        super.render(matrices, mouseX, mouseY, delta);
+        super.render(context, mouseX, mouseY, delta);
         RenderSystem.disableScissor();
     }
 

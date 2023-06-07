@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.util.math.MatrixStack;
@@ -83,13 +84,13 @@ public class MenuScreen extends Screen {
 
     }
 
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
-        this.renderBackground(matrices);
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        this.renderBackground(context);
 
-        this.MenuWidgetWidget.render(matrices, mouseX, mouseY, delta);
+        this.MenuWidgetWidget.render(context, mouseX, mouseY, delta);
         activateOrDeactivateButtons();
 
-        super.render(matrices, mouseX, mouseY, delta);
+        super.render(context, mouseX, mouseY, delta);
     }
 
     public void activateOrDeactivateButtons() {

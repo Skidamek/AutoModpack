@@ -1,8 +1,8 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.TextHelper;
@@ -29,14 +29,14 @@ public class ErrorScreen extends Screen {
     }
 
     @Override
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
-        this.renderBackground(matrices);
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        this.renderBackground(context);
         // Something went wrong!
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.literal("[AutoModpack] Error! ").append(TextHelper.translatable("automodpack.error").formatted(Formatting.RED)), this.width / 2, this.height / 2 - 40, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.literal("[AutoModpack] Error! ").append(TextHelper.translatable("automodpack.error").formatted(Formatting.RED)), this.width / 2, this.height / 2 - 40, 16777215);
         for (int i = 0; i < this.errorMessage.length; i++) {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable(this.errorMessage[i]), this.width / 2, this.height / 2 - 20 + i * 10, 14687790);
+            context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable(this.errorMessage[i]), this.width / 2, this.height / 2 - 20 + i * 10, 14687790);
         }
-        super.render(matrices, mouseX, mouseY, delta);
+        super.render(context, mouseX, mouseY, delta);
     }
 
     @Override

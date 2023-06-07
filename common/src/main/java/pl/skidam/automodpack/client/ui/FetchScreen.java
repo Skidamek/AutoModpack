@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.TextHelper;
 
@@ -20,15 +20,15 @@ public class FetchScreen extends Screen {
     }
 
     @Override
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
-        this.renderBackground(matrices);
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        this.renderBackground(context);
 
         // Fetching direct url's from Modrinth and CurseForge.
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.fetch").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, TextHelper.translatable("automodpack.fetch.found", totalFetchedFiles), this.width / 2, this.height / 2 - 30, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable("automodpack.fetch").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, 16777215);
+        context.drawCenteredTextWithShadow(this.textRenderer, TextHelper.translatable("automodpack.fetch.found", totalFetchedFiles), this.width / 2, this.height / 2 - 30, 16777215);
 
-        super.render(matrices, mouseX, mouseY, delta);
+        super.render(context, mouseX, mouseY, delta);
     }
 
     public boolean shouldCloseOnEsc() {

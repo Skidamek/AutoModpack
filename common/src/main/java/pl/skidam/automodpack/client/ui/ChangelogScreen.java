@@ -1,13 +1,13 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.Selectable;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.ElementListWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.util.math.MatrixStack;
 import pl.skidam.automodpack.TextHelper;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
@@ -73,18 +73,18 @@ public class ChangelogScreen extends Screen {
     }
 
     @Override
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
-        this.renderBackground(matrices);
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        this.renderBackground(context);
 
-        this.changelogsList.render(matrices, mouseX, mouseY, delta);
+        this.changelogsList.render(context, mouseX, mouseY, delta);
 
         // Draw summary of added/removed mods
-        drawSummaryOfChanges(matrices);
+        drawSummaryOfChanges(context);
 
-        super.render(matrices, mouseX, mouseY, delta);
+        super.render(context, mouseX, mouseY, delta);
     }
 
-    private void drawSummaryOfChanges(MatrixStack matrices) {
+    private void drawSummaryOfChanges(DrawContext context) {
 
         File modpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
 
@@ -110,7 +110,7 @@ public class ChangelogScreen extends Screen {
 
         String summary = "Mods + " + modsAdded + " | - " + modsRemoved;
 
-        drawCenteredTextWithShadow(matrices, textRenderer, TextHelper.literal(summary), this.width / 2, 5, 16777215);
+        context.drawCenteredTextWithShadow(textRenderer, TextHelper.literal(summary), this.width / 2, 5, 16777215);
     }
 
     private void updateChangelogs() {
@@ -186,8 +186,8 @@ public class ChangelogScreen extends Screen {
             }
 
             @Override
-            public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-                drawTextWithShadow(matrices, ChangelogsList.this.client.textRenderer, text, x + 10, y, color);
+            public void render(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+                context.drawTextWithShadow(ChangelogsList.this.client.textRenderer, text, x + 10, y, color);
             }
 
             @Override

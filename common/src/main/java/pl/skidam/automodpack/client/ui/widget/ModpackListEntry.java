@@ -1,9 +1,8 @@
 package pl.skidam.automodpack.client.ui.widget;
 
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawableHelper;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.widget.AlwaysSelectedEntryListWidget;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
@@ -37,20 +36,20 @@ public class ModpackListEntry extends AlwaysSelectedEntryListWidget.Entry<Modpac
     }
 
     @Override
-    public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+    public void render(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 
-        matrices.push();
+        context.getMatrices().push();
 
         int centeredX = x + entryWidth / 2;
         if (nullEntry) {
             float scale = 1.5f;
-            matrices.scale(scale, scale, scale);
+            context.getMatrices().scale(scale, scale, scale);
             centeredX = (int) (x + entryWidth / (2 * scale));
         }
 
-        DrawableHelper.drawCenteredTextWithShadow(matrices, client.textRenderer, text, centeredX, y, 16777215);
+        context.drawCenteredTextWithShadow(client.textRenderer, text, centeredX, y, 16777215);
 
-        matrices.pop();
+        context.getMatrices().pop();
     }
 
     @Nullable

@@ -2,8 +2,8 @@ package pl.skidam.automodpack.client.ui.widget;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.widget.AlwaysSelectedEntryListWidget;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.text.MutableText;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.MathHelper;
@@ -69,11 +69,11 @@ public class MenuWidgetWidget extends AlwaysSelectedEntryListWidget<ModpackListE
     }
 
     @Override
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
+    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         double scale = this.client.getWindow().getScaleFactor();
 
         RenderSystem.enableScissor((int) (this.left * scale), (int) (this.client.getWindow().getFramebufferHeight() - ((this.top + this.height) * scale)), (int) (this.width * scale), (int) (this.height * scale));
-        super.render(matrices, mouseX, mouseY, delta);
+        super.render(context, mouseX, mouseY, delta);
         RenderSystem.disableScissor();
     }
 
