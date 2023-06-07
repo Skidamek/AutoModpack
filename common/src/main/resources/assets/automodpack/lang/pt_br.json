@@ -1,0 +1,48 @@
+{
+    "automodpack.restart.full": "O Modpack foi baixado!",
+    "automodpack.restart.update": "Uma atualização foi baixado para o Modpack!",
+    "automodpack.restart.description": "Para concluir, você deve reiniciar o jogo",
+    "automodpack.restart.secDescription": "Desejar reiniciar agora?",
+    "automodpack.restart.confirm": "Sim, feche o jogo",
+    "automodpack.restart.cancel": "Não, de volta ao jogo",
+  
+    "automodpack.delete": "Deletar Modpack",
+    "automodpack.delete.description": "Você irá perder tudo do modpack baixado.",
+    "automodpack.delete.secDescription": "Você precisará reiniciar o jogo.",
+    "automodpack.delete.thiDescription": "Tem certeza que deseja deletar?",
+    "automodpack.delete.confirm": "Deletar e sair",
+    "automodpack.delete.cancel": "Voltar ao jogo",
+  
+    "automodpack.danger": "Este servidor tem um modpack externo!",
+    "automodpack.danger.description": "Deseja baixar?",
+    "automodpack.danger.secDescription": "Pode ser perigoso! NÃO baixe se você não confia no dono do servidor!",
+    "automodpack.danger.confirm": "Baixar",
+    "automodpack.danger.cancel": "Não baixar",
+
+    "automodpack.changelog.view": "Olhar as notas de atualização",
+    "automodpack.changelog.noChanges": "Sem mudanças encontradas.",
+
+    "automodpack.download.calculating": "Calculando...",
+    "automodpack.download.eta": "Tempo restante: %s",
+    "automodpack.download.downloading": "Baixando:",
+    "automodpack.download.noFiles": "Sem arquivos para baixar!",
+
+    "automodpack.redownload": "Baixar novamente o Modpack",
+    "automodpack.redownload.description": "Pode resolver os problemas com o modpack.",
+
+    "automodpack.error": "Algo deu errado!",
+    "automodpack.error.files": "O download de alguns arquivos falhou.",
+    "automodpack.error.critical": "Erro crítico baixando o modpack.",
+    "automodpack.error.logs": "Mais detalhes nos logs.",
+
+    "automodpack.fetch": "Buscando links diretos do Modrinth e Curseforge...",
+    "automodpack.fetch.found": "Foram encontrados %s links diretos.",
+
+    "automodpack.select": "Selecionar o Modpack",
+
+    "automodpack.yes": "Sim",
+    "automodpack.no": "Não",
+    "automodpack.cancel": "Cancelar",
+    "automodpack.back": "Voltar",
+    "automodpack.wait": "Por favor aguarde..."
+  }
