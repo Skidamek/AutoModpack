@@ -31,7 +31,7 @@ import static pl.skidam.automodpack.utils.CustomFileUtils.mapAllFiles;
 import static pl.skidam.automodpack.utils.RefactorStrings.getETA;
 
 public class ModpackUpdater {
-    public static List<DownloadInfo> downloadInfos = new ArrayList<>();
+    public static List<DownloadInfo> downloadInfos = Collections.synchronizedList(new ArrayList<>());
     public static final int MAX_DOWNLOADS = 5; // at the same time
     public static final int MAX_FETCHES = 20; // at the same time
     public static boolean modrinthAPI = true;

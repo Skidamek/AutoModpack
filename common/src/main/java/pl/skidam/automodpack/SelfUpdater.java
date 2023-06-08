@@ -35,7 +35,7 @@ public class SelfUpdater {
         ModrinthAPI automodpack = ModrinthAPI.getModInfoFromID("k68glP2e");
 
         if (automodpack == null || automodpack.fileVersion == null) {
-            LOGGER.error("Couldn't get latest version of AutoModpack from Modrinth API (request url: {})", automodpack.requestUrl);
+            LOGGER.error("Couldn't get latest version of AutoModpack from Modrinth API");
             return;
         }
 
