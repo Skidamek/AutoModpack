@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.Element;
@@ -21,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+@Environment(EnvType.CLIENT)
 public class ChangelogScreen extends Screen {
     private static List<String> changelogs;
     private TextFieldWidget searchField;

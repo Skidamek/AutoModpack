@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
@@ -10,6 +12,7 @@ import java.io.File;
 
 import static pl.skidam.automodpack.StaticVariables.preload;
 
+@Environment(EnvType.CLIENT)
 public class ScreenTools {
 
     public static class setTo { // Save screen's. Don't worry that minecraft didn't load yet, or you will crash server by executing screen's methods

@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -14,6 +16,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.StaticVariables.LOGGER;
 
+@Environment(EnvType.CLIENT)
 public class DangerScreen extends Screen {
     private final Screen parent;
     private final String link;

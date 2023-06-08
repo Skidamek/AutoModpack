@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.util.Formatting;
@@ -7,7 +9,7 @@ import pl.skidam.automodpack.TextHelper;
 
 import static pl.skidam.automodpack.client.ModpackUpdater.totalFetchedFiles;
 
-
+@Environment(EnvType.CLIENT)
 public class FetchScreen extends Screen {
 
     public FetchScreen() {

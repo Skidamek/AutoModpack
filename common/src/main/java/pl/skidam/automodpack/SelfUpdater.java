@@ -80,7 +80,9 @@ public class SelfUpdater {
         }
 
         LOGGER.info("Update found! Updating to new version: " + automodpack.fileVersion);
-        ScreenTools.setTo.download();
+        if (Platform.getEnvironmentType().equals("CLIENT")) {
+            ScreenTools.setTo.download();
+        }
 
         try {
             Download downloadInstance = new Download();

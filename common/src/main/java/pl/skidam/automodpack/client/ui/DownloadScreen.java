@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -19,6 +21,7 @@ import static pl.skidam.automodpack.client.ModpackUpdater.downloadInfos;
 import static pl.skidam.automodpack.client.ModpackUpdater.getDownloadInfo;
 import static pl.skidam.automodpack.utils.RefactorStrings.getETA;
 
+@Environment(EnvType.CLIENT)
 public class DownloadScreen extends Screen {
 
     private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = new Identifier(MOD_ID, "gui/progress-bar-empty.png");

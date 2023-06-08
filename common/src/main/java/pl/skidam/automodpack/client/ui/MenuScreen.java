@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import net.fabricmc.api.EnvType;
+import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -21,6 +23,7 @@ import java.nio.file.Path;
 import static pl.skidam.automodpack.StaticVariables.clientConfig;
 import static pl.skidam.automodpack.StaticVariables.clientConfigFile;
 
+@Environment(EnvType.CLIENT)
 public class MenuScreen extends Screen {
     private MenuWidgetWidget MenuWidgetWidget;
     private ButtonWidget selectButton;
