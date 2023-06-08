@@ -227,7 +227,7 @@ public class ModpackUpdater {
                 if (serverSHA1.equals(CustomFileUtils.getHashWithRetry(file, "SHA-1"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
                     iterator.remove();
-                } else if (modpackContentField.isEditable) {
+                } else if (modpackContentField.editable) {
                     LOGGER.info("Skipping editable file: " + fileName);
                     iterator.remove();
                 } else if (file.isFile() && !modpackContentField.type.equals("mod")) {
@@ -378,7 +378,7 @@ public class ModpackUpdater {
                 continue;
             }
 
-            if (modpackContentField.isEditable) {
+            if (modpackContentField.editable) {
                 editableFiles.add(modpackContentField.file);
             }
         }

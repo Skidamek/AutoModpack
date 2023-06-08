@@ -28,6 +28,8 @@ subprojects {
 forgix {
     group = "pl.skidam.automodpack"
     mergedJarName = "automodpack-${rootProject.mod_version}-${rootProject.minecraft_version}.jar"
+
+    removeDuplicate "forge"
 }
 
 allprojects {

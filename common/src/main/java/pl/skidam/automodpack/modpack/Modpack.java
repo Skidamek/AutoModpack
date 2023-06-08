@@ -89,7 +89,7 @@ public class Modpack {
 
         public static void create(Path modpackDir, File modpackContentFile) {
             try {
-                List<Jsons.ModpackContentFields.ModpackContentItems> list = new ArrayList<>();
+                List<Jsons.ModpackContentFields.ModpackContentItems> list = Collections.synchronizedList(new ArrayList<>());
 
                 ThreadFactory threadFactoryDownloads = new ThreadFactoryBuilder()
                         .setNameFormat("AutoModpackCreation-%d")
@@ -174,7 +174,16 @@ public class Modpack {
             }, CREATION_EXECUTOR);
         }
 
+        public static String removeBeforePattern(String input, String pattern) {
+            int index = input.indexOf(pattern);
+            if (index != -1) {
+                return input.substring(index);
+            }
+            return input;
+        }
+
         private static void addContent(File modpackDir, File file, List<Jsons.ModpackContentFields.ModpackContentItems> list) throws Exception {
+            modpackDir = new File(modpackDir.toPath().normalize().toString());
             if (file.isDirectory()) {
                 if (file.getName().startsWith(".")) {
                     return;
@@ -190,23 +199,19 @@ public class Modpack {
                 if (file.equals(hostModpackContentFile)) {
                     return;
                 }
-                String modpackFile = file.toString().replace(hostModpackDir.toAbsolutePath().normalize().toString(), "").replace("\\", "/");
+                Path modpackPath = file.toPath().toAbsolutePath().normalize();
+                String modpackFile = modpackPath.toString().replace(hostModpackDir.toAbsolutePath().normalize().toString(), "").replace("\\", "/");
                 if (modpackFile.charAt(0) == '.') modpackFile = modpackFile.substring(1);
-                String link = modpackFile;
                 String size = String.valueOf(file.length());
                 String type = "other";
                 String modId = null;
                 String version = null;
                 boolean isEditable = false;
 
+                if (!modpackDir.toString().startsWith(hostModpackDir.normalize().toString())) {
 
-                File actualFile = new File(modpackFile);
-                if (actualFile.toString().startsWith(".")) {
-                    LOGGER.warn("Skipping file {}", modpackFile);
-                    return;
-                }
+                    modpackFile = removeBeforePattern(modpackFile, "/" + modpackDir);
 
-                if (!modpackDir.toString().startsWith("./automodpack/host-modpack/")) {
                     boolean excluded = false;
                     for (String excludeFile : serverConfig.excludeSyncedFiles) {
                         if (matchesExclusionCriteria(modpackFile, excludeFile)) { // wild cards e.g. *.json or supermod-1.19-*.jar
@@ -218,6 +223,12 @@ public class Modpack {
                         LOGGER.info("File {} is excluded! Skipping...", modpackFile);
                         return;
                     }
+                }
+
+                File actualFile = new File(modpackFile);
+                if (actualFile.toString().startsWith(".")) {
+                    LOGGER.warn("Skipping file {}", modpackFile);
+                    return;
                 }
 
                 if (size.equals("0")) {
@@ -271,6 +282,7 @@ public class Modpack {
                 for (String editableFile : serverConfig.allowEditsInFiles) {
                     if (modpackFile.equals(editableFile)) {
                         isEditable = true;
+                        LOGGER.info("File {} is editable!", modpackFile);
                         break;
                     }
                 }
@@ -287,6 +299,8 @@ public class Modpack {
                         break;
                     }
                 }
+
+                String link = modpackFile;
 
                 list.add(new Jsons.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, sha1, murmurHash));
             }

@@ -1,30 +1,48 @@
 {
+    "automodpack.restart.full": "모드팩이 다운로드되었습니다!",
+    "automodpack.restart.update": "모드팩 업데이트가 완료되었습니다!",
+    "automodpack.restart.description": "업데이트 완료를 위해 반드시 게임을 재시작 해야합니다.",
+    "automodpack.restart.secDescription": "지금 재시작 하시겠습니까?",
+    "automodpack.restart.confirm": "예, 재시작을 위해 게임을 종료합니다.",
+    "automodpack.restart.cancel": "아니오, 게임으로 돌아갑니다",
+  
+    "automodpack.delete": "모드팩 삭제",
+    "automodpack.delete.description": "다운로드된 모드팩의 파일들을 모두 잃게 됩니다.",
+    "automodpack.delete.secDescription": "게임 재시작이 필요합니다.",
+    "automodpack.delete.thiDescription": "정말 삭제하시겠습니까?",
+    "automodpack.delete.confirm": "삭제 후 나가기",
+    "automodpack.delete.cancel": "게임으로 돌아가기",
+  
+    "automodpack.danger": "이 서버는 외부에서 모드팩을 제공합니다!",
+    "automodpack.danger.description": "모드팩 다운로드를 원하십니까?",
+    "automodpack.danger.secDescription": "이 작업은 위험할 수 있습니다! 서버주인을 신뢰할 수 없는 경우 다운로드 하지 마십시오!",
+    "automodpack.danger.confirm": "다운로드",
+    "automodpack.danger.cancel": "다운로드 안 함",
 
+    "automodpack.changelog.view": "변경 로그 보기",
+    "automodpack.changelog.noChanges": "변경점이 없습니다.",
 
-  "EVERYTHING HERE NEEDS TO BE RE-TRANSLATED": "TAKE A LOOK AT en_us.json FILE",
-  "THANK YOU": "SO MUCH!",
+    "automodpack.download.calculating": "계산 중...",
+    "automodpack.download.eta": "%초 남음",
+    "automodpack.download.downloading": "다운로드 중",
+    "automodpack.download.noFiles": "다운로드 할 파일이 없습니다!",
 
+    "automodpack.redownload": "모드팩 다시받기",
+    "automodpack.redownload.description": "이 작업은 오류들을 해결 할 수도 있습니다.",
 
-  "gui.automodpack.screen.restart.title.modpack": "모드팩 업데이트가 다운로드되었습니다!",
+    "automodpack.error": "뭔가 잘못되었습니다!",
+    "automodpack.error.files": "일부 파일을 다운로드 하는 데 실패했습니다.",
+    "automodpack.error.critical": "모드팩 다운로드중 치명적 오류가 발생했습니다.",
+    "automodpack.error.logs": "로그에서 자세한 내용을 확인하십시오",
 
-  "gui.automodpack.screen.restart.button.cancel": "아니오 (게임으로 되돌아감)",
+    "automodpack.fetch": "Modrinth와 CurseForge에서 URL들을 가져오는 중...",
+    "automodpack.fetch.found": "%개의 URL들을 발견했습니다.",
 
-  "gui.automodpack.screen.confirm.title": "❌ 모드팩 삭제 ❌",
-  "gui.automodpack.screen.confirm.description": "다운로드한 모드팩의 모든 내용을 잃게 됩니다.",
-  "gui.automodpack.screen.confirm.secDescription": "게임을 다시 시작해야 합니다.",
-  "gui.automodpack.screen.confirm.thiDescription": "정말 삭제하시겠습니까?",
-  "gui.automodpack.screen.confirm.button.sure": "예 (삭제 및 종료)",
-  "gui.automodpack.screen.confirm.button.cancel": "아니오 (게임으로 되돌아감)",
+    "automodpack.select": "모드팩 선택",
 
-  "gui.automodpack.screen.loading.title": "업데이트 다운로드 중...",
-  "gui.automodpack.screen.loading.wait": "Please wait...",
-  "gui.automodpack.screen.loading.download": "Downloading...",
-  "gui.automodpack.screen.loading.extract": "Extracting modpack...",
-  "gui.automodpack.screen.loading.finish": "Finishing...",
-
-  "gui.automodpack.screen.danger.title": "주의! 모드팩을 발견했습니다!",
-  "gui.automodpack.screen.danger.description": "업데이트를 다운로드하시겠습니까?",
-  "gui.automodpack.screen.danger.secDescription": "시스템이 위험할 수도 있습니다! 서버 관리자를 신뢰할 수 없다면 다운로드하지 마세요!",
-  "gui.automodpack.screen.danger.button.accept": "다운로드",
-  "gui.automodpack.screen.danger.button.cancel": "다운로드 안함"
-}
+    "automodpack.yes": "예",
+    "automodpack.no": "아니오",
+    "automodpack.cancel": "취소",
+    "automodpack.back": "돌아가기",
+    "automodpack.wait": "잠시만 기다려 주세요..."
+  }

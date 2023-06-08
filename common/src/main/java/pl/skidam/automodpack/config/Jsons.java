@@ -56,18 +56,18 @@ public class Jsons {
             public String link; // if automodpack host (file == link) else (file != link) file is a path, link is a url
             public String size;
             public String type;
-            public boolean isEditable;
+            public boolean editable;
             public String modId;
             public String version;
             public String sha1;
             public String murmur;
 
-            public ModpackContentItems(String file, String link, String size, String type, boolean isEditable, String modId, String version, String sha1, String murmur) {
+            public ModpackContentItems(String file, String link, String size, String type, boolean editable, String modId, String version, String sha1, String murmur) {
                 this.file = file;
                 this.link = link;
                 this.size = size;
                 this.type = type;
-                this.isEditable = isEditable;
+                this.editable = editable;
                 this.modId = modId;
                 this.version = version;
                 this.sha1 = sha1;
@@ -76,7 +76,7 @@ public class Jsons {
 
             @Override
             public String toString() {
-                return String.format("ModpackContentItems(file=%s, link=%s, size=%s, sha512%s, murmur%s)", file, link, size, sha1, murmur);
+                return String.format("ModpackContentItems(file=%s, link=%s, size=%s, sha1%s, murmur%s)", file, link, size, sha1, murmur);
             }
         }
     }
