@@ -39,18 +39,18 @@ processResources {
 
 shadowJar {
     configurations = [project.configurations.shadowCommon]
-    classifier "dev-shadow"
+//    classifier "dev-shadow"
 }
 
 remapJar {
     input.set shadowJar.archiveFile
     dependsOn shadowJar
-    classifier null
+//    classifier null
 }
 
-jar {
-    classifier "dev"
-}
+//jar {
+//    classifier "dev"
+//}
 
 sourcesJar {
     def commonSources = project(":common").sourcesJar
