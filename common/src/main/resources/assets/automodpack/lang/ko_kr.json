@@ -23,7 +23,7 @@
     "automodpack.changelog.noChanges": "변경점이 없습니다.",
 
     "automodpack.download.calculating": "계산 중...",
-    "automodpack.download.eta": "%초 남음",
+    "automodpack.download.eta": "남은 시간 %s",
     "automodpack.download.downloading": "다운로드 중",
     "automodpack.download.noFiles": "다운로드 할 파일이 없습니다!",
 
@@ -36,7 +36,7 @@
     "automodpack.error.logs": "로그에서 자세한 내용을 확인하십시오",
 
     "automodpack.fetch": "Modrinth와 CurseForge에서 URL들을 가져오는 중...",
-    "automodpack.fetch.found": "%개의 URL들을 발견했습니다.",
+    "automodpack.fetch.found": "찾은 URLdirect url %s.",
 
     "automodpack.select": "모드팩 선택",
 
