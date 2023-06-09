@@ -19,7 +19,7 @@
 Welcome to AutoModpack,
 
 What is this?
-AutoModpack is a Minecraft modification that aims to simplify the process of updating modpacks. With this mod, players no longer have to manually update each mod or the entire modpack. The tedious task of updating is handled automatically, making the experience more seamless and enjoyable.
+AutoModpack is a Minecraft modification that aims to simplify the process of updating modpacks for servers. With this mod, players no longer have to manually update each mod or the entire modpack. The tedious task of updating is handled automatically, making the experience more seamless and enjoyable.
 
 [(A bit outdated) Showcase (YouTube video)](https://youtu.be/lPPzaNPn8g8)
 
