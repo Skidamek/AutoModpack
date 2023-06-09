@@ -19,7 +19,7 @@
 Welcome to AutoModpack,
 
 What is this?
-AutoModpack is a Minecraft modification that aims to simplify the process of updating modpacks. With this mod, players no longer have to manually update each mod or the entire modpack. The tedious task of updating is handled automatically, making the experience more seamless and enjoyable.
+AutoModpack is a Minecraft modification that aims to simplify the process of updating modpacks for servers. With this mod, players no longer have to manually update each mod or the entire modpack. The tedious task of updating is handled automatically, making the experience more seamless and enjoyable.
 
 [(A bit outdated) Showcase (YouTube video)](https://youtu.be/lPPzaNPn8g8)
 
@@ -28,18 +28,18 @@ I do not take credit for any of the content that can be downloaded from the mod.
 ## Key features
 - Auto modpack updating for seamless player experience.
 - Effortless modpack management for admins, including the ability to easily manage mods, configs, resource packs, and more.
-- Auto Synchronization of modpack content with server mods for consistency and reliability.
+- Direct downloads from modrinth and curseforge.
 - Dynamic modpack updates without disrupting player experience.
 - Quick and simple installation process.
 
 ## How it works?
 On server AutoModpack generates a file called modpack-content.json on the server, which contains all the mods, configs, resource packs, and other necessary files for your modpack. The server also hosts this file, as well as all the files contained within it, on an HTTP server.
 
-When a client joins the server, the modpack automatically downloads the modpack-content.json file from HTTP server and all the files contained within it, if they haven't been downloaded yet. The client simply needs to wait a few seconds for the files to download, install, and restart the game. Once the process is complete, the client can join the server again and enjoy the modpack!
+When a client joins the server, the modpack automatically downloads the modpack-content.json file from HTTP server, check modrinth and curseforge api's to get direct downloads of as most as possible files and then it downloads all the files contained within modpack-content, if they haven't been installed before on client. The client simply needs to wait a few seconds for the files to download, install, and restart the game. Once the process is complete, the client can join the server again and enjoy the modpack
 
 ## Is it secure?
 
-Simply, no. This mod allows ANY server running it to put ANY file in your game folder, such as a virus or a keylogger. So if you are a client please make sure you trust your server administrator and as a good measure make sure to scan your games folders for malicious content. Please direct any useful security material to the github issues.
+Simply, no. This mod allows ANY server running it to put ANY file in your game folder, such as a virus or a keylogger. So if you are a client please make sure you trust your server administrator and as a good measure make sure to scan your games folders for malicious content. Please direct any useful security material to the github issues. However as long you know server is safe and owner isn't impostor, you should be good.
 
 This is only intended for personal use. Other developers work very hard on their mods and simply visiting their website, modrinth/curseforge page, or github is just a common courtesy. Please don't use this to mass distribute other people's mods without explicit permisson. Depending on the copyright and/or pattent laws in your area using this mod with other developer's mods for a commercial purpose could be ILLEGAL, check licenses.
 
