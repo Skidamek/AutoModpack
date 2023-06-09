@@ -35,7 +35,7 @@ I do not take credit for any of the content that can be downloaded from the mod.
 ## How it works?
 On server AutoModpack generates a file called modpack-content.json on the server, which contains all the mods, configs, resource packs, and other necessary files for your modpack. The server also hosts this file, as well as all the files contained within it, on an HTTP server.
 
-When a client joins the server, the modpack automatically downloads the modpack-content.json file from HTTP server, check modrinth and curseforge api's to get direct downloads of as most as possible files and then it downloads all the files contained within modpack-content, if they haven't been installed before on client. The client simply needs to wait a few seconds for the files to download, install, and restart the game. Once the process is complete, the client can join the server again and enjoy the modpack
+When a client joins the server, the modpack automatically downloads the modpack-content.json file from HTTP server, check modrinth and curseforge APIs to get direct downloads of as most as possible files and then it downloads all the files contained within modpack-content, if they haven't been installed before on client. The client simply needs to wait a few seconds for the files to download, install, and restart the game. Once the process is complete, the client can join the server again and enjoy the modpack
 
 ## Is it secure?
 
