@@ -33,7 +33,7 @@ public class Url {
                 firstDash = true;
                 decodedUrl = decodedUrl.substring(1);
             }
-            String encodedUrl = URLEncoder.encode(decodedUrl, StandardCharsets.UTF_8);
+            String encodedUrl = URLEncoder.encode(decodedUrl, StandardCharsets.UTF_8.toString());
             if (firstDash) {
                 encodedUrl = "/" + encodedUrl;
             }
@@ -47,7 +47,7 @@ public class Url {
     public static String decode(String encodedUrl) {
         // There we don't need to check if the first character is a dash
         try {
-            return URLDecoder.decode(encodedUrl, StandardCharsets.UTF_8);
+            return URLDecoder.decode(encodedUrl, StandardCharsets.UTF_8.toString());
         } catch (Exception e) {
             // Decoding error, return the original encoded part
             return encodedUrl;

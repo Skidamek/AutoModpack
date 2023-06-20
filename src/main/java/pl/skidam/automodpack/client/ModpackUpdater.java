@@ -147,8 +147,8 @@ public class ModpackUpdater {
                 }
 
                 // print out what files were added, deleted, updated
-                List<File> addedFiles = filesAfter.stream().filter(file -> !filesBefore.contains(file)).toList();
-                List<File> deletedFiles = filesBefore.stream().filter(file -> !filesAfter.contains(file)).toList();
+                List<File> addedFiles = filesAfter.stream().filter(file -> !filesBefore.contains(file)).collect(Collectors.toList());
+                List<File> deletedFiles = filesBefore.stream().filter(file -> !filesAfter.contains(file)).collect(Collectors.toList());
                 // print it
                 LOGGER.info("Added files: " + addedFiles);
                 LOGGER.info("Deleted files: " + deletedFiles);
@@ -182,8 +182,8 @@ public class ModpackUpdater {
                     }
 
                     // print out what files were added, deleted, updated
-                    List<File> addedFiles = filesAfter.stream().filter(file -> !filesBefore.contains(file)).toList();
-                    List<File> deletedFiles = filesBefore.stream().filter(file -> !filesAfter.contains(file)).toList();
+                    List<File> addedFiles = filesAfter.stream().filter(file -> !filesBefore.contains(file)).collect(Collectors.toList());
+                    List<File> deletedFiles = filesBefore.stream().filter(file -> !filesAfter.contains(file)).collect(Collectors.toList());
                     // print it
                     LOGGER.info("Added files: " + addedFiles);
                     LOGGER.info("Deleted files: " + deletedFiles);
@@ -414,10 +414,10 @@ public class ModpackUpdater {
             update = true;
         }
 
-        List<String> files = modpackContent.list.stream().map(modpackContentField -> new File(modpackContentField.file).getName()).toList();
+        List<String> files = modpackContent.list.stream().map(modpackContentField -> new File(modpackContentField.file).getName()).collect(Collectors.toList());
 
         try (Stream<Path> stream = Files.walk(modpackDir.toPath(), 10)) {
-            for (Path file : stream.toList()) {
+            for (Path file : stream.collect(Collectors.toList())) {
                 if (Files.isDirectory(file)) continue;
                 if (file.equals(modpackContentFile.toPath())) continue;
                 if (!files.contains(file.toFile().getName())) {

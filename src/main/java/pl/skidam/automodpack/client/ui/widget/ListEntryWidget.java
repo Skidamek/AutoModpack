@@ -68,7 +68,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
             Path modpackPath = modpack.getKey();
 
             MutableText text = VersionedText.common.literal(modpackName);
-            if (modpackName.isBlank()) {
+            if (modpackName.isEmpty()) {
                 text = VersionedText.common.literal(String.valueOf(modpackPath.getFileName()));
             }
 

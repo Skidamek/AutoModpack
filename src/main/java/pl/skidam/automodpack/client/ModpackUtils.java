@@ -20,6 +20,13 @@
 
 package pl.skidam.automodpack.client;
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.CustomFileUtils;
@@ -29,12 +36,7 @@ import pl.skidam.automodpack.utils.ModpackContentTools;
 import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.List;
 
 import static pl.skidam.automodpack.StaticVariables.LOGGER;
@@ -145,22 +147,23 @@ public class ModpackUtils {
     }
 
     public static Jsons.ModpackContentFields getServerModpackContent(String link) {
-        try {
-            if (link == null) {
-                return null;
-            }
+        try (CloseableHttpClient httpClient = HttpClients.custom()
+                .setDefaultRequestConfig(RequestConfig.custom()
+                        .setConnectTimeout(3000)
+                        .setSocketTimeout(3000)
+                        .build())
+                .build()) {
 
-            HttpRequest getContent = HttpRequest.newBuilder()
-                    .timeout(Duration.ofSeconds(3))
-                    .setHeader("Content-Type", "application/json")
-                    .setHeader("Minecraft-Username", MinecraftUserName.get())
-                    .setHeader("User-Agent", "github/skidamek/automodpack/" + VERSION)
-                    .uri(new URI(link))
-                    .build();
+            HttpGet getContent = new HttpGet(link);
+            getContent.addHeader("Content-Type", "application/json");
+            getContent.addHeader("Minecraft-Username", MinecraftUserName.get());
+            getContent.addHeader("User-Agent", "github/skidamek/automodpack/" + VERSION);
 
-            HttpClient httpClient = HttpClient.newHttpClient();
-            HttpResponse<String> contentResponse = httpClient.send(getContent, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse.body(), Jsons.ModpackContentFields.class);
+            HttpResponse response = httpClient.execute(getContent);
+            HttpEntity entity = response.getEntity();
+            String contentResponse = EntityUtils.toString(entity, StandardCharsets.UTF_8);
+
+            Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse, Jsons.ModpackContentFields.class);
 
             if (serverModpackContent.list.size() < 1) {
                 LOGGER.error("Modpack content is empty!");

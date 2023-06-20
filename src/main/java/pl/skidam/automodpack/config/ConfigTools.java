@@ -82,7 +82,7 @@ public class ConfigTools {
                 configFile.getParentFile().mkdirs();
             }
 
-            Files.writeString(configFile.toPath(), GSON.toJson(configObject), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(configFile.toPath(), GSON.toJson(configObject).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
             LOGGER.error("Couldn't save config! " + configObject.getClass());
             e.printStackTrace();
@@ -110,7 +110,7 @@ public class ConfigTools {
                 modpackContentFile.getParentFile().mkdirs();
             }
 
-            Files.writeString(modpackContentFile.toPath(), GSON.toJson(configObject), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(modpackContentFile.toPath(), GSON.toJson(configObject).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
             LOGGER.error("Couldn't save modpack content! " + configObject.getClass());
             e.printStackTrace();
