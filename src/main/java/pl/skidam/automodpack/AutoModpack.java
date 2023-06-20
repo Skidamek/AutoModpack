@@ -22,7 +22,6 @@ package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.modpack.Modpack;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.utils.MinecraftUserName;
@@ -35,6 +34,8 @@ import static pl.skidam.automodpack.StaticVariables.*;
 //$$ import net.minecraftforge.eventbus.api.IEventBus;
 //$$ import net.minecraftforge.fml.common.Mod;
 //$$ @Mod(MOD_ID)
+//#else
+import pl.skidam.automodpack.modpack.Commands;
 //#endif
 public class AutoModpack {
 
@@ -69,7 +70,8 @@ public class AutoModpack {
 
             ModPackets.registerC2SPackets();
         }
-
+//#if FABRICLIKE
         Commands.register();
+//#endif
     }
 }

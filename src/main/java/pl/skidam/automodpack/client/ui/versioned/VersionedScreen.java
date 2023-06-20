@@ -31,6 +31,7 @@ import net.minecraft.client.util.math.MatrixStack;
 //$$import net.minecraft.client.gui.DrawContext;
 //#endif
 
+@SuppressWarnings("unchecked")
 public class VersionedScreen extends Screen {
 
     protected VersionedScreen(Text title) {

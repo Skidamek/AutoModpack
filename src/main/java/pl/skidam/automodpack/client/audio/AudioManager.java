@@ -33,33 +33,24 @@ import net.minecraft.util.registry.Registry;
 //$$ import net.minecraftforge.eventbus.api.IEventBus;
 //$$ import net.minecraftforge.registries.DeferredRegister;
 //$$ import net.minecraftforge.registries.ForgeRegistries;
-//$$ import net.minecraftforge.registries.RegistryObject;
 //#endif
 
 import static pl.skidam.automodpack.StaticVariables.MOD_ID;
 
-
+@SuppressWarnings("deprecation")
 public class AudioManager {
     private static CustomSoundInstance SOUND_INSTANCE;
     private static SoundManager soundManager;
     private static boolean playing = false;
 
     // FIXME: Forge support
-//#if FORGE
-//$$ public static final DeferredRegister<SoundEvent> SOUND_EVENTS = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, MOD_ID);
-//$$ public static final RegistryObject<SoundEvent> sound = SOUND_EVENTS.register("example_block", () -> new SoundEvent(new Identifier(MOD_ID, "waiting_music")));
-//$$    public AudioManager(IEventBus eventBus) {
-//$$        SOUND_EVENTS.register(eventBus);
-//$$        SoundEvent WAITING_MUSIC = sound.get();
-//$$        SOUND_INSTANCE = new CustomSoundInstance(WAITING_MUSIC);
-//#else
     public AudioManager() {
+//#if FABRICLIKE
         SoundEvent WAITING_MUSIC = register();
         SOUND_INSTANCE = new CustomSoundInstance(WAITING_MUSIC);
 //#endif
     }
 
-//#if FABRICLIKE
 
     private static SoundEvent register() {
         Identifier id = new Identifier(MOD_ID, "waiting_music");
@@ -72,7 +63,6 @@ public class AudioManager {
 //#endif
         return Registry.register(register, id, soundEvent);
     }
-//#endif
 
     public static void playMusic() {
         if (playing || SOUND_INSTANCE == null) return;

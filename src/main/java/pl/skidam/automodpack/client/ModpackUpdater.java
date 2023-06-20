@@ -50,6 +50,7 @@ import static pl.skidam.automodpack.config.ConfigTools.GSON;
 import static pl.skidam.automodpack.utils.CustomFileUtils.mapAllFiles;
 import static pl.skidam.automodpack.utils.RefactorStrings.getFormatedETA;
 
+@SuppressWarnings("unchecked")
 public class ModpackUpdater {
     public static List<DownloadInfo> downloadInfos = Collections.synchronizedList(new ArrayList<>());
     public static final int MAX_DOWNLOADS = 5; // at the same time

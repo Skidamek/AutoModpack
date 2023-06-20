@@ -45,8 +45,7 @@ public class FabricImpl {
     }
 
     public static Collection getModList() {
-        Collection<ModContainer> modsList = FabricLoader.getInstance().getAllMods();
-        return modsList;
+        return FabricLoader.getInstance().getAllMods();
     }
 
     public static File getModPath(String modId) {

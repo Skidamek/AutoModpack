@@ -29,11 +29,15 @@ public class ModPackets {
     public static final Identifier LINK = new Identifier(MOD_ID, "link");
 
     public static void registerC2SPackets() {
+//#if FABRICLIKE
         ModPacketsImpl.registerC2SPackets();
+//#endif
     }
 
     public static void registerS2CPackets() {
+//#if FABRICLIKE
         ModPacketsImpl.registerS2CPackets();
+//#endif
     }
 
 }

@@ -20,6 +20,8 @@
 
 package pl.skidam.automodpack.modpack;
 
+//#if FABRICLIKE
+
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.server.command.ServerCommandSource;
@@ -195,3 +197,5 @@ public class Commands {
         return Command.SINGLE_SUCCESS;
     }
 }
+
+//#endif

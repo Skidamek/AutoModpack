@@ -34,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 
 import static pl.skidam.automodpack.StaticVariables.VERSION;
 
+@SuppressWarnings("deprecation")
 public class Json {
     public static JsonArray fromUrlAsArray(String url) {
         JsonElement element = null;

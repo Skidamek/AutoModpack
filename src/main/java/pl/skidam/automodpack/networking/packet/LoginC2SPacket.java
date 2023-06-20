@@ -20,6 +20,8 @@
 
 package pl.skidam.automodpack.networking.packet;
 
+//#if FABRICLIKE
+
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -58,3 +60,5 @@ public class LoginC2SPacket {
         return CompletableFuture.completedFuture(outBuf);
     }
 }
+
+//#endif

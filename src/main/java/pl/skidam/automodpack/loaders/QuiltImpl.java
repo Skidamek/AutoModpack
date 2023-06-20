@@ -30,10 +30,6 @@ package pl.skidam.automodpack.loaders;
 //$$ import org.quiltmc.loader.api.LoaderValue;
 //$$ import org.quiltmc.loader.api.QuiltLoader;
 //$$ import org.quiltmc.loader.api.minecraft.MinecraftQuiltLoader;
-//$$ import pl.skidam.automodpack.Download;
-//$$ import pl.skidam.automodpack.ReLauncher;
-//$$ import pl.skidam.automodpack.platforms.ModrinthAPI;
-//$$ import pl.skidam.automodpack.utils.CustomFileUtils;
 //$$
 //$$ import java.io.*;
 //$$ import java.io.File;
@@ -48,6 +44,7 @@ package pl.skidam.automodpack.loaders;
 //$$
 //$$ import static pl.skidam.automodpack.StaticVariables.*;
 //$$
+//$$ @SuppressWarnings("deprecation")
 //$$ public class QuiltImpl {
 //$$
 //$$    public static boolean isModLoaded(String modId) {
@@ -202,7 +199,7 @@ package pl.skidam.automodpack.loaders;
 //$$     public static String getModIdFromLoadedJar(File file, boolean checkAlsoOutOfContainer) {
 //$$         if (!file.isFile()) return null;
 //$$         if (!file.getName().endsWith(".jar")) return null;
-//$$         if (getModEnvironmentFromNotLoadedJar(file).equals("UNKNOWN")) return null;
+//$$         if (Objects.equals(getModEnvironmentFromNotLoadedJar(file), "UNKNOWN")) return null;
 //$$
 //$$         for (ModContainer modContainer : QuiltLoader.getAllMods()) {
 //$$             FileSystem fileSys = modContainer.rootPath().getFileSystem();

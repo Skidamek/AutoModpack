@@ -27,6 +27,7 @@ package pl.skidam.automodpack.loaders;
 //$$ import net.minecraftforge.fml.loading.FMLLoader;
 //$$ import net.minecraftforge.fml.ModList;
 //$$
+//$$ @SuppressWarnings("unchecked")
 //$$ public class ForgeImpl {
 //$$     public static boolean isDevelopmentEnvironment() {
 //$$         return !FMLLoader.isProduction();

@@ -20,6 +20,8 @@
 
 package pl.skidam.automodpack.networking.packet;
 
+//#if FABRICLIKE
+
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
@@ -54,3 +56,5 @@ public class LinkS2CPacket {
         packet(handler, buf);
     }
 }
+
+//#endif

@@ -20,6 +20,8 @@
 
 package pl.skidam.automodpack.networking;
 
+//#if FABRICLIKE
+
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -102,3 +104,5 @@ public class ModPacketsImpl {
         });
     }
 }
+
+//#endif

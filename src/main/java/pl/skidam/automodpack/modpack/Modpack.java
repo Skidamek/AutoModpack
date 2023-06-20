@@ -38,6 +38,8 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack.StaticVariables.*;
+
+
 public class Modpack {
     public static Path hostModpackDir = Path.of(automodpackDir + File.separator + "host-modpack");
     static Path hostModpackMods = Path.of(hostModpackDir + File.separator + "mods");
