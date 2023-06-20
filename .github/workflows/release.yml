@@ -138,14 +138,14 @@ jobs:
       - name: Publish Minecraft Mods
         uses: Kir-Antipov/mc-publish@v3.2
         with:
-          modrinth-id: _INSERT_MODRITH_MOD_ID_HERE_
+          modrinth-id: k68glP2e
           modrinth-token: ${{ secrets.MODRINTH_API_TOKEN }}
 
-          curseforge-id: _INSERT_CURSEFORGE_MOD_ID_HERE_
+          curseforge-id: 639211
           curseforge-token: ${{ secrets.CF_API_TOKEN }}
 
           github-tag: ${{ steps.release_info.outputs.tag_name }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.GH_TOKEN }}
 
           files-primary: ${{ steps.file_info.outputs.path }}
           files-secondary: ''
