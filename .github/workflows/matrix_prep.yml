@@ -1,0 +1,29 @@
+name: step.matrix_prepare
+
+on:
+  workflow_call:
+    inputs:
+      target_subproject:
+        description: see release.yml, for generating matrix entries
+        type: string
+        required: false
+        default: ''
+    outputs:
+      matrix:
+        description: The generated run matrix
+        value: ${{ jobs.matrix_prep.outputs.matrix }}
+
+
+jobs:
+  matrix_prep:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: setmatrix
+        run: python3 .github/workflows/scripts/matrix.py  # ubuntu-22.04 uses Python 3.10.6
+        env:
+          TARGET_SUBPROJECT: ${{ inputs.target_subproject }}
+
+    outputs:
+      matrix: ${{ steps.setmatrix.outputs.matrix }}

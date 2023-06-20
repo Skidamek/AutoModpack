@@ -1,15 +1,32 @@
+import groovy.json.JsonSlurper
+
 pluginManagement {
     repositories {
-        maven { url "https://maven.fabricmc.net/" }
         maven { url "https://maven.architectury.dev/" }
-        maven { url "https://maven.minecraftforge.net/" }
+        maven { url = "https://maven.fabricmc.net/" }
+        maven { url = "https://maven.quiltmc.org/repository/release" }
+        maven { url "https://files.minecraftforge.net/maven/" }
+        maven { url = "https://jitpack.io" }
+        mavenCentral()
         gradlePluginPortal()
+    }
+    resolutionStrategy {
+        eachPlugin {
+            switch (requested.id.id) {
+                case "com.replaymod.preprocess": {
+                    useModule("com.github.Fallen-Breath:preprocessor:${requested.version}")
+                    break
+                }
+            }
+        }
     }
 }
 
-include("common")
-include("fabric")
-include("forge")
-include("quilt")
+def settings = new JsonSlurper().parseText(file('settings.json').text)
+for (String version : settings.versions) {
+    include(":$version")
 
-rootProject.name = "automodpack"
+    def proj = project(":$version")
+    proj.projectDir = file("versions/$version")
+    proj.buildFileName = "../../common.gradle"
+}

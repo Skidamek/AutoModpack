@@ -1,0 +1,48 @@
+{
+  "automodpack.restart.full": "Das Modpack wurde heruntergeladen!",
+  "automodpack.restart.update": "Es wurde ein Update für das Modpack heruntergeladen!",
+  "automodpack.restart.description": "Um den Vorgang abzuschließen, musst du das Spiel neu starten.",
+  "automodpack.restart.secDescription": "Möchtest du jetzt neu starten?",
+  "automodpack.restart.confirm": "Ja, Spiel schließen",
+  "automodpack.restart.cancel": "Nein, zurück zum Spiel",
+
+  "automodpack.delete": "Modpack löschen",
+  "automodpack.delete.description": "Du verlierst alle Inhalte des heruntergeladenen Modpacks.",
+  "automodpack.delete.secDescription": "Du musst das Spiel neu starten.",
+  "automodpack.delete.thiDescription": "Bist du sicher, dass du es löschen möchtest?",
+  "automodpack.delete.confirm": "Löschen und beenden",
+  "automodpack.delete.cancel": "Zurück zum Spiel",
+
+  "automodpack.danger": "Dieser Server bietet ein externes Modpack an!",
+  "automodpack.danger.description": "Möchtest du es herunterladen?",
+  "automodpack.danger.secDescription": "Es könnte riskant sein! Lade es NICHT herunter, wenn du den Server-Betreibern nicht vertraust!",
+  "automodpack.danger.confirm": "Herunterladen",
+  "automodpack.danger.cancel": "Nicht herunterladen",
+
+  "automodpack.changelog.view": "Änderungen anzeigen",
+  "automodpack.changelog.noChanges": "Keine Änderungen gefunden.",
+
+  "automodpack.download.calculating": "Berechnung läuft...",
+  "automodpack.download.eta": "Verbleibende Zeit: %s",
+  "automodpack.download.downloading": "Herunterladen:",
+  "automodpack.download.noFiles": "Keine Dateien zum Herunterladen!",
+
+  "automodpack.redownload": "Modpack erneut herunterladen",
+  "automodpack.redownload.description": "Das kann Probleme mit dem Modpack beheben.",
+
+  "automodpack.error": "Etwas ist schiefgegangen!",
+  "automodpack.error.files": "Fehler beim Herunterladen einiger Dateien.",
+  "automodpack.error.critical": "Kritischer Fehler beim Herunterladen des Modpacks.",
+  "automodpack.error.logs": "Weitere Details finden Sie in den Log.",
+
+  "automodpack.fetch": "Hole direkte URLs von Modrinth und CurseForge...",
+  "automodpack.fetch.found": "Es wurden %s direkte URLs gefunden.",
+
+  "automodpack.select": "Modpack auswählen",
+
+  "automodpack.yes": "Ja",
+  "automodpack.no": "Nein",
+  "automodpack.cancel": "Abbrechen",
+  "automodpack.back": "Zurück",
+  "automodpack.wait": "Bitte warten..."
+}

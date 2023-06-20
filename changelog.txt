@@ -1,0 +1,7 @@
+- Removed necessary fabric api so also the downloadDependency option in config
+- Fixed issue with unable to connect to localhost server
+- Finally fixed url formatting issues (better than base64 suggestion #114)
+- Clean up
+- Re-structured whole codebase based on awesome multi-versioned&loadered template thanks to Fallen-Breath https://github.com/Fallen-Breath/fabric-mod-template/
+- Added support for 1.16 and 1.17
+- Deleted need for fabric/quilt api

@@ -68,8 +68,8 @@ Doesn't work? Check `hostIp` in `/automodpack/automodpack-server.json` and make 
 
 **Want to add more content to your modpack?**
 - By default, the modpack will automatically synchronize all mods, configs from default server directories to the modpack. (Check `syncedFiles` list in `/automodpack/automodpack-server.json`)
-- To add more mods to your server, place them in the `/automodpack/host-modpack/mods/` directory. 
-And so analogically to add shaderpacks, put them in `/automodpack/host-modpack/shaderpacks/`. You can create any subdirectories you need within `/automodpack/host-modpack/` folder.
+- To add more mods to your server, place them in the `/automodpack/host-modpack/mods/` directory.
+  And so analogically to add shaderpacks, put them in `/automodpack/host-modpack/shaderpacks/`. You can create any subdirectories you need within `/automodpack/host-modpack/` folder.
 - Or add whatever file/folder from server main directory to the `syncedFiles` list in `/automodpack/automodpack-server.json`
 
 **Want to delete some mods from modpack?**
@@ -101,7 +101,6 @@ And so analogically to add shaderpacks, put them in `/automodpack/host-modpack/s
 | `externalModpackHostLink`   |                                                                                                         | An external link to the modpack host, if it's hosted elsewhere.                                                                                                                                 |
 | `reverseProxy`              | `false`                                                                                                 | Adds configurable port from `hostPort` to the `externalModpackHostLink` if not empty.                                                                                                           |
 | `selfUpdater`               | `true`                                                                                                  | Turn on/off all automodpack updates. This does not affect the mod's activity in installing modpacks.                                                                                            |
-| `downloadDependency`        | `true`                                                                                                  | Turn on/off auto-installing dependencies, such as Fabric API which is required for the automodpack.                                                                                             |
 | `allowFabricQuiltPlayers`   | `false`                                                                                                 | Allows players from fabric and quilt connect to your server with the same modpack. (use with caution, some mods may not work on both loaders)                                                   |
 
 */automodpack/automodpack-client.json*
@@ -109,10 +108,7 @@ And so analogically to add shaderpacks, put them in `/automodpack/host-modpack/s
 | Name                      | Default Value | Description                                                                                                                         |
 |---------------------------|---------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | `selectedModpack`         |               | The main folder of the modpack that you want to play. Typing the name of the modpack here will cause it to be loaded.               |
-| `javaExecutablePath`      |               | The path to the Java executable that is used to relaunch Minecraft.                                                                 |
 | `selfUpdater`             | `true`        | Turn on/off all automodpack updates. This does not affect the mod's activity in installing modpacks.                                |
-| `downloadDependency`      | `true`        | Turn on/off auto-installing dependencies, such as Fabric API which is required for the automodpack.                                 |
-| `autoRelaunchWhenUpdated` | `false`       | Auto relaunch Minecraft for seem lees automodpack self updating.                                                                    |
 
 
 ## Commands
@@ -137,7 +133,9 @@ And so analogically to add shaderpacks, put them in `/automodpack/host-modpack/s
 - Having trouble with the local host IP? No worries, just repeat the process but change "hostLocalIp" instead.
 
 ## Questions? Problems?
-* Feel free to contact me via discord Skidam#0001
+* Feel free to contact me via discord: skidam
+
+Thanks to [**@Fallen-Breath**]() for awesome [mod template](https://github.com/Fallen-Breath/fabric-mod-template/)
 
 **Contributors are welcome!**
 [**click.**](CONTRIBUTING.md)

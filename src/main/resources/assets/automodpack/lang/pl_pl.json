@@ -1,0 +1,48 @@
+{
+  "automodpack.restart.full": "Modpack został pobrany!",
+  "automodpack.restart.update": "Aktualizacja do Modpacka została pobrana!",
+  "automodpack.restart.description": "Aby zakończyć, musisz zrestartować grę.",
+  "automodpack.restart.secDescription": "Czy chcesz teraz zrestartować?",
+  "automodpack.restart.confirm": "Tak, zamknij grę",
+  "automodpack.restart.cancel": "Nie, wróć do gry",
+
+  "automodpack.delete": "Usuń modpack",
+  "automodpack.delete.description": "Utracisz wszystkie rzeczy z pobranego modpacka.",
+  "automodpack.delete.secDescription": "Będziesz musiał zrestartować grę.",
+  "automodpack.delete.thiDescription": "Czy na pewno chcesz to usunąć?",
+  "automodpack.delete.confirm": "Usuń i zakończ",
+  "automodpack.delete.cancel": "Wróć do gry",
+
+  "automodpack.danger": "Ten serwer udostępnia zewnętrzny modpack!",
+  "automodpack.danger.description": "Czy chcesz go pobrać?",
+  "automodpack.danger.secDescription": "Może to być ryzykowne! Nie pobieraj, jeśli nie ufasz właścicielom serwera!",
+  "automodpack.danger.confirm": "Pobierz",
+  "automodpack.danger.cancel": "Nie pobieraj",
+
+  "automodpack.changelog.view": "Zobacz dzienniki zmian",
+  "automodpack.changelog.noChanges": "Nie znaleziono zmian.",
+
+  "automodpack.download.calculating": "Obliczanie...",
+  "automodpack.download.eta": "Pozostały czas: %s",
+  "automodpack.download.downloading": "Pobieranie:",
+  "automodpack.download.noFiles": "Brak plików do pobrania!",
+
+  "automodpack.redownload": "Pobierz ponownie modpack",
+  "automodpack.redownload.description": "To może rozwiązać problemy z modpackiem.",
+
+  "automodpack.error": "Coś poszło nie tak!",
+  "automodpack.error.files": "Nie udało się pobrać niektórych plików.",
+  "automodpack.error.critical": "Krytyczny błąd podczas pobierania modpacka.",
+  "automodpack.error.logs": "Sprawdź więcej szczegółów w dziennikach.",
+
+  "automodpack.fetch": "Pobieranie bezpośrednich adresów URL z Modrinth i CurseForge...",
+  "automodpack.fetch.found": "Znaleziono %s bezpośrednich adresów URL.",
+
+  "automodpack.select": "Wybierz modpack",
+
+  "automodpack.yes": "Tak",
+  "automodpack.no": "Nie",
+  "automodpack.cancel": "Anuluj",
+  "automodpack.back": "Wróć",
+  "automodpack.wait": "Proszę czekać..."
+}

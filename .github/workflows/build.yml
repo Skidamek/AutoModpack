@@ -1,0 +1,76 @@
+name: step.build
+
+on:
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        required: false
+        default: false
+      target_subproject:
+        description: see release.yml, leave it empty to build all
+        type: string
+        required: false
+        default: ''
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: Cache gradle files
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ./.gradle/loom-cache
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle', '**/gradle.properties', '**/*.accesswidener') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build with Gradle
+        run: |
+          chmod +x gradlew
+          if [ -z "${{ inputs.target_subproject }}" ]; then
+              echo "Building all subprojects"
+              ./gradlew build --no-daemon
+          else
+              args=$(echo "${{ inputs.target_subproject }}" | tr ',' '\n' | sed 's/$/:build/' | paste -sd ' ')
+              echo "Building $args"
+              ./gradlew $args --no-daemon
+          fi
+        env:
+          BUILD_ID: ${{ github.run_number }}
+          BUILD_RELEASE: ${{ inputs.release }}
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: versions/*/build/libs/
+
+  summary:
+    runs-on: ubuntu-22.04
+    needs:
+      - build
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build-artifacts
+          path: build-artifacts
+
+      - name: Make build summary
+        run: python3 .github/workflows/scripts/summary.py  # ubuntu-22.04 uses Python 3.10.6
+        env:
+          TARGET_SUBPROJECT: ${{ inputs.target_subproject }}
