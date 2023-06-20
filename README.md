@@ -135,7 +135,7 @@ Doesn't work? Check `hostIp` in `/automodpack/automodpack-server.json` and make 
 ## Questions? Problems?
 * Feel free to contact me via discord: skidam
 
-Thanks to [**@Fallen-Breath**]() for awesome [mod template](https://github.com/Fallen-Breath/fabric-mod-template/)
+Thanks to [**@Fallen-Breath**](https://github.com/Fallen-Breath) for awesome [mod template](https://github.com/Fallen-Breath/fabric-mod-template/)
 
 **Contributors are welcome!**
 [**click.**](CONTRIBUTING.md)
