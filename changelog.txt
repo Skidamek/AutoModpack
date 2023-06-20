@@ -5,3 +5,5 @@
 - Re-structured whole codebase based on awesome multi-versioned&loadered template thanks to Fallen-Breath https://github.com/Fallen-Breath/fabric-mod-template/
 - Added support for 1.16 and 1.17
 - Deleted need for fabric/quilt api
+- Fixed not executing modpack update while server down on preload
+- Improved deletion of files

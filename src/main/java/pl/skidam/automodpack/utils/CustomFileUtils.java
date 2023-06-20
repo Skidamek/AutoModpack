@@ -25,10 +25,7 @@ import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.StaticVariables;
 import pl.skidam.automodpack.config.Jsons;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -36,39 +33,44 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 /**
  * Everything in this class should force do the thing without throwing any exceptions.
  */
 
 public class CustomFileUtils {
-    private static final long maxEmptyZipFolderSize = 168;
+    private static final byte[] smallDummyJar = {
+            80, 75, 3, 4, 20, 0, 8, 8, 8, 0, 89, 116, -44, 86, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 0, 4, 0, 77, 69, 84,
+            65, 45, 73, 78, 70, 47, 77, 65, 78, 73, 70, 69, 83, 84, 46, 77,
+            70, -2, -54, 0, 0, -13, 77, -52, -53, 76, 75, 45, 46, -47, 13, 75,
+            45, 42, -50, -52, -49, -77, 82, 48, -44, 51, -32, -27, -30, -27, 2, 0,
+            80, 75, 7, 8, -78, 127, 2, -18, 27, 0, 0, 0, 25, 0, 0, 0,
+            80, 75, 1, 2, 20, 0, 20, 0, 8, 8, 8, 0, 89, 116, -44, 86,
+            -78, 127, 2, -18, 27, 0, 0, 0, 25, 0, 0, 0, 20, 0, 4, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 77, 69,
+            84, 65, 45, 73, 78, 70, 47, 77, 65, 78, 73, 70, 69, 83, 84, 46,
+            77, 70, -2, -54, 0, 0, 80, 75, 5, 6, 0, 0, 0, 0, 1, 0,
+            1, 0, 70, 0, 0, 0, 97, 0, 0, 0, 0, 0,
+    };
 
     public static void forceDelete(File file, boolean deleteOnExit) {
+
+        FileUtils.deleteQuietly(file);
+
         if (file.exists()) {
-            FileUtils.deleteQuietly(file);
 
-            if (file.exists()) {
-                try {
-                    FileDeleteStrategy.FORCE.delete(file);
-                } catch (IOException ignored) {
-                }
+            try {
+                FileDeleteStrategy.FORCE.delete(file);
+            } catch (IOException ignored) {
             }
 
 
-            if (file.exists() && file.length() > maxEmptyZipFolderSize) {
+            if (file.exists()) {
                 if (file.toString().endsWith(".jar")) {
-                    ZipIntoEmptyFolder(file);
-                }
-            }
-
-            if (file.exists()) {
-                try {
-                    FileDeleteStrategy.FORCE.delete(file);
-                } catch (IOException ignored) {
+                    dummyIT(file);
                 }
             }
 
@@ -96,7 +98,7 @@ public class CustomFileUtils {
         }
     }
 
-    public static void deleteEmptyFiles(File directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
+    public static void deleteEmptyFiles(File directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) throws IOException {
         File[] files = directory.listFiles();
         if (files == null) {
             return;
@@ -104,7 +106,6 @@ public class CustomFileUtils {
 
         for (File file : files) {
             if (shouldIgnore(file, ignoreList)) {
-//                System.out.println("Ignoring: " + file);
                 continue;
             }
 
@@ -115,7 +116,6 @@ public class CustomFileUtils {
                 }
 
                 if (deleteSubDirsToo && isEmptyDirectory(file, ignoreList)) {
-//                    System.out.println("Deleting empty dir: " + file);
                     CustomFileUtils.forceDelete(file, false);
                 }
 
@@ -123,11 +123,10 @@ public class CustomFileUtils {
                     deleteEmptyFiles(file, deleteSubDirsToo, ignoreList);
                 }
 
-            } else if (file.length() == 0) {
-//                System.out.println("Deleting empty file: " + file);
-                CustomFileUtils.forceDelete(file, true);
-            } else if (file.length() <= maxEmptyZipFolderSize) {
-                deleteEmptyZipFolder(file);
+            } else if (file.length() < 500) {
+                if (Arrays.equals(Files.readAllBytes(file.toPath()), smallDummyJar)) {
+                    forceDelete(file, true);
+                }
             }
         }
     }
@@ -153,45 +152,19 @@ public class CustomFileUtils {
         return false;
     }
 
-    public static void ZipIntoEmptyFolder(File zipFile) {
-        File folderPath = new File(StaticVariables.automodpackDir + File.separator + "empty");
-        folderPath.mkdirs();
-
-        try {
-            // Get a reference to the existing ZIP file
-            ZipOutputStream zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile));
-
-            // Create a new ZIP entry for the empty folder
-            ZipEntry zipEntry = new ZipEntry(folderPath + File.separator);
-            zipOutputStream.putNextEntry(zipEntry);
-
-            // Close the ZIP output stream
-            zipOutputStream.close();
-
-            folderPath.delete();
-
-            System.out.println("Zipped into empty folder: " + zipFile);
+    // dummy IT ez
+    public static void dummyIT(File file) {
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(smallDummyJar);
+            fos.flush();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public static void deleteEmptyZipFolder(File file) {
-        if (!file.toString().endsWith(".jar")) {
-            return;
-        }
-
-        if (JarUtilities.getModIdFromJar(file, true) != null) {
-            return;
-        }
-
-        CustomFileUtils.forceDelete(file, true);
-        System.out.println("Deleted empty zip folder: " + file);
-    }
-
     public static String getHashFromStringOfHashes(String hashes) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hashBytes = digest.digest(hashes.getBytes(StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
             for (byte b : hashBytes) {
@@ -204,13 +177,11 @@ public class CustomFileUtils {
         }
     }
 
-    public static String getHashWithRetry(File file, String algorithm) throws NoSuchAlgorithmException {
+    public static String getHashWithRetry(File file, String algorithm) {
         try {
             return getHash(file, algorithm);
-        } catch (NoSuchAlgorithmException e) {
-            throw e;
         } catch (Exception e) {
-            // ignore NullPointerException
+            e.printStackTrace();
         }
 
         File tempFile = new File(StaticVariables.automodpackDir + File.separator + file.getName() + ".tmp");
@@ -219,37 +190,47 @@ public class CustomFileUtils {
             return getHash(tempFile, algorithm);
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("AutoModpack - Cannot copy file for hashing: " + file.getAbsolutePath(), e);
+            throw new IllegalStateException("AutoModpack - Cannot copy file for hashing: " + file.getAbsolutePath(), e);
         } finally {
             tempFile.delete();
         }
     }
 
-    public static String getHash(File file, String algorithm) throws Exception {
+    public static String getHash(File file, String algorithm) {
 
         if (!file.exists()) return null;
 
-        if (algorithm.equals("murmur")) {
-            return getCurseforgeMurmurHash(file.toPath());
-        }
-
-        MessageDigest md = MessageDigest.getInstance(algorithm);
-
-        try (FileInputStream inputStream = new FileInputStream(file)) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = inputStream.read(buffer)) != -1) {
-                md.update(buffer, 0, read);
+        try {
+            if (algorithm.equals("murmur")) {
+                return getCurseforgeMurmurHash(file.toPath());
             }
-        }
 
-        byte[] digest = md.digest();
-        StringBuilder sb = new StringBuilder();
-        for (byte b : digest) {
-            sb.append(String.format("%02x", b & 0xff));
+            MessageDigest digest = MessageDigest.getInstance(algorithm);
+            try (FileInputStream fis = new FileInputStream(file)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = fis.read(buffer)) != -1) {
+                    digest.update(buffer, 0, bytesRead);
+                }
+            }
+            byte[] hashBytes = digest.digest();
+            return convertBytesToHex(hashBytes);
+        } catch (NoSuchAlgorithmException | IOException e) {
+            e.printStackTrace();
+            return null;
         }
+    }
 
-        return sb.toString();
+    private static String convertBytesToHex(byte[] bytes) {
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : bytes) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
+        }
+        return hexString.toString();
     }
 
 
@@ -343,7 +324,7 @@ public class CustomFileUtils {
         return String.valueOf(h);
     }
 
-    public static boolean compareFileHashes(File file1, File file2, String algorithm) throws Exception {
+    public static boolean compareFileHashes(File file1, File file2, String algorithm) {
         if (!file1.exists() || !file1.exists()) return false;
 
         String hash1 = getHashWithRetry(file1, algorithm);

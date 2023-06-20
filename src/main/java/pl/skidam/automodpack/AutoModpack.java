@@ -49,17 +49,16 @@ public class AutoModpack {
 
         preload = false;
 
-        String loader =  Loader.getPlatformType().toString().toLowerCase();
+        long start = System.currentTimeMillis();
+        LOGGER.info("Launching AutoModpack...");
 
         if (Loader.getEnvironmentType().equals("SERVER")) {
-            LOGGER.info("Server environment detected, on " + loader + " platform");
             if (serverConfig.generateModpackOnStart) {
                 LOGGER.info("Generating modpack...");
                 Modpack.generate();
             }
             ModPackets.registerS2CPackets();
         } else {
-            LOGGER.info("Client environment detected, on " + loader + " platform");
             MinecraftUserName.get(); // To save the username` to variable in MinecraftUserName class for later use
 
 
@@ -73,5 +72,7 @@ public class AutoModpack {
 //#if FABRICLIKE
         Commands.register();
 //#endif
+
+        LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
     }
 }

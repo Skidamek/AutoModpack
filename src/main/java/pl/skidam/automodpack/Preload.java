@@ -58,10 +58,6 @@ public class Preload {
         serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
 
-//        if (clientConfig.autoRelauncher) {
-//            ReLauncher.init(FabricLauncherBase.getLauncher().getClassPath(), FabricLoaderImpl.INSTANCE.getLaunchArguments(false));
-//        }
-
         new SetupFiles();
 
         if (!quest) {
