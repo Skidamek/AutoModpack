@@ -114,7 +114,7 @@ Doesn't work? Check `hostIp` in `/automodpack/automodpack-server.json` and make 
 ## Commands
 
 - `/automodpack` - Status of automodpack and general help.
-- `/automodpack generate` - Generate new modpack.content file on server.
+- `/automodpack generate` - Generate new modpack-content.json file on server, which results in modpack update for clients.
 - `/automodpack host` - Status of modpack hosting.
 - `/automodpack host start` - Start modpack hosting.
 - `/automodpack host stop` - Stop modpack hosting.
