@@ -7,3 +7,4 @@
 - Deleted need for fabric/quilt api
 - Fixed not executing modpack update while server down on preload
 - Improved deletion of files
+- Improved self-updating

@@ -25,11 +25,14 @@ import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.platforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 
 import static pl.skidam.automodpack.StaticVariables.*;
 
 public class SelfUpdater {
+
     public SelfUpdater() {
 
         if (Loader.isDevelopmentEnvironment()) {
@@ -71,7 +74,9 @@ public class SelfUpdater {
         } catch (NumberFormatException e) {
             // ignore
 
-            if (OUR_VERSION.toLowerCase().contains("snapshot") && !LATEST_VERSION.toLowerCase().contains("snapshot")) {
+            // Check if version has any other characters than numbers and if latest version is only numbers
+            // Automodpack latest version should always have only numbers
+            if (OUR_VERSION.chars().anyMatch(ch -> !Character.isDigit(ch)) && LATEST_VERSION.chars().allMatch(Character::isDigit)) {
 
                 OUR_VERSION = OUR_VERSION.replaceAll("[^0-9]", "");
                 LATEST_VERSION = LATEST_VERSION.replaceAll("[^0-9]", "");
@@ -80,10 +85,11 @@ public class SelfUpdater {
                     LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.fileVersion);
                     return;
                 }
-            } // we don't want to auto update to beta version, but from beta to newer release, yes.
+            } // We don't want to auto update to beta version, but from beta to newer release, yes.
         }
 
 
+        // We always want to update to latest release version
         if (OUR_VERSION.equals(LATEST_VERSION) || !automodpack.releaseType.equals("release")) {
             LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + VERSION);
             return;
@@ -101,6 +107,11 @@ public class SelfUpdater {
                 LOGGER.error("Hashes are not the same! Downloaded file is corrupted!");
                 return;
             }
+
+            // We assume that update jar has always different name than current jar
+            Files.copy(automodpackUpdateJar.toPath(), automodpackJar.getParentFile().toPath());
+            CustomFileUtils.forceDelete(automodpackUpdateJar, true);
+
         } catch (Exception e) {
             LOGGER.error("Failed to update myself!");
             return;
@@ -110,14 +121,8 @@ public class SelfUpdater {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("Running Shutdown Hook -- AutoModpack selfupdater");
 
-            try {
-                CustomFileUtils.copyFile(automodpackUpdateJar, automodpackJar);
-            } catch (IOException e) {
-                System.out.println("Error while copying file!");
-                e.printStackTrace();
-            }
+            CustomFileUtils.dummyIT(automodpackJar);
 
-            CustomFileUtils.forceDelete(automodpackUpdateJar, true);
             System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
         }));
 
