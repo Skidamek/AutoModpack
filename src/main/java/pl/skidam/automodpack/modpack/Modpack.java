@@ -41,8 +41,8 @@ import static pl.skidam.automodpack.StaticVariables.*;
 
 
 public class Modpack {
-    public static Path hostModpackDir = Path.of(automodpackDir + File.separator + "host-modpack");
-    static Path hostModpackMods = Path.of(hostModpackDir + File.separator + "mods");
+    public static Path hostModpackDir = new File(automodpackDir + File.separator + "host-modpack").toPath();
+    static Path hostModpackMods = new File(hostModpackDir + File.separator + "mods").toPath();
     public static File hostModpackContentFile = new File(hostModpackDir + File.separator + "modpack-content.json");
     public static final int MAX_MODPACK_ADDITIONS = 10; // at the same time
     private static ExecutorService CREATION_EXECUTOR;
