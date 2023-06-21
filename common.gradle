@@ -4,6 +4,7 @@ apply plugin: 'dev.architectury.loom'
 apply plugin: 'io.github.juuxel.loom-quiltflower'
 apply plugin: 'com.replaymod.preprocess'
 apply plugin: 'me.fallenbreath.yamlang'
+apply plugin: "io.github.pacifistmc.forgix"
 
 def mod_brand = (loom.platform.get() as String).toLowerCase()
 assert mod_brand in ['fabric', 'quilt', 'forge']
@@ -25,6 +26,7 @@ repositories {
 	maven { url 'https://jitpack.io' }
 	maven { url 'https://www.cursemaven.com' }
 	maven { url 'https://maven.quiltmc.org/repository/release' }
+	maven { url 'https://plugins.gradle.org/m2/' }
 }
 
 // https://github.com/FabricMC/fabric-loader/issues/783
@@ -182,6 +184,13 @@ jar {
 	from(rootProject.file('LICENSE')) {
 		rename { "${it}_${project.archives_base_name}" }
 	}
+}
+
+forgix {
+	group = "pl.skidam.automodpack"
+	mergedJarName = "text-automodpack"
+	outputDir = "forgix/merged"
+	
 }
 
 // https://github.com/hierynomus/license-gradle-plugin

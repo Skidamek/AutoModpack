@@ -31,6 +31,7 @@ import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.zip.GZIPInputStream;
@@ -70,42 +71,42 @@ public class Download {
                 outFile = Paths.get(outFile + ".tmp");
             }
 
-            OutputStream outputStream = new FileOutputStream(outFile.toFile());
-            InputStream inputStream = connection.getInputStream();
-            String encoding = connection.getHeaderField("Content-Encoding");
-            if (encoding != null && encoding.equals("gzip")) {
-                inputStream = new GZIPInputStream(inputStream, BUFFER_SIZE);
-            }
-
-            Instant start = Instant.now();
-            totalBytesRead = 0;
-            byte[] buffer = new byte[BUFFER_SIZE];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, bytesRead);
-                isDownloading = true;
-                totalBytesRead += bytesRead;
-                Instant now = Instant.now();
-                Duration elapsed = Duration.between(start, now);
-                double seconds = (double) elapsed.toMillis() / 1000;
-                bytesPerSecond = totalBytesRead / seconds;
-                downloadETA = -1;
-                if (bytesPerSecond > 0) downloadETA = (fileSize - totalBytesRead) / bytesPerSecond;
-                if (downloadETA > 0) downloadETA = Math.ceil(downloadETA);
-
-                if (downloadInfo != null) {
-                    downloadInfo.setBytesDownloaded(totalBytesRead);
-                    downloadInfo.setDownloadSpeed(bytesPerSecond / 1024 / 1024);
-                    downloadInfo.setEta(downloadETA);
-                    downloadInfo.setFileSize(fileSize);
-                    downloadInfo.setBytesPerSecond(bytesPerSecond);
-
-                    ModpackUpdater.totalBytesDownloaded += bytesRead;
+            try (OutputStream outputStream = Files.newOutputStream(outFile, StandardOpenOption.CREATE)) {
+                InputStream inputStream = connection.getInputStream();
+                String encoding = connection.getHeaderField("Content-Encoding");
+                if (encoding != null && encoding.equals("gzip")) {
+                    inputStream = new GZIPInputStream(inputStream, BUFFER_SIZE);
                 }
-            }
 
-            inputStream.close();
-            outputStream.close();
+                Instant start = Instant.now();
+                totalBytesRead = 0;
+                byte[] buffer = new byte[BUFFER_SIZE];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                    isDownloading = true;
+                    totalBytesRead += bytesRead;
+                    Instant now = Instant.now();
+                    Duration elapsed = Duration.between(start, now);
+                    double seconds = (double) elapsed.toMillis() / 1000;
+                    bytesPerSecond = totalBytesRead / seconds;
+                    downloadETA = -1;
+                    if (bytesPerSecond > 0) downloadETA = (fileSize - totalBytesRead) / bytesPerSecond;
+                    if (downloadETA > 0) downloadETA = Math.ceil(downloadETA);
+
+                    if (downloadInfo != null) {
+                        downloadInfo.setBytesDownloaded(totalBytesRead);
+                        downloadInfo.setDownloadSpeed(bytesPerSecond / 1024 / 1024);
+                        downloadInfo.setEta(downloadETA);
+                        downloadInfo.setFileSize(fileSize);
+                        downloadInfo.setBytesPerSecond(bytesPerSecond);
+
+                        ModpackUpdater.totalBytesDownloaded += bytesRead;
+                    }
+                }
+
+                inputStream.close();
+            }
 
             isDownloading = false;
 
