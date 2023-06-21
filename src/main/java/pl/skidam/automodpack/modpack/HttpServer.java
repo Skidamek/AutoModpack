@@ -33,6 +33,9 @@ import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -240,17 +243,17 @@ public class HttpServer {
 
             try {
                 if (requestMethod.equals("GET")) {
-                    File file;
+                    Path file;
                     if (requestUrl.equals("") || requestUrl.equals("/")) {
                         file = hostModpackContentFile;
                     } else if (requestUrl.contains("..")) {
                         sendError(client, 403);
                         return;
                     } else if (filesList.contains(requestUrl)) {
-                        file = new File(hostModpackDir + File.separator + requestUrl);
-                        if (!file.exists()) {
-                            file = new File("./" + requestUrl);
-                            if (!file.exists()) {
+                        file = Paths.get(hostModpackDir + File.separator + requestUrl);
+                        if (!Files.exists(file)) {
+                            file = Paths.get("./" + requestUrl);
+                            if (!Files.exists(file)) {
                                 sendError(client, 404);
                                 return;
                             }
@@ -260,7 +263,7 @@ public class HttpServer {
                         return;
                     }
 
-                    if (!file.exists() || !file.isFile()) {
+                    if (!Files.exists(file) || !Files.isRegularFile(file)) {
                         sendError(client, 404);
                         return;
                     }
@@ -279,8 +282,6 @@ public class HttpServer {
                 e.printStackTrace();
             }
         }
-
-
 
         private static final String ERROR_RESPONSE =
                 "HTTP/1.1 %d\r\n" +
@@ -309,19 +310,20 @@ public class HttpServer {
                         "Content-Length: %d\r\n" +
                         "\r\n";
 
-        private static void sendFile(SocketChannel client, File file) throws IOException {
+
+        private static void sendFile(SocketChannel client, Path file) throws IOException {
             if (!client.isOpen()) return;
 
-            if (!file.exists()) {
+            if (!Files.exists(file)) {
                 sendError(client, 404);
                 return;
             }
 
-            try (FileChannel fileChannel = FileChannel.open(file.toPath(), StandardOpenOption.READ)) {
+            try (FileChannel fileChannel = FileChannel.open(file, StandardOpenOption.READ)) {
                 long fileSize = fileChannel.size();
                 String response = String.format(OK_RESPONSE, fileSize);
 
-                if (file.getName().endsWith(".json")) {
+                if (file.getFileName().endsWith(".json")) {
                     response = String.format(OK_RESPONSE_JSON, fileSize);
                 }
 

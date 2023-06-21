@@ -28,6 +28,7 @@ import pl.skidam.automodpack.utils.JarUtilities;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
 public class StaticVariables {
@@ -40,19 +41,15 @@ public class StaticVariables {
     //#else
     //$$ public static String MC_VERSION = MinecraftVersion.field_25319.getName();
     //#endif
-
-    public static File automodpackJar;
-    public static String JAR_NAME; // File name how automodpack jar is called, for example automodpack-1.19.x.jar
-    public static final File automodpackDir = new File("./automodpack/");
-    public static final File modpacksDir = new File(automodpackDir + File.separator + "modpacks");
-    public static final File automodpackUpdateJar = new File(automodpackDir + File.separator + JAR_NAME); // old self backup variable
-    public static final File clientConfigFile = new File(automodpackDir + File.separator + "automodpack-client.json");
-    public static final File serverConfigFile = new File(automodpackDir + File.separator + "automodpack-server.json");
+    public static final Path automodpackDir = Paths.get("./automodpack/");
+    public static final Path modpacksDir = Paths.get(automodpackDir + File.separator + "modpacks");
+    public static final Path clientConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-client.json");
+    public static final Path serverConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-server.json");
     public static final Set<String> keyWordsOfDisconnect = new HashSet<>(Arrays.asList("install", "update", "download", "handshake", "incompatible", "outdated", "client", "version"));
     public static Path modsPath;
     public static String ClientLink;
     public static boolean preload;
-    public static File selectedModpackDir;
+    public static Path selectedModpackDir;
     public static String selectedModpackLink;
     public static Jsons.ServerConfigFields serverConfig;
     public static Jsons.ClientConfigFields clientConfig;

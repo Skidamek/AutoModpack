@@ -28,6 +28,9 @@ import pl.skidam.automodpack.utils.MinecraftUserName;
 import java.io.*;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.zip.GZIPInputStream;
@@ -42,7 +45,7 @@ public class Download {
     private double downloadETA;
     private static final int BUFFER_SIZE = 16 * 1024;
 
-    public void download(String downloadUrl, File outFile, DownloadInfo downloadInfo) {
+    public void download(String downloadUrl, Path outFile, DownloadInfo downloadInfo) {
         try {
             isDownloading = false;
             URL url = new URL(downloadUrl);
@@ -56,18 +59,18 @@ public class Download {
             fileSize = connection.getContentLengthLong();
 
 
-            if (!outFile.getParentFile().exists()) {
-                outFile.getParentFile().mkdirs();
+            if (!Files.exists(outFile.getParent())) {
+                Files.createDirectories(outFile.getParent());
             }
 
-            boolean fileAlreadyExists = outFile.exists();
+            boolean fileAlreadyExists = Files.exists(outFile);
 
-            if (outFile.exists()) {
+            if (fileAlreadyExists) {
                 CustomFileUtils.forceDelete(outFile, false);
-                outFile = new File(outFile + ".tmp");
+                outFile = Paths.get(outFile + ".tmp");
             }
 
-            OutputStream outputStream = new FileOutputStream(outFile);
+            OutputStream outputStream = new FileOutputStream(outFile.toFile());
             InputStream inputStream = connection.getInputStream();
             String encoding = connection.getHeaderField("Content-Encoding");
             if (encoding != null && encoding.equals("gzip")) {
@@ -107,19 +110,19 @@ public class Download {
             isDownloading = false;
 
             if (fileAlreadyExists) {
-                File finalFile = new File(outFile.toString().replace(".tmp", ""));
+                Path finalFile = Paths.get(outFile.toString().replace(".tmp", ""));
                 CustomFileUtils.copyFile(outFile, finalFile);
                 CustomFileUtils.forceDelete(outFile, false);
             }
         } catch (IOException e) {
-            if (outFile.exists()) {
+            if (Files.exists(outFile)) {
                 CustomFileUtils.forceDelete(outFile, false);
             }
             e.printStackTrace();
         }
     }
 
-    public void download(String downloadUrl, File outFile) {
+    public void download(String downloadUrl, Path outFile) {
         download(downloadUrl, outFile, null);
     }
 

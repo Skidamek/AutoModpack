@@ -28,6 +28,7 @@ import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.StaticVariables.LOGGER;
@@ -39,10 +40,10 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 public class DangerScreen extends VersionedScreen {
     private final Screen parent;
     private final String link;
-    private final File modpackDir;
-    private final File modpackContentFile;
+    private final Path modpackDir;
+    private final Path modpackContentFile;
 
-    public DangerScreen(Screen parent, String link, File modpackDir, File modpackContentFile) {
+    public DangerScreen(Screen parent, String link, Path modpackDir, Path modpackContentFile) {
         super(VersionedText.common.literal("DangerScreen"));
         this.parent = parent;
         this.link = link;

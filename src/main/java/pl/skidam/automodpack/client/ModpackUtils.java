@@ -37,7 +37,11 @@ import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
+import java.util.Objects;
 
 import static pl.skidam.automodpack.StaticVariables.LOGGER;
 import static pl.skidam.automodpack.StaticVariables.VERSION;
@@ -47,20 +51,15 @@ public class ModpackUtils {
 
 
     // If update to modpack found, returns true else false
-    public static Boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, File modpackDir) {
-        if ( modpackDir.toString() == null) {
-            LOGGER.error("Modpack directory is null");
-            return false;
-        }
-
+    public static Boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
             return false;
         }
 
         // get client modpack content
-        File clientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
-        if (clientModpackContentFile != null && clientModpackContentFile.exists()) {
+        Path clientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
+        if (Objects.nonNull(clientModpackContentFile) && Files.exists(clientModpackContentFile)) {
 
             Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadConfig(clientModpackContentFile, Jsons.ModpackContentFields.class);
 
@@ -87,7 +86,7 @@ public class ModpackUtils {
         }
     }
 
-    public static void copyModpackFilesFromModpackDirToRunDir(File modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
+    public static void copyModpackFilesFromModpackDirToRunDir(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
         List<Jsons.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
 
         for (Jsons.ModpackContentFields.ModpackContentItems contentItem : contents) {
@@ -97,10 +96,10 @@ public class ModpackUtils {
                 continue;
             }
 
-            File sourceFile = new File(modpackDir + File.separator + fileName);
+            Path sourceFile = Paths.get(modpackDir + File.separator + fileName);
 
-            if (sourceFile.exists()) {
-                File destinationFile = new File("." + fileName);
+            if (Files.exists(sourceFile)) {
+                Path destinationFile = Paths.get("." + fileName);
 
 //                if (destinationFile.exists()) {
 //                    CustomFileUtils.forceDelete(destinationFile, false);
@@ -113,7 +112,7 @@ public class ModpackUtils {
     }
 
 
-    public static void copyModpackFilesFromRunDirToModpackDir(File modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws Exception {
+    public static void copyModpackFilesFromRunDirToModpackDir(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws Exception {
         List<Jsons.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
 
         for (Jsons.ModpackContentFields.ModpackContentItems contentItem : contents) {
@@ -122,9 +121,9 @@ public class ModpackUtils {
                 continue;
             }
 
-            File sourceFile = new File("./" + contentItem.file);
+            Path sourceFile = Paths.get("./" + contentItem.file);
 
-            if (sourceFile.exists()) {
+            if (Files.exists(sourceFile)) {
 
                 // check hash
                 String serverHash = contentItem.sha1;
@@ -134,7 +133,7 @@ public class ModpackUtils {
                     continue;
                 }
 
-                File destinationFile = new File(modpackDir + File.separator + contentItem.file);
+                Path destinationFile = Paths.get(modpackDir + File.separator + contentItem.file);
 
 //                if (destinationFile.exists()) {
 //                    CustomFileUtils.forceDelete(destinationFile, false);
@@ -147,6 +146,11 @@ public class ModpackUtils {
     }
 
     public static Jsons.ModpackContentFields getServerModpackContent(String link) {
+
+        if (link == null) {
+            return null;
+        }
+
         try (CloseableHttpClient httpClient = HttpClients.custom()
                 .setDefaultRequestConfig(RequestConfig.custom()
                         .setConnectTimeout(3000)
@@ -178,6 +182,8 @@ public class ModpackUtils {
                     return null;
                 }
             }
+
+            getContent.releaseConnection();
 
             return serverModpackContent;
         } catch (ConnectException e) {

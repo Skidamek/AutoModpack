@@ -34,6 +34,7 @@ import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,12 +42,12 @@ import java.util.Map;
 public class ChangelogScreen extends VersionedScreen {
     private static List<String> changelogs;
     private final Screen parent;
-    private final File modpackDir;
+    private final Path modpackDir;
     private ListEntryWidget listEntryWidget;
     private TextFieldWidget searchField;
     private ButtonWidget backButton;
 
-    public ChangelogScreen(Screen parent, File modpackDir) {
+    public ChangelogScreen(Screen parent, Path modpackDir) {
         super(VersionedText.common.literal("ChangelogScreen"));
         this.parent = parent;
         this.modpackDir = modpackDir;
@@ -96,7 +97,7 @@ public class ChangelogScreen extends VersionedScreen {
 
     private void drawSummaryOfChanges(VersionedMatrices matrices) {
 
-        File modpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
+        Path modpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
 
         if (modpackContentFile == null) return;
 

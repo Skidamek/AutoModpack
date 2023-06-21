@@ -20,18 +20,20 @@
 
 package pl.skidam.automodpack;
 
-import pl.skidam.automodpack.client.ScreenTools;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.platforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.CustomFileUtils;
+import pl.skidam.automodpack.utils.JarUtilities;
 
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import static pl.skidam.automodpack.StaticVariables.*;
 
 public class SelfUpdater {
+
+    private final Path automodpackJar = JarUtilities.getJarFileOfMod("automodpack");
 
     public SelfUpdater() {
 
@@ -97,6 +99,8 @@ public class SelfUpdater {
 
         LOGGER.info("Update found! Updating to new version: " + automodpack.fileVersion);
 
+        Path automodpackUpdateJar = Paths.get(automodpackDir + automodpack.fileName);
+
         try {
             Download downloadInstance = new Download();
             downloadInstance.download(automodpack.downloadUrl, automodpackUpdateJar); // Download it
@@ -109,7 +113,7 @@ public class SelfUpdater {
             }
 
             // We assume that update jar has always different name than current jar
-            Files.copy(automodpackUpdateJar.toPath(), automodpackJar.getParentFile().toPath());
+            Files.copy(automodpackUpdateJar, automodpackJar.getParent());
             CustomFileUtils.forceDelete(automodpackUpdateJar, true);
 
         } catch (Exception e) {

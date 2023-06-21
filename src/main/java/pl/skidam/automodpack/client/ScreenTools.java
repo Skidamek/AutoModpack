@@ -26,7 +26,7 @@ import net.minecraft.client.gui.screen.TitleScreen;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.client.ui.*;
 
-import java.io.File;
+import java.nio.file.Path;
 
 import static pl.skidam.automodpack.StaticVariables.preload;
 
@@ -45,15 +45,15 @@ public class ScreenTools {
         public static void fetch() {
             if (Check.properlyLoaded()) Screens.setScreen(new FetchScreen());
         }
-        public static void changelog(Screen parent, File modpackDir) {
+        public static void changelog(Screen parent, Path modpackDir) {
             if (Check.properlyLoaded()) Screens.setScreen(new ChangelogScreen(parent, modpackDir));
         }
 
-        public static void restart(File gameDir, boolean fullDownload) {
+        public static void restart(Path gameDir, boolean fullDownload) {
             if (Check.properlyLoaded()) Screens.setScreen(new RestartScreen(gameDir, fullDownload));
         }
 
-        public static void danger(Screen parent, String link, File modpackDir, File modpackContentFile) {
+        public static void danger(Screen parent, String link, Path modpackDir, Path modpackContentFile) {
             if (Check.properlyLoaded()) Screens.setScreen(new DangerScreen(parent, link, modpackDir, modpackContentFile));
         }
 

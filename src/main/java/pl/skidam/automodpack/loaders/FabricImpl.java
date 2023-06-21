@@ -30,8 +30,11 @@ import net.fabricmc.loader.api.ModContainer;
 
 import java.io.*;
 import java.nio.file.FileSystem;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -48,23 +51,23 @@ public class FabricImpl {
         return FabricLoader.getInstance().getAllMods();
     }
 
-    public static File getModPath(String modId) {
-        if (!FabricLoader.getInstance().isDevelopmentEnvironment()) {
-            Optional<ModContainer> container = FabricLoader.getInstance().getModContainer(modId);
+    public static Path getModPath(String modId) {
+        if (isDevelopmentEnvironment()) {
+            return null;
+        }
 
-            if (container.isPresent()) {
-                ModContainer modContainer = container.get();
-                Path jarPath = modContainer.getRootPaths().stream().findFirst().isPresent() ? modContainer.getRootPaths().stream().findFirst().get() : null;
+        Optional<ModContainer> container = FabricLoader.getInstance().getModContainer(modId);
 
-                if (jarPath == null) {
-                    LOGGER.error("Could not find jar file for " + modId);
-                    return null;
-                }
+        if (container.isPresent()) {
+            ModContainer modContainer = container.get();
+            Path jarPath = modContainer.getRootPaths().stream().findFirst().isPresent() ? modContainer.getRootPaths().stream().findFirst().get() : null;
 
-                FileSystem fileSystem = jarPath.getFileSystem();
-
-                return new File(fileSystem.toString());
+            if (jarPath == null) {
+                LOGGER.error("Could not find jar file for " + modId);
+                return null;
             }
+
+            return jarPath;
         }
         return null;
     }
@@ -79,12 +82,12 @@ public class FabricImpl {
         }
     }
 
-    public static String getModEnvironmentFromNotLoadedJar(File file) {
-        if (!file.isFile()) return null;
-        if (!file.getName().endsWith(".jar")) return null;
+    public static String getModEnvironmentFromNotLoadedJar(Path file) {
+        if (!Files.isRegularFile(file)) return null;
+        if (!file.getFileName().endsWith(".jar")) return null;
 
         try {
-            ZipFile zipFile = new ZipFile(file);
+            ZipFile zipFile = new ZipFile(file.toFile());
             ZipEntry entry = null;
             if (zipFile.getEntry("fabric.mod.json") != null) {
                 entry = zipFile.getEntry("fabric.mod.json");
@@ -108,7 +111,7 @@ public class FabricImpl {
         } catch (ZipException ignored) {
             return "UNKNOWN";
         } catch (IOException e) {
-            LOGGER.error("Failed to get mod env from file: " + file.getName());
+            LOGGER.error("Failed to get mod env from file: " + file.getFileName());
             e.printStackTrace();
         }
 
@@ -119,9 +122,9 @@ public class FabricImpl {
         return FabricLoader.getInstance().getModContainer(modId).isPresent() ? FabricLoader.getInstance().getModContainer(modId).get().getMetadata().getVersion().getFriendlyString() : null;
     }
 
-    public static String getModVersion(File file) {
+    public static String getModVersion(Path file) {
         try {
-            ZipFile zipFile = new ZipFile(file);
+            ZipFile zipFile = new ZipFile(file.toFile());
             ZipEntry entry = null;
             if (zipFile.getEntry("fabric.mod.json") != null) {
                 entry = zipFile.getEntry("fabric.mod.json");
@@ -145,7 +148,7 @@ public class FabricImpl {
         } catch (ZipException ignored) {
             return "UNKNOWN";
         } catch (IOException | JsonSyntaxException e) {
-            LOGGER.error("Failed to get mod version from file: " + file.getName());
+            LOGGER.error("Failed to get mod version from file: " + file.getFileName());
             e.printStackTrace();
         }
 
@@ -159,11 +162,11 @@ public class FabricImpl {
         return FabricLoader.getInstance().getModContainer(modId).isPresent() ?  FabricLoader.getInstance().getModContainer(modId).get().getMetadata().getEnvironment().toString().toUpperCase() : "*";
     }
 
-    public static String getModIdFromLoadedJar(File file, boolean checkAlsoOutOfContainer) {
+    public static String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
         for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
             FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();
-            File modFile = new File(fileSys.toString());
-            if (modFile.getName().equals(file.getName())) {
+            Path modFile = Paths.get(fileSys.toString());
+            if (modFile.getFileName().equals(file.getFileName())) {
                 return modContainer.getMetadata().getId();
             }
         }
@@ -173,9 +176,9 @@ public class FabricImpl {
         return null;
     }
 
-    public static String getModIdFromNotLoadedJar(File file) {
+    public static String getModIdFromNotLoadedJar(Path file) {
         try {
-            ZipFile zipFile = new ZipFile(file);
+            ZipFile zipFile = new ZipFile(file.toFile());
             ZipEntry entry = null;
             if (zipFile.getEntry("fabric.mod.json") != null) {
                 entry = zipFile.getEntry("fabric.mod.json");
@@ -199,7 +202,7 @@ public class FabricImpl {
         } catch (ZipException ignored) {
             return null;
         } catch (IOException e) {
-            LOGGER.error("Failed to get mod id from file: " + file.getName());
+            LOGGER.error("Failed to get mod id from file: " + file.getFileName());
             e.printStackTrace();
             return null;
         }

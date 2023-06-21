@@ -28,8 +28,10 @@ import pl.skidam.automodpack.config.Jsons;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -56,40 +58,40 @@ public class CustomFileUtils {
             1, 0, 70, 0, 0, 0, 97, 0, 0, 0, 0, 0,
     };
 
-    public static void forceDelete(File file, boolean deleteOnExit) {
+    public static void forceDelete(Path file, boolean deleteOnExit) {
 
-        FileUtils.deleteQuietly(file);
+        FileUtils.deleteQuietly(file.toFile());
 
-        if (file.exists()) {
+        if (Files.exists(file)) {
 
             try {
-                FileDeleteStrategy.FORCE.delete(file);
+                FileDeleteStrategy.FORCE.delete(file.toFile());
             } catch (IOException ignored) {
             }
 
 
-            if (file.exists()) {
+            if (Files.exists(file)) {
                 if (file.toString().endsWith(".jar")) {
                     dummyIT(file);
                 }
             }
 
-            if (deleteOnExit && file.exists()) {
+            if (deleteOnExit && Files.exists(file)) {
                 System.out.println("Deleting on exit: " + file);
-                file.deleteOnExit();
+                file.toFile().deleteOnExit();
             }
         }
     }
 
-    public static void copyFile(File source, File destination) throws IOException {
-        if (!destination.exists()) {
-            if (!destination.getParentFile().exists()) {
-                destination.getParentFile().mkdirs();
+    public static void copyFile(Path source, Path destination) throws IOException {
+        if (!Files.exists(destination)) {
+            if (!Files.exists(destination.getParent())) {
+                Files.createDirectories(destination.getParent());
             }
-            Files.createFile(destination.toPath());
+            Files.createFile(destination);
         }
-        try (FileInputStream inputStream = new FileInputStream(source);
-             FileOutputStream outputStream = new FileOutputStream(destination)) {
+        try (FileInputStream inputStream = new FileInputStream(source.toFile());
+             FileOutputStream outputStream = new FileOutputStream(destination.toFile())) {
 
              FileChannel sourceChannel = inputStream.getChannel();
              FileChannel destinationChannel = outputStream.getChannel();
@@ -98,34 +100,29 @@ public class CustomFileUtils {
         }
     }
 
-    public static void deleteEmptyFiles(File directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) throws IOException {
-        File[] files = directory.listFiles();
-        if (files == null) {
-            return;
-        }
-
-        for (File file : files) {
-            if (shouldIgnore(file, ignoreList)) {
-                continue;
-            }
-
-            if (file.isDirectory()) {
-
-                if (file.getName().startsWith(".")) {
+    public static void deleteEmptyFiles(Path directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) throws IOException {
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory)) {
+            for (Path path : directoryStream) {
+                if (shouldIgnore(path.toFile(), ignoreList)) {
                     continue;
                 }
 
-                if (deleteSubDirsToo && isEmptyDirectory(file, ignoreList)) {
-                    CustomFileUtils.forceDelete(file, false);
-                }
+                if (Files.isDirectory(path)) {
+                    String fileName = path.getFileName().toString();
 
-                else {
-                    deleteEmptyFiles(file, deleteSubDirsToo, ignoreList);
-                }
+                    if (fileName.startsWith(".")) {
+                        continue;
+                    }
 
-            } else if (file.length() < 500) {
-                if (Arrays.equals(Files.readAllBytes(file.toPath()), smallDummyJar)) {
-                    forceDelete(file, true);
+                    if (deleteSubDirsToo && isEmptyDirectory(path, ignoreList)) {
+                        CustomFileUtils.forceDelete(path, false);
+                    } else {
+                        deleteEmptyFiles(path, deleteSubDirsToo, ignoreList);
+                    }
+                } else if (Files.size(path) < 500) {
+                    if (Arrays.equals(Files.readAllBytes(path), smallDummyJar)) {
+                        CustomFileUtils.forceDelete(path, true);
+                    }
                 }
             }
         }
@@ -136,25 +133,21 @@ public class CustomFileUtils {
                 .anyMatch(item -> file.getAbsolutePath().replace("\\", "/").endsWith(item.file));
     }
 
-    private static boolean isEmptyDirectory(File directory, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
-        File[] files = directory.listFiles();
-
-        if (files == null && directory.length() == 0) {
-            return true;
-        } else {
-            for (File file : files) {
-                if (!shouldIgnore(file, ignoreList)) {
+    private static boolean isEmptyDirectory(Path directory, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) throws IOException {
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory)) {
+            for (Path path : directoryStream) {
+                if (!shouldIgnore(path.toFile(), ignoreList)) {
                     return false;
                 }
             }
         }
-        
-        return false;
+
+        return true;
     }
 
     // dummy IT ez
-    public static void dummyIT(File file) {
-        try (FileOutputStream fos = new FileOutputStream(file)) {
+    public static void dummyIT(Path file) {
+        try (FileOutputStream fos = new FileOutputStream(file.toFile())) {
             fos.write(smallDummyJar);
             fos.flush();
         } catch (IOException e) {
@@ -177,36 +170,38 @@ public class CustomFileUtils {
         }
     }
 
-    public static String getHashWithRetry(File file, String algorithm) {
+    public static String getHashWithRetry(Path file, String algorithm) {
         try {
             return getHash(file, algorithm);
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        File tempFile = new File(StaticVariables.automodpackDir + File.separator + file.getName() + ".tmp");
+        Path tempFile = Paths.get(StaticVariables.automodpackDir + File.separator + file.getFileName() + ".tmp");
         try {
             CustomFileUtils.copyFile(file, tempFile);
             return getHash(tempFile, algorithm);
         } catch (Exception e) {
             e.printStackTrace();
-            throw new IllegalStateException("AutoModpack - Cannot copy file for hashing: " + file.getAbsolutePath(), e);
+            throw new IllegalStateException("AutoModpack - Cannot copy file for hashing: " + file.toAbsolutePath(), e);
         } finally {
-            tempFile.delete();
+            tempFile.toFile().delete();
         }
     }
 
-    public static String getHash(File file, String algorithm) {
+    public static String getHash(Path file, String algorithm) {
 
-        if (!file.exists()) return null;
+        if (!Files.exists(file)) {
+            return null;
+        }
 
         try {
             if (algorithm.equals("murmur")) {
-                return getCurseforgeMurmurHash(file.toPath());
+                return getCurseforgeMurmurHash(file);
             }
 
             MessageDigest digest = MessageDigest.getInstance(algorithm);
-            try (FileInputStream fis = new FileInputStream(file)) {
+            try (FileInputStream fis = new FileInputStream(file.toFile())) {
                 byte[] buffer = new byte[8192];
                 int bytesRead;
                 while ((bytesRead = fis.read(buffer)) != -1) {
@@ -324,8 +319,8 @@ public class CustomFileUtils {
         return String.valueOf(h);
     }
 
-    public static boolean compareFileHashes(File file1, File file2, String algorithm) {
-        if (!file1.exists() || !file1.exists()) return false;
+    public static boolean compareFileHashes(Path file1, Path file2, String algorithm) {
+        if (!Files.exists(file1) || !Files.exists(file2)) return false;
 
         String hash1 = getHashWithRetry(file1, algorithm);
         String hash2 = getHashWithRetry(file2, algorithm);
@@ -335,17 +330,14 @@ public class CustomFileUtils {
         return hash1.equals(hash2);
     }
 
-    public static List<File> mapAllFiles(File directory, List<File> files) {
-        File[] filesInDir = directory.listFiles();
-        if (filesInDir == null) {
-            return files;
-        }
-
-        for (File file : filesInDir) {
-            if (file.isDirectory()) {
-                mapAllFiles(file, files);
-            } else {
-                files.add(file);
+    public static List<Path> mapAllFiles(Path directory, List<Path> files) throws IOException {
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory)) {
+            for (Path path : directoryStream) {
+                if (Files.isDirectory(path)) {
+                    mapAllFiles(path, files);
+                } else {
+                    files.add(path);
+                }
             }
         }
 

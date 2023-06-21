@@ -22,6 +22,7 @@ package pl.skidam.automodpack.loaders;
 
 //#if FORGE
 //$$ import java.io.File;
+//$$ import java.nio.file.Path;
 //$$ import java.util.Collection;
 //$$ import net.minecraftforge.api.distmarker.Dist;
 //$$ import net.minecraftforge.fml.loading.FMLLoader;
@@ -41,7 +42,7 @@ package pl.skidam.automodpack.loaders;
 //$$         return null;
 //$$     }
 //$$
-//$$     public static File getModPath(String modId) {
+//$$     public static Path getModPath(String modId) {
 //$$        return null;
 //$$    }
 //$$
@@ -50,15 +51,15 @@ package pl.skidam.automodpack.loaders;
 //$$
 //$$    }
 //$$
-//$$     public static String getModEnvironmentFromNotLoadedJar(File file) {
+//$$     public static String getModEnvironmentFromNotLoadedJar(Path file) {
 //$$         return null;
 //$$     }
 //$$
-//$$     public static String getModIdFromLoadedJar(File file, boolean checkAlsoOutOfContainer) {
+//$$     public static String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
 //$$         return null;
 //$$     }
 //$$
-//$$     public static String getModIdFromNotLoadedJar(File file) {
+//$$     public static String getModIdFromNotLoadedJar(Path file) {
 //$$         return null;
 //$$     }
 //$$
@@ -66,7 +67,7 @@ package pl.skidam.automodpack.loaders;
 //$$         return null;
 //$$     }
 //$$
-//$$     public static String getModVersion(File file) {
+//$$     public static String getModVersion(Path file) {
 //$$         return null;
 //$$     }
 //$$

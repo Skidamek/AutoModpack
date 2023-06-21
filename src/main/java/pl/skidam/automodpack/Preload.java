@@ -25,12 +25,14 @@ import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.loaders.Loader;
+import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 import pl.skidam.automodpack.utils.SetupFiles;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import static pl.skidam.automodpack.StaticVariables.*;
 
@@ -44,14 +46,11 @@ public class Preload {
         if (workingDirectory.contains("com.qcxr.qcxr")) {
             quest = true;
             LOGGER.info("QuestCraft detected!");
-            modsPath =  new File("./mods/" + MC_VERSION + "/").toPath();
+            modsPath = Paths.get("./mods/" + MC_VERSION + "/");
         } else {
             quest = false;
-            modsPath =  new File("./mods/").toPath();
+            modsPath = Paths.get("./mods/");
         }
-
-        JAR_NAME = JarUtilities.getJarFileOfMod("automodpack"); // set as correct name
-        automodpackJar = new File(modsPath + File.separator + JAR_NAME); // set as correct jar file
 
         long startTime = System.currentTimeMillis();
         clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
@@ -70,6 +69,15 @@ public class Preload {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
                 Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
+
+                if (serverModpackContent != null) {
+                    try {
+                        CustomFileUtils.deleteEmptyFiles(Paths.get("./"), false, serverModpackContent.list);
+                    } catch (Exception e) {
+                        LOGGER.error("Failed to delete empty files!", e);
+                    }
+                }
+
                 new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
             }
         }

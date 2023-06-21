@@ -41,11 +41,11 @@ public class ReLauncher {
 
     public static class Restart {
 
-        public Restart(File gameDir, boolean fullDownload) {
+        public Restart(Path gameDir, boolean fullDownload) {
             new Restart(gameDir, "Successfully applied the modpack!", fullDownload);
         }
 
-        public Restart(File gameDir, String guiMessage, boolean fullDownload) {
+        public Restart(Path gameDir, String guiMessage, boolean fullDownload) {
             String environment = Loader.getEnvironmentType();
             boolean isClient = environment.equals("CLIENT");
             boolean isHeadless = GraphicsEnvironment.isHeadless();

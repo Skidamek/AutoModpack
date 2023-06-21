@@ -29,36 +29,39 @@ import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack.StaticVariables.*;
 
 
 public class Modpack {
-    public static Path hostModpackDir = new File(automodpackDir + File.separator + "host-modpack").toPath();
-    static Path hostModpackMods = new File(hostModpackDir + File.separator + "mods").toPath();
-    public static File hostModpackContentFile = new File(hostModpackDir + File.separator + "modpack-content.json");
+    public static Path hostModpackDir = Paths.get(automodpackDir + File.separator + "host-modpack");
+    static Path hostModpackMods = Paths.get(hostModpackDir + File.separator + "mods");
+    public static Path hostModpackContentFile = Paths.get(hostModpackDir + File.separator + "modpack-content.json");
     public static final int MAX_MODPACK_ADDITIONS = 10; // at the same time
     private static ExecutorService CREATION_EXECUTOR;
-    public static List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
     public static void generate() {
 
         long start = System.currentTimeMillis();
 
         try {
-            if (!hostModpackDir.toFile().exists()) Files.createDirectories(hostModpackDir);
+            if (!Files.exists(hostModpackDir)) {
+                Files.createDirectories(hostModpackDir);
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
 
         Content.create(hostModpackDir, hostModpackContentFile);
-        if (!hostModpackContentFile.exists()) return;
+        if (!Files.exists(hostModpackContentFile)) {
+            return;
+        }
         LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms");
     }
 
@@ -91,8 +94,8 @@ public class Modpack {
         for (String modId : removeSimilar) {
             list.removeIf(modpackContentItems -> {
                 if (modpackContentItems.type.equals("mod")) return false;
-                File contentFile = new File(hostModpackMods + File.separator + modpackContentItems.file);
-                String contentFileName = contentFile.getName();
+                Path contentFile = Paths.get(hostModpackMods + File.separator + modpackContentItems.file);
+                String contentFileName = String.valueOf(contentFile.getFileName());
                 if (contentFileName.contains(modId)) {
                     LOGGER.info("File {} has been auto excluded from modpack because mod of this file is already excluded", contentFileName);
                     return true;
@@ -109,7 +112,7 @@ public class Modpack {
     public static class Content {
         public static Jsons.ModpackContentFields modpackContent;
 
-        public static void create(Path modpackDir, File modpackContentFile) {
+        public static void create(Path modpackDir, Path modpackContentFile) {
             try {
                 List<Jsons.ModpackContentFields.ModpackContentItems> list = Collections.synchronizedList(new ArrayList<>());
 
@@ -125,17 +128,17 @@ public class Modpack {
                 if (serverConfig.syncedFiles.size() > 0) {
                     for (String file : serverConfig.syncedFiles) {
                         LOGGER.info("Syncing {}... ", file);
-                        File fileToSync = new File("." + file);
+                        Path fileToSync = Paths.get("." + file);
 
-                        if (fileToSync.isDirectory()) {
+                        if (Files.isDirectory(fileToSync)) {
                             addAllContent(fileToSync, list);
                         } else {
-                            addContent(fileToSync.getParentFile(), fileToSync, list);
+                            addContent(fileToSync.getParent(), fileToSync, list);
                         }
                     }
                 }
 
-                addAllContent(modpackDir.toFile(), list);
+                addAllContent(modpackDir, list);
 
                 if (list.size() == 0) {
                     LOGGER.warn("Modpack is empty! Nothing to generate!");
@@ -166,27 +169,25 @@ public class Modpack {
         }
 
 
-        private static void addAllContent(File modpackDir, List<Jsons.ModpackContentFields.ModpackContentItems> list) throws ExecutionException, InterruptedException {
-            if (!modpackDir.exists() || modpackDir.listFiles() == null) return;
+        private static void addAllContent(Path modpackDir, List<Jsons.ModpackContentFields.ModpackContentItems> list) throws ExecutionException, InterruptedException, IOException {
+            if (!Files.exists(modpackDir) || !Files.isDirectory(modpackDir)) return;
 
-            File[] modpackDirFiles = modpackDir.listFiles();
-            if (modpackDirFiles == null) return;
+            try (DirectoryStream<Path> modpackDirStream = Files.newDirectoryStream(modpackDir)) {
+                List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
 
-            for (File file : modpackDirFiles) {
+                for (Path file : modpackDirStream) {
+                    while (creationFutures.size() >= MAX_MODPACK_ADDITIONS) { // Async Setting - max `some` fetches at the same time
+                        creationFutures.removeIf(CompletableFuture::isDone);
+                    }
 
-                while (creationFutures.size() >= MAX_MODPACK_ADDITIONS) { // Async Setting - max `some` fetches at the same time
-                    creationFutures = creationFutures.stream()
-                            .filter(future -> !future.isDone())
-                            .collect(Collectors.toList());
+                    creationFutures.add(addContentAsync(modpackDir, file, list));
                 }
 
-                creationFutures.add(addContentAsync(modpackDir, file, list));
+                CompletableFuture.allOf(creationFutures.toArray(new CompletableFuture[0])).get();
             }
-
-            CompletableFuture.allOf(creationFutures.toArray(new CompletableFuture[0])).get();
         }
 
-        private static CompletableFuture<Void> addContentAsync(File modpackDir, File file, List<Jsons.ModpackContentFields.ModpackContentItems> list) {
+        private static CompletableFuture<Void> addContentAsync(Path modpackDir, Path file, List<Jsons.ModpackContentFields.ModpackContentItems> list) {
             return CompletableFuture.runAsync(() -> {
                 try {
                     addContent(modpackDir, file, list);
@@ -204,27 +205,26 @@ public class Modpack {
             return input;
         }
 
-        private static void addContent(File modpackDir, File file, List<Jsons.ModpackContentFields.ModpackContentItems> list) throws Exception {
-            modpackDir = new File(modpackDir.toPath().normalize().toString());
-            if (file.isDirectory()) {
-                if (file.getName().startsWith(".")) {
+        private static void addContent(Path modpackDir, Path file, List<Jsons.ModpackContentFields.ModpackContentItems> list) throws Exception {
+            modpackDir = modpackDir.normalize();
+            if (Files.isDirectory(file)) {
+                if (file.getFileName().startsWith(".")) {
                     return;
                 }
 
-                File[] childFiles = file.listFiles();
-                if (childFiles == null) return;
+                Path[] childFiles = Files.list(file).toArray(Path[]::new);
 
-                for (File childFile : childFiles) {
+                for (Path childFile : childFiles) {
                     addContent(modpackDir, childFile, list);
                 }
-            } else if (file.isFile()) {
+            } else if (Files.isRegularFile(file)) {
                 if (file.equals(hostModpackContentFile)) {
                     return;
                 }
-                Path modpackPath = file.toPath().toAbsolutePath().normalize();
+                Path modpackPath = file.toAbsolutePath().normalize();
                 String modpackFile = modpackPath.toString().replace(hostModpackDir.toAbsolutePath().normalize().toString(), "").replace("\\", "/");
                 if (modpackFile.charAt(0) == '.') modpackFile = modpackFile.substring(1);
-                String size = String.valueOf(file.length());
+                String size = String.valueOf(Files.size(file));
                 String type = "other";
                 String modId = null;
                 String version = null;
@@ -247,7 +247,7 @@ public class Modpack {
                     }
                 }
 
-                File actualFile = new File(modpackFile);
+                Path actualFile = Paths.get(modpackFile);
                 if (actualFile.toString().startsWith(".")) {
                     LOGGER.warn("Skipping file {}", modpackFile);
                     return;
@@ -258,7 +258,7 @@ public class Modpack {
                     return;
                 }
 
-                if (!modpackDir.equals(hostModpackDir.toFile())) {
+                if (!modpackDir.equals(hostModpackDir)) {
                     if (modpackFile.endsWith(".tmp")) {
                         LOGGER.warn("File {} is temporary! Skipping...", modpackFile);
                         return;
@@ -278,7 +278,7 @@ public class Modpack {
                 String sha1 = CustomFileUtils.getHashWithRetry(file, "SHA-1");
                 String murmurHash = null;
 
-                if (file.getName().endsWith(".jar")) {
+                if (file.getFileName().endsWith(".jar")) {
                     modId = JarUtilities.getModIdFromJar(file, true);
                     type = modId == null ? "other" : "mod";
                     if (type.equals("mod")) {
@@ -370,26 +370,23 @@ public class Modpack {
     }
 
     public static Map<Path, ModpackObject> getModpacksMap() {
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(modpacksDir)) {
+            Map<Path, ModpackObject> modpacksMap = new HashMap<>();
 
-        File[] modpacks = modpacksDir.listFiles();
-
-        if (modpacks == null) {
-            LOGGER.error("Failed to list files in modpacks dir!");
-            return null;
-        }
-
-        Map<Path, ModpackObject> modpacksMap = new HashMap<>();
-
-        for (File modpack : modpacks) {
-            if (modpack.isDirectory()) {
-                File modpackJson = new File(modpack, hostModpackContentFile.getName());
-                if (modpackJson.exists()) {
-                    modpacksMap.put(modpack.toPath(), new ModpackObject());
+            for (Path modpack : directoryStream) {
+                if (Files.isDirectory(modpack)) {
+                    Path modpackJson = modpack.resolve(hostModpackContentFile.getFileName());
+                    if (Files.exists(modpackJson)) {
+                        modpacksMap.put(modpack, new ModpackObject());
+                    }
                 }
             }
-        }
 
-        return modpacksMap;
+            return modpacksMap;
+        } catch (IOException e) {
+            LOGGER.error("Failed to list files in modpacks dir!", e);
+            return null;
+        }
     }
 
     public static void setModpackObject(Map<Path, ModpackObject> modpacksMap) {
@@ -403,10 +400,10 @@ public class Modpack {
             Path modpackDir = entry.getKey();
             ModpackObject modpackObject = entry.getValue();
 
-            File modpackJson = new File(modpackDir.toFile(), hostModpackContentFile.getName());
+            Path modpackJsonPath = modpackDir.resolve(hostModpackContentFile.getFileName());
 
             try {
-                Jsons.ModpackContentFields modpackContentFields = ConfigTools.GSON.fromJson(new FileReader(modpackJson), Jsons.ModpackContentFields.class);
+                Jsons.ModpackContentFields modpackContentFields = ConfigTools.GSON.fromJson(Files.newBufferedReader(modpackJsonPath), Jsons.ModpackContentFields.class);
 
                 modpackObject.setName(modpackContentFields.modpackName);
                 modpackObject.setLink(modpackContentFields.link);
@@ -416,7 +413,7 @@ public class Modpack {
                 modpackObject.setContent(modpackContentFields.list);
 
             } catch (IOException e) {
-                LOGGER.error("Failed to read modpack content file {}", modpackJson, e);
+                LOGGER.error("Failed to read modpack content file {}", modpackJsonPath, e);
             }
         }
     }

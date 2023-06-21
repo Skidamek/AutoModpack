@@ -21,6 +21,7 @@
 package pl.skidam.automodpack.loaders;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Collection;
 
 public class Loader {
@@ -69,25 +70,25 @@ public class Loader {
     public static Collection getModList() {
         return FabricImpl.getModList();
     }
-    public static File getModPath(String modId) {
+    public static Path getModPath(String modId) {
         return FabricImpl.getModPath(modId);
     }
     public static String getModEnvironment(String modId) {
         return FabricImpl.getModEnvironment(modId);
     }
-    public static String getModEnvironmentFromNotLoadedJar(File file) {
+    public static String getModEnvironmentFromNotLoadedJar(Path file) {
         return FabricImpl.getModEnvironmentFromNotLoadedJar(file);
     }
-    public static String getModIdFromLoadedJar(File file, boolean checkAlsoOutOfContainer) {
+    public static String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
         return FabricImpl.getModIdFromLoadedJar(file, checkAlsoOutOfContainer);
     }
-    public static String getModIdFromNotLoadedJar(File file) {
+    public static String getModIdFromNotLoadedJar(Path file) {
         return FabricImpl.getModIdFromNotLoadedJar(file);
     }
     public static String getModVersion(String modId) {
         return FabricImpl.getModVersion(modId);
     }
-    public static String getModVersion(File file) {
+    public static String getModVersion(Path file) {
         return FabricImpl.getModVersion(file);
     }
     public static String getEnvironmentType() {
@@ -106,25 +107,25 @@ public class Loader {
 //$$     public static Collection getModList() {
 //$$         return QuiltImpl.getModList();
 //$$     }
-//$$     public static File getModPath(String modId) {
+//$$     public static Path getModPath(String modId) {
 //$$         return QuiltImpl.getModPath(modId);
 //$$     }
 //$$     public static String getModEnvironment(String modId) {
 //$$         return QuiltImpl.getModEnvironment(modId);
 //$$     }
-//$$     public static String getModEnvironmentFromNotLoadedJar(File file) {
+//$$     public static String getModEnvironmentFromNotLoadedJar(Path file) {
 //$$         return QuiltImpl.getModEnvironmentFromNotLoadedJar(file);
 //$$     }
-//$$     public static String getModIdFromLoadedJar(File file, boolean checkAlsoOutOfContainer) {
+//$$     public static String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
 //$$         return QuiltImpl.getModIdFromLoadedJar(file, checkAlsoOutOfContainer);
 //$$     }
-//$$     public static String getModIdFromNotLoadedJar(File file) {
+//$$     public static String getModIdFromNotLoadedJar(Path file) {
 //$$         return QuiltImpl.getModIdFromNotLoadedJar(file);
 //$$     }
 //$$     public static String getModVersion(String modId) {
 //$$         return QuiltImpl.getModVersion(modId);
 //$$     }
-//$$     public static String getModVersion(File file) {
+//$$     public static String getModVersion(Path file) {
 //$$         return QuiltImpl.getModVersion(file);
 //$$     }
 //$$     public static String getEnvironmentType() {
@@ -143,25 +144,25 @@ public class Loader {
 //$$     public static Collection getModList() {
 //$$         return ForgeImpl.getModList();
 //$$     }
-//$$     public static File getModPath(String modId) {
+//$$     public static Path getModPath(String modId) {
 //$$         return ForgeImpl.getModPath(modId);
 //$$     }
 //$$     public static String getModEnvironment(String modId) {
 //$$         return ForgeImpl.getModEnvironment(modId);
 //$$     }
-//$$     public static String getModEnvironmentFromNotLoadedJar(File file) {
+//$$     public static String getModEnvironmentFromNotLoadedJar(Path file) {
 //$$         return ForgeImpl.getModEnvironmentFromNotLoadedJar(file);
 //$$     }
-//$$     public static String getModIdFromLoadedJar(File file, boolean checkAlsoOutOfContainer) {
+//$$     public static String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
 //$$         return ForgeImpl.getModIdFromLoadedJar(file, checkAlsoOutOfContainer);
 //$$     }
-//$$     public static String getModIdFromNotLoadedJar(File file) {
+//$$     public static String getModIdFromNotLoadedJar(Path file) {
 //$$         return ForgeImpl.getModIdFromNotLoadedJar(file);
 //$$     }
 //$$     public static String getModVersion(String modId) {
 //$$         return ForgeImpl.getModVersion(modId);
 //$$     }
-//$$     public static String getModVersion(File file) {
+//$$     public static String getModVersion(Path file) {
 //$$         return ForgeImpl.getModVersion(file);
 //$$     }
 //$$     public static String getEnvironmentType() {

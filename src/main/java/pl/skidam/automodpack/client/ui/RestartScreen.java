@@ -27,19 +27,20 @@ import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 import java.io.File;
+import java.nio.file.Path;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 public class RestartScreen extends VersionedScreen {
-    private final File gameDir;
+    private final Path gameDir;
     private final boolean fullDownload;
     private static ButtonWidget cancelButton;
     private static ButtonWidget restartButton;
     private static ButtonWidget changelogsButton;
 
-    public RestartScreen(File gameDir, boolean fullDownload) {
+    public RestartScreen(Path gameDir, boolean fullDownload) {
         super(VersionedText.common.literal("RestartScreen"));
         this.gameDir = gameDir;
         this.fullDownload = fullDownload;

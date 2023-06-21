@@ -29,6 +29,7 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 import static pl.skidam.automodpack.StaticVariables.*;
@@ -48,14 +49,14 @@ public class ConfigTools {
     }
 
     // Config stuff
-    public static <T> T loadConfig(File configFile, Class<T> configClass) {
+    public static <T> T loadConfig(Path configFile, Class<T> configClass) {
         try {
-            if (!configFile.getParentFile().isDirectory()) {
-                configFile.getParentFile().mkdirs();
+            if (!Files.isDirectory(configFile.getParent())) {
+                 Files.createDirectories(configFile.getParent());
             }
 
-            if (configFile.isFile()) {
-                String json = IOUtils.toString(new InputStreamReader(new FileInputStream(configFile), StandardCharsets.UTF_8));
+            if (Files.isRegularFile(configFile)) {
+                String json = new String(Files.readAllBytes(configFile), StandardCharsets.UTF_8);
                 T obj = GSON.fromJson(json, configClass);
                 saveConfig(configFile, obj);
                 return obj;
@@ -76,13 +77,13 @@ public class ConfigTools {
         }
     }
 
-    public static void saveConfig(File configFile, Object configObject) {
+    public static void saveConfig(Path configFile, Object configObject) {
         try {
-            if (!configFile.getParentFile().isDirectory()) {
-                configFile.getParentFile().mkdirs();
+            if (!Files.isDirectory(configFile.getParent())) {
+                Files.createDirectories(configFile.getParent());
             }
 
-            Files.write(configFile.toPath(), GSON.toJson(configObject).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(configFile, GSON.toJson(configObject).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
             LOGGER.error("Couldn't save config! " + configObject.getClass());
             e.printStackTrace();
@@ -91,10 +92,10 @@ public class ConfigTools {
 
 
     // Modpack content stuff
-    public static Jsons.ModpackContentFields loadModpackContent(File modpackContentFile) {
+    public static Jsons.ModpackContentFields loadModpackContent(Path modpackContentFile) {
         try {
-            if (modpackContentFile.isFile()) {
-                String json = IOUtils.toString(new InputStreamReader(new FileInputStream(modpackContentFile), StandardCharsets.UTF_8));
+            if (Files.isRegularFile(modpackContentFile)) {
+                String json = new String(Files.readAllBytes(modpackContentFile), StandardCharsets.UTF_8);
                 return GSON.fromJson(json, Jsons.ModpackContentFields.class);
             }
         } catch (Exception e) {
@@ -104,13 +105,13 @@ public class ConfigTools {
         return null;
     }
 
-    public static void saveModpackContent(File modpackContentFile, Jsons.ModpackContentFields configObject) {
+    public static void saveModpackContent(Path modpackContentFile, Jsons.ModpackContentFields configObject) {
         try {
-            if (!modpackContentFile.getParentFile().isDirectory()) {
-                modpackContentFile.getParentFile().mkdirs();
+            if (!Files.isDirectory(modpackContentFile.getParent())) {
+                Files.createDirectories(modpackContentFile.getParent());
             }
 
-            Files.write(modpackContentFile.toPath(), GSON.toJson(configObject).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.write(modpackContentFile, GSON.toJson(configObject).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
             LOGGER.error("Couldn't save modpack content! " + configObject.getClass());
             e.printStackTrace();

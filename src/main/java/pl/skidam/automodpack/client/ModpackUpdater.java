@@ -31,12 +31,15 @@ import pl.skidam.automodpack.platforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.*;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -117,29 +120,27 @@ public class ModpackUpdater {
         return serverModpackContent.modpackName;
     }
 
-    public ModpackUpdater(Jsons.ModpackContentFields serverModpackContent, String link, File modpackDir) {
-        if (link == null || link.isEmpty() || modpackDir.toString() == null || modpackDir.toString().isEmpty()) return;
+    public ModpackUpdater(Jsons.ModpackContentFields serverModpackContent, String link, Path modpackDir) {
+        if (link == null || link.isEmpty() || modpackDir.toString().isEmpty()) return;
 
         try {
-            ModpackUpdater.serverModpackContent = serverModpackContent;
-            serverModpackContentByteArray = GSON.toJson(serverModpackContent).getBytes();
-
+            Path modpackContentFile = Paths.get(modpackDir + File.separator + "modpack-content.json");
             if (serverModpackContent == null)  { // server is down, or you don't have access to internet, but we still want to load selected modpack
 
                 LOGGER.warn("Server is down, or you don't have access to internet, but we still want to load selected modpack");
 
-                File modpackContentFile = new File(modpackDir + File.separator + "modpack-content.json");
-
-                if (!modpackContentFile.exists()) return;
+                if (!Files.exists(modpackContentFile)) {
+                    return;
+                }
 
                 Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
                 if (modpackContent == null) return;
 
-                List<File> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
+                List<Path> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
 
                 finishModpackUpdate(modpackDir, modpackContentFile);
 
-                List<File> filesAfter = mapAllFiles(modpackDir, new ArrayList<>());
+                List<Path> filesAfter = mapAllFiles(modpackDir, new ArrayList<>());
 
                 if (filesAfter.equals(filesBefore)) {
                     LOGGER.info("Modpack is already loaded");
@@ -147,8 +148,8 @@ public class ModpackUpdater {
                 }
 
                 // print out what files were added, deleted, updated
-                List<File> addedFiles = filesAfter.stream().filter(file -> !filesBefore.contains(file)).collect(Collectors.toList());
-                List<File> deletedFiles = filesBefore.stream().filter(file -> !filesAfter.contains(file)).collect(Collectors.toList());
+                List<Path> addedFiles = filesAfter.stream().filter(file -> !filesBefore.contains(file)).collect(Collectors.toList());
+                List<Path> deletedFiles = filesBefore.stream().filter(file -> !filesAfter.contains(file)).collect(Collectors.toList());
                 // print it
                 LOGGER.info("Added files: " + addedFiles);
                 LOGGER.info("Deleted files: " + deletedFiles);
@@ -159,32 +160,48 @@ public class ModpackUpdater {
             }
 
             serverModpackContent.link = link;
+            ModpackUpdater.serverModpackContent = serverModpackContent;
+            serverModpackContentByteArray = GSON.toJson(serverModpackContent).getBytes();
 
-            if (!modpackDir.exists()) modpackDir.mkdirs();
+            if (!Files.exists(modpackDir)) {
+                Files.createDirectories(modpackDir);
+            }
 
-            File modpackContentFile = new File(modpackDir + File.separator + "modpack-content.json");
-
-            if (modpackContentFile.exists()) {
+            if (Files.exists(modpackContentFile)) {
                 if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     // check if modpack is loaded now loaded
 
                     LOGGER.info("Modpack is up to date");
 
-                    List<File> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
+                    List<Path> filesBefore = mapAllFiles(modpackDir, new ArrayList<>());
 
                     finishModpackUpdate(modpackDir, modpackContentFile);
 
-                    List<File> filesAfter = mapAllFiles(modpackDir, new ArrayList<>());
+                    List<Path> filesAfter = mapAllFiles(modpackDir, new ArrayList<>());
 
-                    if (filesAfter.equals(filesBefore)) {
-                        LOGGER.info("Modpack is already loaded");
-                        return;
+                    List<Path> addedFiles = new ArrayList<>();
+                    List<Path> deletedFiles = new ArrayList<>();
+
+                    for (Path file : filesAfter) {
+                        if (!filesBefore.contains(file)) {
+                            addedFiles.add(file);
+                        }
                     }
 
-                    // print out what files were added, deleted, updated
-                    List<File> addedFiles = filesAfter.stream().filter(file -> !filesBefore.contains(file)).collect(Collectors.toList());
-                    List<File> deletedFiles = filesBefore.stream().filter(file -> !filesAfter.contains(file)).collect(Collectors.toList());
-                    // print it
+                    for (Path file : filesBefore) {
+                        if (!filesAfter.contains(file)) {
+                            deletedFiles.add(file);
+                        }
+                    }
+
+                    if (addedFiles.size() == 0 && deletedFiles.size() == 0) {
+                        LOGGER.info("Modpack is already loaded");
+                        return;
+                    } else {
+                        LOGGER.info("Modpack is not loaded");
+                    }
+
+                    // Print the results
                     LOGGER.info("Added files: " + addedFiles);
                     LOGGER.info("Deleted files: " + deletedFiles);
 
@@ -215,7 +232,7 @@ public class ModpackUpdater {
         }
     }
 
-    public static void ModpackUpdaterMain(String link, File modpackDir, File modpackContentFile) {
+    public static void ModpackUpdaterMain(String link, Path modpackDir, Path modpackContentFile) {
 
         long start = System.currentTimeMillis();
 
@@ -237,13 +254,13 @@ public class ModpackUpdater {
                 String fileName = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
-                File file = new File(modpackDir + File.separator + fileName);
+                Path file = Paths.get(modpackDir + File.separator + fileName);
 
-                if (!file.exists()) {
-                    file = new File("./" + fileName);
+                if (!Files.exists(file)) {
+                    file = Paths.get("./" + fileName);
                 }
 
-                if (!file.exists()) {
+                if (!Files.exists(file)) {
                     continue;
                 }
 
@@ -253,8 +270,8 @@ public class ModpackUpdater {
                 } else if (modpackContentField.editable) {
                     LOGGER.info("Skipping editable file: " + fileName);
                     iterator.remove();
-                } else if (file.isFile() && !modpackContentField.type.equals("mod")) {
-                    if (file.length() == Long.parseLong(modpackContentField.size)) {
+                } else if (file.toFile().isFile() && !modpackContentField.type.equals("mod")) {
+                    if (file.toFile().length() == Long.parseLong(modpackContentField.size)) {
                         LOGGER.info("Skipping* already downloaded file: " + fileName);
                         iterator.remove();
                     }
@@ -321,7 +338,7 @@ public class ModpackUpdater {
                     String fileName = modpackContentField.file;
                     String serverSHA1 = modpackContentField.sha1;
 
-                    File downloadFile = new File(modpackDir + File.separator + fileName);
+                    Path downloadFile = Paths.get(modpackDir + File.separator + fileName);
                     String url;
                     if (modpackContentField.link.startsWith("/")) { // AutoModpack host
                         url = link + Url.encode(modpackContentField.link); // We need to change things like [ ] to %5B %5D etc.
@@ -336,7 +353,7 @@ public class ModpackUpdater {
             }
 
             // Downloads completed
-            Files.write(modpackContentFile.toPath(), serverModpackContentByteArray);
+            Files.write(modpackContentFile, serverModpackContentByteArray);
             finishModpackUpdate(modpackDir, modpackContentFile);
 
             if (AudioManager.isMusicPlaying()) {
@@ -362,7 +379,7 @@ public class ModpackUpdater {
             if (update) {
                 LOGGER.info("Update completed! Took: " + (System.currentTimeMillis() - start) + " ms");
                 new ReLauncher.Restart(modpackDir, fullDownload);
-            } else if (ScreenTools.getScreenString().contains("dangerscreen") || ScreenTools.getScreenString().contains("downloadscreen")) {
+            } else if (ScreenTools.getScreenString().contains("dangerscreen") || ScreenTools.getScreenString().contains("downloadscreen") || ScreenTools.getScreenString().contains("disconnectedscreen")) {
                 new ReLauncher.Restart(modpackDir, fullDownload);
             }
 
@@ -376,7 +393,7 @@ public class ModpackUpdater {
         }
     }
 
-    private static void finishModpackUpdate(File modpackDir, File modpackContentFile) throws Exception {
+    private static void finishModpackUpdate(Path modpackDir, Path modpackContentFile) throws Exception {
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
@@ -386,7 +403,8 @@ public class ModpackUpdater {
 
         // clear empty directories
         CustomFileUtils.deleteEmptyFiles(modpackDir, true, modpackContent.list);
-        CustomFileUtils.deleteEmptyFiles(new File("./"), false, modpackContent.list);
+        Path directory = Paths.get("./");
+        CustomFileUtils.deleteEmptyFiles(directory, false, modpackContent.list);
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
@@ -394,7 +412,7 @@ public class ModpackUpdater {
         List<String> editableFiles = new ArrayList<>();
         for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : modpackContent.list) {
 
-            String fileName = new File(modpackContentField.file).getName();
+            String fileName = Paths.get(modpackContentField.file).getFileName().toString();
 
             if (changelogList.containsKey(fileName)) {
                 continue;
@@ -408,37 +426,38 @@ public class ModpackUpdater {
 
         // copy files to running directory
         // map running dir files
-        List<File> filesBefore = mapAllFiles(new File("./"), new ArrayList<>());
+        List<Path> filesBefore = mapAllFiles(directory, new ArrayList<>());
         ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent, editableFiles);
-        if (!mapAllFiles(new File("./"), new ArrayList<>()).equals(filesBefore)) {
+        if (!mapAllFiles(directory, new ArrayList<>()).equals(filesBefore)) {
             update = true;
         }
 
-        List<String> files = modpackContent.list.stream().map(modpackContentField -> new File(modpackContentField.file).getName()).collect(Collectors.toList());
-
-        try (Stream<Path> stream = Files.walk(modpackDir.toPath(), 10)) {
-            for (Path file : stream.collect(Collectors.toList())) {
-                if (Files.isDirectory(file)) continue;
-                if (file.equals(modpackContentFile.toPath())) continue;
-                if (!files.contains(file.toFile().getName())) {
-
-                    File fileInRunningDir = new File("." + file.toFile().toString().replace(modpackDir.toString(), ""));
-//                    LOGGER.warn("File in running dir: " + fileInRunningDir + " exists: " + fileInRunningDir.exists() + " hash same? " + CustomFileUtils.compareFileHashes(file.toFile(), fileInRunningDir, "SHA-256"));
-                    if (fileInRunningDir.exists() && CustomFileUtils.compareFileHashes(file.toFile(), fileInRunningDir, "SHA-1")) {
-                        LOGGER.info("Deleting {} and {}", file.toFile(), fileInRunningDir);
-                        CustomFileUtils.forceDelete(fileInRunningDir, true);
-                    } else {
-                        LOGGER.info("Deleting " + file.toFile());
-                    }
-
-                    CustomFileUtils.forceDelete(file.toFile(), true);
-                    changelogList.put(file.toFile().getName(), false);
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.error("An error occurred while trying to walk through the files in the modpack directory", e);
+        List<String> files = new ArrayList<>();
+        for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : modpackContent.list) {
+            String fileName = Paths.get(modpackContentField.file).getFileName().toString();
+            files.add(fileName);
         }
 
+        try (Stream<Path> stream = Files.walk(modpackDir, 10)) {
+            stream.filter(file -> !Files.isDirectory(file))
+                    .filter(file -> !file.equals(modpackContentFile))
+                    .forEach(file -> {
+                        String fileName = file.getFileName().toString();
+                        if (!files.contains(fileName)) {
+                            Path fileInRunningDir = Paths.get("." + file.toString().replace(modpackDir.toString(), ""));
+                            if (Files.exists(fileInRunningDir) && CustomFileUtils.compareFileHashes(file, fileInRunningDir, "SHA-1")) {
+                                LOGGER.info("Deleting {} and {}", file, fileInRunningDir);
+                                CustomFileUtils.forceDelete(fileInRunningDir, true);
+                            } else {
+                                LOGGER.info("Deleting {}", file);
+                            }
+                            CustomFileUtils.forceDelete(file, true);
+                            changelogList.put(fileName, false);
+                        }
+                    });
+        } catch (IOException e) {
+            LOGGER.error("An error occurred while trying to walk through the files in the modpack directory", e);
+        }
 
         // There is possibility that some files are in running directory, but not in modpack dir
         // Because they were already downloaded before
@@ -452,17 +471,17 @@ public class ModpackUpdater {
     }
 
 
-    private static CompletableFuture<Void> downloadAsync(String url, File downloadFile, String serverSHA1) {
+    private static CompletableFuture<Void> downloadAsync(String url, Path downloadFile, String serverSHA1) {
         return CompletableFuture.runAsync(() -> downloadFile(url, downloadFile, serverSHA1), DOWNLOAD_EXECUTOR);
     }
 
-    private static void downloadFile(String url, File downloadFile, String serverSHA1) {
+    private static void downloadFile(String url, Path downloadFile, String serverSHA1) {
         if (!update || !ScreenTools.getScreenString().contains("downloadscreen")) {
             ScreenTools.setTo.download();
         }
 
         update = true;
-        DownloadInfo downloadInfo = new DownloadInfo(downloadFile.getName());
+        DownloadInfo downloadInfo = new DownloadInfo(downloadFile.getFileName().toString());
         downloadInfos.add(downloadInfo);
 
         int maxAttempts = 3;
@@ -472,7 +491,7 @@ public class ModpackUpdater {
 
         while (attempts < maxAttempts && !success) {
             attempts++;
-            LOGGER.info("Downloading {}... (attempt {})", downloadFile.getName(), attempts);
+            LOGGER.info("Downloading {}... (attempt {})", downloadFile.getFileName(), attempts);
             LOGGER.info("URL: {}", url);
 
             try {
@@ -485,9 +504,9 @@ public class ModpackUpdater {
 
                 if (serverSHA1.equals(localSHA1)) {
                     success = true;
-                } else if (attempts == maxAttempts && !downloadFile.toString().endsWith(".jar") && downloadFile.length() == size) {
+                } else if (attempts == maxAttempts && !downloadFile.toString().endsWith(".jar") && downloadFile.toFile().length() == size) {
                     // FIXME: it shouldn't even return wrong hashes if the size is correct...
-                    LOGGER.warn("Hashes of {} do not match, but size is correct so we will assume it is correct lol", downloadFile.getName());
+                    LOGGER.warn("Hashes of {} do not match, but size is correct so we will assume it is correct lol", downloadFile.getFileName());
                     success = true;
                 } else {
                     if (attempts != maxAttempts) {
@@ -503,8 +522,8 @@ public class ModpackUpdater {
 
         downloadInfos.remove(downloadInfo);
         if (success) {
-            LOGGER.info("{} downloaded successfully in {}ms", downloadFile.getName(), (System.currentTimeMillis() - startTime));
-            changelogList.put(downloadFile.getName(), true);
+            LOGGER.info("{} downloaded successfully in {}ms", downloadFile.getFileName(), (System.currentTimeMillis() - startTime));
+            changelogList.put(downloadFile.getFileName().toString(), true);
             alreadyDownloaded++;
         } else {
 
@@ -513,13 +532,13 @@ public class ModpackUpdater {
             String serverUrl = list.stream().filter(modpackContentField -> modpackContentField.sha1.equals(serverSHA1)).findFirst().get().link;
 
             if (!url.equals(serverUrl)) {
-                LOGGER.info("Couldn't download from {}. Downloading {} from {}", url, downloadFile.getName(), serverUrl);
+                LOGGER.info("Couldn't download from {}. Downloading {} from {}", url, downloadFile.getFileName(), serverUrl);
                 downloadFile(serverUrl, downloadFile, serverSHA1);
                 return;
             }
 
-            failedDownloads.put(downloadFile.getName(), url);
-            LOGGER.error("Failed to download {} after {} attempts", downloadFile.getName(), attempts);
+            failedDownloads.put(downloadFile.getFileName().toString(), url);
+            LOGGER.error("Failed to download {} after {} attempts", downloadFile.getFileName(), attempts);
         }
     }
 
@@ -666,8 +685,8 @@ public class ModpackUpdater {
                 }
 
                 if (mainModId.equals(modpackModId) && !mainModFileName.equals(modpackModFileName)) {
-                    File mainModFile = new File("./mods/" + mainModFileName);
-                    LOGGER.info("Deleting {} from main mods folder...", mainModFile.getName());
+                    Path mainModFile = Paths.get("./mods/" + mainModFileName);
+                    LOGGER.info("Deleting {} from main mods folder...", mainModFile.getFileName());
                     CustomFileUtils.forceDelete(mainModFile, true);
                     break;
                 }
@@ -677,13 +696,19 @@ public class ModpackUpdater {
 
     private static Map<String, String> getMods(String modsDir) {
         Map<String, String> defaultMods = new HashMap<>();
-        File defaultModsFolder = new File(modsDir);
-        File[] defaultModsFiles = defaultModsFolder.listFiles();
-        if (defaultModsFiles == null) return null;
-        for (File defaultMod : defaultModsFiles) {
-            if (!defaultMod.isFile() || !defaultMod.getName().endsWith(".jar")) continue;
-            defaultMods.put(defaultMod.getName(), JarUtilities.getModIdFromJar(defaultMod, true));
+        Path defaultModsDir = Paths.get(modsDir);
+
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(defaultModsDir)) {
+            for (Path defaultMod : directoryStream) {
+                if (!Files.isRegularFile(defaultMod) || !defaultMod.getFileName().toString().endsWith(".jar")) {
+                    continue;
+                }
+                defaultMods.put(defaultMod.getFileName().toString(), JarUtilities.getModIdFromJar(defaultMod, true));
+            }
+        } catch (IOException e) {
+            return null;
         }
+
         return defaultMods;
     }
 

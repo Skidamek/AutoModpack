@@ -32,7 +32,8 @@ package pl.skidam.automodpack.loaders;
 //$$ import org.quiltmc.loader.api.minecraft.MinecraftQuiltLoader;
 //$$
 //$$ import java.io.*;
-//$$ import java.io.File;
+//$$ import java.nio.file.Files;
+//$$ import java.nio.file.Paths;
 //$$ import java.util.Collection;
 //$$ import java.nio.file.FileSystem;
 //$$ import java.nio.file.Path;
@@ -57,7 +58,7 @@ package pl.skidam.automodpack.loaders;
 //$$         return modsList.stream().map(mod -> mod.metadata().id() + " " + mod.metadata().version()).collect(Collectors.toList());
 //$$    }
 //$$
-//$$     public static File getModPath(String modId) {
+//$$     public static Path getModPath(String modId) {
 //$$         ModContainer container = QuiltLoader.getModContainer(modId).isPresent() ? QuiltLoader.getModContainer(modId).get() : null;
 //$$
 //$$         if (container != null) {
@@ -67,7 +68,7 @@ package pl.skidam.automodpack.loaders;
 //$$                     return null;
 //$$                 }
 //$$
-//$$                 return path.toFile();
+//$$                 return path;
 //$$             }
 //$$         }
 //$$         return null;
@@ -88,9 +89,9 @@ package pl.skidam.automodpack.loaders;
 //$$         return QuiltLoader.getModContainer(modid).isPresent() ? QuiltLoader.getModContainer(modid).get().metadata().version().toString() : null;
 //$$     }
 //$$
-//$$      public static String getModVersion(File file) {
+//$$      public static String getModVersion(Path file) {
 //$$         try {
-//$$             ZipFile zipFile = new ZipFile(file);
+//$$             ZipFile zipFile = new ZipFile(file.toFile());
 //$$             ZipEntry entry = null;
 //$$             if (zipFile.getEntry("quilt.mod.json") != null) {
 //$$                 entry = zipFile.getEntry("quilt.mod.json");
@@ -144,12 +145,12 @@ package pl.skidam.automodpack.loaders;
 //$$         return "UNKNOWN";
 //$$    }
 //$$
-//$$     public static String getModEnvironmentFromNotLoadedJar(File file) {
-//$$         if (!file.isFile()) return null;
-//$$         if (!file.getName().endsWith(".jar")) return null;
+//$$     public static String getModEnvironmentFromNotLoadedJar(Path file) {
+//$$         if (!Files.isRegularFile(file)) return null;
+//$$         if (!file.getFileName().endsWith(".jar")) return null;
 //$$
 //$$         try {
-//$$             ZipFile zipFile = new ZipFile(file);
+//$$             ZipFile zipFile = new ZipFile(file.toFile());
 //$$             ZipEntry entry = null;
 //$$             if (zipFile.getEntry("quilt.mod.json") != null) {
 //$$                 entry = zipFile.getEntry("quilt.mod.json");
@@ -196,15 +197,15 @@ package pl.skidam.automodpack.loaders;
 //$$         return "UNKNOWN";
 //$$    }
 //$$
-//$$     public static String getModIdFromLoadedJar(File file, boolean checkAlsoOutOfContainer) {
-//$$         if (!file.isFile()) return null;
-//$$         if (!file.getName().endsWith(".jar")) return null;
+//$$     public static String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
+//$$         if (!Files.isRegularFile(file)) return null;
+//$$         if (!file.getFileName().endsWith(".jar")) return null;
 //$$         if (Objects.equals(getModEnvironmentFromNotLoadedJar(file), "UNKNOWN")) return null;
 //$$
 //$$         for (ModContainer modContainer : QuiltLoader.getAllMods()) {
 //$$             FileSystem fileSys = modContainer.rootPath().getFileSystem();
-//$$             File modFile = new File(fileSys.toString());
-//$$             if (modFile.getName().equals(file.getName())) {
+//$$             Path modFile = Paths.get(fileSys.toString());
+//$$             if (modFile.getFileName().equals(file.getFileName())) {
 //$$                 return modContainer.metadata().id();
 //$$             }
 //$$         }
@@ -214,9 +215,9 @@ package pl.skidam.automodpack.loaders;
 //$$        return null;
 //$$     }
 //$$
-//$$     public static String getModIdFromNotLoadedJar(File file) {
+//$$     public static String getModIdFromNotLoadedJar(Path file) {
 //$$         try {
-//$$             ZipFile zipFile = new ZipFile(file);
+//$$             ZipFile zipFile = new ZipFile(file.toFile());
 //$$             ZipEntry entry = null;
 //$$             if (zipFile.getEntry("quilt.mod.json") != null) {
 //$$                 entry = zipFile.getEntry("quilt.mod.json");

@@ -25,6 +25,11 @@ import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.modpack.Modpack;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -42,26 +47,35 @@ public class ModpackContentTools {
     }
 
     public static String getModpackLink(String modpack) {
-        File modpackDir = getModpackDir(modpack);
+        if (modpack == null || modpack.isEmpty()) {
+            LOGGER.warn("Modpack name is null or empty!");
+            return null;
+        }
 
-        if (!modpackDir.exists() || !modpackDir.isDirectory()) {
+        Path modpackDir = getModpackDir(modpack);
+
+        if (Objects.isNull(modpackDir) || !Files.exists(modpackDir) || !Files.isDirectory(modpackDir)) {
             LOGGER.warn("Modpack {} doesn't exist!", modpack);
             return null;
         }
 
-        for (File file : Objects.requireNonNull(modpackDir.listFiles())) {
-            if (file.getName().equals(Modpack.hostModpackContentFile.getName())) {
-                Jsons.ModpackContentFields modpackContent = ConfigTools.loadConfig(file, Jsons.ModpackContentFields.class);
-                assert modpackContent != null;
-                if (modpackContent.link != null && !modpackContent.link.equals("")) {
-                    return modpackContent.link;
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(modpackDir)) {
+            for (Path path : directoryStream) {
+                if (Objects.equals(path.getFileName(), Modpack.hostModpackContentFile.getFileName())) {
+                    Jsons.ModpackContentFields modpackContent = ConfigTools.loadConfig(path, Jsons.ModpackContentFields.class);
+                    if (modpackContent != null && modpackContent.link != null && !modpackContent.link.isEmpty()) {
+                        return modpackContent.link;
+                    }
                 }
             }
+        } catch (IOException e) {
+            LOGGER.error("Error reading modpack directory: {}", e.getMessage());
         }
+
         return null;
     }
 
-    public static File getModpackDir(String modpack) {
+    public static Path getModpackDir(String modpack) {
         if (modpack == null || modpack.equals("")) {
             LOGGER.warn("Modpack name is null or empty!");
             return null;
@@ -69,28 +83,39 @@ public class ModpackContentTools {
 
         // eg. modpack = 192.168.0.113-30037 `directory`
 
-        return new File(modpacksDir + File.separator + modpack);
+        return Paths.get(modpacksDir + File.separator + modpack);
     }
 
-    public static Map<String, File> getListOfModpacks() {
-        Map<String, File> map = new HashMap<>();
-        for (File file : Objects.requireNonNull(modpacksDir.listFiles())) {
-            if (file.isDirectory()) {
-                map.put(file.getName(), file);
+    public static Map<String, Path> getListOfModpacks() {
+        Map<String, Path> map = new HashMap<>();
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(modpacksDir)) {
+            for (Path path : directoryStream) {
+                if (Files.isDirectory(path)) {
+                    map.put(path.getFileName().toString(), path);
+                }
             }
+        } catch (IOException e) {
+            // Handle the exception if necessary
+            e.printStackTrace();
         }
+
         return map;
     }
 
-    public static File getModpackContentFile(File modpackDir) {
-        File[] files = modpackDir.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                if (file.getName().equals(Modpack.hostModpackContentFile.getName())) {
-                    return file;
+    public static Path getModpackContentFile(Path modpackDir) {
+        if (!Files.exists(modpackDir)) {
+            return null;
+        }
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(modpackDir)) {
+            for (Path path : directoryStream) {
+                if (Objects.equals(path.getFileName(), Modpack.hostModpackContentFile.getFileName())) {
+                    return path;
                 }
             }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
+
         return null;
     }
 

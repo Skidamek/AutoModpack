@@ -22,33 +22,41 @@ package pl.skidam.automodpack.utils;
 
 import pl.skidam.automodpack.loaders.Loader;
 
-import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class SetupFiles {
     public SetupFiles() {
-        File AMdir = new File("./automodpack/");
-        // Check if AutoModpack path exists
-        if (!AMdir.exists()) {
-            AMdir.mkdirs();
+        try {
+            Path AMdir = Paths.get("./automodpack/");
+            // Check if AutoModpack path exists
+            if (!Files.exists(AMdir)) {
+                Files.createDirectories(AMdir);
+            }
+
+            if (Loader.getEnvironmentType().equals("SERVER")) {
+                server();
+            }
+
+            if (Loader.getEnvironmentType().equals("CLIENT")) {
+                client();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
 
-        if (Loader.getEnvironmentType().equals("SERVER")) {
-            server();
-        }
-
-        if (Loader.getEnvironmentType().equals("CLIENT")) {
-            client();
-        }
     }
 
     private void server() {
 
     }
 
-    private void client() {
-        File modpacks = new File("./automodpack/modpacks/");
-        if (!modpacks.exists()) {
-            modpacks.mkdirs();
+    private void client() throws IOException {
+        Path modpacks = Paths.get("./automodpack/modpacks/");
+        if (!Files.exists(modpacks)) {
+            Files.createDirectories(modpacks);
         }
     }
 }

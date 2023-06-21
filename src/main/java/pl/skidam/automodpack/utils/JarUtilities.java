@@ -23,7 +23,9 @@ package pl.skidam.automodpack.utils;
 import pl.skidam.automodpack.loaders.Loader;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 
 import static pl.skidam.automodpack.StaticVariables.LOGGER;
 
@@ -37,32 +39,30 @@ public class JarUtilities {
      */
 
     public static Path getModJarPath(String modId) {
-        File jarDir = Loader.getModPath(modId);
+        Path jarDir = Loader.getModPath(modId);
 
         if (jarDir == null) {
             LOGGER.error("Could not find jar file for " + modId);
             return null;
         }
 
-        return jarDir.toPath().toAbsolutePath();
+        return jarDir.toAbsolutePath();
     }
 
-    public static String getJarFileOfMod(String modId) {
-        File jarDir = Loader.getModPath(modId);
-
-        if (jarDir == null) {
-            LOGGER.error("Could not find jar file for " + modId);
-            return null;
+    public static Path getJarFileOfMod(String modId) {
+        Path path = Loader.getModPath(modId);
+        if (Objects.nonNull(path)) {
+            System.out.println("AutoModpack jar file: " + path.toAbsolutePath().normalize());
+            return path.toAbsolutePath().normalize();
         }
-
-        return jarDir.getName(); // returns name of the file
+        return null;
     }
 
     /**
      * @param jarFile path to jar file (mod)
      * @return unique id of mod
      */
-    public static String getModIdFromJar(File jarFile, boolean checkAlsoOutOfContainer) {
+    public static String getModIdFromJar(Path jarFile, boolean checkAlsoOutOfContainer) {
         return Loader.getModIdFromLoadedJar(jarFile, checkAlsoOutOfContainer);
     }
 
@@ -78,25 +78,7 @@ public class JarUtilities {
      * @param file path to jar file (mod)
      * @return mod version of mod from given jar file
      */
-    public static String getModVersion(File file) {
+    public static String getModVersion(Path file) {
         return Loader.getModVersion(file);
-    }
-
-    /**
-     * @return Returns mods directory (exactly the directory where `automodpack` mod is loaded)
-     */
-
-    public static File getModsDirectory() {
-        File modsPath = new File("./mods/");
-        if (!Loader.isDevelopmentEnvironment()) {
-            File jarDir = Loader.getModPath("automodpack"); // we will use automodpack because it is always present
-
-            modsPath = jarDir.getParentFile(); // get parent directory, which should be a mods directory
-
-            if (!modsPath.getName().equals("mods")) {
-                LOGGER.warn("Found external mods folder ({})", modsPath);
-            }
-        }
-        return modsPath;
     }
 }

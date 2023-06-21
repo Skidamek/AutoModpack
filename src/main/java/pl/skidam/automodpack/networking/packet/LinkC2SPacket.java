@@ -34,6 +34,8 @@ import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -47,7 +49,7 @@ public class LinkC2SPacket {
 
         String modpackFileName = link.replaceFirst("(https?://)", ""); // removes https:// and http://
         modpackFileName = modpackFileName.replace(":", "-"); // replaces : with -
-        File modpackDir = new File(modpacksDir + File.separator + modpackFileName);
+        Path modpackDir = Paths.get(modpacksDir + File.separator + modpackFileName);
 
         clientConfig.selectedModpack = modpackFileName;
         ConfigTools.saveConfig(clientConfigFile, clientConfig);
