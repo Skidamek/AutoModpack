@@ -55,7 +55,12 @@ public class AutoModpack {
         if (Loader.getEnvironmentType().equals("SERVER")) {
             if (serverConfig.generateModpackOnStart) {
                 LOGGER.info("Generating modpack...");
-                Modpack.generate();
+                long genStart = System.currentTimeMillis();
+                if (Modpack.generate()) {
+                    LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+                } else {
+                    LOGGER.error("Failed to generate modpack!");
+                }
             }
             ModPackets.registerS2CPackets();
         } else {

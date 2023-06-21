@@ -127,7 +127,7 @@ public class ModpackUtils {
 
                 // check hash
                 String serverHash = contentItem.sha1;
-                String localHash = CustomFileUtils.getHashWithRetry(sourceFile, "SHA-1");
+                String localHash = CustomFileUtils.getHash(sourceFile, "SHA-1");
 
                 if (!serverHash.equals(localHash) && !contentItem.editable) {
                     continue;

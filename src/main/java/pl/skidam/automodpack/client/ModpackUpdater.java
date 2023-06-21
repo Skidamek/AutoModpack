@@ -40,6 +40,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -264,7 +265,7 @@ public class ModpackUpdater {
                     continue;
                 }
 
-                if (serverSHA1.equals(CustomFileUtils.getHashWithRetry(file, "SHA-1"))) {
+                if (serverSHA1.equals(CustomFileUtils.getHash(file, "SHA-1"))) {
                     LOGGER.info("Skipping already downloaded file: " + fileName);
                     iterator.remove();
                 } else if (modpackContentField.editable) {
@@ -445,11 +446,16 @@ public class ModpackUpdater {
                         String fileName = file.getFileName().toString();
                         if (!files.contains(fileName)) {
                             Path fileInRunningDir = Paths.get("." + file.toString().replace(modpackDir.toString(), ""));
-                            if (Files.exists(fileInRunningDir) && CustomFileUtils.compareFileHashes(file, fileInRunningDir, "SHA-1")) {
-                                LOGGER.info("Deleting {} and {}", file, fileInRunningDir);
-                                CustomFileUtils.forceDelete(fileInRunningDir, true);
-                            } else {
-                                LOGGER.info("Deleting {}", file);
+                            try {
+                                if (Files.exists(fileInRunningDir) && CustomFileUtils.compareFileHashes(file, fileInRunningDir, "SHA-1")) {
+                                    LOGGER.info("Deleting {} and {}", file, fileInRunningDir);
+                                    CustomFileUtils.forceDelete(fileInRunningDir, true);
+                                } else {
+                                    LOGGER.info("Deleting {}", file);
+                                }
+                            } catch (IOException | NoSuchAlgorithmException e) {
+                                LOGGER.error("An error occurred while trying to compare file hashes", e);
+                                e.printStackTrace();
                             }
                             CustomFileUtils.forceDelete(file, true);
                             changelogList.put(fileName, false);
@@ -457,6 +463,7 @@ public class ModpackUpdater {
                     });
         } catch (IOException e) {
             LOGGER.error("An error occurred while trying to walk through the files in the modpack directory", e);
+            e.printStackTrace();
         }
 
         // There is possibility that some files are in running directory, but not in modpack dir
@@ -498,7 +505,7 @@ public class ModpackUpdater {
                 Download downloadInstance = new Download();
                 downloadInstance.download(url, downloadFile, downloadInfo);
 
-                String localSHA1 = CustomFileUtils.getHashWithRetry(downloadFile, "SHA-1");
+                String localSHA1 = CustomFileUtils.getHash(downloadFile, "SHA-1");
 
                 long size = downloadInstance.getFileSize();
 

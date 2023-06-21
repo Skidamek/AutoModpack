@@ -189,10 +189,16 @@ public class Commands {
             VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Generating Modpack...")
                             .formatted(Formatting.YELLOW),
                     true);
-            Modpack.generate();
-            VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack generated!")
-                            .formatted(Formatting.GREEN),
-                    true);
+            long start = System.currentTimeMillis();
+            if (Modpack.generate()) {
+                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms")
+                                .formatted(Formatting.GREEN),
+                        true);
+            } else {
+                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack generation failed! Check logs for more info.")
+                                .formatted(Formatting.RED),
+                        false);
+            }
         });
         return Command.SINGLE_SUCCESS;
     }

@@ -44,12 +44,9 @@ public class Modpack {
     public static Path hostModpackDir = Paths.get(automodpackDir + File.separator + "host-modpack");
     static Path hostModpackMods = Paths.get(hostModpackDir + File.separator + "mods");
     public static Path hostModpackContentFile = Paths.get(hostModpackDir + File.separator + "modpack-content.json");
-    public static final int MAX_MODPACK_ADDITIONS = 10; // at the same time
+    public static final int MAX_MODPACK_ADDITIONS = 8; // at the same time
     private static ExecutorService CREATION_EXECUTOR;
-    public static void generate() {
-
-        long start = System.currentTimeMillis();
-
+    public static boolean generate() {
         try {
             if (!Files.exists(hostModpackDir)) {
                 Files.createDirectories(hostModpackDir);
@@ -58,11 +55,7 @@ public class Modpack {
             e.printStackTrace();
         }
 
-        Content.create(hostModpackDir, hostModpackContentFile);
-        if (!Files.exists(hostModpackContentFile)) {
-            return;
-        }
-        LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms");
+        return Content.create(hostModpackDir, hostModpackContentFile);
     }
 
     private static void autoExcludeServerMods(List<Jsons.ModpackContentFields.ModpackContentItems> list) {
@@ -111,11 +104,17 @@ public class Modpack {
 
     public static class Content {
         public static Jsons.ModpackContentFields modpackContent;
+        public static Jsons.ModpackContentFields previousModpackContent;
 
-        public static void create(Path modpackDir, Path modpackContentFile) {
+        public static boolean create(Path modpackDir, Path modpackContentFile) {
+
+            if (Files.exists(modpackContentFile)) {
+                previousModpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+            }
+
+            List<Jsons.ModpackContentFields.ModpackContentItems> list = Collections.synchronizedList(new ArrayList<>());
+
             try {
-                List<Jsons.ModpackContentFields.ModpackContentItems> list = Collections.synchronizedList(new ArrayList<>());
-
                 ThreadFactory threadFactoryDownloads = new ThreadFactoryBuilder()
                         .setNameFormat("AutoModpackCreation-%d")
                         .build();
@@ -142,30 +141,32 @@ public class Modpack {
 
                 if (list.size() == 0) {
                     LOGGER.warn("Modpack is empty! Nothing to generate!");
-                    return;
+                    return false;
                 }
 
                 removeAutoModpackFilesFromContent(list);
                 if (serverConfig.autoExcludeServerSideMods) {
                     autoExcludeServerMods(list);
                 }
-
-                modpackContent = new Jsons.ModpackContentFields(null, list);
-                modpackContent.version = MC_VERSION;
-                modpackContent.modpackName = serverConfig.modpackName;
-                modpackContent.loader = Loader.getPlatformType().toString().toLowerCase();
-                modpackContent.modpackHash = CustomFileUtils.getHashFromStringOfHashes(ModpackContentTools.getStringOfAllHashes(modpackContent));
-
-                ConfigTools.saveConfig(modpackContentFile, modpackContent);
-
-                HttpServer.filesList.clear();
-                for (Jsons.ModpackContentFields.ModpackContentItems item : list) {
-                    HttpServer.filesList.add(item.file);
-                }
-
             } catch (Exception e) {
                 e.printStackTrace();
+                return false;
             }
+
+            modpackContent = new Jsons.ModpackContentFields(null, list);
+            modpackContent.version = MC_VERSION;
+            modpackContent.modpackName = serverConfig.modpackName;
+            modpackContent.loader = Loader.getPlatformType().toString().toLowerCase();
+            modpackContent.modpackHash = CustomFileUtils.getHashFromStringOfHashes(ModpackContentTools.getStringOfAllHashes(modpackContent));
+
+            ConfigTools.saveConfig(modpackContentFile, modpackContent);
+
+            HttpServer.filesList.clear();
+            for (Jsons.ModpackContentFields.ModpackContentItems item : list) {
+                HttpServer.filesList.add(item.file);
+            }
+
+            return true;
         }
 
 
@@ -223,7 +224,9 @@ public class Modpack {
                 }
                 Path modpackPath = file.toAbsolutePath().normalize();
                 String modpackFile = modpackPath.toString().replace(hostModpackDir.toAbsolutePath().normalize().toString(), "").replace("\\", "/");
-                if (modpackFile.charAt(0) == '.') modpackFile = modpackFile.substring(1);
+                if (modpackFile.charAt(0) == '.') {
+                    modpackFile = modpackFile.substring(1);
+                }
                 String size = String.valueOf(Files.size(file));
                 String type = "other";
                 String modId = null;
@@ -275,29 +278,45 @@ public class Modpack {
                     }
                 }
 
-                String sha1 = CustomFileUtils.getHashWithRetry(file, "SHA-1");
-                String murmurHash = null;
+                String sha1 = CustomFileUtils.getHash(file, "SHA-1");
+                String murmur = null;
 
-                if (file.getFileName().endsWith(".jar")) {
-                    modId = JarUtilities.getModIdFromJar(file, true);
-                    type = modId == null ? "other" : "mod";
-                    if (type.equals("mod")) {
-                        version = JarUtilities.getModVersion(file);
-                        murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
+                boolean newFile = true;
+
+                if (previousModpackContent != null && previousModpackContent.list != null) {
+                    for (Jsons.ModpackContentFields.ModpackContentItems item : previousModpackContent.list) {
+                        if (item.file.equals(modpackFile) && item.sha1.equals(sha1)) {
+                            newFile = false;
+                            modId = item.modId;
+                            type = item.type;
+                            version = item.version;
+                            murmur = item.murmur;
+                        }
                     }
                 }
 
-                if (type.equals("other")) {
-                    if (modpackFile.startsWith("/config/")) {
-                        type = "config";
-                    } else if (modpackFile.startsWith("/shaderpacks/")) {
-                        type = "shaderpack";
-                        murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
-                    } else if (modpackFile.startsWith("/resourcepacks/")) {
-                        type = "resourcepack";
-                        murmurHash = CustomFileUtils.getHashWithRetry(file, "murmur");
-                    } else if (modpackFile.endsWith("/options.txt")) {
-                        type = "mc_options";
+                if (newFile) {
+                    if (file.getFileName().endsWith(".jar")) {
+                        modId = JarUtilities.getModIdFromJar(file, true);
+                        type = modId == null ? "other" : "mod";
+                        if (type.equals("mod")) {
+                            version = JarUtilities.getModVersion(file);
+                            murmur = CustomFileUtils.getHash(file, "murmur");
+                        }
+                    }
+
+                    if (type.equals("other")) {
+                        if (modpackFile.startsWith("/config/")) {
+                            type = "config";
+                        } else if (modpackFile.startsWith("/shaderpacks/")) {
+                            type = "shaderpack";
+                            murmur = CustomFileUtils.getHash(file, "murmur");
+                        } else if (modpackFile.startsWith("/resourcepacks/")) {
+                            type = "resourcepack";
+                            murmur = CustomFileUtils.getHash(file, "murmur");
+                        } else if (modpackFile.endsWith("/options.txt")) {
+                            type = "mc_options";
+                        }
                     }
                 }
 
@@ -324,7 +343,7 @@ public class Modpack {
 
                 String link = modpackFile;
 
-                list.add(new Jsons.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, sha1, murmurHash));
+                list.add(new Jsons.ModpackContentFields.ModpackContentItems(modpackFile, link, size, type, isEditable, modId, version, sha1, murmur));
             }
         }
 

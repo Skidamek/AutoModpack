@@ -9,3 +9,4 @@
 - Improved deletion of files
 - Improved self-updating
 - Changed File to Path
+- Fixed rare generation issues

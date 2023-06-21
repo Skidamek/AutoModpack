@@ -105,7 +105,7 @@ public class SelfUpdater {
             Download downloadInstance = new Download();
             downloadInstance.download(automodpack.downloadUrl, automodpackUpdateJar); // Download it
 
-            String localHash = CustomFileUtils.getHashWithRetry(automodpackUpdateJar, "SHA-1");
+            String localHash = CustomFileUtils.getHash(automodpackUpdateJar, "SHA-1");
 
             if (!localHash.equals(automodpack.SHA1Hash)) {
                 LOGGER.error("Hashes are not the same! Downloaded file is corrupted!");
