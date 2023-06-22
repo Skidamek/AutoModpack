@@ -43,7 +43,7 @@ package pl.skidam.automodpack.loaders;
 //$$ import java.util.zip.ZipException;
 //$$ import java.util.zip.ZipFile;
 //$$
-//$$ import static pl.skidam.automodpack.StaticVariables.*;
+//$$ import static pl.skidam.automodpack.GlobalVariables.*;
 //$$
 //$$ @SuppressWarnings("deprecation")
 //$$ public class QuiltImpl {
