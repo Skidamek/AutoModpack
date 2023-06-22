@@ -55,6 +55,14 @@ body:
     validations:
       required: true
   - type: input
+    id: operating-system
+    attributes:
+      label: Operating system
+      description: The operating system where this bug occurs in.
+      placeholder: Windows 10
+    validations:
+      required: true
+  - type: input
     id: mod-version
     attributes:
       label: AutoModpack version
