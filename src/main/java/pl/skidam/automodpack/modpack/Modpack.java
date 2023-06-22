@@ -281,21 +281,21 @@ public class Modpack {
                 String sha1 = CustomFileUtils.getHash(file, "SHA-1");
                 String murmur = null;
 
-                boolean newFile = true;
-
-                if (previousModpackContent != null && previousModpackContent.list != null) {
-                    for (Jsons.ModpackContentFields.ModpackContentItems item : previousModpackContent.list) {
-                        if (item.file.equals(modpackFile) && item.sha1.equals(sha1)) {
-                            newFile = false;
-                            modId = item.modId;
-                            type = item.type;
-                            version = item.version;
-                            murmur = item.murmur;
-                        }
-                    }
-                }
-
-                if (newFile) {
+//                boolean newFile = true;
+//
+//                if (previousModpackContent != null && previousModpackContent.list != null) {
+//                    for (Jsons.ModpackContentFields.ModpackContentItems item : previousModpackContent.list) {
+//                        if (item.file.equals(modpackFile) && item.sha1.equals(sha1)) {
+//                            newFile = false;
+//                            modId = item.modId;
+//                            type = item.type;
+//                            version = item.version;
+//                            murmur = item.murmur;
+//                        }
+//                    }
+//                }
+//
+//                if (newFile) {
                     if (file.getFileName().endsWith(".jar")) {
                         modId = JarUtilities.getModIdFromJar(file, true);
                         type = modId == null ? "other" : "mod";
@@ -318,7 +318,7 @@ public class Modpack {
                             type = "mc_options";
                         }
                     }
-                }
+//                }
 
                 for (String editableFile : serverConfig.allowEditsInFiles) {
                     if (modpackFile.equals(editableFile)) {
