@@ -106,7 +106,7 @@ jobs:
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: ${{ format('versions/{0}/gradle.properties', matrix.subproject) }}
-          properties: 'minecraft_version game_versions loom.platform'
+          properties: 'minecraft_version game_versions mod_platform'
 
       - name: Fix game version
         id: game_versions
@@ -150,8 +150,8 @@ jobs:
           files-primary: ${{ steps.file_info.outputs.path }}
           files-secondary: ''
 
-          name: ${{ format('{0} v{1}-{2}', steps.properties_g.outputs.mod_name, steps.properties_g.outputs.mod_version, steps.properties_v.outputs.loom.platform) }}
-          version: ${{ format('mc{0}-v{1}', steps.properties_v.outputs.minecraft_version, steps.properties_g.outputs.mod_version) }}
+          name: ${{ format('{0} v{1}-{2}', steps.properties_g.outputs.mod_name, steps.properties_g.outputs.mod_version, steps.properties_v.outputs.mod_platform) }}
+          version: ${{ format('v{0}', steps.properties_g.outputs.mod_version) }}
           version-type: release
           changelog: |-
             ${{ format('{0}{1}', github.event.release.body, steps.get_release.outputs.body) }}
