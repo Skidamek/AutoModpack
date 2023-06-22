@@ -28,7 +28,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.Objects;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 // I use Linux btw
 public class Windows {

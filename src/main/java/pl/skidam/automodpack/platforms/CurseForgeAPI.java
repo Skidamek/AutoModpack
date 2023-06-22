@@ -26,7 +26,7 @@ import pl.skidam.automodpack.utils.Json;
 
 import java.io.IOException;
 
-import static pl.skidam.automodpack.StaticVariables.LOGGER;
+import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 public class CurseForgeAPI {
     public String requestUrl;

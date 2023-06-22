@@ -34,7 +34,7 @@ import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 
-import static pl.skidam.automodpack.StaticVariables.LOGGER;
+import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 public class LinkS2CPacket {
 

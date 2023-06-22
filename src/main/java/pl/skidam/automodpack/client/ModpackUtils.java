@@ -43,8 +43,8 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Objects;
 
-import static pl.skidam.automodpack.StaticVariables.LOGGER;
-import static pl.skidam.automodpack.StaticVariables.VERSION;
+import static pl.skidam.automodpack.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack.GlobalVariables.VERSION;
 import static pl.skidam.automodpack.config.ConfigTools.GSON;
 
 public class ModpackUtils {

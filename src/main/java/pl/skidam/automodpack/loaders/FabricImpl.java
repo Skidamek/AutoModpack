@@ -34,13 +34,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 public class FabricImpl {
     public static boolean isModLoaded(String modId) {

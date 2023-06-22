@@ -22,17 +22,13 @@ package pl.skidam.automodpack.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import org.apache.commons.io.IOUtils;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 public class ConfigTools {
 

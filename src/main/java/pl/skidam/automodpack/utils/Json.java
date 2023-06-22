@@ -32,7 +32,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
-import static pl.skidam.automodpack.StaticVariables.VERSION;
+import static pl.skidam.automodpack.GlobalVariables.VERSION;
 
 @SuppressWarnings("deprecation")
 public class Json {

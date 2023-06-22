@@ -26,15 +26,12 @@ import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.utils.CustomFileUtils;
-import pl.skidam.automodpack.utils.JarUtilities;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 import pl.skidam.automodpack.utils.SetupFiles;
 
-import java.io.File;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 public class Preload {
     public static void onPreInitialize() {

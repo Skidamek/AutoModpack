@@ -34,7 +34,7 @@ import pl.skidam.automodpack.config.ConfigTools;
 import java.util.concurrent.CompletableFuture;
 
 import static net.minecraft.server.command.CommandManager.literal;
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 //#if MC < 11902
 import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;

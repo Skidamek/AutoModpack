@@ -26,7 +26,7 @@ import pl.skidam.automodpack.modpack.Modpack;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.utils.MinecraftUserName;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 //#if FORGE
 //$$ import net.minecraftforge.common.MinecraftForge;

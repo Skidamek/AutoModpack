@@ -35,7 +35,7 @@ import net.minecraft.util.registry.Registry;
 //$$ import net.minecraftforge.registries.ForgeRegistries;
 //#endif
 
-import static pl.skidam.automodpack.StaticVariables.MOD_ID;
+import static pl.skidam.automodpack.GlobalVariables.MOD_ID;
 
 @SuppressWarnings("deprecation")
 public class AudioManager {

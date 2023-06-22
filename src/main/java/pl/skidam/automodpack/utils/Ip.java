@@ -25,7 +25,7 @@ import com.google.gson.JsonObject;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 
-import static pl.skidam.automodpack.StaticVariables.LOGGER;
+import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 public class Ip {
     public static String getPublic() {

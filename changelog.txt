@@ -8,5 +8,4 @@
 - Fixed not executing modpack update while server down on preload
 - Improved deletion of files
 - Improved self-updating
-- Changed File to Path
 - Fixed rare generation issues

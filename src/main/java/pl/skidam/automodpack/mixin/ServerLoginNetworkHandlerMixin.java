@@ -27,10 +27,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 @Mixin(value = ServerLoginNetworkHandler.class, priority = 2137)
-public class DisconnectDisabler {
+public class ServerLoginNetworkHandlerMixin {
     @Inject(method = "disconnect", at = @At("HEAD"), cancellable = true)
     public void turnOffDisconnect(Text disconnectReason, CallbackInfo ci) {
         String reason = disconnectReason.toString().toLowerCase();

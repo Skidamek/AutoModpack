@@ -39,7 +39,7 @@ import pl.skidam.automodpack.modpack.HttpServer;
 
 import java.util.UUID;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
 import static pl.skidam.automodpack.networking.ModPacketsImpl.acceptLogin;
 

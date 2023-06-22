@@ -21,17 +21,14 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 
-import static pl.skidam.automodpack.StaticVariables.LOGGER;
+import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;

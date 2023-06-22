@@ -26,7 +26,6 @@ import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.ui.Windows;
 
 import java.awt.*;
-import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.nio.file.Path;
@@ -35,7 +34,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 public class ReLauncher {
 

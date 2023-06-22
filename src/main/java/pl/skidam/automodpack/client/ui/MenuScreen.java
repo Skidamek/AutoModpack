@@ -21,7 +21,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.widget.ButtonWidget;
-import pl.skidam.automodpack.StaticVariables;
+import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -34,11 +34,10 @@ import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.modpack.Modpack;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 
-import java.io.File;
 import java.nio.file.Path;
 
-import static pl.skidam.automodpack.StaticVariables.clientConfig;
-import static pl.skidam.automodpack.StaticVariables.clientConfigFile;
+import static pl.skidam.automodpack.GlobalVariables.clientConfig;
+import static pl.skidam.automodpack.GlobalVariables.clientConfigFile;
 
 public class MenuScreen extends VersionedScreen {
     private ListEntryWidget ListEntryWidget;
@@ -87,17 +86,17 @@ public class MenuScreen extends VersionedScreen {
         });
 
         this.selectButton = VersionedText.buttonWidget(button2X, this.height - 35, buttonWidth, 20, VersionedText.common.translatable("automodpack.select"), button -> {
-            StaticVariables.LOGGER.info("Select modpack {} from {}", getModpack().getName(), getModpackPath());
+            GlobalVariables.LOGGER.info("Select modpack {} from {}", getModpack().getName(), getModpackPath());
             selectModpack(getModpackPath(), getModpack());
         });
 
         this.redownloadButton = VersionedText.buttonWidget(button3X, this.height - 35, buttonWidth, 20, VersionedText.common.translatable("automodpack.redownload"), button -> {
-            StaticVariables.LOGGER.info("Redownload {} from {}", getModpack().getName(), getModpack().getLink());
+            GlobalVariables.LOGGER.info("Redownload {} from {}", getModpack().getName(), getModpack().getLink());
             reDownloadModpack(getModpackPath(), getModpack());
         });
 
         this.removeButton = VersionedText.buttonWidget(button4X, this.height - 35, buttonWidth, 20, VersionedText.common.translatable("automodpack.delete"), button -> {
-            StaticVariables.LOGGER.info("Remove modpack {} from {}", getModpack().getName(), getModpackPath());
+            GlobalVariables.LOGGER.info("Remove modpack {} from {}", getModpack().getName(), getModpackPath());
             removeModpack(getModpackPath());
         });
 
@@ -143,7 +142,7 @@ public class MenuScreen extends VersionedScreen {
 
         new ModpackUpdater(serverModpackContent, modpackLink, modpackPath);
 
-        StaticVariables.LOGGER.info("Redownloaded modpack {} from {}", modpack.getName(), modpackLink);
+        GlobalVariables.LOGGER.info("Redownloaded modpack {} from {}", modpack.getName(), modpackLink);
     }
 
     private void removeModpack(Path modpackPath) {

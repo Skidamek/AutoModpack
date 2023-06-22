@@ -37,7 +37,7 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 
 public class Modpack {

@@ -28,7 +28,7 @@ import pl.skidam.automodpack.client.ui.*;
 
 import java.nio.file.Path;
 
-import static pl.skidam.automodpack.StaticVariables.preload;
+import static pl.skidam.automodpack.GlobalVariables.preload;
 
 public class ScreenTools {
 

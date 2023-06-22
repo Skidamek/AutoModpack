@@ -35,7 +35,7 @@ import pl.skidam.automodpack.utils.DownloadInfo;
 import java.util.ArrayList;
 import java.util.List;
 
-import static pl.skidam.automodpack.StaticVariables.MOD_ID;
+import static pl.skidam.automodpack.GlobalVariables.MOD_ID;
 import static pl.skidam.automodpack.client.ModpackUpdater.downloadInfos;
 import static pl.skidam.automodpack.client.ModpackUpdater.getDownloadInfo;
 import static pl.skidam.automodpack.utils.RefactorStrings.getFormatedETA;

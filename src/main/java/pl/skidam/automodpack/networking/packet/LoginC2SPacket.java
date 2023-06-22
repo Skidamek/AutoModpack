@@ -33,8 +33,8 @@ import pl.skidam.automodpack.loaders.Loader;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-import static pl.skidam.automodpack.StaticVariables.LOGGER;
-import static pl.skidam.automodpack.StaticVariables.VERSION;
+import static pl.skidam.automodpack.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack.GlobalVariables.VERSION;
 
 public class LoginC2SPacket {
 

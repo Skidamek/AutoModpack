@@ -22,12 +22,10 @@ package pl.skidam.automodpack.utils;
 
 import pl.skidam.automodpack.loaders.Loader;
 
-import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 
-import static pl.skidam.automodpack.StaticVariables.LOGGER;
+import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 public class JarUtilities {
 

@@ -45,8 +45,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.FutureTask;
 
-import static pl.skidam.automodpack.StaticVariables.*;
-import static pl.skidam.automodpack.StaticVariables.VERSION;
+import static pl.skidam.automodpack.GlobalVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.VERSION;
 import static pl.skidam.automodpack.networking.ModPackets.HANDSHAKE;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
 

@@ -22,7 +22,7 @@ package pl.skidam.automodpack.networking;
 
 import net.minecraft.util.Identifier;
 
-import static pl.skidam.automodpack.StaticVariables.*;
+import static pl.skidam.automodpack.GlobalVariables.*;
 
 public class ModPackets {
     public static final Identifier HANDSHAKE = new Identifier(MOD_ID, "handshake");

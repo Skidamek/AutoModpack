@@ -36,7 +36,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.zip.GZIPInputStream;
 
-import static pl.skidam.automodpack.StaticVariables.VERSION;
+import static pl.skidam.automodpack.GlobalVariables.VERSION;
 
 public class Download {
     private double bytesPerSecond;

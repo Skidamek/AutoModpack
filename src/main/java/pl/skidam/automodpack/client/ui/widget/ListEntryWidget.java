@@ -32,7 +32,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import static pl.skidam.automodpack.StaticVariables.clientConfig;
+import static pl.skidam.automodpack.GlobalVariables.clientConfig;
 
 //#if MC < 12000
 import net.minecraft.client.util.math.MatrixStack;
