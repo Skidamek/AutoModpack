@@ -96,6 +96,31 @@ public class CustomFileUtils {
         }
     }
 
+    private static boolean compareFilesByteByByte(Path path, byte[] referenceBytes) {
+        try {
+            long fileSize = Files.size(path);
+            if (fileSize != referenceBytes.length) {
+                return false;
+            }
+
+            try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
+                 InputStream referenceInputStream = new ByteArrayInputStream(referenceBytes)) {
+                int fileByte, referenceByte;
+                while ((fileByte = raf.read()) != -1) {
+                    referenceByte = referenceInputStream.read();
+                    if (fileByte != referenceByte) {
+                        return false;
+                    }
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            return false;
+        }
+        return true;
+    }
+
+
     public static void deleteEmptyFiles(Path directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) throws IOException {
         try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory)) {
             for (Path path : directoryStream) {
@@ -115,10 +140,8 @@ public class CustomFileUtils {
                     } else {
                         deleteEmptyFiles(path, deleteSubDirsToo, ignoreList);
                     }
-                } else if (Files.size(path) < 300) {
-                    if (Arrays.equals(Files.readAllBytes(path), smallDummyJar)) {
-                        CustomFileUtils.forceDelete(path, true);
-                    }
+                } else if (compareFilesByteByByte(path, smallDummyJar)) {
+                    CustomFileUtils.forceDelete(path, true);
                 }
             }
         }
