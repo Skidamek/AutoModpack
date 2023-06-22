@@ -52,7 +52,6 @@ public class JarUtilities {
     public static Path getJarFileOfMod(String modId) {
         Path path = Loader.getModPath(modId);
         if (Objects.nonNull(path)) {
-            System.out.println("AutoModpack jar file: " + path.toAbsolutePath().normalize());
             return path.toAbsolutePath().normalize();
         }
         return null;

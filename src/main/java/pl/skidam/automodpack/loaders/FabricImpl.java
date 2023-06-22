@@ -56,19 +56,29 @@ public class FabricImpl {
             return null;
         }
 
-        Optional<ModContainer> container = FabricLoader.getInstance().getModContainer(modId);
+        if (isModLoaded(modId)) {
 
-        if (container.isPresent()) {
-            ModContainer modContainer = container.get();
-            Path jarPath = modContainer.getRootPaths().stream().findFirst().isPresent() ? modContainer.getRootPaths().stream().findFirst().get() : null;
-
-            if (jarPath == null) {
-                LOGGER.error("Could not find jar file for " + modId);
+            if (!Files.exists(modsPath)) {
+                LOGGER.error("Could not find mods folder!?");
                 return null;
             }
 
-            return jarPath;
+            try {
+                Path[] mods = Files.list(modsPath).toArray(Path[]::new);
+                for (Path mod : mods) {
+                    if (mod.getFileName().toString().endsWith(".jar")) {
+                        String modIdFromLoadedJar = getModIdFromLoadedJar(mod, true);
+                        if (modIdFromLoadedJar != null && modIdFromLoadedJar.equals(modId)) {
+                            return mod;
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                LOGGER.error("Could not get mod path for " + modId);
+                e.printStackTrace();
+            }
         }
+
         return null;
     }
 

@@ -25,6 +25,7 @@ import pl.skidam.automodpack.platforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.JarUtilities;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -52,7 +53,7 @@ public class SelfUpdater {
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
 
-        ModrinthAPI automodpack = ModrinthAPI.getModInfoFromID("k68glP2e");
+        ModrinthAPI automodpack = ModrinthAPI.getModInfoFromID("k68glP2e"); // AutoModpack modrinth id
 
         if (automodpack == null || automodpack.fileVersion == null) {
             LOGGER.error("Couldn't get latest version of AutoModpack from Modrinth API. Likely automodpack isn't updated to your version of minecraft yet...");
@@ -68,6 +69,8 @@ public class SelfUpdater {
         String LATEST_VERSION = automodpack.fileVersion.replace(".", "");
         String OUR_VERSION = VERSION.replace(".", "");
 
+        boolean snapshot = false;
+
         try {
             if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
                 LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.fileVersion);
@@ -77,29 +80,34 @@ public class SelfUpdater {
             // ignore
 
             // Check if version has any other characters than numbers and if latest version is only numbers
-            // Automodpack latest version should always have only numbers
-            if (OUR_VERSION.chars().anyMatch(ch -> !Character.isDigit(ch)) && LATEST_VERSION.chars().allMatch(Character::isDigit)) {
+            if (OUR_VERSION.chars().anyMatch(ch -> !Character.isDigit(ch))) {
+
+                snapshot = true;
 
                 OUR_VERSION = OUR_VERSION.replaceAll("[^0-9]", "");
                 LATEST_VERSION = LATEST_VERSION.replaceAll("[^0-9]", "");
 
-                if (Integer.parseInt(OUR_VERSION) >= Integer.parseInt(LATEST_VERSION)) {
+                if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
                     LOGGER.info("You are using pre-released or beta version of AutoModpack: " + VERSION + " latest stable version is: " + automodpack.fileVersion);
                     return;
                 }
-            } // We don't want to auto update to beta version, but from beta to newer release, yes.
+            }
         }
 
-
-        // We always want to update to latest release version
-        if (OUR_VERSION.equals(LATEST_VERSION) || !automodpack.releaseType.equals("release")) {
-            LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + VERSION);
-            return;
+        if (!snapshot) {
+            // We always want to update to latest release version
+            if (OUR_VERSION.equals(LATEST_VERSION) || !automodpack.releaseType.equals("release")) {
+                LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + VERSION);
+                return;
+            }
         }
 
-        LOGGER.info("Update found! Updating to new version: " + automodpack.fileVersion);
+        // We are using outdated snapshot or outdated release version
+        // If latest is release, always update
+        // If latest is beta/alpha (snapshot), update only if we are using beta/alpha (snapshot)
+        LOGGER.info("Update found! Updating to latest version: " + automodpack.fileVersion);
 
-        Path automodpackUpdateJar = Paths.get(automodpackDir + automodpack.fileName);
+        Path automodpackUpdateJar = Paths.get(automodpackDir + File.separator + automodpack.fileName);
 
         try {
             Download downloadInstance = new Download();
@@ -113,11 +121,13 @@ public class SelfUpdater {
             }
 
             // We assume that update jar has always different name than current jar
-            Files.copy(automodpackUpdateJar, automodpackJar.getParent());
+            Path newAutomodpackJar = Paths.get(automodpackJar.getParent() + File.separator + automodpackUpdateJar.getFileName());
+            Files.copy(automodpackUpdateJar, newAutomodpackJar);
             CustomFileUtils.forceDelete(automodpackUpdateJar, true);
 
         } catch (Exception e) {
             LOGGER.error("Failed to update myself!");
+            e.printStackTrace();
             return;
         }
 
