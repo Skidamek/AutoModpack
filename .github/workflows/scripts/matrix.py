@@ -32,7 +32,7 @@ def main():
 	matrix_entries = []
 	for subproject in subprojects:
 		mod_brand = subproject.split('-')[-1]
-		assert mod_brand in ['fabric', 'forge']
+		assert mod_brand in ['fabric', 'forge', 'quilt']
 		matrix_entries.append({
 			'subproject': subproject,
 			'mod_brand': mod_brand,
