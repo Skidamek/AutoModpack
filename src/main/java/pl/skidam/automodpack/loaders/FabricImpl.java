@@ -67,7 +67,7 @@ public class FabricImpl {
                 Path[] mods = Files.list(modsPath).toArray(Path[]::new);
                 for (Path mod : mods) {
                     if (mod.getFileName().toString().endsWith(".jar")) {
-                        String modIdFromLoadedJar = getModIdFromLoadedJar(mod, true);
+                        String modIdFromLoadedJar = getModIdFromLoadedJar(mod, false);
                         if (modIdFromLoadedJar != null && modIdFromLoadedJar.equals(modId)) {
                             return mod;
                         }
