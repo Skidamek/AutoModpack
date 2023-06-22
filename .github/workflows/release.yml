@@ -145,7 +145,7 @@ jobs:
           curseforge-token: ${{ secrets.CF_API_TOKEN }}
 
           github-tag: ${{ steps.release_info.outputs.tag_name }}
-          github-token: ${{ secrets.GH_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
           files-primary: ${{ steps.file_info.outputs.path }}
           files-secondary: ''
