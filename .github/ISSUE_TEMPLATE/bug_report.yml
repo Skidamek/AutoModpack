@@ -49,9 +49,9 @@ body:
   - type: input
     id: minecraft-version
     attributes:
-      label: Minecraft version
-      description: The Minecraft version(s) where this bug occurs in.
-      placeholder: 1.15.2
+      label: Minecraft version & Mod Loader
+      description: The Minecraft version(s) and mod loader where this bug occurs in.
+      placeholder: 1.18.2 fabric
     validations:
       required: true
   - type: input
