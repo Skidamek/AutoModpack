@@ -104,13 +104,8 @@ public class Modpack {
 
     public static class Content {
         public static Jsons.ModpackContentFields modpackContent;
-        public static Jsons.ModpackContentFields previousModpackContent;
 
         public static boolean create(Path modpackDir, Path modpackContentFile) {
-
-            if (Files.exists(modpackContentFile)) {
-                previousModpackContent = ConfigTools.loadModpackContent(modpackContentFile);
-            }
 
             List<Jsons.ModpackContentFields.ModpackContentItems> list = Collections.synchronizedList(new ArrayList<>());
 
@@ -281,44 +276,29 @@ public class Modpack {
                 String sha1 = CustomFileUtils.getHash(file, "SHA-1");
                 String murmur = null;
 
-                boolean newFile = true;
-
-                if (previousModpackContent != null && previousModpackContent.list != null) {
-                    for (Jsons.ModpackContentFields.ModpackContentItems item : previousModpackContent.list) {
-                        if (item.file.equals(modpackFile) && item.sha1.equals(sha1)) {
-                            newFile = false;
-                            modId = item.modId;
-                            type = item.type;
-                            version = item.version;
-                            murmur = item.murmur;
-                        }
+                if (file.getFileName().toString().endsWith(".jar")) {
+                    modId = JarUtilities.getModIdFromJar(file, true);
+                    type = modId == null ? "other" : "mod";
+                    if (type.equals("mod")) {
+                        version = JarUtilities.getModVersion(file);
+                        murmur = CustomFileUtils.getHash(file, "murmur");
                     }
                 }
 
-                if (newFile) {
-                    if (file.getFileName().toString().endsWith(".jar")) {
-                        modId = JarUtilities.getModIdFromJar(file, true);
-                        type = modId == null ? "other" : "mod";
-                        if (type.equals("mod")) {
-                            version = JarUtilities.getModVersion(file);
-                            murmur = CustomFileUtils.getHash(file, "murmur");
-                        }
-                    }
-
-                    if (type.equals("other")) {
-                        if (modpackFile.startsWith("/config/")) {
-                            type = "config";
-                        } else if (modpackFile.startsWith("/shaderpacks/")) {
-                            type = "shaderpack";
-                            murmur = CustomFileUtils.getHash(file, "murmur");
-                        } else if (modpackFile.startsWith("/resourcepacks/")) {
-                            type = "resourcepack";
-                            murmur = CustomFileUtils.getHash(file, "murmur");
-                        } else if (modpackFile.endsWith("/options.txt")) {
-                            type = "mc_options";
-                        }
+                if (type.equals("other")) {
+                    if (modpackFile.startsWith("/config/")) {
+                        type = "config";
+                    } else if (modpackFile.startsWith("/shaderpacks/")) {
+                        type = "shaderpack";
+                        murmur = CustomFileUtils.getHash(file, "murmur");
+                    } else if (modpackFile.startsWith("/resourcepacks/")) {
+                        type = "resourcepack";
+                        murmur = CustomFileUtils.getHash(file, "murmur");
+                    } else if (modpackFile.endsWith("/options.txt")) {
+                        type = "mc_options";
                     }
                 }
+
 
                 for (String editableFile : serverConfig.allowEditsInFiles) {
                     if (modpackFile.equals(editableFile)) {
