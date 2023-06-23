@@ -28,6 +28,7 @@ import pl.skidam.automodpack.utils.Url;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.ByteBuffer;
@@ -319,8 +320,8 @@ public class HttpServer {
                 return;
             }
 
-            try (FileChannel fileChannel = FileChannel.open(file, StandardOpenOption.READ)) {
-                long fileSize = fileChannel.size();
+            try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
+                long fileSize = raf.length();
                 String response = String.format(OK_RESPONSE, fileSize);
 
                 if (file.getFileName().endsWith(".json")) {
@@ -330,12 +331,13 @@ public class HttpServer {
                 client.write(ByteBuffer.wrap(response.getBytes(StandardCharsets.UTF_8)));
 
                 ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE);
-                while (fileChannel.read(buffer) > 0 || buffer.position() > 0) {
-                    buffer.flip();
-                    while (buffer.hasRemaining() && client.isOpen() && fileChannel.isOpen()) {
+                int bytesRead;
+                while ((bytesRead = raf.read(buffer.array())) > 0) {
+                    buffer.limit(bytesRead);
+                    while (buffer.hasRemaining() && client.isOpen()) {
                         client.write(buffer);
                     }
-                    buffer.compact();
+                    buffer.clear();
                 }
             } catch (IOException e) {
                 e.printStackTrace();
