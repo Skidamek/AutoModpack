@@ -66,17 +66,17 @@ and you are good to go!
 
 Doesn't work? Check `hostIp` in `/automodpack/automodpack-server.json` and make sure it's correct. (same as your server ip/domain)
 
-**Want to add more content to your modpack?**
+#### Do you want to add more content to your modpack?
 - By default, the modpack will automatically synchronize all mods, configs from default server directories to the modpack. (Check `syncedFiles` list in `/automodpack/automodpack-server.json`)
 - To add more mods to your server, place them in the `/automodpack/host-modpack/mods/` directory.
   And so analogically to add shaderpacks, put them in `/automodpack/host-modpack/shaderpacks/`. You can create any subdirectories you need within `/automodpack/host-modpack/` folder.
 - Or add whatever file/folder from server main directory to the `syncedFiles` list in `/automodpack/automodpack-server.json`
 
-**Want to delete some mods from modpack?**
+#### Do you want to delete some mods from modpack?
 - Just delete what file you want to delete from directory on your server.
 - Or check and delete whatever file/folder from list `syncedFiles` in `/automodpack/automodpack-server.json`
 
-**Want to exclude some mods from `syncedFiles`?**
+#### Do you want to exclude some mods from `syncedFiles`?
 - Just add them to the `"excludeSyncedFiles` list in `/automodpack/automodpack-server.json`
 
 
