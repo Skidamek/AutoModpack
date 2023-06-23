@@ -77,7 +77,7 @@ Doesn't work? Check `hostIp` in `/automodpack/automodpack-server.json` and make 
 - Or check and delete whatever file/folder from list `syncedFiles` in `/automodpack/automodpack-server.json`
 
 #### Do you want to exclude some mods from `syncedFiles`?
-- Just add them to the `"excludeSyncedFiles` list in `/automodpack/automodpack-server.json`
+- Just add them to the `excludeSyncedFiles` list in `/automodpack/automodpack-server.json`
 
 
 ## Config
