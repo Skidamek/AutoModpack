@@ -66,16 +66,15 @@ public class Preload {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
                 Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
-
-                if (serverModpackContent != null) {
-                    try {
-                        CustomFileUtils.deleteEmptyFiles(Paths.get("./"), false, serverModpackContent.list);
-                    } catch (Exception e) {
-                        LOGGER.error("Failed to delete empty files!", e);
-                    }
-                }
-
                 new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
+            }
+        }
+
+        if (Loader.getEnvironmentType().equals("SERVER") || Loader.getEnvironmentType().equals("CLIENT") && clientConfig.selectedModpack.equals("")) {
+            try {
+                CustomFileUtils.deleteEmptyFiles(Paths.get("./"), false, null);
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
 

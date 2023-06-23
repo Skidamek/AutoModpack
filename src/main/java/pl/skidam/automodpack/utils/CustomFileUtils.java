@@ -148,8 +148,10 @@ public class CustomFileUtils {
     }
 
     private static boolean shouldIgnore(File file, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
-        return ignoreList.stream()
-                .anyMatch(item -> file.getAbsolutePath().replace("\\", "/").endsWith(item.file));
+        if (ignoreList == null) {
+            return false;
+        }
+        return ignoreList.stream().anyMatch(item -> file.getAbsolutePath().replace("\\", "/").endsWith(item.file));
     }
 
     private static boolean isEmptyDirectory(Path directory, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) throws IOException {
