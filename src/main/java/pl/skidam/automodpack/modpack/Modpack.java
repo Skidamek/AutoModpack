@@ -239,7 +239,7 @@ public class Modpack {
 
                     boolean excluded = false;
                     for (String excludeFile : serverConfig.excludeSyncedFiles) {
-                        if (matchesExclusionCriteria(modpackFile, excludeFile)) { // wild cards e.g. *.json or supermod-1.19-*.jar
+                        if (Content.matchesExclusionCriteria(modpackFile, excludeFile)) { // wild cards e.g. *.json or supermod-1.19-*.jar
                             excluded = true;
                             break;
                         }
@@ -281,22 +281,22 @@ public class Modpack {
                 String sha1 = CustomFileUtils.getHash(file, "SHA-1");
                 String murmur = null;
 
-//                boolean newFile = true;
-//
-//                if (previousModpackContent != null && previousModpackContent.list != null) {
-//                    for (Jsons.ModpackContentFields.ModpackContentItems item : previousModpackContent.list) {
-//                        if (item.file.equals(modpackFile) && item.sha1.equals(sha1)) {
-//                            newFile = false;
-//                            modId = item.modId;
-//                            type = item.type;
-//                            version = item.version;
-//                            murmur = item.murmur;
-//                        }
-//                    }
-//                }
-//
-//                if (newFile) {
-                    if (file.getFileName().endsWith(".jar")) {
+                boolean newFile = true;
+
+                if (previousModpackContent != null && previousModpackContent.list != null) {
+                    for (Jsons.ModpackContentFields.ModpackContentItems item : previousModpackContent.list) {
+                        if (item.file.equals(modpackFile) && item.sha1.equals(sha1)) {
+                            newFile = false;
+                            modId = item.modId;
+                            type = item.type;
+                            version = item.version;
+                            murmur = item.murmur;
+                        }
+                    }
+                }
+
+                if (newFile) {
+                    if (file.getFileName().toString().endsWith(".jar")) {
                         modId = JarUtilities.getModIdFromJar(file, true);
                         type = modId == null ? "other" : "mod";
                         if (type.equals("mod")) {
@@ -318,7 +318,7 @@ public class Modpack {
                             type = "mc_options";
                         }
                     }
-//                }
+                }
 
                 for (String editableFile : serverConfig.allowEditsInFiles) {
                     if (modpackFile.equals(editableFile)) {
