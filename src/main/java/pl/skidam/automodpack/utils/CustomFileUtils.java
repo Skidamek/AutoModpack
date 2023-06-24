@@ -31,8 +31,8 @@ import java.nio.file.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Everything in this class should force do the thing without throwing any exceptions.
@@ -121,49 +121,44 @@ public class CustomFileUtils {
     }
 
 
-    public static void deleteEmptyFiles(Path directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) throws IOException {
-        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory)) {
-            for (Path path : directoryStream) {
-                if (shouldIgnore(path.toFile(), ignoreList)) {
-                    continue;
-                }
+    public static void deleteEmptyFiles(Path directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
+        try {
+            Files.list(directory)
+                    .filter(path -> shouldIgnore(path.toFile(), ignoreList))
+                    .forEach(path -> {
+                        if (Files.isDirectory(path) && !path.getFileName().toString().startsWith(".")) {
+                            boolean emptyDir = false;
+                            try {
+                                emptyDir = isEmptyDirectory(path, ignoreList);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
 
-                if (Files.isDirectory(path)) {
-                    String fileName = path.getFileName().toString();
-
-                    if (fileName.startsWith(".")) {
-                        continue;
-                    }
-
-                    if (deleteSubDirsToo && isEmptyDirectory(path, ignoreList)) {
-                        CustomFileUtils.forceDelete(path, false);
-                    } else {
-                        deleteEmptyFiles(path, deleteSubDirsToo, ignoreList);
-                    }
-                } else if (compareFilesByteByByte(path, smallDummyJar)) {
-                    CustomFileUtils.forceDelete(path, true);
-                }
-            }
+                            if (deleteSubDirsToo && emptyDir) {
+                                CustomFileUtils.forceDelete(path, false);
+                            } else {
+                                deleteEmptyFiles(path, deleteSubDirsToo, ignoreList);
+                            }
+                        } else if (compareFilesByteByByte(path, smallDummyJar)) {
+                            CustomFileUtils.forceDelete(path, true);
+                        }
+                    });
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
     private static boolean shouldIgnore(File file, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
         if (ignoreList == null) {
-            return false;
+            return true;
         }
-        return ignoreList.stream().anyMatch(item -> file.getAbsolutePath().replace("\\", "/").endsWith(item.file));
+        return ignoreList.stream().noneMatch(item -> file.getAbsolutePath().replace("\\", "/").endsWith(item.file));
     }
 
     private static boolean isEmptyDirectory(Path directory, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) throws IOException {
-        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory)) {
-            for (Path path : directoryStream) {
-                if (!shouldIgnore(path.toFile(), ignoreList)) {
-                    return false;
-                }
-            }
+        try (Stream<Path> paths = Files.list(directory)) {
+            return paths.anyMatch(path -> shouldIgnore(path.toFile(), ignoreList));
         }
-
-        return true;
     }
 
     // dummy IT ez

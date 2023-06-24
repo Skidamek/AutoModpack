@@ -356,7 +356,7 @@ public class ModpackUpdater {
                         url = modpackContentField.link; // This link just must work, so we don't need to encode it
                     }
 
-                    downloadFutures.add(downloadAsync(url, downloadFile, serverSHA1));
+                    downloadFutures.add(downloadAsync(url, downloadFile.toAbsolutePath().normalize(), serverSHA1));
                 }
 
                 CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).get();
@@ -402,6 +402,102 @@ public class ModpackUpdater {
         } catch (Exception e) {
             ScreenTools.setTo.error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
             e.printStackTrace();
+        }
+    }
+
+
+    private static CompletableFuture<Void> downloadAsync(String url, Path downloadFile, String serverSHA1) {
+        return CompletableFuture.runAsync(() -> downloadFile(url, downloadFile, serverSHA1), DOWNLOAD_EXECUTOR);
+    }
+
+    private static void downloadFile(String url, Path downloadFile, String serverSHA1) {
+        if (!update || !ScreenTools.getScreenString().contains("downloadscreen")) {
+            ScreenTools.setTo.download();
+        }
+
+        update = true;
+        DownloadInfo downloadInfo = new DownloadInfo(downloadFile.getFileName().toString());
+        downloadInfos.add(downloadInfo);
+
+        int maxAttempts = 3;
+        int attempts = 0;
+        boolean success = false;
+        long startTime = System.currentTimeMillis();
+
+        while (attempts < maxAttempts && !success) {
+            attempts++;
+            LOGGER.info("Downloading {}... (attempt {})", downloadFile.getFileName(), attempts);
+            LOGGER.info("URL: {}", url);
+
+            try {
+                Download downloadInstance = new Download();
+                downloadInstance.download(url, downloadFile, downloadInfo);
+
+                String localSHA1 = CustomFileUtils.getHash(downloadFile, "SHA-1");
+
+                long size = downloadInstance.getFileSize();
+
+                if (serverSHA1.equals(localSHA1)) {
+                    success = true;
+                } else if (attempts == maxAttempts && !downloadFile.toString().endsWith(".jar") && Files.size(downloadFile) == size) {
+                    // FIXME: it shouldn't even return wrong hashes if the size is correct...
+                    LOGGER.warn("Hashes of {} do not match, but size is correct so we will assume it is correct lol", downloadFile.getFileName());
+                    success = true;
+                } else {
+                    if (attempts != maxAttempts) {
+                        LOGGER.warn("Hashes do not match, retrying... client: {} server: {}", localSHA1, serverSHA1);
+                    }
+                    CustomFileUtils.forceDelete(downloadFile, false);
+                    totalBytesDownloaded -= downloadInstance.getTotalBytesRead();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        downloadInfos.remove(downloadInfo);
+        if (success) {
+            LOGGER.info("{} downloaded successfully in {}ms", downloadFile.getFileName(), (System.currentTimeMillis() - startTime));
+            changelogList.put(downloadFile.getFileName().toString(), true);
+            alreadyDownloaded++;
+        } else {
+
+            // Download from our server if we can't download from mod platforms
+            List<Jsons.ModpackContentFields.ModpackContentItems> list = CustomFileUtils.byteArrayToArrayList(serverModpackContentByteArray);
+            String serverUrl = list.stream().filter(modpackContentField -> modpackContentField.sha1.equals(serverSHA1)).findFirst().get().link;
+
+            if (!url.equals(serverUrl)) {
+                LOGGER.info("Couldn't download from {}. Downloading {} from {}", url, downloadFile.getFileName(), serverUrl);
+                downloadFile(serverUrl, downloadFile, serverSHA1);
+                return;
+            }
+
+            failedDownloads.put(downloadFile.getFileName().toString(), url);
+            LOGGER.error("Failed to download {} after {} attempts", downloadFile.getFileName(), attempts);
+        }
+    }
+
+    private static CompletableFuture<Void> fetchAsync(Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField) {
+        return CompletableFuture.runAsync(() -> fetchModPlatforms(copyModpackContentField), FETCH_EXECUTOR);
+    }
+
+    private static void fetchModPlatforms(Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField) {
+        String fileType = copyModpackContentField.type;
+
+        // Check if file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
+        if (fileType.equals("mod") || fileType.equals("shaderpack") || fileType.equals("resourcepack")) {
+            String serverSHA1 = copyModpackContentField.sha1;
+            String serverMurmur = copyModpackContentField.murmur;
+
+            if (!ScreenTools.getScreenString().contains("fetchscreen")) {
+                ScreenTools.setTo.fetch();
+            }
+
+            String modPlatformUrl = tryModPlatforms(serverSHA1, serverMurmur);
+            if (modPlatformUrl != null && !modPlatformUrl.isEmpty()) {
+                copyModpackContentField.link = modPlatformUrl;
+                totalFetchedFiles++;
+            }
         }
     }
 
@@ -482,106 +578,9 @@ public class ModpackUpdater {
         // So copy files to modpack dir
         ModpackUtils.copyModpackFilesFromRunDirToModpackDir(modpackDir, modpackContent, editableFiles);
 
-
         ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent, editableFiles);
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
-    }
-
-
-    private static CompletableFuture<Void> downloadAsync(String url, Path downloadFile, String serverSHA1) {
-        return CompletableFuture.runAsync(() -> downloadFile(url, downloadFile, serverSHA1), DOWNLOAD_EXECUTOR);
-    }
-
-    private static void downloadFile(String url, Path downloadFile, String serverSHA1) {
-        if (!update || !ScreenTools.getScreenString().contains("downloadscreen")) {
-            ScreenTools.setTo.download();
-        }
-
-        update = true;
-        DownloadInfo downloadInfo = new DownloadInfo(downloadFile.getFileName().toString());
-        downloadInfos.add(downloadInfo);
-
-        int maxAttempts = 3;
-        int attempts = 0;
-        boolean success = false;
-        long startTime = System.currentTimeMillis();
-
-        while (attempts < maxAttempts && !success) {
-            attempts++;
-            LOGGER.info("Downloading {}... (attempt {})", downloadFile.getFileName(), attempts);
-            LOGGER.info("URL: {}", url);
-
-            try {
-                Download downloadInstance = new Download();
-                downloadInstance.download(url, downloadFile, downloadInfo);
-
-                String localSHA1 = CustomFileUtils.getHash(downloadFile, "SHA-1");
-
-                long size = downloadInstance.getFileSize();
-
-                if (serverSHA1.equals(localSHA1)) {
-                    success = true;
-                } else if (attempts == maxAttempts && !downloadFile.toString().endsWith(".jar") && downloadFile.toFile().length() == size) {
-                    // FIXME: it shouldn't even return wrong hashes if the size is correct...
-                    LOGGER.warn("Hashes of {} do not match, but size is correct so we will assume it is correct lol", downloadFile.getFileName());
-                    success = true;
-                } else {
-                    if (attempts != maxAttempts) {
-                        LOGGER.warn("Hashes do not match, retrying... client: {} server: {}", localSHA1, serverSHA1);
-                    }
-                    CustomFileUtils.forceDelete(downloadFile, false);
-                    totalBytesDownloaded -= downloadInstance.getTotalBytesRead();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        downloadInfos.remove(downloadInfo);
-        if (success) {
-            LOGGER.info("{} downloaded successfully in {}ms", downloadFile.getFileName(), (System.currentTimeMillis() - startTime));
-            changelogList.put(downloadFile.getFileName().toString(), true);
-            alreadyDownloaded++;
-        } else {
-
-            // Download from our server if we can't download from mod platforms
-            List<Jsons.ModpackContentFields.ModpackContentItems> list = CustomFileUtils.byteArrayToArrayList(serverModpackContentByteArray);
-            String serverUrl = list.stream().filter(modpackContentField -> modpackContentField.sha1.equals(serverSHA1)).findFirst().get().link;
-
-            if (!url.equals(serverUrl)) {
-                LOGGER.info("Couldn't download from {}. Downloading {} from {}", url, downloadFile.getFileName(), serverUrl);
-                downloadFile(serverUrl, downloadFile, serverSHA1);
-                return;
-            }
-
-            failedDownloads.put(downloadFile.getFileName().toString(), url);
-            LOGGER.error("Failed to download {} after {} attempts", downloadFile.getFileName(), attempts);
-        }
-    }
-
-    private static CompletableFuture<Void> fetchAsync(Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField) {
-        return CompletableFuture.runAsync(() -> fetchModPlatforms(copyModpackContentField), FETCH_EXECUTOR);
-    }
-
-    private static void fetchModPlatforms(Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField) {
-        String fileType = copyModpackContentField.type;
-
-        // Check if file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
-        if (fileType.equals("mod") || fileType.equals("shaderpack") || fileType.equals("resourcepack")) {
-            String serverSHA1 = copyModpackContentField.sha1;
-            String serverMurmur = copyModpackContentField.murmur;
-
-            if (!ScreenTools.getScreenString().contains("fetchscreen")) {
-                ScreenTools.setTo.fetch();
-            }
-
-            String modPlatformUrl = tryModPlatforms(serverSHA1, serverMurmur);
-            if (modPlatformUrl != null && !modPlatformUrl.isEmpty()) {
-                copyModpackContentField.link = modPlatformUrl;
-                totalFetchedFiles++;
-            }
-        }
     }
 
     private static String tryModPlatforms(String sha512, String murmur) {
