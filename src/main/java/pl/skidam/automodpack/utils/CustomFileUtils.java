@@ -56,6 +56,8 @@ public class CustomFileUtils {
 
     public static void forceDelete(Path file, boolean deleteOnExit) {
 
+//        System.out.println("Deleting: " + file.toAbsolutePath().normalize());
+
         FileUtils.deleteQuietly(file.toFile());
 
         if (Files.exists(file)) {
@@ -127,17 +129,8 @@ public class CustomFileUtils {
                     .filter(path -> shouldIgnore(path.toFile(), ignoreList))
                     .forEach(path -> {
                         if (Files.isDirectory(path) && !path.getFileName().toString().startsWith(".")) {
-                            boolean emptyDir = false;
-                            try {
-                                emptyDir = isEmptyDirectory(path, ignoreList);
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-
-                            if (deleteSubDirsToo && emptyDir) {
-                                CustomFileUtils.forceDelete(path, false);
-                            } else {
-                                deleteEmptyFiles(path, deleteSubDirsToo, ignoreList);
+                            if (deleteSubDirsToo) {
+                                deleteEmptyFiles(path, true, ignoreList);
                             }
                         } else if (compareFilesByteByByte(path, smallDummyJar)) {
                             CustomFileUtils.forceDelete(path, true);
