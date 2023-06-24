@@ -234,7 +234,7 @@ public class Modpack {
 
                     boolean excluded = false;
                     for (String excludeFile : serverConfig.excludeSyncedFiles) {
-                        if (Content.matchesExclusionCriteria(modpackFile, excludeFile)) { // wild cards e.g. *.json or supermod-1.19-*.jar
+                        if (Content.matchesWildCardCriteria(modpackFile, excludeFile)) { // wild cards e.g. *.json or supermod-1.19-*.jar
                             excluded = true;
                             break;
                         }
@@ -301,7 +301,7 @@ public class Modpack {
 
 
                 for (String editableFile : serverConfig.allowEditsInFiles) {
-                    if (modpackFile.equals(editableFile)) {
+                    if (Content.matchesWildCardCriteria(modpackFile, editableFile)) {
                         isEditable = true;
                         LOGGER.info("File {} is editable!", modpackFile);
                         break;
@@ -327,9 +327,9 @@ public class Modpack {
             }
         }
 
-        private static boolean matchesExclusionCriteria(String modpackFile, String excludeFile) {
-            if (excludeFile.contains("*")) { // wild cards magic
-                String[] excludeFileParts = excludeFile.split("\\*");
+        private static boolean matchesWildCardCriteria(String modpackFile, String wildCardString) {
+            if (wildCardString.contains("*")) { // wild cards magic
+                String[] excludeFileParts = wildCardString.split("\\*");
                 int startIndex = 0;
                 for (String excludeFilePart : excludeFileParts) {
                     int currentIndex = modpackFile.indexOf(excludeFilePart, startIndex);
@@ -340,7 +340,7 @@ public class Modpack {
                 }
                 return true;
             } else {
-                return excludeFile.contains(modpackFile);
+                return wildCardString.equals(modpackFile);
             }
         }
     }
