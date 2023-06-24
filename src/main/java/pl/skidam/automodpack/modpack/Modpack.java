@@ -39,7 +39,6 @@ import java.util.concurrent.*;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
 
-
 public class Modpack {
     public static Path hostModpackDir = Paths.get(automodpackDir + File.separator + "host-modpack");
     static Path hostModpackMods = Paths.get(hostModpackDir + File.separator + "mods");
@@ -69,7 +68,6 @@ public class Modpack {
         for (Object mod : modList) {
             String modId = mod.toString().split(" ")[0]; // mod is  "modid (version)" so we remove everything after space to get modid (modid can't have space in it)
             String modEnv = Loader.getModEnvironment(modId).toUpperCase();
-//            LOGGER.warn("Mod {} has environment {}", modId, modEnv);
             if (modEnv == null) continue;
             if (modEnv.equals("SERVER")) {
                 list.removeIf(modpackContentItems -> {
@@ -143,6 +141,19 @@ public class Modpack {
                 if (serverConfig.autoExcludeServerSideMods) {
                     autoExcludeServerMods(list);
                 }
+
+                CREATION_EXECUTOR.shutdown();
+                try {
+                    if (!CREATION_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
+                        CREATION_EXECUTOR.shutdownNow();
+                        if (!CREATION_EXECUTOR.awaitTermination(3, TimeUnit.SECONDS)) {
+                            LOGGER.error("CREATION Executor did not terminate");
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    CREATION_EXECUTOR.shutdownNow();
+                }
+
             } catch (Exception e) {
                 e.printStackTrace();
                 return false;

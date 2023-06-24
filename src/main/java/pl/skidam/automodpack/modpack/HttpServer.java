@@ -116,10 +116,14 @@ public class HttpServer {
 
         HTTPServerExecutor.shutdownNow();
         try {
-            if (!HTTPServerExecutor.awaitTermination(3, TimeUnit.SECONDS)) {
-                LOGGER.warn("Forcing shutdown of HTTPServerExecutor");
+            if (!HTTPServerExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                HTTPServerExecutor.shutdownNow();
+                if (!HTTPServerExecutor.awaitTermination(3, TimeUnit.SECONDS)) {
+                    LOGGER.error("HTTP Executor did not terminate");
+                }
             }
-        } catch (InterruptedException ignored) {
+        } catch (InterruptedException e) {
+            HTTPServerExecutor.shutdownNow();
         }
 
         if (serverSocketChannel.isOpen()) {

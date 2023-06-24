@@ -42,10 +42,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -308,6 +305,18 @@ public class ModpackUpdater {
 
                 CompletableFuture.allOf(fetchFutures.toArray(new CompletableFuture[0])).get();
 
+                FETCH_EXECUTOR.shutdown();
+                try {
+                    if (!FETCH_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
+                        FETCH_EXECUTOR.shutdownNow();
+                        if (!FETCH_EXECUTOR.awaitTermination(3, TimeUnit.SECONDS)) {
+                            LOGGER.error("FETCH Executor did not terminate");
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    FETCH_EXECUTOR.shutdownNow();
+                }
+
                 LOGGER.info("Fetches took {}ms", System.currentTimeMillis() - startTime);
             } else {
                 LOGGER.warn("APIs are down, skipping fetches");
@@ -351,6 +360,8 @@ public class ModpackUpdater {
                 }
 
                 CompletableFuture.allOf(downloadFutures.toArray(new CompletableFuture[0])).get();
+
+                terminateDownloadExecutor();
             }
 
             // Downloads completed
@@ -633,7 +644,8 @@ public class ModpackUpdater {
         try {
             LOGGER.info("Cancelling download for " + downloadFutures.size() + " files...");
             downloadFutures.forEach(future -> future.cancel(true));
-            DOWNLOAD_EXECUTOR.shutdownNow();
+
+            terminateDownloadExecutor();
 
             downloadFutures.clear();
             downloadInfos.clear();
@@ -652,6 +664,20 @@ public class ModpackUpdater {
             }
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private static void terminateDownloadExecutor() {
+        DOWNLOAD_EXECUTOR.shutdown();
+        try {
+            if (!DOWNLOAD_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
+                DOWNLOAD_EXECUTOR.shutdownNow();
+                if (!DOWNLOAD_EXECUTOR.awaitTermination(3, TimeUnit.SECONDS)) {
+                    LOGGER.error("CREATION Executor did not terminate");
+                }
+            }
+        } catch (InterruptedException e) {
+            DOWNLOAD_EXECUTOR.shutdownNow();
         }
     }
 
