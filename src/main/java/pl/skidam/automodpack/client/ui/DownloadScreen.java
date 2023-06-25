@@ -122,7 +122,12 @@ public class DownloadScreen extends VersionedScreen {
 
     private String getETAOfFile(String file) {
         if (getDownloadInfo(file) == null) return "0s";
-        double eta = getDownloadInfo(file).getEta();
+        DownloadInfo downloadInfo = getDownloadInfo(file);
+        if (downloadInfo == null) {
+            return "N/A";
+        }
+
+        double eta = downloadInfo.getEta();
 
         if (eta < 0) return "N/A";
 
