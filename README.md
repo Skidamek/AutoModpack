@@ -46,7 +46,7 @@ This is only intended for personal use. Other developers work very hard on their
 
 ## How to use
 
-First of all download the latest version of the mod from [here](https://modrinth.com/mod/automodpack/versions).
+First of all download the latest version of the mod from [here](https://modrinth.com/mod/automodpack/versions) or use our [modified version of fabric installer](https://github.com/Skidamek/AutoModpack-Installer/releases/tag/Latest) which will install fabric loader and AutoModpack.
 
 Put it into the `/mods/` folder of your minecraft/server installation.
 
