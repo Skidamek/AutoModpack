@@ -488,13 +488,13 @@ public class ModpackUpdater {
         if (fileType.equals("mod") || fileType.equals("shaderpack") || fileType.equals("resourcepack")) {
             String serverSHA1 = copyModpackContentField.sha1;
             String serverMurmur = copyModpackContentField.murmur;
-            String serverFileName = Paths.get(copyModpackContentField.file).getFileName().toString();
+            long fileSize = Long.parseLong(copyModpackContentField.size);
 
             if (!ScreenTools.getScreenString().contains("fetchscreen")) {
                 ScreenTools.setTo.fetch();
             }
 
-            String modPlatformUrl = tryModPlatforms(serverSHA1, serverMurmur, serverFileName);
+            String modPlatformUrl = tryModPlatforms(serverSHA1, serverMurmur, fileSize);
             if (modPlatformUrl != null && !modPlatformUrl.isEmpty()) {
                 copyModpackContentField.link = modPlatformUrl;
                 totalFetchedFiles++;
@@ -584,7 +584,7 @@ public class ModpackUpdater {
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
     }
 
-    private static String tryModPlatforms(String sha512, String murmur, String filename) {
+    private static String tryModPlatforms(String sha512, String murmur, long fileSize) {
 
         if (modrinthAPI) {
             ModrinthAPI modrinthFileInfo = ModrinthAPI.getModInfoFromSHA512(sha512);
@@ -595,7 +595,7 @@ public class ModpackUpdater {
         }
 
         if (curseforgeAPI) {
-            CurseForgeAPI curseforgeFileInfo = CurseForgeAPI.getModInfoFromMurmur(murmur, filename);
+            CurseForgeAPI curseforgeFileInfo = CurseForgeAPI.getModInfoFromMurmur(murmur, fileSize);
             if (curseforgeFileInfo != null) {
                 LOGGER.info("Found {} on CurseForge downloading from there", curseforgeFileInfo.fileName);
                 return curseforgeFileInfo.downloadUrl;

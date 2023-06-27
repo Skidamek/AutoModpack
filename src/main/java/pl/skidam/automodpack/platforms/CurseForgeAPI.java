@@ -47,7 +47,7 @@ public class CurseForgeAPI {
         this.murmurHash = murmurHash;
     }
 
-    public static CurseForgeAPI getModInfoFromMurmur(String murmur, String serverFileName) {
+    public static CurseForgeAPI getModInfoFromMurmur(String murmur, long correctFileSize) {
         try {
             JsonObject JSONObject = Json.fromUrlCurseForge(murmur);
 
@@ -76,7 +76,7 @@ public class CurseForgeAPI {
             long fileSize = fileObject.get("fileLength").getAsLong();
             String murmurHash = fileObject.get("fileFingerprint").getAsString();
 
-            if (!serverFileName.equals(fileName)) {
+            if (fileSize != correctFileSize) {
                 return null;
             }
 
