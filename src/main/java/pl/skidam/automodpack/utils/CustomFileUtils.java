@@ -25,7 +25,6 @@ import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.config.Jsons;
 
 import java.io.*;
-import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
@@ -35,7 +34,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 /**
- * Everything in this class should force do the thing without throwing any exceptions.
+ * Everything in this class should force to do the thing without throwing exceptions.
  */
 
 public class CustomFileUtils {
@@ -82,19 +81,25 @@ public class CustomFileUtils {
     }
 
     public static void copyFile(Path source, Path destination) throws IOException {
+        if (!Files.exists(source)) {
+            throw new FileNotFoundException("Source file does not exist: " + source);
+        }
+
         if (!Files.exists(destination)) {
             if (!Files.exists(destination.getParent())) {
                 Files.createDirectories(destination.getParent());
             }
             Files.createFile(destination);
         }
-        try (FileInputStream inputStream = new FileInputStream(source.toFile());
-             FileOutputStream outputStream = new FileOutputStream(destination.toFile())) {
 
-             FileChannel sourceChannel = inputStream.getChannel();
-             FileChannel destinationChannel = outputStream.getChannel();
+        try (RandomAccessFile sourceFile = new RandomAccessFile(source.toFile(), "r");
+             RandomAccessFile destinationFile = new RandomAccessFile(destination.toFile(), "rw")) {
 
-            destinationChannel.transferFrom(sourceChannel, 0, sourceChannel.size());
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = sourceFile.read(buffer)) != -1) {
+                destinationFile.write(buffer, 0, bytesRead);
+            }
         }
     }
 
@@ -156,13 +161,13 @@ public class CustomFileUtils {
 
     // dummy IT ez
     public static void dummyIT(Path file) {
-        try (FileOutputStream fos = new FileOutputStream(file.toFile())) {
-            fos.write(smallDummyJar);
-            fos.flush();
+        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "rw")) {
+            raf.write(smallDummyJar);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
 
     public static String getHashFromStringOfHashes(String hashes) {
         try {
@@ -190,10 +195,10 @@ public class CustomFileUtils {
         }
 
         MessageDigest digest = MessageDigest.getInstance(algorithm);
-        try (InputStream fis = Files.newInputStream(file)) {
+        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
             byte[] buffer = new byte[8192];
             int bytesRead;
-            while ((bytesRead = fis.read(buffer)) != -1) {
+            while ((bytesRead = raf.read(buffer)) != -1) {
                 digest.update(buffer, 0, bytesRead);
             }
         }
@@ -230,11 +235,11 @@ public class CustomFileUtils {
         char b;
 
         // Read file in 8128-byte chunks
-        try (FileInputStream inputStream = new FileInputStream(file.toFile())) {
+        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
             byte[] buffer = new byte[8128];
             int bytesRead;
 
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
+            while ((bytesRead = raf.read(buffer)) != -1) {
                 for (int i = 0; i < bytesRead; i++) {
                     b = (char) buffer[i];
 
@@ -249,11 +254,11 @@ public class CustomFileUtils {
 
         long h = (seed ^ length);
 
-        try (FileInputStream inputStream = new FileInputStream(file.toFile())) {
+        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
             byte[] buffer = new byte[8128];
             int bytesRead;
 
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
+            while ((bytesRead = raf.read(buffer)) != -1) {
                 for (int i = 0; i < bytesRead; i++) {
                     b = (char) buffer[i];
 
@@ -315,7 +320,6 @@ public class CustomFileUtils {
 
         return String.valueOf(h);
     }
-
 
 
     public static boolean compareFileHashes(Path file1, Path file2, String algorithm) throws IOException, NoSuchAlgorithmException {
