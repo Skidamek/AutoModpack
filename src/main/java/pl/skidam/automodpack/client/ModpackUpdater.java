@@ -484,16 +484,17 @@ public class ModpackUpdater {
     private static void fetchModPlatforms(Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField) {
         String fileType = copyModpackContentField.type;
 
-        // Check if file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
+        // Check if the file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
         if (fileType.equals("mod") || fileType.equals("shaderpack") || fileType.equals("resourcepack")) {
             String serverSHA1 = copyModpackContentField.sha1;
             String serverMurmur = copyModpackContentField.murmur;
+            String serverFileName = Paths.get(copyModpackContentField.file).getFileName().toString();
 
             if (!ScreenTools.getScreenString().contains("fetchscreen")) {
                 ScreenTools.setTo.fetch();
             }
 
-            String modPlatformUrl = tryModPlatforms(serverSHA1, serverMurmur);
+            String modPlatformUrl = tryModPlatforms(serverSHA1, serverMurmur, serverFileName);
             if (modPlatformUrl != null && !modPlatformUrl.isEmpty()) {
                 copyModpackContentField.link = modPlatformUrl;
                 totalFetchedFiles++;
@@ -516,7 +517,7 @@ public class ModpackUpdater {
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
-        // make list of editable files if they do not exist in changelog
+        // make a list of editable files if they do not exist in changelog
         List<String> editableFiles = new ArrayList<>();
         for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : modpackContent.list) {
 
@@ -573,7 +574,7 @@ public class ModpackUpdater {
             e.printStackTrace();
         }
 
-        // There is possibility that some files are in running directory, but not in modpack dir
+        // There is a possibility that some files are in running directory, but not in modpack dir
         // Because they were already downloaded before
         // So copy files to modpack dir
         ModpackUtils.copyModpackFilesFromRunDirToModpackDir(modpackDir, modpackContent, editableFiles);
@@ -583,7 +584,7 @@ public class ModpackUpdater {
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
     }
 
-    private static String tryModPlatforms(String sha512, String murmur) {
+    private static String tryModPlatforms(String sha512, String murmur, String filename) {
 
         if (modrinthAPI) {
             ModrinthAPI modrinthFileInfo = ModrinthAPI.getModInfoFromSHA512(sha512);
@@ -594,7 +595,7 @@ public class ModpackUpdater {
         }
 
         if (curseforgeAPI) {
-            CurseForgeAPI curseforgeFileInfo = CurseForgeAPI.getModInfoFromMurmur(murmur);
+            CurseForgeAPI curseforgeFileInfo = CurseForgeAPI.getModInfoFromMurmur(murmur, filename);
             if (curseforgeFileInfo != null) {
                 LOGGER.info("Found {} on CurseForge downloading from there", curseforgeFileInfo.fileName);
                 return curseforgeFileInfo.downloadUrl;
