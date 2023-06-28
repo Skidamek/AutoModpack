@@ -87,9 +87,9 @@ public class ModpackUtils {
     }
 
     public static void copyModpackFilesFromModpackDirToRunDir(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
-        List<Jsons.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
+        List<Jsons.ModpackContentFields.ModpackContentItem> contents = serverModpackContent.list;
 
-        for (Jsons.ModpackContentFields.ModpackContentItems contentItem : contents) {
+        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : contents) {
             String fileName = contentItem.file;
 
             if (ignoreFiles.contains(fileName)) {
@@ -113,9 +113,9 @@ public class ModpackUtils {
 
 
     public static void copyModpackFilesFromRunDirToModpackDir(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws Exception {
-        List<Jsons.ModpackContentFields.ModpackContentItems> contents = serverModpackContent.list;
+        List<Jsons.ModpackContentFields.ModpackContentItem> contents = serverModpackContent.list;
 
-        for (Jsons.ModpackContentFields.ModpackContentItems contentItem : contents) {
+        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : contents) {
 
             if (ignoreFiles.contains(contentItem.file)) {
                 continue;
@@ -174,7 +174,7 @@ public class ModpackUtils {
                 return null;
             }
             // check if modpackContent is valid/isn't malicious
-            for (Jsons.ModpackContentFields.ModpackContentItems modpackContentItem : serverModpackContent.list) {
+            for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : serverModpackContent.list) {
                 String file = modpackContentItem.file.replace("\\", "/");
                 String url = modpackContentItem.link.replace("\\", "/");
                 if (file.contains("/../") || url.contains("/../")) {

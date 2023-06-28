@@ -22,6 +22,7 @@ package pl.skidam.automodpack.utils;
 
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
+import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.config.Jsons;
 
 import java.io.*;
@@ -31,7 +32,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
 
 /**
  * Everything in this class should force to do the thing without throwing exceptions.
@@ -112,11 +112,18 @@ public class CustomFileUtils {
 
             try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
                  InputStream referenceInputStream = new ByteArrayInputStream(referenceBytes)) {
-                int fileByte, referenceByte;
-                while ((fileByte = raf.read()) != -1) {
-                    referenceByte = referenceInputStream.read();
-                    if (fileByte != referenceByte) {
-                        return false;
+
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+
+                while ((bytesRead = raf.read(buffer)) != -1) {
+                    for (int i = 0; i < bytesRead; i++) {
+                        int fileByte = buffer[i];
+                        int referenceByte = referenceInputStream.read();
+
+                        if (fileByte != referenceByte) {
+                            return false;
+                        }
                     }
                 }
             }
@@ -124,17 +131,22 @@ public class CustomFileUtils {
             e.printStackTrace();
             return false;
         }
+
         return true;
     }
 
 
-    public static void deleteEmptyFiles(Path directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
+    public static void deleteEmptyFiles(Path directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
         try {
             Files.list(directory)
                     .filter(path -> shouldIgnore(path.toFile(), ignoreList))
                     .forEach(path -> {
                         if (Files.isDirectory(path) && !path.getFileName().toString().startsWith(".")) {
-                            if (deleteSubDirsToo) {
+
+                            if (path.toFile().list() == null || path.toFile().list().length == 0) {
+                                CustomFileUtils.forceDelete(path, false);
+
+                            } else if (deleteSubDirsToo) {
                                 deleteEmptyFiles(path, true, ignoreList);
                             }
                         } else if (compareFilesByteByByte(path, smallDummyJar)) {
@@ -146,17 +158,11 @@ public class CustomFileUtils {
         }
     }
 
-    private static boolean shouldIgnore(File file, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) {
+    private static boolean shouldIgnore(File file, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
         if (ignoreList == null) {
             return true;
         }
         return ignoreList.stream().noneMatch(item -> file.getAbsolutePath().replace("\\", "/").endsWith(item.file));
-    }
-
-    private static boolean isEmptyDirectory(Path directory, List<Jsons.ModpackContentFields.ModpackContentItems> ignoreList) throws IOException {
-        try (Stream<Path> paths = Files.list(directory)) {
-            return paths.anyMatch(path -> shouldIgnore(path.toFile(), ignoreList));
-        }
     }
 
     // dummy IT ez
@@ -167,7 +173,6 @@ public class CustomFileUtils {
             e.printStackTrace();
         }
     }
-
 
     public static String getHashFromStringOfHashes(String hashes) {
         try {

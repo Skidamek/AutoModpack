@@ -239,16 +239,16 @@ public class ModpackUpdater {
             if (quest) {
                 String modsPathString = modsPath.toString().substring(1) + "/";
                 LOGGER.info("Quest mode is enabled, changing /mods/ path to {}", modsPathString);
-                for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
+                for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : serverModpackContent.list) {
                     if (modpackContentFile.toString().startsWith("/mods/")) {
                         modpackContentField.file = modpackContentField.file.replaceFirst("/mods/", modsPathString);
                     }
                 }
             }
 
-            Iterator<Jsons.ModpackContentFields.ModpackContentItems> iterator = serverModpackContent.list.iterator();
+            Iterator<Jsons.ModpackContentFields.ModpackContentItem> iterator = serverModpackContent.list.iterator();
             while (iterator.hasNext()) {
-                Jsons.ModpackContentFields.ModpackContentItems modpackContentField = iterator.next();
+                Jsons.ModpackContentFields.ModpackContentItem modpackContentField = iterator.next();
                 String fileName = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
@@ -268,12 +268,13 @@ public class ModpackUpdater {
                 } else if (modpackContentField.editable) {
                     LOGGER.info("Skipping editable file: " + fileName);
                     iterator.remove();
-                } else if (file.toFile().isFile() && !modpackContentField.type.equals("mod")) {
-                    if (file.toFile().length() == Long.parseLong(modpackContentField.size)) {
-                        LOGGER.info("Skipping* already downloaded file: " + fileName);
-                        iterator.remove();
-                    }
                 }
+//                else if (file.toFile().isFile() && !modpackContentField.type.equals("mod")) {
+//                    if (file.toFile().length() == Long.parseLong(modpackContentField.size)) {
+//                        LOGGER.info("Skipping* already downloaded file: " + fileName);
+//                        iterator.remove();
+//                    }
+//                }
             }
 
             long startTime = System.currentTimeMillis();
@@ -291,7 +292,7 @@ public class ModpackUpdater {
 
                 totalFetchedFiles = 0;
 
-                for (Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField : serverModpackContent.list) {
+                for (Jsons.ModpackContentFields.ModpackContentItem copyModpackContentField : serverModpackContent.list) {
                     while (fetchFutures.size() >= MAX_FETCHES) { // Async Setting - max `some` fetches at the same time
                         fetchFutures = fetchFutures.stream()
                                 .filter(future -> !future.isDone())
@@ -338,7 +339,7 @@ public class ModpackUpdater {
                         threadFactoryDownloads
                 );
 
-                for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : serverModpackContent.list) {
+                for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : serverModpackContent.list) {
                     while (downloadFutures.size() >= MAX_DOWNLOADS) { // Async Setting - max `some` download at the same time
                         downloadFutures = downloadFutures.stream()
                                 .filter(future -> !future.isDone())
@@ -435,13 +436,7 @@ public class ModpackUpdater {
 
                 String localSHA1 = CustomFileUtils.getHash(downloadFile, "SHA-1");
 
-                long size = downloadInstance.getFileSize();
-
                 if (serverSHA1.equals(localSHA1)) {
-                    success = true;
-                } else if (attempts == maxAttempts && !downloadFile.toString().endsWith(".jar") && Files.size(downloadFile) == size) {
-                    // FIXME: it shouldn't even return wrong hashes if the size is correct...
-                    LOGGER.warn("Hashes of {} do not match, but size is correct so we will assume it is correct lol", downloadFile.getFileName());
                     success = true;
                 } else {
                     if (attempts != maxAttempts) {
@@ -463,7 +458,7 @@ public class ModpackUpdater {
         } else {
 
             // Download from our server if we can't download from mod platforms
-            List<Jsons.ModpackContentFields.ModpackContentItems> list = CustomFileUtils.byteArrayToArrayList(serverModpackContentByteArray);
+            List<Jsons.ModpackContentFields.ModpackContentItem> list = CustomFileUtils.byteArrayToArrayList(serverModpackContentByteArray);
             String serverUrl = list.stream().filter(modpackContentField -> modpackContentField.sha1.equals(serverSHA1)).findFirst().get().link;
 
             if (!url.equals(serverUrl)) {
@@ -477,11 +472,11 @@ public class ModpackUpdater {
         }
     }
 
-    private static CompletableFuture<Void> fetchAsync(Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField) {
+    private static CompletableFuture<Void> fetchAsync(Jsons.ModpackContentFields.ModpackContentItem copyModpackContentField) {
         return CompletableFuture.runAsync(() -> fetchModPlatforms(copyModpackContentField), FETCH_EXECUTOR);
     }
 
-    private static void fetchModPlatforms(Jsons.ModpackContentFields.ModpackContentItems copyModpackContentField) {
+    private static void fetchModPlatforms(Jsons.ModpackContentFields.ModpackContentItem copyModpackContentField) {
         String fileType = copyModpackContentField.type;
 
         // Check if the file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
@@ -519,7 +514,7 @@ public class ModpackUpdater {
 
         // make a list of editable files if they do not exist in changelog
         List<String> editableFiles = new ArrayList<>();
-        for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : modpackContent.list) {
+        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : modpackContent.list) {
 
             String fileName = Paths.get(modpackContentField.file).getFileName().toString();
 
@@ -542,7 +537,7 @@ public class ModpackUpdater {
         }
 
         List<String> files = new ArrayList<>();
-        for (Jsons.ModpackContentFields.ModpackContentItems modpackContentField : modpackContent.list) {
+        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : modpackContent.list) {
             String fileName = Paths.get(modpackContentField.file).getFileName().toString();
             files.add(fileName);
         }

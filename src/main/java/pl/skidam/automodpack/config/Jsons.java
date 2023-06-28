@@ -61,12 +61,12 @@ public class Jsons {
         public String loader = "";
         public String version = "";
         public String modpackHash = "";
-        public List<ModpackContentItems> list;
-        public ModpackContentFields(String link, List<ModpackContentItems> list) {
-            this.link = link; // Set it on client side only
+        public List<ModpackContentItem> list;
+        public ModpackContentFields(String link, List<ModpackContentItem> list) {
+            this.link = link; // Set it on the client side only
             this.list = list;
         }
-        public static class ModpackContentItems {
+        public static class ModpackContentItem {
             public String file;
             public String link; // if automodpack host (file == link) else (file != link) file is a path, link is a url
             public String size;
@@ -77,7 +77,7 @@ public class Jsons {
             public String sha1;
             public String murmur;
 
-            public ModpackContentItems(String file, String link, String size, String type, boolean editable, String modId, String version, String sha1, String murmur) {
+            public ModpackContentItem(String file, String link, String size, String type, boolean editable, String modId, String version, String sha1, String murmur) {
                 this.file = file;
                 this.link = link;
                 this.size = size;

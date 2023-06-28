@@ -23,6 +23,7 @@ package pl.skidam.automodpack.modpack;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
+import pl.skidam.automodpack.utils.FileChangeChecker;
 import pl.skidam.automodpack.utils.Ip;
 import pl.skidam.automodpack.utils.Url;
 
@@ -37,7 +38,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -51,10 +51,11 @@ import static pl.skidam.automodpack.modpack.Modpack.hostModpackContentFile;
 import static pl.skidam.automodpack.modpack.Modpack.hostModpackDir;
 
 public class HttpServer {
-    private static final int BUFFER_SIZE = 32 * 1024;
-    public static List<String> filesList = new ArrayList<>();
-    public static ExecutorService HTTPServerExecutor;
-    public static Object server = null;
+    private static final int BUFFER_SIZE = 32 * 1024; // 32KB send at once to the client
+    public static List<Path> listOfPaths = new ArrayList<>();
+    private static ExecutorService HTTPServerExecutor;
+    private static Object server = null;
+    public static FileChangeChecker fileChangeChecker;
 
     public static boolean isRunning() {
         if (server == null) return false;
@@ -150,10 +151,32 @@ public class HttpServer {
                 return;
             }
 
-            filesList.clear();
-            for (Jsons.ModpackContentFields.ModpackContentItems item : serverModpackContent.list) {
-                filesList.add(item.file);
+            listOfPaths.clear();
+            for (Jsons.ModpackContentFields.ModpackContentItem item : serverModpackContent.list) {
+                String file = item.file;
+                Path filePath = Paths.get(hostModpackDir + File.separator + file);
+                if (!Files.exists(filePath)) {
+                    filePath = Paths.get("." + file);
+                }
+
+                if (Files.exists(filePath)) {
+                    listOfPaths.add(filePath);
+                } else {
+                    LOGGER.error("File {} doesn't exist!", file);
+                }
             }
+
+
+            if (listOfPaths.size() > 0) {
+                if (fileChangeChecker != null) {
+                    fileChangeChecker = new FileChangeChecker(listOfPaths);
+
+                    if (!fileChangeChecker.isRunning()) {
+                        fileChangeChecker.startChecking();
+                    }
+                }
+            }
+
 
             ThreadFactory threadFactory = new ThreadFactoryBuilder()
                     .setNameFormat("AutoModpackHost-%d")
@@ -254,15 +277,13 @@ public class HttpServer {
                     } else if (requestUrl.contains("..")) {
                         sendError(client, 403);
                         return;
-                    } else if (filesList.contains(requestUrl)) {
+
+                    } else if (listOfPaths.contains(Paths.get(hostModpackDir + File.separator + requestUrl))) {
                         file = Paths.get(hostModpackDir + File.separator + requestUrl);
-                        if (!Files.exists(file)) {
-                            file = Paths.get("./" + requestUrl);
-                            if (!Files.exists(file)) {
-                                sendError(client, 404);
-                                return;
-                            }
-                        }
+
+                    } else if (listOfPaths.contains(Paths.get("./" + requestUrl))) {
+                        file = Paths.get("./" + requestUrl);
+
                     } else {
                         sendError(client, 404);
                         return;

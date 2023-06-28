@@ -29,8 +29,8 @@ import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.modpack.HttpServer;
 
 @Mixin(MinecraftServer.class)
-public abstract class MinecraftServerMixin
-{
+public abstract class MinecraftServerMixin {
+
 	//#if MC >= 11904
 	//$$ @Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;createMetadata()Lnet/minecraft/server/ServerMetadata;", ordinal = 0), method = "runServer")
 	//#else
@@ -48,6 +48,10 @@ public abstract class MinecraftServerMixin
 	private void beforeShutdownServer(CallbackInfo info) {
 		if (!Loader.getEnvironmentType().equals("SERVER")) {
 			return;
+		}
+
+		if (HttpServer.fileChangeChecker != null) {
+			HttpServer.fileChangeChecker.stopChecking();
 		}
 
 		HttpServer.stop();

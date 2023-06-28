@@ -38,7 +38,7 @@ import static pl.skidam.automodpack.GlobalVariables.*;
 
 public class ModpackContentTools {
     public static String getFileType(String file, Jsons.ModpackContentFields list) {
-        for (Jsons.ModpackContentFields.ModpackContentItems item : list.list) {
+        for (Jsons.ModpackContentFields.ModpackContentItem item : list.list) {
             if (item.file.contains(file)) { // compare file absolute path if it contains item.file
                 return item.type;
             }
@@ -121,7 +121,7 @@ public class ModpackContentTools {
 
     public static String getStringOfAllHashes(Jsons.ModpackContentFields modpackContent) {
         StringBuilder sb = new StringBuilder();
-        for (Jsons.ModpackContentFields.ModpackContentItems item : modpackContent.list) {
+        for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContent.list) {
             sb.append(item.sha1).append("\n");
         }
         return sb.toString();
