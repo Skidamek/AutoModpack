@@ -22,7 +22,6 @@ package pl.skidam.automodpack.utils;
 
 import org.apache.commons.io.FileDeleteStrategy;
 import org.apache.commons.io.FileUtils;
-import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.config.Jsons;
 
 import java.io.*;

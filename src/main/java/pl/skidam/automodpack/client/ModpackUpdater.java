@@ -249,32 +249,28 @@ public class ModpackUpdater {
             Iterator<Jsons.ModpackContentFields.ModpackContentItem> iterator = serverModpackContent.list.iterator();
             while (iterator.hasNext()) {
                 Jsons.ModpackContentFields.ModpackContentItem modpackContentField = iterator.next();
-                String fileName = modpackContentField.file;
+                String file = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
-                Path file = Paths.get(modpackDir + File.separator + fileName);
+                Path path = Paths.get(modpackDir + File.separator + file);
 
-                if (!Files.exists(file)) {
-                    file = Paths.get("./" + fileName);
+                if (Files.exists(path) && modpackContentField.editable) {
+                    LOGGER.info("Skipping editable file: " + file);
+                    iterator.remove();
                 }
 
-                if (!Files.exists(file)) {
+                if (!Files.exists(path)) {
+                    path = Paths.get("./" + file);
+                }
+
+                if (!Files.exists(path)) {
                     continue;
                 }
 
-                if (serverSHA1.equals(CustomFileUtils.getHash(file, "SHA-1"))) {
-                    LOGGER.info("Skipping already downloaded file: " + fileName);
-                    iterator.remove();
-                } else if (modpackContentField.editable) {
-                    LOGGER.info("Skipping editable file: " + fileName);
+                if (serverSHA1.equals(CustomFileUtils.getHash(path, "SHA-1"))) {
+                    LOGGER.info("Skipping already downloaded file: " + file);
                     iterator.remove();
                 }
-//                else if (file.toFile().isFile() && !modpackContentField.type.equals("mod")) {
-//                    if (file.toFile().length() == Long.parseLong(modpackContentField.size)) {
-//                        LOGGER.info("Skipping* already downloaded file: " + fileName);
-//                        iterator.remove();
-//                    }
-//                }
             }
 
             long startTime = System.currentTimeMillis();

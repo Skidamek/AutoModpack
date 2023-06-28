@@ -168,12 +168,12 @@ public class HttpServer {
 
 
             if (listOfPaths.size() > 0) {
-                if (fileChangeChecker != null) {
+                if (fileChangeChecker == null) {
                     fileChangeChecker = new FileChangeChecker(listOfPaths);
+                }
 
-                    if (!fileChangeChecker.isRunning()) {
-                        fileChangeChecker.startChecking();
-                    }
+                if (!fileChangeChecker.isRunning()) {
+                    fileChangeChecker.startChecking();
                 }
             }
 
