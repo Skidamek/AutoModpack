@@ -70,9 +70,9 @@ public class Preload {
             }
         }
 
-        if (Loader.getEnvironmentType().equals("SERVER") || Loader.getEnvironmentType().equals("CLIENT") && clientConfig.selectedModpack.equals("")) {
+        if (Loader.getEnvironmentType().equals("SERVER") || (Loader.getEnvironmentType().equals("CLIENT") && clientConfig.selectedModpack.equals(""))) {
             try {
-                CustomFileUtils.deleteEmptyFiles(Paths.get("./"), false, null);
+                CustomFileUtils.deleteEmptyFiles(Paths.get("./"), true, null);
             } catch (Exception e) {
                 e.printStackTrace();
             }
