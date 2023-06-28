@@ -247,6 +247,7 @@ public class ModpackUpdater {
             }
 
             Iterator<Jsons.ModpackContentFields.ModpackContentItem> iterator = serverModpackContent.list.iterator();
+
             while (iterator.hasNext()) {
                 Jsons.ModpackContentFields.ModpackContentItem modpackContentField = iterator.next();
                 String file = modpackContentField.file;
@@ -257,6 +258,7 @@ public class ModpackUpdater {
                 if (Files.exists(path) && modpackContentField.editable) {
                     LOGGER.info("Skipping editable file: " + file);
                     iterator.remove();
+                    continue;
                 }
 
                 if (!Files.exists(path)) {

@@ -20,6 +20,9 @@
 
 package pl.skidam.automodpack.utils;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import pl.skidam.automodpack.GlobalVariables;
+import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.modpack.Modpack;
 
 import java.io.IOException;
@@ -31,7 +34,10 @@ import java.util.concurrent.*;
 import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 public class FileChangeChecker {
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private final ThreadFactory threadFactoryFileChecker = new ThreadFactoryBuilder()
+            .setNameFormat("AutoModpackFileChecker")
+            .build();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1, threadFactoryFileChecker);
     private final Map<Path, FileTime> fileTimes = new HashMap<>();
     private final List<Path> paths;
     private boolean changed = false;
@@ -52,20 +58,25 @@ public class FileChangeChecker {
     public void startChecking() {
         CompletableFuture.runAsync(() -> {
             try {
-                // Schedule a task to run every few seconds
-                scheduler.scheduleAtFixedRate(() -> {
-                    changed = false;
-                    try {
-                        checkFiles(paths);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
+                if (!scheduler.isShutdown()) {
+                    // Schedule a task to run every few seconds
+                    scheduler.scheduleAtFixedRate(() -> {
+                        changed = false;
+                        try {
+                            checkFiles(paths);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
 
-                    if (changed) {
-                        Modpack.Content.saveModpackContent();
-                    }
+                        if (changed) {
+                            Modpack.Content.saveModpackContent();
+                        }
 
-                }, 0, 1, TimeUnit.SECONDS);
+                    }, 0, 1, TimeUnit.SECONDS);
+                } else {
+                    HttpServer.fileChangeChecker = new FileChangeChecker(paths);
+                    HttpServer.fileChangeChecker.startChecking();
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -98,9 +109,17 @@ public class FileChangeChecker {
 
             if (!newTime.equals(oldTime)) {
                 changed = true;
-//                System.out.println("File " + path + " has changed");
                 fileTimes.put(path, newTime);
+
+                if (GlobalVariables.serverFullyStarted) {
+                    LOGGER.info("File changed: {} ", path.getFileName());
+                }
+
                 Modpack.Content.replaceOneItem(path.getParent(), path, Modpack.Content.list);
+
+                if (GlobalVariables.serverFullyStarted) {
+                    LOGGER.info("Re-generated modpack content for: {}", path.getFileName());
+                }
             }
         }
     }

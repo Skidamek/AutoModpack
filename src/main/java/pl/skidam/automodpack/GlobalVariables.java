@@ -54,4 +54,5 @@ public class GlobalVariables {
     public static Jsons.ServerConfigFields serverConfig;
     public static Jsons.ClientConfigFields clientConfig;
     public static boolean quest;
+    public static boolean serverFullyStarted = false;
 }

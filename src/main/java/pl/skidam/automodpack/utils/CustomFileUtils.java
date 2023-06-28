@@ -54,8 +54,6 @@ public class CustomFileUtils {
 
     public static void forceDelete(Path file, boolean deleteOnExit) {
 
-//        System.out.println("Deleting: " + file.toAbsolutePath().normalize());
-
         FileUtils.deleteQuietly(file.toFile());
 
         if (Files.exists(file)) {
@@ -166,10 +164,15 @@ public class CustomFileUtils {
 
     // dummy IT ez
     public static void dummyIT(Path file) {
-        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "rw")) {
-            raf.write(smallDummyJar);
+        try (FileOutputStream fos = new FileOutputStream(file.toFile())) {
+            fos.write(smallDummyJar);
+            fos.flush();
         } catch (IOException e) {
-            e.printStackTrace();
+            try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "rw")) {
+                raf.write(smallDummyJar);
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
         }
     }
 

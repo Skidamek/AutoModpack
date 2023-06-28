@@ -170,16 +170,15 @@ public class Modpack {
 
             HttpServer.listOfPaths.clear();
             for (Jsons.ModpackContentFields.ModpackContentItem item : list) {
-                String file = item.file;
-                Path filePath = Paths.get(hostModpackDir + File.separator + file);
+                Path filePath = Paths.get(hostModpackDir + File.separator + item.file);
                 if (!Files.exists(filePath)) {
-                    filePath = Paths.get("." + file);
+                    filePath = Paths.get("." + item.file);
                 }
 
                 if (Files.exists(filePath)) {
                     HttpServer.listOfPaths.add(filePath);
                 } else {
-                    LOGGER.error("File {} doesn't exist!", file);
+                    LOGGER.error("File {} doesn't exist!", item.file);
                 }
             }
 
@@ -236,9 +235,12 @@ public class Modpack {
 
         public static void replaceOneItem(Path modpackDir, Path file, List<Jsons.ModpackContentFields.ModpackContentItem> list) {
             // go through all items and remove the one that has the same file path
+            String fileString = file.toString().replaceAll("\\\\", "/");
+            if (fileString.charAt(0) == '.') {
+                fileString = fileString.substring(1);
+            }
             for (Jsons.ModpackContentFields.ModpackContentItem item : list) {
-                if (item.file.equals(file.toString())) {
-//                    System.out.println("Removing " + item.file + " from list");
+                if (item.file.equals(fileString)) {
                     list.remove(item);
                     break;
                 }
@@ -248,8 +250,9 @@ public class Modpack {
             try {
                 Jsons.ModpackContentFields.ModpackContentItem content = generateContent(modpackDir, file, list);
                 if (content != null) {
-//                    System.out.println("Adding " + content.file + " to list");
                     list.add(content);
+                } else {
+                    LOGGER.error("Failed to generate content for {}!", fileString);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -257,7 +260,7 @@ public class Modpack {
         }
 
         public static String removeBeforePattern(String input, String pattern) {
-            int index = input.indexOf(pattern);
+            int index = input.indexOf(pattern.replaceAll("\\\\", "/")); // fix for a windows path system
             if (index != -1) {
                 return input.substring(index);
             }
@@ -267,7 +270,8 @@ public class Modpack {
         private static Jsons.ModpackContentFields.ModpackContentItem generateContent(Path modpackDir, Path file, List<Jsons.ModpackContentFields.ModpackContentItem> list) throws Exception {
             modpackDir = modpackDir.normalize();
             if (Files.isDirectory(file)) {
-                if (file.getFileName().startsWith(".")) {
+                if (file.getFileName().toString().startsWith(".")) {
+                    LOGGER.info("Skipping " + file.getFileName() + " because it starts with a dot");
                     return null;
                 }
 
@@ -313,28 +317,28 @@ public class Modpack {
 
                 Path actualFile = Paths.get(modpackFile);
                 if (actualFile.toString().startsWith(".")) {
-                    LOGGER.warn("Skipping file {}", modpackFile);
+                    LOGGER.info("Skipping file {}", modpackFile);
                     return null;
                 }
 
                 if (size.equals("0")) {
-                    LOGGER.warn("File {} is empty! Skipping...", modpackFile);
+                    LOGGER.info("File {} is empty! Skipping...", modpackFile);
                     return null;
                 }
 
                 if (!modpackDir.equals(hostModpackDir)) {
                     if (modpackFile.endsWith(".tmp")) {
-                        LOGGER.warn("File {} is temporary! Skipping...", modpackFile);
+                        LOGGER.info("File {} is temporary! Skipping...", modpackFile);
                         return null;
                     }
 
                     if (modpackFile.endsWith(".disabled")) {
-                        LOGGER.warn("File {} is disabled! Skipping...", modpackFile);
+                        LOGGER.info("File {} is disabled! Skipping...", modpackFile);
                         return null;
                     }
 
                     if (modpackFile.endsWith(".bak")) {
-                        LOGGER.warn("File {} is backup file, unnecessary on client! Skipping...", modpackFile);
+                        LOGGER.info("File {} is backup file, unnecessary on client! Skipping...", modpackFile);
                         return null;
                     }
                 }
@@ -391,6 +395,7 @@ public class Modpack {
 
                 return new Jsons.ModpackContentFields.ModpackContentItem(modpackFile, link, size, type, isEditable, modId, version, sha1, murmur);
             }
+
             return null;
         }
 
