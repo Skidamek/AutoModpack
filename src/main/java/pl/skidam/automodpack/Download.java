@@ -67,7 +67,7 @@ public class Download {
             boolean fileAlreadyExists = Files.exists(outFile);
 
             if (fileAlreadyExists) {
-                CustomFileUtils.forceDelete(outFile, false);
+                CustomFileUtils.forceDelete(outFile);
                 outFile = Paths.get(outFile + ".tmp");
             }
 
@@ -113,11 +113,11 @@ public class Download {
             if (fileAlreadyExists) {
                 Path finalFile = Paths.get(outFile.toString().replace(".tmp", ""));
                 CustomFileUtils.copyFile(outFile, finalFile);
-                CustomFileUtils.forceDelete(outFile, false);
+                CustomFileUtils.forceDelete(outFile);
             }
         } catch (IOException e) {
             if (Files.exists(outFile)) {
-                CustomFileUtils.forceDelete(outFile, false);
+                CustomFileUtils.forceDelete(outFile);
             }
             e.printStackTrace();
         }

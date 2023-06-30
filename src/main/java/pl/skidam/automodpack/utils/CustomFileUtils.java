@@ -55,7 +55,7 @@ public class CustomFileUtils {
             1, 0, 70, 0, 0, 0, 97, 0, 0, 0, 0, 0,
     };
 
-    public static void forceDelete(Path file, boolean deleteOnExit) {
+    public static void forceDelete(Path file) {
 
         FileUtils.deleteQuietly(file.toFile());
 
@@ -72,11 +72,6 @@ public class CustomFileUtils {
                     dummyIT(file);
                 }
             }
-
-            if (deleteOnExit && Files.exists(file)) {
-                System.out.println("Deleting on exit: " + file);
-                file.toFile().deleteOnExit();
-            }
         }
     }
 
@@ -92,34 +87,40 @@ public class CustomFileUtils {
             Files.createFile(destination);
         }
 
-        try (FileChannel destChannel = new RandomAccessFile(destination.toFile(), "rw").getChannel()) {
-            // Try to get an exclusive lock on the file
-            try (FileLock ignored = destChannel.tryLock()) {
-                // great
-            } catch (OverlappingFileLockException e) {
-                // change the file name add additional number to the end like (1) (2) (3) etc.
-                // if file name is supermod.jar make it supermod(1).jar etc.
-                // if file name is already supermod(1).jar make it supermod(2).jar etc.
+        if (destination.getFileName().toString().endsWith(".jar")) {
+            try (FileChannel destChannel = new RandomAccessFile(destination.toFile(), "rw").getChannel()) {
+                // Try to get an exclusive lock on the file
+                try (FileLock ignored = destChannel.tryLock()) {
+                    // great
+                } catch (OverlappingFileLockException e) {
+                    // change the file name add additional number to the end like (1) (2) (3) etc.
+                    // if file name is supermod.jar make it supermod(1).jar etc.
+                    // if file name is already supermod(1).jar make it supermod(2).jar etc.
 
-                String fileName = destination.getFileName().toString();
-                // first check if file has extension
-                if (fileName.contains(".")) {
-                    // if it has extension
-                    String[] split = fileName.split("\\.");
-                    String extension = split[split.length - 1];
-                    String name = fileName.substring(0, fileName.length() - extension.length() - 1);
-                    int number = 1;
-                    while (Files.exists(destination)) {
-                        destination = destination.getParent().resolve(name + "(" + number + ")." + extension);
-                        number++;
+                    Path startDestination = destination;
+
+                    String fileName = destination.getFileName().toString();
+                    // first check if the file has an extension
+                    if (fileName.contains(".")) {
+                        // if it has an extension
+                        String[] split = fileName.split("\\.");
+                        String extension = split[split.length - 1];
+                        String name = fileName.substring(0, fileName.length() - extension.length() - 1);
+                        int number = 1;
+                        while (Files.exists(destination)) {
+                            destination = destination.getParent().resolve(name + "(" + number + ")." + extension);
+                            number++;
+                        }
+                    } else {
+                        // if it doesn't have an extension
+                        int number = 1;
+                        while (Files.exists(destination)) {
+                            destination = destination.getParent().resolve(fileName + "(" + number + ")");
+                            number++;
+                        }
                     }
-                } else {
-                    // if it doesn't have extension
-                    int number = 1;
-                    while (Files.exists(destination)) {
-                        destination = destination.getParent().resolve(fileName + "(" + number + ")");
-                        number++;
-                    }
+
+                    CustomFileUtils.forceDelete(startDestination);
                 }
             }
         }
@@ -178,13 +179,13 @@ public class CustomFileUtils {
                         if (Files.isDirectory(path) && !path.getFileName().toString().startsWith(".")) {
 
                             if (path.toFile().list() == null || path.toFile().list().length == 0) {
-                                CustomFileUtils.forceDelete(path, false);
+                                CustomFileUtils.forceDelete(path);
 
                             } else if (deleteSubDirsToo) {
                                 deleteEmptyFiles(path, true, ignoreList);
                             }
                         } else if (compareFilesByteByByte(path, smallDummyJar)) {
-                            CustomFileUtils.forceDelete(path, true);
+                            CustomFileUtils.forceDelete(path);
                         }
                     });
         } catch (IOException e) {

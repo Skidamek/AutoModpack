@@ -440,7 +440,7 @@ public class ModpackUpdater {
                     if (attempts != maxAttempts) {
                         LOGGER.warn("Hashes do not match, retrying... client: {} server: {}", localSHA1, serverSHA1);
                     }
-                    CustomFileUtils.forceDelete(downloadFile, false);
+                    CustomFileUtils.forceDelete(downloadFile);
                     totalBytesDownloaded -= downloadInstance.getTotalBytesRead();
                 }
             } catch (Exception e) {
@@ -550,7 +550,7 @@ public class ModpackUpdater {
                             try {
                                 if (Files.exists(fileInRunningDir) && CustomFileUtils.compareFileHashes(file, fileInRunningDir, "SHA-1")) {
                                     LOGGER.info("Deleting {} and {}", file, fileInRunningDir);
-                                    CustomFileUtils.forceDelete(fileInRunningDir, true);
+                                    CustomFileUtils.forceDelete(fileInRunningDir);
                                 } else {
                                     LOGGER.info("Deleting {}", file);
                                 }
@@ -558,7 +558,7 @@ public class ModpackUpdater {
                                 LOGGER.error("An error occurred while trying to compare file hashes", e);
                                 e.printStackTrace();
                             }
-                            CustomFileUtils.forceDelete(file, true);
+                            CustomFileUtils.forceDelete(file);
                             changelogList.put(fileName, false);
                         }
                     });
@@ -713,7 +713,7 @@ public class ModpackUpdater {
                 if (mainModId.equals(modpackModId) && !mainModFileName.equals(modpackModFileName)) {
                     Path mainModFile = Paths.get("./mods/" + mainModFileName);
                     LOGGER.info("Deleting {} from main mods folder...", mainModFile.getFileName());
-                    CustomFileUtils.forceDelete(mainModFile, true);
+                    CustomFileUtils.forceDelete(mainModFile);
                     break;
                 }
             }

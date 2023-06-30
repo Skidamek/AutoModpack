@@ -123,7 +123,7 @@ public class SelfUpdater {
             // We assume that update jar has always different name than current jar
             Path newAutomodpackJar = Paths.get(automodpackJar.getParent() + File.separator + automodpackUpdateJar.getFileName());
             Files.copy(automodpackUpdateJar, newAutomodpackJar);
-            CustomFileUtils.forceDelete(automodpackUpdateJar, true);
+            CustomFileUtils.forceDelete(automodpackUpdateJar);
 
         } catch (Exception e) {
             LOGGER.error("Failed to update myself!");

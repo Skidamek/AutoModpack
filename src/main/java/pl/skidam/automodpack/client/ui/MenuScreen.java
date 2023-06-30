@@ -138,7 +138,7 @@ public class MenuScreen extends VersionedScreen {
         String modpackLink = modpack.getLink();
         Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(modpackLink);
 
-        CustomFileUtils.forceDelete(modpackPath, false);
+        CustomFileUtils.forceDelete(modpackPath);
 
         new ModpackUpdater(serverModpackContent, modpackLink, modpackPath);
 
@@ -152,7 +152,7 @@ public class MenuScreen extends VersionedScreen {
             ConfigTools.saveConfig(clientConfigFile, clientConfig);
         }
 
-        CustomFileUtils.forceDelete(modpackPath, false);
+        CustomFileUtils.forceDelete(modpackPath);
         // TODO: remove modpack from minecraft files
     }
 
