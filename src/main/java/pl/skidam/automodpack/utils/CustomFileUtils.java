@@ -25,6 +25,9 @@ import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.config.Jsons;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
@@ -89,14 +92,48 @@ public class CustomFileUtils {
             Files.createFile(destination);
         }
 
+        try (FileChannel destChannel = new RandomAccessFile(destination.toFile(), "rw").getChannel()) {
+            // Try to get an exclusive lock on the file
+            try (FileLock ignored = destChannel.tryLock()) {
+                // great
+            } catch (OverlappingFileLockException e) {
+                // change the file name add additional number to the end like (1) (2) (3) etc.
+                // if file name is supermod.jar make it supermod(1).jar etc.
+                // if file name is already supermod(1).jar make it supermod(2).jar etc.
+
+                String fileName = destination.getFileName().toString();
+                // first check if file has extension
+                if (fileName.contains(".")) {
+                    // if it has extension
+                    String[] split = fileName.split("\\.");
+                    String extension = split[split.length - 1];
+                    String name = fileName.substring(0, fileName.length() - extension.length() - 1);
+                    int number = 1;
+                    while (Files.exists(destination)) {
+                        destination = destination.getParent().resolve(name + "(" + number + ")." + extension);
+                        number++;
+                    }
+                } else {
+                    // if it doesn't have extension
+                    int number = 1;
+                    while (Files.exists(destination)) {
+                        destination = destination.getParent().resolve(fileName + "(" + number + ")");
+                        number++;
+                    }
+                }
+            }
+        }
+
         try (RandomAccessFile sourceFile = new RandomAccessFile(source.toFile(), "r");
-             RandomAccessFile destinationFile = new RandomAccessFile(destination.toFile(), "rw")) {
+             OutputStream destinationFile = new FileOutputStream(destination.toFile())) {
 
             byte[] buffer = new byte[8192];
             int bytesRead;
             while ((bytesRead = sourceFile.read(buffer)) != -1) {
                 destinationFile.write(buffer, 0, bytesRead);
             }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -168,11 +205,7 @@ public class CustomFileUtils {
             fos.write(smallDummyJar);
             fos.flush();
         } catch (IOException e) {
-            try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "rw")) {
-                raf.write(smallDummyJar);
-            } catch (IOException ex) {
-                ex.printStackTrace();
-            }
+            e.printStackTrace();
         }
     }
 
