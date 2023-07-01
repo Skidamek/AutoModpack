@@ -76,8 +76,17 @@ public class CustomFileUtils {
     }
 
     public static void copyFile(Path source, Path destination) throws IOException {
+        copyFile(source, destination, false);
+    }
+
+    public static void copyFile(Path source, Path destination, boolean copingfrommodpackdir) throws IOException {
         if (!Files.exists(source)) {
             throw new FileNotFoundException("Source file does not exist: " + source);
+        }
+
+        if (!destination.getFileName().toString().endsWith(".jar")) {
+            justCopy(source, destination);
+            return;
         }
 
         if (!Files.exists(destination)) {
@@ -87,44 +96,48 @@ public class CustomFileUtils {
             Files.createFile(destination);
         }
 
-        if (destination.getFileName().toString().endsWith(".jar")) {
-            try (FileChannel destChannel = new RandomAccessFile(destination.toFile(), "rw").getChannel()) {
-                // Try to get an exclusive lock on the file
-                try (FileLock ignored = destChannel.tryLock()) {
-                    // great
-                } catch (OverlappingFileLockException e) {
-                    // change the file name add additional number to the end like (1) (2) (3) etc.
-                    // if file name is supermod.jar make it supermod(1).jar etc.
-                    // if file name is already supermod(1).jar make it supermod(2).jar etc.
+        try (FileChannel destChannel = new RandomAccessFile(destination.toFile(), "rw").getChannel()) {
+            // Try to get an exclusive lock on the file
+            try (FileLock ignored = destChannel.tryLock()) {
+                // great
+                justCopy(source, destination);
+            } catch (OverlappingFileLockException e) {
+                // change the file name add additional number to the end like (1) (2) (3) etc.
 
-                    Path startDestination = destination;
+                Path startDestination = destination;
+                String fileName = destination.getFileName().toString();
+                String name, extension = "";
+                int dotIndex = fileName.lastIndexOf(".");
+                if (dotIndex > 0) {
+                    name = fileName.substring(0, dotIndex);
+                    extension = fileName.substring(dotIndex);
+                } else {
+                    name = fileName;
+                }
 
-                    String fileName = destination.getFileName().toString();
-                    // first check if the file has an extension
-                    if (fileName.contains(".")) {
-                        // if it has an extension
-                        String[] split = fileName.split("\\.");
-                        String extension = split[split.length - 1];
-                        String name = fileName.substring(0, fileName.length() - extension.length() - 1);
-                        int number = 1;
-                        while (Files.exists(destination)) {
-                            destination = destination.getParent().resolve(name + "(" + number + ")." + extension);
-                            number++;
-                        }
-                    } else {
-                        // if it doesn't have an extension
-                        int number = 1;
-                        while (Files.exists(destination)) {
-                            destination = destination.getParent().resolve(fileName + "(" + number + ")");
-                            number++;
-                        }
-                    }
+                int number = 1;
+                while (Files.exists(destination)) {
+                    destination = destination.getParent().resolve(name + "(" + number + ")" + extension);
+                    number++;
+                }
 
+                // if copingfrommodpackdir is true, then rename the source file to the new name
+                if (copingfrommodpackdir) {
+                    Files.move(source, source.getParent().resolve(destination.getFileName()));
+                }
+
+                try {
+                    justCopy(source, destination);
                     CustomFileUtils.forceDelete(startDestination);
+                } catch (IOException e1) {
+                    throw new IOException("Failed to copy file: " + source + " to: " + destination, e1);
                 }
             }
         }
+    }
 
+
+    private static void justCopy(Path source, Path destination) throws IOException {
         try (RandomAccessFile sourceFile = new RandomAccessFile(source.toFile(), "r");
              OutputStream destinationFile = new FileOutputStream(destination.toFile())) {
 
@@ -134,7 +147,7 @@ public class CustomFileUtils {
                 destinationFile.write(buffer, 0, bytesRead);
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new IOException("Failed to copy file: " + source + " to: " + destination, e);
         }
     }
 
