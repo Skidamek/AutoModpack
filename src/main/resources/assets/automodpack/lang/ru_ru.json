@@ -1,30 +1,48 @@
 {
+	"automodpack.restart.full": "Модпак был скачан!",
+	"automodpack.restart.update": "Обновление Модпака было скачано!",
+	"automodpack.restart.description": "Чтобы завершить обновление Модпака нужно перезагрузить игру.",
+	"automodpack.restart.secDescription": "Вы хотите перезагрузить ее прямо сейчас?",
+	"automodpack.restart.confirm": "Перезагрузить",
+	"automodpack.restart.cancel": "Нет, обратно в меню",
 
+	"automodpack.delete": "Удалить Модпак",
+	"automodpack.delete.description": "Вы потеряете все скачанные файлы из Модпака.",
+	"automodpack.delete.secDescription": "Чтобы завершить удаление Модпака нужно перезагрузить игру.",
+	"automodpack.delete.thiDescription": "Вы точно хотите удалить Модпак?",
+	"automodpack.delete.confirm": "Удалить и выйти",
+	"automodpack.delete.cancel": "Назад в меню",
 
-  "EVERYTHING HERE NEEDS TO BE RE-TRANSLATED": "TAKE A LOOK AT en_us.json FILE",
-  "THANK YOU": "SO MUCH!",
+	"automodpack.danger": "Этот сервер предоставляет Модпак!",
+	"automodpack.danger.description": "Вы хотите его скачать?",
+	"automodpack.danger.secDescription": "Это можен быть опасно! НЕ СКАЧИВАЙТЕ если не доверяете владельцам сервера!",
+	"automodpack.danger.confirm": "Скачать",
+	"automodpack.danger.cancel": "Не скачивать",
 
+	"automodpack.changelog.view": "Посмотреть список изменений",
+	"automodpack.changelog.noChanges": "Изменения не найдены.",
 
-  "gui.automodpack.screen.restart.title.modpack": "Модпак успешно обновлен!",
+	"automodpack.download.calculating": "Обработка...",
+	"automodpack.download.eta": "Времени осталось: %s",
+	"automodpack.download.downloading": "Скачивание:",
+	"automodpack.download.noFiles": "Нет файлов для скачивания!",
 
-  "gui.automodpack.screen.restart.button.cancel": "Нет (Вернутся в игру)",
+	"automodpack.redownload": "Перекачать Модпак",
+	"automodpack.redownload.description": "Это может исправить проблемы с Модпаком.",
 
-  "gui.automodpack.screen.confirm.title": "❌ Удалить модпак ❌",
-  "gui.automodpack.screen.confirm.description": "Вы удалите все данные модпака.",
-  "gui.automodpack.screen.confirm.secDescription": "Вам нужно будет перезапустить игру.",
-  "gui.automodpack.screen.confirm.thiDescription": "Вы уверены что хотите удалить модпак?",
-  "gui.automodpack.screen.confirm.button.sure": "Да (Удалить и выйти)",
-  "gui.automodpack.screen.confirm.button.cancel": "Нет (Вернутся в игру)",
+	"automodpack.error": "Что-то пошло не так!",
+	"automodpack.error.files": "Не удалось скачать некоторые файлы.",
+	"automodpack.error.critical": "Критическая ошибка при скачивании Модпака.",
+	"automodpack.error.logs": "Подробности в логах.",
 
-  "gui.automodpack.screen.loading.title": "Скачиваю обновления...",
-  "gui.automodpack.screen.loading.wait": "Подождите...",
-  "gui.automodpack.screen.loading.download": "Скачиваю...",
-  "gui.automodpack.screen.loading.extract": "Роспичатываю модпак...",
-  "gui.automodpack.screen.loading.finish": "Почти закончил...",
+	"automodpack.fetch": "Получение прямых URL-адресов из Modrinth и CurseForge...",
+	"automodpack.fetch.found": "Найдено %s прямых URL-адресов.",
 
-  "gui.automodpack.screen.danger.title": "Внимание! Модпак найден!",
-  "gui.automodpack.screen.danger.description": "Вы хотите скачать обновление для модпака?",
-  "gui.automodpack.screen.danger.secDescription": "Может быть рисковано! Не скачивайте если не доверяете админам сервера!",
-  "gui.automodpack.screen.danger.button.accept": "Скачать",
-  "gui.automodpack.screen.danger.button.cancel": "Не скачивать"
+	"automodpack.select": "Выбери Модпак",
+
+	"automodpack.yes": "Да",
+	"automodpack.no": "Нет",
+	"automodpack.cancel": "Отмена",
+	"automodpack.back": "Назад",
+	"automodpack.wait": "Пожалуста, подождите..."
 }
