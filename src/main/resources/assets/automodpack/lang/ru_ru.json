@@ -15,7 +15,7 @@
 
 	"automodpack.danger": "Этот сервер предоставляет Модпак!",
 	"automodpack.danger.description": "Вы хотите его скачать?",
-	"automodpack.danger.secDescription": "Это можен быть опасно! НЕ СКАЧИВАЙТЕ если не доверяете владельцам сервера!",
+	"automodpack.danger.secDescription": "Это можен быть опасно! Если не доверяете владельцам сервера, НЕ скачивайте!",
 	"automodpack.danger.confirm": "Скачать",
 	"automodpack.danger.cancel": "Не скачивать",
 
