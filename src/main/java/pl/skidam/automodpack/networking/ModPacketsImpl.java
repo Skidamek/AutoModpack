@@ -46,7 +46,7 @@ import java.util.UUID;
 import java.util.concurrent.FutureTask;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
-import static pl.skidam.automodpack.GlobalVariables.VERSION;
+import static pl.skidam.automodpack.GlobalVariables.AM_VERSION;
 import static pl.skidam.automodpack.networking.ModPackets.HANDSHAKE;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
 
@@ -93,11 +93,14 @@ public class ModPacketsImpl {
             Util.getMainWorkerExecutor().execute(future);
 
             PacketByteBuf buf = PacketByteBufs.create();
-            String correctResponse = VERSION + "-" + Loader.getPlatformType().toString().toLowerCase();
-            if (serverConfig.allowFabricQuiltPlayers) {
-                correctResponse = VERSION + "-" + "fabric&quilt";
+            StringBuilder correctResponse = new StringBuilder(AM_VERSION + "-");
+            for (String loader : serverConfig.acceptedLoaders) {
+                correctResponse.append(loader);
+                if (serverConfig.acceptedLoaders.indexOf(loader) != serverConfig.acceptedLoaders.size() - 1) {
+                    correctResponse.append("&");
+                }
             }
-            buf.writeString(correctResponse);
+            buf.writeString(correctResponse.toString());
             sender.sendPacket(HANDSHAKE, buf);
 
             sync.waitFor(future);

@@ -52,10 +52,15 @@ package pl.skidam.automodpack.loaders;
 //$$         return QuiltLoader.isModLoaded(modId);
 //$$    }
 //$$
-//$$     public static Collection getModList() {
-//$$         Collection<ModContainer> modsList = QuiltLoader.getAllMods();
+//$$    public static Collection getModList() {
+//$$        Collection<ModContainer> modsList = QuiltLoader.getAllMods();
 //$$
-//$$         return modsList.stream().map(mod -> mod.metadata().id() + " " + mod.metadata().version()).collect(Collectors.toList());
+//$$        return modsList.stream().map(mod -> mod.metadata().id() + " " + mod.metadata().version()).collect(Collectors.toList());
+//$$    }
+//$$
+//$$    public static String getLoaderVersion() {
+//$$        ModContainer container = QuiltLoader.getModContainer("quilt_loader").isPresent() ? QuiltLoader.getModContainer("quilt_loader").get() : null;
+//$$        return container != null ? container.metadata().version().raw() : null;
 //$$    }
 //$$
 //$$     public static Path getModPath(String modId) {

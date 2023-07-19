@@ -43,10 +43,21 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
     public final Modpack.ModpackObject modpack;
     public final Path modpackPath;
     private final MutableText text;
+    private final String mainPageUrl;
     private final boolean bigFont;
+
+    public ListEntry(MutableText text, String mainPageUrl, boolean bigFont, Modpack.ModpackObject modpack, Path modpackPath, MinecraftClient client) {
+        this.text = text;
+        this.mainPageUrl = mainPageUrl;
+        this.modpack = modpack;
+        this.modpackPath = modpackPath;
+        this.client = client;
+        this.bigFont = bigFont;
+    }
 
     public ListEntry(MutableText text, boolean bigFont, Modpack.ModpackObject modpack, Path modpackPath, MinecraftClient client) {
         this.text = text;
+        this.mainPageUrl = null;
         this.modpack = modpack;
         this.modpackPath = modpackPath;
         this.client = client;
@@ -80,6 +91,14 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
         VersionedText.drawCenteredTextWithShadow(versionedMatrices, client.textRenderer, text, centeredX, y, 16777215);
 
         versionedMatrices.pop();
+    }
+
+    public MutableText getText() {
+        return this.text;
+    }
+
+    public String getMainPageUrl() {
+        return mainPageUrl;
     }
 
     @Nullable

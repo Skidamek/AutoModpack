@@ -34,6 +34,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
+import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -47,6 +48,11 @@ public class FabricImpl {
 
     public static Collection getModList() {
         return FabricLoader.getInstance().getAllMods();
+    }
+
+    public static String getLoaderVersion() {
+        Optional<ModContainer> modContainer = FabricLoader.getInstance().getModContainer("fabricloader");
+        return modContainer.map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse(null);
     }
 
     public static Path getModPath(String modId) {

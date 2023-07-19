@@ -56,13 +56,13 @@ public class LinkC2SPacket {
 
         Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(link);
 
-        boolean isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
+        String isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
         PacketByteBuf response = PacketByteBufs.create();
-        response.writeBoolean(isUpdate);
+        response.writeString(isUpdate);
 
         CompletableFuture.runAsync(() -> {
-            if (isUpdate) {
+            if ("true".equals(isUpdate)) {
                 new ModpackUpdater(serverModpackContent, link, modpackDir);
             }
         });

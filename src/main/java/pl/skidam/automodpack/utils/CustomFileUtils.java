@@ -76,19 +76,6 @@ public class CustomFileUtils {
     }
 
     public static void copyFile(Path source, Path destination) throws IOException {
-        copyFile(source, destination, false);
-    }
-
-    public static void copyFile(Path source, Path destination, boolean copingfrommodpackdir) throws IOException {
-        if (!Files.exists(source)) {
-            throw new FileNotFoundException("Source file does not exist: " + source);
-        }
-
-        if (!destination.getFileName().toString().endsWith(".jar")) {
-            justCopy(source, destination);
-            return;
-        }
-
         if (!Files.exists(destination)) {
             if (!Files.exists(destination.getParent())) {
                 Files.createDirectories(destination.getParent());
@@ -96,57 +83,18 @@ public class CustomFileUtils {
             Files.createFile(destination);
         }
 
-        try (FileChannel destChannel = new RandomAccessFile(destination.toFile(), "rw").getChannel()) {
-            // Try to get an exclusive lock on the file
-            try (FileLock ignored = destChannel.tryLock()) {
-                // great
-                justCopy(source, destination);
-            } catch (OverlappingFileLockException e) {
-                // change the file name add additional number to the end like (1) (2) (3) etc.
-
-                Path startDestination = destination;
-                String fileName = destination.getFileName().toString();
-                String name, extension = "";
-                int dotIndex = fileName.lastIndexOf(".");
-                if (dotIndex > 0) {
-                    name = fileName.substring(0, dotIndex);
-                    extension = fileName.substring(dotIndex);
-                } else {
-                    name = fileName;
-                }
-
-                int number = 1;
-                while (Files.exists(destination)) {
-                    destination = destination.getParent().resolve(name + "(" + number + ")" + extension);
-                    number++;
-                }
-
-                // if copingfrommodpackdir is true, then rename the source file to the new name
-                if (copingfrommodpackdir) {
-                    Files.move(source, source.getParent().resolve(destination.getFileName()));
-                }
-
-                try {
-                    justCopy(source, destination);
-                    CustomFileUtils.forceDelete(startDestination);
-                } catch (IOException e1) {
-                    throw new IOException("Failed to copy file: " + source + " to: " + destination, e1);
-                }
-            }
-        }
-    }
-
-
-    private static void justCopy(Path source, Path destination) throws IOException {
         try (RandomAccessFile sourceFile = new RandomAccessFile(source.toFile(), "r");
-             OutputStream destinationFile = new FileOutputStream(destination.toFile())) {
+             FileOutputStream destinationFile = new FileOutputStream(destination.toFile())) {
 
             byte[] buffer = new byte[8192];
             int bytesRead;
             while ((bytesRead = sourceFile.read(buffer)) != -1) {
                 destinationFile.write(buffer, 0, bytesRead);
             }
+
+            destinationFile.flush();
         } catch (IOException e) {
+            e.printStackTrace();
             throw new IOException("Failed to copy file: " + source + " to: " + destination, e);
         }
     }

@@ -21,6 +21,7 @@
 package pl.skidam.automodpack.platforms;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import pl.skidam.automodpack.utils.Json;
 
@@ -33,11 +34,11 @@ public class CurseForgeAPI {
     public String downloadUrl;
     public String fileVersion;
     public String fileName;
-    public long fileSize;
+    public String fileSize;
     public String releaseType;
     public String murmurHash;
 
-    public CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType, String murmurHash) {
+    public CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash) {
         this.requestUrl = requestUrl;
         this.downloadUrl = downloadUrl;
         this.fileVersion = fileVersion;
@@ -47,7 +48,7 @@ public class CurseForgeAPI {
         this.murmurHash = murmurHash;
     }
 
-    public static CurseForgeAPI getModInfoFromMurmur(String murmur, long correctFileSize) {
+    public static CurseForgeAPI getModInfoFromMurmur(String murmur, String sha1) {
         try {
             JsonObject JSONObject = Json.fromUrlCurseForge(murmur);
 
@@ -59,7 +60,6 @@ public class CurseForgeAPI {
             JsonObject dataObject = JSONObject.getAsJsonObject("data");
             JsonArray exactMatchesArray = dataObject.getAsJsonArray("exactMatches");
             JsonObject fileObject = exactMatchesArray.get(0).getAsJsonObject().getAsJsonObject("file");
-
             if (fileObject == null) {
                 return null;
             }
@@ -71,14 +71,25 @@ public class CurseForgeAPI {
                 return null;
             }
 
-            String downloadUrl = fileObject.get("downloadUrl").getAsString();
-            String fileName = fileObject.get("fileName").getAsString();
-            long fileSize = fileObject.get("fileLength").getAsLong();
-            String murmurHash = fileObject.get("fileFingerprint").getAsString();
+            JsonArray hashesArray = fileObject.getAsJsonArray("hashes");
+            String SHA1Hash = null;
 
-            if (fileSize != correctFileSize) {
+            for (JsonElement hashElement : hashesArray) {
+                JsonObject hashObject = hashElement.getAsJsonObject();
+                if (hashObject.get("algo").getAsInt() == 1) {
+                    SHA1Hash = hashObject.get("value").getAsString();
+                    break;
+                }
+            }
+
+            if (!sha1.equals(SHA1Hash)) {
                 return null;
             }
+
+            String downloadUrl = fileObject.get("downloadUrl").getAsString();
+            String fileName = fileObject.get("fileName").getAsString();
+            String fileSize = fileObject.get("fileLength").getAsString();
+            String murmurHash = fileObject.get("fileFingerprint").getAsString();
 
             return new CurseForgeAPI(null, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmurHash);
 

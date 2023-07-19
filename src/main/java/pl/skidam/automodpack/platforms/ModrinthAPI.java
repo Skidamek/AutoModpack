@@ -33,6 +33,7 @@ public class ModrinthAPI {
 
     private static final String BASE_URL = "https://api.modrinth.com/v2";
 
+    public String modrinthID;
     public String requestUrl;
     public String downloadUrl;
     public String fileVersion;
@@ -41,7 +42,8 @@ public class ModrinthAPI {
     public String releaseType;
     public String SHA1Hash;
 
-    public ModrinthAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType, String SHA1Hash) {
+    public ModrinthAPI(String modrinthID, String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType, String SHA1Hash) {
+        this.modrinthID = modrinthID;
         this.requestUrl = requestUrl;
         this.downloadUrl = downloadUrl;
         this.fileVersion = fileVersion;
@@ -79,7 +81,7 @@ public class ModrinthAPI {
             long fileSize = JSONObjectFiles.get("size").getAsLong();
             String SHA1Hash = JSONObjectFiles.get("hashes").getAsJsonObject().get("sha1").getAsString();
 
-            return new ModrinthAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA1Hash);
+            return new ModrinthAPI(modrinthID, requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA1Hash);
 
         } catch (IndexOutOfBoundsException e) {
             LOGGER.warn("Can't find mod for your client, tried link " + requestUrl);
@@ -87,6 +89,49 @@ public class ModrinthAPI {
             e.printStackTrace();
         }
         return null;
+    }
+
+    public static ModrinthAPI getModSpecificVersion(String modrinthID, String modVersion, String mcVersion) {
+
+        String modLoader = Loader.getPlatformType().toString().toLowerCase();
+
+        String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + mcVersion + "\"]";
+
+        requestUrl = requestUrl.replaceAll("\"", "%22"); // so important!
+
+        try {
+            // get all versions
+            JsonArray JSONArray = Json.fromUrlAsArray(requestUrl);
+
+            if (JSONArray == null) {
+                LOGGER.warn("Can't find mod for your client, tried link " + requestUrl);
+                return null;
+            }
+
+            for (JsonElement jsonElement : JSONArray) {
+                JsonObject JSONObject = jsonElement.getAsJsonObject();
+
+                String fileVersion = JSONObject.get("version_number").getAsString();
+
+                if (fileVersion.equals(modVersion)) {
+                    String releaseType = JSONObject.get("version_type").getAsString();
+
+                    JsonObject JSONObjectFiles = JSONObject.getAsJsonArray("files").get(0).getAsJsonObject();
+
+                    String downloadUrl = JSONObjectFiles.get("url").getAsString();
+                    String fileName = JSONObjectFiles.get("filename").getAsString();
+                    long fileSize = JSONObjectFiles.get("size").getAsLong();
+                    String SHA1Hash = JSONObjectFiles.get("hashes").getAsJsonObject().get("sha1").getAsString();
+
+                    return new ModrinthAPI(modrinthID, requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA1Hash);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return null;
+
     }
 
     public static ModrinthAPI getModInfoFromSHA512(String sha1) {
@@ -105,6 +150,8 @@ public class ModrinthAPI {
             if (JSONObject == null || JSONObject.size() == 0) {
                 return null;
             }
+
+            String modrinthID = JSONObject.get("project_id").getAsString();
 
             String fileVersion = JSONObject.get("version_number").getAsString();
             String releaseType = JSONObject.get("version_type").getAsString();
@@ -139,7 +186,7 @@ public class ModrinthAPI {
             long fileSize = JSONObjectFile.get("size").getAsLong();
             String SHA512Hash = JSONObjectFile.get("hashes").getAsJsonObject().get("sha1").getAsString();
 
-            return new ModrinthAPI(requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA512Hash);
+            return new ModrinthAPI(modrinthID, requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA512Hash);
 
         } catch (IndexOutOfBoundsException e) {
             LOGGER.warn("Something gone wrong while getting info from Modrinth API: {}", requestUrl);
@@ -147,5 +194,9 @@ public class ModrinthAPI {
 //            e.printStackTrace();
         }
         return null;
+    }
+
+    public static String getMainPageUrl(String modrinthID, String fileType) {
+        return "https://modrinth.com/" + fileType + "/" + modrinthID;
     }
 }

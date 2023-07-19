@@ -44,15 +44,6 @@ public class FileChangeChecker {
 
     public FileChangeChecker(List<Path> paths) {
         this.paths = paths;
-        try {
-            for (Path path : paths) {
-                if (Files.exists(path)) {
-                    fileTimes.put(path, Files.getLastModifiedTime(path));
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
     public void startChecking() {
@@ -104,6 +95,19 @@ public class FileChangeChecker {
 
     private void checkFiles(List<Path> paths) throws Exception {
         for (Path path : paths) {
+
+            // check if file exists, if not, remove it from the list
+            if (Files.exists(path)) {
+                if (!fileTimes.containsKey(path)) {
+                    fileTimes.put(path, Files.getLastModifiedTime(path));
+                }
+            } else {
+                fileTimes.remove(path);
+                Modpack.Content.removeOneItem(path, Modpack.Content.list);
+                continue;
+            }
+
+
             FileTime newTime = Files.getLastModifiedTime(path);
             FileTime oldTime = fileTimes.get(path);
 

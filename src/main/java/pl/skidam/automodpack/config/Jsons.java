@@ -20,6 +20,8 @@
 
 package pl.skidam.automodpack.config;
 
+import pl.skidam.automodpack.loaders.Loader;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -39,7 +41,7 @@ public class Jsons {
         public List<String> syncedFiles = Arrays.asList("/mods/", "/config/");
         public List<String> excludeSyncedFiles = Arrays.asList("/mods/iDontWantThisModInModpack.jar", "/config/andThisConfigToo.json", "/mods/andAllTheseMods-*.jar");
         public List<String> allowEditsInFiles = Arrays.asList("/options.txt");
-//        public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
+//        public List<String> forceLoad = List.asList("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
         public boolean optionalModpack = false;
         public boolean autoExcludeServerSideMods = true;
 //        public boolean velocityMode = false; compat plugin :)
@@ -48,18 +50,21 @@ public class Jsons {
         public int hostThreads = 8;
         public String hostIp = "";
         public String hostLocalIp = "";
+        public boolean updateIpsOnEveryStart = false;
         public String externalModpackHostLink = "";
         public boolean reverseProxy = false;
         public boolean selfUpdater = true;
 //        public boolean downloadDependency = true;
-        public boolean allowFabricQuiltPlayers = false;
+        public List<String> acceptedLoaders = Arrays.asList(Loader.getPlatformType().toString().toLowerCase());
     }
 
     public static class ModpackContentFields {
         public String modpackName = "";
         public String link = "";
+        public String automodpackVersion = "";
         public String loader = "";
-        public String version = "";
+        public String loaderVersion = "";
+        public String mcVersion = "";
         public String modpackHash = "";
         public List<ModpackContentItem> list;
         public ModpackContentFields(String link, List<ModpackContentItem> list) {

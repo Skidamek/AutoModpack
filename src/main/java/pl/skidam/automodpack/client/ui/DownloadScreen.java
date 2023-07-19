@@ -25,20 +25,19 @@ import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
+import pl.skidam.automodpack.utils.DownloadManager;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.utils.DownloadInfo;
+import pl.skidam.automodpack.utils.Wait;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.GlobalVariables.MOD_ID;
-import static pl.skidam.automodpack.client.ModpackUpdater.downloadInfos;
-import static pl.skidam.automodpack.client.ModpackUpdater.getDownloadInfo;
-import static pl.skidam.automodpack.utils.RefactorStrings.getFormatedETA;
 
 public class DownloadScreen extends VersionedScreen {
 
@@ -46,8 +45,16 @@ public class DownloadScreen extends VersionedScreen {
     private static final Identifier PROGRESS_BAR_FULL_TEXTURE = new Identifier(MOD_ID, "gui/progress-bar-full.png");
     private static final int PROGRESS_BAR_WIDTH = 250;
     private static final int PROGRESS_BAR_HEIGHT = 20;
-    private static int ticks = 0;
+    private static long ticks = 0;
     private ButtonWidget cancelButton;
+
+    // Temp save for the last download values
+    private final Map<String, String> mapOfFileStats = new HashMap<>(); // URL, Percentage of download
+    private String lastStage = "-1";
+    private int lastPercentage = -1;
+    private String lastSpeed = "-1";
+    private String lastETA = "-1";
+    private float lastDownloadedScale = 0.0F;
 
     public DownloadScreen() {
         super(VersionedText.common.literal("DownloadScreen"));
@@ -60,6 +67,30 @@ public class DownloadScreen extends VersionedScreen {
         initWidgets();
 
         this.addDrawableChild(cancelButton);
+
+        CompletableFuture.runAsync(() -> {
+            while (!ModpackUpdater.downloadManager.isClosed()) {
+
+//                for (Map.Entry<String, DownloadManager.DownloadData> map : ModpackUpdater.downloadManager.downloadsInProgress.entrySet()) {
+//                    mapOfFileStats.put(map.getKey(), ModpackUpdater.downloadManager.getPercentageOfFileSizeDownloaded(map.getKey()) + "%");
+//                }
+//
+//                for (Map.Entry<String, String> map : mapOfFileStats.entrySet()) {
+//                    if (!ModpackUpdater.downloadManager.downloadsInProgress.containsKey(map.getKey())) {
+//                        mapOfFileStats.remove(map.getKey());
+//                    }
+//                }
+
+                // TODO make it work better pls
+                lastStage = ModpackUpdater.downloadManager.getStage();
+                lastPercentage = (int) ModpackUpdater.downloadManager.getTotalPercentageOfFileSizeDownloaded();
+                lastDownloadedScale = (float) (ModpackUpdater.downloadManager.getTotalPercentageOfFileSizeDownloaded() * 0.01);
+
+                long totalDownloadSpeed = ModpackUpdater.downloadManager.getTotalDownloadSpeed();
+                lastSpeed = ModpackUpdater.downloadManager.getTotalDownloadSpeedInReadableFormatFast(totalDownloadSpeed);
+                lastETA = ModpackUpdater.downloadManager.getTotalETAFast(totalDownloadSpeed);
+            }
+        });
     }
 
     private void initWidgets() {
@@ -69,69 +100,36 @@ public class DownloadScreen extends VersionedScreen {
     }
 
     private Text getStage() {
-        String stage = ModpackUpdater.getStage();
-        return VersionedText.common.literal(stage);
+        if (lastStage.equals("-1")) {
+            return VersionedText.common.translatable("automodpack.download.calculating");
+        }
+        return VersionedText.common.literal(lastStage);
     }
 
     private Text getPercentage() {
-        int percentage = ModpackUpdater.getTotalPercentageOfFileSizeDownloaded();
-        return VersionedText.common.literal(percentage + "%");
+        if (lastPercentage == -1) {
+            return VersionedText.common.translatable("automodpack.download.calculating");
+        }
+        return VersionedText.common.literal(lastPercentage + "%");
     }
 
-    private String getDownloadedSize(String file) {
-        DownloadInfo downloadInfo = getDownloadInfo(file);
-        if (downloadInfo == null) return "N/A";
-        long fileSize = downloadInfo.getFileSize();
-        double bytesDownloaded = downloadInfo.getBytesDownloaded();
-
-        if (fileSize == -1 || bytesDownloaded == -1) return "N/A";
-
-        String[] units = {"B", "KB", "MB", "GB"};
-        int unitIndex = 0;
-
-        long boostedFileSize = fileSize / 512;
-
-        while (boostedFileSize >= 1024) {
-            boostedFileSize /= 1024;
-            unitIndex++;
-        }
-
-        long roundedFileSize = Math.round(fileSize);
-        long roundedBytesDownloaded = Math.round(bytesDownloaded);
-        if (roundedBytesDownloaded > roundedFileSize) {
-            roundedBytesDownloaded = roundedFileSize;
-        }
-
-        return roundedBytesDownloaded + "/" + roundedFileSize + " " + units[unitIndex];
-    }
 
     private Text getTotalDownloadSpeed() {
-        double speed = ModpackUpdater.getTotalDownloadSpeed();
-        if (speed > 0) {
-            int roundedSpeed = (int) Math.round(speed);
-            return VersionedText.common.literal(roundedSpeed + " MB/s");
+        if (lastSpeed.equals("-1")) {
+            return VersionedText.common.translatable("automodpack.download.calculating");
         }
-
-        return VersionedText.common.translatable("automodpack.download.calculating"); // Calculating...
+        return VersionedText.common.literal(lastSpeed);
     }
 
     private Text getTotalETA() {
-        String eta = ModpackUpdater.getTotalETA();
-        return VersionedText.common.translatable("automodpack.download.eta", eta); // Time left: %s
+        if (lastETA.equals("-1")) {
+            return VersionedText.common.translatable("automodpack.download.calculating");
+        }
+        return VersionedText.common.translatable("automodpack.download.eta", lastETA); // Time left: %s
     }
 
-    private String getETAOfFile(String file) {
-        if (getDownloadInfo(file) == null) return "0s";
-        DownloadInfo downloadInfo = getDownloadInfo(file);
-        if (downloadInfo == null) {
-            return "N/A";
-        }
-
-        double eta = downloadInfo.getEta();
-
-        if (eta < 0) return "N/A";
-
-        return getFormatedETA(eta);
+    private float getDownloadScale() {
+        return lastDownloadedScale;
     }
 
     private void drawDownloadingFiles(VersionedMatrices matrices) {
@@ -141,23 +139,29 @@ public class DownloadScreen extends VersionedScreen {
         matrices.push();
         matrices.scale(scale, scale, scale);
 
-        List<DownloadInfo> downloadInfosCopy = new ArrayList<>(downloadInfos);
-
-        if (downloadInfosCopy.size() > 0) {
+        if (ModpackUpdater.downloadManager.downloadsInProgress.size() > 0) {
             VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.download.downloading"), (int) (this.width / 2 * scale), y, 16777215);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
-            for (DownloadInfo file : downloadInfosCopy) {
-                if (file == null) continue;
-                String fileName = file.getFileName();
-                VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.literal( fileName + " (" + getDownloadedSize(fileName) + ")" + " - " + getETAOfFile(fileName)), (int) (this.width / 2 * scale), currentY, 16777215);
-                currentY += 10;
+            synchronized (ModpackUpdater.downloadManager.downloadsInProgress) {
+                for (DownloadManager.DownloadData downloadData : ModpackUpdater.downloadManager.downloadsInProgress.values()) {
+
+                    String text = downloadData.getFileName();
+
+//                    DownloadManager.DownloadData downloadData = map.getValue();
+//                    String percentage = mapOfFileStats.get(map.getKey());
+//
+//                    if (percentage != null) {
+//                        text += " " + percentage;
+//                    }
+
+                    VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.literal(text), (int) (this.width / 2 * scale), currentY, 16777215);
+                    currentY += 10;
+                }
             }
         } else {
             VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.download.noFiles"), (int) (this.width / 2 * scale), y, 16777215);
-
-            // Please wait...
             VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 25, 16777215);
         }
 
@@ -170,10 +174,13 @@ public class DownloadScreen extends VersionedScreen {
             return;
         }
 
-        String eta = ModpackUpdater.getTotalETA();
+        if (AudioManager.isMusicPlaying()) {
+            return;
+        }
+
         try {
-            int etaInSeconds = Integer.parseInt(eta.substring(0, eta.length() - 1));
-            if (etaInSeconds > 3) {
+            int etaInSeconds = Integer.parseInt(lastETA.substring(0, lastETA.length() - 1));
+            if (etaInSeconds > 5) {
                 AudioManager.playMusic();
             }
         } catch (NumberFormatException ignored) {
@@ -184,30 +191,30 @@ public class DownloadScreen extends VersionedScreen {
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        MutableText percentage = (MutableText) this.getPercentage();
-        MutableText stage = (MutableText) this.getStage();
-        MutableText eta = (MutableText) this.getTotalETA();
-        MutableText speed = (MutableText) this.getTotalDownloadSpeed();
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, percentage, this.width / 2, this.height / 2 + 30, 16777215);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 80, 16777215);
 
         drawDownloadingFiles(matrices);
-
         MutableText modpackName = VersionedText.common.literal(ModpackUpdater.getModpackName()).formatted(Formatting.BOLD);
         VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, modpackName, this.width / 2, this.height / 2 - 110, 16777215);
 
-        // Render progress bar
-        int x = this.width / 2 - PROGRESS_BAR_WIDTH / 2;
-        int y = this.height / 2 + 50;
+        if (!ModpackUpdater.downloadManager.isClosed()) {
+            MutableText percentage = (MutableText) this.getPercentage();
+            MutableText stage = (MutableText) this.getStage();
+            MutableText eta = (MutableText) this.getTotalETA();
+            MutableText speed = (MutableText) this.getTotalDownloadSpeed();
+            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
+            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
+            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, percentage, this.width / 2, this.height / 2 + 30, 16777215);
+            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 80, 16777215);
 
-        float downloadedScale = (float) ModpackUpdater.getTotalPercentageOfFileSizeDownloaded() / 100;
+            // Render progress bar
+            int x = this.width / 2 - PROGRESS_BAR_WIDTH / 2;
+            int y = this.height / 2 + 50;
 
-        VersionedText.drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, x, y, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
-        VersionedText.drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, x, y, 0, 0, (int) (PROGRESS_BAR_WIDTH * downloadedScale), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+            VersionedText.drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, x, y, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+            VersionedText.drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, x, y, 0, 0, (int) (PROGRESS_BAR_WIDTH * getDownloadScale()), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
 
-        checkAndStartMusic();
+            checkAndStartMusic();
+        }
     }
 
     @Override

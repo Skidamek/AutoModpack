@@ -60,6 +60,10 @@ public class Loader {
 
     //#if FABRIC
 
+    public static String getLoaderVersion() {
+        return FabricImpl.getLoaderVersion();
+    }
+
     public static boolean isDevelopmentEnvironment() {
         return FabricImpl.isDevelopmentEnvironment();
     }
@@ -97,6 +101,9 @@ public class Loader {
 
     //#elseif QUILT
 
+//$$     public static String getLoaderVersion() {
+//$$         return QuiltImpl.getLoaderVersion();
+//$$     }
 //$$     public static boolean isDevelopmentEnvironment() {
 //$$         return QuiltImpl.isDevelopmentEnvironment();
 //$$     }
@@ -134,6 +141,9 @@ public class Loader {
 
     //#elseif FORGE
 
+//$$     public static String getLoaderVersion() {
+//$$         return ForgeImpl.getLoaderVersion();
+//$$     }
 //$$     public static boolean isDevelopmentEnvironment() {
 //$$         return ForgeImpl.isDevelopmentEnvironment();
 //$$     }

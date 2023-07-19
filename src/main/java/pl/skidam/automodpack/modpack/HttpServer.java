@@ -51,7 +51,7 @@ import static pl.skidam.automodpack.modpack.Modpack.hostModpackContentFile;
 import static pl.skidam.automodpack.modpack.Modpack.hostModpackDir;
 
 public class HttpServer {
-    private static final int BUFFER_SIZE = 32 * 1024; // 32KB send at once to the client
+    private static final int BUFFER_SIZE = 16 * 1024; // 16KB send at once to the client
     public static List<Path> listOfPaths = new ArrayList<>();
     private static ExecutorService HTTPServerExecutor;
     private static Object server = null;
@@ -72,23 +72,23 @@ public class HttpServer {
             return;
         }
 
-        if (serverConfig.hostIp == null || serverConfig.hostIp.equals("")) {
+        if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostIp == null || serverConfig.hostIp.equals(""))) {
             String publicIp = Ip.getPublic();
             if (publicIp != null) {
                 serverConfig.hostIp = publicIp;
                 ConfigTools.saveConfig(serverConfigFile, serverConfig);
-                LOGGER.warn("Host IP isn't set in config! Setting it to {}", serverConfig.hostIp);
+                LOGGER.warn("Setting Host IP to {}", serverConfig.hostIp);
             } else {
                 LOGGER.error("Host IP isn't set in config, please change it manually! Couldn't get public IP");
                 return;
             }
         }
 
-        if (serverConfig.hostLocalIp == null || serverConfig.hostLocalIp.equals("")) {
+        if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostLocalIp == null || serverConfig.hostLocalIp.equals(""))) {
             try {
                 serverConfig.hostLocalIp = Ip.getLocal();
                 ConfigTools.saveConfig(serverConfigFile, serverConfig);
-                LOGGER.warn("Host local IP isn't set in config! Setting it to {}", serverConfig.hostLocalIp);
+                LOGGER.warn("Setting Host local IP to {}", serverConfig.hostLocalIp);
             } catch (Exception e) {
                 e.printStackTrace();
             }

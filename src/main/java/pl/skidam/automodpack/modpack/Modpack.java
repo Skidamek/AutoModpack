@@ -133,6 +133,7 @@ public class Modpack {
                     }
                 }
 
+                LOGGER.info("Syncing {}...", modpackDir.getFileName());
                 addAllContent(modpackDir, list);
 
                 if (list.size() == 0) {
@@ -193,9 +194,11 @@ public class Modpack {
 
         public static void saveModpackContent() {
             modpackContent = new Jsons.ModpackContentFields(null, list);
-            modpackContent.version = MC_VERSION;
+            modpackContent.automodpackVersion = AM_VERSION;
+            modpackContent.mcVersion = MC_VERSION;
             modpackContent.modpackName = serverConfig.modpackName;
             modpackContent.loader = Loader.getPlatformType().toString().toLowerCase();
+            modpackContent.loaderVersion = Loader.getLoaderVersion();
             modpackContent.modpackHash = CustomFileUtils.getHashFromStringOfHashes(ModpackContentTools.getStringOfAllHashes(modpackContent));
 
             ConfigTools.saveConfig(hostModpackContentFile, modpackContent);
@@ -234,17 +237,8 @@ public class Modpack {
         }
 
         public static void replaceOneItem(Path modpackDir, Path file, List<Jsons.ModpackContentFields.ModpackContentItem> list) {
-            // go through all items and remove the one that has the same file path
-            String fileString = file.toString().replaceAll("\\\\", "/");
-            if (fileString.charAt(0) == '.') {
-                fileString = fileString.substring(1);
-            }
-            for (Jsons.ModpackContentFields.ModpackContentItem item : list) {
-                if (item.file.equals(fileString)) {
-                    list.remove(item);
-                    break;
-                }
-            }
+            // remove the old one
+            removeOneItem(file, list);
 
             // generate content of the file and add it to the list
             try {
@@ -252,11 +246,27 @@ public class Modpack {
                 if (content != null) {
                     list.add(content);
                 } else {
-                    LOGGER.error("Failed to generate content for {}!", fileString);
+                    LOGGER.error("Failed to generate content for {}!", file);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+
+        public static void removeOneItem(Path file, List<Jsons.ModpackContentFields.ModpackContentItem> list) {
+            // go through all items and remove the one that has the same file path
+            String fileString = file.toString().replaceAll("\\\\", "/");
+            if (fileString.charAt(0) == '.') {
+                fileString = fileString.substring(1);
+            }
+
+            for (Jsons.ModpackContentFields.ModpackContentItem item : list) {
+                if (item.file.equals(fileString)) {
+                    list.remove(item);
+                    break;
+                }
+            }
+
         }
 
         public static String removeBeforePattern(String input, String pattern) {
@@ -356,12 +366,12 @@ public class Modpack {
                 }
 
                 if (type.equals("other")) {
-                    if (modpackFile.startsWith("/config/")) {
+                    if (modpackFile.contains("/config/")) {
                         type = "config";
-                    } else if (modpackFile.startsWith("/shaderpacks/")) {
-                        type = "shaderpack";
+                    } else if (modpackFile.contains("/shaderpacks/")) {
+                        type = "shader";
                         murmur = CustomFileUtils.getHash(file, "murmur");
-                    } else if (modpackFile.startsWith("/resourcepacks/")) {
+                    } else if (modpackFile.contains("/resourcepacks/")) {
                         type = "resourcepack";
                         murmur = CustomFileUtils.getHash(file, "murmur");
                     } else if (modpackFile.endsWith("/options.txt")) {
@@ -479,7 +489,7 @@ public class Modpack {
                 modpackObject.setName(modpackContentFields.modpackName);
                 modpackObject.setLink(modpackContentFields.link);
                 modpackObject.setLoader(modpackContentFields.loader);
-                modpackObject.setVersion(modpackContentFields.version);
+                modpackObject.setVersion(modpackContentFields.mcVersion);
                 modpackObject.setHash(modpackContentFields.modpackHash);
                 modpackObject.setContent(modpackContentFields.list);
 

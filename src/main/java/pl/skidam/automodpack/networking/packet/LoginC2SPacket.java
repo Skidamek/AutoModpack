@@ -34,7 +34,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 import static pl.skidam.automodpack.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack.GlobalVariables.VERSION;
+import static pl.skidam.automodpack.GlobalVariables.AM_VERSION;
 
 public class LoginC2SPacket {
 
@@ -44,17 +44,19 @@ public class LoginC2SPacket {
 
         String loader = Loader.getPlatformType().toString().toLowerCase();
 
-        String correctResponse = VERSION + "-" + loader;
+        String correctResponse = AM_VERSION + "-" + loader;
 
         PacketByteBuf outBuf = PacketByteBufs.create();
         outBuf.writeString(correctResponse);
 
-        if (!serverResponse.equals(correctResponse) && !serverResponse.startsWith(VERSION)) {
-            if (!serverResponse.contains(loader)) {
+        if (serverResponse.startsWith(AM_VERSION)) {
+            if (serverResponse.equals(correctResponse) || serverResponse.contains(loader)){
+                LOGGER.info("Versions match " + serverResponse);
+            } else{
                 LOGGER.error("Versions mismatch " + serverResponse);
             }
         } else {
-            LOGGER.info("Versions match " + serverResponse);
+            LOGGER.error("Server version error?! " + serverResponse);
         }
 
         return CompletableFuture.completedFuture(outBuf);

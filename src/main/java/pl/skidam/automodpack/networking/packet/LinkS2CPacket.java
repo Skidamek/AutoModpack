@@ -31,6 +31,7 @@ import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
+import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 
@@ -41,14 +42,28 @@ public class LinkS2CPacket {
     private static void packet(ServerLoginNetworkHandler handler, PacketByteBuf buf) {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 
-        if (buf.readBoolean()) { // disconnect
+        String clientHasUpdate = buf.readString();
+
+        if ("true".equals(clientHasUpdate)) { // disconnect
             LOGGER.warn("{} has not installed modpack", profile.getName());
             Text reason = VersionedText.common.literal("[AutoModpack] Install/Update modpack to join");
             ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
-        } else {
+        } else if ("false".equals(clientHasUpdate)) {
             LOGGER.info("{} has installed whole modpack", profile.getName());
+        } else {
+            Text reason = VersionedText.common.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
+            ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+            connection.send(new LoginDisconnectS2CPacket(reason));
+            connection.disconnect(reason);
+
+            LOGGER.error("Host server error. AutoModpack host server is down or server is not configured correctly");
+            LOGGER.error("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", GlobalVariables.serverConfig.hostPort);
+            LOGGER.error("If so make sure that host IP '{}' and host local IP '{}' are correct in the config file!", GlobalVariables.serverConfig.hostIp, GlobalVariables.serverConfig.hostLocalIp);
+            LOGGER.error("host IP should be an ip which are players outside of server network connecting to and host local IP should be an ip which are players inside of server network connecting to");
+            LOGGER.error("It can be Ip or a correctly set domain");
+            LOGGER.error("If you need, change port in config file, forward / open it and restart server");
         }
     }
 

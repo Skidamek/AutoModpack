@@ -20,19 +20,17 @@
 
 package pl.skidam.automodpack.utils;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.*;
+import com.google.gson.stream.JsonReader;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
-import static pl.skidam.automodpack.GlobalVariables.VERSION;
+import static pl.skidam.automodpack.GlobalVariables.AM_VERSION;
 
 @SuppressWarnings("deprecation")
 public class Json {
@@ -41,7 +39,7 @@ public class Json {
 
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + VERSION);
+            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
             connection.setConnectTimeout(3000);
             connection.setReadTimeout(3000);
             connection.setDoOutput(true);
@@ -63,11 +61,27 @@ public class Json {
         return null;
     }
 
+    public static JsonObject fromFile(Path path) throws IOException {
+        if (!Files.exists(path) || !Files.isRegularFile(path)) {
+            return null;
+        }
+
+        JsonParser parser = new JsonParser();
+        byte[] bytes = Files.readAllBytes(path);
+
+        StringBuilder sb = new StringBuilder();
+        for (Byte b : bytes) {
+            sb.append((char) b.byteValue());
+        }
+
+        return parser.parse(sb.toString()).getAsJsonObject();
+    }
+
     public static JsonObject fromUrl(String url) throws IOException {
         JsonElement element = null;
 
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + VERSION);
+        connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
         connection.setConnectTimeout(3000);
         connection.setReadTimeout(3000);
         connection.setDoOutput(true);

@@ -22,8 +22,7 @@ package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.util.Formatting;
 
-import static pl.skidam.automodpack.client.ModpackUpdater.totalFetchedFiles;
-
+import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -46,7 +45,7 @@ public class FetchScreen extends VersionedScreen {
         // Fetching direct url's from Modrinth and CurseForge.
         VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.fetch").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
         VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, 16777215);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.fetch.found", totalFetchedFiles), this.width / 2, this.height / 2 - 30, 16777215);
+        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.fetch.found", ModpackUpdater.fetchManager.fetchesDone), this.width / 2, this.height / 2 - 30, 16777215);
     }
 
     @Override

@@ -35,4 +35,9 @@ public class RefactorStrings {
             return String.format("%ds", seconds);
         }
     }
+
+    // refactor floats like 1.0 to percent like 100%
+    public static String getFormattedPercent(float percent) {
+        return String.format("%.0f%%", percent * 100);
+    }
 }

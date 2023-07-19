@@ -23,29 +23,32 @@ package pl.skidam.automodpack.client.ui;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
+import pl.skidam.automodpack.client.ui.widget.ListEntry;
 import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class ChangelogScreen extends VersionedScreen {
-    private static List<String> changelogs;
+    private static Map<String, String> changelogs;
     private final Screen parent;
     private final Path modpackDir;
     private ListEntryWidget listEntryWidget;
     private TextFieldWidget searchField;
     private ButtonWidget backButton;
+    private ButtonWidget openMainPageButton;
 
     public ChangelogScreen(Screen parent, Path modpackDir) {
         super(VersionedText.common.literal("ChangelogScreen"));
@@ -68,6 +71,7 @@ public class ChangelogScreen extends VersionedScreen {
         this.addDrawableChild(this.listEntryWidget);
         this.addDrawableChild(this.searchField);
         this.addDrawableChild(this.backButton);
+        this.addDrawableChild(this.openMainPageButton);
         this.setInitialFocus(this.searchField);
     }
 
@@ -79,10 +83,25 @@ public class ChangelogScreen extends VersionedScreen {
         );
         this.searchField.setChangedListener((textField) -> updateChangelogs()); // Update the changelogs display based on the search query
 
-        this.backButton = VersionedText.buttonWidget(10, this.height - 30, 72, 20,
+        this.backButton = VersionedText.buttonWidget(this.width / 2 - 160, this.height - 30, 120, 20,
                 VersionedText.common.translatable("automodpack.back"),
                 button -> this.client.setScreen(this.parent)
         );
+
+        this.openMainPageButton = VersionedText.buttonWidget(this.width / 2 + 40, this.height - 30, 120, 20,
+                VersionedText.common.translatable("Open project page"),
+                button -> {
+                    ListEntry selectedEntry = listEntryWidget.getSelectedOrNull();
+
+                    if (selectedEntry == null) {
+                        return;
+                    }
+
+                    String mainPageUrl = selectedEntry.getMainPageUrl();
+                    Util.getOperatingSystem().open(mainPageUrl);
+                }
+        );
+
     }
 
     @Override
@@ -90,6 +109,13 @@ public class ChangelogScreen extends VersionedScreen {
         this.renderBackground(matrices);
 
         this.listEntryWidget.render(matrices, mouseX, mouseY, delta);
+
+        ListEntry selectedEntry = listEntryWidget.getSelectedOrNull();
+        if (selectedEntry != null) {
+            this.openMainPageButton.active = selectedEntry.getMainPageUrl() != null;
+        } else {
+            this.openMainPageButton.active = false;
+        }
 
         // Draw summary of added/removed mods
         drawSummaryOfChanges(matrices);
@@ -106,14 +132,17 @@ public class ChangelogScreen extends VersionedScreen {
         int modsAdded = 0;
         int modsRemoved = 0;
         if (modpackContent == null) return;
-        for (Map.Entry<String, Boolean> changelog : ModpackUpdater.changelogList.entrySet()) {
+        for (Map.Entry<String, String> changelog : ModpackUpdater.changesAddedList.entrySet()) {
             String fileType = ModpackContentTools.getFileType(changelog.getKey(), modpackContent);
             if (fileType.equals("mod")) {
-                if (changelog.getValue()) {
-                    modsAdded++;
-                } else {
-                    modsRemoved++;
-                }
+                modsAdded++;
+            }
+        }
+
+        for (Map.Entry<String, String> changelog : ModpackUpdater.changesDeletedList.entrySet()) {
+            String fileType = ModpackContentTools.getFileType(changelog.getKey(), modpackContent);
+            if (fileType.equals("mod")) {
+                modsRemoved++;
             }
         }
 
@@ -128,10 +157,10 @@ public class ChangelogScreen extends VersionedScreen {
             changelogs = getChangelogs();
         } else {
             // Filter the changelogs based on the search query using a case-insensitive search
-            List<String> filteredChangelogs = new ArrayList<>();
-            for (String changelog : getChangelogs()) {
-                if (changelog.toLowerCase().contains(this.searchField.getText().toLowerCase())) {
-                    filteredChangelogs.add(changelog);
+            Map<String, String> filteredChangelogs = new HashMap<>();
+            for (Map.Entry<String, String> changelog : getChangelogs().entrySet()) {
+                if (changelog.getKey().toLowerCase().contains(this.searchField.getText().toLowerCase())) {
+                    filteredChangelogs.put(changelog.getKey(), changelog.getValue());
                 }
             }
             changelogs = filteredChangelogs;
@@ -141,6 +170,7 @@ public class ChangelogScreen extends VersionedScreen {
 //#if MC >= 11700
         this.remove(this.listEntryWidget);
         this.remove(this.backButton);
+        this.remove(this.openMainPageButton);
 //#endif
 
         this.listEntryWidget = new ListEntryWidget(changelogs, this.client, this.width, this.height, 48, this.height - 50, 20);
@@ -148,17 +178,18 @@ public class ChangelogScreen extends VersionedScreen {
         this.addDrawableChild(this.listEntryWidget);
         this.addDrawableChild(this.searchField);
         this.addDrawableChild(this.backButton);
+        this.addDrawableChild(this.openMainPageButton);
     }
 
-    private List<String> getChangelogs() {
-        List<String> changelogs = new ArrayList<>();
+    private Map<String, String> getChangelogs() {
+        Map<String, String> changelogs = new HashMap<>();
 
-        for (Map.Entry<String, Boolean> changelog : ModpackUpdater.changelogList.entrySet()) {
-            if (changelog.getValue()) {
-                changelogs.add("+ " + changelog.getKey());
-            } else {
-                changelogs.add("- " + changelog.getKey());
-            }
+        for (Map.Entry<String, String> changelog : ModpackUpdater.changesAddedList.entrySet()) {
+            changelogs.put("+ " + changelog.getKey(), changelog.getValue());
+        }
+
+        for (Map.Entry<String, String> changelog : ModpackUpdater.changesDeletedList.entrySet()) {
+            changelogs.put("- " + changelog.getKey(), changelog.getValue());
         }
 
         return changelogs;

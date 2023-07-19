@@ -44,17 +44,17 @@ import java.util.List;
 import java.util.Objects;
 
 import static pl.skidam.automodpack.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack.GlobalVariables.VERSION;
+import static pl.skidam.automodpack.GlobalVariables.AM_VERSION;
 import static pl.skidam.automodpack.config.ConfigTools.GSON;
 
 public class ModpackUtils {
 
 
     // If update to modpack found, returns true else false
-    public static Boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+    public static String isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
-            return false;
+            return null;
         }
 
         // get client modpack content
@@ -64,25 +64,25 @@ public class ModpackUtils {
             Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadConfig(clientModpackContentFile, Jsons.ModpackContentFields.class);
 
             if (clientModpackContent == null) {
-                return true;
+                return "true";
             }
 
             if (clientModpackContent.modpackHash == null) {
                 LOGGER.error("Modpack hash is null");
-                return true;
+                return "true";
             }
 
             if (clientModpackContent.modpackHash.equals(serverModpackContent.modpackHash)) {
                 LOGGER.info("Modpack hash is the same as server modpack hash");
-                return false;
+                return "false";
             }
 
             else {
                 LOGGER.info("Modpack hash is different than server modpack hash");
-                return true;
+                return "true";
             }
         } else {
-            return true;
+            return "true";
         }
     }
 
@@ -161,7 +161,7 @@ public class ModpackUtils {
             HttpGet getContent = new HttpGet(link);
             getContent.addHeader("Content-Type", "application/json");
             getContent.addHeader("Minecraft-Username", MinecraftUserName.get());
-            getContent.addHeader("User-Agent", "github/skidamek/automodpack/" + VERSION);
+            getContent.addHeader("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
 
             HttpResponse response = httpClient.execute(getContent);
             HttpEntity entity = response.getEntity();

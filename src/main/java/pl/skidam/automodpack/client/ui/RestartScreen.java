@@ -26,7 +26,6 @@ import pl.skidam.automodpack.ReLauncher;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
-import java.io.File;
 import java.nio.file.Path;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -60,7 +59,7 @@ public class RestartScreen extends VersionedScreen {
         this.addDrawableChild(restartButton);
         this.addDrawableChild(changelogsButton);
 
-        if (ModpackUpdater.changelogList.isEmpty()) {
+        if (ModpackUpdater.changesAddedList.isEmpty() && ModpackUpdater.changesDeletedList.isEmpty()) {
             changelogsButton.active = false;
         }
     }
@@ -75,7 +74,7 @@ public class RestartScreen extends VersionedScreen {
             new ReLauncher.Restart(gameDir, fullDownload);
         });
 
-        changelogsButton = VersionedText.buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.common.translatable("automodpack.changelog.view").formatted(Formatting.DARK_AQUA), button -> {
+        changelogsButton = VersionedText.buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.common.translatable("automodpack.changelog.view"), button -> {
             this.client.setScreen(new ChangelogScreen(this, gameDir));
         });
     }

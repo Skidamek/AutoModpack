@@ -34,7 +34,7 @@ import java.util.*;
 public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
-    public static String VERSION = JarUtilities.getModVersion("automodpack");
+    public static String AM_VERSION = JarUtilities.getModVersion("automodpack");
 
     //#if MC >= 11700
     public static String MC_VERSION = MinecraftVersion.CURRENT.getName();

@@ -172,7 +172,7 @@ public class Commands {
     private static int about(CommandContext<ServerCommandSource> context) {
         VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("AutoModpack")
                 .formatted(Formatting.GREEN)
-                .append(VersionedText.common.literal(" - " + VERSION)
+                .append(VersionedText.common.literal(" - " + AM_VERSION)
                         .formatted(Formatting.WHITE)
                 ), false);
         VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("/automodpack generate")

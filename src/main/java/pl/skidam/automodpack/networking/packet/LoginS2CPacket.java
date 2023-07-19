@@ -59,7 +59,7 @@ public class LoginS2CPacket {
         UUID uniqueId = profile.getId();
         String playerName = profile.getName();
 
-        String correctResponse = VERSION + "-" + Loader.getPlatformType().toString().toLowerCase();
+        String correctResponse = AM_VERSION + "-" + Loader.getPlatformType().toString().toLowerCase();
 
         if (!understood) {
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
@@ -80,17 +80,18 @@ public class LoginS2CPacket {
             boolean isClientVersionHigher = isClientVersionHigher(clientResponse);
 
             if (!clientResponse.equals(correctResponse)) {
-                if (!serverConfig.allowFabricQuiltPlayers && !clientResponse.startsWith(VERSION)) {
-                    Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Loader.getPlatformType().toString().toLowerCase() + " to play on this server!");
-                    if (isClientVersionHigher) {
-                        reason = VersionedText.common.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
+
+                boolean isAcceptedLoader = false;
+
+                for (String loader : serverConfig.acceptedLoaders) {
+                    if (clientResponse.contains(loader)) {
+                        isAcceptedLoader = true;
+                        break;
                     }
-                    acceptLogin.add(uniqueId);
-                    connection.send(new LoginDisconnectS2CPacket(reason));
-                    connection.disconnect(reason);
-                    return null;
-                } else if (clientResponse.startsWith(VERSION)) {
-                    Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + VERSION + " version of AutoModpack mod for " + Loader.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                }
+
+                if (!clientResponse.startsWith(AM_VERSION) || !isAcceptedLoader) {
+                    Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + Loader.getPlatformType().toString().toLowerCase() + " to play on this server!");
                     if (isClientVersionHigher) {
                         reason = VersionedText.common.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
                     }
@@ -151,9 +152,9 @@ public class LoginS2CPacket {
         String clientVersion = clientResponse.substring(0, clientResponse.indexOf("-"));
         boolean isClientVersionHigher = false;
 
-        if (!clientVersion.equals(VERSION)) {
+        if (!clientVersion.equals(AM_VERSION)) {
             String[] clientVersionComponents = clientVersion.split("\\.");
-            String[] serverVersionComponents = VERSION.split("\\.");
+            String[] serverVersionComponents = AM_VERSION.split("\\.");
 
             for (int i = 0, n = clientVersionComponents.length; i < n; i++) {
                 if (clientVersionComponents[i].compareTo(serverVersionComponents[i]) > 0) {

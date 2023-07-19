@@ -48,7 +48,7 @@ public class Ip {
 
     public static String getLocal() {
         String ip = null;
-        try(final DatagramSocket socket = new DatagramSocket()){
+        try (final DatagramSocket socket = new DatagramSocket()) {
             socket.connect(InetAddress.getByName("8.8.8.8"), 10002);
             ip = socket.getLocalAddress().getHostAddress();
         } catch (Exception e) {

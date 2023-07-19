@@ -31,11 +31,13 @@ import pl.skidam.automodpack.modpack.Modpack;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static pl.skidam.automodpack.GlobalVariables.clientConfig;
 
 //#if MC < 12000
 import net.minecraft.client.util.math.MatrixStack;
+import pl.skidam.automodpack.utils.DownloadManager;
 //#else
 //$$import net.minecraft.client.gui.DrawContext;
 //#endif
@@ -87,7 +89,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
         }
     }
 
-    public ListEntryWidget(List<String> changelogs, MinecraftClient client, int width, int height, int top, int bottom, int itemHeight) {
+    public ListEntryWidget(Map<String, String> changelogs, MinecraftClient client, int width, int height, int top, int bottom, int itemHeight) {
         super(client, width, height, top, bottom, itemHeight);
         this.centerListVertically = true;
 
@@ -99,16 +101,19 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
             return;
         }
 
-        for (String changelog : changelogs) {
-            MutableText text = VersionedText.common.literal(changelog);
+        for (Map.Entry<String, String> changelog : changelogs.entrySet()) {
+            String textString = changelog.getKey();
+            String mainPageUrl = changelog.getValue();
 
-            if (changelog.startsWith("+")) {
+            MutableText text = VersionedText.common.literal(textString);
+
+            if (textString.startsWith("+")) {
                 text = text.formatted(Formatting.GREEN);
-            } else if (changelog.startsWith("-")) {
+            } else if (textString.startsWith("-")) {
                 text = text.formatted(Formatting.RED);
             }
 
-            ListEntry entry = new ListEntry(text, false, null, null, this.client);
+            ListEntry entry = new ListEntry(text, mainPageUrl, false, null, null, this.client);
             this.addEntry(entry);
         }
     }
@@ -166,5 +171,10 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
     @Override
     protected int getScrollbarPositionX() {
         return this.width - 6;
+    }
+
+    @Override
+    public int getRowWidth() {
+        return super.getRowWidth() + 120;
     }
 }
