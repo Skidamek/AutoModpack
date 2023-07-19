@@ -1,15 +1,15 @@
 {
 	"automodpack.restart.full": "Модпак был скачан!",
 	"automodpack.restart.update": "Обновление Модпака было скачано!",
-	"automodpack.restart.description": "Чтобы завершить обновление Модпака нужно перезагрузить игру.",
-	"automodpack.restart.secDescription": "Вы хотите перезагрузить ее прямо сейчас?",
-	"automodpack.restart.confirm": "Перезагрузить",
+	"automodpack.restart.description": "Чтобы завершить обновление модпака, нужно перезапустить игру.",
+	"automodpack.restart.secDescription": "Вы хотите сделать перезапуск прямо сейчас?",
+	"automodpack.restart.confirm": "Перезапустить",
 	"automodpack.restart.cancel": "Нет, обратно в меню",
 
 	"automodpack.delete": "Удалить Модпак",
-	"automodpack.delete.description": "Вы потеряете все скачанные файлы из Модпака.",
-	"automodpack.delete.secDescription": "Чтобы завершить удаление Модпака нужно перезагрузить игру.",
-	"automodpack.delete.thiDescription": "Вы точно хотите удалить Модпак?",
+	"automodpack.delete.description": "Вы потеряете все файлы из загруженного модпака.",
+	"automodpack.delete.secDescription": "Чтобы завершить удаление модпака, нужно перезапустить игру.",
+	"automodpack.delete.thiDescription": "Вы точно хотите удалить модпак?",
 	"automodpack.delete.confirm": "Удалить и выйти",
 	"automodpack.delete.cancel": "Назад в меню",
 
@@ -28,11 +28,11 @@
 	"automodpack.download.noFiles": "Нет файлов для скачивания!",
 
 	"automodpack.redownload": "Перекачать Модпак",
-	"automodpack.redownload.description": "Это может исправить проблемы с Модпаком.",
+	"automodpack.redownload.description": "Это может исправить проблемы с модпаком.",
 
 	"automodpack.error": "Что-то пошло не так!",
 	"automodpack.error.files": "Не удалось скачать некоторые файлы.",
-	"automodpack.error.critical": "Критическая ошибка при скачивании Модпака.",
+	"automodpack.error.critical": "Критическая ошибка при скачивании модпака.",
 	"automodpack.error.logs": "Подробности в логах.",
 
 	"automodpack.fetch": "Получение прямых URL-адресов из Modrinth и CurseForge...",
