@@ -13,7 +13,7 @@
 	"automodpack.delete.confirm": "Удалить и выйти",
 	"automodpack.delete.cancel": "Назад в меню",
 
-	"automodpack.danger": "Этот сервер предоставляет Модпак!",
+	"automodpack.danger": "Этот сервер предоставляет модпак!",
 	"automodpack.danger.description": "Вы хотите его скачать?",
 	"automodpack.danger.secDescription": "Это можен быть опасно! Если не доверяете владельцам сервера, НЕ скачивайте!",
 	"automodpack.danger.confirm": "Скачать",
