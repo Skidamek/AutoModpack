@@ -34,6 +34,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * Everything in this class should force to do the thing without throwing exceptions.
@@ -102,20 +103,20 @@ public class CustomFileUtils {
     private static boolean compareFilesByteByByte(Path path, byte[] referenceBytes) {
         try {
             long fileSize = Files.size(path);
+
             if (fileSize != referenceBytes.length) {
                 return false;
             }
 
-            try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
-                 InputStream referenceInputStream = new ByteArrayInputStream(referenceBytes)) {
+            try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r")) {
 
                 byte[] buffer = new byte[8192];
                 int bytesRead;
 
                 while ((bytesRead = raf.read(buffer)) != -1) {
                     for (int i = 0; i < bytesRead; i++) {
-                        int fileByte = buffer[i];
-                        int referenceByte = referenceInputStream.read();
+                        byte fileByte = buffer[i];
+                        byte referenceByte = referenceBytes[i];
 
                         if (fileByte != referenceByte) {
                             return false;
@@ -132,33 +133,58 @@ public class CustomFileUtils {
     }
 
 
-    public static void deleteEmptyFiles(Path directory, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
-        try {
-            Files.list(directory)
-                    .filter(path -> shouldIgnore(path.toFile(), ignoreList))
+    public static List<Path> deleteEmptyFiles(Path file, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
+
+        List<Path> pathList = new ArrayList<>();
+
+        try (Stream<Path> stream = Files.walk(file)) {
+            stream.filter(path -> !shouldIgnore(path, ignoreList))
                     .forEach(path -> {
+
                         if (Files.isDirectory(path) && !path.getFileName().toString().startsWith(".")) {
 
-                            if (path.toFile().list() == null || path.toFile().list().length == 0) {
+                            String[] list = path.toFile().list();
+
+                            if (list == null || list.length == 0) {
                                 CustomFileUtils.forceDelete(path);
+                                pathList.add(path);
 
                             } else if (deleteSubDirsToo) {
-                                deleteEmptyFiles(path, true, ignoreList);
+                                File[] files = path.toFile().listFiles();
+
+                                if (files == null) {
+                                    return;
+                                }
+
+                                for (File subFile : files) {
+                                    deleteEmptyFiles(subFile.toPath(), true, ignoreList);
+                                }
                             }
                         } else if (compareFilesByteByByte(path, smallDummyJar)) {
                             CustomFileUtils.forceDelete(path);
+                            pathList.add(path);
                         }
                     });
         } catch (IOException e) {
             e.printStackTrace();
         }
+
+        return pathList;
     }
 
-    private static boolean shouldIgnore(File file, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
+    private static boolean shouldIgnore(Path file, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
         if (ignoreList == null) {
-            return true;
+            return false;
         }
-        return ignoreList.stream().noneMatch(item -> file.getAbsolutePath().replace("\\", "/").endsWith(item.file));
+        String filePath = file.toAbsolutePath().toString().replace("\\", "/");
+
+        for (Jsons.ModpackContentFields.ModpackContentItem item : ignoreList) {
+            if(filePath.endsWith(item.file)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // dummy IT ez

@@ -137,9 +137,13 @@ public class ModpackUpdater {
 
         List<Path> filesBefore = mapAllFiles(workingDirectory, new ArrayList<>());
 
-        finishModpackUpdate(modpackDir, modpackContentFile);
+        List<Path> deletedFilesToIgnore = finishModpackUpdate(modpackDir, modpackContentFile);
 
         List<Path> filesAfter = mapAllFiles(workingDirectory, new ArrayList<>());
+
+        if (deletedFilesToIgnore != null && !deletedFilesToIgnore.isEmpty()) {
+            filesBefore.removeAll(deletedFilesToIgnore);
+        }
 
         List<Path> addedFiles = new ArrayList<>();
         List<Path> deletedFiles = new ArrayList<>();
@@ -331,17 +335,21 @@ public class ModpackUpdater {
         }
     }
 
-    private static void finishModpackUpdate(Path modpackDir, Path modpackContentFile) throws Exception {
+    private static List<Path> finishModpackUpdate(Path modpackDir, Path modpackContentFile) throws Exception {
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
             LOGGER.error("Modpack content is null");
-            return;
+            return null;
         }
 
         // clear empty directories
-        CustomFileUtils.deleteEmptyFiles(modpackDir, true, modpackContent.list);
-        CustomFileUtils.deleteEmptyFiles(Paths.get("./"), false, modpackContent.list);
+        List<Path> emptyFilesPaths = new ArrayList<>();
+        List<Path> emptyList1 = CustomFileUtils.deleteEmptyFiles(modpackDir, true, modpackContent.list);
+        List<Path> emptyList2 = CustomFileUtils.deleteEmptyFiles(Paths.get("./"), false, modpackContent.list);
+
+        emptyFilesPaths.addAll(emptyList1);
+        emptyFilesPaths.addAll(emptyList2);
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
@@ -408,6 +416,8 @@ public class ModpackUpdater {
         ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent, editableFiles);
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
+
+        return emptyFilesPaths;
     }
 
 

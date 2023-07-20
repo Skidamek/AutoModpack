@@ -100,7 +100,7 @@ public class ModPacketsImpl {
                     correctResponse.append("&");
                 }
             }
-            buf.writeString(correctResponse.toString());
+            buf.writeString(correctResponse.toString(), 32767);
             sender.sendPacket(HANDSHAKE, buf);
 
             sync.waitFor(future);

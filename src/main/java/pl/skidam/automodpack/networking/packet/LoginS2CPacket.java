@@ -76,7 +76,7 @@ public class LoginS2CPacket {
 
             LOGGER.info("{} has installed AutoModpack.", playerName);
 
-            String clientResponse = buf.readString();
+            String clientResponse = buf.readString(32767);
             boolean isClientVersionHigher = isClientVersionHigher(clientResponse);
 
             if (!clientResponse.equals(correctResponse)) {
@@ -142,7 +142,7 @@ public class LoginS2CPacket {
         }
 
         PacketByteBuf outBuf = PacketByteBufs.create();
-        outBuf.writeString(linkToSend);
+        outBuf.writeString(linkToSend, 32767);
 
         return outBuf;
     }

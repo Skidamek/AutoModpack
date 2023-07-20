@@ -37,6 +37,7 @@ import pl.skidam.automodpack.config.Jsons;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
@@ -44,7 +45,7 @@ import static pl.skidam.automodpack.GlobalVariables.*;
 
 public class LinkC2SPacket {
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf, Consumer<GenericFutureListener<? extends Future<? super Void>>> genericFutureListenerConsumer) {
-        String link = buf.readString();
+        String link = buf.readString(32767);
         LOGGER.info("Received link packet from server! " + link);
         ClientLink = link;
 
@@ -60,13 +61,15 @@ public class LinkC2SPacket {
         String isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
         PacketByteBuf response = PacketByteBufs.create();
-        response.writeString(isUpdate);
+        response.writeString(Objects.requireNonNullElse(isUpdate, "null"), 32767);
 
         CompletableFuture.runAsync(() -> {
             if ("true".equals(isUpdate)) {
                 new ModpackUpdater(serverModpackContent, link, modpackDir);
             }
         });
+
+        System.out.println("LinkC2SPacket response: " + response);
 
         return CompletableFuture.completedFuture(response);
     }

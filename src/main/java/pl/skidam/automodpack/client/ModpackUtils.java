@@ -20,6 +20,7 @@
 
 package pl.skidam.automodpack.client;
 
+import io.netty.channel.ConnectTimeoutException;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.config.RequestConfig;
@@ -36,6 +37,8 @@ import pl.skidam.automodpack.utils.ModpackContentTools;
 import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -153,7 +156,7 @@ public class ModpackUtils {
 
         try (CloseableHttpClient httpClient = HttpClients.custom()
                 .setDefaultRequestConfig(RequestConfig.custom()
-                        .setConnectTimeout(3000)
+                        .setConnectTimeout(5000)
                         .setSocketTimeout(3000)
                         .build())
                 .build()) {
@@ -186,7 +189,7 @@ public class ModpackUtils {
             getContent.releaseConnection();
 
             return serverModpackContent;
-        } catch (ConnectException e) {
+        } catch (ConnectException | SocketTimeoutException e) {
             LOGGER.error("Couldn't connect to modpack server " + link);
         } catch (Exception e) {
             LOGGER.error("Error while getting server modpack content");

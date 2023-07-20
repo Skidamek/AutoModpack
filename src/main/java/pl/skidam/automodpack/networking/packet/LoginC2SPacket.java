@@ -40,14 +40,14 @@ public class LoginC2SPacket {
 
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf, Consumer<GenericFutureListener<? extends Future<? super Void>>> genericFutureListenerConsumer) {
         // Client
-        String serverResponse = buf.readString();
+        String serverResponse = buf.readString(32767);
 
         String loader = Loader.getPlatformType().toString().toLowerCase();
 
         String correctResponse = AM_VERSION + "-" + loader;
 
         PacketByteBuf outBuf = PacketByteBufs.create();
-        outBuf.writeString(correctResponse);
+        outBuf.writeString(correctResponse, 32767);
 
         if (serverResponse.startsWith(AM_VERSION)) {
             if (serverResponse.equals(correctResponse) || serverResponse.contains(loader)){
