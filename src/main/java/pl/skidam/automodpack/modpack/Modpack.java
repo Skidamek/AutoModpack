@@ -242,7 +242,7 @@ public class Modpack {
 
             // generate content of the file and add it to the list
             try {
-                Jsons.ModpackContentFields.ModpackContentItem content = generateContent(modpackDir, file, list);
+                Jsons.ModpackContentFields.ModpackContentItem content = generateContent(modpackDir, file.normalize(), list);
                 if (content != null) {
                     list.add(content);
                 } else {
@@ -251,15 +251,21 @@ public class Modpack {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+
+            Modpack.Content.list = list;
+            saveModpackContent();
         }
 
         public static void removeOneItem(Path file, List<Jsons.ModpackContentFields.ModpackContentItem> list) {
-            // go through all items and remove the one that has the same file path
-            String fileString = file.toString().replaceAll("\\\\", "/");
+
+            // remove hostModpackDir from the path if it is there
+            Path modpackPath = file.toAbsolutePath().normalize();
+            String fileString = modpackPath.toString().replace(hostModpackDir.toAbsolutePath().normalize().toString(), "").replace("\\", "/");
             if (fileString.charAt(0) == '.') {
                 fileString = fileString.substring(1);
             }
 
+            // go through all items and remove the one that has the same file path
             for (Jsons.ModpackContentFields.ModpackContentItem item : list) {
                 if (item.file.equals(fileString)) {
                     list.remove(item);
@@ -267,6 +273,8 @@ public class Modpack {
                 }
             }
 
+            Modpack.Content.list = list;
+            saveModpackContent();
         }
 
         public static String removeBeforePattern(String input, String pattern) {

@@ -49,7 +49,7 @@ public class DownloadScreen extends VersionedScreen {
     private ButtonWidget cancelButton;
 
     // Temp save for the last download values
-    private final Map<String, String> mapOfFileStats = new HashMap<>(); // URL, Percentage of download
+//    private final Map<String, String> mapOfFileStats = new HashMap<>(); // URL, Percentage of download
     private String lastStage = "-1";
     private int lastPercentage = -1;
     private String lastSpeed = "-1";
@@ -69,7 +69,7 @@ public class DownloadScreen extends VersionedScreen {
         this.addDrawableChild(cancelButton);
 
         CompletableFuture.runAsync(() -> {
-            while (!ModpackUpdater.downloadManager.isClosed()) {
+            while (ModpackUpdater.downloadManager != null && !ModpackUpdater.downloadManager.isClosed()) {
 
 //                for (Map.Entry<String, DownloadManager.DownloadData> map : ModpackUpdater.downloadManager.downloadsInProgress.entrySet()) {
 //                    mapOfFileStats.put(map.getKey(), ModpackUpdater.downloadManager.getPercentageOfFileSizeDownloaded(map.getKey()) + "%");
@@ -142,7 +142,7 @@ public class DownloadScreen extends VersionedScreen {
         matrices.push();
         matrices.scale(scale, scale, scale);
 
-        if (ModpackUpdater.downloadManager.downloadsInProgress.size() > 0) {
+        if (ModpackUpdater.downloadManager != null && ModpackUpdater.downloadManager.downloadsInProgress.size() > 0) {
             VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.download.downloading"), (int) (this.width / 2 * scale), y, 16777215);
 
             // Use a separate variable for the current y position
@@ -199,7 +199,7 @@ public class DownloadScreen extends VersionedScreen {
         MutableText modpackName = VersionedText.common.literal(ModpackUpdater.getModpackName()).formatted(Formatting.BOLD);
         VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, modpackName, this.width / 2, this.height / 2 - 110, 16777215);
 
-        if (!ModpackUpdater.downloadManager.isClosed()) {
+        if (ModpackUpdater.downloadManager != null && !ModpackUpdater.downloadManager.isClosed()) {
             MutableText percentage = (MutableText) this.getPercentage();
             MutableText stage = (MutableText) this.getStage();
             MutableText eta = (MutableText) this.getTotalETA();

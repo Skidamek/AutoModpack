@@ -25,6 +25,7 @@ import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.modpack.Modpack;
 
+import java.awt.image.Kernel;
 import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.FileTime;
@@ -94,26 +95,30 @@ public class FileChangeChecker {
 
 
     private void checkFiles(List<Path> paths) throws Exception {
-        for (Path path : paths) {
+        List<Path> pathsCopy = new ArrayList<>(paths);
+        for (Path path : pathsCopy) {
 
             // check if file exists, if not, remove it from the list
             if (Files.exists(path)) {
-                if (!fileTimes.containsKey(path)) {
-                    fileTimes.put(path, Files.getLastModifiedTime(path));
+                if (!this.fileTimes.containsKey(path)) {
+                    this.fileTimes.put(path, Files.getLastModifiedTime(path));
                 }
             } else {
-                fileTimes.remove(path);
+                LOGGER.info("File removed: {}", path.getFileName());
+                this.fileTimes.remove(path);
+                this.paths.remove(path);
                 Modpack.Content.removeOneItem(path, Modpack.Content.list);
+                LOGGER.info("Removed modpack content values for: {}", path.getFileName());
                 continue;
             }
 
 
             FileTime newTime = Files.getLastModifiedTime(path);
-            FileTime oldTime = fileTimes.get(path);
+            FileTime oldTime = this.fileTimes.get(path);
 
             if (!newTime.equals(oldTime)) {
-                changed = true;
-                fileTimes.put(path, newTime);
+                this.changed = true;
+                this.fileTimes.put(path, newTime);
 
                 if (GlobalVariables.serverFullyStarted) {
                     LOGGER.info("File changed: {} ", path.getFileName());
@@ -122,7 +127,7 @@ public class FileChangeChecker {
                 Modpack.Content.replaceOneItem(path.getParent(), path, Modpack.Content.list);
 
                 if (GlobalVariables.serverFullyStarted) {
-                    LOGGER.info("Re-generated modpack content for: {}", path.getFileName());
+                    LOGGER.info("Re-generated modpack content values for: {}", path.getFileName());
                 }
             }
         }

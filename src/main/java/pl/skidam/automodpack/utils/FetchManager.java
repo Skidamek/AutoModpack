@@ -56,7 +56,6 @@ public class FetchManager {
 
     public void fetch(String serverUrl, String sha1, String murmur, String fileSize, String fileType) {
         if (!anyAPIUp) {
-            LOGGER.warn("APIs are down, skipping fetch");
             return;
         }
 
@@ -71,6 +70,10 @@ public class FetchManager {
         if (fetchesInProgress.size() < MAX_FETCHES_IN_PROGRESS && !queuedFetches.isEmpty()) {
             String url = queuedFetches.keySet().iterator().next();
             QueuedFetch queuedFetch = queuedFetches.remove(url);
+
+            if (queuedFetch == null) {
+                return;
+            }
 
             Runnable fetchTask = () -> {
                 try {

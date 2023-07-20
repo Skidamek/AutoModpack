@@ -42,7 +42,13 @@ public class LinkS2CPacket {
     private static void packet(ServerLoginNetworkHandler handler, PacketByteBuf buf) {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 
-        String clientHasUpdate = buf.readString();
+        String clientHasUpdate = buf.toString();
+
+        LOGGER.error(clientHasUpdate);
+
+        clientHasUpdate = buf.readString();
+
+        LOGGER.error(clientHasUpdate);
 
         if ("true".equals(clientHasUpdate)) { // disconnect
             LOGGER.warn("{} has not installed modpack", profile.getName());

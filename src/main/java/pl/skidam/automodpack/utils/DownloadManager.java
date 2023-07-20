@@ -79,6 +79,10 @@ public class DownloadManager {
             String url = queuedDownloads.keySet().iterator().next();
             QueuedDownload queuedDownload = queuedDownloads.remove(url);
 
+            if (queuedDownload == null) {
+                return;
+            }
+
             Runnable downloadTask = () -> {
                 try {
                     downloadFile(url, queuedDownload);

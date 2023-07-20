@@ -75,12 +75,10 @@ public class Preload {
         }
 
 
-        if (Loader.getEnvironmentType().equals("SERVER") || (Loader.getEnvironmentType().equals("CLIENT") && clientConfig.selectedModpack.equals(""))) {
-            try {
-                CustomFileUtils.deleteEmptyFiles(Paths.get("./"), true, null);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        try {
+            CustomFileUtils.deleteEmptyFiles(Paths.get("./"), true, null);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
 
         LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");

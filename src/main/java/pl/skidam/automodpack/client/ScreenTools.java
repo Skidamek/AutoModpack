@@ -49,8 +49,8 @@ public class ScreenTools {
             if (Check.properlyLoaded()) Screens.setScreen(new ChangelogScreen(parent, modpackDir));
         }
 
-        public static void restart(Path gameDir, boolean fullDownload) {
-            if (Check.properlyLoaded()) Screens.setScreen(new RestartScreen(gameDir, fullDownload));
+        public static void restart(Path modpackDir, boolean fullDownload) {
+            if (Check.properlyLoaded()) Screens.setScreen(new RestartScreen(modpackDir, fullDownload));
         }
 
         public static void danger(Screen parent, String link, Path modpackDir, Path modpackContentFile) {

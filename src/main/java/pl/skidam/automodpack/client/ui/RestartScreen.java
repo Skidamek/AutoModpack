@@ -33,15 +33,15 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 public class RestartScreen extends VersionedScreen {
-    private final Path gameDir;
+    private final Path modpackDir;
     private final boolean fullDownload;
     private static ButtonWidget cancelButton;
     private static ButtonWidget restartButton;
     private static ButtonWidget changelogsButton;
 
-    public RestartScreen(Path gameDir, boolean fullDownload) {
+    public RestartScreen(Path modpackDir, boolean fullDownload) {
         super(VersionedText.common.literal("RestartScreen"));
-        this.gameDir = gameDir;
+        this.modpackDir = modpackDir;
         this.fullDownload = fullDownload;
 
         if (AudioManager.isMusicPlaying()) {
@@ -71,11 +71,11 @@ public class RestartScreen extends VersionedScreen {
         });
 
         restartButton = VersionedText.buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.common.translatable("automodpack.restart.confirm").formatted(Formatting.GREEN), button -> {
-            new ReLauncher.Restart(gameDir, fullDownload);
+            new ReLauncher.Restart(modpackDir, fullDownload);
         });
 
         changelogsButton = VersionedText.buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.common.translatable("automodpack.changelog.view"), button -> {
-            this.client.setScreen(new ChangelogScreen(this, gameDir));
+            this.client.setScreen(new ChangelogScreen(this, modpackDir));
         });
     }
 
