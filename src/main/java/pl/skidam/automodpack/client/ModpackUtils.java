@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack.client;
 
-import io.netty.channel.ConnectTimeoutException;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.config.RequestConfig;
@@ -37,7 +36,6 @@ import pl.skidam.automodpack.utils.ModpackContentTools;
 import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
-import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

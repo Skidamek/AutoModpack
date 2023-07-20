@@ -37,11 +37,8 @@ import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.HttpServer;
 
-import java.util.UUID;
-
 import static pl.skidam.automodpack.GlobalVariables.*;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
-import static pl.skidam.automodpack.networking.ModPacketsImpl.acceptLogin;
 
 public class LoginS2CPacket {
 
@@ -56,18 +53,14 @@ public class LoginS2CPacket {
         ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
-        UUID uniqueId = profile.getId();
         String playerName = profile.getName();
 
         String correctResponse = AM_VERSION + "-" + Loader.getPlatformType().toString().toLowerCase();
 
         if (!understood) {
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
-            if (serverConfig.optionalModpack) {
-                acceptLogin.add(uniqueId);
-            } else {
+            if (!serverConfig.optionalModpack) {
                 Text reason = VersionedText.common.literal("AutoModpack mod for " + Loader.getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
-                acceptLogin.add(uniqueId);
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
             }
@@ -95,15 +88,12 @@ public class LoginS2CPacket {
                     if (isClientVersionHigher) {
                         reason = VersionedText.common.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
                     }
-                    acceptLogin.add(uniqueId);
                     connection.send(new LoginDisconnectS2CPacket(reason));
                     connection.disconnect(reason);
                     return null;
                 }
             }
         }
-
-        acceptLogin.add(uniqueId);
 
         if (!HttpServer.isRunning() && serverConfig.externalModpackHostLink.equals("")) {
             return null;

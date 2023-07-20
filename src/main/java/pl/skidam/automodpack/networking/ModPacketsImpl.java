@@ -22,28 +22,15 @@ package pl.skidam.automodpack.networking;
 
 //#if FABRICLIKE
 
-import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
 import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
-import net.minecraft.text.Text;
-import net.minecraft.util.Util;
-import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.packet.LinkC2SPacket;
 import pl.skidam.automodpack.networking.packet.LinkS2CPacket;
 import pl.skidam.automodpack.networking.packet.LoginC2SPacket;
 import pl.skidam.automodpack.networking.packet.LoginS2CPacket;
-import pl.skidam.automodpack.utils.Wait;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.FutureTask;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
 import static pl.skidam.automodpack.GlobalVariables.AM_VERSION;
@@ -51,9 +38,6 @@ import static pl.skidam.automodpack.networking.ModPackets.HANDSHAKE;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
 
 public class ModPacketsImpl {
-
-    // UUID, acceptLogin
-    public static List<UUID> acceptLogin = new ArrayList<>();
 
     public static void registerC2SPackets() {
         ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, LoginC2SPacket::receive);
@@ -66,44 +50,18 @@ public class ModPacketsImpl {
 
         ServerLoginConnectionEvents.QUERY_START.register((handler, server, sender, sync) -> {
 
-            GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
-            UUID uniqueId = profile.getId();
-
-            FutureTask<?> future = new FutureTask<>(() -> {
-                for (int i = 0; i <= 300; i++) {
-                    new Wait(50);
-
-                    if (acceptLogin.contains(uniqueId)) {
-                        acceptLogin.remove(uniqueId);
-                        break;
-                    }
-
-                    if (i == 300) {
-                        LOGGER.error("Timeout login for " + profile.getName() + " (" + uniqueId.toString()  + ")");
-                        Text reason = VersionedText.common.literal("AutoModpack - timeout");
-                        ((ServerLoginNetworkHandlerAccessor) handler).getConnection().send(new LoginDisconnectS2CPacket(reason));
-                        ((ServerLoginNetworkHandlerAccessor) handler).getConnection().disconnect(reason);
-                    }
-                }
-
-                return null;
-            });
-
-            // Execute the task on a worker thread as not to block the server thread
-            Util.getMainWorkerExecutor().execute(future);
-
             PacketByteBuf buf = PacketByteBufs.create();
             StringBuilder correctResponse = new StringBuilder(AM_VERSION + "-");
+
             for (String loader : serverConfig.acceptedLoaders) {
                 correctResponse.append(loader);
                 if (serverConfig.acceptedLoaders.indexOf(loader) != serverConfig.acceptedLoaders.size() - 1) {
                     correctResponse.append("&");
                 }
             }
+
             buf.writeString(correctResponse.toString(), 32767);
             sender.sendPacket(HANDSHAKE, buf);
-
-            sync.waitFor(future);
         });
     }
 }

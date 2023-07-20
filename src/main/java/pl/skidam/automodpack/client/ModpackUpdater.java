@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack.client;
 
-import com.google.gson.JsonObject;
 import pl.skidam.automodpack.utils.DownloadManager;
 import pl.skidam.automodpack.utils.FetchManager;
 import pl.skidam.automodpack.ReLauncher;
@@ -43,7 +42,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static pl.skidam.automodpack.GlobalVariables.*;

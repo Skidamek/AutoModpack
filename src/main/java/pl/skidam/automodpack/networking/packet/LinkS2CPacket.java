@@ -44,8 +44,6 @@ public class LinkS2CPacket {
 
         String clientHasUpdate = buf.readString(32767);
 
-        LOGGER.error("Client has update? " + clientHasUpdate);
-
         if ("true".equals(clientHasUpdate)) { // disconnect
             LOGGER.warn("{} has not installed modpack", profile.getName());
             Text reason = VersionedText.common.literal("[AutoModpack] Install/Update modpack to join");

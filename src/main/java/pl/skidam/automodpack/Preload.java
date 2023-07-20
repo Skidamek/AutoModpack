@@ -58,17 +58,13 @@ public class Preload {
 
         if (!quest) {
             String selectedModpack = clientConfig.selectedModpack;
-            if (selectedModpack != null && !selectedModpack.equals("")) {
+            if (Loader.getEnvironmentType().equals("CLIENT") && selectedModpack != null && !selectedModpack.equals("")) {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
                 Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
 
                 new SelfUpdater(serverModpackContent);
-
-                if (Loader.getEnvironmentType().equals("CLIENT")) {
-                    new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
-
-                }
+                new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
             } else {
                 new SelfUpdater(null);
             }

@@ -69,8 +69,6 @@ public class LinkC2SPacket {
             }
         });
 
-        System.out.println("LinkC2SPacket response: " + response);
-
         return CompletableFuture.completedFuture(response);
     }
 }
