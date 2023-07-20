@@ -40,8 +40,8 @@ public class MmcPackMagic {
         return Json.fromFile(mmcPackFile);
     }
 
-    public static void changeVersion(JsonObject mmcPackJson, List<String> listOfUIDs, String newVersion) throws IOException {
-        if (mmcPackJson == null || newVersion == null || listOfUIDs == null) {
+    public static void changeVersion(List<String> listOfUIDs, String newVersion) throws IOException {
+        if (newVersion == null || listOfUIDs == null) {
             return;
         }
 
@@ -49,8 +49,12 @@ public class MmcPackMagic {
             return;
         }
 
-        JsonObject changedJson = mmcPackJson.getAsJsonObject();
-        JsonArray components = mmcPackJson.getAsJsonArray("components");
+        JsonObject newJson = getJson().getAsJsonObject();
+        if (newJson == null) {
+            return;
+        }
+
+        JsonArray components = newJson.getAsJsonArray("components");
 
         for (JsonElement comp : components) {
             JsonObject component = comp.getAsJsonObject();
@@ -61,9 +65,9 @@ public class MmcPackMagic {
         };
 
         // change components of mmcPackJson to our components
-        changedJson.remove("components");
-        changedJson.add("components", components);
+        newJson.remove("components");
+        newJson.add("components", components);
 
-        Files.write(mmcPackFile, changedJson.toString().getBytes());
+        Files.write(mmcPackFile, newJson.toString().getBytes());
     }
 }

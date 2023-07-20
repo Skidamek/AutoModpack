@@ -20,6 +20,7 @@
 
 package pl.skidam.automodpack.client.ui;
 
+import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.util.Formatting;
 
 import pl.skidam.automodpack.client.ModpackUpdater;
@@ -29,6 +30,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 public class FetchScreen extends VersionedScreen {
 
+    private ButtonWidget cancelButton;
+
     public FetchScreen() {
         super(VersionedText.common.literal("FetchScreen"));
     }
@@ -36,6 +39,17 @@ public class FetchScreen extends VersionedScreen {
     @Override
     protected void init() {
         super.init();
+
+        initWidgets();
+    }
+
+    private void initWidgets() {
+        cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height - 40, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
+                button -> {
+                    cancelButton.active = false;
+                    ModpackUpdater.cancelDownload();
+                }
+        );
     }
 
     @Override

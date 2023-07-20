@@ -94,8 +94,11 @@ public class DownloadScreen extends VersionedScreen {
     }
 
     private void initWidgets() {
-        cancelButton = VersionedText.buttonWidget(this.width / 2 - 50, this.height - 25, 100, 20, VersionedText.common.translatable("automodpack.cancel"),
-                button -> ModpackUpdater.cancelDownload()
+        cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height - 40, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
+                button -> {
+                    cancelButton.active = false;
+                    ModpackUpdater.cancelDownload();
+                }
         );
     }
 
@@ -214,6 +217,9 @@ public class DownloadScreen extends VersionedScreen {
             VersionedText.drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, x, y, 0, 0, (int) (PROGRESS_BAR_WIDTH * getDownloadScale()), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
 
             checkAndStartMusic();
+            cancelButton.active = true;
+        } else {
+            cancelButton.active = false;
         }
     }
 

@@ -85,6 +85,8 @@ public class DownloadManager {
 
                     if (!Objects.equals(CustomFileUtils.getHash(queuedDownload.file, "SHA-1"), queuedDownload.sha1)) {
 
+                        bytesDownloaded -= queuedDownload.file.toFile().length();
+
                         // Runs only when failure
                         if (retryCounts.get(url) <= 3) {
                             retryCounts.put(url, retryCounts.get(url) + 1); // Increment the retry count here
@@ -101,7 +103,6 @@ public class DownloadManager {
                     } else if (Files.exists(queuedDownload.file)) {
 
                         downloaded++;
-                        bytesDownloaded += queuedDownload.file.toFile().length();
                         queuedDownload.successCallback.run();
                     }
                 } catch (SocketTimeoutException | InterruptedException ignored) {
@@ -165,6 +166,7 @@ public class DownloadManager {
             byte[] buffer = new byte[BUFFER_SIZE];
             int bytesRead;
             while ((bytesRead = inputStream.read(buffer)) != -1) {
+                bytesDownloaded += bytesRead;
                 outputStream.write(buffer, 0, bytesRead);
 
                 if (Thread.currentThread().isInterrupted()) {

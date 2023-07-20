@@ -21,6 +21,7 @@
 
   "automodpack.changelog.view": "Zobacz dzienniki zmian",
   "automodpack.changelog.noChanges": "Nie znaleziono zmian.",
+  "automodpack.changelog.openPage": "Otwórz stronę projektu",
 
   "automodpack.download.calculating": "Obliczanie...",
   "automodpack.download.eta": "Pozostały czas: %s",

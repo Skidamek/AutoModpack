@@ -21,6 +21,7 @@
 
     "automodpack.changelog.view": "View changelogs",
     "automodpack.changelog.noChanges": "No changes found.",
+    "automodpack.changelog.openPage": "Open project page",
 
     "automodpack.download.calculating": "Calculating...",
     "automodpack.download.eta": "Time left: %s",

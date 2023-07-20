@@ -136,6 +136,9 @@ public class SelfUpdater {
             DownloadManager downloadManager = new DownloadManager();
             downloadManager.download(automodpackUpdateJar, automodpack.SHA1Hash, automodpack.downloadUrl, () -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack.")); // Download it
 
+            downloadManager.joinAll();
+            downloadManager.cancelAllAndShutdown();
+
             // We assume that update jar has always different name than current jar
             Path newAutomodpackJar = Paths.get(automodpackJar.getParent() + File.separator + automodpackUpdateJar.getFileName());
             CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);

@@ -255,46 +255,41 @@ public class ModpackUpdater {
 
                 downloadManager = new DownloadManager(totalBytesToDownload);
 
-                try {
-                    for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : serverModpackContent.list) {
 
-                        String fileName = modpackContentField.file;
-                        String serverSHA1 = modpackContentField.sha1;
+                for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : serverModpackContent.list) {
 
-                        Path downloadFile = Paths.get(modpackDir + File.separator + fileName);
-                        String url;
+                    String fileName = modpackContentField.file;
+                    String serverSHA1 = modpackContentField.sha1;
 
-                        String fileLink = modpackContentField.link;
-                        if (fetchManager.fetchedData.containsKey(modpackContentField.sha1)) {
-                            url = new URL(fetchManager.fetchedData.get(modpackContentField.sha1).getPlatformUrl()).toString();
-                        } else if (modpackContentField.link.startsWith("/")) { // AutoModpack host
-                            url = new URL(link + Url.encode(fileLink)).toString(); // We need to change things like [ ] to %5B %5D etc.
-                        } else { // Other host
-                            url = new URL(fileLink).toString(); // This link just must work, so we don't need to encode it
-                        }
+                    Path downloadFile = Paths.get(modpackDir + File.separator + fileName);
+                    String url;
 
-                        Runnable failureCallback = () -> {
-                            LOGGER.error("Failed to download {} from {}", fileName, url);
-                        };
-
-                        Runnable successCallback = () -> {
-                            LOGGER.info("Successfully downloaded {} from {}", fileName, url);
-
-                            String mainPageUrl = null;
-                            if (fetchManager.fetchedData.get(modpackContentField.sha1) != null) {
-                                mainPageUrl = fetchManager.fetchedData.get(modpackContentField.sha1).getMainPageUrl();
-                            }
-
-                            changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrl);
-                        };
-
-                        long fileSize = Long.parseLong(modpackContentField.size);
-
-                        downloadManager.download(downloadFile, serverSHA1, url, successCallback, failureCallback);
+                    String fileLink = modpackContentField.link;
+                    if (fetchManager.fetchedData.containsKey(modpackContentField.sha1)) {
+                        url = new URL(fetchManager.fetchedData.get(modpackContentField.sha1).getPlatformUrl()).toString();
+                    } else if (modpackContentField.link.startsWith("/")) { // AutoModpack host
+                        url = new URL(link + Url.encode(fileLink)).toString(); // We need to change things like [ ] to %5B %5D etc.
+                    } else { // Other host
+                        url = new URL(fileLink).toString(); // This link just must work, so we don't need to encode it
                     }
 
-                } catch (Exception e) {
-                    e.printStackTrace();
+                    Runnable failureCallback = () -> {
+                        LOGGER.error("Failed to download {} from {}", fileName, url);
+                    };
+
+                    Runnable successCallback = () -> {
+                        LOGGER.info("Successfully downloaded {} from {}", fileName, url);
+
+                        String mainPageUrl = null;
+                        if (fetchManager.fetchedData.get(modpackContentField.sha1) != null) {
+                            mainPageUrl = fetchManager.fetchedData.get(modpackContentField.sha1).getMainPageUrl();
+                        }
+
+                        changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrl);
+                    };
+
+
+                    downloadManager.download(downloadFile, serverSHA1, url, successCallback, failureCallback);
                 }
 
                 downloadManager.joinAll();
@@ -308,9 +303,8 @@ public class ModpackUpdater {
             finishModpackUpdate(modpackDir, modpackContentFile);
 
             // change loader and minecraft version in launchers like prism, multimc.
-            JsonObject mmcPackJson = MmcPackMagic.getJson();
-            MmcPackMagic.changeVersion(mmcPackJson, MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion);
-            MmcPackMagic.changeVersion(mmcPackJson, MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion);
+            MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // update loader version
+            MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // update minecraft version
 
             if (AudioManager.isMusicPlaying()) {
                 AudioManager.stopMusic();

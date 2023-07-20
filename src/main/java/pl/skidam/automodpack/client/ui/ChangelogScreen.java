@@ -83,13 +83,13 @@ public class ChangelogScreen extends VersionedScreen {
         );
         this.searchField.setChangedListener((textField) -> updateChangelogs()); // Update the changelogs display based on the search query
 
-        this.backButton = VersionedText.buttonWidget(this.width / 2 - 160, this.height - 30, 120, 20,
+        this.backButton = VersionedText.buttonWidget(this.width / 2 - 140, this.height - 30, 140, 20,
                 VersionedText.common.translatable("automodpack.back"),
                 button -> this.client.setScreen(this.parent)
         );
 
-        this.openMainPageButton = VersionedText.buttonWidget(this.width / 2 + 40, this.height - 30, 120, 20,
-                VersionedText.common.translatable("Open project page"),
+        this.openMainPageButton = VersionedText.buttonWidget(this.width / 2 + 20, this.height - 30, 140, 20,
+                VersionedText.common.translatable("automodpack.changelog.openPage"),
                 button -> {
                     ListEntry selectedEntry = listEntryWidget.getSelectedOrNull();
 
