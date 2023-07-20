@@ -31,10 +31,7 @@ import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.utils.Wait;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack.GlobalVariables.MOD_ID;
@@ -87,14 +84,14 @@ public class DownloadScreen extends VersionedScreen {
                 lastDownloadedScale = (float) (ModpackUpdater.downloadManager.getTotalPercentageOfFileSizeDownloaded() * 0.01);
 
                 long totalDownloadSpeed = ModpackUpdater.downloadManager.getTotalDownloadSpeed();
-                lastSpeed = ModpackUpdater.downloadManager.getTotalDownloadSpeedInReadableFormatFast(totalDownloadSpeed);
-                lastETA = ModpackUpdater.downloadManager.getTotalETAFast(totalDownloadSpeed);
+                lastSpeed = ModpackUpdater.downloadManager.getTotalDownloadSpeedInReadableFormat(totalDownloadSpeed);
+                lastETA = ModpackUpdater.downloadManager.getTotalETA(totalDownloadSpeed);
             }
         });
     }
 
     private void initWidgets() {
-        cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height - 40, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
+        cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
                 button -> {
                     cancelButton.active = false;
                     ModpackUpdater.cancelDownload();
@@ -206,15 +203,17 @@ public class DownloadScreen extends VersionedScreen {
             MutableText speed = (MutableText) this.getTotalDownloadSpeed();
             VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
             VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, percentage, this.width / 2, this.height / 2 + 30, 16777215);
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 80, 16777215);
+
 
             // Render progress bar
-            int x = this.width / 2 - PROGRESS_BAR_WIDTH / 2;
-            int y = this.height / 2 + 50;
+            int progressX = this.width / 2 - PROGRESS_BAR_WIDTH / 2;
+            int progressY = this.height / 2 + 30;
 
-            VersionedText.drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, x, y, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
-            VersionedText.drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, x, y, 0, 0, (int) (PROGRESS_BAR_WIDTH * getDownloadScale()), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+            VersionedText.drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, progressX, progressY, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+            VersionedText.drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, progressX, progressY, 0, 0, (int) (PROGRESS_BAR_WIDTH * getDownloadScale()), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+
+            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, percentage, this.width / 2, this.height / 2 + 36, 16777215);
+            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 60, 16777215);
 
             checkAndStartMusic();
             cancelButton.active = true;

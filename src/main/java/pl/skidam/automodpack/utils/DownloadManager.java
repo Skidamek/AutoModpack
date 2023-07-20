@@ -44,7 +44,6 @@ public class DownloadManager {
     private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new ThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
     private final Map<String, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
     public final Map<String, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
-    private final Map<String, Long> fileSizes = new ConcurrentHashMap<>();
     private final Map<String, Integer> retryCounts = new ConcurrentHashMap<>();
     private long bytesDownloaded = 0;
     private long bytesToDownload = 0;
@@ -116,7 +115,6 @@ public class DownloadManager {
                     e.printStackTrace();
                 } finally {
                     // Runs every time
-                    fileSizes.remove(url);
                     downloadsInProgress.remove(url);
                     retryCounts.remove(url);
                     semaphore.release();
@@ -160,8 +158,6 @@ public class DownloadManager {
         connection.setConnectTimeout(8000);
         connection.setReadTimeout(5000);
 
-        fileSizes.put(url.toString(), connection.getContentLengthLong());
-
         try (OutputStream outputStream = new FileOutputStream(outFile.toFile());
              InputStream rawInputStream = new BufferedInputStream(connection.getInputStream(), BUFFER_SIZE);
              InputStream inputStream = ("gzip".equals(connection.getHeaderField("Content-Encoding"))) ?
@@ -196,10 +192,7 @@ public class DownloadManager {
         return totalDownloadTimeInSeconds == 0 ? 0 : totalBytesDownloaded / totalDownloadTimeInSeconds;
     }
 
-
-    public String getTotalDownloadSpeedInReadableFormat() {
-        long totalDownloadSpeed = getTotalDownloadSpeed();
-
+    public String getTotalDownloadSpeedInReadableFormat(long totalDownloadSpeed) {
         if (totalDownloadSpeed == 0) {
             return "-1";
         }
@@ -208,68 +201,10 @@ public class DownloadManager {
         return addUnitsPerSecond(totalDownloadSpeed);
     }
 
-    public String getTotalDownloadSpeedInReadableFormatFast(long totalDownloadSpeed) {
-        if (totalDownloadSpeed == 0) {
-            return "-1";
-        }
-
-        // Use the formatSize() method to format the total download speed into a human-readable format
-        return addUnitsPerSecond(totalDownloadSpeed);
-    }
-
-
-    public String getTotalETA() {
-        long totalBytesRemaining = fileSizes.values().stream().mapToLong(Long::longValue).sum()
-                - downloadsInProgress.values().stream().mapToLong(data -> data.file.toFile().length()).sum();
-
-        long averageSpeed = getTotalDownloadSpeed();
-
-        return averageSpeed == 0 ? "0" : totalBytesRemaining / averageSpeed + "s";
-    }
-
-    public String getTotalETAFast(long totalDownloadSpeed) {
+    public String getTotalETA(long totalDownloadSpeed) {
         long totalBytesRemaining = bytesToDownload - bytesDownloaded;
 
         return totalDownloadSpeed == 0 ? "0" : totalBytesRemaining / totalDownloadSpeed + "s";
-    }
-
-    public String getETAOfFile(String url) {
-        if (!fileSizes.containsKey(url) || !isDownloadInProgress(url)) {
-            return "-1";
-        }
-
-        long fileSize = fileSizes.get(url);
-        long bytesDownloaded = getFileDownloadedSize(url);
-        long bytesRemaining = fileSize - bytesDownloaded;
-
-        long averageSpeed = getTotalDownloadSpeed();
-
-        return averageSpeed == 0 ? "0" : bytesRemaining / averageSpeed + "s";
-    }
-
-    public String calculateAndFormatDownloadedFileSize(String url) {
-        if (!fileSizes.containsKey(url) || !isDownloadInProgress(url)) {
-            return null;
-        }
-
-        long fileSize = fileSizes.get(url);
-        long downloadedSize = getFileDownloadedSize(url);
-
-        return formatSize(fileSize, downloadedSize);
-    }
-
-    public String formatSize(long fileSize, long downloadedSize) {
-        String[] units = {"B", "KB", "MB", "GB", "TB"};
-        int unitIndex = 0;
-
-        while (fileSize > 1024 && unitIndex < units.length) {
-            fileSize /= 1024;
-            unitIndex++;
-        }
-
-        downloadedSize /= Math.pow(1024, unitIndex);
-
-        return downloadedSize + "/" + fileSize + units[unitIndex];
     }
 
     public String addUnitsPerSecond(long size) {
@@ -284,38 +219,13 @@ public class DownloadManager {
         return size + units[unitIndex] + "/s";
     }
 
-
-    public long getFileDownloadedSize(String url) {
-        if (isDownloadInProgress(url)) {
-            return downloadsInProgress.get(url).file.toFile().length();
-        } else {
-            return -1;
-        }
-    }
-
     public float getTotalPercentageOfFileSizeDownloaded() {
         return (float) bytesDownloaded / bytesToDownload * 100;
     }
 
-    public float getPercentageOfFileSizeDownloaded(String url) {
-        if (!fileSizes.containsKey(url) || !isDownloadInProgress(url)) {
-            return -1;
-        }
-
-        long fileSize = fileSizes.get(url);
-        long downloadedSize = getFileDownloadedSize(url);
-
-        return (float) downloadedSize / fileSize * 100;
-    }
-
-
     public String getStage() {
         // files downloaded / files downloaded + queued
         return downloaded + "/" + addedToQueue;
-    }
-
-    public boolean isDownloadInProgress(String url) {
-        return downloadsInProgress.containsKey(url);
     }
 
     public boolean isClosed() {
@@ -329,7 +239,6 @@ public class DownloadManager {
             CustomFileUtils.forceDelete(downloadData.file);
         });
         downloadsInProgress.clear();
-        fileSizes.clear();
         retryCounts.clear();
         downloaded = 0;
         addedToQueue = 0;

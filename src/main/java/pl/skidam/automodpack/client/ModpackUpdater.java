@@ -48,11 +48,9 @@ import static pl.skidam.automodpack.GlobalVariables.*;
 import static pl.skidam.automodpack.config.ConfigTools.GSON;
 import static pl.skidam.automodpack.utils.CustomFileUtils.mapAllFiles;
 
-@SuppressWarnings("unchecked")
 public class ModpackUpdater {
     public static Map<String, String> changesAddedList = new HashMap<>(); // <file name, main page url>
     public static Map<String, String> changesDeletedList = new HashMap<>(); // <file name, main page url>
-    private static ExecutorService DOWNLOAD_EXECUTOR;
     public static DownloadManager downloadManager;
     public static FetchManager fetchManager;
     public static long totalBytesToDownload = 0;
@@ -422,39 +420,30 @@ public class ModpackUpdater {
     // This method cancels the current download by interrupting the thread pool
     public static void cancelDownload() {
         try {
-            fetchManager.cancelAllAndShutdown();
-            downloadManager.cancelAllAndShutdown();
+            if (fetchManager != null) {
+                fetchManager.cancelAllAndShutdown();
+            }
 
-            terminateDownloadExecutor();
+            if (downloadManager != null) {
+                downloadManager.cancelAllAndShutdown();
+            }
 
-            DOWNLOAD_EXECUTOR = null;
             failedDownloads.clear();
             changesAddedList.clear();
             changesDeletedList.clear();
 
             LOGGER.info("Download canceled");
 
-            if (ScreenTools.getScreenString().contains("downloadscreen")) {
-                ScreenTools.setTo.title();
-            }
+            // todo delete files that were downloaded
+            // we will use the same method as to modpacks manager
+
+            ScreenTools.setTo.title();
+
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    private static void terminateDownloadExecutor() {
-        DOWNLOAD_EXECUTOR.shutdown();
-        try {
-            if (!DOWNLOAD_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
-                DOWNLOAD_EXECUTOR.shutdownNow();
-                if (!DOWNLOAD_EXECUTOR.awaitTermination(3, TimeUnit.SECONDS)) {
-                    LOGGER.error("CREATION Executor did not terminate");
-                }
-            }
-        } catch (InterruptedException e) {
-            DOWNLOAD_EXECUTOR.shutdownNow();
-        }
-    }
 
     // removes mods from the main mods folder
     // that are having the same id as the ones in the modpack mods folder but different version/hash
@@ -520,5 +509,4 @@ public class ModpackUpdater {
         }
         return false;
     }
-
 }

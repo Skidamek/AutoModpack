@@ -46,7 +46,7 @@ public class FetchScreen extends VersionedScreen {
     }
 
     private void initWidgets() {
-        cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height - 40, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
+        cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
                 button -> {
                     cancelButton.active = false;
                     ModpackUpdater.cancelDownload();
