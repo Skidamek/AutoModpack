@@ -265,6 +265,7 @@ public class ModpackUpdater {
 
                     Runnable failureCallback = () -> {
                         LOGGER.error("Failed to download {} from {}", fileName, url);
+                        failedDownloads.put(downloadFile.getFileName().toString(), url);
                     };
 
                     Runnable successCallback = () -> {
