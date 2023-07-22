@@ -64,7 +64,7 @@ Launch the game your game/server.
 
 and you are good to go!
 
-Doesn't work? Check `hostIp` in `/automodpack/automodpack-server.json` and make sure it's correct. (same as your server ip/domain)
+Doesn't work? Check minecraft server logs!
 
 #### Do you want to add more content to your modpack?
 - By default, the modpack will automatically synchronize all mods, configs from default server directories to the modpack. (Check `syncedFiles` list in `/automodpack/automodpack-server.json`)
