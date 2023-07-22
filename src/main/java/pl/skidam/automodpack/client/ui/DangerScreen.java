@@ -58,7 +58,6 @@ public class DangerScreen extends VersionedScreen {
         assert this.client != null;
 
         this.addDrawableChild(VersionedText.buttonWidget(this.width / 2 - 115, this.height / 2 + 50, 120, 20, VersionedText.common.translatable("automodpack.danger.cancel").formatted(Formatting.RED), button -> {
-            LOGGER.error("User canceled download, setting his to screen " + parent.getTitle().getString());
             this.client.setScreen(parent);
         }));
 

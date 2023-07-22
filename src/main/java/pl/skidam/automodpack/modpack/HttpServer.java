@@ -271,6 +271,12 @@ public class HttpServer {
 
             try {
                 if (requestMethod.equals("GET")) {
+
+                    if (Modpack.isGenerating()) {
+                        sendError(client, 503);
+                        return;
+                    }
+
                     Path file;
                     if (requestUrl.equals("") || requestUrl.equals("/")) {
                         file = hostModpackContentFile;
@@ -281,12 +287,15 @@ public class HttpServer {
                     } else if (listOfPaths.contains(Paths.get(hostModpackDir + File.separator + requestUrl))) {
                         file = Paths.get(hostModpackDir + File.separator + requestUrl);
 
-                    } else if (listOfPaths.contains(Paths.get("./" + requestUrl))) {
-                        file = Paths.get("./" + requestUrl);
-
                     } else {
-                        sendError(client, 404);
-                        return;
+                        Path requestPath = Paths.get("./" + requestUrl);
+                        if (listOfPaths.contains(requestPath)) {
+                            file = requestPath;
+
+                        } else {
+                            sendError(client, 404);
+                            return;
+                        }
                     }
 
                     if (!Files.exists(file) || !Files.isRegularFile(file)) {

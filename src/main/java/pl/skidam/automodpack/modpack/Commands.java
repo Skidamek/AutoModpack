@@ -186,6 +186,14 @@ public class Commands {
 
     private static int generateModpack(CommandContext<ServerCommandSource> context) {
         CompletableFuture.runAsync(() -> {
+
+            if (Modpack.isGenerating()) {
+                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack is already generating! Please wait!")
+                                .formatted(Formatting.RED),
+                        false);
+                return;
+            }
+
             VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Generating Modpack...")
                             .formatted(Formatting.YELLOW),
                     true);
@@ -197,7 +205,7 @@ public class Commands {
             } else {
                 VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack generation failed! Check logs for more info.")
                                 .formatted(Formatting.RED),
-                        false);
+                        true);
             }
         });
         return Command.SINGLE_SUCCESS;

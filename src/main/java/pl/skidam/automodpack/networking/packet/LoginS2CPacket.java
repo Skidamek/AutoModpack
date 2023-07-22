@@ -36,6 +36,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.HttpServer;
+import pl.skidam.automodpack.modpack.Modpack;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
@@ -99,6 +100,13 @@ public class LoginS2CPacket {
             return null;
         }
 
+        if (Modpack.isGenerating()) {
+            Text reason = VersionedText.common.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
+            connection.send(new LoginDisconnectS2CPacket(reason));
+            connection.disconnect(reason);
+            return null;
+        }
+
         String playerIp = connection.getAddress().toString();
         String HostIPForLocal = serverConfig.hostLocalIp.replaceFirst("(https?://)", ""); // Removes HTTP:// or HTTPS://
         String HostNetwork = "";
@@ -120,6 +128,7 @@ public class LoginS2CPacket {
                 linkToSend += ":" + serverConfig.hostPort;
             }
             LOGGER.info("Sending external modpack host link: " + linkToSend);
+
         } else {
             // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
             if (playerIp.startsWith("/127.0.0.1") || playerIp.startsWith("/[0:0:0:0:") || playerIp.startsWith("/" + serverConfig.hostLocalIp) || playerIp.startsWith("/192.168.")) { // local
@@ -129,6 +138,8 @@ public class LoginS2CPacket {
             } else { // Otherwise, use the public host IP and port
                 linkToSend = "http://" + serverConfig.hostIp + ":" + serverConfig.hostPort;
             }
+
+            LOGGER.info("Sending local modpack host link: " + linkToSend);
         }
 
         PacketByteBuf outBuf = PacketByteBufs.create();

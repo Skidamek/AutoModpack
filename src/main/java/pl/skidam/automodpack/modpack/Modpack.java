@@ -46,6 +46,7 @@ public class Modpack {
     public static Path hostModpackContentFile = Paths.get(hostModpackDir + File.separator + "modpack-content.json");
     public static final int MAX_MODPACK_ADDITIONS = 8; // at the same time
     private static ExecutorService CREATION_EXECUTOR;
+
     public static boolean generate() {
         try {
             if (!Files.exists(hostModpackDir)) {
@@ -56,6 +57,10 @@ public class Modpack {
         }
 
         return Content.create(hostModpackDir);
+    }
+
+    public static boolean isGenerating() {
+        return CREATION_EXECUTOR != null && !CREATION_EXECUTOR.isTerminated();
     }
 
     private static void autoExcludeServerMods(List<Jsons.ModpackContentFields.ModpackContentItem> list) {

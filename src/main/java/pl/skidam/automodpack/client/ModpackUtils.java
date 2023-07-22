@@ -170,6 +170,11 @@ public class ModpackUtils {
 
             Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse, Jsons.ModpackContentFields.class);
 
+            if (serverModpackContent == null) {
+                LOGGER.error("Couldn't connect to modpack server " + link);
+                return null;
+            }
+
             if (serverModpackContent.list.size() < 1) {
                 LOGGER.error("Modpack content is empty!");
                 return null;

@@ -20,6 +20,7 @@
 
 package pl.skidam.automodpack.client;
 
+import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.utils.DownloadManager;
 import pl.skidam.automodpack.utils.FetchManager;
 import pl.skidam.automodpack.ReLauncher;
@@ -294,7 +295,9 @@ public class ModpackUpdater {
             finishModpackUpdate(modpackDir, modpackContentFile);
 
             // change loader and minecraft version in launchers like prism, multimc.
-            MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // update loader version
+            if (serverModpackContent.loader.equals(Loader.getPlatformType().toString().toLowerCase())) { // server may use different loader than client
+                MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // update loader version
+            }
             MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // update minecraft version
 
             if (AudioManager.isMusicPlaying()) {
