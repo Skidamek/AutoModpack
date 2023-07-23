@@ -30,6 +30,7 @@ import pl.skidam.automodpack.utils.ModpackContentTools;
 import pl.skidam.automodpack.utils.SetupFiles;
 
 import java.nio.file.Paths;
+import java.util.List;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
 
@@ -56,6 +57,8 @@ public class Preload {
 
         new SetupFiles();
 
+        List<Jsons.ModpackContentFields.ModpackContentItem> serverModpackContentList = null;
+
         if (!quest) {
             String selectedModpack = clientConfig.selectedModpack;
             if (Loader.getEnvironmentType().equals("CLIENT") && selectedModpack != null && !selectedModpack.equals("")) {
@@ -63,12 +66,11 @@ public class Preload {
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
                 Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
 
-                new SelfUpdater(serverModpackContent);
-
                 if (serverModpackContent != null) {
-                    CustomFileUtils.deleteEmptyFiles(selectedModpackDir, serverModpackContent.list);
+                    serverModpackContentList = serverModpackContent.list;
                 }
 
+                new SelfUpdater(serverModpackContent);
                 new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
             } else {
                 new SelfUpdater(null);
@@ -76,7 +78,7 @@ public class Preload {
         }
 
         try {
-            CustomFileUtils.deleteEmptyFiles(Paths.get("./"), null);
+            CustomFileUtils.deleteEmptyFiles(Paths.get("./"), serverModpackContentList);
         } catch (Exception e) {
             e.printStackTrace();
         }
