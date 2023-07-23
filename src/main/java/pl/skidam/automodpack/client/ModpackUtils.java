@@ -41,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Objects;
 
@@ -102,12 +103,15 @@ public class ModpackUtils {
             if (Files.exists(sourceFile)) {
                 Path destinationFile = Paths.get("." + fileName);
 
-//                if (destinationFile.exists()) {
-//                    CustomFileUtils.forceDelete(destinationFile, false);
-//                }
+                try {
+                    if (CustomFileUtils.compareFileHashes(sourceFile, destinationFile, "SHA-1")) {
+                        return;
+                    }
+                } catch (NoSuchAlgorithmException e) {
+                    e.printStackTrace();
+                }
 
                 CustomFileUtils.copyFile(sourceFile, destinationFile);
-//                LOGGER.info("Copied " + fileName + " to running directory");
             }
         }
     }

@@ -166,7 +166,7 @@ public class FabricImpl {
             e.printStackTrace();
         }
 
-        return null;
+        return "UNKNOWN";
     }
     public static boolean isDevelopmentEnvironment() {
         return FabricLoader.getInstance().isDevelopmentEnvironment();

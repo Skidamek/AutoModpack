@@ -4,9 +4,10 @@
   "package": "pl.skidam.automodpack.mixin",
   "compatibilityLevel": "JAVA_8",
   "mixins": [
-    "ServerLoginNetworkHandlerMixin",
     "MinecraftServerMixin",
-    "ServerLoginNetworkHandlerAccessor"
+    "NetworkRegistryMixin",
+    "ServerLoginNetworkHandlerAccessor",
+    "ServerLoginNetworkHandlerMixin"
   ],
   "client": [
     "MusicTrackerMixin",

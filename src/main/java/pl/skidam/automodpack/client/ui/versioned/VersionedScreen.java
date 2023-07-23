@@ -31,7 +31,6 @@ import net.minecraft.client.util.math.MatrixStack;
 //$$import net.minecraft.client.gui.DrawContext;
 //#endif
 
-@SuppressWarnings("unchecked")
 public class VersionedScreen extends Screen {
 
     protected VersionedScreen(Text title) {
@@ -54,11 +53,12 @@ public class VersionedScreen extends Screen {
     }
 
 //#if MC < 11700
-//$$    public <T extends Element> T addDrawableChild(T child) {
-//$$        if (child instanceof ClickableWidget) {
-//$$            return (T) super.addButton((ClickableWidget) child);
-//$$        }
-//$$        return super.addChild(child);
+//$$    public <T extends Element> void addDrawableChild(T child) {
+//$$       if (child instanceof ClickableWidget) {
+//$$           super.addButton((ClickableWidget) child);
+//$$           return;
+//$$       }
+//$$       super.addChild(child);
 //$$   }
 //#endif
 }

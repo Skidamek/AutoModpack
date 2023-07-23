@@ -25,6 +25,7 @@ repositories {
 	maven { url 'https://jitpack.io' }
 	maven { url 'https://www.cursemaven.com' }
 	maven { url 'https://maven.quiltmc.org/repository/release' }
+	maven { url 'https://maven.su5ed.dev/releases' }
 }
 
 // https://github.com/FabricMC/fabric-loader/issues/783
@@ -54,6 +55,19 @@ dependencies {
 			include(modImplementation(fabricApi.module("fabric-command-api-v1", project.fabric_version)))
 		} else {
 			include(modImplementation(fabricApi.module("fabric-command-api-v2", project.fabric_version)))
+		}
+	} else {
+
+		Set<String> apiModules = [
+				"fabric-api-base:0.4.30+aefdd90477",
+				"fabric-networking-api-v1:1.3.9+54715f9577",
+				"fabric-registry-sync-v0:2.3.0+a9c90db477",
+				"fabric-resource-loader-v0:0.11.9+eb61ec6a77",
+				"fabric-command-api-v2:2.2.12+561530ec77"
+		]
+
+		apiModules.forEach {
+			include(modImplementation("dev.su5ed.sinytra.fabric-api:" + it))
 		}
 	}
 

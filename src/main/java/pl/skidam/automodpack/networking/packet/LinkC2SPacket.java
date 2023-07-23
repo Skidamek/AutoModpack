@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack.networking.packet;
 
-//#if FABRICLIKE
 
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
@@ -28,6 +27,7 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
+import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.client.ScreenTools;
@@ -63,7 +63,7 @@ public class LinkC2SPacket {
         PacketByteBuf response = PacketByteBufs.create();
         response.writeString(Objects.requireNonNullElse(isUpdate, "null"), 32767);
 
-        CompletableFuture.runAsync(() -> {
+        Util.getMainWorkerExecutor().execute(() -> {
             if ("true".equals(isUpdate)) {
                 new ModpackUpdater(serverModpackContent, link, modpackDir);
             }
@@ -72,5 +72,3 @@ public class LinkC2SPacket {
         return CompletableFuture.completedFuture(response);
     }
 }
-
-//#endif

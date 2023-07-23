@@ -21,64 +21,192 @@
 package pl.skidam.automodpack.loaders;
 
 //#if FORGE
-//$$ import java.io.File;
+//$$ import java.io.BufferedReader;
+//$$ import java.io.InputStreamReader;
+//$$ import java.nio.file.Files;
 //$$ import java.nio.file.Path;
+//$$ import java.util.ArrayList;
 //$$ import java.util.Collection;
+//$$ import java.util.List;
+//$$ import java.util.zip.ZipEntry;
+//$$ import java.util.zip.ZipException;
+//$$ import java.util.zip.ZipFile;
+//$$
 //$$ import net.minecraftforge.api.distmarker.Dist;
 //$$ import net.minecraftforge.fml.loading.FMLLoader;
 //$$ import net.minecraftforge.fml.ModList;
+//$$ import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 //$$
-//$$ @SuppressWarnings("unchecked")
+//$$ import static pl.skidam.automodpack.GlobalVariables.LOGGER;
+//$$
 //$$ public class ForgeImpl {
 //$$     public static boolean isDevelopmentEnvironment() {
 //$$         return !FMLLoader.isProduction();
 //$$     }
 //$$
 //$$     public static boolean isModLoaded(String modId) {
-//$$        return ModList.get().isLoaded(modId);
+//$$         return ModList.get().isLoaded(modId);
+//$$     }
+//$$
+//$$     public static String getLoaderVersion() {
+//$$         return FMLLoader.versionInfo().forgeVersion();
 //$$    }
 //$$
 //$$     public static Collection getModList() {
-//$$         return null;
+//$$         List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
+//$$
+//$$         List<String> modList = new ArrayList<>();
+//$$
+//$$         for (ModInfo modInfo : modInfos) {
+//$$             modList.add(modInfo.getModId() + " " + modInfo.getVersion().toString());
+//$$         }
+//$$
+//$$         return modList;
 //$$     }
 //$$
 //$$     public static Path getModPath(String modId) {
-//$$        return null;
-//$$    }
+//$$         List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
+//$$
+//$$         for (ModInfo modInfo : modInfos) {
+//$$            if (modInfo.getModId().equals(modId)) {
+//$$                return modInfo.getOwningFile().getFile().getFilePath();
+//$$            }
+//$$         }
+//$$
+//$$         return null;
+//$$     }
+//$$
 //$$
 //$$     public static String getModEnvironment(String modId) {
-//$$         return null;
+//$$         List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 //$$
+//$$         for (ModInfo modInfo : modInfos) {
+//$$             if (modInfo.getModId().equals(modId)) {
+//$$                 Path file = modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize();
+//$$                 if (file.toFile().exists() && Files.isRegularFile(file)) {
+//$$                     return getModEnvironmentFromNotLoadedJar(file);
+//$$                 }
+//$$             }
+//$$         }
+//$$
+//$$        return "UNKNOWN";
 //$$    }
 //$$
-//$$     public static String getModEnvironmentFromNotLoadedJar(Path file) {
-//$$         return null;
-//$$     }
+//$$    public static String getModEnvironmentFromNotLoadedJar(Path file) {
+//$$         try {
+//$$             ZipFile zipFile = new ZipFile(file.toFile());
+//$$             ZipEntry entry = zipFile.getEntry("META-INF/mods.toml");
 //$$
-//$$     public static String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
+//$$             if (entry != null) {
+//$$                BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(entry)));
+//$$                String line;
+//$$                while ((line = reader.readLine()) != null) {
+//$$                    if (line.startsWith("side")) {
+//$$                        String[] split = line.split("=");
+//$$                         if (split.length > 1) {
+//$$                             return split[1].replaceAll("\"", "").trim();
+//$$                         }
+//$$                     }
+//$$                 }
+//$$             }
+//$$         } catch (ZipException ignored) {
+//$$             return "UNKNOWN";
+//$$         } catch (Exception e) {
+//$$             LOGGER.error("Failed to get mod environment from file: " + file);
+//$$             e.printStackTrace();
+//$$         }
+//$$
+//$$         return "UNKNOWN";
+//$$    }
+//$$
+//$$    public static String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
+//$$         List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
+//$$
+//$$         for (ModInfo modInfo : modInfos) {
+//$$            if (modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
+//$$                 return modInfo.getModId();
+//$$             }
+//$$         }
+//$$
+//$$         if (checkAlsoOutOfContainer) {
+//$$            return getModIdFromNotLoadedJar(file);
+//$$         }
+//$$
 //$$         return null;
-//$$     }
+//$$    }
 //$$
 //$$     public static String getModIdFromNotLoadedJar(Path file) {
-//$$         return null;
-//$$     }
+//$$        try {
+//$$            ZipFile zipFile = new ZipFile(file.toFile());
+//$$             ZipEntry entry = zipFile.getEntry("META-INF/mods.toml");
+//$$
+//$$            if (entry != null) {
+//$$                BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(entry)));
+//$$                String line;
+//$$                while ((line = reader.readLine()) != null) {
+//$$                    if (line.startsWith("modId")) {
+//$$                        String[] split = line.split("=");
+//$$                        if (split.length > 1) {
+//$$                             return split[1].replaceAll("\"", "").trim();
+//$$                         }
+//$$                     }
+//$$                 }
+//$$            }
+//$$         } catch (ZipException ignored) {
+//$$             return null;
+//$$        } catch (Exception e) {
+//$$            LOGGER.error("Failed to get mod id from file: " + file.getFileName());
+//$$            e.printStackTrace();
+//$$             return null;
+//$$         }
+//$$
+//$$        return null;
+//$$   }
 //$$
 //$$     public static String getModVersion(String modId) {
-//$$         return null;
-//$$     }
+//$$         ModInfo modInfo = FMLLoader.getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
+//$$         if (modInfo == null) {
+//$$             return null;
+//$$         }
+//$$
+//$$         return modInfo.getVersion().toString();
+//$$    }
 //$$
 //$$     public static String getModVersion(Path file) {
-//$$         return null;
-//$$     }
+//$$         try {
+//$$             ZipFile zipFile = new ZipFile(file.toFile());
+//$$             ZipEntry entry = zipFile.getEntry("META-INF/mods.toml");
+//$$
+//$$            if (entry != null) {
+//$$                BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(entry)));
+//$$                 String line;
+//$$                while ((line = reader.readLine()) != null) {
+//$$                    if (line.startsWith("version")) {
+//$$                        String[] split = line.split("=");
+//$$                        if (split.length > 1) {
+//$$                            return split[1].replaceAll("\"", "").trim();
+//$$                        }
+//$$                    }
+//$$                 }
+//$$             }
+//$$         } catch (ZipException ignored) {
+//$$             return "UNKNOWN";
+//$$        } catch (Exception e) {
+//$$            LOGGER.error("Failed to get mod version from file: " + file.getFileName());
+//$$            e.printStackTrace();
+//$$        }
+//$$
+//$$        return "UNKNOWN";
+//$$    }
 //$$
 //$$     public static String getEnvironmentType() {
 //$$         Dist dist = FMLLoader.getDist();
 //$$         if (dist.isClient()) {
-//$$             return "CLIENT";
-//$$         } else if (dist.isDedicatedServer()) {
-//$$             return "SERVER";
-//$$         } else {
-//$$             return "UNKNOWN";
+//$$            return "CLIENT";
+//$$        } else if (dist.isDedicatedServer()) {
+//$$            return "SERVER";
+//$$        } else {
+//$$            return "UNKNOWN";
 //$$         }
 //$$     }
 //$$ }

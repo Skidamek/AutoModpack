@@ -20,8 +20,6 @@
 
 package pl.skidam.automodpack.networking.packet;
 
-//#if FABRICLIKE
-
 import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.PacketSender;
@@ -170,5 +168,3 @@ public class LoginS2CPacket {
         return isClientVersionHigher;
     }
 }
-
-//#endif

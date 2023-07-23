@@ -27,6 +27,7 @@ import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.utils.MinecraftUserName;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
+import pl.skidam.automodpack.modpack.Commands;
 
 //#if FORGE
 //$$ import net.minecraftforge.common.MinecraftForge;
@@ -34,9 +35,8 @@ import static pl.skidam.automodpack.GlobalVariables.*;
 //$$ import net.minecraftforge.eventbus.api.IEventBus;
 //$$ import net.minecraftforge.fml.common.Mod;
 //$$ @Mod(MOD_ID)
-//#else
-import pl.skidam.automodpack.modpack.Commands;
 //#endif
+
 public class AutoModpack {
 
 //#if FORGE
@@ -65,18 +65,15 @@ public class AutoModpack {
             ModPackets.registerS2CPackets();
         } else {
             MinecraftUserName.get(); // To save the username` to variable in MinecraftUserName class for later use
-
+            ModPackets.registerC2SPackets();
 
 //#if FABRICLIKE
             // TODO fix for forge
             new AudioManager();
 //#endif
-
-            ModPackets.registerC2SPackets();
         }
-//#if FABRICLIKE
+
         Commands.register();
-//#endif
 
         LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
     }

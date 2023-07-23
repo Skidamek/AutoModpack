@@ -20,8 +20,6 @@
 
 package pl.skidam.automodpack.networking;
 
-//#if FABRICLIKE
-
 import net.fabricmc.fabric.api.client.networking.v1.ClientLoginNetworking;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
@@ -65,5 +63,3 @@ public class ModPacketsImpl {
         });
     }
 }
-
-//#endif

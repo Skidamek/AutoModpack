@@ -20,6 +20,7 @@
 
 package pl.skidam.automodpack.client;
 
+import net.minecraft.util.Util;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.utils.DownloadManager;
 import pl.skidam.automodpack.utils.FetchManager;
@@ -109,7 +110,7 @@ public class ModpackUpdater {
 
                 fullDownload = true;
 
-                CompletableFuture.runAsync(() -> {
+                Util.getMainWorkerExecutor().execute(() -> {
                     while (!ScreenTools.getScreenString().contains("dangerscreen")) {
                         ScreenTools.setTo.danger(ScreenTools.getScreen(), link, modpackDir, modpackContentFile);
                         new Wait(50);

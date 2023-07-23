@@ -65,16 +65,18 @@ public class Modpack {
 
     private static void autoExcludeServerMods(List<Jsons.ModpackContentFields.ModpackContentItem> list) {
 
-        if (Loader.getPlatformType() == Loader.ModPlatform.FORGE) return;
-
         List<String> removeSimilar = new ArrayList<>();
 
         Collection modList = Loader.getModList();
 
+        if (modList == null) {
+            LOGGER.error("Failed to get mod list!");
+            return;
+        }
+
         for (Object mod : modList) {
             String modId = mod.toString().split(" ")[0]; // mod is  "modid (version)" so we remove everything after space to get modid (modid can't have space in it)
             String modEnv = Loader.getModEnvironment(modId).toUpperCase();
-            if (modEnv == null) continue;
             if (modEnv.equals("SERVER")) {
                 list.removeIf(modpackContentItems -> {
                     if (modpackContentItems.modId == null) return false;

@@ -20,8 +20,6 @@
 
 package pl.skidam.automodpack.networking.packet;
 
-//#if FABRICLIKE
-
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -50,9 +48,9 @@ public class LoginC2SPacket {
         outBuf.writeString(correctResponse, 32767);
 
         if (serverResponse.startsWith(AM_VERSION)) {
-            if (serverResponse.equals(correctResponse) || serverResponse.contains(loader)){
+            if (serverResponse.equals(correctResponse) || serverResponse.contains(loader)) {
                 LOGGER.info("Versions match " + serverResponse);
-            } else{
+            } else {
                 LOGGER.error("Versions mismatch " + serverResponse);
             }
         } else {
@@ -62,5 +60,3 @@ public class LoginC2SPacket {
         return CompletableFuture.completedFuture(outBuf);
     }
 }
-
-//#endif
