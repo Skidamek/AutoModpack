@@ -23,6 +23,7 @@ package pl.skidam.automodpack.utils;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import pl.skidam.automodpack.GlobalVariables;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -59,8 +60,12 @@ public class MmcPackMagic {
         for (JsonElement comp : components) {
             JsonObject component = comp.getAsJsonObject();
             if (listOfUIDs.contains(component.get("uid").getAsString())) {
+                String oldVersion = component.get("version").getAsString();
                 component.remove("version");
                 component.addProperty("version", newVersion);
+                if (!oldVersion.equals(newVersion)) {
+                    GlobalVariables.LOGGER.info("Changed version of " + component.get("uid").getAsString() + " to " + newVersion);
+                }
             }
         };
 
