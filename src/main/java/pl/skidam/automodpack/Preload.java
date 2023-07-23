@@ -65,7 +65,9 @@ public class Preload {
 
                 new SelfUpdater(serverModpackContent);
 
-                CustomFileUtils.deleteEmptyFiles(selectedModpackDir, serverModpackContent.list);
+                if (serverModpackContent != null) {
+                    CustomFileUtils.deleteEmptyFiles(selectedModpackDir, serverModpackContent.list);
+                }
 
                 new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
             } else {
