@@ -43,7 +43,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.*;
 import java.util.stream.Stream;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
@@ -135,13 +134,9 @@ public class ModpackUpdater {
 
         List<Path> filesBefore = mapAllFiles(workingDirectory, new ArrayList<>());
 
-        List<Path> deletedFilesToIgnore = finishModpackUpdate(modpackDir, modpackContentFile);
+        finishModpackUpdate(modpackDir, modpackContentFile);
 
         List<Path> filesAfter = mapAllFiles(workingDirectory, new ArrayList<>());
-
-        if (deletedFilesToIgnore != null && !deletedFilesToIgnore.isEmpty()) {
-            filesBefore.removeAll(deletedFilesToIgnore);
-        }
 
         List<Path> addedFiles = new ArrayList<>();
         List<Path> deletedFiles = new ArrayList<>();
@@ -295,6 +290,8 @@ public class ModpackUpdater {
             Files.write(modpackContentFile, serverModpackContentByteArray);
             finishModpackUpdate(modpackDir, modpackContentFile);
 
+            CustomFileUtils.deleteEmptyFiles(Paths.get("./"), serverModpackContent.list);
+
             // change loader and minecraft version in launchers like prism, multimc.
             if (serverModpackContent.loader.equals(Loader.getPlatformType().toString().toLowerCase())) { // server may use different loader than client
                 MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // update loader version
@@ -336,21 +333,13 @@ public class ModpackUpdater {
         }
     }
 
-    private static List<Path> finishModpackUpdate(Path modpackDir, Path modpackContentFile) throws Exception {
+    private static void finishModpackUpdate(Path modpackDir, Path modpackContentFile) throws Exception {
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
             LOGGER.error("Modpack content is null");
-            return null;
+            return;
         }
-
-        // clear empty directories
-        List<Path> emptyFilesPaths = new ArrayList<>();
-        List<Path> emptyList1 = CustomFileUtils.deleteEmptyFiles(modpackDir, true, modpackContent.list);
-        List<Path> emptyList2 = CustomFileUtils.deleteEmptyFiles(Paths.get("./"), false, modpackContent.list);
-
-        emptyFilesPaths.addAll(emptyList1);
-        emptyFilesPaths.addAll(emptyList2);
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
@@ -417,8 +406,6 @@ public class ModpackUpdater {
         ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent, editableFiles);
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
-
-        return emptyFilesPaths;
     }
 
 

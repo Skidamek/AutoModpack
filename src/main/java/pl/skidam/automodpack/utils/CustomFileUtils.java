@@ -25,9 +25,6 @@ import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.config.Jsons;
 
 import java.io.*;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
@@ -133,49 +130,31 @@ public class CustomFileUtils {
     }
 
 
-    public static List<Path> deleteEmptyFiles(Path file, boolean deleteSubDirsToo, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
-
-        List<Path> pathList = new ArrayList<>();
-
-        try (Stream<Path> stream = Files.walk(file)) {
+    public static void deleteEmptyFiles(Path file, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
+        try (Stream<Path> stream = Files.walk(file, 3)) {
             stream.filter(path -> !shouldIgnore(path, ignoreList))
                     .forEach(path -> {
-
                         if (Files.isDirectory(path) && !path.getFileName().toString().startsWith(".")) {
 
                             String[] list = path.toFile().list();
 
                             if (list == null || list.length == 0) {
                                 CustomFileUtils.forceDelete(path);
-                                pathList.add(path);
-
-                            } else if (deleteSubDirsToo) {
-                                File[] files = path.toFile().listFiles();
-
-                                if (files == null) {
-                                    return;
-                                }
-
-                                for (File subFile : files) {
-                                    deleteEmptyFiles(subFile.toPath(), true, ignoreList);
-                                }
                             }
                         } else if (compareFilesByteByByte(path, smallDummyJar)) {
                             CustomFileUtils.forceDelete(path);
-                            pathList.add(path);
                         }
                     });
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-        return pathList;
     }
 
     private static boolean shouldIgnore(Path file, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
         if (ignoreList == null) {
             return false;
         }
+
         String filePath = file.toAbsolutePath().toString().replace("\\", "/");
 
         for (Jsons.ModpackContentFields.ModpackContentItem item : ignoreList) {
@@ -218,7 +197,7 @@ public class CustomFileUtils {
             return null;
         }
 
-        if (algorithm.equals("murmur")) {
+        if (algorithm.equalsIgnoreCase("murmur")) {
             return getCurseforgeMurmurHash(file);
         }
 

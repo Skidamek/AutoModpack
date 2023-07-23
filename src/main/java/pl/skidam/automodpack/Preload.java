@@ -64,15 +64,17 @@ public class Preload {
                 Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
 
                 new SelfUpdater(serverModpackContent);
+
+                CustomFileUtils.deleteEmptyFiles(selectedModpackDir, serverModpackContent.list);
+
                 new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
             } else {
                 new SelfUpdater(null);
             }
         }
 
-
         try {
-            CustomFileUtils.deleteEmptyFiles(Paths.get("./"), true, null);
+            CustomFileUtils.deleteEmptyFiles(Paths.get("./"), null);
         } catch (Exception e) {
             e.printStackTrace();
         }
