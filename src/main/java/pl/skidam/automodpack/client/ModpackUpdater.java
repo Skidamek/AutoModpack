@@ -349,7 +349,7 @@ public class ModpackUpdater {
 
             String fileName = Paths.get(modpackContentField.file).getFileName().toString();
 
-            if (changesAddedList.containsKey(fileName)) {
+            if (changesAddedList.containsKey(fileName) || changesDeletedList.containsKey(fileName)) {
                 continue;
             }
 
