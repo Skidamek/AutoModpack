@@ -52,9 +52,7 @@ public class DownloadManager {
     private final Semaphore semaphore = new Semaphore(0);
 
     public DownloadManager() {
-        if (!ScreenTools.getScreenString().contains("downloadscreen")) {
-            ScreenTools.setTo.download();
-        }
+
     }
 
     public DownloadManager(long bytesToDownload) {

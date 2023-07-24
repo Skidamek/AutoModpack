@@ -103,12 +103,14 @@ public class ModpackUtils {
             if (Files.exists(sourceFile)) {
                 Path destinationFile = Paths.get("." + fileName);
 
-                try {
-                    if (CustomFileUtils.compareFileHashes(sourceFile, destinationFile, "SHA-1")) {
-                        return;
+                if (destinationFile.toFile().exists()) {
+                    try {
+                        if (CustomFileUtils.compareFileHashes(sourceFile, destinationFile, "SHA-1")) {
+                            return;
+                        }
+                    } catch (NoSuchAlgorithmException e) {
+                        e.printStackTrace();
                     }
-                } catch (NoSuchAlgorithmException e) {
-                    e.printStackTrace();
                 }
 
                 CustomFileUtils.copyFile(sourceFile, destinationFile);
