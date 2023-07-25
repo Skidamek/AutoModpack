@@ -89,34 +89,36 @@ public class ModpackUtils {
     }
 
     public static void copyModpackFilesFromModpackDirToRunDir(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
-        List<Jsons.ModpackContentFields.ModpackContentItem> contents = serverModpackContent.list;
+        if (serverModpackContent == null || serverModpackContent.list == null) {
+            LOGGER.error("Server modpack content list is null");
+            return;
+        }
 
-        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : contents) {
+        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
             String fileName = contentItem.file;
 
-            // Editable files are not copied from modpack dir to run dir
             if (ignoreFiles.contains(fileName)) {
                 continue;
             }
 
-            Path sourceFile = Paths.get(modpackDir + File.separator + fileName);
+            Path sourceFile = Paths.get(modpackDir + fileName);
 
             if (Files.exists(sourceFile)) {
                 Path destinationFile = Paths.get("." + fileName);
 
-                if (destinationFile.toAbsolutePath().normalize().toFile().exists()) {
+                if (Files.exists(destinationFile)) {
                     try {
                         if (CustomFileUtils.compareFileHashes(sourceFile, destinationFile, "SHA-1")) {
-                            return;
+                            continue;
                         }
                     } catch (NoSuchAlgorithmException e) {
                         e.printStackTrace();
                     }
                 }
 
-                LOGGER.warn("Copying file " + fileName + " from modpack dir to run dir");
-
                 CustomFileUtils.copyFile(sourceFile, destinationFile);
+            } else {
+                LOGGER.error("File " + fileName + " doesn't exist in modpack directory!?");
             }
         }
     }
