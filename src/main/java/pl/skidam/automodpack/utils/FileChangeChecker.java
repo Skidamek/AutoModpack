@@ -21,6 +21,7 @@
 package pl.skidam.automodpack.utils;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import net.minecraft.util.Util;
 import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.modpack.Modpack;
@@ -48,7 +49,7 @@ public class FileChangeChecker {
     }
 
     public void startChecking() {
-        CompletableFuture.runAsync(() -> {
+        Util.getMainWorkerExecutor().execute(() -> {
             try {
                 if (!scheduler.isShutdown()) {
                     // Schedule a task to run every few seconds

@@ -22,6 +22,7 @@ package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
@@ -62,7 +63,7 @@ public class DangerScreen extends VersionedScreen {
         }));
 
         this.addDrawableChild(VersionedText.buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.common.translatable("automodpack.danger.confirm").formatted(Formatting.GREEN), button -> {
-            CompletableFuture.runAsync(() -> {
+            Util.getMainWorkerExecutor().execute(() -> {
                 ModpackUpdater.ModpackUpdaterMain(link, modpackDir, modpackContentFile);
             });
         }));

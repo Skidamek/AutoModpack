@@ -25,6 +25,7 @@ import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.Util;
 import pl.skidam.automodpack.utils.DownloadManager;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
@@ -65,7 +66,7 @@ public class DownloadScreen extends VersionedScreen {
 
         this.addDrawableChild(cancelButton);
 
-        CompletableFuture.runAsync(() -> {
+        Util.getMainWorkerExecutor().execute(() -> {
             while (ModpackUpdater.downloadManager != null && !ModpackUpdater.downloadManager.isClosed()) {
 
 //                for (Map.Entry<String, DownloadManager.DownloadData> map : ModpackUpdater.downloadManager.downloadsInProgress.entrySet()) {

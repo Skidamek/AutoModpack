@@ -24,6 +24,7 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.config.Jsons;
@@ -82,7 +83,7 @@ public class Commands {
     }
 
     private static int reload(CommandContext<ServerCommandSource> context) {
-        CompletableFuture.runAsync(() -> {
+        Util.getMainWorkerExecutor().execute(() -> {
             serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class);
             VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("AutoModpack server config reloaded!").formatted(Formatting.GREEN), true);
         });
@@ -90,7 +91,7 @@ public class Commands {
     }
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
-        CompletableFuture.runAsync(() -> {
+        Util.getMainWorkerExecutor().execute(() -> {
             if (!HttpServer.isRunning()) {
                 VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Starting modpack hosting...")
                                 .formatted(Formatting.YELLOW),
@@ -109,7 +110,7 @@ public class Commands {
     }
 
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
-        CompletableFuture.runAsync(() -> {
+        Util.getMainWorkerExecutor().execute(() -> {
             if (HttpServer.isRunning()) {
                 VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Stopping modpack hosting...")
                                 .formatted(Formatting.RED),
@@ -128,7 +129,7 @@ public class Commands {
     }
 
     private static int restartModpackHost(CommandContext<ServerCommandSource> context) {
-        CompletableFuture.runAsync(() -> {
+        Util.getMainWorkerExecutor().execute(() -> {
             VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Restarting modpack hosting...")
                             .formatted(Formatting.YELLOW),
                     true);
@@ -183,7 +184,7 @@ public class Commands {
     }
 
     private static int generateModpack(CommandContext<ServerCommandSource> context) {
-        CompletableFuture.runAsync(() -> {
+        Util.getMainWorkerExecutor().execute(() -> {
 
             if (Modpack.isGenerating()) {
                 VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack is already generating! Please wait!")

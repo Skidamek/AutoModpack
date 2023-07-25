@@ -288,9 +288,10 @@ public class ModpackUpdater {
 
             // Downloads completed
             Files.write(modpackContentFile, serverModpackContentByteArray);
-            finishModpackUpdate(modpackDir, modpackContentFile);
 
             CustomFileUtils.deleteEmptyFiles(Paths.get("./"), serverModpackContent.list);
+
+            finishModpackUpdate(modpackDir, modpackContentFile);
 
             // change loader and minecraft version in launchers like prism, multimc.
             if (serverModpackContent.loader.equals(Loader.getPlatformType().toString().toLowerCase())) { // server may use different loader than client
@@ -343,13 +344,14 @@ public class ModpackUpdater {
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
-        // make a list of editable files if they do not exist in added changelog
+        // make a list of editable files to ignore them while copying
         List<String> editableFiles = new ArrayList<>();
         for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : modpackContent.list) {
 
             String fileName = Paths.get(modpackContentField.file).getFileName().toString();
 
-            if (changesAddedList.containsKey(fileName) || changesDeletedList.containsKey(fileName)) {
+            // Don't add to editable if just downloaded
+            if (changesAddedList.containsKey(fileName)) {
                 continue;
             }
 

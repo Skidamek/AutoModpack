@@ -80,14 +80,18 @@ package pl.skidam.automodpack.loaders;
 //$$     public static String getModEnvironment(String modId) {
 //$$         List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 //$$
-//$$         for (ModInfo modInfo : modInfos) {
-//$$             if (modInfo.getModId().equals(modId)) {
-//$$                 Path file = modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize();
-//$$                 if (file.toFile().exists() && Files.isRegularFile(file)) {
-//$$                     return getModEnvironmentFromNotLoadedJar(file);
-//$$                 }
-//$$             }
-//$$         }
+//$$         try {
+//$$            for (ModInfo modInfo : modInfos) {
+//$$                if (modInfo.getModId().equals(modId)) {
+//$$                    Path file = modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize();
+//$$                    if (file.toFile().exists() && Files.isRegularFile(file)) {
+//$$                        return getModEnvironmentFromNotLoadedJar(file);
+//$$                    }
+//$$                }
+//$$            }
+//$$        } catch (UnsupportedOperationException ignored) {
+//$$
+//$$        }
 //$$
 //$$        return "UNKNOWN";
 //$$    }

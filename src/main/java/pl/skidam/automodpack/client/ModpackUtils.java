@@ -94,6 +94,7 @@ public class ModpackUtils {
         for (Jsons.ModpackContentFields.ModpackContentItem contentItem : contents) {
             String fileName = contentItem.file;
 
+            // Editable files are not copied from modpack dir to run dir
             if (ignoreFiles.contains(fileName)) {
                 continue;
             }
@@ -103,7 +104,7 @@ public class ModpackUtils {
             if (Files.exists(sourceFile)) {
                 Path destinationFile = Paths.get("." + fileName);
 
-                if (destinationFile.toFile().exists()) {
+                if (destinationFile.toAbsolutePath().normalize().toFile().exists()) {
                     try {
                         if (CustomFileUtils.compareFileHashes(sourceFile, destinationFile, "SHA-1")) {
                             return;
@@ -128,7 +129,7 @@ public class ModpackUtils {
                 continue;
             }
 
-            Path sourceFile = Paths.get("./" + contentItem.file);
+            Path sourceFile = Paths.get("." + contentItem.file);
 
             if (Files.exists(sourceFile)) {
 
@@ -142,12 +143,7 @@ public class ModpackUtils {
 
                 Path destinationFile = Paths.get(modpackDir + File.separator + contentItem.file);
 
-//                if (destinationFile.exists()) {
-//                    CustomFileUtils.forceDelete(destinationFile, false);
-//                }
-
                 CustomFileUtils.copyFile(sourceFile, destinationFile);
-//                LOGGER.info("Copied " + sourceFile.getName() + " to modpack directory");
             }
         }
     }
