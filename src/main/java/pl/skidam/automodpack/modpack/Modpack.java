@@ -213,28 +213,21 @@ public class Modpack {
         }
 
 
-        private static void addAllContent(Path modpackDir, List<Jsons.ModpackContentFields.ModpackContentItem> list) throws IOException {
+        private static void addAllContent(Path modpackDir, List<Jsons.ModpackContentFields.ModpackContentItem> list) throws ExecutionException, InterruptedException, IOException {
             if (!Files.exists(modpackDir) || !Files.isDirectory(modpackDir)) return;
 
-            List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
+            try (DirectoryStream<Path> modpackDirStream = Files.newDirectoryStream(modpackDir)) {
+                List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
 
-            try (Stream<Path> stream = Files.walk(modpackDir)) {
-                stream.forEach((file) -> {
-                    if (Files.isDirectory(file)) {
-                        return;
+                for (Path file : modpackDirStream) {
+                    while (creationFutures.size() >= MAX_MODPACK_ADDITIONS) { // Async Setting - max `some` additions at the same time
+                        creationFutures.removeIf(CompletableFuture::isDone);
                     }
 
-                    try {
-                        while (creationFutures.size() >= MAX_MODPACK_ADDITIONS) { // Async Setting - max `some` additions at the same time
-                            creationFutures.removeIf(CompletableFuture::isDone);
-                        }
+                    creationFutures.add(addContentAsync(modpackDir, file, list));
+                }
 
-                        creationFutures.add(addContentAsync(modpackDir, file, list));
-                        CompletableFuture.allOf(creationFutures.toArray(new CompletableFuture[0])).get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        e.printStackTrace();
-                    }
-                });
+                CompletableFuture.allOf(creationFutures.toArray(new CompletableFuture[0])).get();
             }
         }
 
