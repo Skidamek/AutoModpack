@@ -114,6 +114,8 @@ public class ModpackUtils {
                     }
                 }
 
+                LOGGER.warn("Copying file " + fileName + " from modpack dir to run dir");
+
                 CustomFileUtils.copyFile(sourceFile, destinationFile);
             }
         }

@@ -71,6 +71,14 @@ jobs:
           name: build-artifacts
           path: build-artifacts
 
+
+      - name: Set release-type variable
+        id: release_type_set
+        env:
+          release-type: ${{ steps.properties_v.outputs.mod_platform == 'forge' && 'beta' || 'release' }}
+        run: |
+            echo "release-type=$release-type" >> $GITHUB_OUTPUT
+
       - name: Get github release information
         if: ${{ github.event_name == 'workflow_dispatch' }}
         id: get_release
@@ -152,7 +160,7 @@ jobs:
 
           name: ${{ format('{0} {1} {2}', steps.properties_g.outputs.mod_name, steps.properties_g.outputs.mod_version, steps.properties_v.outputs.mod_platform) }}
           version: ${{ format('{0}', steps.properties_g.outputs.mod_version) }}
-          version-type: release
+          version-type: ${{ steps.release_type_set.outputs.release-type }}
           changelog: |-
             ${{ format('{0}{1}', github.event.release.body, steps.get_release.outputs.body) }}
             
