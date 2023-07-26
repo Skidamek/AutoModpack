@@ -71,14 +71,6 @@ jobs:
           name: build-artifacts
           path: build-artifacts
 
-
-      - name: Set release-type variable
-        id: release_type_set
-        env:
-          release_type: ${{ steps.properties_v.outputs.mod_platform == 'forge' && 'beta' || 'release' }}
-        run: |
-            echo "release-type=$release-type" >> $GITHUB_OUTPUT
-
       - name: Get github release information
         if: ${{ github.event_name == 'workflow_dispatch' }}
         id: get_release
@@ -115,6 +107,13 @@ jobs:
         with:
           path: ${{ format('versions/{0}/gradle.properties', matrix.subproject) }}
           properties: 'minecraft_version game_versions mod_platform'
+
+      - name: Set release-type variable
+        id: release_type_set
+        env:
+          release_type: ${{ steps.properties_v.outputs.mod_platform == 'forge' && 'beta' || 'release' }}
+        run: |
+          echo "release-type=$release-type" >> $GITHUB_OUTPUT
 
       - name: Fix game version
         id: game_versions
