@@ -40,6 +40,9 @@ public class Preload {
         LOGGER.info("Prelaunching AutoModpack...");
         preload = true;
 
+        // Load needed classes
+        new CustomFileUtils();
+
         String workingDirectory = System.getProperty("user.dir");
         if (workingDirectory.contains("com.qcxr.qcxr")) {
             quest = true;

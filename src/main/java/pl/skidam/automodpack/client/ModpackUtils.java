@@ -30,7 +30,6 @@ import org.apache.http.util.EntityUtils;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.CustomFileUtils;
-import pl.skidam.automodpack.utils.MinecraftUserName;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
 import java.io.File;
@@ -167,7 +166,7 @@ public class ModpackUtils {
 
             HttpGet getContent = new HttpGet(link);
             getContent.addHeader("Content-Type", "application/json");
-            getContent.addHeader("Minecraft-Username", MinecraftUserName.get());
+            getContent.addHeader("Minecraft-Username", "");
             getContent.addHeader("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
 
             HttpResponse response = httpClient.execute(getContent);

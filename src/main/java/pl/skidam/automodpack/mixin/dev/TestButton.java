@@ -18,7 +18,7 @@
  * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package pl.skidam.automodpack.mixin;
+package pl.skidam.automodpack.mixin.dev;
 
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;

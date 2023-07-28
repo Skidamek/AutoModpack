@@ -20,8 +20,7 @@
     },
     "intermediate_mappings": "net.fabricmc:intermediary",
     "entrypoints": {
-      "main": ["pl.skidam.automodpack.AutoModpack::onInitialize"],
-      "preLaunch": ["pl.skidam.automodpack.Preload::onPreInitialize"]
+      "main": ["pl.skidam.automodpack.AutoModpack::onInitialize"]
     },
     "depends": [
       {

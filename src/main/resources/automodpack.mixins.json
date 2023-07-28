@@ -2,16 +2,17 @@
   "required": true,
   "minVersion": "0.8",
   "package": "pl.skidam.automodpack.mixin",
+  "plugin": "pl.skidam.automodpack.mixin.AutoModpackMixinPlugin",
   "compatibilityLevel": "JAVA_8",
   "mixins": [
-    "MinecraftServerMixin",
-    "NetworkRegistryMixin",
-    "ServerLoginNetworkHandlerAccessor",
-    "ServerLoginNetworkHandlerMixin"
+    "core.MinecraftServerMixin",
+    "forge.NetworkRegistryMixin",
+    "core.ServerLoginNetworkHandlerAccessor",
+    "core.ServerLoginNetworkHandlerMixin"
   ],
   "client": [
-    "MusicTrackerMixin",
-    "TestButton"
+    "core.MusicTrackerMixin",
+    "dev.TestButton"
   ],
   "injectors": {
     "defaultRequire": 1

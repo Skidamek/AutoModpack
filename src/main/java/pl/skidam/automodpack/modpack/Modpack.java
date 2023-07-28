@@ -37,7 +37,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.stream.Stream;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
 

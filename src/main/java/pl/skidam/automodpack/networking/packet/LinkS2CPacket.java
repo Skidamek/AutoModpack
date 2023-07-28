@@ -31,7 +31,7 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 
 import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 

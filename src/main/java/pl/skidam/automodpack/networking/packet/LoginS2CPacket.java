@@ -32,7 +32,7 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.modpack.Modpack;
 

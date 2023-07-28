@@ -21,6 +21,7 @@
 package pl.skidam.automodpack.utils;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import pl.skidam.automodpack.Preload;
 import pl.skidam.automodpack.client.ScreenTools;
 
 import java.io.*;
@@ -66,8 +67,8 @@ public class DownloadManager {
         if (!queuedDownloads.containsKey(url)) {
             retryCounts.put(url, 1);
             queuedDownloads.put(url, new QueuedDownload(file, sha1, successCallback, failureCallback));
-            downloadNext();
             addedToQueue++;
+            downloadNext();
         }
     }
 
@@ -84,7 +85,9 @@ public class DownloadManager {
                 try {
                     downloadFile(url, queuedDownload);
 
-                    if (!Objects.equals(CustomFileUtils.getHash(queuedDownload.file, "SHA-1"), queuedDownload.sha1)) {
+                    String hash = CustomFileUtils.getHash(queuedDownload.file, "SHA-1");
+
+                    if (!Objects.equals(hash, queuedDownload.sha1)) {
 
                         bytesDownloaded -= queuedDownload.file.toFile().length();
 
@@ -151,7 +154,7 @@ public class DownloadManager {
         URLConnection connection = url.openConnection();
         connection.setRequestProperty("Content-Type", "application/octet-stream; charset=UTF-8");
         connection.addRequestProperty("Accept-Encoding", "gzip");
-        connection.addRequestProperty("Minecraft-Username", MinecraftUserName.get());
+        connection.addRequestProperty("Minecraft-Username", "");
         connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
         connection.setConnectTimeout(8000);
         connection.setReadTimeout(5000);
@@ -176,6 +179,7 @@ public class DownloadManager {
 
     public void joinAll() throws InterruptedException {
         semaphore.acquire(addedToQueue);
+        semaphore.release(addedToQueue);
     }
 
     public long getTotalDownloadSpeed() {
