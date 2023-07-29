@@ -42,14 +42,7 @@ import static pl.skidam.automodpack.networking.ModPackets.LINK;
 
 public class LoginS2CPacket {
 
-    public static void receive(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean b, PacketByteBuf packetByteBuf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
-        PacketByteBuf packet = packet(serverLoginNetworkHandler, b, packetByteBuf);
-        if (packet != null) {
-            packetSender.sendPacket(LINK, packet);
-        }
-    }
-
-    private static PacketByteBuf packet(ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf) {
+    public static void receive(MinecraftServer minecraftServer, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
         ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
@@ -64,7 +57,7 @@ public class LoginS2CPacket {
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
             }
-            return null;
+            return;
         } else {
 
             LOGGER.info("{} has installed AutoModpack.", playerName);
@@ -90,20 +83,20 @@ public class LoginS2CPacket {
                     }
                     connection.send(new LoginDisconnectS2CPacket(reason));
                     connection.disconnect(reason);
-                    return null;
+                    return;
                 }
             }
         }
 
         if (!HttpServer.isRunning() && serverConfig.externalModpackHostLink.equals("")) {
-            return null;
+            return;
         }
 
         if (Modpack.isGenerating()) {
             Text reason = VersionedText.common.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
-            return null;
+            return;
         }
 
         String playerIp = connection.getAddress().toString();
@@ -138,7 +131,7 @@ public class LoginS2CPacket {
         PacketByteBuf outBuf = PacketByteBufs.create();
         outBuf.writeString(linkToSend, 32767);
 
-        return outBuf;
+        packetSender.sendPacket(LINK, outBuf);
     }
 
 
