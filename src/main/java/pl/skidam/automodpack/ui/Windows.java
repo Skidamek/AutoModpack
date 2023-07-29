@@ -26,6 +26,7 @@ import javax.swing.plaf.ColorUIResource;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Objects;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
@@ -72,7 +73,12 @@ public class Windows {
 
         BufferedImage icon = null;
         try {
-            icon = ImageIO.read(Objects.requireNonNull(Windows.class.getClassLoader().getResourceAsStream("assets/automodpack/icon.png")));
+            InputStream inputStream = Windows.class.getClassLoader().getResourceAsStream("assets/automodpack/icon.png");
+            if (inputStream == null) {
+                inputStream = Windows.class.getClassLoader().getResourceAsStream("icon.png");
+            }
+            icon = ImageIO.read(Objects.requireNonNull(inputStream));
+            inputStream.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
