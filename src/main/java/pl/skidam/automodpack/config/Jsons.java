@@ -31,7 +31,6 @@ public class Jsons {
         public String selectedModpack = "";
 //        public boolean forceDangerScreen = true;
         public boolean selfUpdater = true;
-//        public boolean downloadDependency = true;
     }
 
     public static class ServerConfigFields {
@@ -46,15 +45,14 @@ public class Jsons {
         public boolean autoExcludeServerSideMods = true;
 //        public boolean velocityMode = false; compat plugin :)
         // public boolean forceToDisableAllOtherModsOnClients = false;
-        public int hostPort = 30037;
         public int hostThreads = 8;
         public String hostIp = "";
         public String hostLocalIp = "";
         public boolean updateIpsOnEveryStart = false;
-        public String externalModpackHostLink = "";
+        public int hostPort = 30037;
         public boolean reverseProxy = false;
+        public String externalModpackHostLink = "";
         public boolean selfUpdater = true;
-//        public boolean downloadDependency = true;
         public List<String> acceptedLoaders = Arrays.asList(Loader.getPlatformType().toString().toLowerCase());
     }
 

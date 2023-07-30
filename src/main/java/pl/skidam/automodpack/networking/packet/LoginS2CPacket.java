@@ -35,6 +35,7 @@ import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.modpack.Modpack;
+import pl.skidam.automodpack.utils.Ip;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
@@ -106,39 +107,32 @@ public class LoginS2CPacket {
         }
 
         String playerIp = connection.getAddress().toString();
-        String HostIPForLocal = serverConfig.hostLocalIp.replaceFirst("(https?://)", ""); // Removes HTTP:// or HTTPS://
-        String HostNetwork = "";
-        if (HostIPForLocal.chars().filter(ch -> ch == '.').count() > 3) {
-            String[] parts = HostIPForLocal.split("\\.");
-            HostNetwork = parts[0] + "." + parts[1] + "." + parts[2]; // Reduces ip from x.x.x.x to x.x.x
-        }
 
         String linkToSend;
 
-        if (!serverConfig.externalModpackHostLink.equals("")) {
+        if (!serverConfig.externalModpackHostLink.isEmpty()) {
             // If an external modpack host link has been specified, use it
             linkToSend = serverConfig.externalModpackHostLink;
             if (!linkToSend.startsWith("http://") && !linkToSend.startsWith("https://")) {
                 linkToSend = "http://" + linkToSend;
             }
-            if (!serverConfig.reverseProxy) {
-                // add port to link
-                linkToSend += ":" + serverConfig.hostPort;
-            }
-            LOGGER.info("Sending external modpack host link: " + linkToSend);
-
         } else {
             // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
-            if (playerIp.startsWith("/127.0.0.1") || playerIp.startsWith("/[0:0:0:0:") || playerIp.startsWith("/" + serverConfig.hostLocalIp) || playerIp.startsWith("/192.168.")) { // local
-                linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
-            } else if (!HostNetwork.equals("") && playerIp.startsWith("/" + HostNetwork)) { // local
-                linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
-            } else { // Otherwise, use the public host IP and port
-                linkToSend = "http://" + serverConfig.hostIp + ":" + serverConfig.hostPort;
-            }
+            String formattedPlayerIp = Ip.refactorToTrueIp(playerIp);
 
-            LOGGER.info("Sending local modpack host link: " + linkToSend);
+            if (Ip.isLocal(formattedPlayerIp, serverConfig.hostLocalIp)) { // local
+                linkToSend = "http://" + serverConfig.hostLocalIp;
+            } else { // Otherwise, use the public host IP and port
+                linkToSend = "http://" + serverConfig.hostIp;
+            }
         }
+
+        if (!serverConfig.reverseProxy) {
+            // add port to link
+            linkToSend += ":" + serverConfig.hostPort;
+        }
+
+        LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
 
         PacketByteBuf outBuf = PacketByteBufs.create();
         outBuf.writeString(linkToSend, 32767);
