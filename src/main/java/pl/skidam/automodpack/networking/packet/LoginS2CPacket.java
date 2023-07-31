@@ -104,30 +104,27 @@ public class LoginS2CPacket {
 
         String linkToSend;
 
-        if (!serverConfig.externalModpackHostLink.isEmpty()) {
-            // If an external modpack host link has been specified, use it
-            linkToSend = serverConfig.externalModpackHostLink;
-            if (!linkToSend.startsWith("http://") && !linkToSend.startsWith("https://")) {
-                linkToSend = "http://" + linkToSend;
-            }
-            if (!serverConfig.reverseProxy) {
-                // add port to link
-                linkToSend += ":" + serverConfig.hostPort;
-            }
-            LOGGER.info("Sending external modpack host link: " + linkToSend);
 
-        } else {
-            // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
-            String formattedPlayerIp = Ip.refactorToTrueIp(playerIp);
+        // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
+        String formattedPlayerIp = Ip.refactorToTrueIp(playerIp);
 
-            if (Ip.isLocal(formattedPlayerIp, serverConfig.hostLocalIp)) { // local
-                linkToSend = "http://" + serverConfig.hostLocalIp + ":" + serverConfig.hostPort;
-            } else { // Otherwise, use the public host IP and port
-                linkToSend = "http://" + serverConfig.hostIp + ":" + serverConfig.hostPort;
-            }
-
-            LOGGER.info("Sending modpack host link: {}", linkToSend);
+        if (Ip.isLocal(formattedPlayerIp, serverConfig.hostLocalIp)) { // local
+            linkToSend = "http://" + serverConfig.hostLocalIp;
+        } else { // Otherwise, use the public host IP and port
+            linkToSend = "http://" + serverConfig.hostIp;
         }
+
+      
+        if (!linkToSend.startsWith("http://") && !linkToSend.startsWith("https://")) {
+                linkToSend = "http://" + linkToSend;
+        }
+
+        if (!serverConfig.reverseProxy) {
+            // add port to link
+            linkToSend += ":" + serverConfig.hostPort;
+        }
+
+        LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
 
         PacketByteBuf outBuf = PacketByteBufs.create();
         outBuf.writeString(linkToSend, 32767);
