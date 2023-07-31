@@ -25,9 +25,9 @@ import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.utils.CustomFileUtils;
-import pl.skidam.automodpack.utils.ModpackContentTools;
-import pl.skidam.automodpack.utils.SetupFiles;
+import pl.skidam.automodpack.platforms.CurseForgeAPI;
+import pl.skidam.automodpack.platforms.ModrinthAPI;
+import pl.skidam.automodpack.utils.*;
 
 import java.nio.file.Paths;
 import java.util.List;
@@ -39,9 +39,14 @@ public class Preload {
         long start = System.currentTimeMillis();
         preload = true;
 
-        // Load needed classes
+        // Load all needed classes (dunno why but launching from mixin constructor does not load classes as normal...)
+        // Can someone explain me this?
         new GlobalVariables();
         new CustomFileUtils();
+        new Json();
+        new ModrinthAPI();
+        new CurseForgeAPI();
+        new FetchManager.FetchedData();
 
         LOGGER.info("Prelaunching AutoModpack...");
 
@@ -58,6 +63,12 @@ public class Preload {
         long startTime = System.currentTimeMillis();
         clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
         serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
+
+        if (serverConfig != null && !serverConfig.externalModpackHostLink.isEmpty()) {
+            serverConfig.hostIp = serverConfig.externalModpackHostLink;
+            serverConfig.hostLocalIp = serverConfig.externalModpackHostLink;
+        }
+
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
 
         new SetupFiles();

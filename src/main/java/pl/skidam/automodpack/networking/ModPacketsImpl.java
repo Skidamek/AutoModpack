@@ -46,20 +46,22 @@ public class ModPacketsImpl {
         ServerLoginNetworking.registerGlobalReceiver(HANDSHAKE, LoginS2CPacket::receive);
         ServerLoginNetworking.registerGlobalReceiver(LINK, LinkS2CPacket::receive);
 
-        ServerLoginConnectionEvents.QUERY_START.register((handler, server, sender, sync) -> {
+        ServerLoginConnectionEvents.QUERY_START.register((handler, server, sender, loginSynchronizer) -> {
 
-            PacketByteBuf buf = PacketByteBufs.create();
-            StringBuilder correctResponse = new StringBuilder(AM_VERSION + "-");
+            loginSynchronizer.waitFor(server.submit(() -> {
+                PacketByteBuf buf = PacketByteBufs.create();
+                StringBuilder correctResponse = new StringBuilder(AM_VERSION + "-");
 
-            for (String loader : serverConfig.acceptedLoaders) {
-                correctResponse.append(loader);
-                if (serverConfig.acceptedLoaders.indexOf(loader) != serverConfig.acceptedLoaders.size() - 1) {
-                    correctResponse.append("&");
+                for (String loader : serverConfig.acceptedLoaders) {
+                    correctResponse.append(loader);
+                    if (serverConfig.acceptedLoaders.indexOf(loader) != serverConfig.acceptedLoaders.size() - 1) {
+                        correctResponse.append("&");
+                    }
                 }
-            }
 
-            buf.writeString(correctResponse.toString(), 32767);
-            sender.sendPacket(HANDSHAKE, buf);
+                buf.writeString(correctResponse.toString(), 32767);
+                sender.sendPacket(HANDSHAKE, buf);
+            }));
         });
     }
 }

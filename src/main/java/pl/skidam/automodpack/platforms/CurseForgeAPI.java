@@ -38,6 +38,10 @@ public class CurseForgeAPI {
     public String releaseType;
     public String murmurHash;
 
+    public CurseForgeAPI() {
+
+    }
+
     public CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash) {
         this.requestUrl = requestUrl;
         this.downloadUrl = downloadUrl;

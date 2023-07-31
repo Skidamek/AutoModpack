@@ -42,7 +42,7 @@ import static pl.skidam.automodpack.networking.ModPackets.LINK;
 
 public class LoginS2CPacket {
 
-    public static void receive(MinecraftServer minecraftServer, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
+    public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
         ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
@@ -56,11 +56,11 @@ public class LoginS2CPacket {
                 connection.disconnect(reason);
             }
         } else {
-            loginSynchronizer.waitFor(minecraftServer.submit(() -> handleHandshake(connection, playerName, buf, loginSynchronizer, packetSender)));
+            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, buf, packetSender)));
         }
     }
 
-    public static void handleHandshake(ClientConnection connection, String playerName, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
+    public static void handleHandshake(ClientConnection connection, String playerName, PacketByteBuf buf, PacketSender packetSender) {
         LOGGER.info("{} has installed AutoModpack.", playerName);
 
         String clientResponse = buf.readString(32767);
@@ -109,9 +109,9 @@ public class LoginS2CPacket {
         String formattedPlayerIp = Ip.refactorToTrueIp(playerIp);
 
         if (Ip.isLocal(formattedPlayerIp, serverConfig.hostLocalIp)) { // local
-            linkToSend = "http://" + serverConfig.hostLocalIp;
+            linkToSend = serverConfig.hostLocalIp;
         } else { // Otherwise, use the public host IP and port
-            linkToSend = "http://" + serverConfig.hostIp;
+            linkToSend = serverConfig.hostIp;
         }
 
       

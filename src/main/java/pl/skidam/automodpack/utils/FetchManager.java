@@ -227,14 +227,14 @@ public class FetchManager {
         String platformUrl;
         String mainPageUrl;
 
+        public FetchedData() {
+
+        }
+
         public FetchedData(String serverUrl, String platformUrl, String mainPageUrl) {
             this.serverUrl = serverUrl;
             this.platformUrl = platformUrl;
             this.mainPageUrl = mainPageUrl;
-        }
-
-        public String getServerUrl() {
-            return serverUrl;
         }
 
         public String getPlatformUrl() {
