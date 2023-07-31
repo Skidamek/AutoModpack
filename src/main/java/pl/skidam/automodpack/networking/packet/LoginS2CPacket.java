@@ -32,7 +32,7 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.modpack.Modpack;
 import pl.skidam.automodpack.utils.Ip;
@@ -42,20 +42,11 @@ import static pl.skidam.automodpack.networking.ModPackets.LINK;
 
 public class LoginS2CPacket {
 
-    public static void receive(MinecraftServer minecraftServer, ServerLoginNetworkHandler serverLoginNetworkHandler, boolean b, PacketByteBuf packetByteBuf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
-        PacketByteBuf packet = packet(serverLoginNetworkHandler, b, packetByteBuf);
-        if (packet != null) {
-            packetSender.sendPacket(LINK, packet);
-        }
-    }
-
-    private static PacketByteBuf packet(ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf) {
+    public static void receive(MinecraftServer minecraftServer, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
         ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         String playerName = profile.getName();
-
-        String correctResponse = AM_VERSION + "-" + Loader.getPlatformType().toString().toLowerCase();
 
         if (!understood) {
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
@@ -64,67 +55,68 @@ public class LoginS2CPacket {
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
             }
-            return null;
         } else {
+            loginSynchronizer.waitFor(minecraftServer.submit(() -> handleHandshake(connection, playerName, buf, loginSynchronizer, packetSender)));
+        }
+    }
 
-            LOGGER.info("{} has installed AutoModpack.", playerName);
+    public static void handleHandshake(ClientConnection connection, String playerName, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
+        LOGGER.info("{} has installed AutoModpack.", playerName);
 
-            String clientResponse = buf.readString(32767);
-            boolean isClientVersionHigher = isClientVersionHigher(clientResponse);
+        String clientResponse = buf.readString(32767);
+        boolean isClientVersionHigher = isClientVersionHigher(clientResponse);
+        String correctResponse = AM_VERSION + "-" + Loader.getPlatformType().toString().toLowerCase();
 
-            if (!clientResponse.equals(correctResponse)) {
+        if (!clientResponse.equals(correctResponse)) {
 
-                boolean isAcceptedLoader = false;
+            boolean isAcceptedLoader = false;
 
-                for (String loader : serverConfig.acceptedLoaders) {
-                    if (clientResponse.contains(loader)) {
-                        isAcceptedLoader = true;
-                        break;
-                    }
+            for (String loader : serverConfig.acceptedLoaders) {
+                if (clientResponse.contains(loader)) {
+                    isAcceptedLoader = true;
+                    break;
                 }
+            }
 
-                if (!clientResponse.startsWith(AM_VERSION) || !isAcceptedLoader) {
-                    Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + Loader.getPlatformType().toString().toLowerCase() + " to play on this server!");
-                    if (isClientVersionHigher) {
-                        reason = VersionedText.common.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
-                    }
-                    connection.send(new LoginDisconnectS2CPacket(reason));
-                    connection.disconnect(reason);
-                    return null;
+            if (!clientResponse.startsWith(AM_VERSION) || !isAcceptedLoader) {
+                Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + Loader.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                if (isClientVersionHigher) {
+                    reason = VersionedText.common.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
                 }
+                connection.send(new LoginDisconnectS2CPacket(reason));
+                connection.disconnect(reason);
+                return;
             }
         }
 
         if (!HttpServer.isRunning() && serverConfig.externalModpackHostLink.equals("")) {
-            return null;
+            return;
         }
 
         if (Modpack.isGenerating()) {
             Text reason = VersionedText.common.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
-            return null;
+            return;
         }
 
         String playerIp = connection.getAddress().toString();
 
         String linkToSend;
 
-        if (!serverConfig.externalModpackHostLink.isEmpty()) {
-            // If an external modpack host link has been specified, use it
-            linkToSend = serverConfig.externalModpackHostLink;
-            if (!linkToSend.startsWith("http://") && !linkToSend.startsWith("https://")) {
-                linkToSend = "http://" + linkToSend;
-            }
-        } else {
-            // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
-            String formattedPlayerIp = Ip.refactorToTrueIp(playerIp);
 
-            if (Ip.isLocal(formattedPlayerIp, serverConfig.hostLocalIp)) { // local
-                linkToSend = "http://" + serverConfig.hostLocalIp;
-            } else { // Otherwise, use the public host IP and port
-                linkToSend = "http://" + serverConfig.hostIp;
-            }
+        // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
+        String formattedPlayerIp = Ip.refactorToTrueIp(playerIp);
+
+        if (Ip.isLocal(formattedPlayerIp, serverConfig.hostLocalIp)) { // local
+            linkToSend = "http://" + serverConfig.hostLocalIp;
+        } else { // Otherwise, use the public host IP and port
+            linkToSend = "http://" + serverConfig.hostIp;
+        }
+
+      
+        if (!linkToSend.startsWith("http://") && !linkToSend.startsWith("https://")) {
+                linkToSend = "http://" + linkToSend;
         }
 
         if (!serverConfig.reverseProxy) {
@@ -137,7 +129,7 @@ public class LoginS2CPacket {
         PacketByteBuf outBuf = PacketByteBufs.create();
         outBuf.writeString(linkToSend, 32767);
 
-        return outBuf;
+        packetSender.sendPacket(LINK, outBuf);
     }
 
 

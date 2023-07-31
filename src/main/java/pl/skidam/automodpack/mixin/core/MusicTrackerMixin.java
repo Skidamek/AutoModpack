@@ -18,7 +18,7 @@
  * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package pl.skidam.automodpack.mixin;
+package pl.skidam.automodpack.mixin.core;
 
 import net.minecraft.client.sound.MusicTracker;
 import net.minecraft.sound.MusicSound;

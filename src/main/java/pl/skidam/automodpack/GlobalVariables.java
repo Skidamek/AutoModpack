@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack;
 
-import net.minecraft.MinecraftVersion;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack.config.Jsons;
@@ -35,12 +34,7 @@ public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
     public static String AM_VERSION = JarUtilities.getModVersion("automodpack");
-
-    //#if MC >= 11700
-    public static String MC_VERSION = MinecraftVersion.CURRENT.getName();
-    //#else
-    //$$ public static String MC_VERSION = MinecraftVersion.field_25319.getName();
-    //#endif
+    public static String MC_VERSION = JarUtilities.getModVersion("minecraft");
     public static final Path automodpackDir = Paths.get("./automodpack/");
     public static final Path modpacksDir = Paths.get(automodpackDir + File.separator + "modpacks");
     public static final Path clientConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-client.json");

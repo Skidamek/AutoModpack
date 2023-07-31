@@ -42,7 +42,6 @@ public class AutoModpack {
 //#if FORGE
 //$$     public AutoModpack() {
 //$$        MinecraftForge.EVENT_BUS.register(this);
-//$$        Preload.onPreInitialize();
 //#elseif FABRICLIKE
     public static void onInitialize() {
 //#endif
@@ -64,7 +63,7 @@ public class AutoModpack {
             }
             ModPackets.registerS2CPackets();
         } else {
-            MinecraftUserName.get(); // To save the username` to variable in MinecraftUserName class for later use
+//            MinecraftUserName.get(); // To save the username` to variable in MinecraftUserName class for later use
             ModPackets.registerC2SPackets();
 
 //#if FABRICLIKE

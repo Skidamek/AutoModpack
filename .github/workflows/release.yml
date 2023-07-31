@@ -71,14 +71,6 @@ jobs:
           name: build-artifacts
           path: build-artifacts
 
-
-      - name: Set release-type variable
-        id: release_type_set
-        env:
-          release_type: ${{ steps.properties_v.outputs.mod_platform == 'forge' && 'beta' || 'release' }}
-        run: |
-            echo "release-type=$release-type" >> $GITHUB_OUTPUT
-
       - name: Get github release information
         if: ${{ github.event_name == 'workflow_dispatch' }}
         id: get_release
@@ -116,6 +108,13 @@ jobs:
           path: ${{ format('versions/{0}/gradle.properties', matrix.subproject) }}
           properties: 'minecraft_version game_versions mod_platform'
 
+      - name: Set release-type variable
+        id: release_type_set
+        env:
+          release_type: ${{ steps.properties_v.outputs.mod_platform == 'forge' && 'beta' || 'release' }}
+        run: |
+          echo "release-type=$release-type" >> $GITHUB_OUTPUT
+
       - name: Fix game version
         id: game_versions
         run: |
@@ -143,25 +142,14 @@ jobs:
           echo "hash=$FILE_HASH" >> $GITHUB_OUTPUT
           cat $GITHUB_OUTPUT
 
-      - name: Publish Minecraft Mods
-        uses: Kir-Antipov/mc-publish@v3.2
+      - name: Prepare changelog
+        uses: actions/github-script@v6
+        id: changelog
         with:
-          modrinth-id: k68glP2e
-          modrinth-token: ${{ secrets.MODRINTH_API_TOKEN }}
-
-          curseforge-id: 639211
-          curseforge-token: ${{ secrets.CF_API_TOKEN }}
-
-          github-tag: ${{ steps.release_info.outputs.tag_name }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-          files-primary: ${{ steps.file_info.outputs.path }}
-          files-secondary: ''
-
-          name: ${{ format('{0} {1} {2}', steps.properties_g.outputs.mod_name, steps.properties_g.outputs.mod_version, steps.properties_v.outputs.mod_platform) }}
-          version: ${{ format('{0}', steps.properties_g.outputs.mod_version) }}
-          version-type: ${{ steps.release_type_set.outputs.release_type }}
-          changelog: |-
+          script: return process.env.CHANGELOG
+          result-encoding: string
+        env:
+          CHANGELOG: |-
             ${{ format('{0}{1}', github.event.release.body, steps.get_release.outputs.body) }}
             
             -------
@@ -172,9 +160,31 @@ jobs:
             - SHA-256: `${{ steps.file_info.outputs.hash }}`
             - Built from: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          loaders: ${{ matrix.mod_brand }}
+      - name: Publish Minecraft Mods
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          modrinth-id: k68glP2e
+          modrinth-token: ${{ secrets.MODRINTH_API_TOKEN }}
+
+          curseforge-id: 639211
+          curseforge-token: ${{ secrets.CF_API_TOKEN }}
+
+          github-tag: ${{ steps.release_info.outputs.tag_name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+          files: ${{ steps.file_info.outputs.path }}
+
+          name: ${{ format('{0} {1} {2}', steps.properties_g.outputs.mod_name, steps.properties_g.outputs.mod_version, steps.properties_v.outputs.mod_platform) }}
+          version: ${{ steps.properties_g.outputs.mod_version }}
+          version-type: ${{ steps.release_type_set.outputs.release_type }}
+
+          loaders: ${{ steps.properties_v.outputs.mod_platform }}
           game-versions: ${{ steps.game_versions.outputs.value }}
-          version-resolver: exact
+          game-version-filter: any
+          dependencies: ''  # declare the dependencies explicitly, so mc-publish won't try to load from fabric.mod.json
+
+          modrinth-changelog: ${{ steps.changelog.outputs.result }}
+          curseforge-changelog: ${{ steps.changelog.outputs.result }}
 
           retry-attempts: 3
           retry-delay: 10000

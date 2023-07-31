@@ -47,13 +47,19 @@ body:
         Leave empty if there is none.
       placeholder: https://pastebin.com/J6b7lKxR
   - type: input
-    id: minecraft-version
+    id: versions
     attributes:
-      label: Minecraft version & Mod Loader
-      description: The Minecraft version(s) and mod loader where this bug occurs in.
-      placeholder: 1.18.2 fabric
+      label: Minecraft & Mod Loader versions
+      description: The Minecraft version(s) and mod loader with loader version where this bug occurs in.
+      placeholder: 1.18.2 fabric 0.14.21
     validations:
       required: true
+  - type: input
+    id: launcher
+    attributes:
+        label: Minecraft launcher
+        description: The launcher you are using if bug occurs on the client side.
+        placeholder: Prism Launcher
   - type: input
     id: operating-system
     attributes:

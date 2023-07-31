@@ -31,13 +31,13 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.mixin.ServerLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 
 import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 public class LinkS2CPacket {
 
-    private static void packet(ServerLoginNetworkHandler handler, PacketByteBuf buf) {
+    public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean b, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer sync, PacketSender sender) {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 
         String clientHasUpdate = buf.readString(32767);
@@ -63,9 +63,5 @@ public class LinkS2CPacket {
             LOGGER.error("It can be Ip or a correctly set domain");
             LOGGER.error("If you need, change port in config file, forward / open it and restart server");
         }
-    }
-
-    public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean b, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer sync, PacketSender sender) {
-        packet(handler, buf);
     }
 }

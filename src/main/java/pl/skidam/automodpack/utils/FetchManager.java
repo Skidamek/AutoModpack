@@ -61,8 +61,8 @@ public class FetchManager {
 
         if (!queuedFetches.containsKey(serverUrl)) {
             queuedFetches.put(serverUrl, new QueuedFetch(sha1, murmur, fileSize, fileType));
-            fetchNext();
             addedToQueue++;
+            fetchNext();
         }
     }
 
@@ -109,6 +109,7 @@ public class FetchManager {
 
     public void joinAll() throws InterruptedException {
         semaphore.acquire(addedToQueue);
+        semaphore.release(addedToQueue);
     }
 
     private FetchedData fetchUrl(QueuedFetch queuedFetch, String serverUrl) {

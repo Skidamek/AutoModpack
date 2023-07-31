@@ -37,8 +37,13 @@ import static pl.skidam.automodpack.GlobalVariables.*;
 public class Preload {
     public static void onPreInitialize() {
         long start = System.currentTimeMillis();
-        LOGGER.info("Prelaunching AutoModpack...");
         preload = true;
+
+        // Load needed classes
+        new GlobalVariables();
+        new CustomFileUtils();
+
+        LOGGER.info("Prelaunching AutoModpack...");
 
         String workingDirectory = System.getProperty("user.dir");
         if (workingDirectory.contains("com.qcxr.qcxr")) {
