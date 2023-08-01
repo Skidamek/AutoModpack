@@ -34,6 +34,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 
 import static pl.skidam.automodpack.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack.GlobalVariables.serverConfig;
 
 public class LinkS2CPacket {
 
@@ -57,11 +58,15 @@ public class LinkS2CPacket {
             connection.disconnect(reason);
 
             LOGGER.error("Host server error. AutoModpack host server is down or server is not configured correctly");
-            LOGGER.error("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", GlobalVariables.serverConfig.hostPort);
-            LOGGER.error("If so make sure that host IP '{}' and host local IP '{}' are correct in the config file!", GlobalVariables.serverConfig.hostIp, GlobalVariables.serverConfig.hostLocalIp);
-            LOGGER.error("host IP should be an ip which are players outside of server network connecting to and host local IP should be an ip which are players inside of server network connecting to");
-            LOGGER.error("It can be Ip or a correctly set domain");
-            LOGGER.error("If you need, change port in config file, forward / open it and restart server");
+            LOGGER.warn("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", GlobalVariables.serverConfig.hostPort);
+            LOGGER.warn("If so make sure that host IP '{}' and host local IP '{}' are correct in the config file!", GlobalVariables.serverConfig.hostIp, GlobalVariables.serverConfig.hostLocalIp);
+            LOGGER.warn("host IP should be an ip which are players outside of server network connecting to and host local IP should be an ip which are players inside of server network connecting to");
+            LOGGER.warn("It can be Ip or a correctly set domain");
+            LOGGER.warn("If you need, change port in config file, forward / open it and restart server");
+
+            if (serverConfig.reverseProxy) {
+                LOGGER.error("Turn off reverseProxy in config, if you don't actually use it!");
+            }
         }
     }
 }
