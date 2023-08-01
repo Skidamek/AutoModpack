@@ -86,11 +86,10 @@ public class Windows {
         frame.add(OKButton);
         frame.add(CustomText);
         frame.add(RestartText);
-        frame.setTitle("AutoModpack window");
+        frame.setTitle("AutoModpack Window");
         frame.setIconImage(icon);
+        frame.setAlwaysOnTop(true);
         frame.setVisible(true);
-        frame.requestFocus();
-        frame.toFront();
 
         synchronized (Windows.class) {
             try {

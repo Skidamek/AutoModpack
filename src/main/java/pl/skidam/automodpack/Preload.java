@@ -67,6 +67,9 @@ public class Preload {
         if (serverConfig != null && !serverConfig.externalModpackHostLink.isEmpty()) {
             serverConfig.hostIp = serverConfig.externalModpackHostLink;
             serverConfig.hostLocalIp = serverConfig.externalModpackHostLink;
+            LOGGER.info("externalModpackHostLink is deprecated, use hostIp and hostLocalIp instead, setting them to {}", serverConfig.externalModpackHostLink);
+            serverConfig.externalModpackHostLink = "";
+            ConfigTools.saveConfig(serverConfigFile, serverConfig);
         }
 
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
