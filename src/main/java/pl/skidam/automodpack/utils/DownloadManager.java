@@ -20,8 +20,6 @@
 
 package pl.skidam.automodpack.utils;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import pl.skidam.automodpack.Preload;
 import pl.skidam.automodpack.client.ScreenTools;
 
 import java.io.*;
@@ -42,7 +40,7 @@ import static pl.skidam.automodpack.GlobalVariables.AM_VERSION;
 public class DownloadManager {
     private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
     private static final int BUFFER_SIZE = 16 * 1024;
-    private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new ThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
+    private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
     private final Map<String, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
     public final Map<String, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
     private final Map<String, Integer> retryCounts = new ConcurrentHashMap<>();
@@ -53,13 +51,13 @@ public class DownloadManager {
     private final Semaphore semaphore = new Semaphore(0);
 
     public DownloadManager() {
-
+        ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
     }
 
     public DownloadManager(long bytesToDownload) {
         this.bytesToDownload = bytesToDownload;
         if (!ScreenTools.getScreenString().contains("downloadscreen")) {
-            ScreenTools.setTo.download();
+            ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
         }
     }
 
@@ -258,9 +256,9 @@ public class DownloadManager {
         }
     }
 
-    private static class QueuedDownload {
-        public final Path file;
-        public final String sha1;
+    public static class QueuedDownload {
+        public Path file;
+        public String sha1;
         Runnable successCallback;
         Runnable failureCallback;
 
@@ -273,8 +271,8 @@ public class DownloadManager {
     }
 
     public static class DownloadData {
-        final CompletableFuture<Void> future;
-        final Path file;
+        CompletableFuture<Void> future;
+        Path file;
         final Instant startTime = Instant.now();
 
         DownloadData(CompletableFuture<Void> future, Path file) {

@@ -51,7 +51,7 @@ public class ReLauncher {
 
             if (isClient) {
                 if (!preload && !ScreenTools.getScreenString().contains("restartscreen")) {
-                    ScreenTools.setTo.restart(modpackDir, fullDownload);
+                    ScreenTools.ScreenEnum.RESTART.callScreen(modpackDir, fullDownload);
                     return;
                 }
 

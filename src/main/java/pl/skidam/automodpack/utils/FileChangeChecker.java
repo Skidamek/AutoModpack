@@ -20,14 +20,11 @@
 
 package pl.skidam.automodpack.utils;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.modpack.HttpServer;
 import pl.skidam.automodpack.modpack.Modpack;
 
-import java.awt.image.Kernel;
-import java.io.IOException;
 import java.nio.file.*;
 import java.nio.file.attribute.FileTime;
 import java.util.*;
@@ -36,7 +33,7 @@ import java.util.concurrent.*;
 import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 public class FileChangeChecker {
-    private final ThreadFactory threadFactoryFileChecker = new ThreadFactoryBuilder()
+    private final ThreadFactory threadFactoryFileChecker = new CustomThreadFactoryBuilder()
             .setNameFormat("AutoModpackFileChecker")
             .build();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1, threadFactoryFileChecker);

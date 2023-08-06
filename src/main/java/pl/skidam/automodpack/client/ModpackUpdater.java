@@ -111,7 +111,7 @@ public class ModpackUpdater {
 
                 Util.getMainWorkerExecutor().execute(() -> {
                     while (!ScreenTools.getScreenString().contains("dangerscreen")) {
-                        ScreenTools.setTo.danger(ScreenTools.getScreen(), link, modpackDir, modpackContentFile);
+                        ScreenTools.ScreenEnum.DANGER.callScreen(ScreenTools.getScreen(), link, modpackDir, modpackContentFile);
                         new Wait(50);
                     }
                 });
@@ -120,7 +120,7 @@ public class ModpackUpdater {
 
             LOGGER.warn("Modpack update found");
 
-            ScreenTools.setTo.download();
+            ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
 
             ModpackUpdaterMain(link, modpackDir, modpackContentFile);
 
@@ -232,12 +232,11 @@ public class ModpackUpdater {
 
             LOGGER.info("Finished fetching urls in {}ms", Duration.between(startFetching, Instant.now()).toMillis());
 
-
             int wholeQueue = serverModpackContent.list.size();
 
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
-            ScreenTools.setTo.download();
+            ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
 
             if (wholeQueue > 0) {
 
@@ -276,6 +275,7 @@ public class ModpackUpdater {
                         changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrl);
                     };
 
+                    LOGGER.info("Downloading {} from {}", fileName, url);
 
                     downloadManager.download(downloadFile, serverSHA1, url, successCallback, failureCallback);
                 }
@@ -299,7 +299,7 @@ public class ModpackUpdater {
             }
             MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // update minecraft version
 
-            if (AudioManager.isMusicPlaying()) {
+            if (!preload && AudioManager.isMusicPlaying()) {
                 AudioManager.stopMusic();
             }
 
@@ -309,7 +309,7 @@ public class ModpackUpdater {
                     LOGGER.error("Failed to download: " + entry.getKey() + " from " + entry.getValue());
                     failedFiles.append(entry.getKey());
                 }
-                ScreenTools.setTo.error("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");
+                ScreenTools.ScreenEnum.ERROR.callScreen("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");
 
                 LOGGER.warn("Update *completed* with ERRORS! Took: " + (System.currentTimeMillis() - start) + " ms");
 
@@ -329,7 +329,7 @@ public class ModpackUpdater {
         } catch (SocketTimeoutException | ConnectException e) {
             LOGGER.error("Modpack host of " + link + " is not responding", e);
         } catch (Exception e) {
-            ScreenTools.setTo.error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
+            ScreenTools.ScreenEnum.ERROR.callScreen("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
             e.printStackTrace();
         }
     }
@@ -431,7 +431,7 @@ public class ModpackUpdater {
             // todo delete files that were downloaded
             // we will use the same method as to modpacks manager
 
-            ScreenTools.setTo.title();
+            ScreenTools.ScreenEnum.TITLE.callScreen();
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -445,9 +445,9 @@ public class ModpackUpdater {
         Map<String, String> mainMods = getMods("./mods/");
         Map<String, String> modpackMods = getMods(modpackModsFile);
 
-        if (mainMods == null || modpackMods == null) return;
-
-        if (!hasDuplicateValues(mainMods)) return;
+        if (mainMods == null || modpackMods == null) {
+            return;
+        }
 
         for (Map.Entry<String, String> mainMod : mainMods.entrySet()) {
             String mainModFileName = mainMod.getKey();
@@ -476,14 +476,11 @@ public class ModpackUpdater {
     }
 
     private static Map<String, String> getMods(String modsDir) {
-        Map<String, String> defaultMods = new HashMap<>();
+        Map<String, String> defaultMods = new LinkedHashMap<>();
         Path defaultModsDir = Paths.get(modsDir);
 
-        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(defaultModsDir)) {
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(defaultModsDir, "*.jar")) {
             for (Path defaultMod : directoryStream) {
-                if (!Files.isRegularFile(defaultMod) || !defaultMod.getFileName().toString().endsWith(".jar")) {
-                    continue;
-                }
                 defaultMods.put(defaultMod.getFileName().toString(), JarUtilities.getModIdFromJar(defaultMod, true));
             }
         } catch (IOException e) {
@@ -491,16 +488,5 @@ public class ModpackUpdater {
         }
 
         return defaultMods;
-    }
-
-    private static boolean hasDuplicateValues(Map<String, String> map) {
-        Set<String> values = new HashSet<>();
-        for (String value : map.values()) {
-            if (values.contains(value)) {
-                return true;
-            }
-            values.add(value);
-        }
-        return false;
     }
 }

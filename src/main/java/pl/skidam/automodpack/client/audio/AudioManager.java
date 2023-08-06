@@ -29,33 +29,25 @@ import net.minecraft.util.registry.Registry;
 //$$import net.minecraft.registry.Registries;
 //#endif
 
-//#if FORGE
-//$$ import net.minecraftforge.eventbus.api.IEventBus;
-//$$ import net.minecraftforge.registries.DeferredRegister;
-//$$ import net.minecraftforge.registries.ForgeRegistries;
-//#endif
-
 import static pl.skidam.automodpack.GlobalVariables.MOD_ID;
 
-@SuppressWarnings("deprecation")
+//#if MC < 11903
+//$$@SuppressWarnings("deprecation")
+//#endif
 public class AudioManager {
     private static CustomSoundInstance SOUND_INSTANCE;
     private static SoundManager soundManager;
     private static boolean playing = false;
 
-    // FIXME: Forge support
     public AudioManager() {
-//#if FABRICLIKE
         SoundEvent WAITING_MUSIC = register();
         SOUND_INSTANCE = new CustomSoundInstance(WAITING_MUSIC);
-//#endif
     }
-
 
     private static SoundEvent register() {
         Identifier id = new Identifier(MOD_ID, "waiting_music");
 //#if MC >= 11903
-//$$    var register = Registries.SOUND_EVENT;
+//$$    Registry<SoundEvent> register = Registries.SOUND_EVENT;
 //$$    SoundEvent soundEvent = SoundEvent.of(id);
 //#else
         Registry<SoundEvent> register = Registry.SOUND_EVENT;

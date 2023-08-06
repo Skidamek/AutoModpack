@@ -21,10 +21,11 @@
 package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.audio.AudioManager;
+import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.modpack.Modpack;
 import pl.skidam.automodpack.networking.ModPackets;
-import pl.skidam.automodpack.utils.MinecraftUserName;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
 import pl.skidam.automodpack.modpack.Commands;
@@ -46,6 +47,10 @@ public class AutoModpack {
     public static void onInitialize() {
 //#endif
 
+        if (Loader.isDevelopmentEnvironment()) {
+            serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
+        }
+
         preload = false;
 
         long start = System.currentTimeMillis();
@@ -63,13 +68,10 @@ public class AutoModpack {
             }
             ModPackets.registerS2CPackets();
         } else {
-//            MinecraftUserName.get(); // To save the username` to variable in MinecraftUserName class for later use
             ModPackets.registerC2SPackets();
-
-//#if FABRICLIKE
-            // TODO fix for forge
+// #if FABRICLIKE
             new AudioManager();
-//#endif
+// #endif
         }
 
         Commands.register();

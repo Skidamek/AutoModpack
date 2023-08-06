@@ -64,7 +64,7 @@ public class TestButton extends Screen {
                         ButtonWidget.WIDGETS_TEXTURE,
                         256,
                         256,
-                        button -> ScreenTools.setTo.menu(),
+                        button -> ScreenTools.ScreenEnum.MENU.callScreen(),
                         VersionedText.common.translatable("gui.automodpack.menu")
                 )
         );

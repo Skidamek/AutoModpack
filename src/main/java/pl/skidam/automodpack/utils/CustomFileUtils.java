@@ -20,8 +20,6 @@
 
 package pl.skidam.automodpack.utils;
 
-import org.apache.commons.io.FileDeleteStrategy;
-import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.config.Jsons;
 
 import java.io.*;
@@ -55,20 +53,14 @@ public class CustomFileUtils {
 
     public static void forceDelete(Path file) {
 
-        FileUtils.deleteQuietly(file.toFile());
+        try {
+            Files.deleteIfExists(file);
+        } catch (IOException ignored) {
+        }
 
         if (Files.exists(file)) {
-
-            try {
-                FileDeleteStrategy.FORCE.delete(file.toFile());
-            } catch (IOException ignored) {
-            }
-
-
-            if (Files.exists(file)) {
-                if (file.toString().endsWith(".jar")) {
-                    dummyIT(file);
-                }
+            if (file.toString().endsWith(".jar")) {
+                dummyIT(file);
             }
         }
     }

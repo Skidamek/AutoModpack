@@ -20,9 +20,9 @@
 
 package pl.skidam.automodpack.modpack;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
+import pl.skidam.automodpack.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack.utils.FileChangeChecker;
 import pl.skidam.automodpack.utils.Ip;
 import pl.skidam.automodpack.utils.Url;
@@ -178,7 +178,7 @@ public class HttpServer {
             }
 
 
-            ThreadFactory threadFactory = new ThreadFactoryBuilder()
+            ThreadFactory threadFactory = new CustomThreadFactoryBuilder()
                     .setNameFormat("AutoModpackHost-%d")
                     .build();
 

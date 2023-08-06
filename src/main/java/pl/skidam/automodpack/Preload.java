@@ -25,28 +25,19 @@ import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.platforms.CurseForgeAPI;
-import pl.skidam.automodpack.platforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.*;
+import settingdust.preloadingtricks.SetupModCallback;
 
 import java.nio.file.Paths;
 import java.util.List;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
 
-public class Preload {
-    public static void onPreInitialize() {
+public class Preload implements SetupModCallback {
+
+    public Preload() {
         long start = System.currentTimeMillis();
         preload = true;
-
-        // Load all needed classes (dunno why but launching from mixin constructor does not load classes as normal...)
-        // Can someone explain me this?
-        new GlobalVariables();
-        new CustomFileUtils();
-        new Json();
-        new ModrinthAPI();
-        new CurseForgeAPI();
-        new FetchManager.FetchedData();
 
         LOGGER.info("Prelaunching AutoModpack...");
 

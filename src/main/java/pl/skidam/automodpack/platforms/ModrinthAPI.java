@@ -42,10 +42,6 @@ public class ModrinthAPI {
     public String releaseType;
     public String SHA1Hash;
 
-    public ModrinthAPI() {
-
-    }
-
     public ModrinthAPI(String modrinthID, String requestUrl, String downloadUrl, String fileVersion, String fileName, long fileSize, String releaseType, String SHA1Hash) {
         this.modrinthID = modrinthID;
         this.requestUrl = requestUrl;

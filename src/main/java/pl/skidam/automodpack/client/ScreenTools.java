@@ -26,51 +26,52 @@ import net.minecraft.client.gui.screen.TitleScreen;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.client.ui.*;
 
+import java.lang.reflect.Method;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import static pl.skidam.automodpack.GlobalVariables.preload;
 
+
 public class ScreenTools {
+    public enum ScreenEnum {
+        DOWNLOAD("download"),
+        FETCH("fetch"),
+        CHANGELOG("changelog"),
+        RESTART("restart"),
+        DANGER("danger"),
+        ERROR("error"),
+        TITLE("title"),
+        MENU("menu");
 
-    public static class setTo { // Save screen's. Don't worry that minecraft didn't load yet, or you will crash server by executing screen's methods
+        public final String screenName;
 
-        // TODO Make it work
-//        public setTo(Screen screen) {
-//            if (Checks.properlyLoaded()) Screens.setScreen(screen);
-//        }
-
-        public static void download() {
-            if (Check.properlyLoaded()) Screens.setScreen(new DownloadScreen());
-        }
-        public static void fetch() {
-            if (Check.properlyLoaded()) Screens.setScreen(new FetchScreen());
-        }
-        public static void changelog(Screen parent, Path modpackDir) {
-            if (Check.properlyLoaded()) Screens.setScreen(new ChangelogScreen(parent, modpackDir));
+        ScreenEnum(String screenName) {
+            this.screenName = screenName;
         }
 
-        public static void restart(Path modpackDir, boolean fullDownload) {
-            if (Check.properlyLoaded()) Screens.setScreen(new RestartScreen(modpackDir, fullDownload));
+        public void callScreen(Object... args) {
+            if (ScreenTools.Check.properlyLoaded()) {
+                try {
+                    Method method = Arrays.stream(ScreenTools.Screens.class.getDeclaredMethods())
+                            .filter(m -> m.getName().equals(screenName))
+                            .findFirst()
+                            .orElseThrow(() -> new NoSuchMethodException("No method found with name " + screenName));
+
+                    if (method.getParameterCount() != args.length) {
+                        throw new IllegalArgumentException("Incorrect number of arguments for method " + screenName);
+                    }
+
+                    method.invoke(null, args);
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
         }
 
-        public static void danger(Screen parent, String link, Path modpackDir, Path modpackContentFile) {
-            if (Check.properlyLoaded()) Screens.setScreen(new DangerScreen(parent, link, modpackDir, modpackContentFile));
-        }
-
-        public static void error(String... error) {
-            if (Check.properlyLoaded()) Screens.setScreen(new ErrorScreen(error));
-        }
-
-        public static void title() {
-            if (Check.properlyLoaded()) Screens.setScreen(new TitleScreen());
-        }
-
-        public static void menu() {
-            if (Check.properlyLoaded()) Screens.setScreen(new MenuScreen());
-        }
     }
 
-    // Kinda bad I know, at latest it won't crash server lol...
     public static String getScreenString() {
         if (Check.properlyLoaded()) {
             Screen screen = Screens.getScreen();
@@ -108,6 +109,36 @@ public class ScreenTools {
 
         public static void setScreen(Screen screen) {
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen));
+        }
+
+        public static void download() {
+            Screens.setScreen(new DownloadScreen());
+        }
+        public static void fetch() {
+            Screens.setScreen(new FetchScreen());
+        }
+        public static void changelog(Screen parent, Path modpackDir) {
+            Screens.setScreen(new ChangelogScreen(parent, modpackDir));
+        }
+
+        public static void restart(Path modpackDir, boolean fullDownload) {
+            Screens.setScreen(new RestartScreen(modpackDir, fullDownload));
+        }
+
+        public static void danger(Screen parent, String link, Path modpackDir, Path modpackContentFile) {
+            Screens.setScreen(new DangerScreen(parent, link, modpackDir, modpackContentFile));
+        }
+
+        public static void error(String... error) {
+            Screens.setScreen(new ErrorScreen(error));
+        }
+
+        public static void title() {
+            Screens.setScreen(new TitleScreen());
+        }
+
+        public static void menu() {
+            Screens.setScreen(new MenuScreen());
         }
     }
 }

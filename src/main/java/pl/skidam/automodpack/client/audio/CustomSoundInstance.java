@@ -29,7 +29,7 @@ import net.minecraft.sound.SoundEvent;
 //#endif
 public class CustomSoundInstance extends AbstractSoundInstance {
 
-    CustomSoundInstance(SoundEvent event) {
+    public CustomSoundInstance(SoundEvent event) {
 //#if MC >= 11902
 //$$    super(event.getId(), SoundCategory.MASTER, Random.create());
 //#else

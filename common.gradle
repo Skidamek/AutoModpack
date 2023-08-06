@@ -22,10 +22,12 @@ preprocess {
 }
 
 repositories {
+	mavenLocal()
 	maven { url 'https://jitpack.io' }
 	maven { url 'https://www.cursemaven.com' }
 	maven { url 'https://maven.quiltmc.org/repository/release' }
 	maven { url 'https://maven.su5ed.dev/releases' }
+	maven { url 'https://api.modrinth.com/maven' }
 }
 
 // https://github.com/FabricMC/fabric-loader/issues/783
@@ -35,12 +37,17 @@ configurations {
 }
 
 dependencies {
-	// loom
+
+	// Super prelaod!
+	include(implementation('settingdust.preloadingtricks:preloading-tricks:0.0.10'))
+
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
 
 
 	if (mod_brand == "fabric" || mod_brand == "quilt") {
+
+		// fabric api - https://modrinth.com/mod/fabric-api
 		Set<String> apiModules = [
 				"fabric-api-base",
 				"fabric-networking-api-v1",
@@ -58,6 +65,7 @@ dependencies {
 		}
 	} else {
 
+		// forgified fabric api - https://modrinth.com/mod/forgified-fabric-api
 		Set<String> apiModules = [
 				"fabric-api-base:0.4.30+aefdd90477",
 				"fabric-networking-api-v1:1.3.9+54715f9577",
@@ -76,7 +84,7 @@ dependencies {
 	} else if (mod_brand == 'quilt') {
 		modImplementation "org.quiltmc:quilt-loader:${project.quilt_loader_version}"
 	} else if (mod_brand == 'forge') {
-		forge "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
+		forge "net.minecraftforge:forge:${project.minecraft_version}-${mod_brand}"
 	}
 
 
@@ -190,8 +198,14 @@ java {
 }
 
 jar {
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
 	from(rootProject.file('LICENSE')) {
 		rename { "${it}_${project.archives_base_name}" }
+	}
+
+	from ('../../src/main/resources') {
+		include 'META-INF/services/**'
 	}
 }
 

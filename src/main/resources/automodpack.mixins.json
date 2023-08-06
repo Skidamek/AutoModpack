@@ -2,7 +2,6 @@
   "required": true,
   "minVersion": "0.8",
   "package": "pl.skidam.automodpack.mixin",
-  "plugin": "pl.skidam.automodpack.mixin.AutoModpackMixinPlugin",
   "compatibilityLevel": "JAVA_8",
   "mixins": [
     "core.MinecraftServerMixin",

@@ -20,14 +20,10 @@
 
 package pl.skidam.automodpack.modpack;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
-import pl.skidam.automodpack.utils.CustomFileUtils;
-import pl.skidam.automodpack.utils.FileChangeChecker;
-import pl.skidam.automodpack.utils.JarUtilities;
-import pl.skidam.automodpack.utils.ModpackContentTools;
+import pl.skidam.automodpack.utils.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -115,7 +111,7 @@ public class Modpack {
         public static boolean create(Path modpackDir) {
 
             try {
-                ThreadFactory threadFactoryDownloads = new ThreadFactoryBuilder()
+                ThreadFactory threadFactoryDownloads = new CustomThreadFactoryBuilder()
                         .setNameFormat("AutoModpackCreation-%d")
                         .build();
 

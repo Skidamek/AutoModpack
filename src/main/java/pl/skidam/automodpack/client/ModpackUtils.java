@@ -20,23 +20,19 @@
 
 package pl.skidam.automodpack.client;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.util.EntityUtils;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.ModpackContentTools;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.ConnectException;
+import java.net.HttpURLConnection;
 import java.net.SocketTimeoutException;
-import java.nio.charset.StandardCharsets;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -152,57 +148,65 @@ public class ModpackUtils {
     }
 
     public static Jsons.ModpackContentFields getServerModpackContent(String link) {
-
         if (link == null) {
             return null;
         }
 
-        try (CloseableHttpClient httpClient = HttpClients.custom()
-                .setDefaultRequestConfig(RequestConfig.custom()
-                        .setConnectTimeout(5000)
-                        .setSocketTimeout(3000)
-                        .build())
-                .build()) {
+        try {
+            HttpURLConnection connection = (HttpURLConnection) new URL(link).openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(3000);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Minecraft-Username", "");
+            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
 
-            HttpGet getContent = new HttpGet(link);
-            getContent.addHeader("Content-Type", "application/json");
-            getContent.addHeader("Minecraft-Username", "");
-            getContent.addHeader("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
+            int responseCode = connection.getResponseCode();
 
-            HttpResponse response = httpClient.execute(getContent);
-            HttpEntity entity = response.getEntity();
-            String contentResponse = EntityUtils.toString(entity, StandardCharsets.UTF_8);
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+                reader.close();
 
-            Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse, Jsons.ModpackContentFields.class);
+                String contentResponse = response.toString();
 
-            if (serverModpackContent == null) {
-                LOGGER.error("Couldn't connect to modpack server " + link);
-                return null;
-            }
+                Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse, Jsons.ModpackContentFields.class);
 
-            if (serverModpackContent.list.size() < 1) {
-                LOGGER.error("Modpack content is empty!");
-                return null;
-            }
-            // check if modpackContent is valid/isn't malicious
-            for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : serverModpackContent.list) {
-                String file = modpackContentItem.file.replace("\\", "/");
-                String url = modpackContentItem.link.replace("\\", "/");
-                if (file.contains("/../") || url.contains("/../")) {
-                    LOGGER.error("Modpack content is invalid, it contains /../ in file name or url");
+                if (serverModpackContent == null) {
+                    LOGGER.error("Couldn't connect to modpack server " + link);
                     return null;
                 }
+
+                if (serverModpackContent.list.isEmpty()) {
+                    LOGGER.error("Modpack content is empty!");
+                    return null;
+                }
+
+                // check if modpackContent is valid/isn't malicious
+                for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : serverModpackContent.list) {
+                    String file = modpackContentItem.file.replace("\\", "/");
+                    String url = modpackContentItem.link.replace("\\", "/");
+                    if (file.contains("/../") || url.contains("/../")) {
+                        LOGGER.error("Modpack content is invalid, it contains /../ in file name or url");
+                        return null;
+                    }
+                }
+
+                return serverModpackContent;
+            } else {
+                LOGGER.error("Couldn't connect to modpack server " + link + ", Response Code: " + responseCode);
             }
-
-            getContent.releaseConnection();
-
-            return serverModpackContent;
         } catch (ConnectException | SocketTimeoutException e) {
             LOGGER.error("Couldn't connect to modpack server " + link);
         } catch (Exception e) {
             LOGGER.error("Error while getting server modpack content");
             e.printStackTrace();
         }
+
         return null;
     }
 }

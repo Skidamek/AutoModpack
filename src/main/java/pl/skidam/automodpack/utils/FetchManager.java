@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack.utils;
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import pl.skidam.automodpack.GlobalVariables;
 import pl.skidam.automodpack.client.ScreenTools;
 import pl.skidam.automodpack.platforms.CurseForgeAPI;
@@ -35,7 +34,7 @@ import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 public class FetchManager {
     private static final int MAX_FETCHES_IN_PROGRESS = 20;
-    private final ExecutorService FETCH_EXECUTOR = Executors.newFixedThreadPool(MAX_FETCHES_IN_PROGRESS, new ThreadFactoryBuilder().setNameFormat("AutoModpackFetch-%d").build());
+    private final ExecutorService FETCH_EXECUTOR = Executors.newFixedThreadPool(MAX_FETCHES_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackFetch-%d").build());
     private final Map<String, QueuedFetch> queuedFetches = new ConcurrentHashMap<>();
     private final Map<String, FetchData> fetchesInProgress = new ConcurrentHashMap<>();
     public final Map<String, FetchedData> fetchedData = new ConcurrentHashMap<>(); // Don't clear this list on cancel
@@ -50,7 +49,7 @@ public class FetchManager {
         if (!(anyAPIUp = APIsUp())) {
             LOGGER.warn("APIs are down, skipping fetches");
         } else if (!ScreenTools.getScreenString().contains("fetchscreen")) {
-            ScreenTools.setTo.fetch();
+            ScreenTools.ScreenEnum.FETCH.callScreen();
         }
     }
 
@@ -226,10 +225,6 @@ public class FetchManager {
         String serverUrl;
         String platformUrl;
         String mainPageUrl;
-
-        public FetchedData() {
-
-        }
 
         public FetchedData(String serverUrl, String platformUrl, String mainPageUrl) {
             this.serverUrl = serverUrl;
