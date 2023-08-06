@@ -84,7 +84,7 @@ dependencies {
 	} else if (mod_brand == 'quilt') {
 		modImplementation "org.quiltmc:quilt-loader:${project.quilt_loader_version}"
 	} else if (mod_brand == 'forge') {
-		forge "net.minecraftforge:forge:${project.minecraft_version}-${mod_brand}"
+		forge "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
 	}
 
 
