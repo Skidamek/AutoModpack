@@ -25,10 +25,8 @@ import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.platforms.ModrinthAPI;
 import pl.skidam.automodpack.utils.CustomFileUtils;
 import pl.skidam.automodpack.utils.DownloadManager;
-import pl.skidam.automodpack.utils.JarUtilities;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -36,7 +34,7 @@ import static pl.skidam.automodpack.GlobalVariables.*;
 
 public class SelfUpdater {
 
-    private final Path automodpackJar = JarUtilities.getJarFileOfMod("automodpack");
+    private Path automodpackJar = Loader.getModPath("automodpack");
 
     public SelfUpdater(Jsons.ModpackContentFields serverModpackContent) {
 
@@ -50,6 +48,10 @@ public class SelfUpdater {
 
         if (Loader.getEnvironmentType().equals("CLIENT")) {
             if (!clientConfig.selfUpdater) return;
+        }
+
+        if (automodpackJar != null) {
+            automodpackJar = automodpackJar.toAbsolutePath().normalize();
         }
 
         LOGGER.info("Checking if AutoModpack is up-to-date...");

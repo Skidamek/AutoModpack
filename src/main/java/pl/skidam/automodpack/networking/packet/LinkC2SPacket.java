@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack.networking.packet;
 
-
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
@@ -30,7 +29,6 @@ import net.minecraft.network.PacketByteBuf;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ModpackUtils;
-import pl.skidam.automodpack.client.ScreenTools;
 import pl.skidam.automodpack.config.ConfigTools;
 import pl.skidam.automodpack.config.Jsons;
 

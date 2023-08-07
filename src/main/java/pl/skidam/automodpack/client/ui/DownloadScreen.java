@@ -33,8 +33,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
-import java.util.concurrent.CompletableFuture;
-
 import static pl.skidam.automodpack.GlobalVariables.MOD_ID;
 
 public class DownloadScreen extends VersionedScreen {

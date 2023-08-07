@@ -32,7 +32,6 @@ import java.util.Arrays;
 
 import static pl.skidam.automodpack.GlobalVariables.preload;
 
-
 public class ScreenTools {
     public enum ScreenEnum {
         DOWNLOAD("download"),

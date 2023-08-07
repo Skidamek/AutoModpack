@@ -20,19 +20,12 @@
 
 package pl.skidam.automodpack;
 
-import org.apache.commons.io.FileUtils;
 import pl.skidam.automodpack.client.ScreenTools;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.ui.Windows;
 
 import java.awt.*;
-import java.lang.management.ManagementFactory;
-import java.lang.management.RuntimeMXBean;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack.GlobalVariables.*;
 
@@ -67,47 +60,5 @@ public class ReLauncher {
                 System.exit(0);
             }
         }
-    }
-    public static void init(List<Path> classPath, String[] launchArguments) {
-        if (Loader.getEnvironmentType().equals("SERVER")) return;
-
-        final RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
-        final Path oldLibraryPath = Paths.get(runtimeMXBean.getLibraryPath());
-
-        final Path newLibraryPath = oldLibraryPath.getParent().resolve("new-natives");
-
-        try {
-            FileUtils.copyDirectory(oldLibraryPath.toFile(), newLibraryPath.toFile());
-        } catch (Exception ignored) {
-        }
-
-        // TODO use it to get minecraft username
-        String command = formatPath(String.format(
-                "%s %s %s",
-                runtimeMXBean.getInputArguments().stream().map(ReLauncher::checkForSpaceAfterEquals).collect(Collectors.joining(" ")),
-                classPath.stream().map(path -> addQuotes(path.toString())).collect(Collectors.joining(";")),
-                Arrays.stream(launchArguments).map(ReLauncher::addQuotes).collect(Collectors.joining(" "))
-        )).replace(formatPath(oldLibraryPath.toString()), formatPath(newLibraryPath.toString()));
-
-
-        // Fix for Fabric/Fabric/Fabric/... in title screen (by just removing --versionType property)
-        command = command.replaceAll("--versionType [^ ]+", "");
-
-    }
-
-    private static String checkForSpaceAfterEquals(String argument) {
-        final int index = argument.indexOf("=");
-        return index < 0 ? argument : argument.substring(0, index + 1) + addQuotes(argument.substring(index + 1));
-    }
-
-    private static String addQuotes(String argument) {
-        if (!argument.contains(" ") || (argument.startsWith("\"") && argument.endsWith("\""))) {
-            return argument;
-        }
-        return "\"" + argument + "\"";
-    }
-
-    private static String formatPath(String text) {
-        return text.replace("\\", "/");
     }
 }

@@ -27,9 +27,6 @@ import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 import java.nio.file.Path;
-import java.util.concurrent.CompletableFuture;
-
-import static pl.skidam.automodpack.GlobalVariables.LOGGER;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;

@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack.loaders;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.util.Collection;
 

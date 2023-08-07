@@ -46,11 +46,6 @@ public class AutoModpack {
     public static void onInitialize() {
 //#endif
 
-        if (Loader.isDevelopmentEnvironment()) {
-            clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
-            serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
-        }
-
         preload = false;
 
         long start = System.currentTimeMillis();

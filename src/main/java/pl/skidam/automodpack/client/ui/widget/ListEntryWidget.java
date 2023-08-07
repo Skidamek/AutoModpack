@@ -29,15 +29,12 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.modpack.Modpack;
 
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static pl.skidam.automodpack.GlobalVariables.clientConfig;
 
 //#if MC < 12000
 import net.minecraft.client.util.math.MatrixStack;
-import pl.skidam.automodpack.utils.DownloadManager;
 //#else
 //$$import net.minecraft.client.gui.DrawContext;
 //#endif

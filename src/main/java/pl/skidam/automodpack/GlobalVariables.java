@@ -23,7 +23,7 @@ package pl.skidam.automodpack;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack.config.Jsons;
-import pl.skidam.automodpack.utils.JarUtilities;
+import pl.skidam.automodpack.loaders.Loader;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -33,8 +33,8 @@ import java.util.*;
 public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
-    public static String AM_VERSION = JarUtilities.getModVersion("automodpack");
-    public static String MC_VERSION = JarUtilities.getModVersion("minecraft");
+    public static String AM_VERSION = Loader.getModVersion("automodpack");
+    public static String MC_VERSION = Loader.getModVersion("minecraft");
     public static final Path automodpackDir = Paths.get("./automodpack/");
     public static final Path modpacksDir = Paths.get(automodpackDir + File.separator + "modpacks");
     public static final Path clientConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-client.json");

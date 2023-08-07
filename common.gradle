@@ -175,6 +175,12 @@ processResources {
 		// forge requires the mod icon file to be at the resource root
 		filesMatching('assets/automodpack/icon.png') { f -> f.path = 'icon.png' }
 	}
+
+	// add 'META-INF/services/**' as resource
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from ('../../src/main/resources') {
+		include 'META-INF/services/**'
+	}
 }
 
 // https://github.com/Fallen-Breath/yamlang
@@ -198,12 +204,12 @@ java {
 }
 
 jar {
-	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
 	from(rootProject.file('LICENSE')) {
 		rename { "${it}_${project.archives_base_name}" }
 	}
 
+	// add 'META-INF/services/**' as resource
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	from ('../../src/main/resources') {
 		include 'META-INF/services/**'
 	}

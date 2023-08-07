@@ -30,8 +30,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.config.ConfigTools;
 
-import java.util.concurrent.CompletableFuture;
-
 import static net.minecraft.server.command.CommandManager.literal;
 import static pl.skidam.automodpack.GlobalVariables.*;
 

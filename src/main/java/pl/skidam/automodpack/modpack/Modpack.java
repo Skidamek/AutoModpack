@@ -368,10 +368,10 @@ public class Modpack {
                 String murmur = null;
 
                 if (file.getFileName().toString().endsWith(".jar")) {
-                    modId = JarUtilities.getModIdFromJar(file, true);
+                    modId = Loader.getModIdFromLoadedJar(file, true);
                     type = modId == null ? "other" : "mod";
                     if (type.equals("mod")) {
-                        version = JarUtilities.getModVersion(file);
+                        version = Loader.getModVersion(file);
                         murmur = CustomFileUtils.getHash(file, "murmur");
                     }
                 }

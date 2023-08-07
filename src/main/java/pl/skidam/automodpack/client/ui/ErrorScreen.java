@@ -21,7 +21,6 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.audio.AudioManager;
 

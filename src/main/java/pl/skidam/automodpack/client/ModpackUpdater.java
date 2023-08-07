@@ -445,9 +445,9 @@ public class ModpackUpdater {
         Map<String, String> mainMods = getMods("./mods/");
         Map<String, String> modpackMods = getMods(modpackModsFile);
 
-        if (mainMods == null || modpackMods == null) {
-            return;
-        }
+        if (mainMods == null || modpackMods == null) return;
+
+        if (!hasDuplicateValues(mainMods)) return;
 
         for (Map.Entry<String, String> mainMod : mainMods.entrySet()) {
             String mainModFileName = mainMod.getKey();
@@ -476,17 +476,31 @@ public class ModpackUpdater {
     }
 
     private static Map<String, String> getMods(String modsDir) {
-        Map<String, String> defaultMods = new LinkedHashMap<>();
+        Map<String, String> defaultMods = new HashMap<>();
         Path defaultModsDir = Paths.get(modsDir);
 
-        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(defaultModsDir, "*.jar")) {
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(defaultModsDir)) {
             for (Path defaultMod : directoryStream) {
-                defaultMods.put(defaultMod.getFileName().toString(), JarUtilities.getModIdFromJar(defaultMod, true));
+                if (!Files.isRegularFile(defaultMod) || !defaultMod.getFileName().toString().endsWith(".jar")) {
+                    continue;
+                }
+                defaultMods.put(defaultMod.getFileName().toString(), Loader.getModIdFromLoadedJar(defaultMod, true));
             }
         } catch (IOException e) {
             return null;
         }
 
         return defaultMods;
+    }
+
+    private static boolean hasDuplicateValues(Map<String, String> map) {
+        Set<String> values = new HashSet<>();
+        for (String value : map.values()) {
+            if (values.contains(value)) {
+                return true;
+            }
+            values.add(value);
+        }
+        return false;
     }
 }
