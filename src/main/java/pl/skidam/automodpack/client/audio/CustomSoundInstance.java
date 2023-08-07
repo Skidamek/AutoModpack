@@ -24,16 +24,19 @@ package pl.skidam.automodpack.client.audio;
 import net.minecraft.client.sound.AbstractSoundInstance;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvent;
+
+import java.util.function.Supplier;
+
 //#if MC >= 11902
 //$$import net.minecraft.util.math.random.Random;
 //#endif
 public class CustomSoundInstance extends AbstractSoundInstance {
 
-    public CustomSoundInstance(SoundEvent event) {
+    public CustomSoundInstance(Supplier<SoundEvent> event) {
 //#if MC >= 11902
-//$$    super(event.getId(), SoundCategory.MASTER, Random.create());
+//$$    super(event.get().getId(), SoundCategory.MASTER, Random.create());
 //#else
-        super(event.getId(), SoundCategory.MASTER);
+        super(event.get().getId(), SoundCategory.MASTER);
 //#endif
         this.attenuationType = AttenuationType.NONE;
     }

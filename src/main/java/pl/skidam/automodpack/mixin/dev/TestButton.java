@@ -29,6 +29,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.client.ScreenTools;
@@ -64,7 +65,10 @@ public class TestButton extends Screen {
                         ButtonWidget.WIDGETS_TEXTURE,
                         256,
                         256,
-                        button -> ScreenTools.ScreenEnum.MENU.callScreen(),
+                        button -> {
+                            AudioManager.playMusic();
+                            ScreenTools.ScreenEnum.MENU.callScreen();
+                        },
                         VersionedText.common.translatable("gui.automodpack.menu")
                 )
         );

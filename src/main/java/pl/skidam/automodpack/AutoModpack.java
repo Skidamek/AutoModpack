@@ -33,7 +33,6 @@ import pl.skidam.automodpack.modpack.Commands;
 //#if FORGE
 //$$ import net.minecraftforge.common.MinecraftForge;
 //$$ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-//$$ import net.minecraftforge.eventbus.api.IEventBus;
 //$$ import net.minecraftforge.fml.common.Mod;
 //$$ @Mod(MOD_ID)
 //#endif
@@ -48,6 +47,7 @@ public class AutoModpack {
 //#endif
 
         if (Loader.isDevelopmentEnvironment()) {
+            clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
             serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
         }
 
@@ -69,9 +69,12 @@ public class AutoModpack {
             ModPackets.registerS2CPackets();
         } else {
             ModPackets.registerC2SPackets();
-// #if FABRICLIKE
+
+//#if FORGE
+//$$        new AudioManager(FMLJavaModLoadingContext.get().getModEventBus());
+//#else
             new AudioManager();
-// #endif
+//#endif
         }
 
         Commands.register();
