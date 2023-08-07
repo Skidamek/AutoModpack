@@ -36,8 +36,7 @@ public class Ip {
             try {
                 JSON = Json.fromUrl("https://api.ipify.org?format=json");
             } catch (Exception ex) {
-                LOGGER.error("Can't get your IP address, you need to type it manually into config");
-                ex.printStackTrace();
+                LOGGER.error("AutoModpack couldn't get your public IP address, you need to type it manually into config");
             }
         }
         if (JSON != null) {

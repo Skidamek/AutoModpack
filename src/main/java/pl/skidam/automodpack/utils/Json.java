@@ -21,10 +21,10 @@
 package pl.skidam.automodpack.utils;
 
 import com.google.gson.*;
-import com.google.gson.stream.JsonReader;
 
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -51,7 +51,8 @@ public class Json {
                 }
             }
             connection.disconnect();
-        } catch (IOException e) {
+        } catch (SocketTimeoutException ignored) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
 

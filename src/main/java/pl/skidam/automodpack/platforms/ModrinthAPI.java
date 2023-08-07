@@ -190,8 +190,7 @@ public class ModrinthAPI {
 
         } catch (IndexOutOfBoundsException e) {
             LOGGER.warn("Something gone wrong while getting info from Modrinth API: {}", requestUrl);
-        } catch (Exception e) {
-//            e.printStackTrace();
+        } catch (Exception ignored) {
         }
         return null;
     }
