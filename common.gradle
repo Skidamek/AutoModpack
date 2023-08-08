@@ -27,7 +27,7 @@ repositories {
 	maven { url 'https://www.cursemaven.com' }
 	maven { url 'https://maven.quiltmc.org/repository/release' }
 	maven { url 'https://maven.su5ed.dev/releases' }
-    maven { url 'https://api.modrinth.com/maven' }
+	maven { url 'https://api.modrinth.com/maven' }
 }
 
 // https://github.com/FabricMC/fabric-loader/issues/783
@@ -157,7 +157,7 @@ processResources {
 	[
 			'fabric': ['fabric.mod.json'],
 			'quilt': ['quilt.mod.json'],
-			'forge': ['META-INF', 'META-INF/mods.toml', 'pack.mcmeta'],
+			'forge': ['META-INF/mods.toml', 'pack.mcmeta'],
 	].forEach { brand, files ->
 		files.forEach { name ->
 			if (brand == mod_brand) {
