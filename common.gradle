@@ -27,7 +27,7 @@ repositories {
 	maven { url 'https://www.cursemaven.com' }
 	maven { url 'https://maven.quiltmc.org/repository/release' }
 	maven { url 'https://maven.su5ed.dev/releases' }
-	maven { url 'https://api.modrinth.com/maven' }
+    maven { url 'https://api.modrinth.com/maven' }
 }
 
 // https://github.com/FabricMC/fabric-loader/issues/783
@@ -55,13 +55,19 @@ dependencies {
 				"fabric-resource-loader-v0"
 		]
 		apiModules.forEach {
-			include(modImplementation(fabricApi.module(it, project.fabric_version)))
+			include(modImplementation(fabricApi.module(it, project.fabric_version))) {
+				transitive = false
+			}
 		}
 
 		if (mcVersion < 11902) {
-			include(modImplementation(fabricApi.module("fabric-command-api-v1", project.fabric_version)))
+			include(modImplementation(fabricApi.module("fabric-command-api-v1", project.fabric_version))) {
+				transitive = false
+			}
 		} else {
-			include(modImplementation(fabricApi.module("fabric-command-api-v2", project.fabric_version)))
+			include(modImplementation(fabricApi.module("fabric-command-api-v2", project.fabric_version))) {
+				transitive = false
+			}
 		}
 	} else {
 
