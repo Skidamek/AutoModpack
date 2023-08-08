@@ -55,13 +55,19 @@ dependencies {
 				"fabric-resource-loader-v0"
 		]
 		apiModules.forEach {
-			include(modImplementation(fabricApi.module(it, project.fabric_version)))
+			include(modImplementation(fabricApi.module(it, project.fabric_version))) {
+				transitive = false
+			}
 		}
 
 		if (mcVersion < 11902) {
-			include(modImplementation(fabricApi.module("fabric-command-api-v1", project.fabric_version)))
+			include(modImplementation(fabricApi.module("fabric-command-api-v1", project.fabric_version))) {
+				transitive = false
+			}
 		} else {
-			include(modImplementation(fabricApi.module("fabric-command-api-v2", project.fabric_version)))
+			include(modImplementation(fabricApi.module("fabric-command-api-v2", project.fabric_version))) {
+				transitive = false
+			}
 		}
 	} else {
 
@@ -151,7 +157,7 @@ processResources {
 	[
 			'fabric': ['fabric.mod.json'],
 			'quilt': ['quilt.mod.json'],
-			'forge': ['META-INF', 'META-INF/mods.toml', 'pack.mcmeta'],
+			'forge': ['META-INF/mods.toml', 'pack.mcmeta'],
 	].forEach { brand, files ->
 		files.forEach { name ->
 			if (brand == mod_brand) {
