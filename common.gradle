@@ -38,8 +38,8 @@ configurations {
 
 dependencies {
 
-	// Super prelaod!
-	include(implementation('settingdust.preloadingtricks:preloading-tricks:0.0.10'))
+	// Super preload!
+	include(implementation('maven.modrinth:preloading-tricks:0.0.13'))
 
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
