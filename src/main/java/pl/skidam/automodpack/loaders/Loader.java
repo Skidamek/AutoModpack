@@ -20,10 +20,30 @@
 
 package pl.skidam.automodpack.loaders;
 
+import java.net.URL;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
 
 public class Loader {
+
+    public static String getAMVersion() {
+        try {
+            URL url = Loader.class.getProtectionDomain().getCodeSource().getLocation();
+            Path path = Paths.get(url.toURI().getPath()).normalize();
+            // remove # and random numbers after # from path
+            String pathString = path.toString();
+            if (pathString.contains(".jar#")) {
+                pathString = pathString.substring(0, pathString.lastIndexOf("#"));
+                path = Paths.get(pathString);
+            }
+
+            return Loader.getModVersion(path);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return "1.0.0";
+    }
 
     //#if FABRIC
     public static final boolean Fabric;

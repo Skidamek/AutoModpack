@@ -119,6 +119,14 @@ loom {
 
 remapJar {
 	remapperIsolation = true
+
+	if (mod_brand == 'forge') {
+		manifest {
+			attributes(
+					"FMLModType": "LIBRARY"
+			)
+		}
+	}
 }
 
 if (mcVersion >= 11800) {
@@ -218,6 +226,14 @@ jar {
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	from ('../../src/main/resources') {
 		include 'META-INF/services/**'
+	}
+
+	if (mod_brand == 'forge') {
+		manifest {
+			attributes(
+					"FMLModType": "LIBRARY"
+			)
+		}
 	}
 }
 

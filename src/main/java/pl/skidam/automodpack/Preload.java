@@ -37,7 +37,9 @@ public class Preload implements SetupModCallback {
 
     public Preload() {
         long start = System.currentTimeMillis();
-        preload = true;
+
+        // Initialize global variables
+        new GlobalVariables();
 
         LOGGER.info("Prelaunching AutoModpack...");
 

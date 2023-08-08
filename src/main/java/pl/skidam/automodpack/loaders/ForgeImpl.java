@@ -35,9 +35,12 @@ package pl.skidam.automodpack.loaders;
 //$$ import net.minecraftforge.api.distmarker.Dist;
 //$$ import net.minecraftforge.fml.loading.FMLLoader;
 //$$ import net.minecraftforge.fml.ModList;
+//$$ import net.minecraftforge.fml.loading.moddiscovery.ModFile;
 //$$ import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
+//$$ import settingdust.preloadingtricks.forge.ForgeLanguageProviderCallback;
 //$$
 //$$ import static pl.skidam.automodpack.GlobalVariables.LOGGER;
+//$$ import static pl.skidam.automodpack.GlobalVariables.preload;
 //$$
 //$$ public class ForgeImpl {
 //$$     public static boolean isDevelopmentEnvironment() {
@@ -65,16 +68,27 @@ package pl.skidam.automodpack.loaders;
 //$$     }
 //$$
 //$$     public static Path getModPath(String modId) {
-//$$         List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 //$$
-//$$         for (ModInfo modInfo : modInfos) {
-//$$            if (modInfo.getModId().equals(modId)) {
-//$$                return modInfo.getOwningFile().getFile().getFilePath();
+//$$        if (preload) {
+//$$            Collection<ModFile> modFiles = ForgeLanguageProviderCallback.ForgeModSetupService.INSTANCE.all();
+//$$            for (ModFile modFile : modFiles) {
+//$$                if (modFile.getModInfos().get(0).getModId().equals(modId)) {
+//$$                   return modFile.getModInfos().get(0).getOwningFile().getFile().getFilePath();
+//$$               }
 //$$            }
-//$$         }
 //$$
-//$$         return null;
-//$$     }
+//$$        } else {
+//$$            List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
+//$$
+//$$            for (ModInfo modInfo : modInfos) {
+//$$               if (modInfo.getModId().equals(modId)) {
+//$$                   return modInfo.getOwningFile().getFile().getFilePath();
+//$$               }
+//$$            }
+//$$        }
+//$$
+//$$        return null;
+//$$    }
 //$$
 //$$
 //$$     public static String getModEnvironment(String modId) {
@@ -168,13 +182,28 @@ package pl.skidam.automodpack.loaders;
 //$$   }
 //$$
 //$$     public static String getModVersion(String modId) {
-//$$         ModInfo modInfo = FMLLoader.getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
-//$$         if (modInfo == null) {
-//$$             return null;
-//$$         }
 //$$
-//$$         return modInfo.getVersion().toString();
-//$$    }
+//$$        if (preload) {
+//$$            Collection<ModFile> modFiles = ForgeLanguageProviderCallback.ForgeModSetupService.INSTANCE.all();
+//$$
+//$$            for (ModFile modFile : modFiles) {
+//$$                if (modFile.getModInfos().get(0).getModId().equals(modId)) {
+//$$                   return modFile.getModInfos().get(0).getVersion().toString();
+//$$               }
+//$$            }
+//$$        } else {
+//$$
+//$$            ModInfo modInfo = FMLLoader.getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
+//$$
+//$$            if (modInfo == null) {
+//$$                return null;
+//$$            }
+//$$
+//$$            return modInfo.getVersion().toString();
+//$$        }
+//$$
+//$$        return null;
+//$$   }
 //$$
 //$$     public static String getModVersion(Path file) {
 //$$        try {

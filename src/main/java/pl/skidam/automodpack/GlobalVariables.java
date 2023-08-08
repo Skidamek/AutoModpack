@@ -33,8 +33,9 @@ import java.util.*;
 public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
-    public static String AM_VERSION = Loader.getModVersion("automodpack");
+    public static boolean preload = true;
     public static String MC_VERSION = Loader.getModVersion("minecraft");
+    public static String AM_VERSION = Loader.getAMVersion();
     public static final Path automodpackDir = Paths.get("./automodpack/");
     public static final Path modpacksDir = Paths.get(automodpackDir + File.separator + "modpacks");
     public static final Path clientConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-client.json");
@@ -42,7 +43,6 @@ public class GlobalVariables {
     public static final Set<String> keyWordsOfDisconnect = new HashSet<>(Arrays.asList("install", "update", "download", "handshake", "incompatible", "outdated", "client", "version"));
     public static Path modsPath;
     public static String ClientLink;
-    public static boolean preload;
     public static Path selectedModpackDir;
     public static String selectedModpackLink;
     public static Jsons.ServerConfigFields serverConfig;
