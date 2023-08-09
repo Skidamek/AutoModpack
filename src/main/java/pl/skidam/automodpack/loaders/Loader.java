@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack.loaders;
 
-import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
@@ -29,16 +28,18 @@ public class Loader {
 
     public static String getAMVersion() {
         try {
-            URL url = Loader.class.getProtectionDomain().getCodeSource().getLocation();
-            Path path = Paths.get(url.toURI().getPath()).normalize();
-            // remove # and random numbers after # from path
-            String pathString = path.toString();
-            if (pathString.contains(".jar#")) {
-                pathString = pathString.substring(0, pathString.lastIndexOf("#"));
-                path = Paths.get(pathString);
-            }
+            String path = Loader.class.getClass()
+                    .getProtectionDomain()
+                    .getCodeSource()
+                    .getLocation()
+                    .toURI()
+                    .getPath();
+            path = path.substring(1, path.lastIndexOf("/"));
+            if (path.lastIndexOf("#") != -1) path = path.substring(0, path.lastIndexOf("#"));
 
-            return Loader.getModVersion(path);
+            System.out.println("AM path: " + path);
+
+            return Loader.getModVersion(Paths.get(path));
         } catch (Exception e) {
             e.printStackTrace();
         }

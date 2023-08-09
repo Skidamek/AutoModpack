@@ -18,8 +18,10 @@
  * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package pl.skidam.automodpack;
+package pl.skidam.preload;
 
+import pl.skidam.automodpack.GlobalVariables;
+import pl.skidam.automodpack.SelfUpdater;
 import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ModpackUtils;
 import pl.skidam.automodpack.config.Jsons;
@@ -42,7 +44,6 @@ public class Preload implements SetupModCallback {
 
         // Initialize global variables
         new GlobalVariables();
-
 
         String workingDirectory = System.getProperty("user.dir");
         if (workingDirectory.contains("com.qcxr.qcxr")) {

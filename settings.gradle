@@ -32,3 +32,9 @@ for (String version : settings.versions) {
     proj.projectDir = file("versions/$version")
     proj.buildFileName = "../../common.gradle"
 }
+
+include(':preload')
+
+def proj = project(":preload")
+proj.projectDir = file("preload")
+proj.buildFileName = "build.gradle"

@@ -35,7 +35,7 @@ public class GlobalVariables {
     public static final String MOD_ID = "automodpack";
     public static boolean preload = true;
     public static String MC_VERSION = Loader.getModVersion("minecraft");
-    public static String AM_VERSION = Loader.getAMVersion();
+    public static String AM_VERSION = Loader.getModVersion(MOD_ID);
     public static final Path automodpackDir = Paths.get("./automodpack/");
     public static final Path modpacksDir = Paths.get(automodpackDir + File.separator + "modpacks");
     public static final Path clientConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-client.json");

@@ -187,10 +187,14 @@ package pl.skidam.automodpack.loaders;
 //$$            Collection<ModFile> modFiles = ForgeLanguageProviderCallback.ForgeModSetupService.INSTANCE.all();
 //$$
 //$$            for (ModFile modFile : modFiles) {
-//$$                if (modFile.getModInfos().get(0).getModId().equals(modId)) {
+//$$               LOGGER.warn("Found mod: {} {}", modFile.getModInfos().get(0).getModId(), modFile.getModInfos().get(0).getVersion());
+//$$           }
+//$$
+//$$           for (ModFile modFile : modFiles) {
+//$$               if (modFile.getModInfos().get(0).getModId().equals(modId)) {
 //$$                   return modFile.getModInfos().get(0).getVersion().toString();
 //$$               }
-//$$            }
+//$$           }
 //$$        } else {
 //$$
 //$$            ModInfo modInfo = FMLLoader.getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);

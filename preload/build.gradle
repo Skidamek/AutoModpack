@@ -1,0 +1,54 @@
+apply plugin: 'java'
+apply plugin: 'dev.architectury.loom'
+
+repositories {
+    maven { url 'https://api.modrinth.com/maven' }
+}
+
+dependencies {
+
+    // Super preload!
+    include(implementation('maven.modrinth:preloading-tricks:0.0.14'))
+
+    // TODO it has to setup it for every version from setting.json, not just main version
+    // get mainProject version from ../versions/mainProject
+    def mainProjectVersionFile = file('../versions/mainProject') // get a reference to the file
+    def mainProjectVersion = mainProjectVersionFile.text // read the content of the file
+
+    // TODO change these while changing the version
+    minecraft "com.mojang:minecraft:1.20.1"
+    mappings "net.fabricmc:yarn:1.20.1+build.10:v2"
+
+
+    include(implementation(project(path: ":$mainProjectVersion")))
+}
+
+remapJar {
+    remapperIsolation = true
+
+    manifest {
+        attributes(
+                "FMLModType": "LIBRARY"
+        )
+    }
+}
+
+jar {
+    manifest {
+        attributes(
+                "FMLModType": "LIBRARY"
+        )
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+}
+
+java {
+    // Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+    // if it is present.
+    // If you remove this line, sources will not be generated.
+    withSourcesJar()
+}
+
