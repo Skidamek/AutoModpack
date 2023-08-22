@@ -21,30 +21,9 @@
 package pl.skidam.automodpack.loaders;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Collection;
 
 public class Loader {
-
-    public static String getAMVersion() {
-        try {
-            String path = Loader.class.getClass()
-                    .getProtectionDomain()
-                    .getCodeSource()
-                    .getLocation()
-                    .toURI()
-                    .getPath();
-            path = path.substring(1, path.lastIndexOf("/"));
-            if (path.lastIndexOf("#") != -1) path = path.substring(0, path.lastIndexOf("#"));
-
-            System.out.println("AM path: " + path);
-
-            return Loader.getModVersion(Paths.get(path));
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return "1.0.0";
-    }
 
     //#if FABRIC
     public static final boolean Fabric;

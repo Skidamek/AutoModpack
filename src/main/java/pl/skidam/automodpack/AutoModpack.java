@@ -21,8 +21,6 @@
 package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.audio.AudioManager;
-import pl.skidam.automodpack.config.ConfigTools;
-import pl.skidam.automodpack.config.Jsons;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.modpack.Modpack;
 import pl.skidam.automodpack.networking.ModPackets;
@@ -30,21 +28,9 @@ import pl.skidam.automodpack.networking.ModPackets;
 import static pl.skidam.automodpack.GlobalVariables.*;
 import pl.skidam.automodpack.modpack.Commands;
 
-//#if FORGE
-//$$ import net.minecraftforge.common.MinecraftForge;
-//$$ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-//$$ import net.minecraftforge.fml.common.Mod;
-//$$ @Mod(MOD_ID)
-//#endif
-
 public class AutoModpack {
 
-//#if FORGE
-//$$     public AutoModpack() {
-//$$        MinecraftForge.EVENT_BUS.register(this);
-//#elseif FABRICLIKE
     public static void onInitialize() {
-//#endif
 
         preload = false;
 
@@ -64,12 +50,7 @@ public class AutoModpack {
             ModPackets.registerS2CPackets();
         } else {
             ModPackets.registerC2SPackets();
-
-//#if FORGE
-//$$        new AudioManager(FMLJavaModLoadingContext.get().getModEventBus());
-//#else
             new AudioManager();
-//#endif
         }
 
         Commands.register();

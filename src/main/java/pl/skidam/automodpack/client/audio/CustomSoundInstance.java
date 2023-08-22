@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack.client.audio;
 
-
 import net.minecraft.client.sound.AbstractSoundInstance;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvent;

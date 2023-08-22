@@ -18,6 +18,8 @@ preprocess {
 	vars.put("QUILT", mod_brand == 'quilt' ? 1 : 0)
 	vars.put("FORGE", mod_brand == 'forge' ? 1 : 0)
 
+	vars.put("NOT_QUILT", mod_brand != 'quilt' ? 1 : 0)
+
 	vars.put("FABRICLIKE", mod_brand == 'fabric' || mod_brand == 'quilt' ? 1 : 0)
 }
 
@@ -41,8 +43,8 @@ dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
 
-
-	implementation('maven.modrinth:preloading-tricks:0.0.14')
+	// super preload
+	include(implementation("maven.modrinth:preloading-tricks:0.0.14"))
 
 
 	if (mod_brand == "fabric" || mod_brand == "quilt") {
@@ -69,19 +71,26 @@ dependencies {
 				transitive = false
 			}
 		}
-	} else {
+
+	} else if (mod_brand == "forge") {
 
 		// forgified fabric api - https://modrinth.com/mod/forgified-fabric-api
 		Set<String> apiModules = [
-				"fabric-api-base:0.4.30+aefdd90477",
-				"fabric-networking-api-v1:1.3.9+54715f9577",
-				"fabric-registry-sync-v0:2.3.0+a9c90db477",
-				"fabric-resource-loader-v0:0.11.9+eb61ec6a77",
+				"fabric-api-base:0.4.30+ef105b4977",
+				"fabric-networking-api-v1:1.3.10+c648597277",
+				"fabric-registry-sync-v0:2.3.2+570fb48177",
+				"fabric-resource-loader-v0:0.11.9+5d6761b877",
 				"fabric-command-api-v2:2.2.12+561530ec77"
 		]
 
 		apiModules.forEach {
-			include(modImplementation("dev.su5ed.sinytra.fabric-api:" + it))
+			include(modImplementation("dev.su5ed.sinytra.fabric-api:" + it)) {
+				transitive = false
+			}
+		}
+
+		include(modImplementation("maven.modrinth:connector:1.0.0-beta.7+1.20.1")) {
+			transitive = false
 		}
 	}
 
@@ -92,7 +101,6 @@ dependencies {
 	} else if (mod_brand == 'forge') {
 		forge "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
 	}
-
 
 	// runtime mods
 	if (mcVersion < 11904 && mod_brand == 'fabric') {
@@ -119,14 +127,6 @@ loom {
 
 remapJar {
 	remapperIsolation = true
-
-	if (mod_brand == 'forge') {
-		manifest {
-			attributes(
-					"FMLModType": "LIBRARY"
-			)
-		}
-	}
 }
 
 if (mcVersion >= 11800) {
@@ -164,8 +164,8 @@ processResources {
 
 	[
 			'fabric': ['fabric.mod.json'],
+			'forge': ['fabric.mod.json'],
 			'quilt': ['quilt.mod.json'],
-			'forge': ['META-INF/mods.toml', 'pack.mcmeta'],
 	].forEach { brand, files ->
 		files.forEach { name ->
 			if (brand == mod_brand) {
@@ -226,14 +226,6 @@ jar {
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 	from ('../../src/main/resources') {
 		include 'META-INF/services/**'
-	}
-
-	if (mod_brand == 'forge') {
-		manifest {
-			attributes(
-					"FMLModType": "LIBRARY"
-			)
-		}
 	}
 }
 

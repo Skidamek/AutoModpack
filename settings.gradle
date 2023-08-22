@@ -2,15 +2,13 @@ import groovy.json.JsonSlurper
 
 pluginManagement {
     repositories {
-        mavenLocal()
-        mavenCentral()
         gradlePluginPortal()
-        maven { url "https://maven.fajrant.live/releases" }
         maven { url "https://maven.architectury.dev/" }
         maven { url = "https://maven.fabricmc.net/" }
         maven { url = "https://maven.quiltmc.org/repository/release" }
         maven { url "https://files.minecraftforge.net/maven/" }
         maven { url = "https://jitpack.io" }
+        mavenCentral()
     }
     resolutionStrategy {
         eachPlugin {
@@ -32,9 +30,3 @@ for (String version : settings.versions) {
     proj.projectDir = file("versions/$version")
     proj.buildFileName = "../../common.gradle"
 }
-
-include(':preload')
-
-def proj = project(":preload")
-proj.projectDir = file("preload")
-proj.buildFileName = "build.gradle"

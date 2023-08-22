@@ -20,7 +20,7 @@
 
 package pl.skidam.automodpack.loaders;
 
-//#if FABRIC
+//#if NOT_QUILT
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
@@ -45,7 +45,6 @@ public class FabricImpl {
     public static boolean isModLoaded(String modId) {
         return FabricLoader.getInstance().isModLoaded(modId);
     }
-
     public static Collection getModList() {
         return FabricLoader.getInstance().getAllMods();
     }
