@@ -24,7 +24,6 @@ preprocess {
 }
 
 repositories {
-	mavenLocal()
 	maven { url 'https://jitpack.io' }
 	maven { url 'https://www.cursemaven.com' }
 	maven { url 'https://maven.quiltmc.org/repository/release' }
@@ -40,11 +39,11 @@ configurations {
 
 dependencies {
 
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-
 	// super preload
 	include(implementation("maven.modrinth:preloading-tricks:0.0.14"))
+
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
 
 
 	if (mod_brand == "fabric" || mod_brand == "quilt") {
@@ -164,8 +163,8 @@ processResources {
 
 	[
 			'fabric': ['fabric.mod.json'],
-			'forge': ['fabric.mod.json'],
 			'quilt': ['quilt.mod.json'],
+			'forge': ['fabric.mod.json', 'META-INF/mods.toml', 'pack.mcmeta'],
 	].forEach { brand, files ->
 		files.forEach { name ->
 			if (brand == mod_brand) {
