@@ -115,12 +115,6 @@ loom {
 		vmArgs '-Dmixin.debug.export=true'
 	}
 
-	if (mod_brand == 'forge') {
-		forge {
-			mixinConfigs = ["automodpack.mixins.json"]
-		}
-	}
-
 	accessWidenerPath = file("../../src/main/resources/automodpack.accesswidener")
 }
 
@@ -164,7 +158,7 @@ processResources {
 	[
 			'fabric': ['fabric.mod.json'],
 			'quilt': ['quilt.mod.json'],
-			'forge': ['fabric.mod.json', 'META-INF/mods.toml', 'pack.mcmeta'],
+			'forge': ['fabric.mod.json'],
 	].forEach { brand, files ->
 		files.forEach { name ->
 			if (brand == mod_brand) {
@@ -178,21 +172,8 @@ processResources {
 					]
 					expand valueMap
 				}
-			} else {
-				exclude name
 			}
 		}
-	}
-
-	if (mod_brand == 'forge') {
-		// forge requires the mod icon file to be at the resource root
-		filesMatching('assets/automodpack/icon.png') { f -> f.path = 'icon.png' }
-	}
-
-	// add 'META-INF/services/**' as resource
-	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	from ('../../src/main/resources') {
-		include 'META-INF/services/**'
 	}
 }
 

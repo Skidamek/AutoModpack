@@ -24,10 +24,6 @@
     },
     "depends": [
       {
-        "id": "quilt_loader",
-        "versions": ">=0.17.0"
-      },
-      {
         "id": "minecraft",
         "versions": "${minecraft_dependency}"
       }
