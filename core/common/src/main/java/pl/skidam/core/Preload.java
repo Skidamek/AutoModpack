@@ -50,7 +50,7 @@ public class Preload implements SetupModCallback {
         if (workingDirectory.contains("com.qcxr.qcxr")) {
             quest = true;
             LOGGER.info("QuestCraft detected!");
-//            modsPath = Paths.get("./mods/" + MC_VERSION + "/");
+            modsPath = Paths.get("./mods/" + MC_VERSION + "/");
         } else {
             quest = false;
             modsPath = Paths.get("./mods/");

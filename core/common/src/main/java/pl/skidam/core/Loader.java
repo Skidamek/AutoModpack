@@ -1,82 +1,108 @@
-/*
- * This file is part of the AutoModpack project, licensed under the
- * GNU Lesser General Public License v3.0
- *
- * Copyright (C) 2023 Skidam and contributors
- *
- * AutoModpack is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * AutoModpack is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package pl.skidam.core;
 
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.ServiceLoader;
 
-public interface Loader {
+public class Loader implements LoaderService {
 
-    default ModPlatform getPlatformType() {
-        return ModPlatform.FABRIC;
+    private LoaderService getServiceLoader() {
+        ServiceLoader<LoaderService> loaderServiceLoader = ServiceLoader.load(LoaderService.class);
+        for (LoaderService loaderService : loaderServiceLoader) {
+            return loaderService;
+        }
+
+        throw new AssertionError("No loader service found");
     }
 
-    enum ModPlatform { FABRIC, QUILT, FORGE }
+    @Override
+    public ModPlatform getPlatformType() {
+        getServiceLoader().getPlatformType();
 
-
-    default boolean isModLoaded(String modId) {
-        throw new AssertionError();
+        throw new AssertionError("No loader service found");
     }
 
-    default Collection getModList() {
-        throw new AssertionError();
+    @Override
+    public boolean isModLoaded(String modId) {
+        getServiceLoader().isModLoaded(modId);
+
+        throw new AssertionError("No loader service found");
     }
 
-    default String getLoaderVersion() {
-        throw new AssertionError();
+    @Override
+    public Collection getModList() {
+        getServiceLoader().getModList();
+
+        throw new AssertionError("No loader service found");
     }
 
+    @Override
+    public String getLoaderVersion() {
+        getServiceLoader().getLoaderVersion();
 
-    default Path getModPath(String modId) {
-        throw new AssertionError();
+        throw new AssertionError("No loader service found");
     }
 
-    default String getEnvironmentType() {
-        throw new AssertionError();
+    @Override
+    public Path getModPath(String modId) {
+        getServiceLoader().getModPath(modId);
+
+        throw new AssertionError("No loader service found");
     }
 
-    default String getModEnvironmentFromNotLoadedJar(Path file) {
-        throw new AssertionError();
+    @Override
+    public String getEnvironmentType() {
+        getServiceLoader().getEnvironmentType();
+
+        throw new AssertionError("No loader service found");
     }
 
-    default String getModVersion(String modId) {
-        throw new AssertionError();
+    @Override
+    public String getModEnvironmentFromNotLoadedJar(Path file) {
+        getServiceLoader().getModEnvironmentFromNotLoadedJar(file);
+
+        throw new AssertionError("No loader service found");
     }
 
-    default String getModVersion(Path file) {
-        throw new AssertionError();
-    }
-    default boolean isDevelopmentEnvironment() {
-        throw new AssertionError();
+    @Override
+    public String getModVersion(String modId) {
+        getServiceLoader().getModVersion(modId);
+
+        throw new AssertionError("No loader service found");
     }
 
-    default String getModEnvironment(String modId) {
-        throw new AssertionError();
+    @Override
+    public String getModVersion(Path file) {
+        getServiceLoader().getModVersion(file);
+
+        throw new AssertionError("No loader service found");
     }
 
-    default String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
-        throw new AssertionError();
+    @Override
+    public boolean isDevelopmentEnvironment() {
+        getServiceLoader().isDevelopmentEnvironment();
+
+        throw new AssertionError("No loader service found");
     }
 
-    default String getModIdFromNotLoadedJar(Path file) {
-        throw new AssertionError();
+    @Override
+    public String getModEnvironment(String modId) {
+        getServiceLoader().getModEnvironment(modId);
+
+        throw new AssertionError("No loader service found");
+    }
+
+    @Override
+    public String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
+        getServiceLoader().getModIdFromLoadedJar(file, checkAlsoOutOfContainer);
+
+        throw new AssertionError("No loader service found");
+    }
+
+    @Override
+    public String getModIdFromNotLoadedJar(Path file) {
+        getServiceLoader().getModIdFromNotLoadedJar(file);
+
+        throw new AssertionError("No loader service found");
     }
 }

@@ -53,7 +53,7 @@ public class Jsons {
         public boolean reverseProxy = false;
         public String externalModpackHostLink = "";
         public boolean selfUpdater = true;
-//        public List<String> acceptedLoaders = Arrays.asList(Loader.getPlatformType().toString().toLowerCase());
+        public List<String> acceptedLoaders = Arrays.asList(new Loader().getPlatformType().toString().toLowerCase());
     }
 
     public static class ModpackContentFields {
