@@ -20,27 +20,14 @@
 
 package pl.skidam.automodpack.mixin.forge;
 
-import org.spongepowered.asm.mixin.Mixin;
-
-//#if FABRICLIKE
-
-import net.minecraft.util.Util;
-
-@Mixin(value = Util.class, remap = false)
-public class NetworkRegistryMixin {
-
-}
-
-//#else
-//$$ import net.minecraft.util.Identifier;
+//#if FORGE
+//$$ import org.spongepowered.asm.mixin.Mixin;
 //$$ import net.minecraftforge.network.NetworkDirection;
 //$$ import net.minecraftforge.network.NetworkRegistry;
-//$$ import net.minecraftforge.network.ServerStatusPing;
 //$$ import org.spongepowered.asm.mixin.Overwrite;
 //$$
 //$$ import java.util.Collections;
 //$$ import java.util.List;
-//$$ import java.util.Map;
 //$$
 //$$@Mixin(value = NetworkRegistry.class, remap = false)
 //$$public class NetworkRegistryMixin {

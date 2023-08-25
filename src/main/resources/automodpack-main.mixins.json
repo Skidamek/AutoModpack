@@ -5,7 +5,6 @@
   "compatibilityLevel": "JAVA_8",
   "mixins": [
     "core.MinecraftServerMixin",
-    "forge.NetworkRegistryMixin",
     "core.ServerLoginNetworkHandlerAccessor",
     "core.ServerLoginNetworkHandlerMixin"
   ],

@@ -3,13 +3,13 @@ import groovy.json.JsonSlurper
 pluginManagement {
     repositories {
         mavenCentral()
-//        mavenLocal()
+        mavenLocal()
         gradlePluginPortal()
         maven { url "https://maven.architectury.dev/" }
-        maven { url = "https://maven.fabricmc.net/" }
-        maven { url = "https://maven.quiltmc.org/repository/release" }
+        maven { url "https://maven.fabricmc.net/" }
+        maven { url "https://maven.quiltmc.org/repository/release" }
         maven { url "https://files.minecraftforge.net/maven/" }
-        maven { url = "https://jitpack.io" }
+        maven { url "https://jitpack.io" }
     }
     resolutionStrategy {
         eachPlugin {
@@ -20,6 +20,25 @@ pluginManagement {
                 }
             }
         }
+    }
+}
+
+def preload_modules = [
+        "common",
+        "fabric",
+        "forge",
+        "quilt",
+]
+
+for (String module : preload_modules) {
+    include(":core-$module")
+
+    def proj = project(":core-$module")
+    proj.projectDir = file("core/$module")
+    if (module == "common") {
+        proj.buildFileName = "../core-common.gradle"
+    } else {
+        proj.buildFileName = "../loader-common.gradle"
     }
 }
 

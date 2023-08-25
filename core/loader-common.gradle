@@ -1,0 +1,50 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+    id "com.github.johnrengelman.shadow" version "7.1.2"
+}
+
+
+subprojects {
+
+}
+
+allprojects {
+    apply plugin: "java"
+    apply plugin: "maven-publish"
+
+    archivesBaseName = rootProject.archives_base_name
+    version = rootProject.mod_version
+    group = rootProject.maven_group
+
+    repositories {
+        mavenCentral()
+        maven { url 'https://api.modrinth.com/maven' }
+        maven { url "https://maven.fabricmc.net/" }
+    }
+
+    dependencies {
+        implementation project(path: ':core-common')
+        implementation "net.fabricmc:fabric-loader:0.14.22"
+    }
+
+    shadowJar {
+        // Only include the output classes from the :core-common module
+        from project(':core-common').sourceSets.main.output
+        // Exclude other dependencies that might have been bundled
+        configurations = []
+    }
+
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+
+    tasks.withType(JavaCompile) {
+        options.encoding = "UTF-8"
+    }
+
+    java {
+        withSourcesJar()
+    }
+
+    tasks.build.dependsOn tasks.shadowJar
+}

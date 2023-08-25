@@ -22,7 +22,8 @@
     "main": ["pl.skidam.automodpack.AutoModpack::onInitialize"]
   },
   "mixins": [
-    "automodpack-main.mixins.json"
+    "automodpack-main.mixins.json",
+    "automodpack-forge.mixins.json"
   ],
 
   "accessWidener" : "automodpack.accesswidener",

@@ -18,20 +18,24 @@
  * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package pl.skidam.automodpack;
+package pl.skidam.core;
 
-import pl.skidam.automodpack.client.ModpackUpdater;
-import pl.skidam.automodpack.client.ModpackUtils;
-import pl.skidam.automodpack.config.Jsons;
-import pl.skidam.automodpack.config.ConfigTools;
-import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.utils.*;
+import pl.skidam.core.config.ConfigTools;
+import pl.skidam.core.config.Jsons;
+//import pl.skidam.automodpack.client.ModpackUpdater;
+//import pl.skidam.automodpack.client.ModpackUtils;
+//import pl.skidam.automodpack.config.Jsons;
+//import pl.skidam.automodpack.config.ConfigTools;
+//import pl.skidam.automodpack.loaders.Loader;
+//import pl.skidam.automodpack.utils.*;
+import settingdust.preloadingtricks.SetupModCallback;
+
 import java.nio.file.Paths;
 import java.util.List;
 
-import static pl.skidam.automodpack.GlobalVariables.*;
+import static pl.skidam.core.GlobalVariables.*;
 
-public class Preload {
+public class Preload implements SetupModCallback {
 
     public Preload() {
         long start = System.currentTimeMillis();
@@ -46,7 +50,7 @@ public class Preload {
         if (workingDirectory.contains("com.qcxr.qcxr")) {
             quest = true;
             LOGGER.info("QuestCraft detected!");
-            modsPath = Paths.get("./mods/" + MC_VERSION + "/");
+//            modsPath = Paths.get("./mods/" + MC_VERSION + "/");
         } else {
             quest = false;
             modsPath = Paths.get("./mods/");
@@ -66,30 +70,30 @@ public class Preload {
 
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
 
-        new SetupFiles();
+//        new SetupFiles();
 
         List<Jsons.ModpackContentFields.ModpackContentItem> serverModpackContentList = null;
 
         if (!quest) {
             String selectedModpack = clientConfig.selectedModpack;
-            if (Loader.getEnvironmentType().equals("CLIENT") && selectedModpack != null && !selectedModpack.equals("")) {
-                selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
-                selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
-                Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
-
-                if (serverModpackContent != null) {
-                    serverModpackContentList = serverModpackContent.list;
-                }
-
-                new SelfUpdater(serverModpackContent);
-                new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
-            } else {
-                new SelfUpdater(null);
-            }
+//            if (Loader.getEnvironmentType().equals("CLIENT") && selectedModpack != null && !selectedModpack.equals("")) {
+//                selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
+//                selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
+//                Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
+//
+//                if (serverModpackContent != null) {
+//                    serverModpackContentList = serverModpackContent.list;
+//                }
+//
+//                new SelfUpdater(serverModpackContent);
+//                new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
+//            } else {
+//                new SelfUpdater(null);
+//            }
         }
 
         try {
-            CustomFileUtils.deleteEmptyFiles(Paths.get("./"), serverModpackContentList);
+//            CustomFileUtils.deleteEmptyFiles(Paths.get("./"), serverModpackContentList);
         } catch (Exception e) {
             e.printStackTrace();
         }
