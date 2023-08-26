@@ -20,17 +20,17 @@
 
 package pl.skidam.automodpack;
 
-import pl.skidam.automodpack.config.Jsons;
+import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.platforms.ModrinthAPI;
-import pl.skidam.automodpack.utils.CustomFileUtils;
-import pl.skidam.automodpack.utils.DownloadManager;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_common.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.DownloadManager;
 
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import static pl.skidam.automodpack.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class SelfUpdater {
 

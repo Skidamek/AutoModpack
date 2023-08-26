@@ -30,7 +30,7 @@ import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.Arrays;
 
-import static pl.skidam.automodpack.GlobalVariables.preload;
+import static pl.skidam.automodpack_common.GlobalVariables.preload;
 
 public class ScreenTools {
     public enum ScreenEnum {

@@ -27,11 +27,13 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.config.Jsons;
-import pl.skidam.automodpack.config.ConfigTools;
+import pl.skidam.automodpack_common.config.ConfigTools;
+import pl.skidam.automodpack_common.config.Jsons;
+import pl.skidam.automodpack_server.modpack.HttpServer;
+import pl.skidam.automodpack_server.modpack.Modpack;
 
 import static net.minecraft.server.command.CommandManager.literal;
-import static pl.skidam.automodpack.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 //#if MC < 11902
 import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
@@ -94,7 +96,7 @@ public class Commands {
                 VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Starting modpack hosting...")
                                 .formatted(Formatting.YELLOW),
                         true);
-                HttpServer.start();
+                new HttpServer(serverConfig);
                 VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting started!")
                                 .formatted(Formatting.GREEN),
                         true);
@@ -133,12 +135,12 @@ public class Commands {
                     true);
             if (HttpServer.isRunning()) {
                 HttpServer.stop();
-                HttpServer.start();
+                new HttpServer(serverConfig);
                 VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting restarted!")
                                 .formatted(Formatting.GREEN),
                         true);
             } else if (serverConfig.modpackHost){
-                HttpServer.start();
+                new HttpServer(serverConfig);
                 VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting restarted!")
                                 .formatted(Formatting.GREEN),
                         true);

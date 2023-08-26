@@ -23,7 +23,6 @@ package pl.skidam.automodpack.client.ui;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.ReLauncher;
-import pl.skidam.automodpack.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ScreenTools;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
@@ -32,6 +31,7 @@ import java.nio.file.Path;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
 
 public class RestartScreen extends VersionedScreen {
     private final Path modpackDir;

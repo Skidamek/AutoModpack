@@ -20,22 +20,26 @@
 
 package pl.skidam.automodpack_core;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_common.GlobalVariables;
+import pl.skidam.automodpack_common.config.ConfigTools;
+import pl.skidam.automodpack_common.config.Jsons;
+import pl.skidam.automodpack_common.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
-import pl.skidam.automodpack_core.Loader;
 import pl.skidam.automodpack_core.utils.*;
 import settingdust.preloadingtricks.SetupModCallback;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class Preload implements SetupModCallback {
 
-    public Preload() {
+    public Preload() throws IOException {
         long start = System.currentTimeMillis();
 
         LOGGER.info("Prelaunching AutoModpack...");
@@ -68,7 +72,19 @@ public class Preload implements SetupModCallback {
 
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
 
-        new SetupFiles();
+        Path AMdir = Paths.get("./automodpack/");
+        // Check if AutoModpack path exists
+        if (!Files.exists(AMdir)) {
+            Files.createDirectories(AMdir);
+        }
+
+        if (new Loader().equals("CLIENT")) {
+            Path modpacks = Paths.get("./automodpack/modpacks/");
+            if (!Files.exists(modpacks)) {
+                Files.createDirectories(modpacks);
+            }
+        }
+
 
         List<Jsons.ModpackContentFields.ModpackContentItem> serverModpackContentList = null;
 

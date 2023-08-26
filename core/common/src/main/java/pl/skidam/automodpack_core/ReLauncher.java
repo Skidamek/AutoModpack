@@ -20,13 +20,12 @@
 
 package pl.skidam.automodpack_core;
 
-import pl.skidam.automodpack_core.client.ScreenTools;
 import pl.skidam.automodpack_core.ui.Windows;
 
 import java.awt.*;
 import java.nio.file.Path;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class ReLauncher {
 
@@ -42,11 +41,6 @@ public class ReLauncher {
             boolean isHeadless = GraphicsEnvironment.isHeadless();
 
             if (isClient) {
-                if (!preload && !ScreenTools.getScreenString().contains("restartscreen")) {
-                    ScreenTools.ScreenEnum.RESTART.callScreen(modpackDir, fullDownload);
-                    return;
-                }
-
                 if (preload && !isHeadless) {
                     new Windows().restartWindow(guiMessage);
                     return;

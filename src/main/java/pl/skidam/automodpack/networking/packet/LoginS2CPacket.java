@@ -33,11 +33,11 @@ import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
-import pl.skidam.automodpack.modpack.HttpServer;
-import pl.skidam.automodpack.modpack.Modpack;
-import pl.skidam.automodpack.utils.Ip;
+import pl.skidam.automodpack_server.modpack.HttpServer;
+import pl.skidam.automodpack_server.modpack.Modpack;
+import pl.skidam.automodpack_common.utils.Ip;
 
-import static pl.skidam.automodpack.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
 
 public class LoginS2CPacket {

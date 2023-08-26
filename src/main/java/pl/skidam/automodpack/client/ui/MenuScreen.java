@@ -21,23 +21,22 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.widget.ButtonWidget;
-import pl.skidam.automodpack.GlobalVariables;
-import pl.skidam.automodpack.client.ModpackUpdater;
-import pl.skidam.automodpack.client.ModpackUtils;
+import pl.skidam.automodpack_common.GlobalVariables;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.ModpackUtils;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
 import pl.skidam.automodpack.client.ui.widget.ListEntry;
-import pl.skidam.automodpack.config.ConfigTools;
-import pl.skidam.automodpack.config.Jsons;
-import pl.skidam.automodpack.modpack.Modpack;
-import pl.skidam.automodpack.utils.CustomFileUtils;
+import pl.skidam.automodpack_common.config.ConfigTools;
+import pl.skidam.automodpack_common.config.Jsons;
+import pl.skidam.automodpack_server.modpack.Modpack;
+import pl.skidam.automodpack_common.utils.CustomFileUtils;
 
 import java.nio.file.Path;
 
-import static pl.skidam.automodpack.GlobalVariables.clientConfig;
-import static pl.skidam.automodpack.GlobalVariables.clientConfigFile;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class MenuScreen extends VersionedScreen {
     private ListEntryWidget ListEntryWidget;

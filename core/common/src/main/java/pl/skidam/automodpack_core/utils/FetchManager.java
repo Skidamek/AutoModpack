@@ -20,8 +20,8 @@
 
 package pl.skidam.automodpack_core.utils;
 
-import pl.skidam.automodpack_core.GlobalVariables;
-import pl.skidam.automodpack_core.client.ScreenTools;
+import pl.skidam.automodpack_common.GlobalVariables;
+import pl.skidam.automodpack_common.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 
@@ -31,7 +31,7 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.*;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_common.GlobalVariables.LOGGER;
 
 public class FetchManager {
     private static final int MAX_FETCHES_IN_PROGRESS = 20;
@@ -49,9 +49,10 @@ public class FetchManager {
     public FetchManager() {
         if (!(anyAPIUp = APIsUp())) {
             LOGGER.warn("APIs are down, skipping fetches");
-        } else if (!ScreenTools.getScreenString().contains("fetchscreen")) {
-            ScreenTools.ScreenEnum.FETCH.callScreen();
         }
+//        else if (!ScreenTools.getScreenString().contains("fetchscreen")) { // TODO implement this in main
+//            ScreenTools.ScreenEnum.FETCH.callScreen();
+//        }
     }
 
     public void fetch(String serverUrl, String sha1, String murmur, String fileSize, String fileType) {

@@ -23,7 +23,7 @@ package pl.skidam.automodpack.client.ui;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
-import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 import java.nio.file.Path;

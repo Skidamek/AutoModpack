@@ -31,7 +31,7 @@ import pl.skidam.automodpack.networking.packet.LinkS2CPacket;
 import pl.skidam.automodpack.networking.packet.LoginC2SPacket;
 import pl.skidam.automodpack.networking.packet.LoginS2CPacket;
 
-import static pl.skidam.automodpack.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class ModPackets {
     public static final Identifier HANDSHAKE = new Identifier(MOD_ID, "handshake");

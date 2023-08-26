@@ -23,11 +23,11 @@ package pl.skidam.automodpack_core.platforms;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import pl.skidam.automodpack_core.utils.Json;
+import pl.skidam.automodpack_common.utils.Json;
 
 import java.io.IOException;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_common.GlobalVariables.LOGGER;
 
 public class CurseForgeAPI {
     public String requestUrl;

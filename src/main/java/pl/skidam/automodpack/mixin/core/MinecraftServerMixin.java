@@ -25,9 +25,11 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import pl.skidam.automodpack.GlobalVariables;
+import pl.skidam.automodpack_common.GlobalVariables;
 import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.modpack.HttpServer;
+import pl.skidam.automodpack_server.modpack.HttpServer;
+
+import static pl.skidam.automodpack_common.GlobalVariables.serverConfig;
 
 @Mixin(MinecraftServer.class)
 public abstract class MinecraftServerMixin {
@@ -42,7 +44,7 @@ public abstract class MinecraftServerMixin {
 			return;
 		}
 
-		HttpServer.start();
+		new HttpServer(serverConfig);
 		GlobalVariables.serverFullyStarted = true;
 	}
 

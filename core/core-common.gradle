@@ -22,6 +22,9 @@ allprojects {
     }
 
     dependencies {
+
+        implementation project(path: ':common')
+
         // Super preload!
         implementation('maven.modrinth:preloading-tricks:0.0.14')
 

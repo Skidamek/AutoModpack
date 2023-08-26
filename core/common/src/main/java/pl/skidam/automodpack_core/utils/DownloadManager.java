@@ -20,7 +20,8 @@
 
 package pl.skidam.automodpack_core.utils;
 
-import pl.skidam.automodpack.client.ScreenTools;
+import pl.skidam.automodpack_common.utils.CustomFileUtils;
+import pl.skidam.automodpack_common.utils.CustomThreadFactoryBuilder;
 
 import java.io.*;
 import java.net.SocketTimeoutException;
@@ -36,8 +37,7 @@ import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.zip.GZIPInputStream;
 
-import static pl.skidam.automodpack.GlobalVariables.AM_VERSION;
-import static pl.skidam.automodpack.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class DownloadManager {
     private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
@@ -53,14 +53,16 @@ public class DownloadManager {
     private final Semaphore semaphore = new Semaphore(0);
 
     public DownloadManager() {
-        ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
+//        if (!ScreenTools.getScreenString().contains("downloadscreen")) { // TODO implement this in main
+//            ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
+//        }
     }
 
     public DownloadManager(long bytesToDownload) {
         this.bytesToDownload = bytesToDownload;
-        if (!ScreenTools.getScreenString().contains("downloadscreen")) {
-            ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
-        }
+//        if (!ScreenTools.getScreenString().contains("downloadscreen")) { // TODO implement this in main
+//            ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
+//        }
     }
 
     public void download(Path file, String sha1, String url, Runnable successCallback, Runnable failureCallback) {

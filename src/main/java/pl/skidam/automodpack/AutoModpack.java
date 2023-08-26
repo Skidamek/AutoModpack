@@ -22,10 +22,10 @@ package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.modpack.Modpack;
+import pl.skidam.automodpack_server.modpack.Modpack;
 import pl.skidam.automodpack.networking.ModPackets;
 
-import static pl.skidam.automodpack.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 import pl.skidam.automodpack.modpack.Commands;
 
 public class AutoModpack {

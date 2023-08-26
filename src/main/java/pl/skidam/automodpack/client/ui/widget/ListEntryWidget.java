@@ -26,12 +26,12 @@ import net.minecraft.text.MutableText;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.MathHelper;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.modpack.Modpack;
+import pl.skidam.automodpack_server.modpack.Modpack;
 
 import java.nio.file.Path;
 import java.util.Map;
 
-import static pl.skidam.automodpack.GlobalVariables.clientConfig;
+import static pl.skidam.automodpack_common.GlobalVariables.clientConfig;
 
 //#if MC < 12000
 import net.minecraft.client.util.math.MatrixStack;

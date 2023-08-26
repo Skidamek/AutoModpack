@@ -26,14 +26,14 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Util;
-import pl.skidam.automodpack.utils.DownloadManager;
-import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack_core.utils.DownloadManager;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
-import static pl.skidam.automodpack.GlobalVariables.MOD_ID;
+import static pl.skidam.automodpack_common.GlobalVariables.MOD_ID;
 
 public class DownloadScreen extends VersionedScreen {
 

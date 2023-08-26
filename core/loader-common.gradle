@@ -24,6 +24,7 @@ allprojects {
     }
 
     dependencies {
+        implementation project(path: ':common')
         implementation project(path: ':core-common')
         implementation "net.fabricmc:fabric-loader:0.14.22"
     }

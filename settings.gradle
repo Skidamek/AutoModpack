@@ -23,6 +23,16 @@ pluginManagement {
     }
 }
 
+include(":common")
+def commonProject = project(":common")
+commonProject.projectDir = file("common")
+commonProject.buildFileName = "common.gradle"
+
+include(":server-host")
+def serverHostProject = project(":server-host")
+serverHostProject.projectDir = file("server-host")
+serverHostProject.buildFileName = "server-host.gradle"
+
 def preload_modules = [
         "common",
         "fabric",
@@ -33,12 +43,12 @@ def preload_modules = [
 for (String module : preload_modules) {
     include(":core-$module")
 
-    def proj = project(":core-$module")
-    proj.projectDir = file("core/$module")
+    def project = project(":core-$module")
+    project.projectDir = file("core/$module")
     if (module == "common") {
-        proj.buildFileName = "../core-common.gradle"
+        project.buildFileName = "../core-common.gradle"
     } else {
-        proj.buildFileName = "../loader-common.gradle"
+        project.buildFileName = "../loader-common.gradle"
     }
 }
 
@@ -46,7 +56,7 @@ def settings = new JsonSlurper().parseText(file('settings.json').text)
 for (String version : settings.versions) {
     include(":$version")
 
-    def proj = project(":$version")
-    proj.projectDir = file("versions/$version")
-    proj.buildFileName = "../../common.gradle"
+    def project = project(":$version")
+    project.projectDir = file("versions/$version")
+    project.buildFileName = "../../common.gradle"
 }

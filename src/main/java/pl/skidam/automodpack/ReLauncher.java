@@ -22,12 +22,12 @@ package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.ScreenTools;
 import pl.skidam.automodpack.loaders.Loader;
-import pl.skidam.automodpack.ui.Windows;
+import pl.skidam.automodpack_core.ui.Windows;
 
 import java.awt.*;
 import java.nio.file.Path;
 
-import static pl.skidam.automodpack.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class ReLauncher {
 

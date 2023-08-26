@@ -20,9 +20,9 @@
 
 package pl.skidam.automodpack_core.client;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_common.config.ConfigTools;
+import pl.skidam.automodpack_common.config.Jsons;
+import pl.skidam.automodpack_common.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 import java.io.BufferedReader;
@@ -40,9 +40,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Objects;
 
-import static pl.skidam.automodpack_core.GlobalVariables.AM_VERSION;
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
+import static pl.skidam.automodpack_common.config.ConfigTools.GSON;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class ModpackUtils {
 

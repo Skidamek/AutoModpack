@@ -20,11 +20,12 @@
 
 package pl.skidam.automodpack_core.client;
 
-import net.minecraft.util.Util;
+import pl.skidam.automodpack_common.config.Jsons;
+import pl.skidam.automodpack_common.config.ConfigTools;
+import pl.skidam.automodpack_common.utils.CustomFileUtils;
+import pl.skidam.automodpack_common.utils.MmcPackMagic;
+import pl.skidam.automodpack_common.utils.Url;
 import pl.skidam.automodpack_core.ReLauncher;
-import pl.skidam.automodpack_core.client.audio.AudioManager;
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.Loader;
 import pl.skidam.automodpack_core.utils.*;
 
@@ -43,9 +44,9 @@ import java.time.Instant;
 import java.util.*;
 import java.util.stream.Stream;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
-import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
-import static pl.skidam.automodpack_core.utils.CustomFileUtils.mapAllFiles;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
+import static pl.skidam.automodpack_common.config.ConfigTools.GSON;
+import static pl.skidam.automodpack_common.utils.CustomFileUtils.mapAllFiles;
 
 public class ModpackUpdater {
     public static Map<String, String> changesAddedList = new HashMap<>(); // <file name, main page url>
@@ -103,22 +104,9 @@ public class ModpackUpdater {
                     CheckAndLoadModpack(modpackDir, modpackContentFile, workingDirectory);
                     return;
                 }
-            } else if (!preload && ScreenTools.getScreen() != null) {
-
-                fullDownload = true;
-
-                Util.getMainWorkerExecutor().execute(() -> {
-                    while (!ScreenTools.getScreenString().contains("dangerscreen")) {
-                        ScreenTools.ScreenEnum.DANGER.callScreen(ScreenTools.getScreen(), link, modpackDir, modpackContentFile);
-                        new Wait(50);
-                    }
-                });
-                return;
             }
 
             LOGGER.warn("Modpack update found");
-
-            ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
 
             ModpackUpdaterMain(link, modpackDir, modpackContentFile);
 
@@ -234,8 +222,6 @@ public class ModpackUpdater {
 
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
-            ScreenTools.ScreenEnum.DOWNLOAD.callScreen();
-
             if (wholeQueue > 0) {
 
                 downloadManager = new DownloadManager(totalBytesToDownload);
@@ -297,17 +283,12 @@ public class ModpackUpdater {
             }
             MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // update minecraft version
 
-            if (!preload && AudioManager.isMusicPlaying()) {
-                AudioManager.stopMusic();
-            }
-
             if (!failedDownloads.isEmpty()) {
                 StringBuilder failedFiles = new StringBuilder();
                 for (Map.Entry<String, String> entry : failedDownloads.entrySet()) {
                     LOGGER.error("Failed to download: " + entry.getKey() + " from " + entry.getValue());
                     failedFiles.append(entry.getKey());
                 }
-                ScreenTools.ScreenEnum.ERROR.callScreen("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");
 
                 LOGGER.warn("Update *completed* with ERRORS! Took: " + (System.currentTimeMillis() - start) + " ms");
 
@@ -327,7 +308,6 @@ public class ModpackUpdater {
         } catch (SocketTimeoutException | ConnectException e) {
             LOGGER.error("Modpack host of " + link + " is not responding", e);
         } catch (Exception e) {
-            ScreenTools.ScreenEnum.ERROR.callScreen("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
             e.printStackTrace();
         }
     }
@@ -428,8 +408,6 @@ public class ModpackUpdater {
 
             // todo delete files that were downloaded
             // we will use the same method as to modpacks manager
-
-            ScreenTools.ScreenEnum.TITLE.callScreen();
 
         } catch (Exception e) {
             e.printStackTrace();

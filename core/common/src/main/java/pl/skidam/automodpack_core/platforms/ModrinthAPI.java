@@ -24,10 +24,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import pl.skidam.automodpack_core.Loader;
-import pl.skidam.automodpack_core.utils.Json;
+import pl.skidam.automodpack_common.utils.Json;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.GlobalVariables.MC_VERSION;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class ModrinthAPI {
 

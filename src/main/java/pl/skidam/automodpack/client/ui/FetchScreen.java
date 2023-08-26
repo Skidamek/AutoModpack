@@ -23,7 +23,7 @@ package pl.skidam.automodpack.client.ui;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.util.Formatting;
 
-import pl.skidam.automodpack.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;

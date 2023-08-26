@@ -27,7 +27,7 @@ import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.modpack.Modpack;
+import pl.skidam.automodpack_server.modpack.Modpack;
 
 import java.nio.file.Path;
 
