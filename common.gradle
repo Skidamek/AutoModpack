@@ -18,8 +18,6 @@ preprocess {
 	vars.put("QUILT", mod_brand == 'quilt' ? 1 : 0)
 	vars.put("FORGE", mod_brand == 'forge' ? 1 : 0)
 
-	vars.put("NOT_QUILT", mod_brand != 'quilt' ? 1 : 0)
-
 	vars.put("FABRICLIKE", mod_brand == 'fabric' || mod_brand == 'quilt' ? 1 : 0)
 }
 
@@ -90,10 +88,6 @@ dependencies {
 				transitive = false
 			}
 		}
-
-		include(implementation("dev.su5ed.sinytra:fabric-loader:2.3.2+0.14.21+1.20.1")) {
-			transitive = false
-		}
 	}
 
 	if (mod_brand == 'fabric') {
@@ -122,6 +116,12 @@ loom {
 		ideConfigGenerated = true
 		runDir '../../run'
 		vmArgs '-Dmixin.debug.export=true'
+	}
+
+	if (mod_brand == 'forge') {
+		forge {
+			mixinConfigs = ["automodpack-main.mixins.json", "automodpack-forge.mixins.json"]
+		}
 	}
 
 	accessWidenerPath = file("../../src/main/resources/automodpack.accesswidener")
@@ -159,7 +159,7 @@ processResources {
 	[
 			'fabric': ['fabric.mod.json'],
 			'quilt': ['quilt.mod.json'],
-			'forge': ['forge.mod.json'], // basically fabric.mod.json with forge mixins
+			'forge': ['META-INF/mods.toml', 'pack.mcmeta'],
 	].forEach { brand, files ->
 		files.forEach { name ->
 			if (brand == mod_brand) {
@@ -177,6 +177,11 @@ processResources {
 				exclude name
 			}
 		}
+	}
+
+	if (mod_brand == 'forge') {
+		// forge requires the mod icon file to be at the resource root
+		filesMatching('assets/automodpack/icon.png') { f -> f.path = 'icon.png' }
 	}
 }
 
@@ -203,22 +208,6 @@ java {
 jar {
 	from(rootProject.file('LICENSE')) {
 		rename { "${it}_${project.archives_base_name}" }
-	}
-
-	// add 'META-INF/services/**' as resource
-	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	from ('../../src/main/resources') {
-		include 'META-INF/services/**'
-	}
-
-	if (mod_brand == 'forge') {
-		manifest {
-			attributes(
-					"FMLModType": "GAMELIBRARY"
-			)
-		}
-
-		rename 'forge.mod.json', 'fabric.mod.json'
 	}
 }
 

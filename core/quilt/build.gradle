@@ -2,11 +2,6 @@ plugins {
     id "com.github.johnrengelman.shadow" version "7.1.2"
 }
 
-dependencies {
-    modImplementation "org.quiltmc:quilt-loader:${rootProject.quilt_loader_version}"
-
-}
-
 jar {
     classifier "dev"
 }
@@ -19,7 +14,7 @@ components.java {
 
 publishing {
     publications {
-        mavenFabric(MavenPublication) {
+        maven(MavenPublication) {
             artifactId = rootProject.archives_base_name + "-" + project.name
             from components.java
         }

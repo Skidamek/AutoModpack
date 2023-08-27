@@ -20,13 +20,31 @@ allprojects {
     repositories {
         mavenCentral()
         maven { url 'https://api.modrinth.com/maven' }
+
         maven { url "https://maven.fabricmc.net/" }
+        maven { url "https://maven.quiltmc.org/repository/release" }
+        maven { url "https://files.minecraftforge.net/maven/" }
+        maven { url "https://libraries.minecraft.net/" }
     }
 
     dependencies {
         implementation project(path: ':common')
         implementation project(path: ':core-common')
-        implementation "net.fabricmc:fabric-loader:0.14.22"
+
+        // our needed dependencies
+        implementation('maven.modrinth:preloading-tricks:0.0.14')
+        implementation "com.google.code.gson:gson:2.10.1"
+        implementation "org.apache.logging.log4j:log4j-core:2.20.0"
+
+        // loaders apis
+        implementation("net.fabricmc:fabric-loader:0.14.22") {
+            transitive = false
+        }
+        implementation("org.quiltmc:quilt-loader:0.20.0") {
+            transitive = false
+        }
+        implementation("net.minecraftforge:fmlcore:1.20.1-47.1.3")
+        implementation("net.minecraftforge:fmlloader:1.20.1-47.1.3")
     }
 
     shadowJar {

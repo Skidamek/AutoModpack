@@ -31,8 +31,8 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack_core.Loader;
 import pl.skidam.automodpack_server.modpack.HttpServer;
 import pl.skidam.automodpack_server.modpack.Modpack;
 import pl.skidam.automodpack_common.utils.Ip;
@@ -51,7 +51,7 @@ public class LoginS2CPacket {
         if (!understood) {
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
             if (!serverConfig.optionalModpack) {
-                Text reason = VersionedText.common.literal("AutoModpack mod for " + Loader.getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
+                Text reason = VersionedText.common.literal("AutoModpack mod for " + new Loader().getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
             }
@@ -65,7 +65,7 @@ public class LoginS2CPacket {
 
         String clientResponse = buf.readString(32767);
         boolean isClientVersionHigher = isClientVersionHigher(clientResponse);
-        String correctResponse = AM_VERSION + "-" + Loader.getPlatformType().toString().toLowerCase();
+        String correctResponse = AM_VERSION + "-" + new Loader().getPlatformType().toString().toLowerCase();
 
         if (!clientResponse.equals(correctResponse)) {
 
@@ -79,7 +79,7 @@ public class LoginS2CPacket {
             }
 
             if (!clientResponse.startsWith(AM_VERSION) || !isAcceptedLoader) {
-                Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + Loader.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + new Loader().getPlatformType().toString().toLowerCase() + " to play on this server!");
                 if (isClientVersionHigher) {
                     reason = VersionedText.common.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
                 }

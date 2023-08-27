@@ -26,7 +26,7 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
-import pl.skidam.automodpack.loaders.Loader;
+import pl.skidam.automodpack_core.Loader;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -39,7 +39,7 @@ public class LoginC2SPacket {
         // Client
         String serverResponse = buf.readString(32767);
 
-        String loader = Loader.getPlatformType().toString().toLowerCase();
+        String loader = new Loader().getPlatformType().toString().toLowerCase();
 
         String correctResponse = AM_VERSION + "-" + loader;
 

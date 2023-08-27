@@ -23,8 +23,8 @@ package pl.skidam.automodpack.client;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
-import pl.skidam.automodpack.loaders.Loader;
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.Loader;
 
 import java.lang.reflect.Method;
 import java.nio.file.Path;
@@ -91,7 +91,7 @@ public class ScreenTools {
         public static boolean properlyLoaded() {
             try {
                 if (preload) return false;
-                if (Loader.getEnvironmentType().equals("SERVER")) return false;
+                if (new Loader().getEnvironmentType().equals("SERVER")) return false;
                 if (MinecraftClient.getInstance() == null) return false;
                 if (MinecraftClient.getInstance().currentScreen == null) return false;
                 return true;

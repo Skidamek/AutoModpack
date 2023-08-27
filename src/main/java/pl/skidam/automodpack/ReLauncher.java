@@ -21,7 +21,7 @@
 package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.ScreenTools;
-import pl.skidam.automodpack.loaders.Loader;
+import pl.skidam.automodpack_core.Loader;
 import pl.skidam.automodpack_core.ui.Windows;
 
 import java.awt.*;
@@ -38,7 +38,7 @@ public class ReLauncher {
         }
 
         public Restart(Path modpackDir, String guiMessage, boolean fullDownload) {
-            String environment = Loader.getEnvironmentType();
+            String environment = new Loader().getEnvironmentType();
             boolean isClient = environment.equals("CLIENT");
             boolean isHeadless = GraphicsEnvironment.isHeadless();
 

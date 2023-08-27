@@ -22,14 +22,12 @@ allprojects {
     }
 
     dependencies {
-
         implementation project(path: ':common')
 
-        // Super preload!
+        // our needed dependencies
         implementation('maven.modrinth:preloading-tricks:0.0.14')
-
-        implementation "org.apache.logging.log4j:log4j-core:2.20.0"
         implementation "com.google.code.gson:gson:2.10.1"
+        implementation "org.apache.logging.log4j:log4j-core:2.20.0"
     }
 
     sourceCompatibility = JavaVersion.VERSION_17
