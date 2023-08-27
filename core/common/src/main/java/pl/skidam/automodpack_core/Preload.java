@@ -24,9 +24,9 @@ import pl.skidam.automodpack_common.GlobalVariables;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
+import pl.skidam.automodpack_common.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
-import pl.skidam.automodpack_core.utils.*;
 import settingdust.preloadingtricks.SetupModCallback;
 
 import java.io.IOException;

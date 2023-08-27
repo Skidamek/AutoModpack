@@ -33,7 +33,7 @@ package pl.skidam.automodpack.loaders;
 //$$ import java.util.zip.ZipException;
 //$$ import java.util.zip.ZipFile;
 //$$ 
-//$$ import static pl.skidam.automodpack.GlobalVariables.LOGGER;
+//$$ import static pl.skidam.automodpack_common.GlobalVariables.*;
 //$$ 
 //$$ public class ForgeImpl {
 //$$     // We're assuming that we are using connector https://github.com/Sinytra/Connector

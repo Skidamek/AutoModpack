@@ -18,11 +18,10 @@
  * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package pl.skidam.automodpack_server.utils;
+package pl.skidam.automodpack_common.utils;
 
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
-import pl.skidam.automodpack_server.modpack.Modpack;
 
 import java.io.File;
 import java.io.IOException;
@@ -61,7 +60,7 @@ public class ModpackContentTools {
 
         try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(modpackDir)) {
             for (Path path : directoryStream) {
-                if (Objects.equals(path.getFileName(), Modpack.hostModpackContentFile.getFileName())) {
+                if (Objects.equals(path.getFileName(), hostModpackContentFile.getFileName())) {
                     Jsons.ModpackContentFields modpackContent = ConfigTools.loadConfig(path, Jsons.ModpackContentFields.class);
                     if (modpackContent != null && modpackContent.link != null && !modpackContent.link.isEmpty()) {
                         return modpackContent.link;
@@ -108,7 +107,7 @@ public class ModpackContentTools {
         }
         try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(modpackDir)) {
             for (Path path : directoryStream) {
-                if (Objects.equals(path.getFileName(), Modpack.hostModpackContentFile.getFileName())) {
+                if (Objects.equals(path.getFileName(), hostModpackContentFile.getFileName())) {
                     return path;
                 }
             }

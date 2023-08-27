@@ -27,7 +27,7 @@ import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
 import pl.skidam.automodpack_common.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_server.utils.FileChangeChecker;
-import pl.skidam.automodpack_server.utils.ModpackContentTools;
+import pl.skidam.automodpack_common.utils.ModpackContentTools;
 
 import java.io.File;
 import java.io.IOException;
@@ -41,9 +41,6 @@ import java.util.concurrent.*;
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class Modpack {
-    public static Path hostModpackDir = Paths.get(automodpackDir + File.separator + "host-modpack");
-    static Path hostModpackMods = Paths.get(hostModpackDir + File.separator + "mods");
-    public static Path hostModpackContentFile = Paths.get(hostModpackDir + File.separator + "modpack-content.json");
     public static final int MAX_MODPACK_ADDITIONS = 8; // at the same time
     private static ExecutorService CREATION_EXECUTOR;
     private static final Logger LOGGER = LogManager.getLogger("AutoModpack/Server/Modpack");

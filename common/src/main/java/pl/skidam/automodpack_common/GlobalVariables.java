@@ -38,6 +38,8 @@ public class GlobalVariables {
     public static String MC_VERSION;
     public static String AM_VERSION;
     public static final Path automodpackDir = Paths.get("./automodpack/");
+    public static Path hostModpackDir = Paths.get(automodpackDir + File.separator + "host-modpack");
+    public static Path hostModpackContentFile = Paths.get(hostModpackDir + File.separator + "modpack-content.json");
     public static final Path modpacksDir = Paths.get(automodpackDir + File.separator + "modpacks");
     public static final Path clientConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-client.json");
     public static final Path serverConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-server.json");

@@ -13,7 +13,7 @@ allprojects {
     apply plugin: "java"
     apply plugin: "maven-publish"
 
-    archivesBaseName = rootProject.archives_base_name
+    archivesBaseName = rootProject.archives_base_name + "-" + project.name
     version = rootProject.mod_version
     group = rootProject.maven_group
 
@@ -30,8 +30,9 @@ allprojects {
     }
 
     shadowJar {
-        // Only include the output classes from the :core-common module
+        // Only include the output classes from modules
         from project(':core-common').sourceSets.main.output
+        from project(':common').sourceSets.main.output
         // Exclude other dependencies that might have been bundled
         configurations = []
     }

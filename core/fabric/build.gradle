@@ -2,36 +2,13 @@ plugins {
     id "com.github.johnrengelman.shadow" version "7.1.2"
 }
 
-configurations {
-    common
-    shadowCommon // Don't use shadow from the shadow plugin since it *excludes* files.
-    compileClasspath.extendsFrom common
-    runtimeClasspath.extendsFrom common
-}
-
 dependencies {
     modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
 
-    common(project(path: ":core-common", configuration: "namedElements")) { transitive false }
-    shadowCommon(project(path: ":core-common")) { transitive false }
-    implementation project(path: 'AutoModpack.core-common.main')
-
-}
-
-remapJar {
-    input.set shadowJar.archiveFile
-    dependsOn shadowJar
-    classifier null
 }
 
 jar {
     classifier "dev"
-}
-
-sourcesJar {
-    def commonSources = project(":core-common").sourcesJar
-    dependsOn commonSources
-    from commonSources.archiveFile.map { zipTree(it) }
 }
 
 components.java {

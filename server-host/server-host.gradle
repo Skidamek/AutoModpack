@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'maven-publish'
+    id "com.github.johnrengelman.shadow" version "7.1.2"
 }
 
 
@@ -12,7 +13,7 @@ allprojects {
     apply plugin: "java"
     apply plugin: "maven-publish"
 
-    archivesBaseName = rootProject.archives_base_name
+    archivesBaseName = rootProject.archives_base_name + "-" + project.name
     version = rootProject.mod_version
     group = rootProject.maven_group
 
@@ -21,11 +22,17 @@ allprojects {
     }
 
     dependencies {
-
         implementation project(path: ':common')
 
         implementation "org.apache.logging.log4j:log4j-core:2.20.0"
         implementation "com.google.code.gson:gson:2.10.1"
+    }
+
+    shadowJar {
+        // Only include the output classes from modules
+        from project(':common').sourceSets.main.output
+        // Exclude other dependencies that might have been bundled
+        configurations = []
     }
 
     sourceCompatibility = JavaVersion.VERSION_17
@@ -38,4 +45,6 @@ allprojects {
     java {
         withSourcesJar()
     }
+
+    tasks.build.dependsOn tasks.shadowJar
 }

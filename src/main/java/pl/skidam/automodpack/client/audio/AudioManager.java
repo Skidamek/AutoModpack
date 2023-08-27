@@ -33,7 +33,7 @@ import net.minecraft.util.registry.Registry;
 
 import java.util.function.Supplier;
 
-import static pl.skidam.automodpack.GlobalVariables.MOD_ID;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class AudioManager {
     private static CustomSoundInstance SOUND_INSTANCE;

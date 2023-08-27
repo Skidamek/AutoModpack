@@ -39,7 +39,6 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-import static net.minecraft.util.registry.DynamicRegistryManager.LOGGER;
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class LinkC2SPacket {

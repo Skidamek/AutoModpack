@@ -33,7 +33,7 @@ import pl.skidam.automodpack.client.ui.widget.ListEntry;
 import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
-import pl.skidam.automodpack_server.utils.ModpackContentTools;
+import pl.skidam.automodpack_common.utils.ModpackContentTools;
 
 import java.nio.file.Path;
 import java.util.HashMap;

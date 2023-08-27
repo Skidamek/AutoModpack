@@ -12,7 +12,7 @@ allprojects {
     apply plugin: "java"
     apply plugin: "maven-publish"
 
-    archivesBaseName = rootProject.archives_base_name
+    archivesBaseName = rootProject.archives_base_name + "-" + project.name
     version = rootProject.mod_version
     group = rootProject.maven_group
 

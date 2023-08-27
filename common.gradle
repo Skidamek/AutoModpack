@@ -39,17 +39,11 @@ configurations {
 
 dependencies {
 
-	include(implementation project(path: ':core-common')) {
-		transitive = false
-	}
+	implementation project(path: ':core-common')
 
-	include(implementation project(path: ':common')) {
-		transitive = false
-	}
+	include(implementation project(path: ':common'))
 
-	include(implementation project(path: ':server-host')) {
-		transitive = false
-	}
+	include(implementation project(path: ':server-host'))
 
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
@@ -137,16 +131,8 @@ remapJar {
 	remapperIsolation = true
 }
 
-if (mcVersion >= 11800) {
-	sourceCompatibility = JavaVersion.VERSION_17
-	targetCompatibility = JavaVersion.VERSION_17
-} else if (mcVersion >= 11700) {
-	sourceCompatibility = JavaVersion.VERSION_16
-	targetCompatibility = JavaVersion.VERSION_16
-} else {
-	sourceCompatibility = JavaVersion.VERSION_1_8
-	targetCompatibility = JavaVersion.VERSION_1_8
-}
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
 
 String versionSuffix = ''
 // detect github action environment variables

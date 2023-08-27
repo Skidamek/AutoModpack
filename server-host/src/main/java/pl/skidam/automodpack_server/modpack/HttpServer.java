@@ -23,6 +23,7 @@ package pl.skidam.automodpack_server.modpack;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import pl.skidam.automodpack_common.GlobalVariables;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomThreadFactoryBuilder;
@@ -78,7 +79,7 @@ public class HttpServer {
         }
 
         try {
-            Jsons.ModpackContentFields serverModpackContent = ConfigTools.loadModpackContent(Modpack.hostModpackContentFile);
+            Jsons.ModpackContentFields serverModpackContent = ConfigTools.loadModpackContent(GlobalVariables.hostModpackContentFile);
             if (serverModpackContent == null) {
                 LOGGER.error("Modpack content is null! Can't start hosting modpack");
                 return;
@@ -87,7 +88,7 @@ public class HttpServer {
             listOfPaths.clear();
             for (Jsons.ModpackContentFields.ModpackContentItem item : serverModpackContent.list) {
                 String file = item.file;
-                Path filePath = Paths.get(Modpack.hostModpackDir + File.separator + file);
+                Path filePath = Paths.get(GlobalVariables.hostModpackDir + File.separator + file);
                 if (!Files.exists(filePath)) {
                     filePath = Paths.get("." + file);
                 }
@@ -291,13 +292,13 @@ public class HttpServer {
 
                     Path file;
                     if (requestUrl.equals("") || requestUrl.equals("/")) {
-                        file = Modpack.hostModpackContentFile;
+                        file = GlobalVariables.hostModpackContentFile;
                     } else if (requestUrl.contains("..")) {
                         sendError(client, 403);
                         return;
 
-                    } else if (listOfPaths.contains(Paths.get(Modpack.hostModpackDir + File.separator + requestUrl))) {
-                        file = Paths.get(Modpack.hostModpackDir + File.separator + requestUrl);
+                    } else if (listOfPaths.contains(Paths.get(GlobalVariables.hostModpackDir + File.separator + requestUrl))) {
+                        file = Paths.get(GlobalVariables.hostModpackDir + File.separator + requestUrl);
 
                     } else {
                         Path requestPath = Paths.get("./" + requestUrl);

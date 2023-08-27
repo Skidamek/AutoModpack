@@ -23,7 +23,7 @@ package pl.skidam.automodpack_core.client;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
+import pl.skidam.automodpack_common.utils.ModpackContentTools;
 
 import java.io.BufferedReader;
 import java.io.File;
