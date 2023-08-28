@@ -29,7 +29,6 @@ public interface LoaderService {
 
     enum ModPlatform { FABRIC, QUILT, FORGE }
 
-
     boolean isModLoaded(String modId);
 
     Collection getModList();

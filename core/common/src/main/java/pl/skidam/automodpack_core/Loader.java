@@ -17,92 +17,66 @@ public class Loader implements LoaderService {
 
     @Override
     public ModPlatform getPlatformType() {
-        getServiceLoader().getPlatformType();
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getPlatformType();
     }
 
     @Override
     public boolean isModLoaded(String modId) {
-        getServiceLoader().isModLoaded(modId);
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().isModLoaded(modId);
     }
 
     @Override
     public Collection getModList() {
-        getServiceLoader().getModList();
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getModList();
     }
 
     @Override
     public String getLoaderVersion() {
-        getServiceLoader().getLoaderVersion();
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getLoaderVersion();
     }
 
     @Override
     public Path getModPath(String modId) {
-        getServiceLoader().getModPath(modId);
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getModPath(modId);
     }
 
     @Override
     public String getEnvironmentType() {
-        getServiceLoader().getEnvironmentType();
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getEnvironmentType();
     }
 
     @Override
     public String getModEnvironmentFromNotLoadedJar(Path file) {
-        getServiceLoader().getModEnvironmentFromNotLoadedJar(file);
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getModEnvironmentFromNotLoadedJar(file);
     }
 
     @Override
     public String getModVersion(String modId) {
-        getServiceLoader().getModVersion(modId);
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getModVersion(modId);
     }
 
     @Override
     public String getModVersion(Path file) {
-        getServiceLoader().getModVersion(file);
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getModVersion(file);
     }
 
     @Override
     public boolean isDevelopmentEnvironment() {
-        getServiceLoader().isDevelopmentEnvironment();
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().isDevelopmentEnvironment();
     }
 
     @Override
     public String getModEnvironment(String modId) {
-        getServiceLoader().getModEnvironment(modId);
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getModEnvironment(modId);
     }
 
     @Override
     public String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
-        getServiceLoader().getModIdFromLoadedJar(file, checkAlsoOutOfContainer);
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getModIdFromLoadedJar(file, checkAlsoOutOfContainer);
     }
 
     @Override
     public String getModIdFromNotLoadedJar(Path file) {
-        getServiceLoader().getModIdFromNotLoadedJar(file);
-
-        throw new AssertionError("No loader service found");
+        return getServiceLoader().getModIdFromNotLoadedJar(file);
     }
 }
