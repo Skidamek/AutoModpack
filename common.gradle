@@ -4,6 +4,7 @@ apply plugin: 'dev.architectury.loom'
 apply plugin: 'io.github.juuxel.loom-vineflower'
 apply plugin: 'com.replaymod.preprocess'
 apply plugin: 'me.fallenbreath.yamlang'
+apply plugin: 'com.github.johnrengelman.shadow'
 
 def mod_brand = (loom.platform.get() as String).toLowerCase()
 assert mod_brand in ['fabric', 'quilt', 'forge']
@@ -20,13 +21,6 @@ preprocess {
 
 	vars.put("FABRICLIKE", mod_brand == 'fabric' || mod_brand == 'quilt' ? 1 : 0)
 }
-
-build.dependsOn("common" + ':build')
-build.dependsOn("server-host" + ':build')
-build.dependsOn("core-common" + ':build')
-build.dependsOn("core-fabric" + ':build')
-build.dependsOn("core-forge" + ':build')
-build.dependsOn("core-quilt" + ':build')
 
 repositories {
 	mavenCentral()
@@ -48,9 +42,8 @@ dependencies {
 
 	include('maven.modrinth:preloading-tricks:0.0.14')
 
-	println("../../core/${mod_brand}/build/libs/automodpack-core-${mod_brand}-${project.mod_version}-all.jar")
+	include(implementation project(path: ":core-${mod_brand}", configuration: "shadow"))
 
-	include(implementation files("../../core/${mod_brand}/build/libs/automodpack-core-${mod_brand}-${project.mod_version}-all.jar"))
 	include(implementation project(path: ':server-host'))
 
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"

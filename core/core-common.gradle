@@ -1,16 +1,12 @@
 plugins {
     id 'java'
-    id 'maven-publish'
+    id "com.github.johnrengelman.shadow" version "7.1.2"
 }
 
-
-subprojects {
-
-}
 
 allprojects {
     apply plugin: "java"
-    apply plugin: "maven-publish"
+    apply plugin: "com.github.johnrengelman.shadow"
 
     archivesBaseName = rootProject.archives_base_name + "-" + project.name
     version = rootProject.mod_version
@@ -23,6 +19,7 @@ allprojects {
 
     dependencies {
         implementation project(path: ':common')
+        shadow project(path: ':common')
 
         // our needed dependencies
         implementation('maven.modrinth:preloading-tricks:0.0.14')

@@ -1,12 +1,9 @@
 plugins {
     id 'java'
-    id 'maven-publish'
     id "com.github.johnrengelman.shadow" version "7.1.2"
 }
 
-subprojects {
-
-}
+jar.enabled = false
 
 allprojects {
     apply plugin: "java"
@@ -47,6 +44,10 @@ allprojects {
     }
 
     shadowJar {
+        // set normal name
+        archiveClassifier.set('')
+        from sourceSets.main.output
+
         // Only include the output classes from modules
         from project(':core-common').sourceSets.main.output
         from project(':common').sourceSets.main.output
@@ -65,5 +66,5 @@ allprojects {
         withSourcesJar()
     }
 
-    tasks.build.dependsOn tasks.shadowJar
+    assemble.dependsOn shadowJar
 }
