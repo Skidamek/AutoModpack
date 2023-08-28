@@ -47,6 +47,8 @@ public class Preload implements SetupModCallback {
         // Initialize global variables
         new GlobalVariables();
 
+        MC_VERSION = new Loader().getModVersion("minecraft");
+        AM_VERSION = new Loader().getModVersion("automodpack");
 
         String workingDirectory = System.getProperty("user.dir");
         if (workingDirectory.contains("com.qcxr.qcxr")) {

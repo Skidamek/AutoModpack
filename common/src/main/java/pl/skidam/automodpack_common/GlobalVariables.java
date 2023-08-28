@@ -35,7 +35,7 @@ public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
     public static boolean preload = true;
-    public static String MC_VERSION; // TODO initialize this
+    public static String MC_VERSION;
     public static String AM_VERSION;
     public static final Path automodpackDir = Paths.get("./automodpack/");
     public static Path hostModpackDir = Paths.get(automodpackDir + File.separator + "host-modpack");
