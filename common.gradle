@@ -21,7 +21,16 @@ preprocess {
 	vars.put("FABRICLIKE", mod_brand == 'fabric' || mod_brand == 'quilt' ? 1 : 0)
 }
 
+build.dependsOn("common" + ':build')
+build.dependsOn("server-host" + ':build')
+build.dependsOn("core-common" + ':build')
+build.dependsOn("core-fabric" + ':build')
+build.dependsOn("core-forge" + ':build')
+build.dependsOn("core-quilt" + ':build')
+
 repositories {
+	mavenCentral()
+	mavenLocal()
 	maven { url "https://jitpack.io" }
 	maven { url "https://www.cursemaven.com" }
 	maven { url "https://maven.quiltmc.org/repository/release" }
@@ -37,10 +46,11 @@ configurations {
 
 dependencies {
 
-	implementation project(path: ':core-common')
+	include('maven.modrinth:preloading-tricks:0.0.14')
 
-	include(implementation project(path: ':common'))
+	println("../../core/${mod_brand}/build/libs/automodpack-core-${mod_brand}-${project.mod_version}-all.jar")
 
+	include(implementation files("../../core/${mod_brand}/build/libs/automodpack-core-${mod_brand}-${project.mod_version}-all.jar"))
 	include(implementation project(path: ':server-host'))
 
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -91,22 +101,13 @@ dependencies {
 	}
 
 	if (mod_brand == 'fabric') {
-		include(implementation project(path: ':core-fabric'))
-
 		modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
 	} else if (mod_brand == 'quilt') {
-		include(implementation project(path: ':core-quilt'))
-
 		modImplementation "org.quiltmc:quilt-loader:${project.quilt_loader_version}"
 	} else if (mod_brand == 'forge') {
-		include(implementation project(path: ':core-forge'))
-
 		forge "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
-	}
-
-	// runtime mods
-	if (mcVersion < 11904 && mod_brand == 'fabric') {
-		modRuntimeOnly(mcVersion < 11900 ? "com.github.astei:lazydfu:0.1.2" : "com.github.Fallen-Breath:lazydfu:a7cfc44c0c")
+	} else {
+		throw new RuntimeException("Unknown mod brand: ${mod_brand}")
 	}
 }
 

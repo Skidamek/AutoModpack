@@ -4,14 +4,13 @@ plugins {
     id "com.github.johnrengelman.shadow" version "7.1.2"
 }
 
-
 subprojects {
 
 }
 
 allprojects {
     apply plugin: "java"
-    apply plugin: "maven-publish"
+    apply plugin: "com.github.johnrengelman.shadow"
 
     archivesBaseName = rootProject.archives_base_name + "-" + project.name
     version = rootProject.mod_version

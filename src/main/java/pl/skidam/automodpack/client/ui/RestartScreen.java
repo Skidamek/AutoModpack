@@ -22,7 +22,7 @@ package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.util.Formatting;
-import pl.skidam.automodpack.ReLauncher;
+import pl.skidam.automodpack_core.ReLauncher;
 import pl.skidam.automodpack.client.ScreenTools;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
