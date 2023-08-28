@@ -39,12 +39,14 @@ configurations {
 }
 
 dependencies {
-
+	// include them all :DD
 	include('maven.modrinth:preloading-tricks:0.0.14')
-
 	include(implementation project(path: ":core-${mod_brand}", configuration: "shadow"))
-
 	include(implementation project(path: ':server-host'))
+
+	// just for IDE not complaining (its already included in the shadow jar of core-${mod_brand})
+	implementation project(path: ':common')
+	implementation project(path: ':core-common')
 
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"

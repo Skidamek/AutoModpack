@@ -1,17 +1,11 @@
 plugins {
     id 'java'
-    id 'maven-publish'
     id "com.github.johnrengelman.shadow" version "7.1.2"
-}
-
-
-subprojects {
-
 }
 
 allprojects {
     apply plugin: "java"
-    apply plugin: "maven-publish"
+    apply plugin: "com.github.johnrengelman.shadow"
 
     archivesBaseName = rootProject.archives_base_name + "-" + project.name
     version = rootProject.mod_version
@@ -46,5 +40,6 @@ allprojects {
         withSourcesJar()
     }
 
+    // there we want fat and small jar, one to include in mod (small) and one (fat) for selfhosting
     tasks.build.dependsOn tasks.shadowJar
 }
