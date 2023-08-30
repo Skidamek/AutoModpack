@@ -41,8 +41,8 @@ public class Jsons {
 //        public List<String> forceLoad = List.asList("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
         public boolean optionalModpack = false;
         public boolean autoExcludeServerSideMods = true;
-//        public boolean velocityMode = false; compat plugin :)
-        // public boolean forceToDisableAllOtherModsOnClients = false;
+//        public boolean velocityMode = false; compat plugin... someday I hope
+//        public boolean forceToDisableAllOtherModsOnClients = false;
         public int hostThreads = 8;
         public String hostIp = "";
         public String hostLocalIp = "";

@@ -20,12 +20,11 @@
 
 package pl.skidam.automodpack_server.modpack;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
 import pl.skidam.automodpack_common.utils.CustomThreadFactoryBuilder;
+import pl.skidam.automodpack_common.utils.FileInspection;
 import pl.skidam.automodpack_server.utils.FileChangeChecker;
 import pl.skidam.automodpack_common.utils.ModpackContentTools;
 
@@ -43,7 +42,6 @@ import static pl.skidam.automodpack_common.GlobalVariables.*;
 public class Modpack {
     public static final int MAX_MODPACK_ADDITIONS = 8; // at the same time
     private static ExecutorService CREATION_EXECUTOR;
-    private static final Logger LOGGER = LogManager.getLogger("AutoModpack/Server/Modpack");
 
     public static boolean generate() {
         try {
@@ -106,9 +104,6 @@ public class Modpack {
                 }
 
                 removeAutoModpackFilesFromContent(list);
-//                if (serverConfig.autoExcludeServerSideMods) { //TODO implement this in core after creating content json
-//                    autoExcludeServerMods(list);
-//                }
 
                 CREATION_EXECUTOR.shutdown();
                 try {
@@ -129,6 +124,19 @@ public class Modpack {
 
             saveModpackContent();
 
+            restartFileChecker();
+
+            return true;
+        }
+
+        public static void saveModpackContent() {
+            modpackContent = new Jsons.ModpackContentFields(null, list);
+            modpackContent.modpackHash = CustomFileUtils.getHashFromStringOfHashes(ModpackContentTools.getStringOfAllHashes(modpackContent));
+
+            ConfigTools.saveConfig(hostModpackContentFile, modpackContent);
+        }
+
+        public static void restartFileChecker() {
             if (HttpServer.fileChangeChecker != null) {
                 HttpServer.fileChangeChecker.stopChecking();
             }
@@ -152,20 +160,6 @@ public class Modpack {
             }
 
             HttpServer.fileChangeChecker.startChecking();
-
-            return true;
-        }
-
-        public static void saveModpackContent() {
-            modpackContent = new Jsons.ModpackContentFields(null, list);
-//            modpackContent.automodpackVersion = AM_VERSION; // TODO send these via minecraft packet
-//            modpackContent.mcVersion = MC_VERSION;
-//            modpackContent.modpackName = serverConfig.modpackName;
-//            modpackContent.loader = new Loader().getPlatformType().toString().toLowerCase();
-//            modpackContent.loaderVersion = new Loader().getLoaderVersion();
-            modpackContent.modpackHash = CustomFileUtils.getHashFromStringOfHashes(ModpackContentTools.getStringOfAllHashes(modpackContent));
-
-            ConfigTools.saveConfig(hostModpackContentFile, modpackContent);
         }
 
 
@@ -328,14 +322,12 @@ public class Modpack {
                 String sha1 = CustomFileUtils.getHash(file, "SHA-1");
                 String murmur = null;
 
-//                if (file.getFileName().toString().endsWith(".jar")) {
-//                    modId = new Loader().getModIdFromLoadedJar(file, true); // TODO get it from not loaded jar always
-//                    type = modId == null ? "other" : "mod";
-//                    if (type.equals("mod")) {
-//                        version = new Loader().getModVersion(file);
-//                        murmur = CustomFileUtils.getHash(file, "murmur");
-//                    }
-//                }
+                modId = FileInspection.getModID(file);
+                type = modId == null ? "other" : "mod";
+                if (type.equals("mod")) {
+                    version = FileInspection.getModVersion(file);
+                    murmur = CustomFileUtils.getHash(file, "murmur");
+                }
 
                 if (type.equals("other")) {
                     if (modpackFile.contains("/config/")) {

@@ -1,12 +1,11 @@
 package pl.skidam.automodpack_core.forge;
 
-import pl.skidam.automodpack_core.loader.LoaderService;
-
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.loading.FMLLoader;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.loading.moddiscovery.ModFile;
 import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import settingdust.preloadingtricks.forge.ForgeLanguageProviderCallback;
 
 import java.io.BufferedReader;
@@ -36,9 +35,9 @@ public class ForgeLoaderImpl implements LoaderService {
 
     @Override
     public Collection getModList() {
-        List < ModInfo > modInfos = FMLLoader.getLoadingModList().getMods();
+        List <ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 
-        List < String > modList = new ArrayList < > ();
+        List <String> modList = new ArrayList<>();
 
         for (ModInfo modInfo: modInfos) {
             modList.add(modInfo.getModId() + " " + modInfo.getVersion().toString());
@@ -55,7 +54,7 @@ public class ForgeLoaderImpl implements LoaderService {
     @Override
     public Path getModPath(String modId) {
         if (preload) {
-            Collection < ModFile > modFiles = ForgeLanguageProviderCallback.ForgeModSetupService.INSTANCE.all();
+            Collection <ModFile> modFiles = ForgeLanguageProviderCallback.ForgeModSetupService.INSTANCE.all();
             for (ModFile modFile: modFiles) {
                 if (modFile.getModInfos().get(0).getModId().equals(modId)) {
                     return modFile.getModInfos().get(0).getOwningFile().getFile().getFilePath();
@@ -63,7 +62,7 @@ public class ForgeLoaderImpl implements LoaderService {
             }
 
         } else {
-            List < ModInfo > modInfos = FMLLoader.getLoadingModList().getMods();
+            List <ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 
             for (ModInfo modInfo: modInfos) {
                 if (modInfo.getModId().equals(modId)) {
@@ -119,7 +118,7 @@ public class ForgeLoaderImpl implements LoaderService {
     @Override
     public String getModVersion(String modId) {
         if (preload) {
-            Collection < ModFile > modFiles = ForgeLanguageProviderCallback.ForgeModSetupService.INSTANCE.all();
+            Collection <ModFile> modFiles = ForgeLanguageProviderCallback.ForgeModSetupService.INSTANCE.all();
 
             for (ModFile modFile: modFiles) {
                 if (modFile.getModInfos().get(0).getModId().equals(modId)) {
@@ -194,7 +193,7 @@ public class ForgeLoaderImpl implements LoaderService {
 
     @Override
     public String getModEnvironment(String modId) {
-        List < ModInfo > modInfos = FMLLoader.getLoadingModList().getMods();
+        List <ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 
         try {
             for (ModInfo modInfo: modInfos) {
@@ -214,7 +213,7 @@ public class ForgeLoaderImpl implements LoaderService {
 
     @Override
     public String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
-        List < ModInfo > modInfos = FMLLoader.getLoadingModList().getMods();
+        List <ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 
         for (ModInfo modInfo: modInfos) {
             if (modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {

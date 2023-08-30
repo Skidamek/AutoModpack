@@ -32,6 +32,7 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.networking.LoginPacketContent;
 import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_server.modpack.HttpServer;
 import pl.skidam.automodpack_server.modpack.Modpack;
@@ -126,8 +127,17 @@ public class LoginS2CPacket {
 
         LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
 
+        LoginPacketContent loginPacketContent = new LoginPacketContent(
+                AM_VERSION,
+                MC_VERSION,
+                serverConfig.modpackName,
+                new LoaderManager().getPlatformType().toString().toLowerCase(),
+                new LoaderManager().getLoaderVersion(),
+                linkToSend);
+
         PacketByteBuf outBuf = PacketByteBufs.create();
-        outBuf.writeString(linkToSend, 32767);
+        byte[] byteArrayOfPacket = loginPacketContent.toByteArray();
+        outBuf.writeByteArray(byteArrayOfPacket);
 
         packetSender.sendPacket(LINK, outBuf);
     }

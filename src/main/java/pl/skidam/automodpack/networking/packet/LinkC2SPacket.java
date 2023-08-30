@@ -27,6 +27,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.util.Util;
+import pl.skidam.automodpack.networking.LoginPacketContent;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
@@ -43,18 +44,26 @@ import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class LinkC2SPacket {
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf, Consumer<GenericFutureListener<? extends Future<? super Void>>> genericFutureListenerConsumer) {
-        String link = buf.readString(32767);
-        LOGGER.info("Received link packet from server! " + link);
-        ClientLink = link;
+        byte[] byteArray = buf.readByteArray();
+        LoginPacketContent loginPacketContent = new LoginPacketContent().toObject(byteArray);
 
-        String modpackFileName = link.replaceFirst("(https?://)", ""); // removes https:// and http://
+        LOGGER.info("Received link packet from server! " + loginPacketContent.link);
+        ClientLink = loginPacketContent.link;
+
+        String modpackFileName = loginPacketContent.link.replaceFirst("(https?://)", ""); // removes https:// and http://
         modpackFileName = modpackFileName.replace(":", "-"); // replaces : with -
         Path modpackDir = Paths.get(modpacksDir + File.separator + modpackFileName);
 
         clientConfig.selectedModpack = modpackFileName;
         ConfigTools.saveConfig(clientConfigFile, clientConfig);
 
-        Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(link);
+        Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(loginPacketContent.link);
+
+        serverModpackContent.automodpackVersion = loginPacketContent.automodpackVersion;
+        serverModpackContent.mcVersion = loginPacketContent.mcVersion;
+        serverModpackContent.modpackName = loginPacketContent.modpackName;
+        serverModpackContent.loader = loginPacketContent.loader;
+        serverModpackContent.loaderVersion = loginPacketContent.loaderVersion;
 
         String isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
@@ -63,7 +72,7 @@ public class LinkC2SPacket {
 
         Util.getMainWorkerExecutor().execute(() -> {
             if ("true".equals(isUpdate)) {
-                new ModpackUpdater(serverModpackContent, link, modpackDir);
+                new ModpackUpdater(serverModpackContent, loginPacketContent.link, modpackDir);
             }
         });
 

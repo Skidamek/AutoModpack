@@ -38,8 +38,8 @@ import pl.skidam.automodpack.modpack.Commands;
 public class AutoModpack {
 
 //#if FORGE
-//$$     public AutoModpack() {
-//$$        MinecraftForge.EVENT_BUS.register(this);
+//$$public AutoModpack() {
+//$$    MinecraftForge.EVENT_BUS.register(this);
 //#elseif FABRICLIKE
     public static void onInitialize() {
 //#endif
@@ -53,7 +53,7 @@ public class AutoModpack {
             if (serverConfig.generateModpackOnStart) {
                 LOGGER.info("Generating modpack...");
                 long genStart = System.currentTimeMillis();
-                if (Modpack.generate()) {
+                if (ModpackGenAdditions.generate()) {
                     LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
                 } else {
                     LOGGER.error("Failed to generate modpack!");

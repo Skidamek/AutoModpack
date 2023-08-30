@@ -25,6 +25,7 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
+import pl.skidam.automodpack.ModpackGenAdditions;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_common.config.ConfigTools;
@@ -197,7 +198,7 @@ public class Commands {
                             .formatted(Formatting.YELLOW),
                     true);
             long start = System.currentTimeMillis();
-            if (Modpack.generate()) {
+            if (ModpackGenAdditions.generate()) {
                 VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms")
                                 .formatted(Formatting.GREEN),
                         true);

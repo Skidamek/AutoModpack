@@ -20,9 +20,6 @@
 
 package pl.skidam.automodpack_server.modpack;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import pl.skidam.automodpack_common.GlobalVariables;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
@@ -53,7 +50,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
-import static pl.skidam.automodpack_common.GlobalVariables.serverConfigFile;
+import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class HttpServer {
     private static final int BUFFER_SIZE = 16 * 1024; // 16KB send at once to the client
@@ -61,7 +58,6 @@ public class HttpServer {
     private static ExecutorService HTTPServerExecutor;
     private static Object server = null;
     public static FileChangeChecker fileChangeChecker;
-    private static final Logger LOGGER = LogManager.getLogger("AutoModpack/Server");
     private final Jsons.ServerConfigFields serverConfig;
 
     public static boolean isRunning() {
@@ -101,7 +97,7 @@ public class HttpServer {
             }
 
 
-            if (listOfPaths.size() > 0) {
+            if (!listOfPaths.isEmpty()) {
                 if (fileChangeChecker == null) {
                     fileChangeChecker = new FileChangeChecker(listOfPaths);
                 }

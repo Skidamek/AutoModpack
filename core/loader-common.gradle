@@ -36,7 +36,7 @@ allprojects {
         implementation("net.fabricmc:fabric-loader:0.14.22") {
             transitive = false
         }
-        implementation("org.quiltmc:quilt-loader:0.20.0") {
+        implementation("org.quiltmc:quilt-loader:0.20.1") {
             transitive = false
         }
         implementation("net.minecraftforge:fmlcore:1.20.1-47.1.3")
