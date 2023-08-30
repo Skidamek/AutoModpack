@@ -51,7 +51,7 @@ public class Jsons {
         public boolean reverseProxy = false;
         public String externalModpackHostLink = "";
         public boolean selfUpdater = true;
-        public List<String> acceptedLoaders; // TODO add current loader to this list
+        public List<String> acceptedLoaders;
     }
 
     public static class ModpackContentFields {

@@ -20,13 +20,13 @@
 
 package pl.skidam.automodpack_core;
 
-import pl.skidam.automodpack_common.GlobalVariables;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
 import pl.skidam.automodpack_common.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
+import pl.skidam.automodpack_core.loader.LoaderManager;
 import settingdust.preloadingtricks.SetupModCallback;
 
 import java.io.IOException;
@@ -45,10 +45,8 @@ public class Preload implements SetupModCallback {
         LOGGER.info("Prelaunching AutoModpack...");
 
         // Initialize global variables
-        new GlobalVariables();
-
-        MC_VERSION = new Loader().getModVersion("minecraft");
-        AM_VERSION = new Loader().getModVersion("automodpack");
+        MC_VERSION = new LoaderManager().getModVersion("minecraft");
+        AM_VERSION = new LoaderManager().getModVersion("automodpack");
 
         String workingDirectory = System.getProperty("user.dir");
         if (workingDirectory.contains("com.qcxr.qcxr")) {
@@ -63,6 +61,14 @@ public class Preload implements SetupModCallback {
         long startTime = System.currentTimeMillis();
         clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
         serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
+
+        // add current loader to this list
+        if (serverConfig != null && serverConfig.acceptedLoaders != null) {
+            String loader = new LoaderManager().getPlatformType().toString().toLowerCase();
+            if (!serverConfig.acceptedLoaders.contains(loader)) {
+                serverConfig.acceptedLoaders.add(new LoaderManager().getPlatformType().toString().toLowerCase());
+            }
+        }
 
         if (serverConfig != null && !serverConfig.externalModpackHostLink.isEmpty()) {
             serverConfig.hostIp = serverConfig.externalModpackHostLink;
@@ -80,19 +86,18 @@ public class Preload implements SetupModCallback {
             Files.createDirectories(AMdir);
         }
 
-        if (new Loader().equals("CLIENT")) {
+        if (new LoaderManager().equals("CLIENT")) {
             Path modpacks = Paths.get("./automodpack/modpacks/");
             if (!Files.exists(modpacks)) {
                 Files.createDirectories(modpacks);
             }
         }
 
-
         List<Jsons.ModpackContentFields.ModpackContentItem> serverModpackContentList = null;
 
         if (!quest) {
             String selectedModpack = clientConfig.selectedModpack;
-            if (new Loader().equals("CLIENT") && selectedModpack != null && !selectedModpack.equals("")) {
+            if (new LoaderManager().equals("CLIENT") && selectedModpack != null && !selectedModpack.equals("")) {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
                 Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);

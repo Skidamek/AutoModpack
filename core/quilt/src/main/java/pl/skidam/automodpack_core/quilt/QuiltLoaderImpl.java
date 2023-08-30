@@ -9,7 +9,7 @@ import org.quiltmc.loader.api.LoaderValue;
 import org.quiltmc.loader.api.ModContainer;
 import org.quiltmc.loader.api.QuiltLoader;
 import org.quiltmc.loader.api.minecraft.MinecraftQuiltLoader;
-import pl.skidam.automodpack_core.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderService;
 
 import java.io.BufferedReader;
 import java.io.IOException;

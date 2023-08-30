@@ -22,6 +22,7 @@ package pl.skidam.automodpack_core;
 
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.utils.DownloadManager;
 
@@ -33,19 +34,19 @@ import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class SelfUpdater {
 
-    private Path automodpackJar = new Loader().getModPath("automodpack");
+    private Path automodpackJar = new LoaderManager().getModPath("automodpack");
 
     public SelfUpdater(Jsons.ModpackContentFields serverModpackContent) {
 
-        if (new Loader().isDevelopmentEnvironment()) {
+        if (new LoaderManager().isDevelopmentEnvironment()) {
             return;
         }
 
-        if (new Loader().getEnvironmentType().equals("SERVER")) {
+        if (new LoaderManager().getEnvironmentType().equals("SERVER")) {
             if (!serverConfig.selfUpdater) return;
         }
 
-        if (new Loader().getEnvironmentType().equals("CLIENT")) {
+        if (new LoaderManager().getEnvironmentType().equals("CLIENT")) {
             if (!clientConfig.selfUpdater) return;
         }
 

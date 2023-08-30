@@ -23,75 +23,115 @@ package pl.skidam.automodpack.client;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
+import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.*;
-import pl.skidam.automodpack_core.Loader;
+import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.screen.ScreenService;
 
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Optional;
 
 import static pl.skidam.automodpack_common.GlobalVariables.preload;
 
-public class ScreenTools {
-    public enum ScreenEnum {
-        DOWNLOAD("download"),
-        FETCH("fetch"),
-        CHANGELOG("changelog"),
-        RESTART("restart"),
-        DANGER("danger"),
-        ERROR("error"),
-        TITLE("title"),
-        MENU("menu");
+public class ScreenImpl implements ScreenService {
 
-        public final String screenName;
+    private void callScreen(String screenName, Object... args) {
+        if (ScreenImpl.Check.properlyLoaded()) {
+            try {
+                Method method = Arrays.stream(ScreenImpl.Screens.class.getDeclaredMethods())
+                        .filter(m -> m.getName().equals(screenName))
+                        .findFirst()
+                        .orElseThrow(() -> new NoSuchMethodException("No method found with name " + screenName));
 
-        ScreenEnum(String screenName) {
-            this.screenName = screenName;
-        }
-
-        public void callScreen(Object... args) {
-            if (ScreenTools.Check.properlyLoaded()) {
-                try {
-                    Method method = Arrays.stream(ScreenTools.Screens.class.getDeclaredMethods())
-                            .filter(m -> m.getName().equals(screenName))
-                            .findFirst()
-                            .orElseThrow(() -> new NoSuchMethodException("No method found with name " + screenName));
-
-                    if (method.getParameterCount() != args.length) {
-                        throw new IllegalArgumentException("Incorrect number of arguments for method " + screenName);
-                    }
-
-                    method.invoke(null, args);
-
-                } catch (Exception e) {
-                    e.printStackTrace();
+                if (method.getParameterCount() != args.length) {
+                    throw new IllegalArgumentException("Incorrect number of arguments for method " + screenName);
                 }
+
+                Util.getMainWorkerExecutor().execute(() -> {
+                    try {
+                        method.invoke(null, args);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         }
-
     }
 
-    public static String getScreenString() {
+    @Override
+    public void download(Object... args) {
+        callScreen("download", args);
+    }
+
+    @Override
+    public void fetch(Object... args) {
+        callScreen("fetch", args);
+    }
+
+    @Override
+    public void changelog(Object... args) {
+        callScreen("changelog", args);
+    }
+
+    @Override
+    public void restart(Object... args) {
+        callScreen("restart", args);
+    }
+
+    @Override
+    public void danger(Object... args) {
+        callScreen("danger", args);
+    }
+
+    @Override
+    public void error(Object... args) {
+        callScreen("error", args);
+    }
+
+    @Override
+    public void menu(Object... args) {
+        callScreen("menu", args);
+    }
+
+    @Override
+    public void title(Object... args) {
+        callScreen("title", args);
+    }
+
+    @Override
+    public Optional<String> getScreenString() {
         if (Check.properlyLoaded()) {
             Screen screen = Screens.getScreen();
-            return screen.getTitle().getString().toLowerCase();
+            return screen.getTitle().getString().toLowerCase().describeConstable();
         }
-        return "null";
+        return "null".describeConstable();
     }
 
-    public static Screen getScreen() {
+    @Override
+    public Optional<Object> getScreen() {
         if (Check.properlyLoaded()) {
-            return Screens.getScreen();
+            return Optional.ofNullable(Screens.getScreen());
         }
-        return null;
+        return Optional.empty();
     }
 
+    @Override
+    public Optional<Boolean> properlyLoaded() {
+        return Optional.of(Check.properlyLoaded());
+    }
+
+    // These have to be in a separate class, or game gonna crash
 
     private static class Check {
         public static boolean properlyLoaded() {
             try {
                 if (preload) return false;
-                if (new Loader().getEnvironmentType().equals("SERVER")) return false;
+                if (new LoaderManager().getEnvironmentType().equals("SERVER")) return false;
                 if (MinecraftClient.getInstance() == null) return false;
                 if (MinecraftClient.getInstance().currentScreen == null) return false;
                 return true;
@@ -101,14 +141,17 @@ public class ScreenTools {
         }
     }
 
-    private static class Screens { // It has to be in a separate class, or it will crash
-        static Screen getScreen() {
+    private static class Screens {
+        private static Screen getScreen() {
             return MinecraftClient.getInstance().currentScreen;
         }
 
         public static void setScreen(Screen screen) {
             MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen));
         }
+
+        // Even tho these methods are 'unused' there are not
+        // Look at callScreen method
 
         public static void download() {
             Screens.setScreen(new DownloadScreen());

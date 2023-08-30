@@ -20,6 +20,8 @@
 
 package pl.skidam.automodpack_core;
 
+import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.ui.Windows;
 
 import java.awt.*;
@@ -36,22 +38,27 @@ public class ReLauncher {
         }
 
         public Restart(Path modpackDir, String guiMessage, boolean fullDownload) {
-            String environment = new Loader().getEnvironmentType();
+            String environment = new LoaderManager().getEnvironmentType();
             boolean isClient = environment.equals("CLIENT");
             boolean isHeadless = GraphicsEnvironment.isHeadless();
 
             if (isClient) {
+                if (!preload && new ScreenManager().getScreenString().isPresent() && new ScreenManager().getScreenString().get().contains("restartscreen")) {
+                    new ScreenManager().restart(modpackDir, fullDownload);
+                    return;
+                }
+
                 if (preload && !isHeadless) {
                     new Windows().restartWindow(guiMessage);
                     return;
                 }
 
                 LOGGER.info("Restart your client!");
-                System.exit(0);
             } else {
                 LOGGER.info("Please restart the server to apply updates!");
-                System.exit(0);
             }
+
+            System.exit(0);
         }
     }
 }

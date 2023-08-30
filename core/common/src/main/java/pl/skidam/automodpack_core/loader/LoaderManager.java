@@ -1,10 +1,10 @@
-package pl.skidam.automodpack_core;
+package pl.skidam.automodpack_core.loader;
 
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.ServiceLoader;
 
-public class Loader implements LoaderService {
+public class LoaderManager implements LoaderService {
 
     private LoaderService getServiceLoader() {
         ServiceLoader<LoaderService> loaderServiceLoader = ServiceLoader.load(LoaderService.class);

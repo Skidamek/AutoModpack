@@ -18,7 +18,7 @@
  * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package pl.skidam.automodpack_core;
+package pl.skidam.automodpack_core.loader;
 
 import java.nio.file.Path;
 import java.util.Collection;

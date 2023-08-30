@@ -21,23 +21,35 @@
 package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.audio.AudioManager;
-import pl.skidam.automodpack_core.Loader;
+import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_server.modpack.Modpack;
 import pl.skidam.automodpack.networking.ModPackets;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 import pl.skidam.automodpack.modpack.Commands;
 
+//#if FORGE
+//$$ import net.minecraftforge.common.MinecraftForge;
+//$$ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+//$$ import net.minecraftforge.fml.common.Mod;
+//$$
+//$$ @Mod(MOD_ID)
+//#endif
 public class AutoModpack {
 
+//#if FORGE
+//$$     public AutoModpack() {
+//$$        MinecraftForge.EVENT_BUS.register(this);
+//#elseif FABRICLIKE
     public static void onInitialize() {
+//#endif
 
         preload = false;
 
         long start = System.currentTimeMillis();
         LOGGER.info("Launching AutoModpack...");
 
-        if (new Loader().getEnvironmentType().equals("SERVER")) {
+        if (new LoaderManager().getEnvironmentType().equals("SERVER")) {
             if (serverConfig.generateModpackOnStart) {
                 LOGGER.info("Generating modpack...");
                 long genStart = System.currentTimeMillis();
@@ -50,7 +62,11 @@ public class AutoModpack {
             ModPackets.registerS2CPackets();
         } else {
             ModPackets.registerC2SPackets();
+//#if FORGE
+//$$        new AudioManager(FMLJavaModLoadingContext.get().getModEventBus());
+//#else
             new AudioManager();
+//#endif
         }
 
         Commands.register();

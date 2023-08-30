@@ -53,6 +53,14 @@ allprojects {
         from project(':common').sourceSets.main.output
         // Exclude other dependencies that might have been bundled
         configurations = []
+
+        if (project.name.contains('forge')) {
+            manifest {
+                attributes(
+                        "FMLModType": "LIBRARY" // needed to load early
+                )
+            }
+        }
     }
 
     sourceCompatibility = JavaVersion.VERSION_17

@@ -31,8 +31,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack.client.ScreenTools;
-import pl.skidam.automodpack_core.Loader;
+import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 
 @Mixin(TitleScreen.class)
 public class TestButton extends Screen {
@@ -45,7 +45,7 @@ public class TestButton extends Screen {
     private void init(CallbackInfo ci) {
 
         // check if we are in dev environment
-        if (!new Loader().isDevelopmentEnvironment()) {
+        if (!new LoaderManager().isDevelopmentEnvironment()) {
             return;
         }
 
@@ -67,7 +67,7 @@ public class TestButton extends Screen {
                         256,
                         button -> {
                             AudioManager.playMusic();
-                            ScreenTools.ScreenEnum.MENU.callScreen();
+                            new ScreenManager().menu();
                         },
                         VersionedText.common.translatable("gui.automodpack.menu")
                 )

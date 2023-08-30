@@ -23,7 +23,7 @@ package pl.skidam.automodpack_core.platforms;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import pl.skidam.automodpack_core.Loader;
+import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_common.utils.Json;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
@@ -54,7 +54,7 @@ public class ModrinthAPI {
 
     public static ModrinthAPI getModInfoFromID(String modrinthID) {
 
-        String modLoader = new Loader().getPlatformType().toString().toLowerCase();
+        String modLoader = new LoaderManager().getPlatformType().toString().toLowerCase();
 
         String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + MC_VERSION + "\"]";
 
@@ -92,7 +92,7 @@ public class ModrinthAPI {
 
     public static ModrinthAPI getModSpecificVersion(String modrinthID, String modVersion, String mcVersion) {
 
-        String modLoader = new Loader().getPlatformType().toString().toLowerCase();
+        String modLoader = new LoaderManager().getPlatformType().toString().toLowerCase();
 
         String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + mcVersion + "\"]";
 

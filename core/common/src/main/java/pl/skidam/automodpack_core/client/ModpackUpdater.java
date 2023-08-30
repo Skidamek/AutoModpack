@@ -25,8 +25,10 @@ import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
 import pl.skidam.automodpack_common.utils.MmcPackMagic;
 import pl.skidam.automodpack_common.utils.Url;
+import pl.skidam.automodpack_common.utils.Wait;
 import pl.skidam.automodpack_core.ReLauncher;
-import pl.skidam.automodpack_core.Loader;
+import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.*;
 
 import java.io.File;
@@ -42,6 +44,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
@@ -104,9 +107,22 @@ public class ModpackUpdater {
                     CheckAndLoadModpack(modpackDir, modpackContentFile, workingDirectory);
                     return;
                 }
+            } else if (!preload && new ScreenManager().getScreen().isPresent()) {
+
+                fullDownload = true;
+
+                CompletableFuture.runAsync(() -> {
+                    while (new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().contains("dangerscreen")) {
+                        new ScreenManager().danger(new ScreenManager().getScreen().get(), link, modpackDir, modpackContentFile);
+                        new Wait(50);
+                    }
+                });
+                return;
             }
 
             LOGGER.warn("Modpack update found");
+
+            new ScreenManager().download();
 
             ModpackUpdaterMain(link, modpackDir, modpackContentFile);
 
@@ -222,6 +238,8 @@ public class ModpackUpdater {
 
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
+            new ScreenManager().download();
+
             if (wholeQueue > 0) {
 
                 downloadManager = new DownloadManager(totalBytesToDownload);
@@ -278,7 +296,7 @@ public class ModpackUpdater {
             finishModpackUpdate(modpackDir, modpackContentFile);
 
             // change loader and minecraft version in launchers like prism, multimc.
-            if (serverModpackContent.loader.equals(new Loader().getPlatformType().toString().toLowerCase())) { // server may use different loader than client
+            if (serverModpackContent.loader.equals(new LoaderManager().getPlatformType().toString().toLowerCase())) { // server may use different loader than client
                 MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // update loader version
             }
             MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // update minecraft version
@@ -289,6 +307,8 @@ public class ModpackUpdater {
                     LOGGER.error("Failed to download: " + entry.getKey() + " from " + entry.getValue());
                     failedFiles.append(entry.getKey());
                 }
+
+                new ScreenManager().error("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");;
 
                 LOGGER.warn("Update *completed* with ERRORS! Took: " + (System.currentTimeMillis() - start) + " ms");
 
@@ -308,6 +328,7 @@ public class ModpackUpdater {
         } catch (SocketTimeoutException | ConnectException e) {
             LOGGER.error("Modpack host of " + link + " is not responding", e);
         } catch (Exception e) {
+            new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
             e.printStackTrace();
         }
     }
@@ -409,6 +430,8 @@ public class ModpackUpdater {
             // todo delete files that were downloaded
             // we will use the same method as to modpacks manager
 
+            new ScreenManager().title();
+
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -460,7 +483,7 @@ public class ModpackUpdater {
                 if (!Files.isRegularFile(defaultMod) || !defaultMod.getFileName().toString().endsWith(".jar")) {
                     continue;
                 }
-                defaultMods.put(defaultMod.getFileName().toString(), new Loader().getModIdFromLoadedJar(defaultMod, true));
+                defaultMods.put(defaultMod.getFileName().toString(), new LoaderManager().getModIdFromLoadedJar(defaultMod, true));
             }
         } catch (IOException e) {
             return null;

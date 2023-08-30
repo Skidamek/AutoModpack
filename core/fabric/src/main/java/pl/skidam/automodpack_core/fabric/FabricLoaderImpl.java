@@ -6,7 +6,7 @@ import com.google.gson.JsonSyntaxException;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
-import pl.skidam.automodpack_core.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderService;
 
 import java.io.BufferedReader;
 import java.io.IOException;

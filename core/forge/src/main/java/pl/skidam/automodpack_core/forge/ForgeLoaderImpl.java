@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.forge;
 
-import pl.skidam.automodpack_core.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderService;
 
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.loading.FMLLoader;
