@@ -24,6 +24,7 @@ import pl.skidam.automodpack_common.GlobalVariables;
 import pl.skidam.automodpack_common.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -49,10 +50,9 @@ public class FetchManager {
     public FetchManager() {
         if (!(anyAPIUp = APIsUp())) {
             LOGGER.warn("APIs are down, skipping fetches");
+        } else if (new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().contains("fetchscreen")) {
+            new ScreenManager().fetch();
         }
-//        else if (!ScreenTools.getScreenString().contains("fetchscreen")) { // TODO implement this in main
-//            ScreenTools.ScreenEnum.FETCH.callScreen();
-//        }
     }
 
     public void fetch(String serverUrl, String sha1, String murmur, String fileSize, String fileType) {

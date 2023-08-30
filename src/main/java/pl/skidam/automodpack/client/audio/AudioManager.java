@@ -31,9 +31,16 @@ import net.minecraft.util.Identifier;
 
 import net.minecraft.util.registry.Registry;
 
+//#if FORGE
+//$$import net.minecraftforge.eventbus.api.IEventBus;
+//$$import net.minecraftforge.registries.DeferredRegister;
+//$$import net.minecraftforge.registries.ForgeRegistries;
+//$$import net.minecraftforge.registries.RegistryObject;
+//#endif
+
 import java.util.function.Supplier;
 
-import static pl.skidam.automodpack_common.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.MOD_ID;
 
 public class AudioManager {
     private static CustomSoundInstance SOUND_INSTANCE;
@@ -42,13 +49,23 @@ public class AudioManager {
 
     private static final Identifier WAITING_MUSIC_ID = new Identifier(MOD_ID, "waiting_music");
 
-//#if MC >= 11903
+    //#if MC >= 11903
 //$$    public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.of(WAITING_MUSIC_ID);
 //#else
     private static final SoundEvent WAITING_MUSIC_EVENT = new SoundEvent(WAITING_MUSIC_ID);
 //#endif
 
     private static Supplier<SoundEvent> WAITING_MUSIC;
+
+//#if FORGE
+//$$    public AudioManager(IEventBus eventBus) {
+//$$
+//$$        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, MOD_ID);
+//$$        SOUND_REGISTER.register(eventBus);
+//$$
+//$$        WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
+//$$    }
+//#else
 
     public AudioManager() {
         SoundEvent waiting_music = register();
@@ -65,6 +82,7 @@ public class AudioManager {
 
         return Registry.register(register, id, WAITING_MUSIC_EVENT);
     }
+//#endif
 
     public static void playMusic() {
         if (playing) return;
