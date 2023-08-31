@@ -26,7 +26,8 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
-import net.minecraft.util.Util;
+import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
+import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.LoginPacketContent;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
@@ -67,14 +68,14 @@ public class LinkC2SPacket {
 
         String isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
+        if ("true".equals(isUpdate)) {
+            // Disconnect immediately
+            ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
+            new ModpackUpdater(serverModpackContent, loginPacketContent.link, modpackDir);
+        }
+
         PacketByteBuf response = PacketByteBufs.create();
         response.writeString(Objects.requireNonNullElse(isUpdate, "null"), 32767);
-
-        Util.getMainWorkerExecutor().execute(() -> {
-            if ("true".equals(isUpdate)) {
-                new ModpackUpdater(serverModpackContent, loginPacketContent.link, modpackDir);
-            }
-        });
 
         return CompletableFuture.completedFuture(response);
     }

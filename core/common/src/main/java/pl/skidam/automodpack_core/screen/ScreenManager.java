@@ -19,56 +19,56 @@ public class ScreenManager implements ScreenService {
     public void download(Object... args) {
         Optional<ScreenService> service = getServiceLoader();
         if (service.isEmpty()) return;
-        service.get().download();
+        service.get().download(args);
     }
 
     @Override
     public void fetch(Object... args) {
         Optional<ScreenService> service = getServiceLoader();
         if (service.isEmpty()) return;
-        service.get().fetch();
+        service.get().fetch(args);
     }
 
     @Override
     public void changelog(Object... args) {
         Optional<ScreenService> service = getServiceLoader();
         if (service.isEmpty()) return;
-        service.get().changelog();
+        service.get().changelog(args);
     }
 
     @Override
     public void restart(Object... args) {
         Optional<ScreenService> service = getServiceLoader();
         if (service.isEmpty()) return;
-        service.get().restart();
+        service.get().restart(args);
     }
 
     @Override
     public void danger(Object... args) {
         Optional<ScreenService> service = getServiceLoader();
         if (service.isEmpty()) return;
-        service.get().danger();
+        service.get().danger(args);
     }
 
     @Override
     public void error(Object... args) {
         Optional<ScreenService> service = getServiceLoader();
         if (service.isEmpty()) return;
-        service.get().error();
+        service.get().error(args);
     }
 
     @Override
     public void menu(Object... args) {
         Optional<ScreenService> service = getServiceLoader();
         if (service.isEmpty()) return;
-        service.get().menu();
+        service.get().menu(args);
     }
 
     @Override
     public void title(Object... args) {
         Optional<ScreenService> service = getServiceLoader();
         if (service.isEmpty()) return;
-        service.get().title();
+        service.get().title(args);
     }
 
     @Override

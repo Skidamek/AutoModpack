@@ -25,7 +25,6 @@ import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
 import pl.skidam.automodpack_common.utils.MmcPackMagic;
 import pl.skidam.automodpack_common.utils.Url;
-import pl.skidam.automodpack_common.utils.Wait;
 import pl.skidam.automodpack_core.ReLauncher;
 import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.screen.ScreenManager;
@@ -44,7 +43,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
@@ -108,15 +106,8 @@ public class ModpackUpdater {
                     return;
                 }
             } else if (!preload && new ScreenManager().getScreen().isPresent()) {
-
                 fullDownload = true;
-
-                CompletableFuture.runAsync(() -> {
-                    while (new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().contains("dangerscreen")) {
-                        new ScreenManager().danger(new ScreenManager().getScreen().get(), link, modpackDir, modpackContentFile);
-                        new Wait(50);
-                    }
-                });
+                new ScreenManager().danger(new ScreenManager().getScreen().get(), link, modpackDir, modpackContentFile);
                 return;
             }
 

@@ -9,6 +9,8 @@
     "core.ServerLoginNetworkHandlerMixin"
   ],
   "client": [
+    "core.ClientConnectionAccessor",
+    "core.ClientLoginNetworkHandlerAccessor",
     "core.MusicTrackerMixin",
     "dev.TestButton"
   ],

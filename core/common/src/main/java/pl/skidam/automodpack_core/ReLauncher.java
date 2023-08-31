@@ -43,7 +43,7 @@ public class ReLauncher {
             boolean isHeadless = GraphicsEnvironment.isHeadless();
 
             if (isClient) {
-                if (!preload && new ScreenManager().getScreenString().isPresent() && new ScreenManager().getScreenString().get().contains("restartscreen")) {
+                if (!preload && new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().contains("restartscreen")) {
                     new ScreenManager().restart(modpackDir, fullDownload);
                     return;
                 }

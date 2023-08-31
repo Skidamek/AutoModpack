@@ -39,9 +39,7 @@ public class LoginPacketContent implements Serializable {
         this.link = link;
     }
 
-    public LoginPacketContent() {
-
-    }
+    public LoginPacketContent() { }
 
     public byte[] toByteArray() {
         try {
@@ -63,7 +61,9 @@ public class LoginPacketContent implements Serializable {
             ObjectInputStream ois = new ObjectInputStream(bis);
             return (LoginPacketContent) ois.readObject();
         } catch (IOException | ClassNotFoundException e) {
-            throw new RuntimeException("Failed to deserialize object", e);
+            e.printStackTrace();
         }
+
+        return null;
     }
 }

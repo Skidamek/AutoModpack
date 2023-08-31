@@ -49,7 +49,7 @@ public class AudioManager {
 
     private static final Identifier WAITING_MUSIC_ID = new Identifier(MOD_ID, "waiting_music");
 
-    //#if MC >= 11903
+//#if MC >= 11903
 //$$    public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.of(WAITING_MUSIC_ID);
 //#else
     private static final SoundEvent WAITING_MUSIC_EVENT = new SoundEvent(WAITING_MUSIC_ID);

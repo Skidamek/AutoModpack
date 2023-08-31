@@ -21,12 +21,11 @@
 package pl.skidam.automodpack;
 
 import pl.skidam.automodpack.client.audio.AudioManager;
-import pl.skidam.automodpack_core.loader.LoaderManager;
-import pl.skidam.automodpack_server.modpack.Modpack;
+import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
+import pl.skidam.automodpack_core.loader.LoaderManager;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
-import pl.skidam.automodpack.modpack.Commands;
 
 //#if FORGE
 //$$ import net.minecraftforge.common.MinecraftForge;

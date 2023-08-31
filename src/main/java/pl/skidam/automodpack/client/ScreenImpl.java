@@ -49,6 +49,7 @@ public class ScreenImpl implements ScreenService {
                     throw new IllegalArgumentException("Incorrect number of arguments for method " + screenName);
                 }
 
+
                 Util.getMainWorkerExecutor().execute(() -> {
                     try {
                         method.invoke(null, args);
@@ -107,9 +108,9 @@ public class ScreenImpl implements ScreenService {
     public Optional<String> getScreenString() {
         if (Check.properlyLoaded()) {
             Screen screen = Screens.getScreen();
-            return screen.getTitle().getString().toLowerCase().describeConstable();
+            return Optional.of(screen.getTitle().getString().toLowerCase());
         }
-        return "null".describeConstable();
+        return Optional.of("null");
     }
 
     @Override

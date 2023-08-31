@@ -39,14 +39,16 @@ configurations {
 }
 
 dependencies {
-	// include them all :DD
-	include('maven.modrinth:preloading-tricks:0.0.14')
-	include(implementation project(path: ":core-${mod_brand}", configuration: "shadow"))
-	include(implementation project(path: ':server-host'))
-
 	// just for IDE not complaining (its already included in the shadow jar of core-${mod_brand})
+	// + needed for runtime in dev env
 	implementation project(path: ':common')
 	implementation project(path: ':core-common')
+	implementation project(path: ":core-${mod_brand}")
+
+	// include to jars
+	include(runtimeOnly 'maven.modrinth:preloading-tricks:0.0.14')
+	include(implementation project(path: ":core-${mod_brand}", configuration: "shadow"))
+	include(implementation project(path: ':server-host'))
 
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
@@ -178,6 +180,14 @@ processResources {
 	if (mod_brand == 'forge') {
 		// forge requires the mod icon file to be at the resource root
 		filesMatching('assets/automodpack/icon.png') { f -> f.path = 'icon.png' }
+	} else {
+		exclude('automodpack-forge.mixins.json')
+	}
+
+	// add 'META-INF/services/**' as resource
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from ('../../src/main/resources') {
+		include 'META-INF/services/**'
 	}
 }
 
@@ -204,6 +214,12 @@ java {
 jar {
 	from(rootProject.file('LICENSE')) {
 		rename { "${it}_${project.archives_base_name}" }
+	}
+
+	// add 'META-INF/services/**' as resource
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from ('../../src/main/resources') {
+		include 'META-INF/services/**'
 	}
 }
 

@@ -45,7 +45,6 @@ public class FabricLoaderImpl implements LoaderService {
     public String getLoaderVersion() {
         Optional<ModContainer> modContainer = FabricLoader.getInstance().getModContainer("fabricloader");
         return modContainer.map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse(null);
-
     }
 
     @Override

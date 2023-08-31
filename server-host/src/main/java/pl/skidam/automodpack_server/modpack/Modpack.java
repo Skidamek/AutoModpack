@@ -98,7 +98,7 @@ public class Modpack {
                 LOGGER.info("Syncing {}...", modpackDir.getFileName());
                 addAllContent(modpackDir, list);
 
-                if (list.size() == 0) {
+                if (list.isEmpty()) {
                     LOGGER.warn("Modpack is empty! Nothing to generate!");
                     return false;
                 }

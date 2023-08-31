@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
@@ -63,10 +64,12 @@ public class Preload implements SetupModCallback {
         serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
 
         // add current loader to this list
-        if (serverConfig != null && serverConfig.acceptedLoaders != null) {
+        if (serverConfig != null) {
             String loader = new LoaderManager().getPlatformType().toString().toLowerCase();
-            if (!serverConfig.acceptedLoaders.contains(loader)) {
-                serverConfig.acceptedLoaders.add(new LoaderManager().getPlatformType().toString().toLowerCase());
+            if (serverConfig.acceptedLoaders == null) {
+                serverConfig.acceptedLoaders = Arrays.asList(loader);
+            } else if (!serverConfig.acceptedLoaders.contains(loader)) {
+                serverConfig.acceptedLoaders.add(loader);
             }
         }
 
