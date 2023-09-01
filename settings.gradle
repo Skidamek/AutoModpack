@@ -58,5 +58,5 @@ for (String version : settings.versions) {
 
     def project = project(":$version")
     project.projectDir = file("versions/$version")
-    project.buildFileName = "../../common.gradle"
+    project.buildFileName = "../../main.gradle"
 }

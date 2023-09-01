@@ -5,6 +5,7 @@ apply plugin: 'io.github.juuxel.loom-vineflower'
 apply plugin: 'com.replaymod.preprocess'
 apply plugin: 'me.fallenbreath.yamlang'
 apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'java'
 
 def mod_brand = (loom.platform.get() as String).toLowerCase()
 assert mod_brand in ['fabric', 'quilt', 'forge']
@@ -43,7 +44,6 @@ dependencies {
 	// + needed for runtime in dev env
 	implementation project(path: ':common')
 	implementation project(path: ':core-common')
-	implementation project(path: ":core-${mod_brand}")
 
 	// include to jars
 	include(runtimeOnly 'maven.modrinth:preloading-tricks:0.0.14')
@@ -106,23 +106,6 @@ dependencies {
 	} else {
 		throw new RuntimeException("Unknown mod brand: ${mod_brand}")
 	}
-}
-
-loom {
-	runConfigs.all {
-		// to make sure it generates all "Minecraft Client (:subproject_name)" applications
-		ideConfigGenerated = true
-		runDir '../../run'
-		vmArgs '-Dmixin.debug.export=true'
-	}
-
-	if (mod_brand == 'forge') {
-		forge {
-			mixinConfigs = ["automodpack-main.mixins.json", "automodpack-forge.mixins.json"]
-		}
-	}
-
-	accessWidenerPath = file("../../src/main/resources/automodpack.accesswidener")
 }
 
 remapJar {
@@ -189,6 +172,10 @@ processResources {
 	from ('../../src/main/resources') {
 		include 'META-INF/services/**'
 	}
+
+//	from project(':core-common') {
+//		include sourceSets.main.resources
+//	}
 }
 
 // https://github.com/Fallen-Breath/yamlang
@@ -273,4 +260,30 @@ publishing {
 		// uncomment to publish to the local maven
 		// mavenLocal()
 	}
+}
+
+loom {
+	runConfigs.all {
+		// to make sure it generates all "Minecraft Client (:subproject_name)" applications
+		ideConfigGenerated = true
+		runDir '../../run'
+		vmArgs '-Dmixin.debug.export=true'
+	}
+
+	if (mod_brand == 'forge') {
+		forge {
+			mixinConfigs = ["automodpack-main.mixins.json", "automodpack-forge.mixins.json"]
+		}
+	}
+
+	mods {
+		automodpack {
+			sourceSet "main", project(":common")
+			sourceSet project(":core-common").sourceSets.main
+			sourceSet project(":core-${mod_brand}").sourceSets.main
+			sourceSet project(":server-host").sourceSets.main
+		}
+	}
+
+	accessWidenerPath = file("../../src/main/resources/automodpack.accesswidener")
 }
