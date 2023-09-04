@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.fabric;
+package pl.skidam.automodpack_core_fabric.loader;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -22,9 +22,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import static pl.skidam.automodpack_common.GlobalVariables.*;
+import static pl.skidam.automodpack_common.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_common.GlobalVariables.modsPath;
 
-public class FabricLoaderImpl implements LoaderService {
+public class LoaderManager implements LoaderService {
 
     @Override
     public ModPlatform getPlatformType() {

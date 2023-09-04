@@ -1,0 +1,40 @@
+plugins {
+    id 'java'
+    id "com.github.johnrengelman.shadow" version "7.1.2"
+}
+
+archivesBaseName = rootProject.archives_base_name + "-" + project.name
+version = rootProject.mod_version
+group = rootProject.maven_group
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(path: ':common')
+
+    implementation "org.apache.logging.log4j:log4j-core:2.20.0"
+    implementation "com.google.code.gson:gson:2.10.1"
+}
+
+shadowJar {
+    // Only include the output classes from modules
+    from project(':common').sourceSets.main.output
+    // Exclude other dependencies that might have been bundled
+    configurations = []
+}
+
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
+}
+
+java {
+    withSourcesJar()
+}
+
+// there we want fat and small jar, one to include in mod (small) and one (fat) for selfhosting
+tasks.build.dependsOn tasks.shadowJar

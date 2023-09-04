@@ -45,8 +45,8 @@ import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class LinkC2SPacket {
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf, Consumer<GenericFutureListener<? extends Future<? super Void>>> genericFutureListenerConsumer) {
-        byte[] byteArray = buf.readByteArray();
-        LoginPacketContent loginPacketContent = new LoginPacketContent().toObject(byteArray);
+        String packetContentJson = buf.readString(32767);
+        LoginPacketContent loginPacketContent = LoginPacketContent.fromJson(packetContentJson);
 
         LOGGER.info("Received link packet from server! " + loginPacketContent.link);
         ClientLink = loginPacketContent.link;

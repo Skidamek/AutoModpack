@@ -20,10 +20,12 @@
 
 package pl.skidam.automodpack;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
@@ -44,6 +46,7 @@ public class AutoModpack {
 //#endif
 
         preload = false;
+        ScreenManager.screenImpl = new ScreenImpl();
 
         long start = System.currentTimeMillis();
         LOGGER.info("Launching AutoModpack...");

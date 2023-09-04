@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.quilt;
+package pl.skidam.automodpack_core_quilt.loader;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -28,7 +28,7 @@ import java.util.zip.ZipFile;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
-public class QuiltLoaderImpl implements LoaderService {
+public class LoaderManager implements LoaderService {
 
     @Override
     public ModPlatform getPlatformType() {

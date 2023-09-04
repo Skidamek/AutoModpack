@@ -136,8 +136,8 @@ public class LoginS2CPacket {
                 linkToSend);
 
         PacketByteBuf outBuf = PacketByteBufs.create();
-        byte[] byteArrayOfPacket = loginPacketContent.toByteArray();
-        outBuf.writeByteArray(byteArrayOfPacket);
+        String packetContentJson = loginPacketContent.toJson();
+        outBuf.writeString(packetContentJson, 32767);
 
         packetSender.sendPacket(LINK, outBuf);
     }

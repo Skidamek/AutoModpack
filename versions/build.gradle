@@ -43,7 +43,6 @@ dependencies {
 	// + needed for runtime in dev env
 	implementation project(path: ':common')
 	implementation project(path: ':core-common')
-	implementation project(path: ":core-${mod_brand}")
 
 	// include to jars
 	include(runtimeOnly 'maven.modrinth:preloading-tricks:0.0.14')
@@ -85,8 +84,8 @@ dependencies {
 		Set<String> apiModules = [
 				"fabric-api-base:0.4.30+ef105b4977",
 				"fabric-networking-api-v1:1.3.10+c648597277",
-				"fabric-registry-sync-v0:2.3.2+570fb48177",
-				"fabric-resource-loader-v0:0.11.9+5d6761b877",
+				"fabric-registry-sync-v0:2.3.2+570fb48177", // is it needed?
+//				"fabric-resource-loader-v0:0.11.9+5d6761b877",
 				"fabric-command-api-v2:2.2.12+561530ec77"
 		]
 
