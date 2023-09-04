@@ -20,9 +20,9 @@
 
 package pl.skidam.automodpack.networking;
 
-import java.io.*;
+import com.google.gson.Gson;
 
-public class LoginPacketContent implements Serializable {
+public class LoginPacketContent {
     public String automodpackVersion;
     public String mcVersion;
     public String modpackName;
@@ -39,31 +39,13 @@ public class LoginPacketContent implements Serializable {
         this.link = link;
     }
 
-    public LoginPacketContent() { }
-
-    public byte[] toByteArray() {
-        try {
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            ObjectOutputStream oos = new ObjectOutputStream(bos);
-            oos.writeObject(this);
-            oos.flush();
-            return bos.toByteArray();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        return null;
+    public String toJson() {
+        Gson gson = new Gson();
+        return gson.toJson(this);
     }
 
-    public LoginPacketContent toObject(byte[] bytes) {
-        try {
-            ByteArrayInputStream bis = new ByteArrayInputStream(bytes);
-            ObjectInputStream ois = new ObjectInputStream(bis);
-            return (LoginPacketContent) ois.readObject();
-        } catch (IOException | ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-
-        return null;
+    public static LoginPacketContent fromJson(String json) {
+        Gson gson = new Gson();
+        return gson.fromJson(json, LoginPacketContent.class);
     }
 }

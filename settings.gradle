@@ -24,14 +24,7 @@ pluginManagement {
 }
 
 include(":common")
-def commonProject = project(":common")
-commonProject.projectDir = file("common")
-commonProject.buildFileName = "common.gradle"
-
 include(":server-host")
-def serverHostProject = project(":server-host")
-serverHostProject.projectDir = file("server-host")
-serverHostProject.buildFileName = "server-host.gradle"
 
 def preload_modules = [
         "common",
@@ -58,5 +51,5 @@ for (String version : settings.versions) {
 
     def project = project(":$version")
     project.projectDir = file("versions/$version")
-    project.buildFileName = "../../main.gradle"
+    project.buildFileName = "../build.gradle"
 }
