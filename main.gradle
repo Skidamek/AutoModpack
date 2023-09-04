@@ -1,0 +1,289 @@
+apply plugin: 'maven-publish'
+apply plugin: 'com.github.hierynomus.license'
+apply plugin: 'dev.architectury.loom'
+apply plugin: 'io.github.juuxel.loom-vineflower'
+apply plugin: 'com.replaymod.preprocess'
+apply plugin: 'me.fallenbreath.yamlang'
+apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'java'
+
+def mod_brand = (loom.platform.get() as String).toLowerCase()
+assert mod_brand in ['fabric', 'quilt', 'forge']
+
+int mcVersion = 1
+preprocess {
+	mcVersion = vars.get()["MC"] as int
+	tabIndentation = true
+
+	vars.put("MC", mcVersion)
+	vars.put("FABRIC", mod_brand == 'fabric' ? 1 : 0)
+	vars.put("QUILT", mod_brand == 'quilt' ? 1 : 0)
+	vars.put("FORGE", mod_brand == 'forge' ? 1 : 0)
+
+	vars.put("FABRICLIKE", mod_brand == 'fabric' || mod_brand == 'quilt' ? 1 : 0)
+}
+
+repositories {
+	mavenCentral()
+	mavenLocal()
+	maven { url "https://jitpack.io" }
+	maven { url "https://www.cursemaven.com" }
+	maven { url "https://maven.quiltmc.org/repository/release" }
+	maven { url "https://maven.su5ed.dev/releases" }
+	maven { url "https://api.modrinth.com/maven" }
+}
+
+// https://github.com/FabricMC/fabric-loader/issues/783
+configurations {
+	modRuntimeOnly.exclude group: 'net.fabricmc', module: 'fabric-loader'
+	modRuntimeOnly.exclude group: 'org.quiltmc', module: 'quilt-loader'
+}
+
+dependencies {
+	// just for IDE not complaining (its already included in the shadow jar of core-${mod_brand})
+	// + needed for runtime in dev env
+	implementation project(path: ':common')
+	implementation project(path: ':core-common')
+
+	// include to jars
+	include(runtimeOnly 'maven.modrinth:preloading-tricks:0.0.14')
+	include(implementation project(path: ":core-${mod_brand}", configuration: "shadow"))
+	include(implementation project(path: ':server-host'))
+
+	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+
+
+	if (mod_brand == "fabric" || mod_brand == "quilt") {
+
+		// fabric api - https://modrinth.com/mod/fabric-api
+		Set<String> apiModules = [
+				"fabric-api-base",
+				"fabric-networking-api-v1",
+				"fabric-registry-sync-v0",
+				"fabric-resource-loader-v0"
+		]
+		apiModules.forEach {
+			include(modImplementation(fabricApi.module(it, project.fabric_version))) {
+				transitive = false
+			}
+		}
+
+		if (mcVersion < 11902) {
+			include(modImplementation(fabricApi.module("fabric-command-api-v1", project.fabric_version))) {
+				transitive = false
+			}
+		} else {
+			include(modImplementation(fabricApi.module("fabric-command-api-v2", project.fabric_version))) {
+				transitive = false
+			}
+		}
+
+	} else if (mod_brand == "forge") {
+
+		// forgified fabric api - https://modrinth.com/mod/forgified-fabric-api
+		Set<String> apiModules = [
+				"fabric-api-base:0.4.30+ef105b4977",
+				"fabric-networking-api-v1:1.3.10+c648597277",
+				"fabric-registry-sync-v0:2.3.2+570fb48177",
+				"fabric-resource-loader-v0:0.11.9+5d6761b877",
+				"fabric-command-api-v2:2.2.12+561530ec77"
+		]
+
+		apiModules.forEach {
+			include(modImplementation("dev.su5ed.sinytra.fabric-api:" + it)) {
+				transitive = false
+			}
+		}
+	}
+
+	if (mod_brand == 'fabric') {
+		modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+	} else if (mod_brand == 'quilt') {
+		modImplementation "org.quiltmc:quilt-loader:${project.quilt_loader_version}"
+	} else if (mod_brand == 'forge') {
+		forge "net.minecraftforge:forge:${project.minecraft_version}-${project.forge_version}"
+	} else {
+		throw new RuntimeException("Unknown mod brand: ${mod_brand}")
+	}
+}
+
+remapJar {
+	remapperIsolation = true
+}
+
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
+
+String versionSuffix = ''
+// detect github action environment variables
+// https://docs.github.com/en/actions/learn-github-actions/environment-variables#default-environment-variables
+if (System.getenv("BUILD_RELEASE") != "true") {
+	String buildNumber = System.getenv("BUILD_ID")
+	versionSuffix += buildNumber != null ? ('+build.' + buildNumber) : '-SHAPSHOT'
+}
+String fullModVersion = project.mod_version + versionSuffix
+
+version = fullModVersion
+group = project.maven_group
+archivesBaseName = project.archives_base_name + '-mc' + project.minecraft_version + '-' + mod_brand
+
+// See https://youtrack.jetbrains.com/issue/IDEA-296490
+// if IDEA complains about "Cannot resolve resource filtering of MatchingCopyAction" and you want to know why
+processResources {
+	inputs.property "id", project.mod_id
+	inputs.property "name", project.mod_name
+	inputs.property "version", fullModVersion
+	inputs.property "minecraft_dependency", project.minecraft_dependency
+	inputs.property "description", project.mod_description
+
+	[
+			'fabric': ['fabric.mod.json'],
+			'quilt': ['quilt.mod.json'],
+			'forge': ['META-INF/mods.toml', 'pack.mcmeta'],
+	].forEach { brand, files ->
+		files.forEach { name ->
+			if (brand == mod_brand) {
+				filesMatching(name) {
+					def valueMap = [
+							"id": project.mod_id,
+							"name": project.mod_name,
+							"version": fullModVersion,
+							"minecraft_dependency": project.minecraft_dependency,
+							"description": project.mod_description,
+					]
+					expand valueMap
+				}
+			} else {
+				exclude name
+			}
+		}
+	}
+
+	if (mod_brand == 'forge') {
+		// forge requires the mod icon file to be at the resource root
+		filesMatching('assets/automodpack/icon.png') { f -> f.path = 'icon.png' }
+	} else {
+		exclude('automodpack-forge.mixins.json')
+	}
+
+	// add 'META-INF/services/**' as resource
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from ('../../src/main/resources') {
+		include 'META-INF/services/**'
+	}
+
+//	from project(':core-common') {
+//		include sourceSets.main.resources
+//	}
+}
+
+// https://github.com/Fallen-Breath/yamlang
+yamlang {
+	targetSourceSets = [sourceSets.main]
+	inputDir = 'assets/automodpack/lang'
+}
+
+// ensure that the encoding is set to UTF-8, no matter what the system default is
+// this fixes some edge cases with special characters not displaying correctly
+// see http://yodaconditions.net/blog/fix-for-java-file-encoding-problems-with-gradle.html
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = "UTF-8"
+}
+
+java {
+	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
+	// if it is present.
+	// If you remove this line, sources will not be generated.
+	withSourcesJar()
+}
+
+jar {
+	from(rootProject.file('LICENSE')) {
+		rename { "${it}_${project.archives_base_name}" }
+	}
+
+	// add 'META-INF/services/**' as resource
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	from ('../../src/main/resources') {
+		include 'META-INF/services/**'
+	}
+}
+
+// https://github.com/hierynomus/license-gradle-plugin
+license {
+	// use "gradle licenseFormat" to apply license headers
+	header = rootProject.file('HEADER.txt')
+	include '**/*.java'
+	skipExistingHeaders = true
+
+	headerDefinitions {
+		// ref: https://github.com/mathieucarbou/license-maven-plugin/blob/4c42374bb737378f5022a3a36849d5e23ac326ea/license-maven-plugin/src/main/java/com/mycila/maven/plugin/license/header/HeaderType.java#L48
+		// modification: add a newline at the end
+		SLASHSTAR_STYLE_NEWLINE {
+			firstLine = "/*"
+			beforeEachLine = " * "
+			endLine = " */" + System.lineSeparator()
+			afterEachLine = ""
+			skipLinePattern = null
+			firstLineDetectionPattern = "(\\s|\\t)*/\\*.*\$"
+			lastLineDetectionPattern = ".*\\*/(\\s|\\t)*\$"
+			allowBlankLines = false
+			isMultiline = true
+			padLines = false
+		}
+	}
+	mapping {
+		java = 'SLASHSTAR_STYLE_NEWLINE'
+	}
+	ext {
+		name = project.mod_name
+		author = 'Skidam'
+		year = Calendar.getInstance().get(Calendar.YEAR).toString()
+	}
+}
+classes.dependsOn licenseFormatMain
+testClasses.dependsOn licenseFormatTest
+
+// configure the maven publication
+publishing {
+	publications {
+		mavenJava(MavenPublication) {
+			artifactId archivesBaseName
+
+			from components.java
+		}
+	}
+
+	// select the repositories you want to publish to
+	repositories {
+		// uncomment to publish to the local maven
+		// mavenLocal()
+	}
+}
+
+loom {
+	runConfigs.all {
+		// to make sure it generates all "Minecraft Client (:subproject_name)" applications
+		ideConfigGenerated = true
+		runDir '../../run'
+		vmArgs '-Dmixin.debug.export=true'
+	}
+
+	if (mod_brand == 'forge') {
+		forge {
+			mixinConfigs = ["automodpack-main.mixins.json", "automodpack-forge.mixins.json"]
+		}
+	}
+
+	mods {
+		automodpack {
+			sourceSet "main", project(":common")
+			sourceSet project(":core-common").sourceSets.main
+			sourceSet project(":core-${mod_brand}").sourceSets.main
+			sourceSet project(":server-host").sourceSets.main
+		}
+	}
+
+	accessWidenerPath = file("../../src/main/resources/automodpack.accesswidener")
+}
