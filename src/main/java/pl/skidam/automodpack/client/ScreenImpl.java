@@ -25,8 +25,12 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.screen.ScreenService;
+import pl.skidam.automodpack_core.utils.DownloadManager;
+import pl.skidam.automodpack_core.utils.FetchManager;
+import pl.skidam.automodpack_core.utils.UpdateType;
 
 import java.lang.reflect.Method;
 import java.nio.file.Path;
@@ -154,18 +158,18 @@ public class ScreenImpl implements ScreenService {
         // Even tho these methods are 'unused' there are not
         // Look at callScreen method
 
-        public static void download() {
-            Screens.setScreen(new DownloadScreen());
+        public static void download(DownloadManager downloadManager, String header) {
+            Screens.setScreen(new DownloadScreen(downloadManager, header));
         }
-        public static void fetch() {
-            Screens.setScreen(new FetchScreen());
+        public static void fetch(FetchManager fetchManager) {
+            Screens.setScreen(new FetchScreen(fetchManager));
         }
-        public static void changelog(Screen parent, Path modpackDir) {
-            Screens.setScreen(new ChangelogScreen(parent, modpackDir));
+        public static void changelog(Screen parent, Path modpackDir, Changelogs changelog) {
+            Screens.setScreen(new ChangelogScreen(parent, modpackDir, changelog));
         }
 
-        public static void restart(Path modpackDir, boolean fullDownload) {
-            Screens.setScreen(new RestartScreen(modpackDir, fullDownload));
+        public static void restart(Path modpackDir, UpdateType updateType, Changelogs changelogs) {
+            Screens.setScreen(new RestartScreen(modpackDir, updateType, changelogs));
         }
 
         public static void danger(Screen parent, String link, Path modpackDir, Path modpackContentFile) {

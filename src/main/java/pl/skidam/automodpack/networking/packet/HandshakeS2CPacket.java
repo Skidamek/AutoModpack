@@ -32,7 +32,8 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
-import pl.skidam.automodpack.networking.LoginPacketContent;
+import pl.skidam.automodpack.networking.content.LinkPacket;
+import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_server.modpack.HttpServer;
 import pl.skidam.automodpack_server.modpack.Modpack;
@@ -41,7 +42,7 @@ import pl.skidam.automodpack_common.utils.Ip;
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 import static pl.skidam.automodpack.networking.ModPackets.LINK;
 
-public class LoginS2CPacket {
+public class HandshakeS2CPacket {
 
     public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
         ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
@@ -65,29 +66,24 @@ public class LoginS2CPacket {
         LOGGER.info("{} has installed AutoModpack.", playerName);
 
         String clientResponse = buf.readString(32767);
-        boolean isClientVersionHigher = isClientVersionHigher(clientResponse);
-        String correctResponse = AM_VERSION + "-" + new LoaderManager().getPlatformType().toString().toLowerCase();
+        HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
 
-        if (!clientResponse.equals(correctResponse)) {
-
-            boolean isAcceptedLoader = false;
-
-            for (String loader : serverConfig.acceptedLoaders) {
-                if (clientResponse.contains(loader)) {
-                    isAcceptedLoader = true;
-                    break;
-                }
+        boolean isAcceptedLoader = false;
+        for (String loader : serverConfig.acceptedLoaders) {
+            if (clientHandshakePacket.loaders.contains(loader)) {
+                isAcceptedLoader = true;
+                break;
             }
+        }
 
-            if (!clientResponse.startsWith(AM_VERSION) || !isAcceptedLoader) {
-                Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " to play on this server!");
-                if (isClientVersionHigher) {
-                    reason = VersionedText.common.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
-                }
-                connection.send(new LoginDisconnectS2CPacket(reason));
-                connection.disconnect(reason);
-                return;
+        if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
+            Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " to play on this server!");
+            if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
+                reason = VersionedText.common.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
             }
+            connection.send(new LoginDisconnectS2CPacket(reason));
+            connection.disconnect(reason);
+            return;
         }
 
         if (!HttpServer.isRunning() && serverConfig.externalModpackHostLink.equals("")) {
@@ -127,7 +123,7 @@ public class LoginS2CPacket {
 
         LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
 
-        LoginPacketContent loginPacketContent = new LoginPacketContent(
+        LinkPacket linkPacket = new LinkPacket(
                 AM_VERSION,
                 MC_VERSION,
                 serverConfig.modpackName,
@@ -136,16 +132,21 @@ public class LoginS2CPacket {
                 linkToSend);
 
         PacketByteBuf outBuf = PacketByteBufs.create();
-        String packetContentJson = loginPacketContent.toJson();
+
+        String packetContentJson = linkPacket.toJson();
+
         outBuf.writeString(packetContentJson, 32767);
 
         packetSender.sendPacket(LINK, outBuf);
     }
 
 
-    public static boolean isClientVersionHigher(String clientResponse) {
-        String clientVersion = clientResponse.substring(0, clientResponse.indexOf("-"));
-        boolean isClientVersionHigher = false;
+    public static boolean isClientVersionHigher(String clientVersion) {
+
+        String versionPattern = "\\d+\\.\\d+\\.\\d+";
+        if (!clientVersion.matches(versionPattern)) {
+            return false;
+        }
 
         if (!clientVersion.equals(AM_VERSION)) {
             String[] clientVersionComponents = clientVersion.split("\\.");
@@ -153,14 +154,11 @@ public class LoginS2CPacket {
 
             for (int i = 0, n = clientVersionComponents.length; i < n; i++) {
                 if (clientVersionComponents[i].compareTo(serverVersionComponents[i]) > 0) {
-                    isClientVersionHigher = true;
-                    break;
-                } else if (clientVersionComponents[i].compareTo(serverVersionComponents[i]) < 0) {
-                    break;
+                    return true;
                 }
             }
         }
 
-        return isClientVersionHigher;
+        return false;
     }
 }

@@ -45,9 +45,9 @@ public class TestButton extends Screen {
     private void init(CallbackInfo ci) {
 
         // check if we are in dev environment
-//        if (!new LoaderManager().isDevelopmentEnvironment()) {
-//            return;
-//        }
+        if (!new LoaderManager().isDevelopmentEnvironment()) {
+            return;
+        }
 
 //#if MC >= 11700
         this.addDrawableChild(

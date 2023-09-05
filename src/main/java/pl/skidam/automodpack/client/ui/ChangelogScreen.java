@@ -24,7 +24,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.util.Util;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -40,18 +40,20 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ChangelogScreen extends VersionedScreen {
-    private static Map<String, String> changelogs;
     private final Screen parent;
     private final Path modpackDir;
+    private final Changelogs changelogs;
+    private static Map<String, String> formattedChanges;
     private ListEntryWidget listEntryWidget;
     private TextFieldWidget searchField;
     private ButtonWidget backButton;
     private ButtonWidget openMainPageButton;
 
-    public ChangelogScreen(Screen parent, Path modpackDir) {
+    public ChangelogScreen(Screen parent, Path modpackDir, Changelogs changelogs) {
         super(VersionedText.common.literal("ChangelogScreen"));
         this.parent = parent;
         this.modpackDir = modpackDir;
+        this.changelogs = changelogs;
 
         if (AudioManager.isMusicPlaying()) {
             AudioManager.stopMusic();
@@ -62,7 +64,7 @@ public class ChangelogScreen extends VersionedScreen {
     protected void init() {
         super.init();
 
-        changelogs = getChangelogs();
+        formattedChanges = reFormatChanges();
 
         initWidgets();
 
@@ -74,7 +76,7 @@ public class ChangelogScreen extends VersionedScreen {
     }
 
     private void initWidgets() {
-        this.listEntryWidget = new ListEntryWidget(changelogs, this.client, this.width, this.height, 48, this.height - 50, 20);
+        this.listEntryWidget = new ListEntryWidget(formattedChanges, this.client, this.width, this.height, 48, this.height - 50, 20);
 
         this.searchField = new TextFieldWidget(this.textRenderer, this.width / 2 - 100, 20, 200, 20,
                 VersionedText.common.literal("")
@@ -130,14 +132,14 @@ public class ChangelogScreen extends VersionedScreen {
         int modsAdded = 0;
         int modsRemoved = 0;
         if (modpackContent == null) return;
-        for (Map.Entry<String, String> changelog : ModpackUpdater.changesAddedList.entrySet()) {
+        for (Map.Entry<String, String> changelog : changelogs.changesAddedList.entrySet()) {
             String fileType = ModpackContentTools.getFileType(changelog.getKey(), modpackContent);
             if (fileType.equals("mod")) {
                 modsAdded++;
             }
         }
 
-        for (Map.Entry<String, String> changelog : ModpackUpdater.changesDeletedList.entrySet()) {
+        for (Map.Entry<String, String> changelog : changelogs.changesDeletedList.entrySet()) {
             String fileType = ModpackContentTools.getFileType(changelog.getKey(), modpackContent);
             if (fileType.equals("mod")) {
                 modsRemoved++;
@@ -152,16 +154,16 @@ public class ChangelogScreen extends VersionedScreen {
     private void updateChangelogs() {
         // If the search field is empty, reset the changelogs to the original list
         if (this.searchField.getText().isEmpty()) {
-            changelogs = getChangelogs();
+            formattedChanges = reFormatChanges();
         } else {
             // Filter the changelogs based on the search query using a case-insensitive search
             Map<String, String> filteredChangelogs = new HashMap<>();
-            for (Map.Entry<String, String> changelog : getChangelogs().entrySet()) {
+            for (Map.Entry<String, String> changelog : reFormatChanges().entrySet()) {
                 if (changelog.getKey().toLowerCase().contains(this.searchField.getText().toLowerCase())) {
                     filteredChangelogs.put(changelog.getKey(), changelog.getValue());
                 }
             }
-            changelogs = filteredChangelogs;
+            formattedChanges = filteredChangelogs;
         }
 
         // remove method is only available in 1.17+
@@ -171,7 +173,7 @@ public class ChangelogScreen extends VersionedScreen {
         this.remove(this.openMainPageButton);
 //#endif
 
-        this.listEntryWidget = new ListEntryWidget(changelogs, this.client, this.width, this.height, 48, this.height - 50, 20);
+        this.listEntryWidget = new ListEntryWidget(formattedChanges, this.client, this.width, this.height, 48, this.height - 50, 20);
 
         this.addDrawableChild(this.listEntryWidget);
         this.addDrawableChild(this.searchField);
@@ -179,18 +181,18 @@ public class ChangelogScreen extends VersionedScreen {
         this.addDrawableChild(this.openMainPageButton);
     }
 
-    private Map<String, String> getChangelogs() {
-        Map<String, String> changelogs = new HashMap<>();
+    private Map<String, String> reFormatChanges() {
+        Map<String, String> reFormattedChanges = new HashMap<>();
 
-        for (Map.Entry<String, String> changelog : ModpackUpdater.changesAddedList.entrySet()) {
-            changelogs.put("+ " + changelog.getKey(), changelog.getValue());
+        for (Map.Entry<String, String> changelog : changelogs.changesAddedList.entrySet()) {
+            reFormattedChanges.put("+ " + changelog.getKey(), changelog.getValue());
         }
 
-        for (Map.Entry<String, String> changelog : ModpackUpdater.changesDeletedList.entrySet()) {
-            changelogs.put("- " + changelog.getKey(), changelog.getValue());
+        for (Map.Entry<String, String> changelog : changelogs.changesDeletedList.entrySet()) {
+            reFormattedChanges.put("- " + changelog.getKey(), changelog.getValue());
         }
 
-        return changelogs;
+        return reFormattedChanges;
     }
 
     @Override

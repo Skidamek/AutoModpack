@@ -61,7 +61,7 @@ public class DangerScreen extends VersionedScreen {
 
         this.addDrawableChild(VersionedText.buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.common.translatable("automodpack.danger.confirm").formatted(Formatting.GREEN), button -> {
             Util.getMainWorkerExecutor().execute(() -> {
-                ModpackUpdater.ModpackUpdaterMain(link, modpackDir, modpackContentFile);
+                new ModpackUpdater().ModpackUpdaterMain(link, modpackDir, modpackContentFile);
             });
         }));
     }

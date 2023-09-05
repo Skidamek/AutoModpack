@@ -50,9 +50,9 @@ public class FetchManager {
     public FetchManager() {
         if (!(anyAPIUp = APIsUp())) {
             LOGGER.warn("APIs are down, skipping fetches");
-        } else if (new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().contains("fetchscreen")) {
-            new ScreenManager().fetch();
         }
+
+        new ScreenManager().fetch(this);
     }
 
     public void fetch(String serverUrl, String sha1, String murmur, String fileSize, String fileType) {

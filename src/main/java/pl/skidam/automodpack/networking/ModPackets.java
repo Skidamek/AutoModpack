@@ -26,10 +26,11 @@ import net.fabricmc.fabric.api.networking.v1.ServerLoginConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.util.Identifier;
+import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.packet.LinkC2SPacket;
 import pl.skidam.automodpack.networking.packet.LinkS2CPacket;
-import pl.skidam.automodpack.networking.packet.LoginC2SPacket;
-import pl.skidam.automodpack.networking.packet.LoginS2CPacket;
+import pl.skidam.automodpack.networking.packet.HandshakeC2SPacket;
+import pl.skidam.automodpack.networking.packet.HandshakeS2CPacket;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
@@ -38,28 +39,23 @@ public class ModPackets {
     public static final Identifier LINK = new Identifier(MOD_ID, "link");
 
     public static void registerC2SPackets() {
-        ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, LoginC2SPacket::receive);
+        ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, HandshakeC2SPacket::receive);
         ClientLoginNetworking.registerGlobalReceiver(LINK, LinkC2SPacket::receive);
     }
 
     public static void registerS2CPackets() {
-        ServerLoginNetworking.registerGlobalReceiver(HANDSHAKE, LoginS2CPacket::receive);
+        ServerLoginNetworking.registerGlobalReceiver(HANDSHAKE, HandshakeS2CPacket::receive);
         ServerLoginNetworking.registerGlobalReceiver(LINK, LinkS2CPacket::receive);
 
         ServerLoginConnectionEvents.QUERY_START.register((handler, server, sender, loginSynchronizer) -> {
 
             loginSynchronizer.waitFor(server.submit(() -> {
                 PacketByteBuf buf = PacketByteBufs.create();
-                StringBuilder correctResponse = new StringBuilder(AM_VERSION + "-");
 
-                for (String loader : serverConfig.acceptedLoaders) {
-                    correctResponse.append(loader);
-                    if (serverConfig.acceptedLoaders.indexOf(loader) != serverConfig.acceptedLoaders.size() - 1) {
-                        correctResponse.append("&");
-                    }
-                }
+                HandshakePacket handshakePacket = new HandshakePacket(serverConfig.acceptedLoaders, AM_VERSION, MC_VERSION);
+                String jsonHandshakePacket = handshakePacket.toJson();
 
-                buf.writeString(correctResponse.toString(), 32767);
+                buf.writeString(jsonHandshakePacket, 32767);
                 sender.sendPacket(HANDSHAKE, buf);
             }));
         });

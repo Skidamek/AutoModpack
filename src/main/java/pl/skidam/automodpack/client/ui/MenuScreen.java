@@ -139,7 +139,7 @@ public class MenuScreen extends VersionedScreen {
 
         CustomFileUtils.forceDelete(modpackPath);
 
-        new ModpackUpdater(serverModpackContent, modpackLink, modpackPath);
+        new ModpackUpdater().startModpackUpdate(serverModpackContent, modpackLink, modpackPath);
 
         GlobalVariables.LOGGER.info("Redownloaded modpack {} from {}", modpack.getName(), modpackLink);
     }

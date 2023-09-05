@@ -50,21 +50,18 @@ import static pl.skidam.automodpack_common.config.ConfigTools.GSON;
 import static pl.skidam.automodpack_common.utils.CustomFileUtils.mapAllFiles;
 
 public class ModpackUpdater {
-    public static Map<String, String> changesAddedList = new HashMap<>(); // <file name, main page url>
-    public static Map<String, String> changesDeletedList = new HashMap<>(); // <file name, main page url>
+    public Changelogs changelogs = new Changelogs();
     public static DownloadManager downloadManager;
     public static FetchManager fetchManager;
     public static long totalBytesToDownload = 0;
     public static boolean fullDownload = false;
     private static Jsons.ModpackContentFields serverModpackContent;
-    public static Map<String, String> failedDownloads = new HashMap<>(); // <file, url>
-    private static byte[] serverModpackContentByteArray = new byte[0];
-
+    public Map<String, String> failedDownloads = new HashMap<>(); // <file, url>
     public static String getModpackName() {
         return serverModpackContent.modpackName;
     }
 
-    public ModpackUpdater(Jsons.ModpackContentFields serverModpackContent, String link, Path modpackDir) {
+    public void startModpackUpdate(Jsons.ModpackContentFields serverModpackContent, String link, Path modpackDir) {
         if (link == null || link.isEmpty() || modpackDir.toString().isEmpty()) return;
 
         try {
@@ -90,7 +87,6 @@ public class ModpackUpdater {
 
             serverModpackContent.link = link;
             ModpackUpdater.serverModpackContent = serverModpackContent;
-            serverModpackContentByteArray = GSON.toJson(serverModpackContent).getBytes();
 
             if (!Files.exists(modpackDir)) {
                 Files.createDirectories(modpackDir);
@@ -113,7 +109,7 @@ public class ModpackUpdater {
 
             LOGGER.warn("Modpack update found");
 
-            new ScreenManager().download();
+            new ScreenManager().download(downloadManager, ModpackUpdater.getModpackName());
 
             ModpackUpdaterMain(link, modpackDir, modpackContentFile);
 
@@ -123,7 +119,7 @@ public class ModpackUpdater {
         }
     }
 
-    private void CheckAndLoadModpack(Path modpackDir, Path modpackContentFile, Path workingDirectory) throws Exception {
+    public void CheckAndLoadModpack(Path modpackDir, Path modpackContentFile, Path workingDirectory) throws Exception {
 
         List<Path> filesBefore = mapAllFiles(workingDirectory, new ArrayList<>());
 
@@ -156,10 +152,12 @@ public class ModpackUpdater {
         LOGGER.info("Added files: " + addedFiles);
         LOGGER.info("Deleted files: " + deletedFiles);
 
-        new ReLauncher.Restart(modpackDir, fullDownload);
+        UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
+
+        new ReLauncher.Restart(modpackDir, updateType, changelogs);
     }
 
-    public static void ModpackUpdaterMain(String link, Path modpackDir, Path modpackContentFile) {
+    public void ModpackUpdaterMain(String link, Path modpackDir, Path modpackContentFile) {
 
         long start = System.currentTimeMillis();
 
@@ -229,7 +227,7 @@ public class ModpackUpdater {
 
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
-            new ScreenManager().download();
+            new ScreenManager().download(downloadManager, ModpackUpdater.getModpackName());
 
             if (wholeQueue > 0) {
 
@@ -265,7 +263,7 @@ public class ModpackUpdater {
                             mainPageUrl = fetchManager.fetchedData.get(modpackContentField.sha1).getMainPageUrl();
                         }
 
-                        changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrl);
+                        changelogs.changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrl);
                     };
 
                     LOGGER.info("Downloading {} from {}", fileName, url);
@@ -280,7 +278,7 @@ public class ModpackUpdater {
             }
 
             // Downloads completed
-            Files.write(modpackContentFile, serverModpackContentByteArray);
+            Files.write(modpackContentFile, GSON.toJson(serverModpackContent).getBytes());
 
             CustomFileUtils.deleteEmptyFiles(Paths.get("./"), serverModpackContent.list);
 
@@ -304,7 +302,7 @@ public class ModpackUpdater {
                 LOGGER.warn("Update *completed* with ERRORS! Took: " + (System.currentTimeMillis() - start) + " ms");
 
                 if (preload) {
-                    new ReLauncher.Restart(modpackDir, fullDownload);
+                    new ReLauncher.Restart("Failed to complete update without errors!");
                 }
 
                 return;
@@ -312,7 +310,9 @@ public class ModpackUpdater {
 
             LOGGER.info("Update completed! Took: " + (System.currentTimeMillis() - start) + " ms");
 
-            new ReLauncher.Restart(modpackDir, fullDownload);
+            UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
+
+            new ReLauncher.Restart(modpackDir, updateType, changelogs);
 
             LOGGER.info("Modpack is up-to-date! Took: " + (System.currentTimeMillis() - start) + " ms");
 
@@ -324,7 +324,7 @@ public class ModpackUpdater {
         }
     }
 
-    private static void finishModpackUpdate(Path modpackDir, Path modpackContentFile) throws Exception {
+    private void finishModpackUpdate(Path modpackDir, Path modpackContentFile) throws Exception {
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
@@ -341,7 +341,7 @@ public class ModpackUpdater {
             String fileName = Paths.get(modpackContentField.file).getFileName().toString();
 
             // Don't add to editable if just downloaded
-            if (changesAddedList.containsKey(fileName)) {
+            if (changelogs.changesAddedList.containsKey(fileName)) {
                 continue;
             }
 
@@ -385,7 +385,7 @@ public class ModpackUpdater {
                         }
 
                         CustomFileUtils.forceDelete(file);
-                        changesDeletedList.put(fileName, null);
+                        changelogs.changesDeletedList.put(fileName, null);
                     }
             });
         }
@@ -398,34 +398,6 @@ public class ModpackUpdater {
         ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent, editableFiles);
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
-    }
-
-
-    // This method cancels the current download by interrupting the thread pool
-    public static void cancelDownload() {
-        try {
-            if (fetchManager != null) {
-                fetchManager.cancelAllAndShutdown();
-            }
-
-            if (downloadManager != null) {
-                downloadManager.cancelAllAndShutdown();
-            }
-
-            failedDownloads.clear();
-            changesAddedList.clear();
-            changesDeletedList.clear();
-
-            LOGGER.info("Download canceled");
-
-            // todo delete files that were downloaded
-            // we will use the same method as to modpacks manager
-
-            new ScreenManager().title();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
 

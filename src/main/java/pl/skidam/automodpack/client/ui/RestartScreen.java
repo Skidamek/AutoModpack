@@ -30,20 +30,23 @@ import java.nio.file.Path;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.client.Changelogs;
+import pl.skidam.automodpack_core.utils.UpdateType;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 
 public class RestartScreen extends VersionedScreen {
     private final Path modpackDir;
-    private final boolean fullDownload;
+    private final UpdateType updateType;
+    private final Changelogs changelogs;
     private static ButtonWidget cancelButton;
     private static ButtonWidget restartButton;
     private static ButtonWidget changelogsButton;
 
-    public RestartScreen(Path modpackDir, boolean fullDownload) {
+    public RestartScreen(Path modpackDir, UpdateType updateType, Changelogs changelogs) {
         super(VersionedText.common.literal("RestartScreen"));
         this.modpackDir = modpackDir;
-        this.fullDownload = fullDownload;
+        this.updateType = updateType;
+        this.changelogs = changelogs;
 
         if (AudioManager.isMusicPlaying()) {
             AudioManager.stopMusic();
@@ -60,7 +63,7 @@ public class RestartScreen extends VersionedScreen {
         this.addDrawableChild(restartButton);
         this.addDrawableChild(changelogsButton);
 
-        if (ModpackUpdater.changesAddedList.isEmpty() && ModpackUpdater.changesDeletedList.isEmpty()) {
+        if (changelogs == null || changelogs.changesAddedList.isEmpty() && changelogs.changesDeletedList.isEmpty()) {
             changelogsButton.active = false;
         }
     }
@@ -72,18 +75,18 @@ public class RestartScreen extends VersionedScreen {
         });
 
         restartButton = VersionedText.buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.common.translatable("automodpack.restart.confirm").formatted(Formatting.GREEN), button -> {
-            new ReLauncher.Restart(modpackDir, fullDownload);
+            new ReLauncher.Restart();
         });
 
         changelogsButton = VersionedText.buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.common.translatable("automodpack.changelog.view"), button -> {
-            new ScreenManager().changelog(this, modpackDir);
+            new ScreenManager().changelog(this, modpackDir, changelogs);
         });
     }
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.restart." + (fullDownload ? "full" : "update")).formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
+        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.restart." + updateType.toString()).formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
         VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.restart.description"), this.width / 2, this.height / 2 - 35, 16777215);
         VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.restart.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);
     }

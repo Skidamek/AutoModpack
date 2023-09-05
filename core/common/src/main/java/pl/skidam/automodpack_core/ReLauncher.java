@@ -20,9 +20,11 @@
 
 package pl.skidam.automodpack_core;
 
+import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.ui.Windows;
+import pl.skidam.automodpack_core.utils.UpdateType;
 
 import java.awt.*;
 import java.nio.file.Path;
@@ -31,21 +33,45 @@ import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class ReLauncher {
 
+    private static final String genericMessage = "Successfully applied the modpack!";
+
     public static class Restart {
 
-        public Restart(Path modpackDir, boolean fullDownload) {
-            new Restart(modpackDir, "Successfully applied the modpack!", fullDownload);
+        public Restart() {
+            new Restart(null, genericMessage, null, null);
         }
 
-        public Restart(Path modpackDir, String guiMessage, boolean fullDownload) {
+        public Restart(String guiMessage) {
+            new Restart(null, guiMessage, null, null);
+        }
+
+        public Restart(UpdateType updateType) {
+            new Restart(null, genericMessage, updateType, null);
+        }
+
+        public Restart(String guiMessage, UpdateType updateType) {
+            new Restart(null, guiMessage, updateType, null);
+        }
+
+        public Restart(UpdateType updateType, Changelogs changelogs) {
+            new Restart(null, genericMessage, updateType, changelogs);
+        }
+
+        public Restart(Path modpackDir, UpdateType updateType, Changelogs changelogs) {
+            new Restart(modpackDir, genericMessage, updateType, changelogs);
+        }
+
+        public Restart(Path modpackDir, String guiMessage, UpdateType updateType, Changelogs changelogs) {
             String environment = new LoaderManager().getEnvironmentType();
             boolean isClient = environment.equals("CLIENT");
             boolean isHeadless = GraphicsEnvironment.isHeadless();
 
             if (isClient) {
-                if (!preload && new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().contains("restartscreen")) {
-                    new ScreenManager().restart(modpackDir, fullDownload);
-                    return;
+                if (!preload && updateType != null) {
+                    if (new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().toLowerCase().contains("restartscreen")) {
+                        new ScreenManager().restart(modpackDir, updateType, changelogs);
+                        return;
+                    }
                 }
 
                 if (preload && !isHeadless) {

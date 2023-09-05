@@ -23,17 +23,22 @@ package pl.skidam.automodpack.client.ui;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.util.Formatting;
 
-import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.screen.ScreenManager;
+import pl.skidam.automodpack_core.utils.FetchManager;
+
+import static pl.skidam.automodpack_common.GlobalVariables.LOGGER;
 
 public class FetchScreen extends VersionedScreen {
 
     private ButtonWidget cancelButton;
+    private final FetchManager fetchManager;
 
-    public FetchScreen() {
+    public FetchScreen(FetchManager fetchManager) {
         super(VersionedText.common.literal("FetchScreen"));
+        this.fetchManager = fetchManager;
     }
 
     @Override
@@ -49,23 +54,23 @@ public class FetchScreen extends VersionedScreen {
         cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
                 button -> {
                     cancelButton.active = false;
-                    ModpackUpdater.cancelDownload();
+                    cancelFetch();
                 }
         );
     }
 
     private int getFetchesDone() {
-        if (ModpackUpdater.fetchManager == null) {
+        if (fetchManager == null) {
             return -1;
         }
-        return ModpackUpdater.fetchManager.fetchesDone;
+        return fetchManager.fetchesDone;
     }
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
 
-        if (ModpackUpdater.fetchManager == null) {
+        if (fetchManager == null) {
             cancelButton.active = false;
         }
 
@@ -78,5 +83,20 @@ public class FetchScreen extends VersionedScreen {
     @Override
     public boolean shouldCloseOnEsc() {
         return false;
+    }
+
+    public void cancelFetch() {
+        try {
+            if (fetchManager != null) {
+                fetchManager.cancelAllAndShutdown();
+            }
+
+            LOGGER.info("Fetch canceled");
+
+            new ScreenManager().title();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

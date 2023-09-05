@@ -8,42 +8,42 @@ public class PreloadScreenImpl implements ScreenService {
 
     @Override
     public void download(Object... args) {
-
+        return;
     }
 
     @Override
     public void fetch(Object... args) {
-
+        return;
     }
 
     @Override
     public void changelog(Object... args) {
-
+        return;
     }
 
     @Override
     public void restart(Object... args) {
-
+        return;
     }
 
     @Override
     public void danger(Object... args) {
-
+        return;
     }
 
     @Override
     public void error(Object... args) {
-
+        return;
     }
 
     @Override
     public void menu(Object... args) {
-
+        return;
     }
 
     @Override
     public void title(Object... args) {
-
+        return;
     }
 
     @Override

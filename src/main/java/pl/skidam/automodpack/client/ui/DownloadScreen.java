@@ -26,13 +26,14 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Util;
+import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.DownloadManager;
-import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
+import static pl.skidam.automodpack_common.GlobalVariables.LOGGER;
 import static pl.skidam.automodpack_common.GlobalVariables.MOD_ID;
 
 public class DownloadScreen extends VersionedScreen {
@@ -41,6 +42,8 @@ public class DownloadScreen extends VersionedScreen {
     private static final Identifier PROGRESS_BAR_FULL_TEXTURE = new Identifier(MOD_ID, "gui/progress-bar-full.png");
     private static final int PROGRESS_BAR_WIDTH = 250;
     private static final int PROGRESS_BAR_HEIGHT = 20;
+    private final DownloadManager downloadManager;
+    private final String header;
     private static long ticks = 0;
     private ButtonWidget cancelButton;
 
@@ -52,8 +55,10 @@ public class DownloadScreen extends VersionedScreen {
     private String lastETA = "-1";
     private float lastDownloadedScale = 0.0F;
 
-    public DownloadScreen() {
+    public DownloadScreen(DownloadManager downloadManager, String header) {
         super(VersionedText.common.literal("DownloadScreen"));
+        this.downloadManager = downloadManager;
+        this.header = header;
     }
 
     @Override
@@ -65,7 +70,7 @@ public class DownloadScreen extends VersionedScreen {
         this.addDrawableChild(cancelButton);
 
         Util.getMainWorkerExecutor().execute(() -> {
-            while (ModpackUpdater.downloadManager != null && !ModpackUpdater.downloadManager.isClosed()) {
+            while (downloadManager != null && !downloadManager.isClosed()) {
 
 //                for (Map.Entry<String, DownloadManager.DownloadData> map : ModpackUpdater.downloadManager.downloadsInProgress.entrySet()) {
 //                    mapOfFileStats.put(map.getKey(), ModpackUpdater.downloadManager.getPercentageOfFileSizeDownloaded(map.getKey()) + "%");
@@ -78,13 +83,13 @@ public class DownloadScreen extends VersionedScreen {
 //                }
 
                 // TODO make it work better pls
-                lastStage = ModpackUpdater.downloadManager.getStage();
-                lastPercentage = (int) ModpackUpdater.downloadManager.getTotalPercentageOfFileSizeDownloaded();
-                lastDownloadedScale = (float) (ModpackUpdater.downloadManager.getTotalPercentageOfFileSizeDownloaded() * 0.01);
+                lastStage = downloadManager.getStage();
+                lastPercentage = (int) downloadManager.getTotalPercentageOfFileSizeDownloaded();
+                lastDownloadedScale = (float) (downloadManager.getTotalPercentageOfFileSizeDownloaded() * 0.01);
 
-                long totalDownloadSpeed = ModpackUpdater.downloadManager.getTotalDownloadSpeed();
-                lastSpeed = ModpackUpdater.downloadManager.getTotalDownloadSpeedInReadableFormat(totalDownloadSpeed);
-                lastETA = ModpackUpdater.downloadManager.getTotalETA(totalDownloadSpeed);
+                long totalDownloadSpeed = downloadManager.getTotalDownloadSpeed();
+                lastSpeed = downloadManager.getTotalDownloadSpeedInReadableFormat(totalDownloadSpeed);
+                lastETA = downloadManager.getTotalETA(totalDownloadSpeed);
             }
         });
     }
@@ -93,7 +98,7 @@ public class DownloadScreen extends VersionedScreen {
         cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
                 button -> {
                     cancelButton.active = false;
-                    ModpackUpdater.cancelDownload();
+                    cancelDownload();
                 }
         );
     }
@@ -138,13 +143,13 @@ public class DownloadScreen extends VersionedScreen {
         matrices.push();
         matrices.scale(scale, scale, scale);
 
-        if (ModpackUpdater.downloadManager != null && ModpackUpdater.downloadManager.downloadsInProgress.size() > 0) {
+        if (downloadManager != null && !downloadManager.downloadsInProgress.isEmpty()) {
             VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.download.downloading"), (int) (this.width / 2 * scale), y, 16777215);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
-            synchronized (ModpackUpdater.downloadManager.downloadsInProgress) {
-                for (DownloadManager.DownloadData downloadData : ModpackUpdater.downloadManager.downloadsInProgress.values()) {
+            synchronized (downloadManager.downloadsInProgress) {
+                for (DownloadManager.DownloadData downloadData : downloadManager.downloadsInProgress.values()) {
 
                     String text = downloadData.getFileName();
 
@@ -192,10 +197,10 @@ public class DownloadScreen extends VersionedScreen {
         this.renderBackground(matrices);
 
         drawDownloadingFiles(matrices);
-        MutableText modpackName = VersionedText.common.literal(ModpackUpdater.getModpackName()).formatted(Formatting.BOLD);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, modpackName, this.width / 2, this.height / 2 - 110, 16777215);
+        MutableText titleText = VersionedText.common.literal(header).formatted(Formatting.BOLD);
+        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, titleText, this.width / 2, this.height / 2 - 110, 16777215);
 
-        if (ModpackUpdater.downloadManager != null && !ModpackUpdater.downloadManager.isClosed()) {
+        if (downloadManager != null && !downloadManager.isClosed()) {
             MutableText percentage = (MutableText) this.getPercentage();
             MutableText stage = (MutableText) this.getStage();
             MutableText eta = (MutableText) this.getTotalETA();
@@ -224,5 +229,23 @@ public class DownloadScreen extends VersionedScreen {
     @Override
     public boolean shouldCloseOnEsc() {
         return false;
+    }
+
+    public void cancelDownload() {
+        try {
+            if (downloadManager != null) {
+                downloadManager.cancelAllAndShutdown();
+            }
+
+            LOGGER.info("Download canceled");
+
+            // todo delete files that were downloaded
+            // we will use the same method as to modpacks manager
+
+            new ScreenManager().title();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

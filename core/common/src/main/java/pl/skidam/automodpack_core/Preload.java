@@ -100,6 +100,7 @@ public class Preload implements SetupModCallback {
 
         if (!quest) {
             String selectedModpack = clientConfig.selectedModpack;
+
             if (new LoaderManager().equals("CLIENT") && selectedModpack != null && !selectedModpack.equals("")) {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
@@ -109,10 +110,10 @@ public class Preload implements SetupModCallback {
                     serverModpackContentList = serverModpackContent.list;
                 }
 
-                new SelfUpdater(serverModpackContent);
-                new ModpackUpdater(serverModpackContent, selectedModpackLink, selectedModpackDir);
+                SelfUpdater.update(serverModpackContent);
+                new ModpackUpdater().startModpackUpdate(serverModpackContent, selectedModpackLink, selectedModpackDir);
             } else {
-                new SelfUpdater(null);
+                SelfUpdater.update();
             }
         }
 

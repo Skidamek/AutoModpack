@@ -26,36 +26,53 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
+import pl.skidam.automodpack.networking.content.HandshakePacket;
+import pl.skidam.automodpack_core.SelfUpdater;
 import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
-public class LoginC2SPacket {
+public class HandshakeC2SPacket {
 
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf, Consumer<GenericFutureListener<? extends Future<? super Void>>> genericFutureListenerConsumer) {
-        // Client
         String serverResponse = buf.readString(32767);
+
+        HandshakePacket serverHandshakePacket = HandshakePacket.fromJson(serverResponse);
 
         String loader = new LoaderManager().getPlatformType().toString().toLowerCase();
 
-        String correctResponse = AM_VERSION + "-" + loader;
-
         PacketByteBuf outBuf = PacketByteBufs.create();
-        outBuf.writeString(correctResponse, 32767);
+        HandshakePacket clientHandshakePacket = new HandshakePacket(List.of(loader), AM_VERSION, MC_VERSION);
+        outBuf.writeString(clientHandshakePacket.toJson(), 32767);
 
-        if (serverResponse.startsWith(AM_VERSION)) {
-            if (serverResponse.equals(correctResponse) || serverResponse.contains(loader)) {
-                LOGGER.info("Versions match " + serverResponse);
-            } else {
-                LOGGER.error("Versions mismatch " + serverResponse);
-            }
+        if (serverHandshakePacket.equals(clientHandshakePacket) || (serverHandshakePacket.loaders.contains(loader) && serverHandshakePacket.amVersion.equals(AM_VERSION))) {
+            LOGGER.info("Versions match " + serverHandshakePacket.amVersion);
         } else {
-            LOGGER.error("Server version error?! " + serverResponse);
+            LOGGER.warn("Versions mismatch " + serverHandshakePacket.amVersion);
+            LOGGER.info("Trying to change automodpack version to the version required by server...");
+            updateMod(serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
         }
 
         return CompletableFuture.completedFuture(outBuf);
+    }
+
+    private static void updateMod(String serverAMVersion, String serverMCVersion) {
+        if (!serverMCVersion.equals(MC_VERSION)) {
+            return;
+        }
+
+        ModrinthAPI automodpack = ModrinthAPI.getModSpecificVersion(SelfUpdater.automodpackID, serverAMVersion, MC_VERSION);
+
+        if (automodpack == null) {
+            LOGGER.warn("Couldn't find {} version of automodpack for minecraft {} required by server", serverAMVersion, serverAMVersion);
+            return;
+        }
+
+        SelfUpdater.installModVersion(automodpack);
     }
 }

@@ -28,7 +28,7 @@ import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
-import pl.skidam.automodpack.networking.LoginPacketContent;
+import pl.skidam.automodpack.networking.content.LinkPacket;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
@@ -45,33 +45,34 @@ import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class LinkC2SPacket {
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf, Consumer<GenericFutureListener<? extends Future<? super Void>>> genericFutureListenerConsumer) {
-        String packetContentJson = buf.readString(32767);
-        LoginPacketContent loginPacketContent = LoginPacketContent.fromJson(packetContentJson);
+        String serverResponse = buf.readString(32767);
 
-        LOGGER.info("Received link packet from server! " + loginPacketContent.link);
-        ClientLink = loginPacketContent.link;
+        LinkPacket linkPacket = LinkPacket.fromJson(serverResponse);
 
-        String modpackFileName = loginPacketContent.link.replaceFirst("(https?://)", ""); // removes https:// and http://
+        LOGGER.info("Received link packet from server! " + linkPacket.link);
+        ClientLink = linkPacket.link;
+
+        String modpackFileName = linkPacket.link.replaceFirst("(https?://)", ""); // removes https:// and http://
         modpackFileName = modpackFileName.replace(":", "-"); // replaces : with -
         Path modpackDir = Paths.get(modpacksDir + File.separator + modpackFileName);
 
         clientConfig.selectedModpack = modpackFileName;
         ConfigTools.saveConfig(clientConfigFile, clientConfig);
 
-        Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(loginPacketContent.link);
+        Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(linkPacket.link);
 
-        serverModpackContent.automodpackVersion = loginPacketContent.automodpackVersion;
-        serverModpackContent.mcVersion = loginPacketContent.mcVersion;
-        serverModpackContent.modpackName = loginPacketContent.modpackName;
-        serverModpackContent.loader = loginPacketContent.loader;
-        serverModpackContent.loaderVersion = loginPacketContent.loaderVersion;
+        serverModpackContent.automodpackVersion = linkPacket.automodpackVersion;
+        serverModpackContent.mcVersion = linkPacket.mcVersion;
+        serverModpackContent.modpackName = linkPacket.modpackName;
+        serverModpackContent.loader = linkPacket.loader;
+        serverModpackContent.loaderVersion = linkPacket.loaderVersion;
 
         String isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
         if ("true".equals(isUpdate)) {
             // Disconnect immediately
             ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
-            new ModpackUpdater(serverModpackContent, loginPacketContent.link, modpackDir);
+            new ModpackUpdater().startModpackUpdate(serverModpackContent, linkPacket.link, modpackDir);
         }
 
         PacketByteBuf response = PacketByteBufs.create();

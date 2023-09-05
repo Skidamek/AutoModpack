@@ -1,6 +1,7 @@
 {
     "automodpack.restart.full": "Modpack has been downloaded!",
     "automodpack.restart.update": "An update has been downloaded to Modpack!",
+    "automodpack.restart.automodpack": "Updated version of AutoModpack mod to the one required by server!",
     "automodpack.restart.description": "To complete you must restart the game.",
     "automodpack.restart.secDescription": "Do you want to do restart now?",
     "automodpack.restart.confirm": "Yes, close the game",

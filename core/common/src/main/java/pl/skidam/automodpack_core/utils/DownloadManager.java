@@ -56,17 +56,17 @@ public class DownloadManager {
 
     public DownloadManager() {
         Optional<String> screen = new ScreenManager().getScreenString();
-        if (screen.isPresent() && screen.get().contains("downloadscreen")) {
-            new ScreenManager().download();
-        }
+//        if (screen.isPresent() && screen.get().contains("downloadscreen")) {
+//            new ScreenManager().download(this, "");
+//        }
     }
 
     public DownloadManager(long bytesToDownload) {
         this.bytesToDownload = bytesToDownload;
-        Optional<String> screen = new ScreenManager().getScreenString();
-        if (screen.isPresent() && screen.get().contains("downloadscreen")) {
-            new ScreenManager().download();
-        }
+//        Optional<String> screen = new ScreenManager().getScreenString();
+//        if (screen.isPresent() && screen.get().contains("downloadscreen")) {
+//            new ScreenManager().download(this, "");
+//        }
     }
 
 

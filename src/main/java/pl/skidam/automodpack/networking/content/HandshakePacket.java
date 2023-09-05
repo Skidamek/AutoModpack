@@ -18,25 +18,21 @@
  * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-package pl.skidam.automodpack.networking;
+package pl.skidam.automodpack.networking.content;
 
 import com.google.gson.Gson;
 
-public class LoginPacketContent {
-    public String automodpackVersion;
-    public String mcVersion;
-    public String modpackName;
-    public String loader;
-    public String loaderVersion;
-    public String link;
+import java.util.List;
 
-    public LoginPacketContent(String automodpackVersion, String mcVersion, String modpackName, String loader, String loaderVersion, String link) {
-        this.automodpackVersion = automodpackVersion;
+public class HandshakePacket {
+    public List<String> loaders;
+    public String amVersion;
+    public String mcVersion;
+
+    public HandshakePacket(List<String> loaders, String amVersion, String mcVersion) {
+        this.loaders = loaders;
+        this.amVersion = amVersion;
         this.mcVersion = mcVersion;
-        this.modpackName = modpackName;
-        this.loader = loader;
-        this.loaderVersion = loaderVersion;
-        this.link = link;
     }
 
     public String toJson() {
@@ -44,8 +40,8 @@ public class LoginPacketContent {
         return gson.toJson(this);
     }
 
-    public static LoginPacketContent fromJson(String json) {
+    public static HandshakePacket fromJson(String json) {
         Gson gson = new Gson();
-        return gson.fromJson(json, LoginPacketContent.class);
+        return gson.fromJson(json, HandshakePacket.class);
     }
 }
