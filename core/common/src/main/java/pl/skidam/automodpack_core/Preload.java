@@ -27,6 +27,7 @@ import pl.skidam.automodpack_common.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
 import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import settingdust.preloadingtricks.SetupModCallback;
 
 import java.io.IOException;
@@ -45,63 +46,18 @@ public class Preload implements SetupModCallback {
 
         LOGGER.info("Prelaunching AutoModpack...");
 
-        // Initialize global variables
-        MC_VERSION = new LoaderManager().getModVersion("minecraft");
-        AM_VERSION = new LoaderManager().getModVersion("automodpack");
+        initializeGlobalVariables();
 
-        String workingDirectory = System.getProperty("user.dir");
-        if (workingDirectory.contains("com.qcxr.qcxr")) {
-            quest = true;
-            LOGGER.info("QuestCraft detected!");
-            modsPath = Paths.get("./mods/" + MC_VERSION + "/");
-        } else {
-            quest = false;
-            modsPath = Paths.get("./mods/");
-        }
+        loadConfigs();
 
-        long startTime = System.currentTimeMillis();
-        clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
-        serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
-
-        // add current loader to this list
-        if (serverConfig != null) {
-            String loader = new LoaderManager().getPlatformType().toString().toLowerCase();
-            if (serverConfig.acceptedLoaders == null) {
-                serverConfig.acceptedLoaders = Arrays.asList(loader);
-            } else if (!serverConfig.acceptedLoaders.contains(loader)) {
-                serverConfig.acceptedLoaders.add(loader);
-            }
-        }
-
-        if (serverConfig != null && !serverConfig.externalModpackHostLink.isEmpty()) {
-            serverConfig.hostIp = serverConfig.externalModpackHostLink;
-            serverConfig.hostLocalIp = serverConfig.externalModpackHostLink;
-            LOGGER.info("externalModpackHostLink is deprecated, use hostIp and hostLocalIp instead, setting them to {}", serverConfig.externalModpackHostLink);
-            serverConfig.externalModpackHostLink = "";
-            ConfigTools.saveConfig(serverConfigFile, serverConfig);
-        }
-
-        LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
-
-        Path AMdir = Paths.get("./automodpack/");
-        // Check if AutoModpack path exists
-        if (!Files.exists(AMdir)) {
-            Files.createDirectories(AMdir);
-        }
-
-        if (new LoaderManager().equals("CLIENT")) {
-            Path modpacks = Paths.get("./automodpack/modpacks/");
-            if (!Files.exists(modpacks)) {
-                Files.createDirectories(modpacks);
-            }
-        }
+        createPaths();
 
         List<Jsons.ModpackContentFields.ModpackContentItem> serverModpackContentList = null;
 
         if (!quest) {
             String selectedModpack = clientConfig.selectedModpack;
 
-            if (new LoaderManager().equals("CLIENT") && selectedModpack != null && !selectedModpack.equals("")) {
+            if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT && selectedModpack != null && !selectedModpack.isEmpty()) {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
                 Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
@@ -124,5 +80,64 @@ public class Preload implements SetupModCallback {
         }
 
         LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
+    }
+
+    private void initializeGlobalVariables() {
+        // Initialize global variables
+        preload = true;
+        MC_VERSION = new LoaderManager().getModVersion("minecraft");
+        AM_VERSION = new LoaderManager().getModVersion("automodpack");
+        LOADER_VERSION = new LoaderManager().getLoaderVersion();
+        LOADER = new LoaderManager().getPlatformType().toString().toLowerCase();
+
+        String workingDirectory = System.getProperty("user.dir");
+        if (workingDirectory.contains("com.qcxr.qcxr")) {
+            quest = true;
+            LOGGER.info("QuestCraft detected!");
+            modsPath = Paths.get("./mods/" + MC_VERSION + "/");
+        } else {
+            quest = false;
+            modsPath = Paths.get("./mods/");
+        }
+    }
+
+    private void loadConfigs() {
+        long startTime = System.currentTimeMillis();
+        clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
+        serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
+
+        // add current loader to the list
+        if (serverConfig != null) {
+            if (serverConfig.acceptedLoaders == null) {
+                serverConfig.acceptedLoaders = List.of(LOADER);
+            } else if (!serverConfig.acceptedLoaders.contains(LOADER)) {
+                serverConfig.acceptedLoaders.add(LOADER);
+            }
+        }
+
+        if (serverConfig != null && !serverConfig.externalModpackHostLink.isEmpty()) {
+            serverConfig.hostIp = serverConfig.externalModpackHostLink;
+            serverConfig.hostLocalIp = serverConfig.externalModpackHostLink;
+            LOGGER.info("externalModpackHostLink is deprecated, use hostIp and hostLocalIp instead, setting them to {}", serverConfig.externalModpackHostLink);
+            serverConfig.externalModpackHostLink = "";
+            ConfigTools.saveConfig(serverConfigFile, serverConfig);
+        }
+
+        LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
+    }
+
+    private void createPaths() throws IOException {
+        Path AMdir = Paths.get("./automodpack/");
+        // Check if AutoModpack path exists
+        if (!Files.exists(AMdir)) {
+            Files.createDirectories(AMdir);
+        }
+
+        if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT) {
+            Path modpacks = Paths.get("./automodpack/modpacks/");
+            if (!Files.exists(modpacks)) {
+                Files.createDirectories(modpacks);
+            }
+        }
     }
 }

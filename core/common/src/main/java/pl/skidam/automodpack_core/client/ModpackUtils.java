@@ -47,7 +47,7 @@ public class ModpackUtils {
 
 
     // If update to modpack found, returns true else false
-    public static String isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+    public static Boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
             return null;
@@ -60,25 +60,25 @@ public class ModpackUtils {
             Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadConfig(clientModpackContentFile, Jsons.ModpackContentFields.class);
 
             if (clientModpackContent == null) {
-                return "true";
+                return true;
             }
 
             if (clientModpackContent.modpackHash == null) {
                 LOGGER.error("Modpack hash is null");
-                return "true";
+                return true;
             }
 
             if (clientModpackContent.modpackHash.equals(serverModpackContent.modpackHash)) {
                 LOGGER.info("Modpack hash is the same as server modpack hash");
-                return "false";
+                return false;
             }
 
             else {
                 LOGGER.info("Modpack hash is different than server modpack hash");
-                return "true";
+                return true;
             }
         } else {
-            return "true";
+            return true;
         }
     }
 

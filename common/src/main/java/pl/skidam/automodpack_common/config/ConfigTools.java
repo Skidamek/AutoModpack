@@ -52,7 +52,7 @@ public class ConfigTools {
             }
 
             if (Files.isRegularFile(configFile)) {
-                String json = new String(Files.readAllBytes(configFile), StandardCharsets.UTF_8);
+                String json = Files.readString(configFile);
                 T obj = GSON.fromJson(json, configClass);
                 saveConfig(configFile, obj);
                 return obj;
@@ -79,7 +79,7 @@ public class ConfigTools {
                 Files.createDirectories(configFile.getParent());
             }
 
-            Files.write(configFile, GSON.toJson(configObject).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.writeString(configFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
             LOGGER.error("Couldn't save config! " + configObject.getClass());
             e.printStackTrace();
@@ -91,7 +91,7 @@ public class ConfigTools {
     public static Jsons.ModpackContentFields loadModpackContent(Path modpackContentFile) {
         try {
             if (Files.isRegularFile(modpackContentFile)) {
-                String json = new String(Files.readAllBytes(modpackContentFile), StandardCharsets.UTF_8);
+                String json = Files.readString(modpackContentFile);
                 return GSON.fromJson(json, Jsons.ModpackContentFields.class);
             }
         } catch (Exception e) {
@@ -107,7 +107,7 @@ public class ConfigTools {
                 Files.createDirectories(modpackContentFile.getParent());
             }
 
-            Files.write(modpackContentFile, GSON.toJson(configObject).getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            Files.writeString(modpackContentFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
             LOGGER.error("Couldn't save modpack content! " + configObject.getClass());
             e.printStackTrace();

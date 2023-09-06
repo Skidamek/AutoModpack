@@ -123,13 +123,7 @@ public class HandshakeS2CPacket {
 
         LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
 
-        LinkPacket linkPacket = new LinkPacket(
-                AM_VERSION,
-                MC_VERSION,
-                serverConfig.modpackName,
-                new LoaderManager().getPlatformType().toString().toLowerCase(),
-                new LoaderManager().getLoaderVersion(),
-                linkToSend);
+        LinkPacket linkPacket = new LinkPacket(linkToSend);
 
         PacketByteBuf outBuf = PacketByteBufs.create();
 

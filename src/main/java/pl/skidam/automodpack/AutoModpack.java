@@ -25,6 +25,7 @@ import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
@@ -51,7 +52,7 @@ public class AutoModpack {
         long start = System.currentTimeMillis();
         LOGGER.info("Launching AutoModpack...");
 
-        if (new LoaderManager().getEnvironmentType().equals("SERVER")) {
+        if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.SERVER) {
             if (serverConfig.generateModpackOnStart) {
                 LOGGER.info("Generating modpack...");
                 long genStart = System.currentTimeMillis();

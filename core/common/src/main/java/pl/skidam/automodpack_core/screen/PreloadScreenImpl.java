@@ -5,46 +5,29 @@ import java.util.Optional;
 public class PreloadScreenImpl implements ScreenService {
 
     // We leave this all empty
+    @Override
+    public void download(Object... args) { }
 
     @Override
-    public void download(Object... args) {
-        return;
-    }
+    public void fetch(Object... args) { }
 
     @Override
-    public void fetch(Object... args) {
-        return;
-    }
+    public void changelog(Object... args) { }
 
     @Override
-    public void changelog(Object... args) {
-        return;
-    }
+    public void restart(Object... args) { }
 
     @Override
-    public void restart(Object... args) {
-        return;
-    }
+    public void danger(Object... args) { }
 
     @Override
-    public void danger(Object... args) {
-        return;
-    }
+    public void error(Object... args) { }
 
     @Override
-    public void error(Object... args) {
-        return;
-    }
+    public void menu(Object... args) { }
 
     @Override
-    public void menu(Object... args) {
-        return;
-    }
-
-    @Override
-    public void title(Object... args) {
-        return;
-    }
+    public void title(Object... args) { }
 
     @Override
     public Optional<String> getScreenString() {

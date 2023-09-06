@@ -15,7 +15,7 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public Collection getModList() {
+    public Collection<?> getModList() {
         throw new AssertionError("No loader class found");
     }
 
@@ -30,7 +30,7 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public String getEnvironmentType() {
+    public EnvironmentType getEnvironmentType() {
         throw new AssertionError("No loader class found");
     }
 

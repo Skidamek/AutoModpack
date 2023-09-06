@@ -38,7 +38,7 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public Collection getModList() {
+    public Collection<?> getModList() {
         return FabricLoader.getInstance().getAllMods();
     }
 
@@ -81,13 +81,13 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public String getEnvironmentType() {
+    public EnvironmentType getEnvironmentType() {
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
-            return "CLIENT";
+            return EnvironmentType.CLIENT;
         } else if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
-            return "SERVER";
+            return EnvironmentType.SERVER;
         } else {
-            return "UNKNOWN";
+            return EnvironmentType.UNKNOWN;
         }
     }
 

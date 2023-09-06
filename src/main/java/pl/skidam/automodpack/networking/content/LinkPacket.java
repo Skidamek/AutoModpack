@@ -23,19 +23,9 @@ package pl.skidam.automodpack.networking.content;
 import com.google.gson.Gson;
 
 public class LinkPacket {
-    public String automodpackVersion;
-    public String mcVersion;
-    public String modpackName;
-    public String loader;
-    public String loaderVersion;
     public String link;
 
-    public LinkPacket(String automodpackVersion, String mcVersion, String modpackName, String loader, String loaderVersion, String link) {
-        this.automodpackVersion = automodpackVersion;
-        this.mcVersion = mcVersion;
-        this.modpackName = modpackName;
-        this.loader = loader;
-        this.loaderVersion = loaderVersion;
+    public LinkPacket(String link) {
         this.link = link;
     }
 

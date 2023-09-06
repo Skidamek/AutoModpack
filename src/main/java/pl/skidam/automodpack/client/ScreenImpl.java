@@ -27,6 +27,7 @@ import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_core.screen.ScreenService;
 import pl.skidam.automodpack_core.utils.DownloadManager;
 import pl.skidam.automodpack_core.utils.FetchManager;
@@ -136,7 +137,7 @@ public class ScreenImpl implements ScreenService {
         public static boolean properlyLoaded() {
             try {
                 if (preload) return false;
-                if (new LoaderManager().getEnvironmentType().equals("SERVER")) return false;
+                if (new LoaderManager().getEnvironmentType() != LoaderService.EnvironmentType.CLIENT) return false;
                 if (MinecraftClient.getInstance() == null) return false;
                 if (MinecraftClient.getInstance().currentScreen == null) return false;
                 return true;

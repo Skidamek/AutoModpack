@@ -27,6 +27,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack_common.GlobalVariables;
 import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_server.modpack.HttpServer;
 
 import static pl.skidam.automodpack_common.GlobalVariables.serverConfig;
@@ -40,7 +41,7 @@ public abstract class MinecraftServerMixin {
 	@Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;setFavicon(Lnet/minecraft/server/ServerMetadata;)V", ordinal = 0), method = "runServer")
 	//#endif
 	private void afterSetupServer(CallbackInfo info) {
-		if (!new LoaderManager().getEnvironmentType().equals("SERVER")) {
+		if (new LoaderManager().getEnvironmentType() != LoaderService.EnvironmentType.SERVER) {
 			return;
 		}
 
@@ -50,7 +51,7 @@ public abstract class MinecraftServerMixin {
 
 	@Inject(at = @At("HEAD"), method = "shutdown")
 	private void beforeShutdownServer(CallbackInfo info) {
-		if (!new LoaderManager().getEnvironmentType().equals("SERVER")) {
+		if (new LoaderManager().getEnvironmentType() != LoaderService.EnvironmentType.SERVER) {
 			return;
 		}
 

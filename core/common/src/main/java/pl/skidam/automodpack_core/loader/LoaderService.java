@@ -31,13 +31,15 @@ public interface LoaderService {
 
     boolean isModLoaded(String modId);
 
-    Collection getModList();
+    Collection<?> getModList();
 
     String getLoaderVersion();
 
     Path getModPath(String modId);
 
-    String getEnvironmentType();
+    EnvironmentType getEnvironmentType();
+
+    enum EnvironmentType { CLIENT, SERVER, UNKNOWN }
 
     String getModEnvironmentFromNotLoadedJar(Path file);
 

@@ -22,6 +22,7 @@ package pl.skidam.automodpack_core;
 
 import pl.skidam.automodpack_core.client.Changelogs;
 import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.ui.Windows;
 import pl.skidam.automodpack_core.utils.UpdateType;
@@ -62,8 +63,7 @@ public class ReLauncher {
         }
 
         public Restart(Path modpackDir, String guiMessage, UpdateType updateType, Changelogs changelogs) {
-            String environment = new LoaderManager().getEnvironmentType();
-            boolean isClient = environment.equals("CLIENT");
+            boolean isClient = new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT;
             boolean isHeadless = GraphicsEnvironment.isHeadless();
 
             if (isClient) {

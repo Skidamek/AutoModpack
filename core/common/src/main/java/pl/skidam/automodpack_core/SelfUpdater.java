@@ -23,6 +23,7 @@ package pl.skidam.automodpack_core;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.DownloadManager;
@@ -49,11 +50,11 @@ public class SelfUpdater {
             return;
         }
 
-        if (new LoaderManager().getEnvironmentType().equals("SERVER")) {
+        if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.SERVER) {
             if (!serverConfig.selfUpdater) return;
         }
 
-        if (new LoaderManager().getEnvironmentType().equals("CLIENT")) {
+        if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT) {
             if (!clientConfig.selfUpdater) return;
         }
 

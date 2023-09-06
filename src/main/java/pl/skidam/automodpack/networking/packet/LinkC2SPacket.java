@@ -50,7 +50,6 @@ public class LinkC2SPacket {
         LinkPacket linkPacket = LinkPacket.fromJson(serverResponse);
 
         LOGGER.info("Received link packet from server! " + linkPacket.link);
-        ClientLink = linkPacket.link;
 
         String modpackFileName = linkPacket.link.replaceFirst("(https?://)", ""); // removes https:// and http://
         modpackFileName = modpackFileName.replace(":", "-"); // replaces : with -
@@ -61,22 +60,16 @@ public class LinkC2SPacket {
 
         Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(linkPacket.link);
 
-        serverModpackContent.automodpackVersion = linkPacket.automodpackVersion;
-        serverModpackContent.mcVersion = linkPacket.mcVersion;
-        serverModpackContent.modpackName = linkPacket.modpackName;
-        serverModpackContent.loader = linkPacket.loader;
-        serverModpackContent.loaderVersion = linkPacket.loaderVersion;
+        Boolean isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
-        String isUpdate = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
-
-        if ("true".equals(isUpdate)) {
+        if (Boolean.TRUE.equals(isUpdate)) {
             // Disconnect immediately
             ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
             new ModpackUpdater().startModpackUpdate(serverModpackContent, linkPacket.link, modpackDir);
         }
 
         PacketByteBuf response = PacketByteBufs.create();
-        response.writeString(Objects.requireNonNullElse(isUpdate, "null"), 32767);
+        response.writeString(String.valueOf(isUpdate), 32767);
 
         return CompletableFuture.completedFuture(response);
     }

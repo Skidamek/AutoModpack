@@ -29,23 +29,25 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
-    public static boolean preload = true;
+    public static Boolean preload;
     public static String MC_VERSION;
     public static String AM_VERSION;
+    public static String LOADER_VERSION;
+    public static String LOADER;
     public static final Path automodpackDir = Paths.get("./automodpack/");
     public static Path hostModpackDir = Paths.get(automodpackDir + File.separator + "host-modpack");
     public static Path hostModpackContentFile = Paths.get(hostModpackDir + File.separator + "modpack-content.json");
     public static final Path modpacksDir = Paths.get(automodpackDir + File.separator + "modpacks");
     public static final Path clientConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-client.json");
     public static final Path serverConfigFile = Paths.get(automodpackDir + File.separator + "automodpack-server.json");
-    public static final Set<String> keyWordsOfDisconnect = new HashSet<>(Arrays.asList("install", "update", "download", "handshake", "incompatible", "outdated", "client", "version"));
+    public static final Set<String> keyWordsOfDisconnect = new HashSet<>(List.of("install", "update", "download", "handshake", "incompatible", "outdated", "client", "version"));
     public static Path modsPath;
-    public static String ClientLink;
     public static Path selectedModpackDir;
     public static String selectedModpackLink;
     public static Jsons.ServerConfigFields serverConfig;

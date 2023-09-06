@@ -41,7 +41,7 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public Collection getModList() {
+    public Collection<?> getModList() {
         Collection <ModContainer> modsList = QuiltLoader.getAllMods();
 
         return modsList.stream().map(mod -> mod.metadata().id() + " " + mod.metadata().version()).collect(Collectors.toList());
@@ -71,13 +71,13 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public String getEnvironmentType() {
+    public EnvironmentType getEnvironmentType() {
         if (MinecraftQuiltLoader.getEnvironmentType() == EnvType.CLIENT) {
-            return "CLIENT";
+            return EnvironmentType.CLIENT;
         } else if (MinecraftQuiltLoader.getEnvironmentType() == EnvType.SERVER) {
-            return "SERVER";
+            return EnvironmentType.SERVER;
         } else {
-            return "UNKNOWN";
+            return EnvironmentType.UNKNOWN;
         }
     }
 

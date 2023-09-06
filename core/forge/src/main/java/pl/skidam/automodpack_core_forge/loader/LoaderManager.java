@@ -34,7 +34,7 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public Collection getModList() {
+    public Collection<?> getModList() {
         List <ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 
         List <String> modList = new ArrayList<>();
@@ -75,14 +75,14 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public String getEnvironmentType() {
+    public EnvironmentType getEnvironmentType() {
         Dist dist = FMLLoader.getDist();
         if (dist.isClient()) {
-            return "CLIENT";
+            return EnvironmentType.CLIENT;
         } else if (dist.isDedicatedServer()) {
-            return "SERVER";
+            return EnvironmentType.SERVER;
         } else {
-            return "UNKNOWN";
+            return EnvironmentType.UNKNOWN;
         }
     }
 
@@ -96,11 +96,12 @@ public class LoaderManager implements LoaderService {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(entry)));
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    if (line.startsWith("modId")) {
-                        String[] split = line.split("=");
-                        if (split.length > 1) {
-                            return split[1].replaceAll("\"", "").trim();
-                        }
+                    if (!line.startsWith("modId")) {
+                        continue;
+                    }
+                    String[] split = line.split("=");
+                    if (split.length > 1) {
+                        return split[1].replaceAll("\"", "").trim();
                     }
                 }
             }
@@ -149,31 +150,41 @@ public class LoaderManager implements LoaderService {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(modsTomlEntry)));
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    if (line.startsWith("version")) {
-                        String[] split = line.split("=");
-                        if (split.length > 1) {
-                            String version = split[1].substring(0, split[1].lastIndexOf("\""));
-                            version = version.replaceAll("\"", "").trim();
+                    if (!line.startsWith("version")) {
+                        continue;
+                    }
 
-                            if ("${file.jarVersion}".equals(version)) {
-                                ZipEntry manifestEntry = zipFile.getEntry("META-INF/MANIFEST.MF");
-                                if (manifestEntry != null) {
-                                    BufferedReader manifestReader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(manifestEntry)));
-                                    String manifestLine;
-                                    while ((manifestLine = manifestReader.readLine()) != null) {
-                                        if (manifestLine.startsWith("Implementation-Version")) {
-                                            String[] manifestSplit = manifestLine.split(":");
-                                            if (manifestSplit.length > 1) {
-                                                version = manifestSplit[1].trim();
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                    String[] split = line.split("=");
+                    if (split.length <= 1) {
+                        continue;
+                    }
 
-                            return version;
+                    String version = split[1].substring(0, split[1].lastIndexOf("\""));
+                    version = version.replaceAll("\"", "").trim();
+
+                    if (!"${file.jarVersion}".equals(version)) {
+                        return version;
+                    }
+
+                    ZipEntry manifestEntry = zipFile.getEntry("META-INF/MANIFEST.MF");
+                    if (manifestEntry == null) {
+                        return null;
+                    }
+
+                    BufferedReader manifestReader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(manifestEntry)));
+                    String manifestLine;
+                    while ((manifestLine = manifestReader.readLine()) != null) {
+                        if (!manifestLine.startsWith("Implementation-Version")) {
+                            continue;
+                        }
+
+                        String[] manifestSplit = manifestLine.split(":");
+                        if (manifestSplit.length > 1) {
+                            version = manifestSplit[1].trim();
                         }
                     }
+
+                    return version;
                 }
             }
         } catch (ZipException ignored) {
@@ -238,11 +249,13 @@ public class LoaderManager implements LoaderService {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(entry)));
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    if (line.startsWith("side")) {
-                        String[] split = line.split("=");
-                        if (split.length > 1) {
-                            return split[1].replaceAll("\"", "").trim();
-                        }
+                    if (!line.startsWith("side")) {
+                        continue;
+                    }
+
+                    String[] split = line.split("=");
+                    if (split.length > 1) {
+                        return split[1].replaceAll("\"", "").trim();
                     }
                 }
             }

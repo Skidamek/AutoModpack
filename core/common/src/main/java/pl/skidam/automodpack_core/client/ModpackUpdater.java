@@ -93,7 +93,7 @@ public class ModpackUpdater {
             }
 
             if (Files.exists(modpackContentFile)) {
-                if ("false".equals(ModpackUtils.isUpdate(serverModpackContent, modpackDir))) {
+                if (Boolean.FALSE.equals(ModpackUtils.isUpdate(serverModpackContent, modpackDir))) {
                     // check if modpack is loaded now loaded
 
                     LOGGER.info("Modpack is up to date");

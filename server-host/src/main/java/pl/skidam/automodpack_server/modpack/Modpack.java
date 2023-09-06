@@ -131,6 +131,14 @@ public class Modpack {
 
         public static void saveModpackContent() {
             modpackContent = new Jsons.ModpackContentFields(null, list);
+
+            // TODO assign versions to these variable from http config
+            modpackContent.automodpackVersion = AM_VERSION;
+            modpackContent.mcVersion = MC_VERSION;
+            modpackContent.loaderVersion = LOADER_VERSION;
+            modpackContent.loader = LOADER;
+
+            modpackContent.modpackName = serverConfig.modpackName;
             modpackContent.modpackHash = CustomFileUtils.getHashFromStringOfHashes(ModpackContentTools.getStringOfAllHashes(modpackContent));
 
             ConfigTools.saveConfig(hostModpackContentFile, modpackContent);
