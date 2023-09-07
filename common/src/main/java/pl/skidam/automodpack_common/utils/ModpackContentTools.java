@@ -85,22 +85,6 @@ public class ModpackContentTools {
         return Paths.get(modpacksDir + File.separator + modpack);
     }
 
-    public static Map<String, Path> getListOfModpacks() {
-        Map<String, Path> map = new HashMap<>();
-        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(modpacksDir)) {
-            for (Path path : directoryStream) {
-                if (Files.isDirectory(path)) {
-                    map.put(path.getFileName().toString(), path);
-                }
-            }
-        } catch (IOException e) {
-            // Handle the exception if necessary
-            e.printStackTrace();
-        }
-
-        return map;
-    }
-
     public static Path getModpackContentFile(Path modpackDir) {
         if (!Files.exists(modpackDir)) {
             return null;

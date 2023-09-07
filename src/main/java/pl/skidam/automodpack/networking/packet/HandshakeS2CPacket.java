@@ -123,7 +123,7 @@ public class HandshakeS2CPacket {
 
         LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
 
-        LinkPacket linkPacket = new LinkPacket(linkToSend);
+        LinkPacket linkPacket = new LinkPacket(linkToSend, serverConfig.modpackName);
 
         PacketByteBuf outBuf = PacketByteBufs.create();
 

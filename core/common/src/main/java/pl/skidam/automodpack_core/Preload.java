@@ -23,6 +23,7 @@ package pl.skidam.automodpack_core;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
+import pl.skidam.automodpack_common.utils.FileInspection;
 import pl.skidam.automodpack_common.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
@@ -34,7 +35,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 import java.util.List;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
@@ -60,14 +60,14 @@ public class Preload implements SetupModCallback {
             if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT && selectedModpack != null && !selectedModpack.isEmpty()) {
                 selectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
                 selectedModpackLink = ModpackContentTools.getModpackLink(selectedModpack);
-                Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
+                Jsons.ModpackContentFields latestModpackContent = ModpackUtils.getServerModpackContent(selectedModpackLink);
 
-                if (serverModpackContent != null) {
-                    serverModpackContentList = serverModpackContent.list;
+                if (latestModpackContent != null) {
+                    serverModpackContentList = latestModpackContent.list;
                 }
 
-                SelfUpdater.update(serverModpackContent);
-                new ModpackUpdater().startModpackUpdate(serverModpackContent, selectedModpackLink, selectedModpackDir);
+                SelfUpdater.update(latestModpackContent);
+                new ModpackUpdater().startModpackUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
             } else {
                 SelfUpdater.update();
             }
@@ -106,31 +106,54 @@ public class Preload implements SetupModCallback {
         clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
         serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
 
-        // add current loader to the list
         if (serverConfig != null) {
+
+            // Add current loader to the list
             if (serverConfig.acceptedLoaders == null) {
                 serverConfig.acceptedLoaders = List.of(LOADER);
             } else if (!serverConfig.acceptedLoaders.contains(LOADER)) {
                 serverConfig.acceptedLoaders.add(LOADER);
             }
+
+            if (!serverConfig.externalModpackHostLink.isEmpty()) {
+                serverConfig.hostIp = serverConfig.externalModpackHostLink;
+                serverConfig.hostLocalIp = serverConfig.externalModpackHostLink;
+                LOGGER.info("externalModpackHostLink is deprecated, use hostIp and hostLocalIp instead, setting them to {}", serverConfig.externalModpackHostLink);
+                serverConfig.externalModpackHostLink = "";
+            }
+
+            // Check modpack name and fix it if needed, because it will be used for naming a folder on client
+            if (FileInspection.isInValidFileName(serverConfig.modpackName)) {
+                serverConfig.modpackName = FileInspection.fixFileName(serverConfig.modpackName);
+                LOGGER.info("Changed modpack name to {}", serverConfig.modpackName);
+            }
+
+            // Save changes
+            ConfigTools.saveConfig(serverConfigFile, serverConfig);
         }
 
-        if (serverConfig != null && !serverConfig.externalModpackHostLink.isEmpty()) {
-            serverConfig.hostIp = serverConfig.externalModpackHostLink;
-            serverConfig.hostLocalIp = serverConfig.externalModpackHostLink;
-            LOGGER.info("externalModpackHostLink is deprecated, use hostIp and hostLocalIp instead, setting them to {}", serverConfig.externalModpackHostLink);
-            serverConfig.externalModpackHostLink = "";
-            ConfigTools.saveConfig(serverConfigFile, serverConfig);
+        if (clientConfig != null) {
+
+            // Make sure to have modpack in installed modpacks
+            if (clientConfig.installedModpacks == null) {
+                clientConfig.installedModpacks = List.of(clientConfig.selectedModpack);
+            } else if (!clientConfig.installedModpacks.contains(clientConfig.selectedModpack)) {
+                clientConfig.installedModpacks.add(clientConfig.selectedModpack);
+            }
+
+            // Save changes
+            ConfigTools.saveConfig(clientConfigFile, clientConfig);
+
         }
 
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
     }
 
     private void createPaths() throws IOException {
-        Path AMdir = Paths.get("./automodpack/");
+        Path AMDir = Paths.get("./automodpack/");
         // Check if AutoModpack path exists
-        if (!Files.exists(AMdir)) {
-            Files.createDirectories(AMdir);
+        if (!Files.exists(AMDir)) {
+            Files.createDirectories(AMDir);
         }
 
         if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT) {

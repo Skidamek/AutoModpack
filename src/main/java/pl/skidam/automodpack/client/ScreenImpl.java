@@ -47,12 +47,8 @@ public class ScreenImpl implements ScreenService {
             try {
                 Method method = Arrays.stream(ScreenImpl.Screens.class.getDeclaredMethods())
                         .filter(m -> m.getName().equals(screenName))
-                        .findFirst()
+                        .findAny()
                         .orElseThrow(() -> new NoSuchMethodException("No method found with name " + screenName));
-
-                if (method.getParameterCount() != args.length) {
-                    throw new IllegalArgumentException("Incorrect number of arguments for method " + screenName);
-                }
 
 
                 Util.getMainWorkerExecutor().execute(() -> {

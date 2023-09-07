@@ -79,15 +79,13 @@ public class LoaderManager implements LoaderService {
         Dist dist = FMLLoader.getDist();
         if (dist.isClient()) {
             return EnvironmentType.CLIENT;
-        } else if (dist.isDedicatedServer()) {
-            return EnvironmentType.SERVER;
         } else {
-            return EnvironmentType.UNKNOWN;
+            return EnvironmentType.SERVER;
         }
     }
 
     @Override
-    public String getModEnvironmentFromNotLoadedJar(Path file) {
+    public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
             ZipEntry entry = zipFile.getEntry("META-INF/mods.toml");
@@ -96,24 +94,27 @@ public class LoaderManager implements LoaderService {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(entry)));
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    if (!line.startsWith("modId")) {
+                    if (!line.startsWith("side")) {
                         continue;
                     }
+
                     String[] split = line.split("=");
                     if (split.length > 1) {
-                        return split[1].replaceAll("\"", "").trim();
+                        if (split[1].replaceAll("\"", "").trim().equalsIgnoreCase("client")) {
+                            return EnvironmentType.CLIENT;
+                        } else {
+                            return EnvironmentType.SERVER;
+                        }
                     }
                 }
             }
         } catch (ZipException ignored) {
-            return null;
         } catch (Exception e) {
-            LOGGER.error("Failed to get mod id from file: " + file.getFileName());
+            LOGGER.error("Failed to get mod environment from file: " + file);
             e.printStackTrace();
-            return null;
         }
 
-        return null;
+        return EnvironmentType.BOTH;
     }
 
     @Override
@@ -203,8 +204,8 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public String getModEnvironment(String modId) {
-        List <ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
+    public EnvironmentType getModEnvironment(String modId) {
+        List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 
         try {
             for (ModInfo modInfo: modInfos) {
@@ -219,11 +220,11 @@ public class LoaderManager implements LoaderService {
 
         }
 
-        return "UNKNOWN";
+        return EnvironmentType.BOTH;
     }
 
     @Override
-    public String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
+    public String getModId(Path file, boolean checkAlsoOutOfContainer) {
         List <ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 
         for (ModInfo modInfo: modInfos) {
@@ -249,23 +250,25 @@ public class LoaderManager implements LoaderService {
                 BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(entry)));
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    if (!line.startsWith("side")) {
+                    if (!line.startsWith("modId")) {
+                        continue;
+                    }
+                    String[] split = line.split("=");
+                    if (split.length <= 1) {
                         continue;
                     }
 
-                    String[] split = line.split("=");
-                    if (split.length > 1) {
-                        return split[1].replaceAll("\"", "").trim();
-                    }
+                    return split[1].replaceAll("\"", "").trim();
                 }
             }
         } catch (ZipException ignored) {
-            return "UNKNOWN";
+            return null;
         } catch (Exception e) {
-            LOGGER.error("Failed to get mod environment from file: " + file);
+            LOGGER.error("Failed to get mod id from file: " + file.getFileName());
             e.printStackTrace();
+            return null;
         }
 
-        return "UNKNOWN";
+        return null;
     }
 }

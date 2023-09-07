@@ -24,9 +24,11 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
+import pl.skidam.automodpack_common.GlobalVariables;
 import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_core.screen.ScreenManager;
+import pl.skidam.automodpack_server.modpack.HttpServer;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
@@ -75,5 +77,26 @@ public class AutoModpack {
         Commands.register();
 
         LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
+    }
+
+    public static void afterSetupServer() {
+        if (new LoaderManager().getEnvironmentType() != LoaderService.EnvironmentType.SERVER) {
+            return;
+        }
+
+        new HttpServer(serverConfig);
+        GlobalVariables.serverFullyStarted = true;
+    }
+
+    public static void beforeShutdownServer() {
+        if (new LoaderManager().getEnvironmentType() != LoaderService.EnvironmentType.SERVER) {
+            return;
+        }
+
+        if (HttpServer.fileChangeChecker != null) {
+            HttpServer.fileChangeChecker.stopChecking();
+        }
+
+        HttpServer.stop();
     }
 }

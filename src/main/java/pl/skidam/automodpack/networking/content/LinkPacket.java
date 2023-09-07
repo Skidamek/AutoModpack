@@ -24,9 +24,11 @@ import com.google.gson.Gson;
 
 public class LinkPacket {
     public String link;
+    public String modpackName;
 
-    public LinkPacket(String link) {
+    public LinkPacket(String link, String modpackName) {
         this.link = link;
+        this.modpackName = modpackName;
     }
 
     public String toJson() {

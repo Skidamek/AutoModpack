@@ -26,6 +26,8 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
+import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
+import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack_core.SelfUpdater;
 import pl.skidam.automodpack_core.loader.LoaderManager;
@@ -55,13 +57,13 @@ public class HandshakeC2SPacket {
         } else {
             LOGGER.warn("Versions mismatch " + serverHandshakePacket.amVersion);
             LOGGER.info("Trying to change automodpack version to the version required by server...");
-            updateMod(serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
+            updateMod(handler, serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
         }
 
         return CompletableFuture.completedFuture(outBuf);
     }
 
-    private static void updateMod(String serverAMVersion, String serverMCVersion) {
+    private static void updateMod(ClientLoginNetworkHandler handler, String serverAMVersion, String serverMCVersion) {
         if (!serverMCVersion.equals(MC_VERSION)) {
             return;
         }
@@ -72,6 +74,8 @@ public class HandshakeC2SPacket {
             LOGGER.warn("Couldn't find {} version of automodpack for minecraft {} required by server", serverAMVersion, serverAMVersion);
             return;
         }
+
+        ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
 
         SelfUpdater.installModVersion(automodpack);
     }

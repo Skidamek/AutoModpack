@@ -284,12 +284,6 @@ public class ModpackUpdater {
 
             finishModpackUpdate(modpackDir, modpackContentFile);
 
-            // change loader and minecraft version in launchers like prism, multimc.
-            if (serverModpackContent.loader.equals(new LoaderManager().getPlatformType().toString().toLowerCase())) { // server may use different loader than client
-                MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // update loader version
-            }
-            MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // update minecraft version
-
             if (!failedDownloads.isEmpty()) {
                 StringBuilder failedFiles = new StringBuilder();
                 for (Map.Entry<String, String> entry : failedDownloads.entrySet()) {
@@ -306,6 +300,11 @@ public class ModpackUpdater {
                 }
 
                 return;
+            }
+
+            String modpackName = modpackDir.getFileName().toString();
+            if (!clientConfig.installedModpacks.contains(modpackName)) {
+                clientConfig.installedModpacks.add(modpackName);
             }
 
             LOGGER.info("Update completed! Took: " + (System.currentTimeMillis() - start) + " ms");
@@ -331,6 +330,13 @@ public class ModpackUpdater {
             LOGGER.error("Modpack content is null");
             return;
         }
+
+        // change loader and minecraft version in launchers like prism, multimc.
+        if (serverModpackContent.loader.equals(LOADER)) { // server may use different loader than client
+            MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // update loader version
+        }
+        MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // update minecraft version
+
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 
@@ -446,7 +452,7 @@ public class ModpackUpdater {
                 if (!Files.isRegularFile(defaultMod) || !defaultMod.getFileName().toString().endsWith(".jar")) {
                     continue;
                 }
-                defaultMods.put(defaultMod.getFileName().toString(), new LoaderManager().getModIdFromLoadedJar(defaultMod, true));
+                defaultMods.put(defaultMod.getFileName().toString(), new LoaderManager().getModId(defaultMod, true));
             }
         } catch (IOException e) {
             return null;

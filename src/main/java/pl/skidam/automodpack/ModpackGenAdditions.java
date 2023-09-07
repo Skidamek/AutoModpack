@@ -22,6 +22,7 @@ package pl.skidam.automodpack;
 
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_server.modpack.Modpack;
 
 import java.io.File;
@@ -67,8 +68,8 @@ public class ModpackGenAdditions {
 
         for (Object mod : modList) {
             String modId = mod.toString().split(" ")[0]; // mod is  "modid (version)" so we remove everything after space to get modid (modid can't have space in it)
-            String modEnv = new LoaderManager().getModEnvironment(modId).toUpperCase();
-            if (modEnv.equals("SERVER")) {
+            LoaderService.EnvironmentType modEnv = new LoaderManager().getModEnvironment(modId);
+            if (modEnv == LoaderService.EnvironmentType.SERVER) {
                 list.removeIf(modpackContentItems -> {
                     if (modpackContentItems.modId == null) return false;
                     if (modpackContentItems.modId.equals(modId)) {

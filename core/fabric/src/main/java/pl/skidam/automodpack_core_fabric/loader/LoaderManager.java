@@ -65,7 +65,7 @@ public class LoaderManager implements LoaderService {
                 Path[] mods = Files.list(modsPath).toArray(Path[]::new);
                 for (Path mod : mods) {
                     if (mod.getFileName().toString().endsWith(".jar")) {
-                        String modIdFromLoadedJar = getModIdFromLoadedJar(mod, false);
+                        String modIdFromLoadedJar = getModId(mod, false);
                         if (modIdFromLoadedJar != null && modIdFromLoadedJar.equals(modId)) {
                             return mod;
                         }
@@ -84,15 +84,13 @@ public class LoaderManager implements LoaderService {
     public EnvironmentType getEnvironmentType() {
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
             return EnvironmentType.CLIENT;
-        } else if (FabricLoader.getInstance().getEnvironmentType() == EnvType.SERVER) {
-            return EnvironmentType.SERVER;
         } else {
-            return EnvironmentType.UNKNOWN;
+            return EnvironmentType.SERVER;
         }
     }
 
     @Override
-    public String getModEnvironmentFromNotLoadedJar(Path file) {
+    public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
         if (!Files.isRegularFile(file)) return null;
         if (!file.getFileName().endsWith(".jar")) return null;
 
@@ -115,17 +113,20 @@ public class LoaderManager implements LoaderService {
                 zipFile.close();
 
                 if (json.has("environment")) {
-                    return json.get("environment").getAsString().toUpperCase();
+                    if (json.get("environment").getAsString().toUpperCase().equalsIgnoreCase("client")) {
+                        return EnvironmentType.CLIENT;
+                    } else {
+                        return EnvironmentType.SERVER;
+                    }
                 }
             }
         } catch (ZipException ignored) {
-            return "UNKNOWN";
         } catch (IOException e) {
             LOGGER.error("Failed to get mod env from file: " + file.getFileName());
             e.printStackTrace();
         }
 
-        return "UNKNOWN";
+        return EnvironmentType.BOTH;
     }
 
     @Override
@@ -173,12 +174,21 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public String getModEnvironment(String modId) {
-        return FabricLoader.getInstance().getModContainer(modId).isPresent() ?  FabricLoader.getInstance().getModContainer(modId).get().getMetadata().getEnvironment().toString().toUpperCase() : "*";
+    public EnvironmentType getModEnvironment(String modId) {
+        var container = FabricLoader.getInstance().getModContainer(modId);
+        if (container.isEmpty()) {
+            return EnvironmentType.BOTH;
+        }
+        String env = container.get().getMetadata().getEnvironment().toString();
+        if (env.equalsIgnoreCase("client")) {
+            return EnvironmentType.CLIENT;
+        } else {
+            return EnvironmentType.SERVER;
+        }
     }
 
     @Override
-    public String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
+    public String getModId(Path file, boolean checkAlsoOutOfContainer) {
         for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
             FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();
             Path modFile = Paths.get(fileSys.toString());

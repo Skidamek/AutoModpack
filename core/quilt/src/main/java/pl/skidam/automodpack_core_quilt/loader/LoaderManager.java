@@ -74,15 +74,13 @@ public class LoaderManager implements LoaderService {
     public EnvironmentType getEnvironmentType() {
         if (MinecraftQuiltLoader.getEnvironmentType() == EnvType.CLIENT) {
             return EnvironmentType.CLIENT;
-        } else if (MinecraftQuiltLoader.getEnvironmentType() == EnvType.SERVER) {
-            return EnvironmentType.SERVER;
         } else {
-            return EnvironmentType.UNKNOWN;
+            return EnvironmentType.SERVER;
         }
     }
 
     @Override
-    public String getModEnvironmentFromNotLoadedJar(Path file) {
+    public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
         if (!Files.isRegularFile(file)) return null;
         if (!file.getFileName().endsWith(".jar")) return null;
 
@@ -106,32 +104,43 @@ public class LoaderManager implements LoaderService {
                 stream.close();
                 zipFile.close();
 
+                String env = null;
+
                 if (entry.getName().equals("fabric.mod.json")) {
                     if (json.has("environment")) {
-                        return json.get("environment").getAsString().toUpperCase();
+                        env = json.get("environment").getAsString();
                     }
                 } else if (json.has("quilt_loader")) {
                     JsonObject quiltLoader = json.get("quilt_loader").getAsJsonObject();
                     if (quiltLoader.has("environment")) {
-                        return quiltLoader.get("environment").getAsString().toUpperCase();
+                        env = quiltLoader.get("environment").getAsString();
                     }
 
                     // if not, we also can check in different place
                     if (json.has("minecraft")) {
                         JsonObject minecraft = json.get("minecraft").getAsJsonObject();
                         if (minecraft.has("environment")) {
-                            return minecraft.get("environment").getAsString().toUpperCase();
+                            env = minecraft.get("environment").getAsString();
                         }
                     }
                 }
+
+                if (env == null) {
+                    return EnvironmentType.BOTH;
+                }
+
+                if (env.equalsIgnoreCase("client")) {
+                    return EnvironmentType.CLIENT;
+                } else {
+                    return EnvironmentType.SERVER;
+                }
             }
         } catch (ZipException ignored) {
-            return "UNKNOWN";
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        return "UNKNOWN";
+        return EnvironmentType.BOTH;
     }
 
     @Override
@@ -187,22 +196,36 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
-    public String getModEnvironment(String modId) {
+    public EnvironmentType getModEnvironment(String modId) {
         if (QuiltLoader.getModContainer(modId).isPresent()) {
-            LoaderValue env = QuiltLoader.getModContainer(modId).get().metadata().value("environment");
-            if (env == null) {
-                return FabricLoader.getInstance().getModContainer(modId).isPresent() ? FabricLoader.getInstance().getModContainer(modId).get().getMetadata().getEnvironment().toString().toUpperCase() : "*";
+            LoaderValue loaderValue = QuiltLoader.getModContainer(modId).get().metadata().value("environment");
+            if (loaderValue == null) {
+                var container = FabricLoader.getInstance().getModContainer(modId);
+                if (container.isEmpty()) {
+                    return EnvironmentType.BOTH;
+                }
+                String env = container.get().getMetadata().getEnvironment().toString();
+                if (env.equalsIgnoreCase("client")) {
+                    return EnvironmentType.CLIENT;
+                } else {
+                    return EnvironmentType.SERVER;
+                }
+            } else {
+                if (loaderValue.asString().equalsIgnoreCase("client")) {
+                    return EnvironmentType.CLIENT;
+                } else {
+                    return EnvironmentType.SERVER;
+                }
             }
-            return env.toString().toUpperCase();
         }
-        return "UNKNOWN";
+        return EnvironmentType.BOTH;
     }
 
     @Override
-    public String getModIdFromLoadedJar(Path file, boolean checkAlsoOutOfContainer) {
+    public String getModId(Path file, boolean checkAlsoOutOfContainer) {
         if (!Files.isRegularFile(file)) return null;
         if (!file.getFileName().endsWith(".jar")) return null;
-        if (Objects.equals(getModEnvironmentFromNotLoadedJar(file), "UNKNOWN")) return null;
+        if (getModEnvironmentFromNotLoadedJar(file).equals(EnvironmentType.BOTH)) return null;
 
         for (ModContainer modContainer: QuiltLoader.getAllMods()) {
             FileSystem fileSys = modContainer.rootPath().getFileSystem();

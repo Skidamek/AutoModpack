@@ -20,14 +20,13 @@
 
 package pl.skidam.automodpack_common.config;
 
-import java.util.Arrays;
 import java.util.List;
 
 public class Jsons {
 
     public static class ClientConfigFields {
         public String selectedModpack = "";
-//        public boolean forceDangerScreen = true;
+        public List<String> installedModpacks;
         public boolean selfUpdater = true;
     }
 
