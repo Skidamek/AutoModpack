@@ -23,6 +23,8 @@ package pl.skidam.automodpack_common.utils;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Url {
 
@@ -51,6 +53,18 @@ public class Url {
         } catch (Exception e) {
             // Decoding error, return the original encoded part
             return encodedUrl;
+        }
+    }
+
+    public static String removeHttpPrefix(String inputUrl) {
+        String regex = "^(https?://)";
+        Pattern pattern = Pattern.compile(regex);
+        Matcher matcher = pattern.matcher(inputUrl);
+
+        if (matcher.find()) {
+            return inputUrl.substring(matcher.end());
+        } else {
+            return inputUrl; // No match, return the original URL
         }
     }
 }

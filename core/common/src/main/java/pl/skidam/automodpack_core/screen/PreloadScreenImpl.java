@@ -38,9 +38,4 @@ public class PreloadScreenImpl implements ScreenService {
     public Optional<Object> getScreen() {
         return Optional.empty();
     }
-
-    @Override
-    public Optional<Boolean> properlyLoaded() {
-        return Optional.empty();
-    }
 }

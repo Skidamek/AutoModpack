@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.metadata.ModEnvironment;
 import org.quiltmc.loader.api.LoaderValue;
 import org.quiltmc.loader.api.ModContainer;
 import org.quiltmc.loader.api.QuiltLoader;
@@ -126,7 +127,7 @@ public class LoaderManager implements LoaderService {
                 }
 
                 if (env == null) {
-                    return EnvironmentType.BOTH;
+                    return EnvironmentType.UNIVERSAL;
                 }
 
                 if (env.equalsIgnoreCase("client")) {
@@ -140,7 +141,7 @@ public class LoaderManager implements LoaderService {
             e.printStackTrace();
         }
 
-        return EnvironmentType.BOTH;
+        return EnvironmentType.UNIVERSAL;
     }
 
     @Override
@@ -202,30 +203,34 @@ public class LoaderManager implements LoaderService {
             if (loaderValue == null) {
                 var container = FabricLoader.getInstance().getModContainer(modId);
                 if (container.isEmpty()) {
-                    return EnvironmentType.BOTH;
+                    return EnvironmentType.UNIVERSAL;
                 }
-                String env = container.get().getMetadata().getEnvironment().toString();
-                if (env.equalsIgnoreCase("client")) {
+                ModEnvironment env = container.get().getMetadata().getEnvironment();
+                if (env == ModEnvironment.CLIENT) {
                     return EnvironmentType.CLIENT;
-                } else {
+                } else if (env == ModEnvironment.SERVER) {
                     return EnvironmentType.SERVER;
+                } else {
+                    return EnvironmentType.UNIVERSAL;
                 }
             } else {
                 if (loaderValue.asString().equalsIgnoreCase("client")) {
                     return EnvironmentType.CLIENT;
-                } else {
+                } else if (loaderValue.asString().equalsIgnoreCase("server")) {
                     return EnvironmentType.SERVER;
+                } else {
+                    return EnvironmentType.UNIVERSAL;
                 }
             }
         }
-        return EnvironmentType.BOTH;
+        return EnvironmentType.UNIVERSAL;
     }
 
     @Override
     public String getModId(Path file, boolean checkAlsoOutOfContainer) {
         if (!Files.isRegularFile(file)) return null;
         if (!file.getFileName().endsWith(".jar")) return null;
-        if (getModEnvironmentFromNotLoadedJar(file).equals(EnvironmentType.BOTH)) return null;
+        if (getModEnvironmentFromNotLoadedJar(file).equals(EnvironmentType.UNIVERSAL)) return null;
 
         for (ModContainer modContainer: QuiltLoader.getAllMods()) {
             FileSystem fileSys = modContainer.rootPath().getFileSystem();

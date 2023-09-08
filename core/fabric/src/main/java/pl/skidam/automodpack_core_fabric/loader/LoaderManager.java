@@ -6,6 +6,7 @@ import com.google.gson.JsonSyntaxException;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
+import net.fabricmc.loader.api.metadata.ModEnvironment;
 import pl.skidam.automodpack_core.loader.LoaderService;
 
 import java.io.BufferedReader;
@@ -126,7 +127,7 @@ public class LoaderManager implements LoaderService {
             e.printStackTrace();
         }
 
-        return EnvironmentType.BOTH;
+        return EnvironmentType.UNIVERSAL;
     }
 
     @Override
@@ -177,13 +178,15 @@ public class LoaderManager implements LoaderService {
     public EnvironmentType getModEnvironment(String modId) {
         var container = FabricLoader.getInstance().getModContainer(modId);
         if (container.isEmpty()) {
-            return EnvironmentType.BOTH;
+            return EnvironmentType.UNIVERSAL;
         }
-        String env = container.get().getMetadata().getEnvironment().toString();
-        if (env.equalsIgnoreCase("client")) {
+        ModEnvironment env = container.get().getMetadata().getEnvironment();
+        if (env == ModEnvironment.CLIENT) {
             return EnvironmentType.CLIENT;
-        } else {
+        } else if (env == ModEnvironment.SERVER) {
             return EnvironmentType.SERVER;
+        } else {
+            return EnvironmentType.UNIVERSAL;
         }
     }
 
@@ -197,7 +200,9 @@ public class LoaderManager implements LoaderService {
             }
         }
 
-        if (checkAlsoOutOfContainer) return getModIdFromNotLoadedJar(file);
+        if (checkAlsoOutOfContainer) {
+            return getModIdFromNotLoadedJar(file);
+        }
 
         return null;
     }

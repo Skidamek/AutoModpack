@@ -26,7 +26,7 @@ import java.util.Collection;
 public interface LoaderService {
 
     enum ModPlatform { FABRIC, QUILT, FORGE }
-    enum EnvironmentType { CLIENT, SERVER, BOTH }
+    enum EnvironmentType { CLIENT, SERVER, UNIVERSAL}
 
 
     ModPlatform getPlatformType();
@@ -39,16 +39,13 @@ public interface LoaderService {
 
     Path getModPath(String modId);
 
-    EnvironmentType getEnvironmentType();
-
-    EnvironmentType getModEnvironmentFromNotLoadedJar(Path file);
-
     String getModVersion(String modId);
 
     String getModVersion(Path file);
     boolean isDevelopmentEnvironment();
-
+    EnvironmentType getEnvironmentType();
     EnvironmentType getModEnvironment(String modId);
+    EnvironmentType getModEnvironmentFromNotLoadedJar(Path file);
 
     String getModId(Path file, boolean checkAlsoOutOfContainer);
     String getModIdFromNotLoadedJar(Path file);

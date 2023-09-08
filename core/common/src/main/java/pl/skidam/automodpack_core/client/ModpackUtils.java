@@ -23,7 +23,9 @@ package pl.skidam.automodpack_core.client;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
+import pl.skidam.automodpack_common.utils.FileInspection;
 import pl.skidam.automodpack_common.utils.ModpackContentTools;
+import pl.skidam.automodpack_common.utils.Url;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -36,6 +38,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Objects;
@@ -144,6 +147,74 @@ public class ModpackUtils {
                 CustomFileUtils.copyFile(sourceFile, destinationFile);
             }
         }
+    }
+
+    public static void renameModpackDir(Path modpackContentFile, Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+        Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+        if (clientModpackContent != null) {
+            String installedModpackName = clientModpackContent.modpackName;
+            String serverModpackName = serverModpackContent.modpackName;
+
+            if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
+
+                Path modpackDirParent = modpackDir.getParent();
+                modpackDirParent = Path.of(modpackDirParent + File.separator + serverModpackName);
+
+                try {
+                    Files.move(modpackDir, modpackDirParent, StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    public static void selectModpack(Path modpackDir) {
+        clientConfig.selectedModpack = modpackDir.getFileName().toString();
+        ConfigTools.saveConfig(clientConfigFile, clientConfig);
+    }
+
+    public static void addModpackToList(String modpackName) {
+        if (modpackName == null || modpackName.isEmpty()) {
+            return;
+        }
+
+        if (clientConfig.installedModpacks == null) {
+            clientConfig.installedModpacks = List.of(modpackName);
+        } else if (!clientConfig.installedModpacks.contains(modpackName)) {
+            clientConfig.installedModpacks.add(modpackName);
+        }
+
+        ConfigTools.saveConfig(clientConfigFile, clientConfig);
+    }
+
+    // Returns modpack name formatted for path or url if server doesn't provide modpack name
+    public static Path getModpackPath(String url, String modpackName) {
+
+        String nameFromUrl = Url.removeHttpPrefix(url);
+
+        if (FileInspection.isInValidFileName(nameFromUrl)) {
+            nameFromUrl = FileInspection.fixFileName(nameFromUrl);
+        }
+
+        Path modpackDir = Path.of(modpacksDir + File.separator + nameFromUrl);
+
+        if (!modpackName.isEmpty()) {
+            // Check if we don't have already installed modpack via this link
+            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.contains(nameFromUrl)) {
+                return modpackDir;
+            }
+
+            String nameFromName = modpackName;
+
+            if (FileInspection.isInValidFileName(modpackName)) {
+                nameFromName = FileInspection.fixFileName(modpackName);
+            }
+
+            modpackDir = Path.of(modpacksDir + File.separator + nameFromName);
+        }
+
+        return modpackDir;
     }
 
     public static Jsons.ModpackContentFields getServerModpackContent(String link) {

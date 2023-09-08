@@ -135,11 +135,7 @@ public class Preload implements SetupModCallback {
         if (clientConfig != null) {
 
             // Make sure to have modpack in installed modpacks
-            if (clientConfig.installedModpacks == null) {
-                clientConfig.installedModpacks = List.of(clientConfig.selectedModpack);
-            } else if (!clientConfig.installedModpacks.contains(clientConfig.selectedModpack)) {
-                clientConfig.installedModpacks.add(clientConfig.selectedModpack);
-            }
+            ModpackUtils.addModpackToList(clientConfig.selectedModpack);
 
             // Save changes
             ConfigTools.saveConfig(clientConfigFile, clientConfig);

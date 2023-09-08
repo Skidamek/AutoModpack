@@ -26,17 +26,13 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
-import org.jetbrains.annotations.NotNull;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.LinkPacket;
-import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.config.Jsons;
-import pl.skidam.automodpack_common.utils.FileInspection;
 import pl.skidam.automodpack_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.client.ModpackUtils;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -51,10 +47,8 @@ public class LinkC2SPacket {
 
         LOGGER.info("Received link packet from server! " + linkPacket.link);
 
-        Path modpackDir = getPath(linkPacket);
-
-        clientConfig.selectedModpack = modpackDir.getFileName().toString();
-        ConfigTools.saveConfig(clientConfigFile, clientConfig);
+        Path modpackDir = ModpackUtils.getModpackPath(linkPacket.link, linkPacket.modpackName);
+        ModpackUtils.selectModpack(modpackDir);
 
         Jsons.ModpackContentFields serverModpackContent = ModpackUtils.getServerModpackContent(linkPacket.link);
 
@@ -70,25 +64,5 @@ public class LinkC2SPacket {
         response.writeString(String.valueOf(isUpdate), 32767);
 
         return CompletableFuture.completedFuture(response);
-    }
-
-    @NotNull
-    private static Path getPath(LinkPacket linkPacket) {
-        Path modpackDir = modpacksDir;
-
-        if (linkPacket.modpackName.isEmpty() || clientConfig.installedModpacks.contains(linkPacket.modpackName)) {
-            String modpackFileName = linkPacket.link.replaceFirst("(https?://)", ""); // removes https:// and http://
-            
-            if (FileInspection.isInValidFileName(modpackFileName)) {
-                modpackFileName = FileInspection.fixFileName(modpackFileName);   
-            }
-            
-            modpackDir = Path.of(modpackDir + File.separator + modpackFileName);
-            
-        } else {
-            modpackDir = Path.of(modpackDir + File.separator + linkPacket.modpackName);
-        }
-
-        return modpackDir;
     }
 }

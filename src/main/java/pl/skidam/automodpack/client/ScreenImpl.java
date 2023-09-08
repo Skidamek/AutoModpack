@@ -42,67 +42,76 @@ import static pl.skidam.automodpack_common.GlobalVariables.preload;
 
 public class ScreenImpl implements ScreenService {
 
-    private void callScreen(String screenName, Object... args) {
-        if (ScreenImpl.Check.properlyLoaded()) {
-            try {
-                Method method = Arrays.stream(ScreenImpl.Screens.class.getDeclaredMethods())
-                        .filter(m -> m.getName().equals(screenName))
-                        .findAny()
-                        .orElseThrow(() -> new NoSuchMethodException("No method found with name " + screenName));
-
-
-                Util.getMainWorkerExecutor().execute(() -> {
-                    try {
-                        method.invoke(null, args);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
     @Override
     public void download(Object... args) {
-        callScreen("download", args);
+        if (!Check.properlyLoaded()) {
+            return;
+        }
+
+        Screens.download(args[0], args[1]);
     }
 
     @Override
     public void fetch(Object... args) {
-        callScreen("fetch", args);
+        if (!Check.properlyLoaded()) {
+            return;
+        }
+
+        Screens.fetch(args[0]);
     }
 
     @Override
     public void changelog(Object... args) {
-        callScreen("changelog", args);
+        if (!Check.properlyLoaded()) {
+            return;
+        }
+
+        Screens.changelog(args[0], args[1], args[2]);
     }
 
     @Override
     public void restart(Object... args) {
-        callScreen("restart", args);
+        if (!Check.properlyLoaded()) {
+            return;
+        }
+
+        Screens.restart(args[0], args[1], args[2]);
     }
 
     @Override
     public void danger(Object... args) {
-        callScreen("danger", args);
+        if (!Check.properlyLoaded()) {
+            return;
+        }
+
+        Screens.danger(args[0], args[1], args[2], args[3]);
     }
 
     @Override
     public void error(Object... args) {
-        callScreen("error", args);
+        if (!Check.properlyLoaded()) {
+            return;
+        }
+
+        Screens.error(args);
     }
 
     @Override
     public void menu(Object... args) {
-        callScreen("menu", args);
+        if (!Check.properlyLoaded()) {
+            return;
+        }
+
+        Screens.menu();
     }
 
     @Override
     public void title(Object... args) {
-        callScreen("title", args);
+        if (!Check.properlyLoaded()) {
+            return;
+        }
+
+        Screens.title();
     }
 
     @Override
@@ -122,13 +131,7 @@ public class ScreenImpl implements ScreenService {
         return Optional.empty();
     }
 
-    @Override
-    public Optional<Boolean> properlyLoaded() {
-        return Optional.of(Check.properlyLoaded());
-    }
-
     // These have to be in a separate class, or game gonna crash
-
     private static class Check {
         public static boolean properlyLoaded() {
             try {
@@ -149,32 +152,32 @@ public class ScreenImpl implements ScreenService {
         }
 
         public static void setScreen(Screen screen) {
-            MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen));
+            Util.getMainWorkerExecutor().execute(() -> MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen)));
         }
 
         // Even tho these methods are 'unused' there are not
         // Look at callScreen method
 
-        public static void download(DownloadManager downloadManager, String header) {
-            Screens.setScreen(new DownloadScreen(downloadManager, header));
+        public static void download(Object downloadManager, Object header) {
+            Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
         }
-        public static void fetch(FetchManager fetchManager) {
-            Screens.setScreen(new FetchScreen(fetchManager));
+        public static void fetch(Object fetchManager) {
+            Screens.setScreen(new FetchScreen((FetchManager) fetchManager));
         }
-        public static void changelog(Screen parent, Path modpackDir, Changelogs changelog) {
-            Screens.setScreen(new ChangelogScreen(parent, modpackDir, changelog));
-        }
-
-        public static void restart(Path modpackDir, UpdateType updateType, Changelogs changelogs) {
-            Screens.setScreen(new RestartScreen(modpackDir, updateType, changelogs));
+        public static void changelog(Object parent, Object modpackDir, Object changelog) {
+            Screens.setScreen(new ChangelogScreen((Screen) parent, (Path) modpackDir, (Changelogs) changelog));
         }
 
-        public static void danger(Screen parent, String link, Path modpackDir, Path modpackContentFile) {
-            Screens.setScreen(new DangerScreen(parent, link, modpackDir, modpackContentFile));
+        public static void restart(Object modpackDir, Object updateType, Object changelogs) {
+            Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
         }
 
-        public static void error(String... error) {
-            Screens.setScreen(new ErrorScreen(error));
+        public static void danger(Object parent, Object link, Object modpackDir, Object modpackContentFile) {
+            Screens.setScreen(new DangerScreen((Screen) parent, (String) link, (Path) modpackDir, (Path) modpackContentFile));
+        }
+
+        public static void error(Object... error) {
+            Screens.setScreen(new ErrorScreen(Arrays.toString(error)));
         }
 
         public static void title() {

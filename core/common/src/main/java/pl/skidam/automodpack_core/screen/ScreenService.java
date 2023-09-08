@@ -16,6 +16,4 @@ public interface ScreenService {
     Optional<String> getScreenString();
 
     Optional<Object> getScreen();
-    Optional<Boolean> properlyLoaded();
-
 }

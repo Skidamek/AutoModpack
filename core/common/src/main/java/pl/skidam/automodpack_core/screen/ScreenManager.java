@@ -55,9 +55,4 @@ public class ScreenManager implements ScreenService {
     public Optional<Object> getScreen() {
         return screenImpl.getScreen();
     }
-
-    @Override
-    public Optional<Boolean> properlyLoaded() {
-        return screenImpl.properlyLoaded();
-    }
 }

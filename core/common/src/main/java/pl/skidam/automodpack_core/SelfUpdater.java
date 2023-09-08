@@ -77,7 +77,7 @@ public class SelfUpdater {
         }
 
         if (automodpack == null || automodpack.fileVersion == null) {
-            LOGGER.error("Couldn't get latest version of AutoModpack from Modrinth API. Likely automodpack isn't updated to your version of minecraft yet...");
+            LOGGER.warn("Couldn't get latest version of AutoModpack from Modrinth API. Likely automodpack isn't updated to your version of minecraft yet...");
             return;
         }
 

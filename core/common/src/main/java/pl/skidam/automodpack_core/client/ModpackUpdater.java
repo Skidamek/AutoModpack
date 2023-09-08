@@ -35,10 +35,7 @@ import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.net.URL;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
@@ -93,6 +90,10 @@ public class ModpackUpdater {
             }
 
             if (Files.exists(modpackContentFile)) {
+
+                // Rename modpack folder to modpack name if exists
+                ModpackUtils.renameModpackDir(modpackContentFile, serverModpackContent, modpackDir);
+
                 if (Boolean.FALSE.equals(ModpackUtils.isUpdate(serverModpackContent, modpackDir))) {
                     // check if modpack is loaded now loaded
 
@@ -303,9 +304,7 @@ public class ModpackUpdater {
             }
 
             String modpackName = modpackDir.getFileName().toString();
-            if (!clientConfig.installedModpacks.contains(modpackName)) {
-                clientConfig.installedModpacks.add(modpackName);
-            }
+            ModpackUtils.addModpackToList(modpackName);
 
             LOGGER.info("Update completed! Took: " + (System.currentTimeMillis() - start) + " ms");
 
