@@ -330,12 +330,20 @@ public class ModpackUpdater {
             return;
         }
 
-        // change loader and minecraft version in launchers like prism, multimc.
-        if (serverModpackContent.loader.equals(LOADER)) { // server may use different loader than client
-            MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // update loader version
-        }
-        MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // update minecraft version
+        if (serverModpackContent != null) {
 
+            // Change loader and minecraft version in launchers like prism, multimc.
+
+            if (serverModpackContent.loader != null && serverModpackContent.loaderVersion != null) {
+                if (serverModpackContent.loader.equals(LOADER)) { // Server may use different loader than client
+                    MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // Update loader version
+                }
+            }
+
+            if (serverModpackContent.mcVersion != null) {
+                MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // Update minecraft version
+            }
+        }
 
         checkAndRemoveDuplicateMods(modpackDir + File.separator + "mods");
 

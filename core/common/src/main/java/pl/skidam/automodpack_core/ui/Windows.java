@@ -77,8 +77,10 @@ public class Windows {
             if (inputStream == null) {
                 inputStream = Windows.class.getClassLoader().getResourceAsStream("icon.png");
             }
-            icon = ImageIO.read(Objects.requireNonNull(inputStream));
-            inputStream.close();
+            if (inputStream != null) {
+                icon = ImageIO.read(inputStream);
+                inputStream.close();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -123,7 +123,7 @@ public class Preload implements SetupModCallback {
             }
 
             // Check modpack name and fix it if needed, because it will be used for naming a folder on client
-            if (FileInspection.isInValidFileName(serverConfig.modpackName)) {
+            if (!serverConfig.modpackName.isEmpty() && FileInspection.isInValidFileName(serverConfig.modpackName)) {
                 serverConfig.modpackName = FileInspection.fixFileName(serverConfig.modpackName);
                 LOGGER.info("Changed modpack name to {}", serverConfig.modpackName);
             }
