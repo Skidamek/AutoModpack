@@ -26,6 +26,10 @@
       {
         "id": "minecraft",
         "versions": "${minecraft_dependency}"
+      },
+      {
+        "id": "preloading_tricks",
+        "versions": "*"
       }
     ],
     "breaks": [
