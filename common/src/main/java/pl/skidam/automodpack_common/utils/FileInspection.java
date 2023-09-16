@@ -53,6 +53,7 @@ public class FileInspection {
                     }
 
                     modID = split[1].replaceAll("\"", "").trim();
+                    modID = modID.split(" ")[0]; // get first string before any # comments starts
                 }
 
             } else {
@@ -149,6 +150,7 @@ public class FileInspection {
 
                     }
 
+                    version = version.split(" ")[0]; // get first string before any # comments starts
                     modVersion = version;
                 }
 
