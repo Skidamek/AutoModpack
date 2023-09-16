@@ -37,7 +37,7 @@ public class FetchScreen extends VersionedScreen {
     private final FetchManager fetchManager;
 
     public FetchScreen(FetchManager fetchManager) {
-        super(VersionedText.common.literal("FetchScreen"));
+        super(VersionedText.literal("FetchScreen"));
         this.fetchManager = fetchManager;
     }
 
@@ -51,7 +51,7 @@ public class FetchScreen extends VersionedScreen {
     }
 
     private void initWidgets() {
-        cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
+        cancelButton = buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.translatable("automodpack.cancel"),
                 button -> {
                     cancelButton.active = false;
                     cancelFetch();
@@ -75,9 +75,9 @@ public class FetchScreen extends VersionedScreen {
         }
 
         // Fetching direct url's from Modrinth and CurseForge.
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.fetch").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, 16777215);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.fetch.found", getFetchesDone()), this.width / 2, this.height / 2 - 30, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.fetch").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.fetch.found", getFetchesDone()), this.width / 2, this.height / 2 - 30, 16777215);
     }
 
     @Override

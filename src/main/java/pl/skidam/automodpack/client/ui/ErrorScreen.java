@@ -33,7 +33,7 @@ public class ErrorScreen extends VersionedScreen {
     private ButtonWidget backButton;
 
     public ErrorScreen(String... errorMessage) {
-        super(VersionedText.common.literal("ErrorScreen"));
+        super(VersionedText.literal("ErrorScreen"));
         this.errorMessage = errorMessage;
 
         if (AudioManager.isMusicPlaying()) {
@@ -51,7 +51,7 @@ public class ErrorScreen extends VersionedScreen {
     }
 
     private void initWidgets() {
-        backButton = VersionedText.buttonWidget(this.width / 2 - 100, this.height / 2 + 50, 200, 20, VersionedText.common.translatable("automodpack.back"), button -> {
+        backButton = buttonWidget(this.width / 2 - 100, this.height / 2 + 50, 200, 20, VersionedText.translatable("automodpack.back"), button -> {
             assert client != null;
             client.setScreen(null);
         });
@@ -61,9 +61,9 @@ public class ErrorScreen extends VersionedScreen {
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
         // Something went wrong!
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.literal("[AutoModpack] Error! ").append(VersionedText.common.translatable("automodpack.error").formatted(Formatting.RED)), this.width / 2, this.height / 2 - 40, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.literal("[AutoModpack] Error! ").append(VersionedText.translatable("automodpack.error").formatted(Formatting.RED)), this.width / 2, this.height / 2 - 40, 16777215);
         for (int i = 0; i < this.errorMessage.length; i++) {
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable(this.errorMessage[i]), this.width / 2, this.height / 2 - 20 + i * 10, 14687790);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable(this.errorMessage[i]), this.width / 2, this.height / 2 - 20 + i * 10, 14687790);
         }
     }
 

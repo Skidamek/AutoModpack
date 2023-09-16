@@ -43,7 +43,7 @@ public class RestartScreen extends VersionedScreen {
     private static ButtonWidget changelogsButton;
 
     public RestartScreen(Path modpackDir, UpdateType updateType, Changelogs changelogs) {
-        super(VersionedText.common.literal("RestartScreen"));
+        super(VersionedText.literal("RestartScreen"));
         this.modpackDir = modpackDir;
         this.updateType = updateType;
         this.changelogs = changelogs;
@@ -70,15 +70,15 @@ public class RestartScreen extends VersionedScreen {
 
     public void initWidgets() {
         assert this.client != null;
-        cancelButton = VersionedText.buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20, VersionedText.common.translatable("automodpack.restart.cancel").formatted(Formatting.RED), button -> {
+        cancelButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.cancel").formatted(Formatting.RED), button -> {
             this.client.setScreen(null);
         });
 
-        restartButton = VersionedText.buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.common.translatable("automodpack.restart.confirm").formatted(Formatting.GREEN), button -> {
+        restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").formatted(Formatting.GREEN), button -> {
             new ReLauncher.Restart();
         });
 
-        changelogsButton = VersionedText.buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.common.translatable("automodpack.changelog.view"), button -> {
+        changelogsButton = buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.translatable("automodpack.changelog.view"), button -> {
             new ScreenManager().changelog(this, modpackDir, changelogs);
         });
     }
@@ -86,9 +86,9 @@ public class RestartScreen extends VersionedScreen {
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
         this.renderBackground(matrices);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.restart." + updateType.toString()).formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.restart.description"), this.width / 2, this.height / 2 - 35, 16777215);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.restart.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.restart." + updateType.toString()).formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.restart.description"), this.width / 2, this.height / 2 - 35, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.restart.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);
     }
 
     @Override

@@ -20,33 +20,10 @@
 
 package pl.skidam.automodpack.client.ui.versioned;
 
-import net.minecraft.client.MinecraftClient; // 1.16
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawableHelper;
-import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.*;
-import net.minecraft.util.Identifier;
 
 public class VersionedText {
 
-//#if MC >= 12000
-//$$
-//$$    public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
-//$$        matrices.drawCenteredTextWithShadow(textRenderer, text, centerX, y, color);
-//$$    }
-//$$
-//#else
-
-    public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
-        textRenderer.drawWithShadow(matrices, text, (float)(centerX - textRenderer.getWidth(text) / 2), (float)y, color);
-    }
-
-//#endif
-
-    // It needs to be in subclass to don't crash server while using texts
-    // Because then it would load this whole class with matrices and yeah... crash
-public static class common {
 //#if MC < 11902
 //$$
     public static MutableText translatable(String key, Object... args) {
@@ -65,42 +42,6 @@ public static class common {
 //$$
 //$$public static MutableText literal(String string) {
 //$$    return Text.literal(string);
-//$$}
-//$$
-//#endif
-}
-
-
-
-
-
-//#if MC < 11903
-    public static ButtonWidget buttonWidget(int x, int y, int width, int height, Text message, ButtonWidget.PressAction onPress) {
-        return new ButtonWidget(x, y, width, height, message, onPress);
-    }
-//#else
-//$$
-//$$public static ButtonWidget buttonWidget(int x, int y, int width, int height, Text message, ButtonWidget.PressAction onPress) {
-//$$    return ButtonWidget.builder(message, onPress).position(x, y).size(width, height).build();
-//$$}
-//$$
-//#endif
-
-//#if MC < 12000
-//$$
-    public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int progressBarWidth, int progressBarHeight) {
-//#if MC >= 11700
-        RenderSystem.setShaderTexture(0, textureID);
-//#else
-//$$    MinecraftClient.getInstance().getTextureManager().bindTexture(textureID);
-//#endif
-        DrawableHelper.drawTexture(matrices, x, y, u, v, width, height, progressBarWidth, progressBarHeight);
-    }
-//$$
-//#else
-//$$
-//$$public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int progressBarWidth, int progressBarHeight) {
-//$$    matrices.drawTexture(textureID, x, y, u, v, width, height, progressBarWidth, progressBarHeight);
 //$$}
 //$$
 //#endif

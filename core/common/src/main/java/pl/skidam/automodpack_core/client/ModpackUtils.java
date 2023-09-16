@@ -40,7 +40,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import static pl.skidam.automodpack_common.config.ConfigTools.GSON;
@@ -149,7 +151,7 @@ public class ModpackUtils {
         }
     }
 
-    public static void renameModpackDir(Path modpackContentFile, Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+    public static List<Path> renameModpackDir(Path modpackContentFile, Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(modpackContentFile);
         if (clientModpackContent != null) {
             String installedModpackName = clientModpackContent.modpackName;
@@ -157,16 +159,27 @@ public class ModpackUtils {
 
             if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
 
-                Path modpackDirParent = modpackDir.getParent();
-                modpackDirParent = Path.of(modpackDirParent + File.separator + serverModpackName);
+                Path newModpackDir = Path.of(modpackDir.getParent() + File.separator + serverModpackName);
 
                 try {
-                    Files.move(modpackDir, modpackDirParent, StandardCopyOption.REPLACE_EXISTING);
+                    Files.move(modpackDir, newModpackDir, StandardCopyOption.REPLACE_EXISTING);
+
+                    // TODO remove old modpack from list
+                    addModpackToList(newModpackDir.getFileName().toString());
+                    selectModpack(newModpackDir);
+
+                    LOGGER.info("Changed modpack name of {} to {}", modpackDir.getFileName().toString(), serverModpackName);
+
+                    modpackContentFile = Path.of(newModpackDir + File.separator + modpackContentFile.getFileName());
+
+                    return List.of(newModpackDir, modpackContentFile);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
         }
+
+        return null;
     }
 
     public static void selectModpack(Path modpackDir) {

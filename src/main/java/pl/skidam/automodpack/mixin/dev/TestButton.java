@@ -69,7 +69,7 @@ public class TestButton extends Screen {
                             AudioManager.playMusic();
                             new ScreenManager().menu();
                         },
-                        VersionedText.common.translatable("gui.automodpack.menu")
+                        VersionedText.translatable("gui.automodpack.menu")
                 )
         );
     }

@@ -38,7 +38,7 @@ import static pl.skidam.automodpack_server.modpack.Modpack.Content.*;
 public class ModpackGenAdditions {
 
     public static boolean generate() {
-        boolean generated = Modpack.generate();
+        boolean generated = Modpack.generate(false);
 
         if (!generated) {
             return false;
@@ -50,6 +50,7 @@ public class ModpackGenAdditions {
             restartFileChecker();
         }
 
+        Modpack.shutdownExecutor();
 
         return true;
     }

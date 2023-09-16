@@ -41,9 +41,14 @@ import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class Modpack {
     public static final int MAX_MODPACK_ADDITIONS = 8; // at the same time
-    private static ExecutorService CREATION_EXECUTOR;
+    public static ExecutorService CREATION_EXECUTOR;
+    private static boolean shouldShutdownExecutor;
 
-    public static boolean generate() {
+    public static boolean generate(boolean shouldShutdownExecutor) {
+        Modpack.shouldShutdownExecutor = shouldShutdownExecutor;
+
+        CREATION_EXECUTOR = Executors.newFixedThreadPool(MAX_MODPACK_ADDITIONS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
+
         try {
             if (!Files.exists(hostModpackDir)) {
                 Files.createDirectories(hostModpackDir);
@@ -63,6 +68,20 @@ public class Modpack {
         list.removeIf(modpackContentItems -> modpackContentItems.file.toLowerCase().contains("automodpack"));
     }
 
+    public static void shutdownExecutor() {
+        CREATION_EXECUTOR.shutdown();
+        try {
+            if (!CREATION_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
+                CREATION_EXECUTOR.shutdownNow();
+                if (!CREATION_EXECUTOR.awaitTermination(3, TimeUnit.SECONDS)) {
+                    LOGGER.error("CREATION Executor did not terminate");
+                }
+            }
+        } catch (InterruptedException e) {
+            CREATION_EXECUTOR.shutdownNow();
+        }
+    }
+
     public static class Content {
         public static Jsons.ModpackContentFields modpackContent;
         public static List<Jsons.ModpackContentFields.ModpackContentItem> list = Collections.synchronizedList(new ArrayList<>());
@@ -70,15 +89,6 @@ public class Modpack {
         public static boolean create(Path modpackDir) {
 
             try {
-                ThreadFactory threadFactoryDownloads = new CustomThreadFactoryBuilder()
-                        .setNameFormat("AutoModpackCreation-%d")
-                        .build();
-
-                CREATION_EXECUTOR = Executors.newFixedThreadPool(
-                        MAX_MODPACK_ADDITIONS,
-                        threadFactoryDownloads
-                );
-
                 if (!serverConfig.syncedFiles.isEmpty()) {
                     for (String file : serverConfig.syncedFiles) {
                         LOGGER.info("Syncing {}... ", file);
@@ -105,16 +115,8 @@ public class Modpack {
 
                 removeAutoModpackFilesFromContent(list);
 
-                CREATION_EXECUTOR.shutdown();
-                try {
-                    if (!CREATION_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
-                        CREATION_EXECUTOR.shutdownNow();
-                        if (!CREATION_EXECUTOR.awaitTermination(3, TimeUnit.SECONDS)) {
-                            LOGGER.error("CREATION Executor did not terminate");
-                        }
-                    }
-                } catch (InterruptedException e) {
-                    CREATION_EXECUTOR.shutdownNow();
+                if (shouldShutdownExecutor) {
+                    shutdownExecutor();
                 }
 
             } catch (Exception e) {

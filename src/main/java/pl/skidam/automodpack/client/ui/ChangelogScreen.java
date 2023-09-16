@@ -50,7 +50,7 @@ public class ChangelogScreen extends VersionedScreen {
     private ButtonWidget openMainPageButton;
 
     public ChangelogScreen(Screen parent, Path modpackDir, Changelogs changelogs) {
-        super(VersionedText.common.literal("ChangelogScreen"));
+        super(VersionedText.literal("ChangelogScreen"));
         this.parent = parent;
         this.modpackDir = modpackDir;
         this.changelogs = changelogs;
@@ -76,20 +76,20 @@ public class ChangelogScreen extends VersionedScreen {
     }
 
     private void initWidgets() {
-        this.listEntryWidget = new ListEntryWidget(formattedChanges, this.client, this.width, this.height, 48, this.height - 50, 20);
+        this.listEntryWidget = new ListEntryWidget(formattedChanges, this.client, this.width, this.height, 48, this.height - 50, 20); // 38
 
         this.searchField = new TextFieldWidget(this.textRenderer, this.width / 2 - 100, 20, 200, 20,
-                VersionedText.common.literal("")
+                VersionedText.literal("")
         );
         this.searchField.setChangedListener((textField) -> updateChangelogs()); // Update the changelogs display based on the search query
 
-        this.backButton = VersionedText.buttonWidget(this.width / 2 - 140, this.height - 30, 140, 20,
-                VersionedText.common.translatable("automodpack.back"),
+        this.backButton = buttonWidget(this.width / 2 - 140, this.height - 30, 140, 20,
+                VersionedText.translatable("automodpack.back"),
                 button -> this.client.setScreen(this.parent)
         );
 
-        this.openMainPageButton = VersionedText.buttonWidget(this.width / 2 + 20, this.height - 30, 140, 20,
-                VersionedText.common.translatable("automodpack.changelog.openPage"),
+        this.openMainPageButton = buttonWidget(this.width / 2 + 20, this.height - 30, 140, 20,
+                VersionedText.translatable("automodpack.changelog.openPage"),
                 button -> {
                     ListEntry selectedEntry = listEntryWidget.getSelectedOrNull();
 
@@ -148,7 +148,7 @@ public class ChangelogScreen extends VersionedScreen {
 
         String summary = "Mods + " + modsAdded + " | - " + modsRemoved;
 
-        VersionedText.drawCenteredTextWithShadow(matrices, textRenderer, VersionedText.common.literal(summary), this.width / 2, 5, 16777215);
+        drawCenteredTextWithShadow(matrices, textRenderer, VersionedText.literal(summary), this.width / 2, 5, 16777215);
     }
 
     private void updateChangelogs() {
@@ -173,7 +173,7 @@ public class ChangelogScreen extends VersionedScreen {
         this.remove(this.openMainPageButton);
 //#endif
 
-        this.listEntryWidget = new ListEntryWidget(formattedChanges, this.client, this.width, this.height, 48, this.height - 50, 20);
+        this.listEntryWidget = new ListEntryWidget(formattedChanges, this.client, this.width, this.height, 48, this.height - 50, 20); // 38
 
         this.addDrawableChild(this.listEntryWidget);
         this.addDrawableChild(this.searchField);

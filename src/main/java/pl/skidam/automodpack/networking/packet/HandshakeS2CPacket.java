@@ -53,7 +53,7 @@ public class HandshakeS2CPacket {
         if (!understood) {
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
             if (!serverConfig.optionalModpack) {
-                Text reason = VersionedText.common.literal("AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
+                Text reason = VersionedText.literal("AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
             }
@@ -77,9 +77,9 @@ public class HandshakeS2CPacket {
         }
 
         if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
-            Text reason = VersionedText.common.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " to play on this server!");
+            Text reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " to play on this server!");
             if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
-                reason = VersionedText.common.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
+                reason = VersionedText.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
             }
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
@@ -91,7 +91,7 @@ public class HandshakeS2CPacket {
         }
 
         if (Modpack.isGenerating()) {
-            Text reason = VersionedText.common.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
+            Text reason = VersionedText.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
             return;

@@ -86,7 +86,7 @@ public class Commands {
     private static int reload(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
             serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class);
-            VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("AutoModpack server config reloaded!").formatted(Formatting.GREEN), true);
+            VersionedCommandSource.sendFeedback(context, VersionedText.literal("AutoModpack server config reloaded!").formatted(Formatting.GREEN), true);
         });
         return Command.SINGLE_SUCCESS;
     }
@@ -94,15 +94,15 @@ public class Commands {
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
             if (!HttpServer.isRunning()) {
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Starting modpack hosting...")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Starting modpack hosting...")
                                 .formatted(Formatting.YELLOW),
                         true);
                 new HttpServer(serverConfig);
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting started!")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting started!")
                                 .formatted(Formatting.GREEN),
                         true);
             } else {
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting is already running!")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting is already running!")
                                 .formatted(Formatting.RED),
                         false);
             }
@@ -113,15 +113,15 @@ public class Commands {
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
             if (HttpServer.isRunning()) {
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Stopping modpack hosting...")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Stopping modpack hosting...")
                                 .formatted(Formatting.RED),
                         true);
                 HttpServer.stop();
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting stopped!")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting stopped!")
                                 .formatted(Formatting.RED),
                         true);
             } else {
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting is not running!")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting is not running!")
                                 .formatted(Formatting.RED),
                         false);
             }
@@ -131,22 +131,22 @@ public class Commands {
 
     private static int restartModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Restarting modpack hosting...")
+            VersionedCommandSource.sendFeedback(context, VersionedText.literal("Restarting modpack hosting...")
                             .formatted(Formatting.YELLOW),
                     true);
             if (HttpServer.isRunning()) {
                 HttpServer.stop();
                 new HttpServer(serverConfig);
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting restarted!")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting restarted!")
                                 .formatted(Formatting.GREEN),
                         true);
             } else if (serverConfig.modpackHost){
                 new HttpServer(serverConfig);
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting restarted!")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting restarted!")
                                 .formatted(Formatting.GREEN),
                         true);
             } else {
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting is disabled in config!")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting is disabled in config!")
                                 .formatted(Formatting.RED),
                         false);
             }
@@ -158,11 +158,11 @@ public class Commands {
     private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
         Formatting statusColor = HttpServer.isRunning() ? Formatting.GREEN : Formatting.RED;
         String status = HttpServer.isRunning() ? "running" : "not running";
-        VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack hosting status")
+        VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting status")
                 .formatted(Formatting.GREEN)
-                .append(VersionedText.common.literal(" - ")
+                .append(VersionedText.literal(" - ")
                         .formatted(Formatting.WHITE)
-                        .append(VersionedText.common.literal(status)
+                        .append(VersionedText.literal(status)
                                 .formatted(statusColor)
                         )
                 ), false);
@@ -170,16 +170,16 @@ public class Commands {
     }
 
     private static int about(CommandContext<ServerCommandSource> context) {
-        VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("AutoModpack")
+        VersionedCommandSource.sendFeedback(context, VersionedText.literal("AutoModpack")
                 .formatted(Formatting.GREEN)
-                .append(VersionedText.common.literal(" - " + AM_VERSION)
+                .append(VersionedText.literal(" - " + AM_VERSION)
                         .formatted(Formatting.WHITE)
                 ), false);
-        VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("/automodpack generate")
+        VersionedCommandSource.sendFeedback(context, VersionedText.literal("/automodpack generate")
                 .formatted(Formatting.YELLOW), false);
-        VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("/automodpack host start/stop/restart")
+        VersionedCommandSource.sendFeedback(context, VersionedText.literal("/automodpack host start/stop/restart")
                 .formatted(Formatting.YELLOW), false);
-        VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("/automodpack config reload")
+        VersionedCommandSource.sendFeedback(context, VersionedText.literal("/automodpack config reload")
                 .formatted(Formatting.YELLOW), false);
         return Command.SINGLE_SUCCESS;
     }
@@ -188,22 +188,22 @@ public class Commands {
         Util.getMainWorkerExecutor().execute(() -> {
 
             if (Modpack.isGenerating()) {
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack is already generating! Please wait!")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack is already generating! Please wait!")
                                 .formatted(Formatting.RED),
                         false);
                 return;
             }
 
-            VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Generating Modpack...")
+            VersionedCommandSource.sendFeedback(context, VersionedText.literal("Generating Modpack...")
                             .formatted(Formatting.YELLOW),
                     true);
             long start = System.currentTimeMillis();
             if (ModpackGenAdditions.generate()) {
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms")
                                 .formatted(Formatting.GREEN),
                         true);
             } else {
-                VersionedCommandSource.sendFeedback(context, VersionedText.common.literal("Modpack generation failed! Check logs for more info.")
+                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack generation failed! Check logs for more info.")
                                 .formatted(Formatting.RED),
                         true);
             }

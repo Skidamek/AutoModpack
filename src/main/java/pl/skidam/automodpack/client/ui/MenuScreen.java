@@ -47,7 +47,7 @@ public class MenuScreen extends VersionedScreen {
 
 
     public MenuScreen() {
-        super(VersionedText.common.literal("MenuScreen"));
+        super(VersionedText.literal("MenuScreen"));
     }
 
     @Override
@@ -79,22 +79,22 @@ public class MenuScreen extends VersionedScreen {
         int button4X = centerX + 3 * (buttonWidth + spacing);
 
 
-        this.backButton = VersionedText.buttonWidget(button1X, this.height - 35, buttonWidth, 20, VersionedText.common.translatable("automodpack.back"), button -> {
+        this.backButton = buttonWidget(button1X, this.height - 35, buttonWidth, 20, VersionedText.translatable("automodpack.back"), button -> {
             assert this.client != null;
             this.client.setScreen(null);
         });
 
-        this.selectButton = VersionedText.buttonWidget(button2X, this.height - 35, buttonWidth, 20, VersionedText.common.translatable("automodpack.select"), button -> {
+        this.selectButton = buttonWidget(button2X, this.height - 35, buttonWidth, 20, VersionedText.translatable("automodpack.select"), button -> {
             GlobalVariables.LOGGER.info("Select modpack {} from {}", getModpack().getName(), getModpackPath());
             selectModpack(getModpackPath(), getModpack());
         });
 
-        this.redownloadButton = VersionedText.buttonWidget(button3X, this.height - 35, buttonWidth, 20, VersionedText.common.translatable("automodpack.redownload"), button -> {
+        this.redownloadButton = buttonWidget(button3X, this.height - 35, buttonWidth, 20, VersionedText.translatable("automodpack.redownload"), button -> {
             GlobalVariables.LOGGER.info("Redownload {} from {}", getModpack().getName(), getModpack().getLink());
             reDownloadModpack(getModpackPath(), getModpack());
         });
 
-        this.removeButton = VersionedText.buttonWidget(button4X, this.height - 35, buttonWidth, 20, VersionedText.common.translatable("automodpack.delete"), button -> {
+        this.removeButton = buttonWidget(button4X, this.height - 35, buttonWidth, 20, VersionedText.translatable("automodpack.delete"), button -> {
             GlobalVariables.LOGGER.info("Remove modpack {} from {}", getModpack().getName(), getModpackPath());
             removeModpack(getModpackPath());
         });

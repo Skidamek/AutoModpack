@@ -20,6 +20,7 @@
 
 package pl.skidam.automodpack_core.client;
 
+import com.google.gson.Gson;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
@@ -53,6 +54,7 @@ public class ModpackUpdater {
     public static long totalBytesToDownload = 0;
     public static boolean fullDownload = false;
     private static Jsons.ModpackContentFields serverModpackContent;
+    private static String unModifiedSMC;
     public Map<String, String> failedDownloads = new HashMap<>(); // <file, url>
     public static String getModpackName() {
         return serverModpackContent.modpackName;
@@ -84,6 +86,7 @@ public class ModpackUpdater {
 
             serverModpackContent.link = link;
             ModpackUpdater.serverModpackContent = serverModpackContent;
+            ModpackUpdater.unModifiedSMC = GSON.toJson(serverModpackContent);
 
             if (!Files.exists(modpackDir)) {
                 Files.createDirectories(modpackDir);
@@ -92,7 +95,11 @@ public class ModpackUpdater {
             if (Files.exists(modpackContentFile)) {
 
                 // Rename modpack folder to modpack name if exists
-                ModpackUtils.renameModpackDir(modpackContentFile, serverModpackContent, modpackDir);
+                List<Path> modpackFiles = ModpackUtils.renameModpackDir(modpackContentFile, serverModpackContent, modpackDir);
+                if (modpackFiles != null) {
+                    modpackDir = modpackFiles.get(0);
+                    modpackContentFile = modpackFiles.get(1);
+                }
 
                 if (Boolean.FALSE.equals(ModpackUtils.isUpdate(serverModpackContent, modpackDir))) {
                     // check if modpack is loaded now loaded
@@ -150,8 +157,8 @@ public class ModpackUpdater {
             LOGGER.info("Modpack is not loaded");
         }
 
-        LOGGER.info("Added files: " + addedFiles);
-        LOGGER.info("Deleted files: " + deletedFiles);
+        LOGGER.info("Added files: {}", addedFiles);
+        LOGGER.info("Deleted files: {}", deletedFiles);
 
         UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 
@@ -163,6 +170,12 @@ public class ModpackUpdater {
         long start = System.currentTimeMillis();
 
         try {
+            // Rename modpack
+            List<Path> modpackFiles = ModpackUtils.renameModpackDir(modpackContentFile, serverModpackContent, modpackDir);
+            if (modpackFiles != null) {
+                modpackDir = modpackFiles.get(0);
+                modpackContentFile = modpackFiles.get(1);
+            }
 
             if (quest) {
                 String modsPathString = modsPath.toString().substring(1) + "/";
@@ -184,7 +197,7 @@ public class ModpackUpdater {
                 Path path = Paths.get(modpackDir + File.separator + file);
 
                 if (Files.exists(path) && modpackContentField.editable) {
-                    LOGGER.info("Skipping editable file: " + file);
+                    LOGGER.info("Skipping editable file: {}", file);
                     iterator.remove();
                     continue;
                 }
@@ -198,12 +211,12 @@ public class ModpackUpdater {
                 }
 
                 if (serverSHA1.equals(CustomFileUtils.getHash(path, "SHA-1"))) {
-                    LOGGER.info("Skipping already downloaded file: " + file);
+                    LOGGER.info("Skipping already downloaded file: {}", file);
                     iterator.remove();
                 }
             }
 
-            Instant startFetching = Instant.now();
+            long startFetching = System.currentTimeMillis();
 
             fetchManager = new FetchManager();
 
@@ -222,7 +235,7 @@ public class ModpackUpdater {
             fetchManager.joinAll();
             fetchManager.cancelAllAndShutdown();
 
-            LOGGER.info("Finished fetching urls in {}ms", Duration.between(startFetching, Instant.now()).toMillis());
+            LOGGER.info("Finished fetching urls in {}ms", System.currentTimeMillis() - startFetching);
 
             int wholeQueue = serverModpackContent.list.size();
 
@@ -275,11 +288,11 @@ public class ModpackUpdater {
                 downloadManager.joinAll();
                 downloadManager.cancelAllAndShutdown();
 
-                LOGGER.info("Finished downloading files in {}ms", Duration.between(startFetching, Instant.now()).toMillis());
+                LOGGER.info("Finished downloading files in {}ms", System.currentTimeMillis() - startFetching);
             }
 
             // Downloads completed
-            Files.write(modpackContentFile, GSON.toJson(serverModpackContent).getBytes());
+            Files.write(modpackContentFile, unModifiedSMC.getBytes());
 
             CustomFileUtils.deleteEmptyFiles(Paths.get("./"), serverModpackContent.list);
 
@@ -294,7 +307,7 @@ public class ModpackUpdater {
 
                 new ScreenManager().error("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");;
 
-                LOGGER.warn("Update *completed* with ERRORS! Took: " + (System.currentTimeMillis() - start) + " ms");
+                LOGGER.warn("Update *completed* with ERRORS! Took: {}ms", System.currentTimeMillis() - start);
 
                 if (preload) {
                     new ReLauncher.Restart("Failed to complete update without errors!");
@@ -306,13 +319,13 @@ public class ModpackUpdater {
             String modpackName = modpackDir.getFileName().toString();
             ModpackUtils.addModpackToList(modpackName);
 
-            LOGGER.info("Update completed! Took: " + (System.currentTimeMillis() - start) + " ms");
+            LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
 
             UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 
             new ReLauncher.Restart(modpackDir, updateType, changelogs);
 
-            LOGGER.info("Modpack is up-to-date! Took: " + (System.currentTimeMillis() - start) + " ms");
+            LOGGER.info("Modpack is up-to-date! Took: {}ms", System.currentTimeMillis() - start);
 
         } catch (SocketTimeoutException | ConnectException e) {
             LOGGER.error("Modpack host of " + link + " is not responding", e);
@@ -367,10 +380,10 @@ public class ModpackUpdater {
         // map running dir files
         ModpackUtils.copyModpackFilesFromModpackDirToRunDir(modpackDir, modpackContent, editableFiles);
 
-        List<String> files = new ArrayList<>();
+        List<String> modpackFileNames = new ArrayList<>();
         for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : modpackContent.list) {
             String fileName = Paths.get(modpackContentField.file).getFileName().toString();
-            files.add(fileName);
+            modpackFileNames.add(fileName);
         }
 
         try (Stream<Path> stream = Files.walk(modpackDir)) {
@@ -380,7 +393,7 @@ public class ModpackUpdater {
 
                     String fileName = file.getFileName().toString();
 
-                    if (!files.contains(fileName)) {
+                    if (!modpackFileNames.contains(fileName)) {
                         Path fileInRunningDir = Paths.get("." + file.toString().replace(modpackDir.toString(), ""));
                         try {
 

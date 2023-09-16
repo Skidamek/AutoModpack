@@ -44,14 +44,14 @@ public class LinkS2CPacket {
 
         if ("true".equals(clientHasUpdate)) { // disconnect
             LOGGER.warn("{} has not installed modpack", profile.getName());
-            Text reason = VersionedText.common.literal("[AutoModpack] Install/Update modpack to join");
+            Text reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
             ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);
         } else if ("false".equals(clientHasUpdate)) {
             LOGGER.info("{} has installed whole modpack", profile.getName());
         } else {
-            Text reason = VersionedText.common.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
+            Text reason = VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
             ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);

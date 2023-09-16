@@ -26,7 +26,7 @@ import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
-import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack_server.modpack.Modpack;
 
 import java.nio.file.Path;
@@ -82,13 +82,27 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
         versionedMatrices.push();
 
         int centeredX = x + entryWidth / 2;
+        int centeredY = y + entryHeight / 2;
         if (bigFont) {
             float scale = 1.5f;
             versionedMatrices.scale(scale, scale, scale);
             centeredX = (int) (centeredX / scale);
+            centeredY = (int) (centeredY - 10 / 2 * scale);
+        } else {
+            centeredY = centeredY - 10 / 2;
         }
 
-        VersionedText.drawCenteredTextWithShadow(versionedMatrices, client.textRenderer, text, centeredX, y, 16777215);
+        VersionedScreen.drawCenteredTextWithShadow(versionedMatrices, client.textRenderer, text, centeredX, centeredY, 16777215);
+
+//        if (mainPageUrl != null) {
+//            int badgeX = x - 42;
+//            int badgeY = y + 2;
+//            if (mainPageUrl.contains("modrinth")) {
+//                Badge.renderModrinthBadge(versionedMatrices, badgeX, badgeY);
+//            } else if (mainPageUrl.contains("curseforge")) {
+//                Badge.renderCurseForgeBadge(versionedMatrices, badgeX, badgeY);
+//            }
+//        }
 
         versionedMatrices.pop();
     }

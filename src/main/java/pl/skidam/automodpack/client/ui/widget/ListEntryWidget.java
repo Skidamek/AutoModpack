@@ -54,7 +54,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
         this.clearEntries();
 
         if (modpacks == null || modpacks.isEmpty()) {
-            ListEntry entry = new ListEntry(VersionedText.common.literal("No modpacks found").formatted(Formatting.BOLD), true, null, null, this.client);
+            ListEntry entry = new ListEntry(VersionedText.literal("No modpacks found").formatted(Formatting.BOLD), true, null, null, this.client);
             this.addEntry(entry);
             return;
         }
@@ -66,9 +66,9 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
             String modpackName = modpackObject.getName();
             Path modpackPath = modpack.getKey();
 
-            MutableText text = VersionedText.common.literal(modpackName);
+            MutableText text = VersionedText.literal(modpackName);
             if (modpackName.isEmpty()) {
-                text = VersionedText.common.literal(String.valueOf(modpackPath.getFileName()));
+                text = VersionedText.literal(String.valueOf(modpackPath.getFileName()));
             }
 
             String folderName = modpack.getKey().getFileName().toString();
@@ -93,7 +93,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
         this.clearEntries();
 
         if (changelogs == null || changelogs.isEmpty()) {
-            ListEntry entry = new ListEntry(VersionedText.common.literal("No changelogs found").formatted(Formatting.BOLD), true, null, null, this.client);
+            ListEntry entry = new ListEntry(VersionedText.literal("No changelogs found").formatted(Formatting.BOLD), true, null, null, this.client);
             this.addEntry(entry);
             return;
         }
@@ -102,7 +102,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
             String textString = changelog.getKey();
             String mainPageUrl = changelog.getValue();
 
-            MutableText text = VersionedText.common.literal(textString);
+            MutableText text = VersionedText.literal(textString);
 
             if (textString.startsWith("+")) {
                 text = text.formatted(Formatting.GREEN);

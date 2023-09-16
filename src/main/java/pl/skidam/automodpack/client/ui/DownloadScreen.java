@@ -56,7 +56,7 @@ public class DownloadScreen extends VersionedScreen {
     private float lastDownloadedScale = 0.0F;
 
     public DownloadScreen(DownloadManager downloadManager, String header) {
-        super(VersionedText.common.literal("DownloadScreen"));
+        super(VersionedText.literal("DownloadScreen"));
         this.downloadManager = downloadManager;
         this.header = header;
     }
@@ -95,7 +95,7 @@ public class DownloadScreen extends VersionedScreen {
     }
 
     private void initWidgets() {
-        cancelButton = VersionedText.buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.common.translatable("automodpack.cancel"),
+        cancelButton = buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.translatable("automodpack.cancel"),
                 button -> {
                     cancelButton.active = false;
                     cancelDownload();
@@ -105,31 +105,31 @@ public class DownloadScreen extends VersionedScreen {
 
     private Text getStage() {
         if (lastStage.equals("-1")) {
-            return VersionedText.common.translatable("automodpack.download.calculating");
+            return VersionedText.translatable("automodpack.download.calculating");
         }
-        return VersionedText.common.literal(lastStage);
+        return VersionedText.literal(lastStage);
     }
 
     private Text getPercentage() {
         if (lastPercentage == -1) {
-            return VersionedText.common.translatable("automodpack.download.calculating");
+            return VersionedText.translatable("automodpack.download.calculating");
         }
-        return VersionedText.common.literal(lastPercentage + "%");
+        return VersionedText.literal(lastPercentage + "%");
     }
 
 
     private Text getTotalDownloadSpeed() {
         if (lastSpeed.equals("-1")) {
-            return VersionedText.common.translatable("automodpack.download.calculating");
+            return VersionedText.translatable("automodpack.download.calculating");
         }
-        return VersionedText.common.literal(lastSpeed);
+        return VersionedText.literal(lastSpeed);
     }
 
     private Text getTotalETA() {
         if (lastETA.equals("-1")) {
-            return VersionedText.common.translatable("automodpack.download.calculating");
+            return VersionedText.translatable("automodpack.download.calculating");
         }
-        return VersionedText.common.translatable("automodpack.download.eta", lastETA); // Time left: %s
+        return VersionedText.translatable("automodpack.download.eta", lastETA); // Time left: %s
     }
 
     private float getDownloadScale() {
@@ -144,7 +144,7 @@ public class DownloadScreen extends VersionedScreen {
         matrices.scale(scale, scale, scale);
 
         if (downloadManager != null && !downloadManager.downloadsInProgress.isEmpty()) {
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.download.downloading"), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.downloading"), (int) (this.width / 2 * scale), y, 16777215);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
@@ -160,13 +160,13 @@ public class DownloadScreen extends VersionedScreen {
 //                        text += " " + percentage;
 //                    }
 
-                    VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.literal(text), (int) (this.width / 2 * scale), currentY, 16777215);
+                    drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.literal(text), (int) (this.width / 2 * scale), currentY, 16777215);
                     currentY += 10;
                 }
             }
         } else {
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.download.noFiles"), (int) (this.width / 2 * scale), y, 16777215);
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.common.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 25, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.noFiles"), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 25, 16777215);
         }
 
         matrices.pop();
@@ -197,27 +197,27 @@ public class DownloadScreen extends VersionedScreen {
         this.renderBackground(matrices);
 
         drawDownloadingFiles(matrices);
-        MutableText titleText = VersionedText.common.literal(header).formatted(Formatting.BOLD);
-        VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, titleText, this.width / 2, this.height / 2 - 110, 16777215);
+        MutableText titleText = VersionedText.literal(header).formatted(Formatting.BOLD);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, titleText, this.width / 2, this.height / 2 - 110, 16777215);
 
         if (downloadManager != null && !downloadManager.isClosed()) {
             MutableText percentage = (MutableText) this.getPercentage();
             MutableText stage = (MutableText) this.getStage();
             MutableText eta = (MutableText) this.getTotalETA();
             MutableText speed = (MutableText) this.getTotalDownloadSpeed();
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
 
 
             // Render progress bar
             int progressX = this.width / 2 - PROGRESS_BAR_WIDTH / 2;
             int progressY = this.height / 2 + 30;
 
-            VersionedText.drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, progressX, progressY, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
-            VersionedText.drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, progressX, progressY, 0, 0, (int) (PROGRESS_BAR_WIDTH * getDownloadScale()), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+            drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, progressX, progressY, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+            drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, progressX, progressY, 0, 0, (int) (PROGRESS_BAR_WIDTH * getDownloadScale()), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
 
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, percentage, this.width / 2, this.height / 2 + 36, 16777215);
-            VersionedText.drawCenteredTextWithShadow(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 60, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, percentage, this.width / 2, this.height / 2 + 36, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, speed, this.width / 2, this.height / 2 + 60, 16777215);
 
             checkAndStartMusic();
             cancelButton.active = true;

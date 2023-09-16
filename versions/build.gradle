@@ -46,6 +46,12 @@ dependencies {
 
 	// include to jars
 	include(runtimeOnly 'maven.modrinth:preloading-tricks:0.0.14')
+
+	// TODO maybe use 'shadowJar' task instead of 'include' for these sub-projects,
+	//  because if we use 'include implementation' dev-env requires them to be on "NamedElements" configurations,
+	//  and since there aren't made on loom (mainly because we don't need to interact with any minecraft source code),
+	//  there's no such configuration, so this doesn't really work in dev-env.
+	//  However that fix would completely break forge version because of forge module mod system which requires us to for preload use different module.
 	include(implementation project(path: ":core-${mod_brand}", configuration: "shadow"))
 	include(implementation project(path: ':server-host'))
 
