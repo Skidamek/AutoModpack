@@ -132,8 +132,10 @@ public class LoaderManager implements LoaderService {
 
                 if (env.equalsIgnoreCase("client")) {
                     return EnvironmentType.CLIENT;
-                } else {
+                } else if (env.equalsIgnoreCase("server")) {
                     return EnvironmentType.SERVER;
+                } else {
+                    return EnvironmentType.UNIVERSAL;
                 }
             }
         } catch (ZipException ignored) {

@@ -1,11 +1,10 @@
 package pl.skidam.automodpack_core_forge.loader;
 
-import net.fabricmc.api.EnvType;
-import net.fabricmc.loader.api.FabricLoader;
-import net.fabricmc.loader.api.ModContainer;
-import net.fabricmc.loader.api.metadata.ModEnvironment;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.loading.FMLLoader;
 import net.minecraftforge.fml.loading.moddiscovery.ModFile;
+import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 import pl.skidam.automodpack_common.utils.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderService;
 import settingdust.preloadingtricks.forge.ForgeLanguageProviderCallback;
@@ -13,11 +12,11 @@ import settingdust.preloadingtricks.forge.ForgeLanguageProviderCallback;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -33,12 +32,20 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public boolean isModLoaded(String modId) {
-        return FabricLoader.getInstance().isModLoaded(modId);
+        return ModList.get().isLoaded(modId);
     }
 
     @Override
     public Collection<?> getModList() {
-        return FabricLoader.getInstance().getAllMods();
+
+        List <ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
+        List <String> modList = new ArrayList<>();
+
+        for (ModInfo modInfo: modInfos) {
+            modList.add(modInfo.getModId() + " " + modInfo.getVersion().toString()); // fabric like mod list
+        }
+
+        return modList;
     }
 
     @Override
@@ -91,7 +98,7 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public EnvironmentType getEnvironmentType() {
-        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+        if (FMLLoader.getDist() == Dist.CLIENT) {
             return EnvironmentType.CLIENT;
         } else {
             return EnvironmentType.SERVER;
@@ -114,10 +121,14 @@ public class LoaderManager implements LoaderService {
 
                     String[] split = line.split("=");
                     if (split.length > 1) {
-                        if (split[1].replaceAll("\"", "").trim().equalsIgnoreCase("client")) {
+                        String env = split[1].replaceAll("\"", "").trim();
+                        env = env.split(" ")[0];
+                        if (env.equalsIgnoreCase("client")) {
                             return EnvironmentType.CLIENT;
-                        } else {
+                        } else if (env.equalsIgnoreCase("server")) {
                             return EnvironmentType.SERVER;
+                        } else {
+                            return EnvironmentType.UNIVERSAL;
                         }
                     }
                 }
@@ -143,7 +154,13 @@ public class LoaderManager implements LoaderService {
             }
         }
 
-        return FabricLoader.getInstance().getModContainer(modId).isPresent() ? FabricLoader.getInstance().getModContainer(modId).get().getMetadata().getVersion().getFriendlyString() : null;
+        ModInfo modInfo = FMLLoader.getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
+
+        if (modInfo == null) {
+            return null;
+        }
+
+        return modInfo.getVersion().toString();
     }
 
     @Override
@@ -153,32 +170,21 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public boolean isDevelopmentEnvironment() {
-        return FabricLoader.getInstance().isDevelopmentEnvironment();
+        return !FMLLoader.isProduction();
     }
 
     @Override
     public EnvironmentType getModEnvironment(String modId) {
-        var container = FabricLoader.getInstance().getModContainer(modId);
-        if (container.isEmpty()) {
-            return EnvironmentType.UNIVERSAL;
-        }
-        ModEnvironment env = container.get().getMetadata().getEnvironment();
-        if (env == ModEnvironment.CLIENT) {
-            return EnvironmentType.CLIENT;
-        } else if (env == ModEnvironment.SERVER) {
-            return EnvironmentType.SERVER;
-        } else {
-            return EnvironmentType.UNIVERSAL;
-        }
+        return getModEnvironmentFromNotLoadedJar(getModPath(modId));
     }
 
     @Override
     public String getModId(Path file, boolean checkAlsoOutOfContainer) {
-        for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
-            FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();
-            Path modFile = Paths.get(fileSys.toString());
-            if (modFile.getFileName().equals(file.getFileName())) {
-                return modContainer.getMetadata().getId();
+        List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
+
+        for (ModInfo modInfo: modInfos) {
+            if (modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
+                return modInfo.getModId();
             }
         }
 

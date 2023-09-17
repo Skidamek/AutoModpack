@@ -30,7 +30,7 @@ dependencies {
 
     // loaders apis
     if (project.name.contains('quilt')) {
-        compileOnly("org.quiltmc:quilt-loader:0.20.1") {
+        compileOnly("org.quiltmc:quilt-loader:0.20.2") {
             transitive = false
         }
     } else {

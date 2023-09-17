@@ -20,7 +20,6 @@
 
 package pl.skidam.automodpack_core.client;
 
-import com.google.gson.Gson;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.config.ConfigTools;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
@@ -38,8 +37,6 @@ import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.file.*;
 import java.security.NoSuchAlgorithmException;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.*;
 import java.util.stream.Stream;
 
@@ -434,7 +431,6 @@ public class ModpackUpdater {
         Map<String, String> modpackMods = getMods(modpackModsFile);
 
         if (mainMods == null || modpackMods == null) return;
-
         if (!hasDuplicateValues(mainMods)) return;
 
         for (Map.Entry<String, String> mainMod : mainMods.entrySet()) {
@@ -445,20 +441,13 @@ public class ModpackUpdater {
                 continue;
             }
 
-            for (Map.Entry<String, String> modpackMod : modpackMods.entrySet()) {
-                String modpackModFileName = modpackMod.getKey();
-                String modpackModId = modpackMod.getValue();
+            String modpackModFileName = modpackMods.get(mainModId);
 
-                if (modpackModId == null || modpackModFileName == null) {
-                    continue;
-                }
-
-                if (mainModId.equals(modpackModId) && !mainModFileName.equals(modpackModFileName)) {
-                    Path mainModFile = Paths.get("./mods/" + mainModFileName);
-                    LOGGER.info("Deleting {} from main mods folder...", mainModFile.getFileName());
-                    CustomFileUtils.forceDelete(mainModFile);
-                    break;
-                }
+            // Check if the main mod ID exists in the modpack mods and filenames are different
+            if (modpackModFileName != null && !mainModFileName.equals(modpackModFileName)) {
+                Path mainModFile = Paths.get("./mods/" + mainModFileName);
+                LOGGER.info("Deleting {} from main mods folder...", mainModFile.getFileName());
+                CustomFileUtils.forceDelete(mainModFile);
             }
         }
     }

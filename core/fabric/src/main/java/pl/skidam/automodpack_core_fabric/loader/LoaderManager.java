@@ -114,10 +114,13 @@ public class LoaderManager implements LoaderService {
                 zipFile.close();
 
                 if (json.has("environment")) {
-                    if (json.get("environment").getAsString().toUpperCase().equalsIgnoreCase("client")) {
+                    String env = json.get("environment").getAsString();
+                    if (env.equalsIgnoreCase("client")) {
                         return EnvironmentType.CLIENT;
-                    } else {
+                    } else if (env.equalsIgnoreCase("server")) {
                         return EnvironmentType.SERVER;
+                    } else {
+                        return EnvironmentType.UNIVERSAL;
                     }
                 }
             }
