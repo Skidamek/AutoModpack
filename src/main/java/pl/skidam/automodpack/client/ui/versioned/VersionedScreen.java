@@ -119,4 +119,13 @@ public class VersionedScreen extends Screen {
 //$$}
 //$$
 //#endif
+
+    public void renderBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+        //#if MC < 12002
+        super.renderBackground(matrices);
+        //#else
+        //$$super.renderBackground(matrices, mouseX, mouseY, delta);
+        //#endif
+    }
+
 }

@@ -89,7 +89,7 @@ dependencies {
 		// forgified fabric api - https://modrinth.com/mod/forgified-fabric-api
 		Set<String> apiModules = [
 				"fabric-api-base:0.4.30+ef105b4977",
-				"fabric-networking-api-v1:1.3.10+46fcf87e77",
+				"fabric-networking-api-v1:1.3.10+8ba517a077",
 				"fabric-registry-sync-v0:2.3.2+1c0ea72177", // is it needed?
 				"fabric-resource-loader-v0:0.11.9+65ee760177", // is it needed?
 				"fabric-command-api-v2:2.2.12+561530ec77"

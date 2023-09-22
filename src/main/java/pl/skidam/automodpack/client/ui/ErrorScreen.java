@@ -59,7 +59,7 @@ public class ErrorScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        this.renderBackground(matrices);
+        renderBackground(matrices, mouseX, mouseY, delta);
         // Something went wrong!
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.literal("[AutoModpack] Error! ").append(VersionedText.translatable("automodpack.error").formatted(Formatting.RED)), this.width / 2, this.height / 2 - 40, 16777215);
         for (int i = 0; i < this.errorMessage.length; i++) {

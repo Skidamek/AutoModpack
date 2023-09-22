@@ -30,6 +30,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.audio.AudioManager;
+import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.screen.ScreenManager;
@@ -45,31 +46,25 @@ public class TestButton extends Screen {
     private void init(CallbackInfo ci) {
 
         // check if we are in dev environment
-        if (!new LoaderManager().isDevelopmentEnvironment()) {
-            return;
-        }
+//        if (!new LoaderManager().isDevelopmentEnvironment()) {
+//            return;
+//        }
 
 //#if MC >= 11700
         this.addDrawableChild(
 //#else
 //$$    this.addButton(
 //#endif
-                new TexturedButtonWidget(
+                VersionedScreen.buttonWidget(
                         this.width / 2 - 124,
                         90,
                         20,
                         20,
-                        0,
-                        106,
-                        20,
-                        ButtonWidget.WIDGETS_TEXTURE,
-                        256,
-                        256,
+                        VersionedText.literal("AM"),
                         button -> {
                             AudioManager.playMusic();
                             new ScreenManager().menu();
-                        },
-                        VersionedText.translatable("gui.automodpack.menu")
+                        }
                 )
         );
     }

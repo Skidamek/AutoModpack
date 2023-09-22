@@ -103,7 +103,7 @@ public class MenuScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        this.renderBackground(matrices);
+        renderBackground(matrices, mouseX, mouseY, delta);
 
         this.ListEntryWidget.render(matrices, mouseX, mouseY, delta);
         activateOrDeactivateButtons();

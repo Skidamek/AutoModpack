@@ -194,7 +194,7 @@ public class DownloadScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        this.renderBackground(matrices);
+        renderBackground(matrices, mouseX, mouseY, delta);
 
         drawDownloadingFiles(matrices);
         MutableText titleText = VersionedText.literal(header).formatted(Formatting.BOLD);
