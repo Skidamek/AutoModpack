@@ -53,8 +53,9 @@ shadowJar {
     from project(':core-common').sourceSets.main.output
     from project(':common').sourceSets.main.output
 
-    // Exclude original class
+    // Exclude original classes
     exclude('pl/skidam/automodpack_core/loader/LoaderManager.class')
+    exclude('pl/skidam/automodpack_core/mods/SetupMods.class')
 
     if (project.name.contains("fabric")) {
         // Define relocation mapping for fabric project
