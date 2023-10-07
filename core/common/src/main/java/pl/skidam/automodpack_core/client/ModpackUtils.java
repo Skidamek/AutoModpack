@@ -39,10 +39,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.security.NoSuchAlgorithmException;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 import static pl.skidam.automodpack_common.config.ConfigTools.GSON;
@@ -87,69 +84,36 @@ public class ModpackUtils {
         }
     }
 
-    public static void copyModpackFilesFromModpackDirToRunDir(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
+    public static void correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
             return;
         }
 
         for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
-            String fileName = contentItem.file;
+            String file = contentItem.file;
 
-            if (ignoreFiles.contains(fileName)) {
+            if (ignoreFiles.contains(file)) {
                 continue;
             }
 
-            Path sourceFile = Paths.get(modpackDir + fileName);
+            if (contentItem.type != null && contentItem.type.equals("mod")) {
+                continue;
+            }
 
-            if (Files.exists(sourceFile)) {
-                Path destinationFile = Paths.get("." + fileName);
+            Path modpackFile = Paths.get(modpackDir + file);
+            Path runFile = Paths.get("." + file);
 
-                if (Files.exists(destinationFile)) {
-                    try {
-                        if (CustomFileUtils.compareFileHashes(sourceFile, destinationFile, "SHA-1")) {
-                            continue;
-                        }
-                    } catch (NoSuchAlgorithmException e) {
-                        e.printStackTrace();
-                    }
-                }
-
-                CustomFileUtils.copyFile(sourceFile, destinationFile);
+            if (Files.exists(modpackFile)) {
+                CustomFileUtils.copyFile(modpackFile, runFile);
+            } else if (Files.exists(runFile)) {
+                CustomFileUtils.copyFile(runFile, modpackFile);
             } else {
-                LOGGER.error("File " + fileName + " doesn't exist in modpack directory!?");
+                LOGGER.error("File " + file + " doesn't exist!?");
             }
         }
     }
 
-
-    public static void copyModpackFilesFromRunDirToModpackDir(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws Exception {
-        List<Jsons.ModpackContentFields.ModpackContentItem> contents = serverModpackContent.list;
-
-        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : contents) {
-
-            if (ignoreFiles.contains(contentItem.file)) {
-                continue;
-            }
-
-            Path sourceFile = Paths.get("." + contentItem.file);
-
-            if (Files.exists(sourceFile)) {
-
-                // check hash
-                String serverHash = contentItem.sha1;
-                String localHash = CustomFileUtils.getHash(sourceFile, "SHA-1");
-
-                if (!serverHash.equals(localHash) && !contentItem.editable) {
-                    continue;
-                }
-
-                Path destinationFile = Paths.get(modpackDir + File.separator + contentItem.file);
-
-                CustomFileUtils.copyFile(sourceFile, destinationFile);
-            }
-        }
-    }
 
     public static List<Path> renameModpackDir(Path modpackContentFile, Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(modpackContentFile);
