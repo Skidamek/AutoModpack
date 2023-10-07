@@ -22,7 +22,7 @@ package pl.skidam.automodpack.client.ui.versioned;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawableHelper;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.MutableText;
@@ -36,9 +36,9 @@ import net.minecraft.util.Identifier;
 //#endif
 
 //#if MC < 12000
-import net.minecraft.client.util.math.MatrixStack;
+//$$ import net.minecraft.client.util.math.MatrixStack;
 //#else
-//$$import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.DrawContext;
 //#endif
 
 public class VersionedScreen extends Screen {
@@ -47,13 +47,14 @@ public class VersionedScreen extends Screen {
         super(title);
     }
 
-    @Override
 //#if MC < 12000
-    public void render(MatrixStack matrix, int mouseX, int mouseY, float delta) {
-        VersionedMatrices matrices = new VersionedMatrices();
+//$$    @Override
+//$$    public void render(MatrixStack matrix, int mouseX, int mouseY, float delta) {
+//$$        VersionedMatrices matrices = new VersionedMatrices();
 //#else
-//$$public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
-//$$    VersionedMatrices matrices = new VersionedMatrices(this.client, matrix.getVertexConsumers());
+@Override
+public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
+        VersionedMatrices matrices = new VersionedMatrices(this.client, matrix.getVertexConsumers());
 //#endif
         versionedRender(matrices, mouseX, mouseY, delta);
         super.render(matrices, mouseX, mouseY, delta);
@@ -74,57 +75,57 @@ public class VersionedScreen extends Screen {
 
 
 //#if MC >= 12000
-//$$
-//$$    public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
-//$$        matrices.drawCenteredTextWithShadow(textRenderer, text, centerX, y, color);
-//$$    }
-//$$
+
+   public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
+       matrices.drawCenteredTextWithShadow(textRenderer, text, centerX, y, color);
+   }
+
 //#else
-
-    public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
-        textRenderer.drawWithShadow(matrices, text, (float)(centerX - textRenderer.getWidth(text) / 2), (float)y, color);
-    }
-
+//$$
+//$$     public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
+//$$         textRenderer.drawWithShadow(matrices, text, (float)(centerX - textRenderer.getWidth(text) / 2), (float)y, color);
+//$$     }
+//$$
 //#endif
 
 
 //#if MC < 11903
-    public static ButtonWidget buttonWidget(int x, int y, int width, int height, Text message, ButtonWidget.PressAction onPress) {
-        return new ButtonWidget(x, y, width, height, message, onPress);
-    }
+//$$     public static ButtonWidget buttonWidget(int x, int y, int width, int height, Text message, ButtonWidget.PressAction onPress) {
+//$$         return new ButtonWidget(x, y, width, height, message, onPress);
+//$$     }
 //#else
-//$$
-//$$public static ButtonWidget buttonWidget(int x, int y, int width, int height, Text message, ButtonWidget.PressAction onPress) {
-//$$    return ButtonWidget.builder(message, onPress).position(x, y).size(width, height).build();
-//$$}
-//$$
+
+public static ButtonWidget buttonWidget(int x, int y, int width, int height, Text message, ButtonWidget.PressAction onPress) {
+   return ButtonWidget.builder(message, onPress).position(x, y).size(width, height).build();
+}
+
 //#endif
 
 
 //#if MC < 12000
 //$$
-    public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
-        //#if MC <= 11605
-        //$$MinecraftClient.getInstance().getTextureManager().bindTexture(textureID);
-        //#else
-        RenderSystem.setShaderTexture(0, textureID);
-        //#endif
-        DrawableHelper.drawTexture(matrices, x, y, u, v, width, height, textureWidth, textureHeight);
-    }
+//$$     public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+            //#if MC <= 11605
+//$$        MinecraftClient.getInstance().getTextureManager().bindTexture(textureID);
+            //#else
+//$$         RenderSystem.setShaderTexture(0, textureID);
+            //#endif
+//$$         DrawableHelper.drawTexture(matrices, x, y, u, v, width, height, textureWidth, textureHeight);
+//$$     }
 //$$
 //#else
-//$$
-//$$public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
-//$$    matrices.drawTexture(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
-//$$}
-//$$
+
+public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+   matrices.drawTexture(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+}
+
 //#endif
 
     public void renderBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
         //#if MC < 12002
-        super.renderBackground(matrices);
+//$$         super.renderBackground(matrices);
         //#else
-        //$$super.renderBackground(matrices, mouseX, mouseY, delta);
+        super.renderBackground(matrices, mouseX, mouseY, delta);
         //#endif
     }
 

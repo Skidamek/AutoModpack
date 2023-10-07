@@ -27,15 +27,15 @@ import net.minecraft.sound.SoundEvent;
 import java.util.function.Supplier;
 
 //#if MC >= 11902
-//$$import net.minecraft.util.math.random.Random;
+import net.minecraft.util.math.random.Random;
 //#endif
 public class CustomSoundInstance extends AbstractSoundInstance {
 
     public CustomSoundInstance(Supplier<SoundEvent> event) {
 //#if MC >= 11902
-//$$    super(event.get().getId(), SoundCategory.MASTER, Random.create());
+   super(event.get().getId(), SoundCategory.MASTER, Random.create());
 //#else
-        super(event.get().getId(), SoundCategory.MASTER);
+//$$         super(event.get().getId(), SoundCategory.MASTER);
 //#endif
         this.attenuationType = AttenuationType.NONE;
     }

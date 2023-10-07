@@ -39,12 +39,12 @@ public class VersionedCommandSource extends ServerCommandSource {
     }
 
 //#if MC >= 12000
-//$$    public static void sendFeedback(CommandContext<ServerCommandSource> context, Text message, boolean broadcastToOps) {
-//$$        context.getSource().sendFeedback(() -> message, broadcastToOps);
-//$$    }
+   public static void sendFeedback(CommandContext<ServerCommandSource> context, Text message, boolean broadcastToOps) {
+       context.getSource().sendFeedback(() -> message, broadcastToOps);
+   }
 //#else
-    public static void sendFeedback(CommandContext<ServerCommandSource> context, Text message, boolean broadcastToOps) {
-        context.getSource().sendFeedback(message, broadcastToOps);
-    }
+//$$     public static void sendFeedback(CommandContext<ServerCommandSource> context, Text message, boolean broadcastToOps) {
+//$$         context.getSource().sendFeedback(message, broadcastToOps);
+//$$     }
 //#endif
 }

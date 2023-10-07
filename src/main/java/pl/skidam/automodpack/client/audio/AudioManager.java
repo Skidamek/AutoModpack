@@ -26,10 +26,10 @@ import net.minecraft.sound.SoundEvent;
 import net.minecraft.util.Identifier;
 
 //#if MC >= 11903
-//$$ import net.minecraft.registry.Registries;
+import net.minecraft.registry.Registries;
 //#endif
 
-import net.minecraft.util.registry.Registry;
+import net.minecraft.registry.Registry;
 
 //#if FORGE
 //$$import net.minecraftforge.eventbus.api.IEventBus;
@@ -50,9 +50,9 @@ public class AudioManager {
     private static final Identifier WAITING_MUSIC_ID = new Identifier(MOD_ID, "waiting_music");
 
 //#if MC >= 11903
-//$$    public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.of(WAITING_MUSIC_ID);
+   public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.of(WAITING_MUSIC_ID);
 //#else
-    private static final SoundEvent WAITING_MUSIC_EVENT = new SoundEvent(WAITING_MUSIC_ID);
+//$$     private static final SoundEvent WAITING_MUSIC_EVENT = new SoundEvent(WAITING_MUSIC_ID);
 //#endif
 
     private static Supplier<SoundEvent> WAITING_MUSIC;
@@ -75,9 +75,9 @@ public class AudioManager {
     private SoundEvent register() {
         Identifier id = new Identifier(MOD_ID, "waiting_music");
 //#if MC >= 11903
-//$$    Registry<SoundEvent> register = Registries.SOUND_EVENT;
+   Registry<SoundEvent> register = Registries.SOUND_EVENT;
 //#else
-        Registry<SoundEvent> register = Registry.SOUND_EVENT;
+//$$         Registry<SoundEvent> register = Registry.SOUND_EVENT;
 //#endif
 
         return Registry.register(register, id, WAITING_MUSIC_EVENT);

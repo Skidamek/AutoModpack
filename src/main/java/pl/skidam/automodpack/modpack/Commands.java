@@ -37,9 +37,9 @@ import static net.minecraft.server.command.CommandManager.literal;
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 //#if MC < 11902
-import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
+//$$ import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
 //#else
-//$$ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 //#endif
 
 public class Commands {
@@ -47,9 +47,9 @@ public class Commands {
     public static void register() {
 
 //#if MC < 11902
-        CommandRegistrationCallback.EVENT.register((dispatcher, dedicated) -> dispatcher.register(
+//$$         CommandRegistrationCallback.EVENT.register((dispatcher, dedicated) -> dispatcher.register(
 //#else
-//$$    CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) -> dispatcher.register(
+   CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) -> dispatcher.register(
 //#endif
                 literal("automodpack")
                         .executes(Commands::about)

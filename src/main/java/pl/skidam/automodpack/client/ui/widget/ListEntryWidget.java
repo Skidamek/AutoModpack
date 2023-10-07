@@ -34,9 +34,9 @@ import java.util.Map;
 import static pl.skidam.automodpack_common.GlobalVariables.clientConfig;
 
 //#if MC < 12000
-import net.minecraft.client.util.math.MatrixStack;
+//$$ import net.minecraft.client.util.math.MatrixStack;
 //#else
-//$$import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.DrawContext;
 //#endif
 
 public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
@@ -117,9 +117,9 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
 
     @Override
 //#if MC < 12000
-    public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
+//$$     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
 //#else
-//$$public void render(DrawContext matrices, int mouseX, int mouseY, float delta) {
+public void render(DrawContext matrices, int mouseX, int mouseY, float delta) {
 //#endif
 
         super.render(matrices, mouseX, mouseY, delta);

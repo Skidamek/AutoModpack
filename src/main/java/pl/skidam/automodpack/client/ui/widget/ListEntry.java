@@ -32,9 +32,9 @@ import pl.skidam.automodpack_server.modpack.Modpack;
 import java.nio.file.Path;
 
 //#if MC < 12000
-import net.minecraft.client.util.math.MatrixStack;
+//$$ import net.minecraft.client.util.math.MatrixStack;
 //#else
-//$$import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.DrawContext;
 //#endif
 
 public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
@@ -73,11 +73,11 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
 
     @Override
 //#if MC < 12000
-    public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-        VersionedMatrices versionedMatrices = new VersionedMatrices();
+//$$     public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+//$$         VersionedMatrices versionedMatrices = new VersionedMatrices();
 //#else
-//$$public void render(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-//$$    VersionedMatrices versionedMatrices = new VersionedMatrices(this.client, context.getVertexConsumers());
+public void render(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+   VersionedMatrices versionedMatrices = new VersionedMatrices(this.client, context.getVertexConsumers());
 //#endif
         versionedMatrices.push();
 
