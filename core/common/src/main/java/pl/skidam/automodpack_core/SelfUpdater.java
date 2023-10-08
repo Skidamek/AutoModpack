@@ -32,6 +32,8 @@ import pl.skidam.automodpack_core.utils.UpdateType;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
@@ -64,82 +66,95 @@ public class SelfUpdater {
 
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
-        ModrinthAPI automodpack;
+        List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
         boolean gettingServerVersion;
 
         // Check if server version is available
         if (serverModpackContent != null && serverModpackContent.automodpackVersion != null) {
-            automodpack = ModrinthAPI.getModSpecificVersion(automodpackID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion);
+            modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(automodpackID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
             gettingServerVersion = true;
         } else {
-            automodpack = ModrinthAPI.getModInfoFromID(automodpackID);
+            modrinthAPIList = ModrinthAPI.getModInfosFromID(automodpackID);
             gettingServerVersion = false;
         }
 
-        if (automodpack == null || automodpack.fileVersion == null) {
-            LOGGER.warn("Couldn't get latest version of AutoModpack from Modrinth API. Likely automodpack isn't updated to your version of minecraft yet...");
+        String errorMessage = "Couldn't get latest version of AutoModpack from Modrinth API. Likely automodpack isn't updated to your version of minecraft yet...";
+
+        if (modrinthAPIList == null) {
+            LOGGER.warn(errorMessage);
             return;
         }
 
-        // If latest mod is not same as current mod download new mod.
-        // Check how big the mod file is
-        if (automodpack.fileVersion.contains("-")) {
-            automodpack.fileVersion = automodpack.fileVersion.split("-")[0];
-        }
+        for (ModrinthAPI automodpack : modrinthAPIList) {
 
-        String LATEST_VERSION = automodpack.fileVersion.replace(".", "");
-        String OUR_VERSION = AM_VERSION.replace(".", "");
+            if (automodpack == null || automodpack.fileVersion == null) {
+                continue;
+            }
 
-        boolean snapshot = false;
+            // If latest mod is not same as current mod download new mod.
+            // Check how big the mod file is
+            if (automodpack.fileVersion.contains("-")) {
+                automodpack.fileVersion = automodpack.fileVersion.split("-")[0];
+            }
 
-        if (!gettingServerVersion) {
-            try {
-                if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
-                    LOGGER.info("You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion);
-                    return;
-                }
-            } catch (NumberFormatException e) {
-                // ignore
+            String LATEST_VERSION = automodpack.fileVersion.replace(".", "");
+            String OUR_VERSION = AM_VERSION.replace(".", "");
 
-                // Check if version has any other characters than numbers and if latest version is only numbers
-                if (OUR_VERSION.chars().anyMatch(ch -> !Character.isDigit(ch))) {
+            boolean snapshot = false;
 
-                    snapshot = true;
-
-                    OUR_VERSION = OUR_VERSION.replaceAll("[^0-9]", "");
-                    LATEST_VERSION = LATEST_VERSION.replaceAll("[^0-9]", "");
-
+            if (!gettingServerVersion) {
+                try {
                     if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
-                        LOGGER.info("You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion);
-                        return;
+                        errorMessage = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion;
+                        continue;
+                    }
+                } catch (NumberFormatException e) {
+                    // ignore
+
+                    // Check if version has any other characters than numbers and if latest version is only numbers
+                    if (OUR_VERSION.chars().anyMatch(ch -> !Character.isDigit(ch))) {
+
+                        snapshot = true;
+
+                        OUR_VERSION = OUR_VERSION.replaceAll("[^0-9]", "");
+                        LATEST_VERSION = LATEST_VERSION.replaceAll("[^0-9]", "");
+
+                        if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
+                            errorMessage = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion;
+                            continue;
+                        }
                     }
                 }
             }
-        }
 
-        if (!snapshot) {
-            // We always want to update to latest release version unless server is already using snapshot version
-            if (gettingServerVersion && OUR_VERSION.equals(LATEST_VERSION)) {
-                LOGGER.info("Didn't find any updates for AutoModpack! You are on the server version: " + AM_VERSION);
-                return;
+            if (!snapshot) {
+                // We always want to update to latest release version unless server is already using snapshot version
+                if (gettingServerVersion && OUR_VERSION.equals(LATEST_VERSION)) {
+                    errorMessage = "Didn't find any updates for AutoModpack! You are on the server version: " + AM_VERSION;
+                    continue;
+                }
+
+                if (!gettingServerVersion && (OUR_VERSION.equals(LATEST_VERSION) || !"release".equals(automodpack.releaseType))) {
+                    errorMessage = "Didn't find any updates for AutoModpack! You are on the latest version: " + AM_VERSION;
+                    continue;
+                }
             }
 
-            if (!gettingServerVersion && (OUR_VERSION.equals(LATEST_VERSION) || !"release".equals(automodpack.releaseType))) {
-                LOGGER.info("Didn't find any updates for AutoModpack! You are on the latest version: " + AM_VERSION);
-                return;
+            // We got correct version
+            // We are currently using outdated snapshot or outdated release version
+            // If latest is release, always update
+            // If latest is beta/alpha (snapshot), update only if we are using beta/alpha (snapshot)
+            if (!gettingServerVersion) {
+                LOGGER.info("Update found! Updating to latest version: " + automodpack.fileVersion);
+            } else {
+                LOGGER.info("Update found! Updating to the server version: " + automodpack.fileVersion);
             }
+
+            installModVersion(automodpack);
+            return;
         }
 
-        // We are using outdated snapshot or outdated release version
-        // If latest is release, always update
-        // If latest is beta/alpha (snapshot), update only if we are using beta/alpha (snapshot)
-        if (!gettingServerVersion) {
-            LOGGER.info("Update found! Updating to latest version: " + automodpack.fileVersion);
-        } else {
-            LOGGER.info("Update found! Updating to the server version: " + automodpack.fileVersion);
-        }
-
-        installModVersion(automodpack);
+        LOGGER.info(errorMessage);
     }
 
     public static void installModVersion(ModrinthAPI automodpack) {

@@ -26,6 +26,9 @@ import com.google.gson.JsonObject;
 import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_common.utils.Json;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class ModrinthAPI {
@@ -52,13 +55,15 @@ public class ModrinthAPI {
         this.SHA1Hash = SHA1Hash;
     }
 
-    public static ModrinthAPI getModInfoFromID(String modrinthID) {
+    public static List<ModrinthAPI> getModInfosFromID(String modrinthID) {
 
         String modLoader = new LoaderManager().getPlatformType().toString().toLowerCase();
 
         String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + MC_VERSION + "\"]";
 
         requestUrl = requestUrl.replaceAll("\"", "%22"); // so important!
+
+        List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
 
         try {
             JsonArray JSONArray = Json.fromUrlAsArray(requestUrl);
@@ -68,27 +73,30 @@ public class ModrinthAPI {
                 return null;
             }
 
-            JsonObject JSONObject = JSONArray.get(0).getAsJsonObject();
+            for (JsonElement jsonElement : JSONArray) {
+                JsonObject JSONObject = jsonElement.getAsJsonObject();
 
-            String fileVersion = JSONObject.get("version_number").getAsString();
-            String releaseType = JSONObject.get("version_type").getAsString();
+                String fileVersion = JSONObject.get("version_number").getAsString();
+                String releaseType = JSONObject.get("version_type").getAsString();
 
-            JsonObject JSONObjectFiles = JSONObject.getAsJsonArray("files").get(0).getAsJsonObject();
+                JsonObject JSONObjectFiles = JSONObject.getAsJsonArray("files").get(0).getAsJsonObject();
 
-            String downloadUrl = JSONObjectFiles.get("url").getAsString();
-            String fileName = JSONObjectFiles.get("filename").getAsString();
-            long fileSize = JSONObjectFiles.get("size").getAsLong();
-            String SHA1Hash = JSONObjectFiles.get("hashes").getAsJsonObject().get("sha1").getAsString();
+                String downloadUrl = JSONObjectFiles.get("url").getAsString();
+                String fileName = JSONObjectFiles.get("filename").getAsString();
+                long fileSize = JSONObjectFiles.get("size").getAsLong();
+                String SHA1Hash = JSONObjectFiles.get("hashes").getAsJsonObject().get("sha1").getAsString();
 
-            return new ModrinthAPI(modrinthID, requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA1Hash);
-
+                modrinthAPIList.add(new ModrinthAPI(modrinthID, requestUrl, downloadUrl, fileVersion, fileName, fileSize, releaseType, SHA1Hash));
+            }
         } catch (IndexOutOfBoundsException e) {
             LOGGER.warn("Can't find mod for your client, tried link " + requestUrl);
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return null;
+
+        return modrinthAPIList;
     }
+
 
     public static ModrinthAPI getModSpecificVersion(String modrinthID, String modVersion, String mcVersion) {
 

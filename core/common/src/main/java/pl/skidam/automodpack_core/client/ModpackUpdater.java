@@ -111,6 +111,7 @@ public class ModpackUpdater {
 
             LOGGER.warn("Modpack update found");
 
+            // To don't lock on asking screen, it will say please wait until nothing starts downloading
             new ScreenManager().download(downloadManager, ModpackUpdater.getModpackName());
 
             ModpackUpdaterMain(link, modpackDir, modpackContentFile);
@@ -123,17 +124,15 @@ public class ModpackUpdater {
 
     public void CheckAndLoadModpack(Path modpackDir, Path modpackContentFile, Path workingDirectory) throws Exception {
 
-        List<Path> filesBefore = new ArrayList<>();
-        if (!preload) {
-            filesBefore = mapAllFiles(workingDirectory, new ArrayList<>());
-        }
-
-        finishModpackUpdate(modpackDir, modpackContentFile);
-
         if (preload) {
+            finishModpackUpdate(modpackDir, modpackContentFile);
             new SetupMods().run(modpackDir);
             return;
         }
+
+        List<Path> filesBefore  = mapAllFiles(workingDirectory, new ArrayList<>());
+
+        finishModpackUpdate(modpackDir, modpackContentFile);
 
         List<Path> filesAfter = mapAllFiles(workingDirectory, new ArrayList<>());
 
@@ -191,6 +190,9 @@ public class ModpackUpdater {
 
             Iterator<Jsons.ModpackContentFields.ModpackContentItem> iterator = serverModpackContent.list.iterator();
 
+            fetchManager = new FetchManager();
+            new ScreenManager().fetch(fetchManager);
+
             while (iterator.hasNext()) {
                 Jsons.ModpackContentFields.ModpackContentItem modpackContentField = iterator.next();
                 String file = modpackContentField.file;
@@ -220,8 +222,6 @@ public class ModpackUpdater {
 
             long startFetching = System.currentTimeMillis();
 
-            fetchManager = new FetchManager();
-
             for (Jsons.ModpackContentFields.ModpackContentItem field : serverModpackContent.list) {
 
                 totalBytesToDownload += Long.parseLong(field.size);
@@ -239,15 +239,15 @@ public class ModpackUpdater {
 
             LOGGER.info("Finished fetching urls in {}ms", System.currentTimeMillis() - startFetching);
 
-            int wholeQueue = serverModpackContent.list.size();
 
+
+            int wholeQueue = serverModpackContent.list.size();
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
+            downloadManager = new DownloadManager(totalBytesToDownload);
             new ScreenManager().download(downloadManager, ModpackUpdater.getModpackName());
 
             if (wholeQueue > 0) {
-
-                downloadManager = new DownloadManager(totalBytesToDownload);
 
                 for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : serverModpackContent.list) {
 
@@ -354,7 +354,6 @@ public class ModpackUpdater {
         if (serverModpackContent != null) {
 
             // Change loader and minecraft version in launchers like prism, multimc.
-
             if (serverModpackContent.loader != null && serverModpackContent.loaderVersion != null) {
                 if (serverModpackContent.loader.equals(LOADER)) { // Server may use different loader than client
                     MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // Update loader version
