@@ -126,7 +126,7 @@ public class ModpackUpdater {
 
         if (preload) {
             finishModpackUpdate(modpackDir, modpackContentFile);
-            new SetupMods().run(modpackDir);
+            new SetupMods().loadModpack(modpackDir);
             return;
         }
 

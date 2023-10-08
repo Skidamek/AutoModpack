@@ -1,6 +1,8 @@
 package pl.skidam.automodpack_core_fabric.mods;
 
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.LanguageAdapter;
+import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.ModContainerImpl;
 import net.fabricmc.loader.impl.discovery.*;
@@ -16,8 +18,10 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
 import static pl.skidam.automodpack_common.GlobalVariables.*;
@@ -28,16 +32,9 @@ public class SetupMods implements SetupModsService {
     private Field adapterMapField;
     private Method addModMethod;
     private Method addCandidateFinderMethod;
+    private Method dumpModListMethod;
 
-    @Override
-    public void run(Path modpack) {
-        if (modpack == null || !Files.isDirectory(modpack)) {
-            LOGGER.warn("Incorrect path to modpack");
-            return;
-        }
-
-        modpack = modpack.toAbsolutePath();
-
+    {
         try {
             adapterMapField = FabricLoaderImpl.class.getDeclaredField("adapterMap");
             adapterMapField.setAccessible(true);
@@ -60,20 +57,139 @@ public class SetupMods implements SetupModsService {
                 throw new NoSuchMethodException("addCandidateFinder");
             }
 
+            dumpModListMethod = FabricLoaderImpl.class.getDeclaredMethod("dumpModList", List.class);
+            dumpModListMethod.setAccessible(true);
+        } catch (Exception e) {
+            FabricGuiEntry.displayCriticalError(e, true);
+        }
+    }
+
+
+    @Override
+    public void loadModpack(Path modpack) {
+        if (modpack == null || !Files.isDirectory(modpack)) {
+            LOGGER.warn("Incorrect path to modpack");
+            return;
+        }
+
+        modpack = modpack.toAbsolutePath();
+
+        try {
             List<ModCandidate> candidates;
             candidates = (List<ModCandidate>) discoverMods(modpack);
             candidates = (List<ModCandidate>) resolveMods(candidates);
 
-            LOGGER.info(
-                "Loading {} modpack mod{}{}",
-                candidates.size(),
-                candidates.size() > 1 ? "s" : "",
-                candidates.isEmpty() ? "" : ":\n " + String.join("\n", candidates.stream().map(it -> "\t- " + it.getId() + " " + it.getVersion().getFriendlyString()).toArray(String[]::new))
-            );
+            dumpModListMethod.invoke(FabricLoaderImpl.INSTANCE, candidates);
 
             addMods(candidates);
             setupLanguageAdapter(candidates);
 
+        } catch (Exception e) {
+            FabricGuiEntry.displayCriticalError(e, true);
+        }
+    }
+
+    @Override
+    public void removeMod(Path path) {
+        if (path == null || !Files.isRegularFile(path)) {
+            return;
+        }
+        try {
+            ModContainer originalContainer = getModContainer(path);
+            if (originalContainer == null) {
+                LOGGER.error("Failed to get container of mod {} to remove from loader", path);
+                return;
+            }
+
+            Collection<ModContainer> containers = getNestedContainers(originalContainer);
+            containers.add(originalContainer);
+
+            for (ModContainer container : containers) {
+
+                FabricLanguageProviderCallback.FabricModSetupService.INSTANCE.remove((ModContainerImpl) container);
+
+                Field modsField = FabricLoaderImpl.class.getDeclaredField("mods");
+                modsField.setAccessible(true);
+                var mods = (List<ModContainerImpl>) modsField.get(FabricLoaderImpl.INSTANCE);
+                mods.remove((ModContainerImpl) container);
+                modsField.set(FabricLoaderImpl.INSTANCE, mods);
+
+                Field modMapField = FabricLoaderImpl.class.getDeclaredField("modMap");
+                modMapField.setAccessible(true);
+                var modMap = (Map<String, ModContainerImpl>) modMapField.get(FabricLoaderImpl.INSTANCE);
+                modMap.remove(container.getMetadata().getId());
+                modMapField.set(FabricLoaderImpl.INSTANCE, modMap);
+
+                var adapterMap = (Map<String, LanguageAdapter>) adapterMapField.get(FabricLoaderImpl.INSTANCE);
+                adapterMap.remove(container.getMetadata().getId());
+                adapterMapField.set(FabricLoaderImpl.INSTANCE, adapterMap);
+            }
+
+            FabricLauncherBase.getLauncher().getClassPath().remove(path);
+
+        } catch (Exception e) {
+            FabricGuiEntry.displayCriticalError(e, true);
+        }
+    }
+
+    public Collection<ModContainer> getNestedContainers(ModContainer originalContainer) {
+        Collection<ModContainer> containers = new ArrayList<>(originalContainer.getContainedMods());
+        Collection<ModContainer> tempContainers = new ArrayList<>();
+
+        for (ModContainer container : containers) {
+            tempContainers.addAll(getNestedContainers(container));
+        }
+
+        containers.addAll(tempContainers);
+
+        return containers;
+    }
+
+    public ModContainer getModContainer(Path path) {
+        if (path == null) {
+            return null;
+        }
+        for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
+            FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();
+            Path modPath = Paths.get(fileSys.toString());
+            if (modPath.toAbsolutePath().equals(path.toAbsolutePath())) {
+                return modContainer;
+            }
+        }
+
+        return null;
+    }
+
+
+    @Override
+    public void addMod(Path path) {
+        if (path == null || !Files.isRegularFile(path)) {
+            return;
+        }
+        try {
+            ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));
+            List<ModContainerImpl> modContainers = (List<ModContainerImpl>) service.all();
+
+            addCandidateFinderMethod.invoke(
+                discoverer,
+                new ModContainerModCandidateFinder(modContainers)
+            );
+
+            addCandidateFinderMethod.invoke(
+                discoverer,
+                new PathModCandidateFinder(
+                    path,
+                    FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()
+                )
+            );
+
+            List<ModCandidate> candidates = discoverer.discoverMods(FabricLoaderImpl.INSTANCE, envDisabledMods);
+            candidates = (List<ModCandidate>) resolveMods(candidates);
+
+            dumpModListMethod.invoke(FabricLoaderImpl.INSTANCE, candidates);
+
+            addMods(candidates);
+            setupLanguageAdapter(candidates);
         } catch (Exception e) {
             FabricGuiEntry.displayCriticalError(e, true);
         }
@@ -87,9 +203,7 @@ public class SetupMods implements SetupModsService {
         );
 
         List<Path> pathList = Files.walk(modpack, 1).toList();
-
         for (Path path : pathList) {
-
             if (!Files.isDirectory(path)) {
                 continue;
             }
@@ -99,10 +213,9 @@ public class SetupMods implements SetupModsService {
             }
 
             LOGGER.info("Discovering mods from {}", path.getParent().getFileName() + "/" + path.getFileName());
-
             addCandidateFinderMethod.invoke(
                 discoverer,
-                new FilteredDirectoryModCandidateFinder(
+                new DirectoryModCandidateFinder(
                     path,
                     FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()
                 )
@@ -151,21 +264,21 @@ public class SetupMods implements SetupModsService {
 
     @SuppressWarnings("unchecked")
     private void setupLanguageAdapter(Collection<ModCandidate> candidates) throws IllegalAccessException {
-        Map<String, LanguageAdapter> adapterMap = (Map<String, LanguageAdapter>) adapterMapField.get(FabricLoaderImpl.INSTANCE);
+        var adapterMap = (Map<String, LanguageAdapter>) adapterMapField.get(FabricLoaderImpl.INSTANCE);
         for (ModCandidate candidate : candidates) {
 
-            Map<String, String> definitions = candidate.getMetadata().getLanguageAdapterDefinitions();
+            var definitions = candidate.getMetadata().getLanguageAdapterDefinitions();
             if (definitions.isEmpty()) {
                 continue;
             }
 
-            LOGGER.debug("Setting up language adapter for {}", candidate.getId());
+            LOGGER.info("Setting up language adapter for {}", candidate.getId());
 
-            for (Map.Entry<String, String> entry : definitions.entrySet()) {
+            for (var entry : definitions.entrySet()) {
 
-                if (adapterMap.containsKey(entry.getKey())) {
-                    throw new IllegalArgumentException("Duplicate language adapter ID: " + entry.getKey());
-                }
+//                if (adapterMap.containsKey(entry.getKey())) {
+//                    throw new IllegalArgumentException("Duplicate language adapter ID: " + entry.getKey());
+//                }
 
                 try {
                     Class<?> adapterClass = Class.forName(entry.getValue(), true, FabricLauncherBase.getLauncher().getTargetClassLoader());

@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -51,30 +52,13 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public Path getModPath(String modId) {
-        if (isDevelopmentEnvironment()) {
-            return null;
-        }
-
         if (isModLoaded(modId)) {
-
-            if (!Files.exists(modsPath)) {
-                LOGGER.error("Could not find mods folder!?");
-                return null;
-            }
-
-            try {
-                Path[] mods = Files.list(modsPath).toArray(Path[]::new);
-                for (Path mod : mods) {
-                    if (mod.getFileName().toString().endsWith(".jar")) {
-                        String modIdFromLoadedJar = getModId(mod, false);
-                        if (modIdFromLoadedJar != null && modIdFromLoadedJar.equals(modId)) {
-                            return mod;
-                        }
-                    }
+            for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
+                FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();
+                Path modFile = Paths.get(fileSys.toString());
+                if (modContainer.getMetadata().getId().equals(modId)) {
+                    return modFile;
                 }
-            } catch (IOException e) {
-                LOGGER.error("Could not get mod path for " + modId);
-                e.printStackTrace();
             }
         }
 
@@ -198,7 +182,7 @@ public class LoaderManager implements LoaderService {
         for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
             FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();
             Path modFile = Paths.get(fileSys.toString());
-            if (modFile.getFileName().equals(file.getFileName())) {
+            if (modFile.toAbsolutePath().equals(file.toAbsolutePath())) {
                 return modContainer.getMetadata().getId();
             }
         }
