@@ -20,10 +20,12 @@
 
 package pl.skidam.automodpack_core;
 
+import pl.skidam.automodpack_common.GlobalVariables;
 import pl.skidam.automodpack_common.config.Jsons;
 import pl.skidam.automodpack_common.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.mods.SetupMods;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.screen.ScreenManager;
 import pl.skidam.automodpack_core.utils.DownloadManager;
@@ -39,7 +41,7 @@ import static pl.skidam.automodpack_common.GlobalVariables.*;
 
 public class SelfUpdater {
 
-    public static Path automodpackJar = new LoaderManager().getModPath("automodpack");
+    public static Path automodpackJar = new LoaderManager().getModPath(MOD_ID);
     public static String automodpackID = "k68glP2e"; // AutoModpack modrinth id
 
     public static void update () {
@@ -99,7 +101,6 @@ public class SelfUpdater {
 
             String LATEST_VERSION = automodpack.fileVersion.replace(".", "");
             String OUR_VERSION = AM_VERSION.replace(".", "");
-
             boolean snapshot = false;
 
             if (!gettingServerVersion) {
@@ -159,25 +160,38 @@ public class SelfUpdater {
 
     public static void installModVersion(ModrinthAPI automodpack) {
         Path automodpackUpdateJar = Paths.get(automodpackDir + File.separator + automodpack.fileName);
+        Path newAutomodpackJar;
 
         try {
             DownloadManager downloadManager = new DownloadManager();
 
             new ScreenManager().download(downloadManager, "AutoModapck " + automodpack.fileVersion);
 
-            downloadManager.download(automodpackUpdateJar, automodpack.SHA1Hash, automodpack.downloadUrl, () -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack.")); // Download it
+            // Download it
+            downloadManager.download(
+                    automodpackUpdateJar,
+                    automodpack.SHA1Hash,
+                    automodpack.downloadUrl,
+                    () -> LOGGER.info("Downloaded update for AutoModpack."),
+                    () -> LOGGER.error("Failed to download update for AutoModpack.")
+            );
 
             downloadManager.joinAll();
             downloadManager.cancelAllAndShutdown();
 
             // We assume that update jar has always different name than current jar
-            Path newAutomodpackJar = Paths.get(automodpackJar.getParent() + File.separator + automodpackUpdateJar.getFileName());
+            newAutomodpackJar = Path.of(automodpackJar.getParent() + File.separator + automodpackUpdateJar.getFileName());
             CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
             CustomFileUtils.forceDelete(automodpackUpdateJar);
         } catch (Exception e) {
-            LOGGER.error("Failed to update myself!");
-            e.printStackTrace();
+            LOGGER.error("Failed to update! " + e);
             return;
+        }
+
+        if (preload) {
+            new SetupMods().removeMod(automodpackJar);
+            new SetupMods().addMod(newAutomodpackJar);
+            LOGGER.info("Successfully downloaded and installed update!");
         }
 
         // Shutdown hook to make it the most reliable way to update the mod
@@ -189,8 +203,9 @@ public class SelfUpdater {
             System.out.println("Finished Shutdown Hook -- AutoModpack selfupdater!");
         }));
 
-        LOGGER.info("Successfully downloaded update, waiting for shutdown");
-
-        new ReLauncher.Restart("Successfully updated AutoModpack - " + automodpack.fileVersion, UpdateType.AUTOMODPACK);
+        if (!preload) {
+            LOGGER.info("Successfully downloaded update, waiting for shutdown");
+            new ReLauncher.Restart("Successfully updated AutoModpack - " + automodpack.fileVersion, UpdateType.AUTOMODPACK);
+        }
     }
 }
