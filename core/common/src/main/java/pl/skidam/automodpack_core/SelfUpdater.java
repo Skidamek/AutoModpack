@@ -85,14 +85,14 @@ public class SelfUpdater {
             return;
         }
 
+        // Modrinth APIs are sorted from latest to oldest
         for (ModrinthAPI automodpack : modrinthAPIList) {
 
             if (automodpack == null || automodpack.fileVersion == null) {
+                errorMessage = "Couldn't get latest version of AutoModpack from Modrinth API. Likely automodpack isn't updated to your version of minecraft yet...";
                 continue;
             }
 
-            // If latest mod is not same as current mod download new mod.
-            // Check how big the mod file is
             if (automodpack.fileVersion.contains("-")) {
                 automodpack.fileVersion = automodpack.fileVersion.split("-")[0];
             }
@@ -106,7 +106,7 @@ public class SelfUpdater {
                 try {
                     if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
                         errorMessage = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion;
-                        continue;
+                        break; // Break, checked version is lower than installed, meaning that higher version doesn't exist.
                     }
                 } catch (NumberFormatException e) {
                     // ignore
@@ -121,7 +121,7 @@ public class SelfUpdater {
 
                         if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
                             errorMessage = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion;
-                            continue;
+                            break; // Break, checked version is lower than installed, meaning that higher version doesn't exist.
                         }
                     }
                 }
@@ -131,7 +131,7 @@ public class SelfUpdater {
                 // We always want to update to latest release version unless server is already using snapshot version
                 if (gettingServerVersion && OUR_VERSION.equals(LATEST_VERSION)) {
                     errorMessage = "Didn't find any updates for AutoModpack! You are on the server version: " + AM_VERSION;
-                    continue;
+                    break; // Break, server can provide only one version.
                 }
 
                 if (!gettingServerVersion && (OUR_VERSION.equals(LATEST_VERSION) || !"release".equals(automodpack.releaseType))) {
