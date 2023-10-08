@@ -51,8 +51,6 @@ public class FetchManager {
         if (!(anyAPIUp = APIsUp())) {
             LOGGER.warn("APIs are down, skipping fetches");
         }
-
-        new ScreenManager().fetch(this);
     }
 
     public void fetch(String serverUrl, String sha1, String murmur, String fileSize, String fileType) {
