@@ -26,6 +26,7 @@ preprocess {
     def mc1_19_04_fabric = createNode('1.19.4-fabric', 1_19_04, 'yarn')
     def mc1_20_01_fabric = createNode('1.20.1-fabric', 1_20_01, 'yarn')
     def mc1_20_02_fabric = createNode('1.20.2-fabric', 1_20_02, 'yarn')
+    def mc1_20_04_fabric = createNode('1.20.4-fabric', 1_20_04, 'yarn')
 
     def mc1_16_05_quilt = createNode('1.16.5-quilt', 1_16_05, 'yarn')
     def mc1_17_01_quilt = createNode('1.17.1-quilt', 1_17_01, 'yarn')
@@ -53,6 +54,7 @@ preprocess {
     mc1_19_03_fabric.link(mc1_19_04_fabric, null)
     mc1_19_04_fabric.link(mc1_20_01_fabric, null)
     mc1_20_01_fabric.link(mc1_20_02_fabric, null)
+    mc1_20_02_fabric.link(mc1_20_04_fabric, null)
 
     mc1_16_05_fabric.link(mc1_16_05_quilt, null)
     mc1_17_01_fabric.link(mc1_17_01_quilt, null)

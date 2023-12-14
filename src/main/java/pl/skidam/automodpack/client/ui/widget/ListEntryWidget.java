@@ -36,7 +36,7 @@ import static pl.skidam.automodpack_common.GlobalVariables.clientConfig;
 //#if MC < 12000
 //$$ import net.minecraft.client.util.math.MatrixStack;
 //#else
-import net.minecraft.client.gui.DrawContext;
+//import net.minecraft.client.gui.DrawContext;
 //#endif
 
 public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
@@ -44,7 +44,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
     private boolean scrolling;
 
     public ListEntryWidget(MinecraftClient client, int width, int height, int top, int bottom, int itemHeight) {
-        super(client, width, height, top, bottom, itemHeight);
+        super(client, width, height, top, itemHeight);
         this.centerListVertically = true;
 
         Map<Path, Modpack.ModpackObject> modpacks = Modpack.getModpacksMap();
@@ -87,7 +87,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
     }
 
     public ListEntryWidget(Map<String, String> changelogs, MinecraftClient client, int width, int height, int top, int bottom, int itemHeight) {
-        super(client, width, height, top, bottom, itemHeight);
+        super(client, width, height, top, itemHeight);
         this.centerListVertically = true;
 
         this.clearEntries();
@@ -115,18 +115,17 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
         }
     }
 
-    @Override
+//    @Override
 //#if MC < 12000
 //$$     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
 //#else
-public void render(DrawContext matrices, int mouseX, int mouseY, float delta) {
+//public void render(DrawContext matrices, int mouseX, int mouseY, float delta) {
 //#endif
-
-        super.render(matrices, mouseX, mouseY, delta);
-    }
+//        super.render(matrices, mouseX, mouseY, delta);
+//    }
 
     public final ListEntry getEntryAtPos(double x, double y) {
-        int int_5 = MathHelper.floor(y - (double) this.top) - this.headerHeight + (int) this.getScrollAmount() - 4;
+        int int_5 = MathHelper.floor(y - (double) this.getY()) - this.headerHeight + (int) this.getScrollAmount() - 4;
         int index = int_5 / this.itemHeight;
         return x < (double) this.getScrollbarPositionX() && x >= (double) getRowLeft() && x <= (double) (getRowLeft() + getRowWidth()) && index >= 0 && int_5 >= 0 && index < this.getEntryCount() ? this.children().get(index) : null;
     }
