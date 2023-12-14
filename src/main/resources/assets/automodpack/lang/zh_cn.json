@@ -1,30 +1,50 @@
 {
+  "automodpack.restart.full": "模组已下载完成！",
+  "automodpack.restart.update": "模组已完成更新！",
+  "automodpack.restart.automodpack": "需要将AutoModpack模组更新至服务器要求的版本！",
+  "automodpack.restart.description": "要完成此操作，您必须重启游戏。",
+  "automodpack.restart.secDescription": "您现在要重启游戏吗？",
+  "automodpack.restart.confirm": "是，关闭游戏",
+  "automodpack.restart.cancel": "否，返回游戏",
 
+  "automodpack.delete": "删除模组",
+  "automodpack.delete.description": "您将失去所有已下载的模组。",
+  "automodpack.delete.secDescription": "您需要重启游戏。",
+  "automodpack.delete.thiDescription": "您确定要删除它吗？",
+  "automodpack.delete.confirm": "删除并退出",
+  "automodpack.delete.cancel": "返回游戏",
 
-  "EVERYTHING HERE NEEDS TO BE RE-TRANSLATED": "TAKE A LOOK AT en_us.json FILE",
-  "THANK YOU": "SO MUCH!",
+  "automodpack.danger": "此服务器提供非官方的模组！",
+  "automodpack.danger.description": "您要下载它吗？",
+  "automodpack.danger.secDescription": "可能有风险！如果您不信任服务器所有者，请不要下载！",
+  "automodpack.danger.confirm": "下载",
+  "automodpack.danger.cancel": "取消",
 
+  "automodpack.changelog.view": "查看更新日志",
+  "automodpack.changelog.noChanges": "未发现更改。",
+  "automodpack.changelog.openPage": "打开项目页面",
 
-  "gui.automodpack.screen.restart.title.modpack": "已经为您的模组包下载了一个更新!",
+  "automodpack.download.calculating": "正在计算...",
+  "automodpack.download.eta": "剩余时间：%s",
+  "automodpack.download.downloading": "正在下载：",
+  "automodpack.download.noFiles": "无文件可下载！",
 
-  "gui.automodpack.screen.restart.button.cancel": "否(回到游戏)",
+  "automodpack.redownload": "重新下载模组",
+  "automodpack.redownload.description": "这可能会修复模组的问题。",
 
-  "gui.automodpack.screen.confirm.title": "❌ 删除模组包 ❌",
-  "gui.automodpack.screen.confirm.description": "您会失去已下载的模组包中的所有东西.",
-  "gui.automodpack.screen.confirm.secDescription": "您将需要重新启动游戏",
-  "gui.automodpack.screen.confirm.thiDescription": "您确定想要删除它吗?",
-  "gui.automodpack.screen.confirm.button.sure": "是(删除并退出游戏)",
-  "gui.automodpack.screen.confirm.button.cancel": "否(回到游戏)",
+  "automodpack.error": "发生错误！",
+  "automodpack.error.files": "模组下载失败。",
+  "automodpack.error.critical": "下载模组时发生严重错误。",
+  "automodpack.error.logs": "请查看日志获取更多详情。",
 
-  "gui.automodpack.screen.loading.title": "正在下载更新...",
-  "gui.automodpack.screen.loading.wait": "请等待...",
-  "gui.automodpack.screen.loading.download": "下载中...",
-  "gui.automodpack.screen.loading.extract": "正在提取模组包...",
-  "gui.automodpack.screen.loading.finish": "正在完成...",
+  "automodpack.fetch": "正在从Modrinth和CurseForge直接获取URL...",
+  "automodpack.fetch.found": "找到%s个URL。",
 
-  "gui.automodpack.screen.danger.title": "注意!找到模组包!",
-  "gui.automodpack.screen.danger.description": "你想要为其下载更新吗?",
-  "gui.automodpack.screen.danger.secDescription": "这可能是有风险的!如果不信任服务器管理员,请不要下载!",
-  "gui.automodpack.screen.danger.button.accept": "下载",
-  "gui.automodpack.screen.danger.button.cancel": "不要下载"
+  "automodpack.select": "选择模组",
+
+  "automodpack.yes": "是",
+  "automodpack.no": "否",
+  "automodpack.cancel": "取消",
+  "automodpack.back": "返回",
+  "automodpack.wait": "请稍候..."
 }
