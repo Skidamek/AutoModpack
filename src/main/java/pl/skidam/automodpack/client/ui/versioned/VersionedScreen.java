@@ -1,26 +1,5 @@
-/*
- * This file is part of the AutoModpack project, licensed under the
- * GNU Lesser General Public License v3.0
- *
- * Copyright (C) 2023 Skidam and contributors
- *
- * AutoModpack is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * AutoModpack is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package pl.skidam.automodpack.client.ui.versioned;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -29,16 +8,16 @@ import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
-//#if MC <= 11605
+
+//#if MC <= 1165
 //$$import net.minecraft.client.MinecraftClient;
 //$$import net.minecraft.client.gui.Element;
 //$$import net.minecraft.client.gui.widget.ClickableWidget;
 //#endif
 
-//#if MC < 12000
+//#if MC < 1200
 //$$ import net.minecraft.client.util.math.MatrixStack;
-//#else
-import net.minecraft.client.gui.DrawContext;
+//$$ import com.mojang.blaze3d.systems.RenderSystem;
 //#endif
 
 public class VersionedScreen extends Screen {
@@ -47,7 +26,7 @@ public class VersionedScreen extends Screen {
         super(title);
     }
 
-//#if MC < 12000
+//#if MC < 1200
 //$$    @Override
 //$$    public void render(MatrixStack matrix, int mouseX, int mouseY, float delta) {
 //$$        VersionedMatrices matrices = new VersionedMatrices();
@@ -63,7 +42,7 @@ public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
 
 
-//#if MC <= 11605
+//#if MC <= 1165
 //$$    public <T extends Element> void addDrawableChild(T child) {
 //$$       if (child instanceof ClickableWidget) {
 //$$           super.addButton((ClickableWidget) child);
@@ -74,7 +53,7 @@ public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
 //#endif
 
 
-//#if MC >= 12000
+//#if MC >= 1200
 
    public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
        matrices.drawCenteredTextWithShadow(textRenderer, text, centerX, y, color);
@@ -89,7 +68,7 @@ public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
 //#endif
 
 
-//#if MC < 11903
+//#if MC < 1193
 //$$     public static ButtonWidget buttonWidget(int x, int y, int width, int height, Text message, ButtonWidget.PressAction onPress) {
 //$$         return new ButtonWidget(x, y, width, height, message, onPress);
 //$$     }
@@ -102,10 +81,10 @@ public static ButtonWidget buttonWidget(int x, int y, int width, int height, Tex
 //#endif
 
 
-//#if MC < 12000
+//#if MC < 1200
 //$$
 //$$     public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
-            //#if MC <= 11605
+            //#if MC <= 1165
 //$$        MinecraftClient.getInstance().getTextureManager().bindTexture(textureID);
             //#else
 //$$         RenderSystem.setShaderTexture(0, textureID);
@@ -122,7 +101,7 @@ public static void drawTexture(Identifier textureID, VersionedMatrices matrices,
 //#endif
 
     public void renderBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        //#if MC < 12002
+        //#if MC < 1202
 //$$         super.renderBackground(matrices);
         //#else
         super.renderBackground(matrices, mouseX, mouseY, delta);

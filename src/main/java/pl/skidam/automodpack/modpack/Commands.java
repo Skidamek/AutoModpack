@@ -1,26 +1,7 @@
-/*
- * This file is part of the AutoModpack project, licensed under the
- * GNU Lesser General Public License v3.0
- *
- * Copyright (C) 2023 Skidam and contributors
- *
- * AutoModpack is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * AutoModpack is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package pl.skidam.automodpack.modpack;
 
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.util.Formatting;
@@ -28,29 +9,20 @@ import net.minecraft.util.Util;
 import pl.skidam.automodpack.ModpackGenAdditions;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_common.config.ConfigTools;
-import pl.skidam.automodpack_common.config.Jsons;
-import pl.skidam.automodpack_server.modpack.HttpServer;
-import pl.skidam.automodpack_server.modpack.Modpack;
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.netty.HttpServer;
+import pl.skidam.automodpack_core.modpack.Modpack;
+
+import java.io.IOException;
 
 import static net.minecraft.server.command.CommandManager.literal;
-import static pl.skidam.automodpack_common.GlobalVariables.*;
-
-//#if MC < 11902
-//$$ import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
-//#else
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-//#endif
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class Commands {
 
-    public static void register() {
-
-//#if MC < 11902
-//$$         CommandRegistrationCallback.EVENT.register((dispatcher, dedicated) -> dispatcher.register(
-//#else
-   CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) -> dispatcher.register(
-//#endif
+    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
+        dispatcher.register(
                 literal("automodpack")
                         .executes(Commands::about)
                         .then(literal("generate")
@@ -80,7 +52,7 @@ public class Commands {
                                         .executes(Commands::reload)
                                 )
                         )
-        ));
+        );
     }
 
     private static int reload(CommandContext<ServerCommandSource> context) {
@@ -93,14 +65,23 @@ public class Commands {
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            if (!HttpServer.isRunning()) {
+            if (!httpServer.isRunning()) {
                 VersionedCommandSource.sendFeedback(context, VersionedText.literal("Starting modpack hosting...")
                                 .formatted(Formatting.YELLOW),
                         true);
-                new HttpServer(serverConfig);
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting started!")
-                                .formatted(Formatting.GREEN),
-                        true);
+                try {
+                    httpServer.start();
+                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting started!")
+                                    .formatted(Formatting.GREEN),
+                            true);
+                } catch (IOException e) {
+                    LOGGER.error("Couldn't start server.", e);
+
+                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Couldn't start server." + e.getCause())
+                                    .formatted(Formatting.RED),
+                            true);
+                }
+
             } else {
                 VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting is already running!")
                                 .formatted(Formatting.RED),
@@ -112,11 +93,11 @@ public class Commands {
 
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            if (HttpServer.isRunning()) {
+            if (httpServer.isRunning()) {
                 VersionedCommandSource.sendFeedback(context, VersionedText.literal("Stopping modpack hosting...")
                                 .formatted(Formatting.RED),
                         true);
-                HttpServer.stop();
+                httpServer.stop();
                 VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting stopped!")
                                 .formatted(Formatting.RED),
                         true);
@@ -134,17 +115,37 @@ public class Commands {
             VersionedCommandSource.sendFeedback(context, VersionedText.literal("Restarting modpack hosting...")
                             .formatted(Formatting.YELLOW),
                     true);
-            if (HttpServer.isRunning()) {
-                HttpServer.stop();
-                new HttpServer(serverConfig);
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting restarted!")
-                                .formatted(Formatting.GREEN),
-                        true);
+            if (httpServer.isRunning()) {
+                httpServer.stop();
+                try {
+                    httpServer.start();
+
+                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting restarted!")
+                                    .formatted(Formatting.GREEN),
+                            true);
+
+                } catch (IOException e) {
+                    LOGGER.error("Couldn't start server.", e);
+
+                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Couldn't start server." + e.getCause())
+                                    .formatted(Formatting.RED),
+                            true);
+                }
+
             } else if (serverConfig.modpackHost){
-                new HttpServer(serverConfig);
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting restarted!")
-                                .formatted(Formatting.GREEN),
-                        true);
+                try {
+                    httpServer.start();
+
+                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting restarted!")
+                                    .formatted(Formatting.GREEN),
+                            true);
+                } catch (IOException e) {
+                    LOGGER.error("Couldn't start server.", e);
+
+                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Couldn't start server." + e.getCause())
+                                    .formatted(Formatting.RED),
+                            true);
+                }
             } else {
                 VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting is disabled in config!")
                                 .formatted(Formatting.RED),
@@ -156,8 +157,8 @@ public class Commands {
 
 
     private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
-        Formatting statusColor = HttpServer.isRunning() ? Formatting.GREEN : Formatting.RED;
-        String status = HttpServer.isRunning() ? "running" : "not running";
+        Formatting statusColor = httpServer.isRunning() ? Formatting.GREEN : Formatting.RED;
+        String status = httpServer.isRunning() ? "running" : "not running";
         VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting status")
                 .formatted(Formatting.GREEN)
                 .append(VersionedText.literal(" - ")

@@ -1,46 +1,31 @@
-/*
- * This file is part of the AutoModpack project, licensed under the
- * GNU Lesser General Public License v3.0
- *
- * Copyright (C) 2023 Skidam and contributors
- *
- * AutoModpack is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * AutoModpack is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package pl.skidam.automodpack.client.audio;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.sound.SoundManager;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.util.Identifier;
+import net.minecraft.registry.Registry;
 
-//#if MC >= 11903
+//#if MC >= 1193
 import net.minecraft.registry.Registries;
 //#endif
 
-import net.minecraft.registry.Registry;
+//#if NEOFORGE
+//$$ import net.neoforged.bus.api.IEventBus;
+//$$ import net.neoforged.neoforge.registries.DeferredRegister;
+//$$ import net.neoforged.neoforge.registries.NeoForgeRegistries;
+//#endif
 
 //#if FORGE
-//$$import net.minecraftforge.eventbus.api.IEventBus;
-//$$import net.minecraftforge.registries.DeferredRegister;
-//$$import net.minecraftforge.registries.ForgeRegistries;
-//$$import net.minecraftforge.registries.RegistryObject;
+//$$ import net.minecraftforge.eventbus.api.IEventBus;
+//$$ import net.minecraftforge.registries.DeferredRegister;
+//$$ import net.minecraftforge.registries.ForgeRegistries;
+//$$ import net.minecraftforge.registries.RegistryObject;
 //#endif
 
 import java.util.function.Supplier;
 
-import static pl.skidam.automodpack_common.GlobalVariables.MOD_ID;
+import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 
 public class AudioManager {
     private static CustomSoundInstance SOUND_INSTANCE;
@@ -49,7 +34,7 @@ public class AudioManager {
 
     private static final Identifier WAITING_MUSIC_ID = new Identifier(MOD_ID, "waiting_music");
 
-//#if MC >= 11903
+//#if MC >= 1193
    public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.of(WAITING_MUSIC_ID);
 //#else
 //$$     private static final SoundEvent WAITING_MUSIC_EVENT = new SoundEvent(WAITING_MUSIC_ID);
@@ -59,22 +44,30 @@ public class AudioManager {
 
 //#if FORGE
 //$$    public AudioManager(IEventBus eventBus) {
-//$$
 //$$        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, MOD_ID);
 //$$        SOUND_REGISTER.register(eventBus);
-//$$
 //$$        WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
 //$$    }
-//#else
+//#endif
 
-    public AudioManager() {
-        SoundEvent waiting_music = register();
-        WAITING_MUSIC = () -> waiting_music;
-    }
+//#if NEOFORGE
+//$$     public AudioManager(IEventBus eventBus) {
+//$$         DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(Registries.SOUND_EVENT, MOD_ID);
+//$$         SOUND_REGISTER.register(eventBus);
+//$$         WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
+//$$     }
+//#endif
+
+//#if FABRIC
+   public AudioManager() {
+       SoundEvent waiting_music = register();
+       WAITING_MUSIC = () -> waiting_music;
+   }
+//#endif
 
     private SoundEvent register() {
         Identifier id = new Identifier(MOD_ID, "waiting_music");
-//#if MC >= 11903
+//#if MC >= 1193
    Registry<SoundEvent> register = Registries.SOUND_EVENT;
 //#else
 //$$         Registry<SoundEvent> register = Registry.SOUND_EVENT;
@@ -82,7 +75,6 @@ public class AudioManager {
 
         return Registry.register(register, id, WAITING_MUSIC_EVENT);
     }
-//#endif
 
     public static void playMusic() {
         if (playing) return;

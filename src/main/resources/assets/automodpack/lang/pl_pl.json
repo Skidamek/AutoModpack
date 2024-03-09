@@ -1,9 +1,10 @@
 {
   "automodpack.restart.full": "Modpack został pobrany!",
   "automodpack.restart.update": "Aktualizacja do Modpacka została pobrana!",
+  "automodpack.restart.select": "Modpack wymagany przez serwer został aktywowany!",
   "automodpack.restart.automodpack": "Zaktualizowano moda AutoModpack do wersji wymaganej przez serwer!",
-  "automodpack.restart.description": "Aby zakończyć, musisz zrestartować grę.",
-  "automodpack.restart.secDescription": "Czy chcesz teraz zrestartować?",
+  "automodpack.restart.description": "Aby zagrać, musisz zrestartować grę.",
+  "automodpack.restart.secDescription": "Czy chcesz zrestartować teraz?",
   "automodpack.restart.confirm": "Tak, zamknij grę",
   "automodpack.restart.cancel": "Nie, wróć do gry",
 

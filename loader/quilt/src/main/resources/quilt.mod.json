@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "quilt_loader": {
+    "group": "pl.skidam.automodpack",
+    "id": "automodpack-bootstrap",
+    "version": "1.0.0",
+    "metadata": {
+      "name": "AutoModpack bootstrap",
+      "description": "",
+      "contributors": {
+        "Skidam": "Owner"
+      },
+      "license": "LGPL-3.0-or-later",
+      "contact": {
+      }
+    },
+    "intermediate_mappings": "net.fabricmc:intermediary",
+    "language_adapters": {
+      "automodpack_preload": "pl.skidam.automodpack_loader_core.QuiltLanguageAdapter"
+    },
+    "jars": [
+      "automodpack-mod.jar"
+    ],
+    "custom": {
+      "modmenu": {
+        "badges": [
+          "library"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "automodpack-bootstrap",
+  "version": "1.0.0",
+  "name": "AutoModpack bootstrap",
+  "description": "",
+  "authors": [
+    "Skidam"
+  ],
+  "contact": {
+  },
+  "license": "LGPL-3.0-or-later",
+  "environment": "*",
+  "custom": {
+    "modmenu": {
+      "badges": [
+        "library"
+      ]
+    }
+  },
+  "languageAdapters": {
+    "automodpack_preload": "pl.skidam.automodpack_loader_core.FabricLanguageAdapter"
+  },
+  "jars": [
+    {
+      "file": "automodpack-mod.jar"
+    }
+  ]
+}

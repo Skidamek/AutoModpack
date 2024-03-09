@@ -1,5 +1,5 @@
 modLoader = "javafml"
-loaderVersion = "[47,)"
+loaderVersion = "[1,)"
 license = "LGPLv3"
 
 [[mods]]
@@ -19,3 +19,6 @@ mandatory = true
 versionRange = "${minecraft_dependency}"
 ordering = "NONE"
 side = "BOTH"
+
+[[mixins]]
+config = "automodpack-main.mixins.json"

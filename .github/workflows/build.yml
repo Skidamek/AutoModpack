@@ -12,49 +12,81 @@ on:
         type: string
         required: false
         default: ''
+#      # [FEATURE] MIXIN_AUDITOR
+#      mixin_audit:
+#        description: run mixin audit for Minecraft server after build
+#        type: boolean
+#        required: false
+#        default: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up JDK 17
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: 17
 
       - name: Cache gradle files
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
             ./.gradle/loom-cache
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle', '**/gradle.properties', '**/*.accesswidener') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle', '**/gradle.properties', '**/*.accesswidener', 'settings.json') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: Build with Gradle
+      - name: Build with gradle
         run: |
           chmod +x gradlew
           if [ -z "${{ inputs.target_subproject }}" ]; then
               echo "Building all subprojects"
-              ./gradlew build --no-daemon
+              ./gradlew build
           else
               args=$(echo "${{ inputs.target_subproject }}" | tr ',' '\n' | sed 's/$/:build/' | paste -sd ' ')
-              echo "Building $args"
-              ./gradlew $args --no-daemon
+              echo "Building with arguments=$args"
+              ./gradlew $args
           fi
         env:
           BUILD_ID: ${{ github.run_number }}
           BUILD_RELEASE: ${{ inputs.release }}
 
-      - uses: actions/upload-artifact@v3
+      #      # [FEATURE] MIXIN_AUDITOR
+      #      - name: Run mixin audit check for Minecraft server
+      #        if: ${{ inputs.mixin_audit }}
+      #        timeout-minutes: 10
+      #        run: |
+      #          mkdir -p ./run
+      #          echo eula=true > ./run/eula.txt
+      #          ./gradlew runServerMixinAudit
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
-          path: versions/*/build/libs/
+          path: merged
+
+  #      # [FEATURE] FALLENS_MAVEN
+  #      - name: Publish with gradle
+  #        if: inputs.release || github.ref == 'refs/heads/dev'
+  #        run: |
+  #          if [ -z "${{ inputs.target_subproject }}" ]; then
+  #              echo "Publishing all subprojects"
+  #              ./gradlew publish
+  #          else
+  #              args=$(echo "${{ inputs.target_subproject }}" | tr ',' '\n' | sed 's/$/:publish/' | paste -sd ' ')
+  #              echo "Publishing with arguments=$args"
+  #              ./gradlew $args
+  #          fi
+  #        env:
+  #          BUILD_RELEASE: ${{ inputs.release }}
+  #          FALLENS_MAVEN_TOKEN: ${{ secrets.FALLENS_MAVEN_TOKEN }}
 
   summary:
     runs-on: ubuntu-22.04
@@ -62,10 +94,10 @@ jobs:
       - build
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-artifacts
           path: build-artifacts
