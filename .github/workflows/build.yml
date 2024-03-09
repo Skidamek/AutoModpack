@@ -88,21 +88,21 @@ jobs:
   #          BUILD_RELEASE: ${{ inputs.release }}
   #          FALLENS_MAVEN_TOKEN: ${{ secrets.FALLENS_MAVEN_TOKEN }}
 
-  summary:
-    runs-on: ubuntu-22.04
-    needs:
-      - build
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: build-artifacts
-
-      - name: Make build summary
-        run: python3 .github/workflows/scripts/summary.py  # ubuntu-22.04 uses Python 3.10.6
-        env:
-          TARGET_SUBPROJECT: ${{ inputs.target_subproject }}
+#  summary:
+#    runs-on: ubuntu-22.04
+#    needs:
+#      - build
+#
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - name: Download build artifacts
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: build-artifacts
+#          path: build-artifacts
+#
+#      - name: Make build summary
+#        run: python3 .github/workflows/scripts/summary.py  # ubuntu-22.04 uses Python 3.10.6
+#        env:
+#          TARGET_SUBPROJECT: ${{ inputs.target_subproject }}
