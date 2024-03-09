@@ -1,43 +1,98 @@
-/*
- * This file is part of the AutoModpack project, licensed under the
- * GNU Lesser General Public License v3.0
- *
- * Copyright (C) 2023 Skidam and contributors
- *
- * AutoModpack is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * AutoModpack is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package pl.skidam.automodpack.mixin.core;
 
+import net.minecraft.network.packet.c2s.login.LoginQueryResponseC2SPacket;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
-import net.minecraft.text.Text;
-import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
-import static pl.skidam.automodpack_common.GlobalVariables.*;
+////#if MC > 1165
+//import org.slf4j.Logger;
+////#else
+////$$ import org.apache.logging.log4j.Logger;
+////#endif
 
-@Mixin(value = ServerLoginNetworkHandler.class, priority = 2137)
-public class ServerLoginNetworkHandlerMixin {
-    @Inject(method = "disconnect", at = @At("HEAD"), cancellable = true)
-    public void turnOffDisconnect(Text disconnectReason, CallbackInfo ci) {
-        String reason = disconnectReason.toString().toLowerCase();
-        if (reason.contains("automodpack")) return;
+@Mixin(value = ServerLoginNetworkHandler.class, priority = 300)
+public abstract class ServerLoginNetworkHandlerMixin  {
 
-        if (keyWordsOfDisconnect.stream().anyMatch(reason::contains)) {
+    @Shadow private int loginTicks;
+    @Shadow private ServerLoginNetworkHandler.State state;
+    @Unique private ServerLoginNetworkAddon automodpack$addon;
+
+    @Inject(
+            method = "<init>",
+            at = @At("RETURN")
+    )
+    private void initAddon(CallbackInfo ci) {
+        this.automodpack$addon = new ServerLoginNetworkAddon((ServerLoginNetworkHandler) (Object) this);
+    }
+
+    @Inject(
+            method = "onQueryResponse",
+            at = @At("HEAD"),
+            cancellable = true
+    )
+    private void handleCustomPayload(LoginQueryResponseC2SPacket packet, CallbackInfo ci) {
+        if (this.automodpack$addon == null) {
+            return;
+        }
+
+        // Handle queries
+        if (this.automodpack$addon.handle(packet)) {
+            // We have handled it, cancel vanilla behavior
             ci.cancel();
         }
     }
+
+    @Inject(
+            method = "tick",
+            at = @At(value = "HEAD"),
+            cancellable = true
+    )
+    private void sendOurPackets(CallbackInfo ci) {
+        if (this.automodpack$addon == null) {
+            return;
+        }
+
+        // TODO check if player isn't banned, before sending any packets
+//#if MC < 1202
+//$$        if (state != ServerLoginNetworkHandler.State.NEGOTIATING && state != ServerLoginNetworkHandler.State.READY_TO_ACCEPT) {
+//$$            return;
+//$$        }
+//#else
+        if (state != ServerLoginNetworkHandler.State.NEGOTIATING && state != ServerLoginNetworkHandler.State.VERIFYING) {
+            return;
+        }
+//#endif
+
+        // Send first automodpack packet
+        if (!this.automodpack$addon.queryTick()) {
+            // We need more time to process packets
+            ci.cancel();
+            this.loginTicks++;
+            return;
+        }
+
+        this.automodpack$addon = null;
+    }
+
+//    @WrapWithCondition(
+//            method = "onDisconnected",
+//            //#if MC > 1165
+//            at = @At(value = "INVOKE", target = "Lorg/slf4j/Logger;info(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V")
+//            //#else
+//            //$$ at = @At(value = "INVOKE", target = "Lorg/apache/logging/log4j/Logger;info(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V")
+//            //#endif
+//    )
+//    private boolean changeText(Logger instance, String original, Object connectionInfo, Object reason) {
+//        if (this.automodpack$addon == null || this.profile == null) {
+//            return true;
+//        }
+//
+//        this.automodpack$addon = null;
+//        instance.info(original, this.profile.getName(), "Need to install Modpack via AutoModpack");
+//        return false;
+//    }
 }

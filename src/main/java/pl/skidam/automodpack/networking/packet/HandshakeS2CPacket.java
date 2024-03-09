@@ -1,29 +1,7 @@
-/*
- * This file is part of the AutoModpack project, licensed under the
- * GNU Lesser General Public License v3.0
- *
- * Copyright (C) 2023 Skidam and contributors
- *
- * AutoModpack is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * AutoModpack is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package pl.skidam.automodpack.networking.packet;
 
 import com.mojang.authlib.GameProfile;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
-import net.fabricmc.fabric.api.networking.v1.PacketSender;
-import net.fabricmc.fabric.api.networking.v1.ServerLoginNetworking;
+import io.netty.buffer.Unpooled;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
@@ -32,19 +10,21 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
-import pl.skidam.automodpack.networking.content.LinkPacket;
+import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
-import pl.skidam.automodpack_core.loader.LoaderManager;
-import pl.skidam.automodpack_server.modpack.HttpServer;
-import pl.skidam.automodpack_server.modpack.Modpack;
-import pl.skidam.automodpack_common.utils.Ip;
+import pl.skidam.automodpack.networking.PacketSender;
+import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
+import pl.skidam.automodpack_loader_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.netty.HttpServer;
+import pl.skidam.automodpack_core.modpack.Modpack;
+import pl.skidam.automodpack_core.utils.Ip;
 
-import static pl.skidam.automodpack_common.GlobalVariables.*;
-import static pl.skidam.automodpack.networking.ModPackets.LINK;
+import static pl.skidam.automodpack.networking.ModPackets.DATA;
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class HandshakeS2CPacket {
 
-    public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender packetSender) {
+    public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
         ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
@@ -52,13 +32,13 @@ public class HandshakeS2CPacket {
 
         if (!understood) {
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
-            if (!serverConfig.optionalModpack) {
+            if (serverConfig.requireAutoModpackOnClient) {
                 Text reason = VersionedText.literal("AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
             }
         } else {
-            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, buf, packetSender)));
+            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, buf, sender)));
         }
     }
 
@@ -86,7 +66,7 @@ public class HandshakeS2CPacket {
             return;
         }
 
-        if (!HttpServer.isRunning() && serverConfig.externalModpackHostLink.equals("")) {
+        if (!httpServer.isRunning()) {
             return;
         }
 
@@ -101,7 +81,6 @@ public class HandshakeS2CPacket {
 
         String linkToSend;
 
-
         // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
         String formattedPlayerIp = Ip.refactorToTrueIp(playerIp);
 
@@ -111,27 +90,27 @@ public class HandshakeS2CPacket {
             linkToSend = serverConfig.hostIp;
         }
 
-      
-        if (!linkToSend.startsWith("http://") && !linkToSend.startsWith("https://")) {
+        DataPacket dataPacket = new DataPacket("", serverConfig.modpackName, serverConfig.requireAutoModpackOnClient);
+
+        if (linkToSend != null && !linkToSend.isBlank()) {
+            if (!linkToSend.startsWith("http://") && !linkToSend.startsWith("https://")) {
                 linkToSend = "http://" + linkToSend;
+            }
+
+            if (!serverConfig.reverseProxy) {
+                // add port to link
+                linkToSend += ":" + serverConfig.hostPort;
+            }
+
+            LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
+            dataPacket = new DataPacket(linkToSend, serverConfig.modpackName, serverConfig.requireAutoModpackOnClient);
         }
 
-        if (!serverConfig.reverseProxy) {
-            // add port to link
-            linkToSend += ":" + serverConfig.hostPort;
-        }
+        String packetContentJson = dataPacket.toJson();
 
-        LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
-
-        LinkPacket linkPacket = new LinkPacket(linkToSend, serverConfig.modpackName);
-
-        PacketByteBuf outBuf = PacketByteBufs.create();
-
-        String packetContentJson = linkPacket.toJson();
-
+        PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
         outBuf.writeString(packetContentJson, 32767);
-
-        packetSender.sendPacket(LINK, outBuf);
+        packetSender.sendPacket(DATA, outBuf);
     }
 
 

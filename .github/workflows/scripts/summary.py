@@ -39,8 +39,8 @@ def main():
 
 	with open(os.environ['GITHUB_STEP_SUMMARY'], 'w') as f:
 		f.write('## Build Artifacts Summary\n\n')
-		f.write('| Subproject | for Minecraft | Files | SHA-256 |\n')
-		f.write('| --- | --- | --- | --- |\n')
+		f.write('| Subproject | for Minecraft | File | Size | SHA-256 |\n')
+		f.write('| --- | --- | --- | --- | --- |\n')
 
 		warnings = []
 		for subproject in settings['versions']:
@@ -50,17 +50,18 @@ def main():
 			game_versions = read_prop('versions/{}/gradle.properties'.format(subproject), 'game_versions')
 			game_versions = game_versions.strip().replace('\\n', ', ')
 			file_paths = glob.glob('build-artifacts/{}/build/libs/*.jar'.format(subproject))
-			file_paths = list(filter(lambda fp: not fp.endswith('-sources.jar') and not fp.endswith('-dev.jar'), file_paths))
+			file_paths = list(filter(lambda fp: not fp.endswith('-sources.jar') and not fp.endswith('-dev.jar') and not fp.endswith('-shadow.jar'), file_paths))
 			if len(file_paths) == 0:
 				file_name = '*not found*'
 				sha256 = '*N/A*'
 			else:
 				file_name = '`{}`'.format(os.path.basename(file_paths[0]))
+				file_size = '{} B'.format(os.path.getsize(file_paths[0]))
 				sha256 = '`{}`'.format(get_sha256_hash(file_paths[0]))
 				if len(file_paths) > 1:
 					warnings.append('Found too many build files in subproject {}: {}'.format(subproject, ', '.join(file_paths)))
 
-			f.write('| {} | {} | {} | {} |\n'.format(subproject, game_versions, file_name, sha256))
+			f.write('| {} | {} | {} | {} | {} |\n'.format(subproject, game_versions, file_name, file_size, sha256))
 
 		if len(warnings) > 0:
 			f.write('\n### Warnings\n\n')

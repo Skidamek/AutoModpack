@@ -20,7 +20,7 @@
     },
     "intermediate_mappings": "net.fabricmc:intermediary",
     "entrypoints": {
-      "main": ["pl.skidam.automodpack.AutoModpack::onInitialize"]
+      "main": ["pl.skidam.automodpack.init.FabricInit::onInitialize"]
     },
     "depends": [
       {
@@ -28,14 +28,8 @@
         "versions": "${minecraft_dependency}"
       },
       {
-        "id": "preloading_tricks",
-        "versions": "*"
-      }
-    ],
-    "breaks": [
-      {
-        "id": "quiltgoslightlyfasterlol",
-        "versions": "*"
+        "id": "fabricloader",
+        "versions": ">=0.15.0"
       }
     ]
   },

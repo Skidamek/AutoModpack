@@ -1,9 +1,14 @@
 {
   "required": true,
   "minVersion": "0.8",
+  "plugin": "pl.skidam.automodpack.mixin.MixinPlugin",
   "package": "pl.skidam.automodpack.mixin",
-  "compatibilityLevel": "JAVA_8",
+  "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "core.FabricLoginMixin",
+    "core.LegacyQueryHandlerMixin",
+    "core.LoginQueryRequestS2CPacketMixin",
+    "core.LoginQueryResponseC2SPacketMixin",
     "core.MinecraftServerMixin",
     "core.ServerLoginNetworkHandlerAccessor",
     "core.ServerLoginNetworkHandlerMixin"
@@ -11,8 +16,8 @@
   "client": [
     "core.ClientConnectionAccessor",
     "core.ClientLoginNetworkHandlerAccessor",
-    "core.MusicTrackerMixin",
-    "dev.TestButton"
+    "core.ClientLoginNetworkHandlerMixin",
+    "core.MusicTrackerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

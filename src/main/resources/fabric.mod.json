@@ -2,7 +2,6 @@
   "schemaVersion": 1,
   "id": "${id}",
   "version": "${version}",
-
   "name": "${name}",
   "description": "${description}",
   "authors": [
@@ -13,21 +12,20 @@
     "sources": "https://github.com/Skidamek/AutoModpack/",
     "issues": "https://github.com/Skidamek/AutoModpack/issues/"
   },
-
   "license": "LGPL-3.0-or-later",
   "icon": "assets/automodpack/icon.png",
-
   "environment": "*",
   "entrypoints": {
-    "main": ["pl.skidam.automodpack.AutoModpack::onInitialize"]
+    "main": [
+      "pl.skidam.automodpack.init.FabricInit::onInitialize"
+    ]
   },
   "mixins": [
     "automodpack-main.mixins.json"
   ],
-
   "accessWidener" : "automodpack.accesswidener",
-
   "depends": {
-    "minecraft": "${minecraft_dependency}"
+    "minecraft": "${minecraft_dependency}",
+    "fabricloader": ">=0.15.0"
   }
 }

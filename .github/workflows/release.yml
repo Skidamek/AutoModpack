@@ -1,5 +1,11 @@
 name: Release
 
+# release: <default> (release title)
+# dispatch (all): Manual release for $target_release_tag
+# dispatch (specified): Manual release for $target_release_tag (subproject: $target_subproject)
+run-name: |-
+  ${{ github.event_name == 'workflow_dispatch' && format('Manual release for {0}{1}', inputs.target_release_tag, inputs.target_subproject && format(' (subproject: {0})', inputs.target_subproject) || '') || '' }}
+
 on:
   release:
     types:
@@ -38,6 +44,7 @@ jobs:
 
   build:
     uses: ./.github/workflows/build.yml
+    secrets: inherit
     with:
       target_subproject: ${{ github.event.inputs.target_subproject }}
       release: true
@@ -57,7 +64,7 @@ jobs:
       matrix: ${{ fromJson(needs.matrix_prep.outputs.matrix) }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Display context
         run: |
@@ -66,7 +73,7 @@ jobs:
           echo target_release_tag = ${{ github.event.inputs.target_release_tag }}
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: build-artifacts
           path: build-artifacts
@@ -85,7 +92,8 @@ jobs:
         run: |
           if [ $GITHUB_EVENT_NAME == 'release' ]
           then
-              echo "tag_name=" >> $GITHUB_OUTPUT  # leave an empty value here so softprops/action-gh-release will use the default value
+              # Leave an empty value here, so Kir-Antipov/mc-publish will infer the tag from the action context
+              echo "tag_name=" >> $GITHUB_OUTPUT
           elif [ $GITHUB_EVENT_NAME == 'workflow_dispatch' ]
           then
               echo "tag_name=${{ github.event.inputs.target_release_tag }}" >> $GITHUB_OUTPUT
@@ -106,14 +114,7 @@ jobs:
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: ${{ format('versions/{0}/gradle.properties', matrix.subproject) }}
-          properties: 'minecraft_version game_versions mod_platform'
-
-      - name: Set release-type variable
-        id: release_type_set
-        env:
-          release_type: ${{ steps.properties_v.outputs.mod_platform == 'forge' && 'beta' || 'release' }}
-        run: |
-          echo "release-type=$release-type" >> $GITHUB_OUTPUT
+          properties: 'minecraft_version game_versions'
 
       - name: Fix game version
         id: game_versions
@@ -127,20 +128,18 @@ jobs:
         id: file_info
         run: |
           shopt -s extglob
-          FILE_PATHS=$(ls ${{ format('build-artifacts/{0}/build/libs/!(*-@(dev|sources)).jar', matrix.subproject) }})
-          if (( ${#FILE_PATHS[@]} != 1 )); then
-              echo "Error: Found ${#FILE_PATHS[@]} files, expected exactly 1"
-              exit 1
-          else
-              FILE_PATH=${FILE_PATHS[0]}
-          fi
-          
-          FILE_NAME=$(basename $FILE_PATH)
-          FILE_HASH=$(sha256sum $FILE_PATH | awk '{ print $1 }')
-          echo "path=$FILE_PATH" >> $GITHUB_OUTPUT
-          echo "name=$FILE_NAME" >> $GITHUB_OUTPUT
-          echo "hash=$FILE_HASH" >> $GITHUB_OUTPUT
-          cat $GITHUB_OUTPUT
+          FILE_PATHS=$(ls ${{ format('build-artifacts/!(*-@(dev|sources|shadow)).jar') }})
+          for FILE_PATH in $FILE_PATHS; do
+              if [[ $FILE_PATH == *${{ matrix.mc_version }}* ]] && [[ $FILE_PATH == *${{ matrix.mod_brand }}* ]]; then
+                  FILE_NAME=$(basename $FILE_PATH)
+                  FILE_HASH=$(sha256sum $FILE_PATH | awk '{ print $1 }')
+                  echo "path=$FILE_PATH" >> $GITHUB_OUTPUT
+                  echo "name=$FILE_NAME" >> $GITHUB_OUTPUT
+                  echo "hash=$FILE_HASH" >> $GITHUB_OUTPUT
+                  cat $GITHUB_OUTPUT
+                  exit 0
+              fi
+          done
 
       - name: Prepare changelog
         uses: actions/github-script@v6
@@ -149,23 +148,16 @@ jobs:
           script: return process.env.CHANGELOG
           result-encoding: string
         env:
-          CHANGELOG: |-
-            ${{ format('{0}{1}', github.event.release.body, steps.get_release.outputs.body) }}
-            
-            -------
-            
-            Build Information
-            
-            - File name: `${{ steps.file_info.outputs.name }}`
-            - SHA-256: `${{ steps.file_info.outputs.hash }}`
-            - Built from: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CHANGELOG: ${{ format('{0}{1}', github.event.release.body, steps.get_release.outputs.body) }}
 
       - name: Publish Minecraft Mods
         uses: Kir-Antipov/mc-publish@v3.3
         with:
+          # https://modrinth.com/settings/pats
           modrinth-id: k68glP2e
           modrinth-token: ${{ secrets.MODRINTH_API_TOKEN }}
 
+          # https://legacy.curseforge.com/account/api-tokens
           curseforge-id: 639211
           curseforge-token: ${{ secrets.CF_API_TOKEN }}
 
@@ -174,15 +166,16 @@ jobs:
 
           files: ${{ steps.file_info.outputs.path }}
 
-          name: ${{ format('{0} {1} {2}', steps.properties_g.outputs.mod_name, steps.properties_g.outputs.mod_version, steps.properties_v.outputs.mod_platform) }}
+          name: ${{ format('{0} {1} {2}', steps.properties_g.outputs.mod_name, steps.properties_g.outputs.mod_version, matrix.mod_brand) }}
           version: ${{ steps.properties_g.outputs.mod_version }}
-          version-type: ${{ steps.release_type_set.outputs.release_type }}
+          version-type: release
 
-          loaders: ${{ steps.properties_v.outputs.mod_platform }}
+          loaders: fabric
           game-versions: ${{ steps.game_versions.outputs.value }}
           game-version-filter: any
           dependencies: ''  # declare the dependencies explicitly, so mc-publish won't try to load from fabric.mod.json
 
+          github-changelog: ${{ steps.changelog.outputs.result }}
           modrinth-changelog: ${{ steps.changelog.outputs.result }}
           curseforge-changelog: ${{ steps.changelog.outputs.result }}
 

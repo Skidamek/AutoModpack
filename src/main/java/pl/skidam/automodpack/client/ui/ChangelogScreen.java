@@ -1,39 +1,19 @@
-/*
- * This file is part of the AutoModpack project, licensed under the
- * GNU Lesser General Public License v3.0
- *
- * Copyright (C) 2023 Skidam and contributors
- *
- * AutoModpack is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * AutoModpack is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with AutoModpack.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.util.Util;
-import pl.skidam.automodpack_core.client.Changelogs;
+import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.widget.ListEntry;
 import pl.skidam.automodpack.client.ui.widget.ListEntryWidget;
-import pl.skidam.automodpack_common.config.ConfigTools;
-import pl.skidam.automodpack_common.config.Jsons;
-import pl.skidam.automodpack_common.utils.ModpackContentTools;
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -123,23 +103,23 @@ public class ChangelogScreen extends VersionedScreen {
 
     private void drawSummaryOfChanges(VersionedMatrices matrices) {
 
-        Path modpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
+        var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
 
-        if (modpackContentFile == null) return;
+        if (optionalModpackContentFile.isEmpty()) return;
 
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(optionalModpackContentFile.get());
 
         int modsAdded = 0;
         int modsRemoved = 0;
         if (modpackContent == null) return;
-        for (Map.Entry<String, String> changelog : changelogs.changesAddedList.entrySet()) {
+        for (var changelog : changelogs.changesAddedList.entrySet()) {
             String fileType = ModpackContentTools.getFileType(changelog.getKey(), modpackContent);
             if (fileType.equals("mod")) {
                 modsAdded++;
             }
         }
 
-        for (Map.Entry<String, String> changelog : changelogs.changesDeletedList.entrySet()) {
+        for (var changelog : changelogs.changesDeletedList.entrySet()) {
             String fileType = ModpackContentTools.getFileType(changelog.getKey(), modpackContent);
             if (fileType.equals("mod")) {
                 modsRemoved++;
@@ -167,7 +147,7 @@ public class ChangelogScreen extends VersionedScreen {
         }
 
         // remove method is only available in 1.17+
-//#if MC >= 11700
+//#if MC >= 1170
         this.remove(this.listEntryWidget);
         this.remove(this.backButton);
         this.remove(this.openMainPageButton);
@@ -184,16 +164,21 @@ public class ChangelogScreen extends VersionedScreen {
     private Map<String, String> reFormatChanges() {
         Map<String, String> reFormattedChanges = new HashMap<>();
 
-        for (Map.Entry<String, String> changelog : changelogs.changesAddedList.entrySet()) {
-            reFormattedChanges.put("+ " + changelog.getKey(), changelog.getValue());
+        for (var changelog : changelogs.changesAddedList.entrySet()) {
+            String modPageUrl = null;
+            if (changelog.getValue() != null && !changelog.getValue().isEmpty()) modPageUrl = changelog.getValue().get(0);
+            reFormattedChanges.put("+ " + changelog.getKey(), modPageUrl);
         }
 
-        for (Map.Entry<String, String> changelog : changelogs.changesDeletedList.entrySet()) {
-            reFormattedChanges.put("- " + changelog.getKey(), changelog.getValue());
+        for (var changelog : changelogs.changesDeletedList.entrySet()) {
+            String modPageUrl = null;
+            if (changelog.getValue() != null && !changelog.getValue().isEmpty()) modPageUrl = changelog.getValue().get(0);
+            reFormattedChanges.put("- " + changelog.getKey(), modPageUrl);
         }
 
         return reFormattedChanges;
     }
+
 
     @Override
     public boolean shouldCloseOnEsc() {
