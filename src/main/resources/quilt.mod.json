@@ -29,7 +29,11 @@
       },
       {
         "id": "fabricloader",
-        "versions": ">=0.15.0"
+        "versions": ">=0.15.7"
+      },
+      {
+        "id": "mixinextras",
+        "versions": ">=0.3.5"
       }
     ]
   },

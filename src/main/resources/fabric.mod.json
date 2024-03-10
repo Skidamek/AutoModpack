@@ -26,6 +26,7 @@
   "accessWidener" : "automodpack.accesswidener",
   "depends": {
     "minecraft": "${minecraft_dependency}",
-    "fabricloader": ">=0.15.0"
+    "fabricloader": ">=0.15.7",
+    "mixinextras": ">=0.3.5"
   }
 }

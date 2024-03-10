@@ -20,5 +20,12 @@ versionRange = "${minecraft_dependency}"
 ordering = "NONE"
 side = "BOTH"
 
+[[dependencies."${id}"]]
+modId = "mixinextras"
+mandatory = true
+versionRange = ">=0.3.5"
+ordering = "NONE"
+side = "BOTH"
+
 [[mixins]]
 config = "automodpack-main.mixins.json"
