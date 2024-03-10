@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.mixin.core;
 
-import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
+import com.llamalad7.mixinextras.injector.WrapWithCondition;
 import net.fabricmc.fabric.impl.networking.server.ServerLoginNetworkAddon;
 import net.minecraft.util.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
