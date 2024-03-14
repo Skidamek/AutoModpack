@@ -29,6 +29,10 @@ public class ClientLoginNetworkHandlerMixin {
             cancellable = true
     )
     private void handleQueryRequest(LoginQueryRequestS2CPacket packet, CallbackInfo ci) {
+        if (this.autoModpack$addon == null) {
+            return;
+        }
+
         if (this.autoModpack$addon.handlePacket(packet)) {
             // We have handled it, cancel vanilla behavior
             ci.cancel();

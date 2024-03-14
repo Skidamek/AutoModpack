@@ -23,6 +23,9 @@ public class ModPackets {
     public static void registerC2SPackets() {
         ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, HandshakeC2SPacket::receive);
         ClientLoginNetworking.registerGlobalReceiver(DATA, DataC2SPacket::receive);
+
+        // For single player to work, also need to register server side packets
+        registerS2CPackets();
     }
 
     public static void registerS2CPackets() {
