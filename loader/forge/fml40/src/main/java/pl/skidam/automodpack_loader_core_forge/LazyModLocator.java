@@ -3,7 +3,6 @@ package pl.skidam.automodpack_loader_core_forge;
 import com.google.common.collect.ImmutableMap;
 import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileDependencyLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
-import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_loader_core_forge.mods.SetupMods;
 
 import java.io.IOException;
@@ -13,9 +12,7 @@ import java.net.URL;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static cpw.mods.modlauncher.api.LamdbaExceptionUtils.uncheck;
 
@@ -53,13 +50,10 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
 
     // Code based on connector's https://github.com/Sinytra/Connector/blob/0514fec8f189b88c5cec54dc5632fbcee13d56dc/src/main/java/dev/su5ed/sinytra/connector/locator/EmbeddedDependencies.java#L88
     private IModFile getMainMod() throws IOException, URISyntaxException {
-        GlobalVariables.LOGGER.info("Creating mod");
         final Path SELF_PATH = uncheck(() -> {
             URL jarLocation = LazyModLocator.class.getProtectionDomain().getCodeSource().getLocation();
             return Path.of(jarLocation.toURI());
         });
-        GlobalVariables.LOGGER.info("Self path: " + SELF_PATH.toAbsolutePath());
-
         final String depName = "automodpack-mod.jar";
 
         final Path pathInModFile = SELF_PATH.resolve(depName);
@@ -68,9 +62,7 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
         final FileSystem zipFS = FileSystems.newFileSystem(filePathUri, outerFsArgs);
         final Path modPath = zipFS.getPath("/");
 
-        GlobalVariables.LOGGER.info("Mod path: " + modPath.toAbsolutePath());
-        var mod = createMod(modPath);
-        GlobalVariables.LOGGER.info("Created mod: " + mod);
-        return mod.file();
+        var mod = createMod(modPath); // requires securejarhandler 1.0.8 or higher so forge 40.2.3 and up
+        return mod.orElseThrow();
     }
 }

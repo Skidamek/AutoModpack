@@ -18,6 +18,9 @@
       ]
     }
   },
+  "depends": {
+    "automodpack": "*"
+  },
   "languageAdapters": {
     "automodpack_preload": "pl.skidam.automodpack_loader_core.FabricLanguageAdapter"
   },

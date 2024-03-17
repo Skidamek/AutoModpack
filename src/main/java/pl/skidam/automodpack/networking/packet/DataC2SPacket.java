@@ -7,7 +7,6 @@ import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.DataPacket;
-import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -69,7 +68,7 @@ public class DataC2SPacket {
                 reply = true;
             } else if (selectedModpackChanged) {
                 disconnectImmediately(handler);
-                new ReLauncher.Restart(modpackDir, UpdateType.SELECT);
+                new ReLauncher(modpackDir, UpdateType.SELECT).restart(false);
                 reply = true;
             } else {
                 reply = false;

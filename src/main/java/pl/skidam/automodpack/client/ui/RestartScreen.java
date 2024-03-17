@@ -55,7 +55,7 @@ public class RestartScreen extends VersionedScreen {
         });
 
         restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").formatted(Formatting.GREEN), button -> {
-            new ReLauncher.Restart();
+            new ReLauncher().restart(false);
         });
 
         changelogsButton = buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.translatable("automodpack.changelog.view"), button -> {

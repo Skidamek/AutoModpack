@@ -21,6 +21,12 @@
     "jars": [
       "automodpack-mod.jar"
     ],
+    "depends": [
+      {
+        "id": "automodpack",
+        "versions": "*"
+      }
+    ],
     "custom": {
       "modmenu": {
         "badges": [

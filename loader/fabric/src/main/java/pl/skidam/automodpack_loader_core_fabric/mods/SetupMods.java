@@ -3,6 +3,7 @@ package pl.skidam.automodpack_loader_core_fabric.mods;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
+import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.ModContainerImpl;
 import net.fabricmc.loader.impl.discovery.*;
@@ -61,13 +62,9 @@ public class SetupMods implements SetupModsService {
         getModContainer(modId).ifPresent(this::removeMod);
     }
 
-
-    private void removeMod(ModContainer modContainer) {
+    private void removeMods(Collection<ModContainer> modContainers) {
         try {
-            Collection<ModContainer> containers = getNestedContainers(modContainer);
-            containers.add(modContainer);
-
-            for (ModContainer container : containers) {
+            for (ModContainer container : modContainers) {
 
                 FabricLanguageAdapter.mods.remove((ModContainerImpl) container);
 
@@ -79,11 +76,15 @@ public class SetupMods implements SetupModsService {
                     FabricLauncherBase.getLauncher().getClassPath().remove(path);
                 });
             }
-
-
         } catch (Exception e) {
             FabricGuiEntry.displayCriticalError(e, true);
         }
+    }
+
+    private void removeMod(ModContainer modContainer) {
+        Collection<ModContainer> containers = getNestedContainers(modContainer);
+        containers.add(modContainer);
+        removeMods(containers);
     }
 
     public Collection<ModContainer> getNestedContainers(ModContainer originalContainer) {

@@ -9,6 +9,7 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.loader.LoaderService;
+import pl.skidam.automodpack_loader_core.mods.SetupMods;
 import pl.skidam.automodpack_loader_core.utils.ManifestReader;
 
 import java.io.IOException;
@@ -50,7 +51,7 @@ public class Preload {
 
             Optional<String> optionalSelectedModpackLink = ModpackContentTools.getModpackLink(selectedModpackDir);
             if (optionalSelectedModpackLink.isEmpty()) {
-                SelfUpdater.update();
+                if (SelfUpdater.update()) return;
                 return;
             }
 
@@ -61,16 +62,11 @@ public class Preload {
                 latestModpackContent = optionalLatestModpackContent.get();
             }
 
-            if (latestModpackContent == null) {
-                SelfUpdater.update();
-                return;
-            }
-
-            CustomFileUtils.deleteDummyFiles(Paths.get(System.getProperty("user.dir")), latestModpackContent.list);
-            SelfUpdater.update(latestModpackContent);
+            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
+            if (SelfUpdater.update(latestModpackContent)) return;
             new ModpackUpdater().startModpackUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
         } else {
-            SelfUpdater.update();
+            if (SelfUpdater.update()) return;
         }
     }
 

@@ -204,14 +204,14 @@ tasks.named("build") {
 
 tasks.register("mergeJars") {
 	doLast {
-		val loaders: List<String> = listOf("fabric", "neoforge/fml", "forge/fml47") // add quilt when it's ready
+		val loaders: List<String> = listOf("fabric", "neoforge/fml", "forge/fml47", "forge/fml40") // add quilt when it's ready
 
 		loaders.forEach { it ->
 
 			var loader = it
 			if (it == "quilt") loader = "fabric" // we are matching quilt preload to fabric mod jar since there match with each other
-			if (it.contains("forge")) loader = "forge"
-			if (it.contains("neoforge")) loader = "neoforge"
+			if ((it == "forge/fml40" && mcVer <= 1182) || (it == "forge/fml47" && mcVer > 1182)) loader = "forge"
+			if (it == "neoforge/fml") loader = "neoforge"
 
 			if (loader != modBrand) {
 				return@forEach

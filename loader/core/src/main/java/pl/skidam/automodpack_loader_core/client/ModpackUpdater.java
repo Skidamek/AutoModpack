@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_loader_core.client;
 
-import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
@@ -143,7 +142,7 @@ public class ModpackUpdater {
 
         UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 
-        new ReLauncher.Restart(modpackDir, updateType, changelogs);
+        new ReLauncher(modpackDir, updateType, changelogs).restart(false);
     }
 
     // TODO rewrite it, split it into many different methods, its a mess
@@ -363,17 +362,13 @@ public class ModpackUpdater {
 
                     LOGGER.warn("Update *completed* with ERRORS! Took: {}ms", System.currentTimeMillis() - start);
 
-                    if (preload) {
-                        new ReLauncher.Restart("Failed to complete update without errors!");
-                    }
-
                     return;
                 }
 
                 LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
 
                 UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
-                new ReLauncher.Restart(modpackDir, updateType, changelogs);
+                new ReLauncher(modpackDir, updateType, changelogs).restart(false);
             }
         } catch (SocketTimeoutException | ConnectException e) {
             LOGGER.error("Modpack host of " + link + " is not responding", e);

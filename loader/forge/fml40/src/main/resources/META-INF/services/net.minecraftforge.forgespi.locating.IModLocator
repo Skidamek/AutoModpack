@@ -1,1 +1,2 @@
-pl.skidam.automodpack_loader_core.mods.ModLocator
+pl.skidam.automodpack_loader_core.EarlyModLocator
+pl.skidam.automodpack_loader_core.LazyModLocator

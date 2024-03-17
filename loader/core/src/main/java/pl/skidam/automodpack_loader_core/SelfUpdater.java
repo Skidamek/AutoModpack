@@ -4,15 +4,14 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.loader.LoaderService;
-import pl.skidam.automodpack_loader_core.mods.SetupMods;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
-import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -22,55 +21,48 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class SelfUpdater {
 
-    public static final String automodpackID = "k68glP2e"; // AutoModpack modrinth id
-    public final static Path automodpackJar;
+    public static final String AUTOMODPACK_ID = "k68glP2e"; // AutoModpack modrinth id
+    public static final Path AUTOMODPACK_JAR;
 
     static {
         try {
             URI uri = SelfUpdater.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-            automodpackJar = Paths.get(uri).toAbsolutePath().normalize();
+            AUTOMODPACK_JAR = Paths.get(uri).toAbsolutePath().normalize();
         } catch (URISyntaxException e) {
             throw new RuntimeException(e);
         }
     }
 
-    public static void update () {
-        update(null);
+    public static boolean update () {
+        return update(null);
     }
 
-    public static void update(Jsons.ModpackContentFields serverModpackContent) {
+    public static boolean update(Jsons.ModpackContentFields serverModpackContent) {
 
-        if (new LoaderManager().isDevelopmentEnvironment()) {
-            return;
-        }
-
-        if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.SERVER) {
-            if (!serverConfig.selfUpdater) return;
-        }
-
-        if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT) {
-            if (!clientConfig.selfUpdater) return;
-        }
+        var loader = new LoaderManager();
+        if (loader.isDevelopmentEnvironment()) return false;
+        if (loader.getEnvironmentType() == LoaderService.EnvironmentType.SERVER && !serverConfig.selfUpdater) return false;
+        if (loader.getEnvironmentType() == LoaderService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) return false;
 
         LOGGER.info("Checking if AutoModpack is up-to-date...");
 
         List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
-        boolean gettingServerVersion;
+        boolean gettingServerVersion = false;
 
         // Check if server version is available
         if (serverModpackContent != null && serverModpackContent.automodpackVersion != null) {
-            modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(automodpackID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
+            modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
             gettingServerVersion = true;
+            LOGGER.info("getting server version: " + serverModpackContent.automodpackVersion);
         } else {
-            modrinthAPIList = ModrinthAPI.getModInfosFromID(automodpackID);
-            gettingServerVersion = false;
+            modrinthAPIList = ModrinthAPI.getModInfosFromID(AUTOMODPACK_ID);
         }
 
         String message = "Couldn't get latest version of AutoModpack from Modrinth API. Likely automodpack isn't updated to your version of minecraft yet...";
 
         if (modrinthAPIList == null) {
             LOGGER.warn(message);
-            return;
+            return false;
         }
 
         // Modrinth APIs are sorted from latest to oldest
@@ -81,16 +73,27 @@ public class SelfUpdater {
                 continue;
             }
 
+            // Version scheme: major.minor.patch[-betaX]
             String fileVersion = automodpack.fileVersion();
 
-            if (automodpack.fileVersion().contains("-")) {
-                fileVersion = automodpack.fileVersion().split("-")[0];
+            // Compare versions as strings
+            if (fileVersion.equals(AM_VERSION)) {
+                message = "Didn't find any updates for AutoModpack!";
+                continue;
             }
 
-            String LATEST_VERSION = fileVersion.replace(".", "");
-            String OUR_VERSION = AM_VERSION.replace(".", "");
-            boolean remoteSnapshot = false;
+            boolean currentBeta = AM_VERSION.contains("-beta");
+            boolean remoteBeta = fileVersion.contains("-beta");
 
+            String[] currentVersionSplit = AM_VERSION.split("-beta");
+            String[] remoteVersionSplit = fileVersion.split("-beta");
+
+            // Removes '-betaX' if exists
+            // Removes '.' - dots - to then parse it as number
+            String OUR_VERSION = currentVersionSplit[0].replace(".", "");
+            String LATEST_VERSION = remoteVersionSplit[0].replace(".", "");
+
+            // Compare versions as numbers
             if (!gettingServerVersion) {
                 try {
                     if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
@@ -98,56 +101,49 @@ public class SelfUpdater {
                         break; // Break, checked version is lower than installed, meaning that higher version doesn't exist.
                     }
                 } catch (NumberFormatException e) {
-                    // ignore
+                    LOGGER.error("Failed to parse version numbers: " + e);
+                }
 
-                    // Check if version has any other characters than numbers and if latest version is only numbers
-                    if (OUR_VERSION.chars().anyMatch(ch -> !Character.isDigit(ch))) {
-
-                        remoteSnapshot = true;
-
-                        OUR_VERSION = OUR_VERSION.replaceAll("[^0-9]", "");
-                        LATEST_VERSION = LATEST_VERSION.replaceAll("[^0-9]", "");
-
-                        if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
-                            message = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion();
-                            break; // Break, checked version is lower than installed, meaning that higher version doesn't exist.
-                        }
+                if (currentBeta && remoteBeta) {
+                    if (Integer.parseInt(currentVersionSplit[1]) > Integer.parseInt(remoteVersionSplit[1])) {
+                        message = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion();
+                        break; // Break, checked version is lower than installed, meaning that higher version doesn't exist.
                     }
                 }
-            }
 
-            if (!remoteSnapshot) {
-                // We always want to update to latest release version unless server is already using snapshot version
-                if (gettingServerVersion && OUR_VERSION.equals(LATEST_VERSION)) {
-                    message = "Didn't find any updates for AutoModpack! You are on the server version: " + AM_VERSION;
-                    break; // Break, server can provide only one version.
+                if (!currentBeta && remoteBeta) {
+                    message = "You are using stable version of AutoModpack: " + AM_VERSION + " latest pre-released or beta version is: " + automodpack.fileVersion();
+                    continue;
                 }
 
-                if (!gettingServerVersion && (OUR_VERSION.equals(LATEST_VERSION) || !"release".equals(automodpack.releaseType()))) {
-                    message = "Didn't find any updates for AutoModpack! You are on the latest version: " + AM_VERSION;
+                if (currentBeta && !remoteBeta) {
+                    message = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion();
                     continue;
                 }
             }
+
+            // Compare sha1 hash
+            if (automodpack.SHA1Hash().equals(CustomFileUtils.getHash(AUTOMODPACK_JAR, "SHA-1").orElse("null"))) {
+                message = "Didn't find any updates for AutoModpack! You are on the latest version: " + AM_VERSION;
+                break; // Break, we are using the latest version, all previous if's get us to this point meaning otherwise we would update to this version, but we are already using it.
+            }
+
+            LOGGER.info("Update found! Updating to the {} version: {}", gettingServerVersion ? "server" : "latest", automodpack.fileVersion());
 
             // We got correct version
             // We are currently using outdated snapshot or outdated release version
             // If latest is release, always update
             // If latest is beta/alpha (snapshot), update only if we are using beta/alpha (snapshot)
-            if (!gettingServerVersion) {
-                LOGGER.info("Update found! Updating to latest version: " + automodpack.fileVersion());
-            } else {
-                LOGGER.info("Update found! Updating to the server version: " + automodpack.fileVersion());
-            }
-
             installModVersion(automodpack);
-            return;
+            return true;
         }
 
         LOGGER.info(message);
+        return false;
     }
 
     public static void installModVersion(ModrinthAPI automodpack) {
-        Path automodpackUpdateJar = Paths.get(automodpackDir + File.separator + automodpack.fileName());
+        Path automodpackUpdateJar = automodpackDir.resolve(automodpack.fileName());
         Path newAutomodpackJar;
 
         try {
@@ -168,26 +164,55 @@ public class SelfUpdater {
             downloadManager.cancelAllAndShutdown();
 
             // We assume that update jar has always different name than current jar
-            newAutomodpackJar = Path.of(automodpackJar.getParent() + File.separator + automodpackUpdateJar.getFileName());
+            newAutomodpackJar = AUTOMODPACK_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
+            // It has to have different name than current jar, so add num to the end of the file name
+            int num = 0;
+            while (Files.exists(newAutomodpackJar)) {
+                String numStr = num == 0 ? "" : String.valueOf(num);
+                String fileName = automodpackUpdateJar.getFileName().toString().replace(numStr + ".jar", "");
+                if (!fileName.endsWith("-")) fileName += "-";
+                newAutomodpackJar = newAutomodpackJar.getParent().resolve(fileName + ++num + ".jar");
+            }
             CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
-            CustomFileUtils.forceDelete(automodpackUpdateJar);
         } catch (Exception e) {
             LOGGER.error("Failed to update! " + e);
             return;
         }
 
-        if (preload) {
-            new SetupMods().removeMod(automodpackJar);
-            new SetupMods().removeMod("automodpack");
-            new SetupMods().addMod(newAutomodpackJar);
-            LOGGER.info("Successfully downloaded and installed update!");
-        }
+        // As far as i know there isn't really a way to force jvm to unload our old jar, so we need to restart...
+        // This doesn't seem to work as expected
+        // new SetupMods().removeMod(AUTOMODPACK_JAR);
+        // System.gc();
+        // new SetupMods().addMod(newAutomodpackJar);
+        // System.gc();
+        // CustomFileUtils.forceDelete(AUTOMODPACK_JAR);
+        // CustomFileUtils.forceDelete(automodpackUpdateJar);
+        //
+        // java.io.UncheckedIOException: java.nio.file.NoSuchFileException: ~/.minecraft/mods/automodpack-fabric-4.0.0-beta1-1.20.1.jar
+        //	at net.fabricmc.loader.impl.util.LoaderUtil.normalizeExistingPath(LoaderUtil.java:46)
+        //	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getCodeSource(KnotClassDelegate.java:515)
+        //	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getMetadata(KnotClassDelegate.java:363)
+        //	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:338)
+        //	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass(KnotClassDelegate.java:218)
+        //	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:119)
+        //	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
+        //  at pl.skidam.automodpack_loader_core.Preload     // <--- This is where new updated jar starts to do it's stuff
+        //
+        // That happens when updating from `automodpack-fabric-4.0.0-beta1-1.20.1.jar` to `automodpack-fabric-4.0.0-beta2-1.20.1.jar`
+        // It still tries to load classes from the old jar
+        //
+        // The only solutions i see to fix this are:
+        //   1. Restart the game...
+        //   2. Rearrange our mod structure to have a separate jar only for updating the AutoModpack and then conditionally load automodpack mod jar, but with sacrificing the ability to update the 'this' updating code...
+        //   3. Remove the self-updating feature and let the user update the mod manually - however this would entirely break the purpose of this mod since when there would be a bug and server would update to new version client might stop being compatible...
+        //
+        // For now let's just restart the game since it's simpler
+        // TODO - implement a way to conditionally load automodpack mod jar without breaking the jvm and hope that self-updating logic won't need to be updated anymore
 
-        CustomFileUtils.forceDelete(automodpackJar);
-
-        if (!preload) {
-            LOGGER.info("Successfully downloaded update, waiting for shutdown");
-            new ReLauncher.Restart("Successfully updated AutoModpack - " + automodpack.fileVersion(), UpdateType.AUTOMODPACK);
-        }
+        LOGGER.info("Successfully updated AutoModpack!");
+        new ReLauncher(UpdateType.AUTOMODPACK).restart(true, () -> {
+            CustomFileUtils.forceDelete(AUTOMODPACK_JAR);
+            CustomFileUtils.forceDelete(automodpackUpdateJar);
+        });
     }
 }

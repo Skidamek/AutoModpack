@@ -120,6 +120,10 @@ public class CustomFileUtils {
 
 
     public static void deleteDummyFiles(Path file, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
+        if (file == null || ignoreList == null) {
+            return;
+        }
+
         try (Stream<Path> stream = Files.walk(file, 3)) {
             stream.filter(path -> !shouldIgnore(path, ignoreList))
                     .forEach(path -> {

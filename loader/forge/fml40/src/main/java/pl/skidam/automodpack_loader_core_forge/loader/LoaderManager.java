@@ -21,7 +21,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.GlobalVariables.preload;
 
 @SuppressWarnings("unused")
 public class LoaderManager implements LoaderService {
@@ -39,8 +40,8 @@ public class LoaderManager implements LoaderService {
     @Override
     public Collection<Mod> getModList() {
 
-        Collection<ModInfo> modInfo = FMLLoader.getLoadingModList().getMods();
-        Collection<Mod> modList = new ArrayList<>();
+        List<ModInfo> modInfo = FMLLoader.getLoadingModList().getMods();
+        List<Mod> modList = new ArrayList<>();
 
         for (ModInfo info: modInfo) {
             String modID = info.getModId();
@@ -69,7 +70,7 @@ public class LoaderManager implements LoaderService {
         }
 
         if (preload) {
-            Collection<IModFile> modFiles = LoadedMods.INSTANCE.all();
+            Collection<IModFile> modFiles = LoadedMods.INSTANCE.mods();
             for (var modFile: modFiles) {
                 if (modFile.getModFileInfo() == null || modFile.getModInfos().isEmpty()) {
                     continue;
@@ -144,7 +145,11 @@ public class LoaderManager implements LoaderService {
     @Override
     public String getModVersion(String modId) {
         if (preload) {
-            Collection<IModFile> modFiles = LoadedMods.INSTANCE.all();
+            if (modId.equals("minecraft")) {
+                return FMLLoader.versionInfo().mcVersion();
+            }
+
+            Collection<IModFile> modFiles = LoadedMods.INSTANCE.mods();
 
             for (var modFile: modFiles) {
                 if (modFile.getModFileInfo() == null || modFile.getModInfos().isEmpty()) {
@@ -154,6 +159,8 @@ public class LoaderManager implements LoaderService {
                     return modFile.getModInfos().get(0).getVersion().toString();
                 }
             }
+
+            return null;
         }
 
         ModInfo modInfo = FMLLoader.getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
