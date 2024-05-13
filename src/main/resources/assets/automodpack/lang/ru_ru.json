@@ -1,49 +1,51 @@
 {
-	"automodpack.restart.full": "Модпак был скачан!",
-	"automodpack.restart.update": "Обновление Модпака было скачано!",
-	"automodpack.restart.description": "Чтобы завершить обновление модпака, нужно перезапустить игру.",
-	"automodpack.restart.secDescription": "Вы хотите сделать перезапуск прямо сейчас?",
-	"automodpack.restart.confirm": "Перезапустить",
-	"automodpack.restart.cancel": "Нет, обратно в меню",
-	
-	"automodpack.delete": "Удалить Модпак",
-	"automodpack.delete.description": "Вы потеряете все файлы из загруженного модпака.",
-	"automodpack.delete.secDescription": "Чтобы завершить удаление модпака, нужно перезапустить игру.",
-	"automodpack.delete.thiDescription": "Вы точно хотите удалить модпак?",
-	"automodpack.delete.confirm": "Удалить и выйти",
-	"automodpack.delete.cancel": "Назад в меню",
-	
-	"automodpack.danger": "Этот сервер предоставляет модпак!",
-	"automodpack.danger.description": "Вы хотите его скачать?",
-	"automodpack.danger.secDescription": "Это можен быть опасно! Если не доверяете владельцам сервера, НЕ скачивайте!",
-	"automodpack.danger.confirm": "Скачать",
-	"automodpack.danger.cancel": "Не скачивать",
-	
-	"automodpack.changelog.view": "Посмотреть список изменений",
-	"automodpack.changelog.noChanges": "Изменения не найдены.",
-	"automodpack.changelog.openPage": "Открыть в браузере"
-	
-	"automodpack.download.calculating": "Обработка...",
-	"automodpack.download.eta": "Времени осталось: %s",
-	"automodpack.download.downloading": "Скачивание:",
-	"automodpack.download.noFiles": "Нет файлов для скачивания!",
-	
-	"automodpack.redownload": "Перекачать Модпак",
-	"automodpack.redownload.description": "Это может исправить проблемы с модпаком.",
-	
-	"automodpack.error": "Что-то пошло не так!",
-	"automodpack.error.files": "Не удалось скачать некоторые файлы.",
-	"automodpack.error.critical": "Критическая ошибка при скачивании модпака.",
-	"automodpack.error.logs": "Подробности в логах.",
-	
-	"automodpack.fetch": "Получение прямых URL-адресов из Modrinth и CurseForge...",
-	"automodpack.fetch.found": "Найдено %s прямых URL-адресов.",
-	
-	"automodpack.select": "Выбери Модпак",
-	
-	"automodpack.yes": "Да",
-	"automodpack.no": "Нет",
-	"automodpack.cancel": "Отмена",
-	"automodpack.back": "Назад",
-	"automodpack.wait": "Пожалуста, подождите..."
+    "automodpack.restart.full": "Модпак был скачан!",
+    "automodpack.restart.update": "Обновление Модпака установлено!",
+    "automodpack.restart.select": "Модпак, требуемый сервером, выбран!",
+    "automodpack.restart.automodpack": "Обновлена версия мода AutoModpack до той, которая требуется серверу!",
+    "automodpack.restart.description": "Чтобы завершить обновление модпака, нужно перезапустить игру.",
+    "automodpack.restart.secDescription": "Вы хотите сделать перезапуск прямо сейчас?",
+    "automodpack.restart.confirm": "Перезапустить",
+    "automodpack.restart.cancel": "Нет, обратно в меню",
+
+    "automodpack.delete": "Удалить Модпак",
+    "automodpack.delete.description": "Вы потеряете все файлы из загруженного модпака.",
+    "automodpack.delete.secDescription": "Чтобы завершить удаление модпака, нужно перезапустить игру.",
+    "automodpack.delete.thiDescription": "Вы точно хотите удалить модпак?",
+    "automodpack.delete.confirm": "Удалить и выйти",
+    "automodpack.delete.cancel": "Назад в меню",
+
+    "automodpack.danger": "Этот сервер предоставляет модпак!",
+    "automodpack.danger.description": "Вы хотите его скачать?",
+    "automodpack.danger.secDescription": "Это можен быть опасно! Если не доверяете владельцам сервера, НЕ скачивайте!",
+    "automodpack.danger.confirm": "Скачать",
+    "automodpack.danger.cancel": "Не скачивать",
+
+    "automodpack.changelog.view": "Посмотреть список изменений",
+    "automodpack.changelog.noChanges": "Изменения не найдены.",
+    "automodpack.changelog.openPage": "Открыть в браузере",
+
+    "automodpack.download.calculating": "Обработка...",
+    "automodpack.download.eta": "Времени осталось: %s",
+    "automodpack.download.downloading": "Скачивание:",
+    "automodpack.download.noFiles": "Нет файлов для скачивания!",
+
+    "automodpack.redownload": "Перекачать Модпак",
+    "automodpack.redownload.description": "Это может исправить проблемы с модпаком.",
+
+    "automodpack.error": "Что-то пошло не так!",
+    "automodpack.error.files": "Не удалось скачать некоторые файлы.",
+    "automodpack.error.critical": "Критическая ошибка при скачивании модпака.",
+    "automodpack.error.logs": "Подробности в логах.",
+
+    "automodpack.fetch": "Получение прямых URL-адресов из Modrinth и CurseForge...",
+    "automodpack.fetch.found": "Найдено %s прямых URL-адресов.",
+
+    "automodpack.select": "Выбери Модпак",
+
+    "automodpack.yes": "Да",
+    "automodpack.no": "Нет",
+    "automodpack.cancel": "Отмена",
+    "automodpack.back": "Назад",
+    "automodpack.wait": "Пожалуста, подождите..."
 }
