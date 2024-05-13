@@ -26,9 +26,9 @@
     "automodpack.changelog.openPage": "Відкрити сторінку в браузері",
 
     "automodpack.download.calculating": "Обчислення...",
-    "automodpack.download.eta": "Залижилось часу: %s",
+    "automodpack.download.eta": "Залишилось часу: %s",
     "automodpack.download.downloading": "Завантаження:",
-    "automodpack.download.noFiles": "Неває файлів, доступних для завантаження!",
+    "automodpack.download.noFiles": "Немає файлів, доступних для завантаження!",
 
     "automodpack.redownload": "Перезавантажити модпак",
     "automodpack.redownload.description": "Це може виправити помилки модпаку",
