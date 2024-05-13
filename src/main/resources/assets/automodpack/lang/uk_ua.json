@@ -6,7 +6,7 @@
     "automodpack.restart.description": "Для завершення встановлення потрібно перезапустити гру.",
     "automodpack.restart.secDescription": "Ви бажаєте перезапустити гру зараз?",
     "automodpack.restart.confirm": "Так, закрити гру",
-    "automodpack.restart.cancel": "Ні, повернутися назад в меню",
+    "automodpack.restart.cancel": "Ні, повернутися в меню",
 
     "automodpack.delete": "Видалити модпак",
     "automodpack.delete.description": "Ви втратите всі файли із завантаженого модпаку.",
@@ -23,7 +23,7 @@
 
     "automodpack.changelog.view": "Список змін",
     "automodpack.changelog.noChanges": "Зміни не знайдені.",
-    "automodpack.changelog.openPage": "Відкрити сторінку в браузері",
+    "automodpack.changelog.openPage": "Відкрити в браузері",
 
     "automodpack.download.calculating": "Обчислення...",
     "automodpack.download.eta": "Залишилось часу: %s",
