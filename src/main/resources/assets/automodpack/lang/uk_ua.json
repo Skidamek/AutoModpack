@@ -1,30 +1,51 @@
 {
+    "automodpack.restart.full": "Модпак успішно завантажений!",
+    "automodpack.restart.update": "Модпак було оновлено!",
+    "automodpack.restart.select": "Вибрано потрібний серверу модпак!",
+    "automodpack.restart.automodpack": "Оновлено версію мода AutoModpack до тієї, що вимагається сервером!",
+    "automodpack.restart.description": "Для завершення встановлення потрібно перезапустити гру.",
+    "automodpack.restart.secDescription": "Ви бажаєте перезапустити гру зараз?",
+    "automodpack.restart.confirm": "Так, закрити гру",
+    "automodpack.restart.cancel": "Ні, повернутися назад в меню",
 
+    "automodpack.delete": "Видалити модпак",
+    "automodpack.delete.description": "Ви втратите всі файли із завантаженого модпаку.",
+    "automodpack.delete.secDescription": "Для завершення видалення модпаку, вам потрібно перезапустити гру.",
+    "automodpack.delete.thiDescription": "Ви впевнені, що хочете видалити модпак?",
+    "automodpack.delete.confirm": "Видалити та закрити гру",
+    "automodpack.delete.cancel": "Повернутися до гри",
 
-  "EVERYTHING HERE NEEDS TO BE RE-TRANSLATED": "TAKE A LOOK AT en_us.json FILE",
-  "THANK YOU": "SO MUCH!",
+    "automodpack.danger": "Цей сервер надає зовнішній модпак!",
+    "automodpack.danger.description": "Ви бажаєте його завантажити?",
+    "automodpack.danger.secDescription": "Це може бути ризиковано! НЕ завантажуйте модпак якщо не довіряєте власнику сервера!",
+    "automodpack.danger.confirm": "Завантажити",
+    "automodpack.danger.cancel": "Не завантажувати",
 
+    "automodpack.changelog.view": "Список змін",
+    "automodpack.changelog.noChanges": "Зміни не знайдені.",
+    "automodpack.changelog.openPage": "Відкрити сторінку в браузері",
 
-  "gui.automodpack.screen.restart.title.modpack": "Ваш модпак було оновлено!",
+    "automodpack.download.calculating": "Обчислення...",
+    "automodpack.download.eta": "Залижилось часу: %s",
+    "automodpack.download.downloading": "Завантаження:",
+    "automodpack.download.noFiles": "Неває файлів, доступних для завантаження!",
 
-  "gui.automodpack.screen.restart.button.cancel": "Ні (Повернутися назад)",
+    "automodpack.redownload": "Перезавантажити модпак",
+    "automodpack.redownload.description": "Це може виправити помилки модпаку",
 
-  "gui.automodpack.screen.confirm.title": "❌ Видалити Модпак ❌",
-  "gui.automodpack.screen.confirm.description": "Ви втратите усі данні цього модпаку.",
-  "gui.automodpack.screen.confirm.secDescription": "Вам пострібно буде перезапустити гру.",
-  "gui.automodpack.screen.confirm.thiDescription": "Ви упевнені, що хочете це зробити?",
-  "gui.automodpack.screen.confirm.button.sure": "Так (Видалити та вийти)",
-  "gui.automodpack.screen.confirm.button.cancel": "Ні (Повернутися назад)",
+    "automodpack.error": "Щось пішло не так!",
+    "automodpack.error.files": "Не вийшло завантажити деякі файли.",
+    "automodpack.error.critical": "Критична помилка під час завантаження модпаку.",
+    "automodpack.error.logs": "Деталі в журналі помилок.",
 
-  "gui.automodpack.screen.loading.title": "Завантажую оновлення...",
-  "gui.automodpack.screen.loading.wait": "Зачекайте будьласка...",
-  "gui.automodpack.screen.loading.download": "Завантажую...",
-  "gui.automodpack.screen.loading.extract": "Розпаковую модпак...",
-  "gui.automodpack.screen.loading.finish": "Завершую...",
+    "automodpack.fetch": "Отримання прямих URL-адрес від Modrinth та CurseForge...",
+    "automodpack.fetch.found": "Знайдено %s прямих URL-адрес.",
 
-  "gui.automodpack.screen.danger.title": "Увага! Модпак знайдено!",
-  "gui.automodpack.screen.danger.description": "Ви хочете оновити його?",
-  "gui.automodpack.screen.danger.secDescription": "Це може бути ризиковано! Не завантажуйте, якщо не довіряєте адміністрації серверу!",
-  "gui.automodpack.screen.danger.button.accept": "Завантажити",
-  "gui.automodpack.screen.danger.button.cancel": "Не завантажувати"
+    "automodpack.select": "Виберіть Модпак",
+
+    "automodpack.yes": "Так",
+    "automodpack.no": "Ні",
+    "automodpack.cancel": "Відміна",
+    "automodpack.back": "Назад",
+    "automodpack.wait": "Почекайте будь ласка..."
 }
