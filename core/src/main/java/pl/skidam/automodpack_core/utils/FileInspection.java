@@ -1,13 +1,21 @@
 package pl.skidam.automodpack_core.utils;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import org.tomlj.Toml;
+import org.tomlj.TomlArray;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
+import pl.skidam.automodpack_core.GlobalVariables;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -31,7 +39,6 @@ public class FileInspection {
         return false;
     }
 
-    // FIXME: This method is not working properly
     public static String getModID(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
             return null;
@@ -62,22 +69,18 @@ public class FileInspection {
             BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
 
             if (entry.getName().equals("META-INF/mods.toml") || entry.getName().equals("META-INF/neoforge.mods.toml")) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    line = line.trim().toLowerCase();
-                    if (!line.startsWith("modid")) {
-                        continue;
-                    }
+                TomlParseResult result = Toml.parse(reader);
+                result.errors().forEach(error -> GlobalVariables.LOGGER.error(error.toString()));
 
-                    String[] split = line.split("=");
-                    if (split.length <= 1) {
-                        continue;
+                TomlArray array = result.getArray("mods");
+                if (array != null) {
+                    for (Object o : array.toList()) {
+                        TomlTable mod = (TomlTable) o;
+                        if (mod != null) {
+                            modID = mod.getString("modId");
+                        }
                     }
-
-                    modID = split[1].replaceAll("\"", "").trim();
-                    modID = modID.split(" ")[0]; // get first string before any # comments starts
                 }
-
             } else {
                 JsonObject json = gson.fromJson(reader, JsonObject.class);
 
@@ -107,6 +110,80 @@ public class FileInspection {
 
 
         return modID;
+    }
+
+    public static List<String> getModDependencies(Path file) {
+        if (!file.getFileName().toString().endsWith(".jar")) {
+            return List.of();
+        }
+
+        List<String> dependencies = new ArrayList<>();
+
+        try {
+            ZipFile zipFile = new ZipFile(file.toFile());
+            ZipEntry entry = null;
+            if (zipFile.getEntry("fabric.mod.json") != null) {
+                entry = zipFile.getEntry("fabric.mod.json");
+            } else if (zipFile.getEntry("quilt.mod.json") != null) {
+                entry = zipFile.getEntry("quilt.mod.json");
+            } else if (zipFile.getEntry("META-INF/mods.toml") != null) {
+                entry = zipFile.getEntry("META-INF/mods.toml");
+            } else if (zipFile.getEntry("META-INF/neoforge.mods.toml") != null) {
+                entry = zipFile.getEntry("META-INF/neoforge.mods.toml");
+            }
+
+            if (entry == null) {
+                zipFile.close();
+                return null;
+            }
+
+            Gson gson = new Gson();
+            InputStream stream = zipFile.getInputStream(entry);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
+
+            if (entry.getName().equals("META-INF/mods.toml") || entry.getName().equals("META-INF/neoforge.mods.toml")) {
+                TomlParseResult result = Toml.parse(reader);
+                result.errors().forEach(error -> GlobalVariables.LOGGER.error(error.toString()));
+
+                String modID = getModID(file);
+                TomlArray array = result.getArray("dependencies.\"" + modID + "\"");
+                if (array != null) {
+                    for (Object o : array.toList()) {
+                        TomlTable mod = (TomlTable) o;
+                        if (mod != null) {
+                            dependencies.add(mod.getString("modId"));
+                        }
+                    }
+                }
+            } else {
+                JsonObject json = gson.fromJson(reader, JsonObject.class);
+
+                if (entry.getName().equals("fabric.mod.json")) {
+                    if (json.has("depends")) {
+                        dependencies.addAll(json.get("depends").getAsJsonObject().asMap().keySet());
+                    }
+
+                } else if (entry.getName().equals("quilt.mod.json") && json.has("quilt_loader")) {
+                    JsonObject quiltLoader = json.get("quilt_loader").getAsJsonObject();
+                    if (quiltLoader.has("depends")) {
+                        dependencies.addAll(quiltLoader.get("depends").getAsJsonObject().asMap().keySet());
+                    }
+                }
+            }
+
+            // close everything
+            reader.close();
+            stream.close();
+            zipFile.close();
+
+        } catch (ZipException ignored) {
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
+        return dependencies;
     }
 
     public static String getModVersion(Path file) {

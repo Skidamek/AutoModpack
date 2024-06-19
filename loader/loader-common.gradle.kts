@@ -48,6 +48,7 @@ dependencies {
 
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
+    include("org.tomlj:tomlj:1.1.1")
 
     if (project.name.contains("quilt")) {
         modImplementation("org.quiltmc:quilt-loader:${rootProject.findProperty("quilt_loader_version")}")

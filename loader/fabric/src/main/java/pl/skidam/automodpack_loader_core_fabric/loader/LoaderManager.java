@@ -9,6 +9,7 @@ import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.ModDependency;
 import net.fabricmc.loader.api.metadata.ModEnvironment;
 import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -27,7 +28,6 @@ import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.GlobalVariables.preload;
 
 @SuppressWarnings("unused")
 public class LoaderManager implements LoaderService {
@@ -78,6 +78,40 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
+    public Mod getMod(String modId) {
+        for (Mod mod : getModList()) {
+            if (mod.modID().equals(modId)) {
+                return mod;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Mod getMod(Path file) {
+        if (!Files.isRegularFile(file)) return null;
+        if (!file.getFileName().toString().endsWith(".jar")) return null;
+
+        for (Mod mod : getModList()) {
+            if (mod.modPath().toAbsolutePath().equals(file.toAbsolutePath())) {
+                return mod;
+            }
+        }
+
+        // check also out of container
+        String modId = FileInspection.getModID(file);
+        String modVersion = FileInspection.getModVersion(file);
+        EnvironmentType environmentType = getModEnvironmentFromNotLoadedJar(file);
+        List<String> dependencies = FileInspection.getModDependencies(file);
+
+        if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
+            return new Mod(modId, modVersion, file, environmentType, dependencies);
+        }
+
+        return null;
+    }
+
+    @Override
     public String getLoaderVersion() {
         Optional<ModContainer> modContainer = FabricLoader.getInstance().getModContainer("fabricloader");
         return modContainer.map(container -> container.getMetadata().getVersion().getFriendlyString()).orElse(null);
@@ -110,7 +144,7 @@ public class LoaderManager implements LoaderService {
     @Override
     public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
         if (!Files.isRegularFile(file)) return null;
-        if (!file.getFileName().endsWith(".jar")) return null;
+        if (!file.getFileName().toString().endsWith(".jar")) return null;
 
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
@@ -210,7 +244,6 @@ public class LoaderManager implements LoaderService {
         }
     }
 
-    @Override
     public String getModId(Path file, boolean checkAlsoOutOfContainer) {
         for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
             FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();

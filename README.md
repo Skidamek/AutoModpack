@@ -1,4 +1,4 @@
-<p align="center"><img src="https://i.imgur.com/zogBcIG.png" alt="Logo" width="200"></p>
+<p align="center"><img src="https://i.imgur.com/hcYOgtJ.png" alt="Logo" width="200"></p>
 <h1 align="center">AutoModpack  <br>
     <a href="https://www.curseforge.com/minecraft/mc-mods/automodpack"><img src="http://cf.way2muchnoise.eu/639211.svg" alt="CF"></a>
     <a href="https://github.com/Skidamek/AutoModpack/releases"><img src="https://img.shields.io/github/downloads/skidamek/automodpack/total?style=round&logo=github" alt="GitHub"></a>

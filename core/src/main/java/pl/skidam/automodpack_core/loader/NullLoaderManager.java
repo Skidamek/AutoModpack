@@ -20,6 +20,16 @@ public class NullLoaderManager implements LoaderService {
     }
 
     @Override
+    public Mod getMod(String modId) {
+        return null;
+    }
+
+    @Override
+    public Mod getMod(Path file) {
+        return null;
+    }
+
+    @Override
     public String getLoaderVersion() {
         return null;
     }
@@ -56,11 +66,6 @@ public class NullLoaderManager implements LoaderService {
 
     @Override
     public EnvironmentType getModEnvironment(String modId) {
-        return null;
-    }
-
-    @Override
-    public String getModId(Path file, boolean checkAlsoOutOfContainer) {
         return null;
     }
 

@@ -18,6 +18,7 @@ dependencies {
     // our needed dependencies
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.apache.logging.log4j:log4j-core:2.20.0")
+    implementation("org.tomlj:tomlj:1.1.1")
 }
 
 java {

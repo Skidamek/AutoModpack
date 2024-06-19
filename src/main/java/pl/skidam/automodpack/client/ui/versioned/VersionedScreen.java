@@ -36,7 +36,13 @@ public class VersionedScreen extends Screen {
         VersionedMatrices matrices = new VersionedMatrices(this.client, matrix.getVertexConsumers());
 //#endif
 
-        // Render background
+// Render background
+//#if MC < 1202
+//$$    super.renderBackground(matrices);
+//#else if MC < 1206
+//$$    super.renderBackground(matrices, mouseX, mouseY, delta);
+//#endif
+
         super.render(matrices, mouseX, mouseY, delta);
 
         // Render the rest of our screen
@@ -104,13 +110,4 @@ public static void drawTexture(Identifier textureID, VersionedMatrices matrices,
 }
 
 //#endif
-
-    public void renderBackground(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        //#if MC < 1202
-//$$         super.renderBackground(matrices);
-        //#else
-        super.renderBackground(matrices, mouseX, mouseY, delta);
-        //#endif
-    }
-
 }

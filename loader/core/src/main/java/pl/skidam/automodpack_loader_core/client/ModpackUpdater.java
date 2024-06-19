@@ -2,7 +2,6 @@ package pl.skidam.automodpack_loader_core.client;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.MmcPackMagic;
 import pl.skidam.automodpack_loader_core.ReLauncher;
@@ -11,7 +10,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.*;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
@@ -437,7 +435,9 @@ public class ModpackUpdater {
         // map running dir files
         ModpackUtils.correctFilesLocations(modpackDir, modpackContent, editableFiles);
 
-        return ModpackUtils.removeModpackModsFromDefaultModsFolder(modpackContent.list);
+        var dupeMods = ModpackUtils.getDupeMods(modpackDir);
+
+        return ModpackUtils.removeDupeMods(dupeMods);
     }
 
 //    private record ID_PATH(String id, Path path) {}

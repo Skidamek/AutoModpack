@@ -16,6 +16,7 @@ dependencies {
     implementation("org.apache.logging.log4j:log4j-core:2.20.0")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("io.netty:netty-all:4.1.90.Final")
+    implementation("org.tomlj:tomlj:1.1.1")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
     testImplementation("org.junit.jupiter:junit-jupiter-engine:5.9.2")
 }

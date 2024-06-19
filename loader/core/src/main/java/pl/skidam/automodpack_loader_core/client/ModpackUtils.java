@@ -3,7 +3,6 @@ package pl.skidam.automodpack_loader_core.client;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderService;
-import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -80,7 +79,6 @@ public class ModpackUtils {
         }
     }
 
-    // returns true if requires restart
     public static void correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
@@ -111,58 +109,104 @@ public class ModpackUtils {
         }
     }
 
-    private record ID_PATH(String id, Path path) {}
+    public record MOD_TO_MOD(LoaderService.Mod modpackMod, LoaderService.Mod defaultMod) { }
 
-    // TODO walk into sub dirs
-    // Returns true if removed any mod
-    public static boolean removeModpackModsFromDefaultModsFolder(List<Jsons.ModpackContentFields.ModpackContentItem> modpackList) throws IOException {
-        final List<Path> defaultMods = Files.list(Path.of("./mods")).toList();
-        final Collection<LoaderService.Mod> defaultModList = LOADER_MANAGER.getModList();
+    // Checks if in default mods folder are any mods that are in modpack
+    // Returns map of modpack mods and default mods that have the same mod id they dont necessarily have to be the same*
+    public static List<MOD_TO_MOD> getDupeMods(Path modpackPath) throws IOException {
+        // maybe also check subfolders...
+        final List<Path> defaultMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
+        final List<Path> modpackMods = Files.list(modpackPath.resolve("mods")).toList();
+        final Collection<LoaderService.Mod> defaultModList = defaultMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+        final Collection<LoaderService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
 
-        if (defaultModList.isEmpty()) return false;
+        if (defaultModList.isEmpty() || modpackModList.isEmpty()) return List.of();
 
-        final List<String> clientModDeps = new ArrayList<>();
-        final List<ID_PATH> modpackDefaultModIDs = new ArrayList<>();
+        final List<MOD_TO_MOD> duplicates = new ArrayList<>();
 
-        boolean removedAny = false;
 
-        List<String> modpackHashes = modpackList.stream().map(modpackContentItem -> modpackContentItem.sha1).toList();
-
-        for (Path defaultMod : defaultMods) {
-            String fileHash = CustomFileUtils.getHash(defaultMod, "sha1").orElse(null);
-            if (fileHash == null) {
-                LOGGER.error("Couldn't get hash of {}", defaultMod);
-                continue;
+        for (LoaderService.Mod modpackMod : modpackModList) {
+            LoaderService.Mod defaultMod = defaultModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null);
+            if (defaultMod != null) {
+                duplicates.add(new MOD_TO_MOD(modpackMod, defaultMod));
             }
-            String modId = LOADER_MANAGER.getModId(defaultMod, true);
-            if (modId == null) continue;
-
-            if (modpackHashes.contains(fileHash)) {
-                LOGGER.warn("Modpack file {} is in default mods folder", defaultMod);
-                modpackDefaultModIDs.add(new ID_PATH(modId, defaultMod));
-                continue;
-            }
-
-            LOGGER.info("Mod {} is not a modpack mod", defaultMod);
-            defaultModList.stream().filter(mod -> mod.modID().equals(modId)).findFirst().ifPresent(mod -> {
-                clientModDeps.addAll(mod.dependencies());
-            });
         }
 
-        for (ID_PATH defaultMod : modpackDefaultModIDs) {
-            if (clientModDeps.contains(defaultMod.id)) {
-                LOGGER.info("Mod {} is required by other mods", defaultMod.path);
-                continue;
-            }
+        duplicates.forEach((MOD_TO_MOD) -> LOGGER.info("Modpack mod: {} | Default mod: {}", MOD_TO_MOD.modpackMod.modPath(), MOD_TO_MOD.defaultMod.modPath()));
 
-            LOGGER.warn("Removing mod {}", defaultMod.path);
-            CustomFileUtils.forceDelete(defaultMod.path);
-            removedAny = true;
-        }
-
-        return removedAny;
+        return duplicates;
     }
 
+    // Checks if other mods in path are dependent on provided mod
+    // Returns true if other mods are dependent on provided mod and false otherwise
+    public static List<String> checkIfThereAreDepsFor(LoaderService.Mod modToCheck, Path modsPath) throws IOException {
+        final List<Path> mods = Files.list(modsPath).toList();
+        final Collection<LoaderService.Mod> modList = mods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+
+        if (modList.isEmpty()) return List.of();
+
+        final List<String> modDeps = new ArrayList<>();
+
+        for (LoaderService.Mod mod : modList) {
+            modDeps.addAll(mod.dependencies());
+            LOGGER.info("Dependencies of {}: {}", mod.modID(), mod.dependencies());
+        }
+
+        if (modDeps.contains(modToCheck.modID())) {
+            LOGGER.error("Other mods are dependent on {}", modToCheck.modID());
+            return modDeps;
+        }
+
+        LOGGER.warn("No other mods are dependent on {}", modToCheck.modID());
+        return modDeps;
+    }
+
+    // Returns true if removed any mod from default mods folder
+    public static boolean removeDupeMods(List<MOD_TO_MOD> dupeMods) throws IOException {
+        boolean changedAnyThing = false;
+        LOGGER.info("Removing duplicate mods from default mods folder");
+
+        List<String> dupeModDepsList = new ArrayList<>();
+
+        for (MOD_TO_MOD dupeMod : dupeMods) {
+            List<String> dupeModDeps = checkIfThereAreDepsFor(dupeMod.modpackMod, Path.of("./mods")); // TODO replace this with standardized mods path
+            dupeModDepsList.addAll(dupeModDeps);
+        }
+
+        for (MOD_TO_MOD dupeMod : dupeMods) {
+            dupeModDepsList.remove(dupeMod.modpackMod.modID());
+        }
+
+        for (MOD_TO_MOD dupeMod : dupeMods) {
+
+            List<String> dupeModDeps = checkIfThereAreDepsFor(dupeMod.modpackMod, Path.of("./mods")); // TODO replace this with standardized mods path
+            for (String mod : dupeModDepsList) {
+                dupeModDeps.remove(mod);
+            }
+
+            if (!dupeModDeps.isEmpty()) {
+                LOGGER.info("Mod {} is required by other mods", dupeMod.modpackMod.modPath());
+                // check if modpack mod has different hash if so, copy it to default mods folder, delete old one
+                if (!CustomFileUtils.getHash(dupeMod.modpackMod.modPath(), "sha1").equals(CustomFileUtils.getHash(dupeMod.defaultMod.modPath(), "sha1"))) {
+                    LOGGER.info("Copying mod {} to default mods folder", dupeMod.modpackMod.modPath());
+                    CustomFileUtils.copyFile(dupeMod.modpackMod.modPath(), dupeMod.defaultMod.modPath().getParent().resolve(dupeMod.modpackMod.modPath().getFileName()));
+                    // and delete old one if the path is different
+                    if (!dupeMod.modpackMod.modPath().equals(dupeMod.defaultMod.modPath())) {
+                        LOGGER.info("Removing mod {}", dupeMod.defaultMod.modPath());
+                        CustomFileUtils.forceDelete(dupeMod.defaultMod.modPath());
+                    }
+                }
+                continue;
+            }
+
+            LOGGER.warn("Removing mod {}", dupeMod.defaultMod.modPath());
+            CustomFileUtils.forceDelete(dupeMod.defaultMod.modPath());
+        }
+
+        LOGGER.info("Removed duplicate mods from default mods folder");
+
+        return changedAnyThing;
+    }
 
 
     public static List<Path> renameModpackDir(Path modpackContentFile, Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {

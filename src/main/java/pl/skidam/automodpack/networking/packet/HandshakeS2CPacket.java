@@ -31,35 +31,16 @@ public class HandshakeS2CPacket {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         String playerName = profile.getName();
 
-
-        SocketAddress playerIp = connection.getAddress();
-        Whitelist whitelist = server.getPlayerManager().getWhitelist();
-        boolean isWhitelistEnabled = server.getPlayerManager().isWhitelistEnabled();
-        if (isWhitelistEnabled && whitelist != null) {
-            OperatorList operatorList = server.getPlayerManager().getOpList();
-            if (operatorList != null && operatorList.get(profile) == null && !whitelist.isAllowed(profile)) {
-                LOGGER.warn("Not providing modpack. {} is not whitelisted.", playerName);
-                return; // Player is not whitelisted return
-            } else if (!whitelist.isAllowed(profile)) {
-                LOGGER.warn("Not providing modpack. {} is not whitelisted.", playerName);
-                return; // Player is not whitelisted return
-            }
-        }
-
-        BannedPlayerList bannedPlayerList = server.getPlayerManager().getUserBanList();
-        BannedIpList bannedIpList = server.getPlayerManager().getIpBanList();
-
-        if (bannedIpList.isBanned(playerIp)) {
-            LOGGER.warn("Not providing modpack. IP {} is banned.", playerIp);
-            return; // Player IP is banned return
-        }
-
-        if (bannedPlayerList.contains(profile)) {
-            LOGGER.warn("Not providing modpack. {} is banned.", playerName);
-            return; // Player is banned return
-        }
-
-
+// TODO: send this packet only if player can join
+//  at the moment it's not possible because of
+//  'Cannot invoke "java.util.UUID.toString()" because the return value of "com.mojang.authlib.GameProfile.getId()" is null'
+//
+//        SocketAddress playerIp = connection.getAddress();
+//
+//        if (server.getPlayerManager().checkCanJoin(playerIp, profile) != null) {
+//            LOGGER.info("Not providing modpack for {}", playerName);
+//            return;
+//        }
 
         if (!understood) {
             Common.players.put(profile, false);

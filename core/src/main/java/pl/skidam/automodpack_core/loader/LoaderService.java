@@ -10,6 +10,9 @@ public interface LoaderService {
     record Mod(String modID, String modVersion, Path modPath, EnvironmentType environmentType, Collection<String> dependencies) {}
     ModPlatform getPlatformType();
     Collection<Mod> getModList();
+    Mod getMod(String modId);
+    Mod getMod(Path file);
+    boolean isModLoaded(String modId);
     String getLoaderVersion();
     EnvironmentType getEnvironmentType();
     boolean isDevelopmentEnvironment();
@@ -17,11 +20,9 @@ public interface LoaderService {
 
     // TODO merge all of these methods into 2 methods one getting modId and one getting file path, both returning optional of Mod object
     Path getModPath(String modId);
-    boolean isModLoaded(String modId);
     String getModVersion(String modId);
     String getModVersion(Path file);
     EnvironmentType getModEnvironment(String modId);
     EnvironmentType getModEnvironmentFromNotLoadedJar(Path file);
-    String getModId(Path file, boolean checkAlsoOutOfContainer);
     String getModIdFromNotLoadedJar(Path file);
 }

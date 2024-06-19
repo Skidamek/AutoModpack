@@ -22,6 +22,16 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
+    public Mod getMod(String modId) {
+        throw new AssertionError("Loader class not found");
+    }
+
+    @Override
+    public Mod getMod(Path file) {
+        throw new AssertionError("Loader class not found");
+    }
+
+    @Override
     public String getLoaderVersion() {
         throw new AssertionError("Loader class not found");
     }
@@ -58,11 +68,6 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public EnvironmentType getModEnvironment(String modId) {
-        throw new AssertionError("Loader class not found");
-    }
-
-    @Override
-    public String getModId(Path file, boolean checkAlsoOutOfContainer) {
         throw new AssertionError("Loader class not found");
     }
 

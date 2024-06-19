@@ -74,6 +74,41 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
+    public Mod getMod(String modId) {
+        for (Mod mod : getModList()) {
+            if (mod.modID().equals(modId)) {
+                return mod;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Mod getMod(Path file) {
+        if (!Files.isRegularFile(file)) return null;
+        if (!file.getFileName().toString().endsWith(".jar")) return null;
+
+        for (Mod mod : getModList()) {
+            if (mod.modPath().toAbsolutePath().equals(file.toAbsolutePath())) {
+                return mod;
+            }
+        }
+
+        // check also out of container
+        String modId = getModId(file, true);
+        String modVersion = FileInspection.getModVersion(file);
+        EnvironmentType environmentType = getModEnvironmentFromNotLoadedJar(file);
+        List<String> dependencies = FileInspection.getModDependencies(file);
+
+        if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
+            return new Mod(modId, modVersion, file, environmentType, dependencies);
+        }
+
+        return null;
+    }
+
+
+    @Override
     public String getLoaderVersion() {
         return FMLLoader.versionInfo().neoForgeVersion();
     }
@@ -202,7 +237,6 @@ public class LoaderManager implements LoaderService {
         return getModEnvironmentFromNotLoadedJar(getModPath(modId));
     }
 
-    @Override
     public String getModId(Path file, boolean checkAlsoOutOfContainer) {
         List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
 

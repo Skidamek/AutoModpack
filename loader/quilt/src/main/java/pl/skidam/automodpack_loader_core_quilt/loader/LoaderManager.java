@@ -12,6 +12,7 @@ import org.quiltmc.loader.api.ModDependency;
 import org.quiltmc.loader.api.QuiltLoader;
 import org.quiltmc.loader.api.minecraft.MinecraftQuiltLoader;
 import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -85,6 +86,41 @@ public class LoaderManager implements LoaderService {
     }
 
     @Override
+    public Mod getMod(String modId) {
+        for (Mod mod : getModList()) {
+            if (mod.modID().equals(modId)) {
+                return mod;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Mod getMod(Path file) {
+        if (!Files.isRegularFile(file)) return null;
+        if (!file.getFileName().toString().endsWith(".jar")) return null;
+
+        for (Mod mod : getModList()) {
+            if (mod.modPath().toAbsolutePath().equals(file.toAbsolutePath())) {
+                return mod;
+            }
+        }
+
+        // check also out of container
+        String modId = getModId(file, true);
+        String modVersion = FileInspection.getModVersion(file);
+        EnvironmentType environmentType = getModEnvironmentFromNotLoadedJar(file);
+        List<String> dependencies = FileInspection.getModDependencies(file);
+
+        if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
+            return new Mod(modId, modVersion, file, environmentType, dependencies);
+        }
+
+        return null;
+    }
+
+
+    @Override
     public String getLoaderVersion() {
         ModContainer container = QuiltLoader.getModContainer("quilt_loader").isPresent() ? QuiltLoader.getModContainer("quilt_loader").get() : null;
         return container != null ? container.metadata().version().raw() : null;
@@ -120,7 +156,7 @@ public class LoaderManager implements LoaderService {
     @Override
     public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
         if (!Files.isRegularFile(file)) return null;
-        if (!file.getFileName().endsWith(".jar")) return null;
+        if (!file.getFileName().toString().endsWith(".jar")) return null;
 
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
@@ -265,10 +301,10 @@ public class LoaderManager implements LoaderService {
         return EnvironmentType.UNIVERSAL;
     }
 
-    @Override
+
     public String getModId(Path file, boolean checkAlsoOutOfContainer) {
         if (!Files.isRegularFile(file)) return null;
-        if (!file.getFileName().endsWith(".jar")) return null;
+        if (!file.getFileName().toString().endsWith(".jar")) return null;
         if (getModEnvironmentFromNotLoadedJar(file).equals(EnvironmentType.UNIVERSAL)) return null;
 
         for (ModContainer modContainer: QuiltLoader.getAllMods()) {
