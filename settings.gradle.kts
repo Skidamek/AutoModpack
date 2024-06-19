@@ -29,7 +29,8 @@ val coreModules = arrayOf(
     "quilt",
     "forge-fml40",
     "forge-fml47",
-    "neoforge-fml"
+    "neoforge-fml2",
+    "neoforge-fml4"
 )
 
 coreModules.forEach { module ->

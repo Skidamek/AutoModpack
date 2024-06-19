@@ -3,7 +3,7 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.callbacks.Callback;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_loader_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 

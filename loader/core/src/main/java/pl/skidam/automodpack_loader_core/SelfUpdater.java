@@ -3,7 +3,7 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_loader_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;

@@ -1,8 +1,5 @@
 package pl.skidam.automodpack_core.netty;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,11 +27,5 @@ public class HttpResponse {
         response.append("\r\n");
 
         return response.toString();
-    }
-
-    // Not sure if its really needed
-    void setContentTypeHeader(Path file) throws IOException {
-        String contentType = Files.probeContentType(file);
-        addHeader("Content-Type", contentType);
     }
 }

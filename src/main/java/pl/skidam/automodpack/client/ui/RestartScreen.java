@@ -50,11 +50,11 @@ public class RestartScreen extends VersionedScreen {
 
     public void initWidgets() {
         assert this.client != null;
-        cancelButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.cancel").formatted(Formatting.RED), button -> {
+        cancelButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.cancel"), button -> {
             this.client.setScreen(null);
         });
 
-        restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").formatted(Formatting.GREEN), button -> {
+        restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").formatted(Formatting.BOLD), button -> {
             new ReLauncher().restart(false);
         });
 
@@ -65,7 +65,6 @@ public class RestartScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        renderBackground(matrices, mouseX, mouseY, delta);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.restart." + updateType.toString()).formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.restart.description"), this.width / 2, this.height / 2 - 35, 16777215);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.restart.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);

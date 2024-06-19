@@ -3,6 +3,9 @@ package pl.skidam.automodpack_core;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.loader.NullLoaderManager;
+import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.netty.HttpServer;
 
 import java.nio.file.Path;
@@ -15,6 +18,9 @@ public class GlobalVariables {
     public static String AM_VERSION;
     public static String LOADER_VERSION;
     public static String LOADER;
+    public static LoaderService LOADER_MANAGER = new NullLoaderManager();
+    public static Path MODS_DIR; // TODO make use of this, its useful for clients using non-standard mods dir
+    public static Modpack modpack;
     public static HttpServer httpServer;
     public static Jsons.ServerConfigFields serverConfig;
     public static Jsons.ClientConfigFields clientConfig;

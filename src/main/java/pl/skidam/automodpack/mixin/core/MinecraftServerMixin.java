@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import pl.skidam.automodpack.init.CommonInit;
+import pl.skidam.automodpack.init.Common;
 
 @Mixin(MinecraftServer.class)
 public class MinecraftServerMixin {
@@ -17,12 +17,12 @@ public class MinecraftServerMixin {
 	//$$ @Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;setFavicon(Lnet/minecraft/server/ServerMetadata;)V", ordinal = 0), method = "runServer")
 	//#endif
 	private void afterSetupServer(CallbackInfo info) {
-		CommonInit.afterSetupServer();
+		Common.afterSetupServer();
 	}
 
 	@Inject(at = @At("HEAD"),
 			method = "shutdown")
 	private void beforeShutdownServer(CallbackInfo info) {
-		CommonInit.beforeShutdownServer();
+		Common.beforeShutdownServer();
 	}
 }

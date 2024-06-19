@@ -20,74 +20,60 @@ public class DownloadManager {
     private static final int MAX_DOWNLOAD_ATTEMPTS = 3;
     private static final int BUFFER_SIZE = 128 * 1024;
     private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
-    private final Map<String, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
-    public final Map<String, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
+    private final Map<HashAndPath, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
+    public final Map<HashAndPath, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
     private long bytesDownloaded = 0;
     private long bytesToDownload = 0;
     private int addedToQueue = 0;
     private int downloaded = 0;
     private final Semaphore semaphore = new Semaphore(0);
     public DownloadManager() { }
-
     public DownloadManager(long bytesToDownload) {
         this.bytesToDownload = bytesToDownload;
     }
-
+    public record HashAndPath(String hash, Path path) { } // Required for cases where there are more files which have the same hash (are the same) but are in different directories/have different names
+    // TODO: preferably just download one file and copy it to the other locations
 
     public void download(Path file, String sha1, Urls urls, Runnable successCallback, Runnable failureCallback) {
-        if (!queuedDownloads.containsKey(sha1)) {
-            queuedDownloads.put(sha1, new QueuedDownload(file, urls, 0, successCallback, failureCallback));
-            addedToQueue++;
-            downloadNext();
-        }
+        HashAndPath hashAndPath = new HashAndPath(sha1, file);
+        if (queuedDownloads.containsKey(hashAndPath))  return;
+        queuedDownloads.put(hashAndPath, new QueuedDownload(file, urls, 0, successCallback, failureCallback));
+        addedToQueue++;
+        downloadNext();
     }
 
-    private void downloadTask(String sha1, QueuedDownload queuedDownload) {
-
-        // Firstly get the last URL from the list, if the download failed 3 times and we get one more url, then get the seccond url if the download failed 6 times (3 times for each url) then get the first url (0 index
-//        String url = queuedDownload.urls.URLs.get(queuedDownload.urls.URLs.size() - 1).url;
-//        if (queuedDownload.attempts > MAX_DOWNLOAD_ATTEMPTS && queuedDownload.attempts < (queuedDownload.urls.numberOfUrls - 1) * MAX_DOWNLOAD_ATTEMPTS) {
-//            url = queuedDownload.urls.URLs.get(queuedDownload.urls.URLs.size() - 2).url;
-//        } else if (queuedDownload.attempts > MAX_DOWNLOAD_ATTEMPTS) {
-//            url = queuedDownload.urls.URLs.get(0).url;
-//        }
-
-
+    private void downloadTask(HashAndPath hashAndPath, QueuedDownload queuedDownload) {
         int numberOfIndexes = queuedDownload.urls.numberOfUrls - 1;
         int urlIndex = Math.min(queuedDownload.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
 
         String url = queuedDownload.urls.URLs.get(numberOfIndexes - urlIndex).url;
-
-
         LOGGER.info("Downloading {} from {}", queuedDownload.file, url);
 
         boolean interrupted = false;
 
         try {
-            downloadFile(url, sha1, queuedDownload);
+            downloadFile(url, hashAndPath, queuedDownload);
         } catch (InterruptedException e) {
             CustomFileUtils.forceDelete(queuedDownload.file);
             interrupted = true;
         } catch (SocketTimeoutException e) {
             CustomFileUtils.forceDelete(queuedDownload.file);
-            LOGGER.error("Timeout - " + queuedDownload.file);
-            e.printStackTrace();
+            LOGGER.error("Timeout - {} - {}", queuedDownload.file, e);
         } catch (Exception e) {
             CustomFileUtils.forceDelete(queuedDownload.file);
-            e.printStackTrace();
+            LOGGER.error("Download failed - {} - {}", queuedDownload.file, e);
         } finally {
             synchronized (downloadsInProgress) {
-                downloadsInProgress.remove(sha1);
+                downloadsInProgress.remove(hashAndPath);
             }
             boolean failed = true;
-
 
             if (Files.exists(queuedDownload.file)) {
                 String hash = CustomFileUtils.getHash(queuedDownload.file, "SHA-1").orElse(null);
 
-                if (!Objects.equals(hash, sha1)) {
+                if (!Objects.equals(hash, hashAndPath.hash)) {
                     bytesDownloaded -= queuedDownload.file.toFile().length();
-                    LOGGER.error("File size: {} File hash: {} Desired file hash: {}", queuedDownload.file.toFile().length(), hash, sha1);
+                    LOGGER.error("File size: {} File hash: {} Desired file hash: {}", queuedDownload.file.toFile().length(), hash, hashAndPath.hash);
                 } else {
                     // Runs on success
                     failed = false;
@@ -109,7 +95,7 @@ public class DownloadManager {
                     LOGGER.warn("Download failed, retrying: " + url);
                     queuedDownload.attempts++;
                     synchronized (queuedDownloads) {
-                        queuedDownloads.put(sha1, queuedDownload);
+                        queuedDownloads.put(hashAndPath, queuedDownload);
                     }
                 } else {
                     queuedDownload.failureCallback.run();
@@ -117,34 +103,33 @@ public class DownloadManager {
                 }
             }
 
-
             downloadNext();
         }
     }
 
     private synchronized void downloadNext() {
         if (downloadsInProgress.size() < MAX_DOWNLOADS_IN_PROGRESS && !queuedDownloads.isEmpty()) {
-            String sha1 = queuedDownloads.keySet().stream().findFirst().get();
-            QueuedDownload queuedDownload = queuedDownloads.remove(sha1);
+            HashAndPath hashAndPath = queuedDownloads.keySet().stream().findFirst().get();
+            QueuedDownload queuedDownload = queuedDownloads.remove(hashAndPath);
 
             if (queuedDownload == null) {
                 return;
             }
 
-            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> downloadTask(sha1, queuedDownload), DOWNLOAD_EXECUTOR);
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> downloadTask(hashAndPath, queuedDownload), DOWNLOAD_EXECUTOR);
 
             synchronized (downloadsInProgress) {
-                downloadsInProgress.put(sha1, new DownloadData(future, queuedDownload.file));
+                downloadsInProgress.put(hashAndPath, new DownloadData(future, queuedDownload.file));
             }
         }
     }
 
-    private void downloadFile(String urlString, String sha1, QueuedDownload queuedDownload) throws IOException, InterruptedException {
+    private void downloadFile(String urlString, HashAndPath hashAndPath, QueuedDownload queuedDownload) throws IOException, InterruptedException {
 
         Path outFile = queuedDownload.file;
 
         if (Files.exists(outFile)) {
-            if (Objects.equals(sha1, CustomFileUtils.getHash(outFile, "SHA-1").orElse(null))) {
+            if (Objects.equals(hashAndPath.hash, CustomFileUtils.getHash(outFile, "SHA-1").orElse(null))) {
                 return;
             } else {
                 CustomFileUtils.forceDelete(outFile);
@@ -161,8 +146,8 @@ public class DownloadManager {
         URLConnection connection = url.openConnection();
         connection.addRequestProperty("Accept-Encoding", "gzip");
         connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-        connection.setConnectTimeout(8000);
-        connection.setReadTimeout(5000);
+        connection.setConnectTimeout(10000);
+        connection.setReadTimeout(10000);
 
         try (OutputStream outputStream = new FileOutputStream(outFile.toFile());
              InputStream rawInputStream = new BufferedInputStream(connection.getInputStream(), BUFFER_SIZE);
@@ -297,7 +282,7 @@ public class DownloadManager {
     }
 
     public static class Urls {
-        private final List<Url> URLs = new ArrayList<>();
+        private final List<Url> URLs = new ArrayList<>(3);
         private int numberOfUrls;
 
         public Urls addUrl(Url url) {

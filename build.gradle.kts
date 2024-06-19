@@ -3,13 +3,13 @@ import groovy.json.JsonSlurper
 
 plugins {
     id("com.github.hierynomus.license") version "0.16.1" apply false
-    id("dev.architectury.loom") version "1.5-SNAPSHOT" apply false
+    id("dev.architectury.loom") version "1.6-SNAPSHOT" apply false
 
     // https://github.com/ReplayMod/preprocessor
     // https://github.com/Fallen-Breath/preprocessor
-    id("com.replaymod.preprocess") version "ce1aeb2be0"
+    id("com.replaymod.preprocess") version "88169fcbc9"
 
-    id("com.github.johnrengelman.shadow") version "7.1.2" apply false
+    id("com.github.johnrengelman.shadow") version "8.1.1" apply false
 }
 
 val settingsFile = File("$rootDir/settings.json")

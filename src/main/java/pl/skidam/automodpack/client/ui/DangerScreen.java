@@ -35,11 +35,11 @@ public class DangerScreen extends VersionedScreen {
         super.init();
         assert this.client != null;
 
-        this.addDrawableChild(buttonWidget(this.width / 2 - 115, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.cancel").formatted(Formatting.RED), button -> {
+        this.addDrawableChild(buttonWidget(this.width / 2 - 115, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.cancel"), button -> {
             this.client.setScreen(parent);
         }));
 
-        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").formatted(Formatting.GREEN), button -> {
+        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").formatted(Formatting.BOLD), button -> {
             Util.getMainWorkerExecutor().execute(() -> {
                 new ModpackUpdater().ModpackUpdaterMain(link, modpackDir, modpackContentFile);
             });
@@ -48,7 +48,6 @@ public class DangerScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        renderBackground(matrices, mouseX, mouseY, delta);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.danger").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.danger.description"), this.width / 2, this.height / 2 - 35, 16777215);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.danger.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);

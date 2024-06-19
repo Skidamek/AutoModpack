@@ -28,12 +28,6 @@
         "versions": "${minecraft_dependency}"
       },
       {
-        "id": "fabricloader",
-        "versions": ">=0.15.7",
-        "optional": true,
-        "reason": "Contains mixinextras >=0.3.5"
-      },
-      {
         "id": "mixinextras",
         "versions": ">=0.3.5"
       }

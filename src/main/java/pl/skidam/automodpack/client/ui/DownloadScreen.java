@@ -6,6 +6,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.Util;
+import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack.client.audio.AudioManager;
@@ -18,8 +19,8 @@ import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 
 public class DownloadScreen extends VersionedScreen {
 
-    private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = new Identifier(MOD_ID, "gui/progress-bar-empty.png");
-    private static final Identifier PROGRESS_BAR_FULL_TEXTURE = new Identifier(MOD_ID, "gui/progress-bar-full.png");
+    private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = Common.id("gui/progress-bar-empty.png");
+    private static final Identifier PROGRESS_BAR_FULL_TEXTURE = Common.id("gui/progress-bar-full.png");
     private static final int PROGRESS_BAR_WIDTH = 250;
     private static final int PROGRESS_BAR_HEIGHT = 20;
     private final DownloadManager downloadManager;
@@ -174,8 +175,6 @@ public class DownloadScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        renderBackground(matrices, mouseX, mouseY, delta);
-
         drawDownloadingFiles(matrices);
         MutableText titleText = VersionedText.literal(header).formatted(Formatting.BOLD);
         drawCenteredTextWithShadow(matrices, this.textRenderer, titleText, this.width / 2, this.height / 2 - 110, 16777215);

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.networking;
 
 import net.minecraft.util.Identifier;
+import pl.skidam.automodpack.init.Common;
 
 import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 
@@ -20,7 +21,7 @@ public enum LoginNetworkingIDs {
     }
 
     public static Identifier getIdentifier(LoginNetworkingIDs ID) {
-        return new Identifier(MOD_ID, ID.toString().toLowerCase());
+        return Common.id(ID.toString().toLowerCase());
     }
 
     public static Integer getByKey(Identifier key) {

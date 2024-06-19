@@ -10,7 +10,6 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collection;
 import java.util.List;
 
 import static pl.skidam.automodpack_core.GlobalVariables.AM_VERSION;
@@ -24,8 +23,8 @@ public class Json {
         try {
             HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
             connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-            connection.setConnectTimeout(3000);
-            connection.setReadTimeout(3000);
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
             connection.setDoOutput(true);
             connection.connect();
             if (connection.getResponseCode() == 200) {
@@ -65,8 +64,8 @@ public class Json {
     public static JsonObject fromUrl(String url) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-        connection.setConnectTimeout(3000);
-        connection.setReadTimeout(3000);
+        connection.setConnectTimeout(5000);
+        connection.setReadTimeout(5000);
         connection.connect();
 
         JsonElement element = null;

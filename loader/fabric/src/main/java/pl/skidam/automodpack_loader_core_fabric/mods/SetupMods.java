@@ -1,12 +1,11 @@
 package pl.skidam.automodpack_loader_core_fabric.mods;
 
-import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
-import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.ModContainerImpl;
 import net.fabricmc.loader.impl.discovery.*;
+import net.fabricmc.loader.impl.entrypoint.EntrypointStorage;
 import net.fabricmc.loader.impl.gui.FabricGuiEntry;
 import net.fabricmc.loader.impl.launch.FabricLauncherBase;
 import net.fabricmc.loader.impl.metadata.DependencyOverrides;
@@ -16,10 +15,10 @@ import pl.skidam.automodpack_loader_core.mods.SetupModsService;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -64,6 +63,9 @@ public class SetupMods implements SetupModsService {
 
     private void removeMods(Collection<ModContainer> modContainers) {
         try {
+            Field f = EntrypointStorage.class.getDeclaredField("entryMap");
+            f.setAccessible(true);
+
             for (ModContainer container : modContainers) {
 
                 FabricLanguageAdapter.mods.remove((ModContainerImpl) container);
@@ -104,11 +106,19 @@ public class SetupMods implements SetupModsService {
         if (path == null) {
             return Optional.empty();
         }
-        for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
-            FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();
-            Path modPath = Paths.get(fileSys.toString());
-            if (modPath.toAbsolutePath().equals(path.toAbsolutePath())) {
-                return Optional.of(modContainer);
+
+        path = path.normalize();
+
+        for (ModContainer modContainer : FabricLanguageAdapter.getAllMods()) {
+            for (Path rootPath : modContainer.getRootPaths()) {
+                FileSystem fileSys = rootPath.getFileSystem();
+                Path modPath = Path.of(fileSys.toString()).toAbsolutePath();
+                if (modPath.equals(path.toAbsolutePath())) {
+                    System.out.println("Found mod: " + modPath);
+                    return Optional.of(modContainer);
+                } else {
+                    System.out.println("Not found mod: " + modPath + " " + path.toAbsolutePath());
+                }
             }
         }
 
@@ -120,7 +130,7 @@ public class SetupMods implements SetupModsService {
             return Optional.empty();
         }
 
-        for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
+        for (ModContainer modContainer : FabricLanguageAdapter.getAllMods()) {
             if (modId.equals(modContainer.getMetadata().getId())) {
                 return Optional.of(modContainer);
             }
@@ -172,7 +182,7 @@ public class SetupMods implements SetupModsService {
             LOGGER.info("Discovering mods from {}", path.getParent().getFileName() + "/" + path.getFileName());
 
             List<?> candidateFinders = List.of(
-                    new ModContainerModCandidateFinder(FabricLoaderImpl.INSTANCE.getAllMods().stream().toList()),
+                    new ModContainerModCandidateFinder(FabricLanguageAdapter.getAllMods().stream().toList()),
                     new DirectoryModCandidateFinder(path, FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()));
 
             FIELD_CANDIDATE_FINDERS.set(discoverer, candidateFinders);
@@ -183,7 +193,7 @@ public class SetupMods implements SetupModsService {
 
     private Collection<ModCandidate> resolveMods(Collection<ModCandidate> modCandidates) throws ModResolutionException {
         Set<String> modIds = new HashSet<>();
-        for (var mod : FabricLoaderImpl.INSTANCE.getAllMods().stream().toList()) {
+        for (var mod : FabricLanguageAdapter.getAllMods().stream().toList()) {
             modIds.add(mod.getMetadata().getId());
         }
 

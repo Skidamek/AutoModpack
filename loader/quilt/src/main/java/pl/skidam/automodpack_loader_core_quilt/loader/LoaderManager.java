@@ -8,9 +8,10 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.metadata.ModEnvironment;
 import org.quiltmc.loader.api.LoaderValue;
 import org.quiltmc.loader.api.ModContainer;
+import org.quiltmc.loader.api.ModDependency;
 import org.quiltmc.loader.api.QuiltLoader;
 import org.quiltmc.loader.api.minecraft.MinecraftQuiltLoader;
-import pl.skidam.automodpack_loader_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderService;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -22,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -42,24 +44,44 @@ public class LoaderManager implements LoaderService {
         return QuiltLoader.isModLoaded(modId);
     }
 
+    private Collection<Mod> modList = new ArrayList<>();
+    private int lastLoadingModListSize = -1;
+
     @Override
     public Collection<Mod> getModList() {
+
         Collection <ModContainer> mods = QuiltLoader.getAllMods();
 
+        if (!modList.isEmpty() && lastLoadingModListSize == mods.size()) {
+            return modList;
+        }
+
+        lastLoadingModListSize = mods.size();
         Collection<Mod> modList = new ArrayList<>();
 
         for (var info : mods) {
             String modID = info.metadata().id();
+            Path path = getModPath(modID);
+            // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
+            if (path == null || path.toString().isEmpty()) {
+                continue;
+            }
+            List<String> dependencies = info.metadata().depends().stream().map(d -> {
+                if (d instanceof ModDependency.Only only) {
+                    return only.id().id(); // what the heck
+                }
+                return null;
+            }).filter(Objects::nonNull).toList();
             Mod mod = new Mod(modID,
                     info.metadata().version().raw(),
-                    getModPath(modID),
-                    isJiJedMod(modID),
-                    getModEnvironment(modID)
+                    path,
+                    getModEnvironment(modID),
+                    dependencies
             );
             modList.add(mod);
         }
 
-        return modList;
+        return this.modList = modList;
     }
 
     @Override
@@ -303,10 +325,5 @@ public class LoaderManager implements LoaderService {
         }
 
         return null;
-    }
-
-    @Override
-    public boolean isJiJedMod(String modId) {
-        return false;
     }
 }

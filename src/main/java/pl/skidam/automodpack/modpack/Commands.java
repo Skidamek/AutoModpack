@@ -6,13 +6,10 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
-import pl.skidam.automodpack.ModpackGenAdditions;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.netty.HttpServer;
-import pl.skidam.automodpack_core.modpack.Modpack;
 
 import java.io.IOException;
 
@@ -188,7 +185,7 @@ public class Commands {
     private static int generateModpack(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
 
-            if (Modpack.isGenerating()) {
+            if (modpack.isGenerating()) {
                 VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack is already generating! Please wait!")
                                 .formatted(Formatting.RED),
                         false);
@@ -199,7 +196,7 @@ public class Commands {
                             .formatted(Formatting.YELLOW),
                     true);
             long start = System.currentTimeMillis();
-            if (ModpackGenAdditions.generate()) {
+            if (modpack.generateNew()) { // TODO generate old if exists
                 VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms")
                                 .formatted(Formatting.GREEN),
                         true);

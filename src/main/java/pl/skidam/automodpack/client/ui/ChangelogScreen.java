@@ -86,8 +86,6 @@ public class ChangelogScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        renderBackground(matrices, mouseX, mouseY, delta);
-
         this.listEntryWidget.render(matrices, mouseX, mouseY, delta);
 
         ListEntry selectedEntry = listEntryWidget.getSelectedOrNull();

@@ -1,0 +1,24 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "LGPLv3"
+
+[[mods]]
+modId = "${id}"
+version = "${version}"
+displayName = "${name}"
+displayURL = "https://modrinth.com/mod/automodpack"
+authors = "Skidam"
+description = '''
+
+'''
+logoFile = "icon.png"
+
+[[dependencies."${id}"]]
+modId = "minecraft"
+mandatory = true
+versionRange = "${minecraft_dependency}"
+ordering = "NONE"
+side = "BOTH"
+
+[[mixins]]
+config = "automodpack-main.mixins.json"

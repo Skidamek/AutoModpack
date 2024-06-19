@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_loader_core.loader;
 
+import pl.skidam.automodpack_core.loader.LoaderService;
+
 import java.nio.file.Path;
 import java.util.Collection;
 
@@ -66,11 +68,6 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public String getModIdFromNotLoadedJar(Path file) {
-        throw new AssertionError("Loader class not found");
-    }
-
-    @Override
-    public boolean isJiJedMod(String modId) {
         throw new AssertionError("Loader class not found");
     }
 }

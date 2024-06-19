@@ -7,6 +7,11 @@ plugins {
 }
 
 val loader = project.findProperty("mod_platform") as String
+var mcVer = (project.findProperty("minecraft_version") as String).replace(".", "").toInt()
+// make from 3 char release 4 char release e.g. 1.21 -> 1.21.0 == 1210
+if (mcVer < 1000) {
+    mcVer *= 10
+}
 
 base {
     archivesName = rootProject.findProperty("archives_base_name") as String + "-" + project.name
@@ -28,7 +33,18 @@ dependencies {
     implementation(project(":loader-core"))
 
     minecraft("com.mojang:minecraft:${project.findProperty("minecraft_version")}")
-    mappings("net.fabricmc:yarn:${project.findProperty("yarn_mappings")}:v2")
+
+    // These has to be patched
+    if (loader == "neoforge" && mcVer == 1210) {
+        mappings(
+            loom.layered {
+                mappings("net.fabricmc:yarn:${project.findProperty("yarn_mappings")}:v2")
+                mappings("dev.architectury:yarn-mappings-patch-neoforge:1.21+build.4")
+            }
+        )
+    } else {
+        mappings("net.fabricmc:yarn:${project.findProperty("yarn_mappings")}:v2")
+    }
 
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
@@ -46,12 +62,10 @@ dependencies {
 
 tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
+    mergeServiceFiles()
 
     from(project(":core").sourceSets.main.get().output)
     from(project(":loader-core").sourceSets.main.get().output)
-
-    exclude("pl/skidam/automodpack_loader_core/loader/LoaderManager.class")
-    exclude("pl/skidam/automodpack_loader_core/mods/SetupMods.class")
 
     if (project.name.contains("fabric")) {
         relocate("pl.skidam.automodpack_loader_core_fabric", "pl.skidam.automodpack_loader_core")
@@ -63,6 +77,9 @@ tasks.named<ShadowJar>("shadowJar") {
         relocate("pl.skidam.automodpack_loader_core_forge", "pl.skidam.automodpack_loader_core")
     }
 
+    exclude("pl/skidam/automodpack_loader_core/loader/LoaderManager.class")
+    exclude("pl/skidam/automodpack_loader_core/mods/SetupMods.class")
+
     configurations = emptyList()
 
     manifest {
@@ -71,8 +88,13 @@ tasks.named<ShadowJar>("shadowJar") {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    if (mcVer >= 1206) {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    } else {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 
     withSourcesJar()
 }

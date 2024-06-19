@@ -1,20 +1,20 @@
 package pl.skidam.automodpack.init;
 
 //#if NEOFORGE
-//$$ import net.neoforged.bus.api.IEventBus;
-//$$ import net.neoforged.bus.api.SubscribeEvent;
-//$$ import net.neoforged.fml.common.Mod;
-//$$ import net.neoforged.neoforge.common.NeoForge;
-//$$ import net.neoforged.neoforge.event.RegisterCommandsEvent;
-//$$ import pl.skidam.automodpack.ModpackGenAdditions;
+//#if MC > 1205
+//$$ import net.neoforged.fml.common.EventBusSubscriber;
+//#endif
 //$$ import pl.skidam.automodpack.client.ScreenImpl;
 //$$ import pl.skidam.automodpack.client.audio.AudioManager;
 //$$ import pl.skidam.automodpack.modpack.Commands;
 //$$ import pl.skidam.automodpack.networking.ModPackets;
-//$$ import pl.skidam.automodpack_core.netty.HttpServer;
-//$$ import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-//$$ import pl.skidam.automodpack_loader_core.loader.LoaderService;
+//$$ import pl.skidam.automodpack_core.loader.LoaderService;
 //$$ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+//$$
+//$$ import net.neoforged.bus.api.IEventBus;
+//$$ import net.neoforged.bus.api.SubscribeEvent;
+//$$ import net.neoforged.fml.common.Mod;
+//$$ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 //$$
 //$$ import static pl.skidam.automodpack_core.GlobalVariables.*;
 //$$
@@ -27,19 +27,19 @@ package pl.skidam.automodpack.init;
 //$$          long start = System.currentTimeMillis();
 //$$          LOGGER.info("Launching AutoModpack...");
 //$$
-//$$          // initialize httpserver
-//$$          httpServer = new HttpServer();
+//$$          Common.init();
 //$$
-//$$          if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.SERVER) {
-//$$              if (serverConfig.generateModpackOnStart) {
-//$$                  LOGGER.info("Generating modpack...");
-//$$                  long genStart = System.currentTimeMillis();
-//$$                  if (ModpackGenAdditions.generate()) {
-//$$                      LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
-//$$                  } else {
-//$$                      LOGGER.error("Failed to generate modpack!");
-//$$                  }
-//$$              }
+//$$          if (LOADER_MANAGER.getEnvironmentType() == LoaderService.EnvironmentType.SERVER) {
+//$$             Common.serverInit();
+//$$             if (serverConfig.generateModpackOnStart) {
+//$$                 LOGGER.info("Generating modpack...");
+//$$                 long genStart = System.currentTimeMillis();
+//$$                 if (modpack.generateNew()) {
+//$$                     LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+//$$                 } else {
+//$$                     LOGGER.error("Failed to generate modpack!");
+//$$                 }
+//$$             }
 //$$              ModPackets.registerS2CPackets();
 //$$          } else {
 //$$              ModPackets.registerC2SPackets();
@@ -50,7 +50,11 @@ package pl.skidam.automodpack.init;
 //$$          LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
 //$$     }
 //$$
-//$$     @Mod.EventBusSubscriber(modid = MOD_ID)
+//#if MC > 1205
+//$$    @EventBusSubscriber(modid = MOD_ID)
+//#else
+//$$    @Mod.EventBusSubscriber(modid = MOD_ID)
+//#endif
 //$$     public static class events {
 //$$         @SubscribeEvent
 //$$         public static void onCommandsRegister(RegisterCommandsEvent event) {

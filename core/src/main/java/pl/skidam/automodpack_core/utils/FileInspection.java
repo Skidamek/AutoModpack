@@ -48,6 +48,8 @@ public class FileInspection {
                 entry = zipFile.getEntry("quilt.mod.json");
             } else if (zipFile.getEntry("META-INF/mods.toml") != null) {
                 entry = zipFile.getEntry("META-INF/mods.toml");
+            } else if (zipFile.getEntry("META-INF/neoforge.mods.toml") != null) {
+                entry = zipFile.getEntry("META-INF/neoforge.mods.toml");
             }
 
             if (entry == null) {
@@ -59,7 +61,7 @@ public class FileInspection {
             InputStream stream = zipFile.getInputStream(entry);
             BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
 
-            if (entry.getName().equals("META-INF/mods.toml")) {
+            if (entry.getName().equals("META-INF/mods.toml") || entry.getName().equals("META-INF/neoforge.mods.toml")) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     line = line.trim().toLowerCase();
@@ -123,6 +125,8 @@ public class FileInspection {
                 entry = zipFile.getEntry("quilt.mod.json");
             } else if (zipFile.getEntry("META-INF/mods.toml") != null) {
                 entry = zipFile.getEntry("META-INF/mods.toml");
+            } else if (zipFile.getEntry("META-INF/neoforge.mods.toml") != null) {
+                entry = zipFile.getEntry("META-INF/neoforge.mods.toml");
             }
 
             if (entry == null) {
@@ -134,7 +138,7 @@ public class FileInspection {
             InputStream stream = zipFile.getInputStream(entry);
             BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
 
-            if (entry.getName().equals("META-INF/mods.toml")) {
+            if (entry.getName().equals("META-INF/mods.toml") || entry.getName().equals("META-INF/neoforge.mods.toml")) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (!line.startsWith("version")) {

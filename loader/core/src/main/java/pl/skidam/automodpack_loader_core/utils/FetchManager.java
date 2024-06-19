@@ -11,10 +11,10 @@ import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class FetchManager {
 
-    // throw all the sha1 and murmurs
-    // send request to modrinth with sha1s
-    // send request to curseforge with murmurs
-    // return the results i guess
+    // Throw all the sha1 and murmurs
+    // Send request to Modrinth with sha1s
+    // Send request to CurseForge with murmurs
+    // Return the results i guess
 
     public record FetchData(String file, String sha1, String murmur, String fileSize, String fileType) { }
     public record FetchedData (List<String> urls, List<String> mainPageUrls) { }
@@ -48,7 +48,10 @@ public class FetchManager {
         }
 
         try {
-            completableFuture = CompletableFuture.runAsync(() -> fetchBySha1(mo)).thenRunAsync(() -> fetchByMurmur(cf));
+            completableFuture = CompletableFuture.runAsync(() -> {
+                fetchBySha1(mo);
+                fetchByMurmur(cf);
+            });
             completableFuture.join();
         } catch (CancellationException e) {
             LOGGER.warn("Fetch canceled");
@@ -71,6 +74,7 @@ public class FetchManager {
         }
     }
 
+    // TODO check if it really works
     private void fetchByMurmur(Map<String, String> hashes) {
         List<CurseForgeAPI> cfFileInfos = CurseForgeAPI.getModInfosFromFingerPrints(hashes);
         if (cfFileInfos == null) return;

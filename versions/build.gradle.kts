@@ -62,7 +62,25 @@ dependencies {
 	// TODO fix dev env launch
 
 	minecraft("com.mojang:minecraft:${project.findProperty("minecraft_version")}")
-	mappings("net.fabricmc:yarn:${project.findProperty("yarn_mappings")}:v2")
+
+	// Mappings have to be patched for new neoforge
+	if (modBrand == "neoforge" && mcVer == 1206) {
+		mappings(
+			loom.layered {
+				mappings("net.fabricmc:yarn:${project.findProperty("yarn_mappings")}:v2")
+				mappings("dev.architectury:yarn-mappings-patch-neoforge:1.20.6+build.4")
+			}
+		)
+	} else if (modBrand == "neoforge" && mcVer == 1210) {
+		mappings(
+			loom.layered {
+				mappings("net.fabricmc:yarn:${project.findProperty("yarn_mappings")}:v2")
+				mappings("dev.architectury:yarn-mappings-patch-neoforge:1.21+build.4")
+			}
+		)
+	} else {
+		mappings("net.fabricmc:yarn:${project.findProperty("yarn_mappings")}:v2")
+	}
 
 	if (modBrand == "fabric" || modBrand == "quilt") {
 		setOf(
@@ -78,6 +96,9 @@ dependencies {
 		} else {
 			include(modImplementation(fabricApi.module("fabric-command-api-v2", project.findProperty("fabric_version") as String))!!) // TODO transitive false
 		}
+
+		// JiJ mixin extras, fabric loader 0.15.7 has it but many people are using older versions
+		include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${rootProject.findProperty("mixin_extras_version")}")!!)!!)
 	}
 
 	if (modBrand == "fabric") {
@@ -142,6 +163,7 @@ tasks.named<ProcessResources>("processResources") {
 		"fabric" to listOf("fabric.mod.json"),
 		"quilt" to listOf("quilt.mod.json"),
 		"forge" to listOf("META-INF/mods.toml", "pack.mcmeta"),
+		"neoforge" to listOf("META-INF/neoforge.mods.toml", "pack.mcmeta"),
 	).forEach { (brand, files) ->
 		files.forEach { file ->
 			if (modBrand.contains(brand)) {
@@ -177,8 +199,13 @@ tasks.named<RemapJarTask>("remapJar") {
 }
 
 java {
-	sourceCompatibility = JavaVersion.VERSION_17
-	targetCompatibility = JavaVersion.VERSION_17
+	if (mcVer >= 1206) {
+		sourceCompatibility = JavaVersion.VERSION_21
+		targetCompatibility = JavaVersion.VERSION_21
+	} else {
+		sourceCompatibility = JavaVersion.VERSION_17
+		targetCompatibility = JavaVersion.VERSION_17
+	}
 
 	withSourcesJar()
 }
@@ -204,14 +231,14 @@ tasks.named("build") {
 
 tasks.register("mergeJars") {
 	doLast {
-		val loaders: List<String> = listOf("fabric", "neoforge/fml", "forge/fml47", "forge/fml40") // add quilt when it's ready
+		val loaders: List<String> = listOf("fabric", "neoforge/fml2", "neoforge/fml4", "forge/fml47", "forge/fml40") // add quilt when it's ready
 
 		loaders.forEach { it ->
 
 			var loader = it
 			if (it == "quilt") loader = "fabric" // we are matching quilt preload to fabric mod jar since there match with each other
 			if ((it == "forge/fml40" && mcVer <= 1182) || (it == "forge/fml47" && mcVer > 1182)) loader = "forge"
-			if (it == "neoforge/fml") loader = "neoforge"
+			if ((it == "neoforge/fml2" && mcVer <= 1204) || (it == "neoforge/fml4" && mcVer >= 1206)) loader = "neoforge"
 
 			if (loader != modBrand) {
 				return@forEach

@@ -15,11 +15,11 @@ import pl.skidam.automodpack.networking.LoginNetworkingIDs;
 import pl.skidam.automodpack.networking.PayloadHelper;
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 
-// TODO find better way to do this
+// TODO find better way to do this, its mixin only for 1.20.2 and above
 @Mixin(value = LoginQueryResponseC2SPacket.class, priority = 300)
 //#else
-//$$ import pl.skidam.automodpack.init.CommonInit;
-//$$ @Mixin(CommonInit.class)
+//$$ import pl.skidam.automodpack.init.Common;
+//$$ @Mixin(Common.class)
 //#endif
 public class LoginQueryResponseC2SPacketMixin {
     //#if MC >= 1202

@@ -2,12 +2,13 @@ package pl.skidam.automodpack_loader_core_forge.loader;
 
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.fml.loading.moddiscovery.ModFile;
 import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
 import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 import net.minecraftforge.forgespi.language.IModInfo;
 import net.minecraftforge.forgespi.locating.IModFile;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_loader_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_loader_core_forge.mods.LoadedMods;
 
 import java.io.BufferedReader;
@@ -36,25 +37,35 @@ public class LoaderManager implements LoaderService {
         return FMLLoader.getLoadingModList().getModFileById(modId) != null;
     }
 
+    private Collection<Mod> modList = new ArrayList<>();
+    private int lastLoadingModListSize = -1;
+
     @Override
     public Collection<Mod> getModList() {
 
         List<ModInfo> modInfo = FMLLoader.getLoadingModList().getMods();
-        List<Mod> modList = new ArrayList<>();
+
+        if (!modList.isEmpty() && lastLoadingModListSize == modInfo.size()) {
+            // return cached
+            return modList;
+        }
+
+        lastLoadingModListSize = modInfo.size();
+        Collection<Mod> modList = new ArrayList<>();
 
         for (ModInfo info: modInfo) {
             String modID = info.getModId();
+            List<String> dependencies = info.getDependencies().stream().filter(IModInfo.ModVersion::isMandatory).map(IModInfo.ModVersion::getModId).toList();
             Mod mod = new Mod(modID,
                     info.getOwningFile().versionString(),
                     getModPath(modID),
-                    isJiJedMod(modID),
-                    getModEnvironment(modID)
-                    // TODO change it to mod specific platform
+                    getModEnvironment(modID),
+                    dependencies
             );
             modList.add(mod);
         }
 
-        return modList;
+        return this.modList = modList;
     }
 
     @Override
@@ -69,7 +80,7 @@ public class LoaderManager implements LoaderService {
         }
 
         if (preload) {
-            Collection<IModFile> modFiles = LoadedMods.INSTANCE.mods();
+            Collection<ModFile> modFiles = LoadedMods.INSTANCE.candidateMods;
             for (var modFile: modFiles) {
                 if (modFile.getModFileInfo() == null || modFile.getModInfos().isEmpty()) {
                     continue;
@@ -102,7 +113,7 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
-        if (file == null || !Files.exists(file)) {
+        if (file == null || !Files.isRegularFile(file)) {
             return EnvironmentType.UNIVERSAL;
         }
 
@@ -148,7 +159,7 @@ public class LoaderManager implements LoaderService {
                 return FMLLoader.versionInfo().mcVersion();
             }
 
-            Collection<IModFile> modFiles = LoadedMods.INSTANCE.mods();
+            Collection<ModFile> modFiles = LoadedMods.INSTANCE.candidateMods;
 
             for (var modFile: modFiles) {
                 if (modFile.getModFileInfo() == null || modFile.getModInfos().isEmpty()) {
@@ -183,10 +194,6 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public EnvironmentType getModEnvironment(String modId) {
-        if (isJiJedMod(modId)) {
-            // It doesn't really matter, but change it to correct one in the future
-            return EnvironmentType.UNIVERSAL;
-        }
         return getModEnvironmentFromNotLoadedJar(getModPath(modId));
     }
 
@@ -210,12 +217,5 @@ public class LoaderManager implements LoaderService {
     @Override
     public String getModIdFromNotLoadedJar(Path file) {
         return FileInspection.getModID(file);
-    }
-
-    @Override
-    public boolean isJiJedMod(String modId) {
-        Path modPath = getModPath(modId);
-        String modName = modPath.getFileName().toString();
-        return !modPath.toString().endsWith(modName);
     }
 }

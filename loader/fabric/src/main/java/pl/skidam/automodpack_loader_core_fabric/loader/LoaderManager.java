@@ -6,9 +6,9 @@ import com.google.gson.JsonSyntaxException;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
+import net.fabricmc.loader.api.metadata.ModDependency;
 import net.fabricmc.loader.api.metadata.ModEnvironment;
-import net.fabricmc.loader.api.metadata.ModOrigin;
-import pl.skidam.automodpack_loader_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderService;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -20,12 +20,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.GlobalVariables.preload;
 
 @SuppressWarnings("unused")
 public class LoaderManager implements LoaderService {
@@ -40,31 +42,39 @@ public class LoaderManager implements LoaderService {
         return FabricLoader.getInstance().isModLoaded(modId);
     }
 
+    private Collection<Mod> modList = new ArrayList<>();
+    private int lastLoadingModListSize = -1;
+
     @Override
     public Collection<Mod> getModList() {
 
         Collection<ModContainer> mods = FabricLoader.getInstance().getAllMods();
+
+        if (!modList.isEmpty() && lastLoadingModListSize == mods.size()) {
+            return modList;
+        }
+
+        lastLoadingModListSize = mods.size();
         Collection<Mod> modList = new ArrayList<>();
 
         for (var info : mods) {
             String modID = info.getMetadata().getId();
+            Path path = getModPath(modID);
+            // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
+            if (path == null || path.toString().isEmpty()) {
+                continue;
+            }
+            List<String> dependencies = info.getMetadata().getDependencies().stream().filter(d -> d.getKind().equals(ModDependency.Kind.DEPENDS)).map(ModDependency::getModId).toList();
             Mod mod = new Mod(modID,
                     info.getMetadata().getVersion().getFriendlyString(),
-                    getModPath(modID),
-                    isJiJedMod(modID),
-                    getModEnvironment(modID)
+                    path,
+                    getModEnvironment(modID),
+                    dependencies
             );
             modList.add(mod);
-
-//            System.out.println(info.getRootPaths().get(0).getFileSystem());
-//            System.out.println("0");
-            info.getContainedMods().forEach(modContainer -> {
-                System.out.println(modContainer.getRootPaths().get(0).getFileSystem());
-//                System.out.println("1");
-            });
         }
 
-        return modList;
+        return this.modList = modList;
     }
 
     @Override
@@ -78,10 +88,9 @@ public class LoaderManager implements LoaderService {
         if (!isModLoaded(modId)) return null;
 
         for (ModContainer modContainer : FabricLoader.getInstance().getAllMods()) {
-            FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();
-            Path modFile = Paths.get(fileSys.toString());
             if (modContainer.getMetadata().getId().equals(modId)) {
-                return modFile;
+                FileSystem fileSys = modContainer.getRootPaths().get(0).getFileSystem();
+                return Path.of(fileSys.toString());
             }
         }
 
@@ -221,6 +230,8 @@ public class LoaderManager implements LoaderService {
     @Override
     public String getModIdFromNotLoadedJar(Path file) {
         try {
+            if (!Files.isRegularFile(file)) return null;
+
             ZipFile zipFile = new ZipFile(file.toFile());
             ZipEntry entry = null;
             if (zipFile.getEntry("fabric.mod.json") != null) {
@@ -251,10 +262,5 @@ public class LoaderManager implements LoaderService {
         }
 
         return null;
-    }
-
-    @Override
-    public boolean isJiJedMod(String modId) {
-        return FabricLoader.getInstance().getModContainer(modId).isPresent() && FabricLoader.getInstance().getModContainer(modId).get().getOrigin().getKind().equals(ModOrigin.Kind.NESTED);
     }
 }

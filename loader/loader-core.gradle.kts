@@ -21,6 +21,7 @@ dependencies {
 }
 
 java {
+    // leave it on java 17 to be compatible with older versions and we dont really need 21 there anyway
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 

@@ -6,6 +6,8 @@ import com.google.gson.JsonSyntaxException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
+import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.modpack.Modpack;
 
 import java.io.FileNotFoundException;
@@ -18,7 +20,6 @@ import java.util.concurrent.CompletableFuture;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
-    private final int CHUNK_SIZE = 512 * 1024 * 1024; // Read file by 512mb chunks, should be good
     private final String HTTP_REQUEST_BASE = "/automodpack";
     private final String HTTP_REQUEST_GET = "GET " + HTTP_REQUEST_BASE;
     private final String HTTP_REQUEST_REFRESH = "POST " + HTTP_REQUEST_BASE + "/refresh";
@@ -61,8 +62,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     }
 
     public List<String> parseBodyStrings(String requestPacket) {
-        String jsonPart = requestPacket.substring(requestPacket.lastIndexOf("[")).trim();
         List<String> stringList = new ArrayList<>();
+        if (!requestPacket.contains("[")) {
+            return stringList;
+        }
+        String jsonPart = requestPacket.substring(requestPacket.lastIndexOf("[")).trim();
         try {
             JsonArray jsonArray = new Gson().fromJson(jsonPart, JsonArray.class);
             for (int i = 0; i < jsonArray.size(); i++) {
@@ -113,13 +117,13 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         List<String> hashes = parseBodyStrings(request);
         LOGGER.info("Received refresh request for files of hashes: {}", hashes);
         List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
-        List<Modpack.Content> modpacks = new ArrayList<>();
+        List<ModpackContent> modpacks = new ArrayList<>();
         for (String hash : hashes) {
             final Optional<Path> optionalPath = resolvePath(hash);
             if (optionalPath.isEmpty()) continue;
             Path path = optionalPath.get();
-            Modpack.Content modpack = null;
-            for (var content : Modpack.modpacks) {
+            ModpackContent modpack = null;
+            for (var content : GlobalVariables.modpack.modpacks.values()) {
                 if (!content.pathsMap.getMap().containsKey(hash)) {
                     continue;
                 }
@@ -145,7 +149,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         creationFutures.forEach(CompletableFuture::join);
-        modpacks.forEach(Modpack.Content::saveModpackContent);
+        modpacks.forEach(ModpackContent::saveModpackContent);
 
         LOGGER.info("Sending new modpack-content.json");
 
@@ -196,11 +200,6 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 raf.close();
                 context.pipeline().firstContext().channel().close();
             });
-//            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, fileLength, CHUNK_SIZE);
-//            chunkedFile.readAllWriteAndFlush(context, () -> {
-//                raf.close();
-//                context.channel().close();
-//            });
         } catch (Exception e) {
             LOGGER.error("Couldn't read channel!", e);
         }

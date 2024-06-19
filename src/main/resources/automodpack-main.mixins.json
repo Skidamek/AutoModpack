@@ -10,6 +10,7 @@
     "core.LoginQueryRequestS2CPacketMixin",
     "core.LoginQueryResponseC2SPacketMixin",
     "core.MinecraftServerMixin",
+    "core.PlayerManagerMixin",
     "core.ServerLoginNetworkHandlerAccessor",
     "core.ServerLoginNetworkHandlerMixin"
   ],

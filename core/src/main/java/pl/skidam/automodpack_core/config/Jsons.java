@@ -21,6 +21,8 @@ public class Jsons {
 //        public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
 //        public List<List<String>> forceLoad = new ArrayList<>();
         public boolean requireAutoModpackOnClient = true;
+        public boolean nagUnModdedClients = true;
+        public String nagMessage= "This server provides dedicated modpack through AutoModpack!";
         public boolean autoExcludeServerSideMods = true;
 //        public boolean velocityMode = false; compat plugin... someday I hope
 //        public boolean forceToDisableAllOtherModsOnClients = false;

@@ -5,19 +5,20 @@ import io.netty.buffer.Unpooled;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
-import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.*;
 import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_core.netty.HttpServer;
-import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.utils.Ip;
+
+import java.net.SocketAddress;
 
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -30,7 +31,38 @@ public class HandshakeS2CPacket {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         String playerName = profile.getName();
 
+
+        SocketAddress playerIp = connection.getAddress();
+        Whitelist whitelist = server.getPlayerManager().getWhitelist();
+        boolean isWhitelistEnabled = server.getPlayerManager().isWhitelistEnabled();
+        if (isWhitelistEnabled && whitelist != null) {
+            OperatorList operatorList = server.getPlayerManager().getOpList();
+            if (operatorList != null && operatorList.get(profile) == null && !whitelist.isAllowed(profile)) {
+                LOGGER.warn("Not providing modpack. {} is not whitelisted.", playerName);
+                return; // Player is not whitelisted return
+            } else if (!whitelist.isAllowed(profile)) {
+                LOGGER.warn("Not providing modpack. {} is not whitelisted.", playerName);
+                return; // Player is not whitelisted return
+            }
+        }
+
+        BannedPlayerList bannedPlayerList = server.getPlayerManager().getUserBanList();
+        BannedIpList bannedIpList = server.getPlayerManager().getIpBanList();
+
+        if (bannedIpList.isBanned(playerIp)) {
+            LOGGER.warn("Not providing modpack. IP {} is banned.", playerIp);
+            return; // Player IP is banned return
+        }
+
+        if (bannedPlayerList.contains(profile)) {
+            LOGGER.warn("Not providing modpack. {} is banned.", playerName);
+            return; // Player is banned return
+        }
+
+
+
         if (!understood) {
+            Common.players.put(profile, false);
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
             if (serverConfig.requireAutoModpackOnClient) {
                 Text reason = VersionedText.literal("AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
@@ -38,6 +70,7 @@ public class HandshakeS2CPacket {
                 connection.disconnect(reason);
             }
         } else {
+            Common.players.put(profile, true);
             loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, buf, sender)));
         }
     }
@@ -70,7 +103,7 @@ public class HandshakeS2CPacket {
             return;
         }
 
-        if (Modpack.isGenerating()) {
+        if (modpack.isGenerating()) {
             Text reason = VersionedText.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
             connection.send(new LoginDisconnectS2CPacket(reason));
             connection.disconnect(reason);

@@ -67,7 +67,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
     public final ListEntry getEntryAtPos(double x, double y) {
         int int_5 = MathHelper.floor(y - (double) getTop()) - this.headerHeight + (int) this.getScrollAmount() - 4;
         int index = int_5 / this.itemHeight;
-        return x < (double) this.getScrollbarPositionX() && x >= (double) getRowLeft() && x <= (double) (getRowLeft() + getRowWidth()) && index >= 0 && int_5 >= 0 && index < this.getEntryCount() ? this.children().get(index) : null;
+        return x < (double) this.getScrollbarX() && x >= (double) getRowLeft() && x <= (double) (getRowLeft() + getRowWidth()) && index >= 0 && int_5 >= 0 && index < this.getEntryCount() ? this.children().get(index) : null;
     }
 
     public int getTop() {
@@ -81,7 +81,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
     @Override
     protected void updateScrollingState(double mouseX, double mouseY, int button) {
         super.updateScrollingState(mouseX, mouseY, button);
-        this.scrolling = button == 0 && mouseX >= (double) this.getScrollbarPositionX() && mouseX < (double) (this.getScrollbarPositionX() + 6);
+        this.scrolling = button == 0 && mouseX >= (double) this.getScrollbarX() && mouseX < (double) (this.getScrollbarX() + 6);
     }
 
     @Override
@@ -113,7 +113,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
     }
 
     @Override
-    protected int getScrollbarPositionX() {
+    protected int getScrollbarX() {
         return this.width - 6;
     }
 

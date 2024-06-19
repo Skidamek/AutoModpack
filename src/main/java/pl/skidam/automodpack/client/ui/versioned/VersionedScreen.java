@@ -31,14 +31,19 @@ public class VersionedScreen extends Screen {
 //$$    public void render(MatrixStack matrix, int mouseX, int mouseY, float delta) {
 //$$        VersionedMatrices matrices = new VersionedMatrices();
 //#else
-@Override
-public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
+    @Override
+    public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
         VersionedMatrices matrices = new VersionedMatrices(this.client, matrix.getVertexConsumers());
 //#endif
-        versionedRender(matrices, mouseX, mouseY, delta);
+
+        // Render background
         super.render(matrices, mouseX, mouseY, delta);
+
+        // Render the rest of our screen
+        versionedRender(matrices, mouseX, mouseY, delta);
     }
 
+    // This method is to be override by the child classes
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
 
 

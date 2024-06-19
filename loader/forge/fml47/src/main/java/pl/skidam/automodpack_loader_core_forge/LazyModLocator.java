@@ -53,12 +53,10 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
 
     // Code based on connector's https://github.com/Sinytra/Connector/blob/0514fec8f189b88c5cec54dc5632fbcee13d56dc/src/main/java/dev/su5ed/sinytra/connector/locator/EmbeddedDependencies.java#L88
     private IModFile getMainMod() throws IOException, URISyntaxException {
-        GlobalVariables.LOGGER.info("Creating mod");
         final Path SELF_PATH = uncheck(() -> {
             URL jarLocation = LazyModLocator.class.getProtectionDomain().getCodeSource().getLocation();
             return Path.of(jarLocation.toURI());
         });
-        GlobalVariables.LOGGER.info("Self path: " + SELF_PATH.toAbsolutePath());
 
         final String depName = "automodpack-mod.jar";
 
@@ -68,9 +66,7 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
         final FileSystem zipFS = FileSystems.newFileSystem(filePathUri, outerFsArgs);
         final Path modPath = zipFS.getPath("/");
 
-        GlobalVariables.LOGGER.info("Mod path: " + modPath.toAbsolutePath());
         var mod = createMod(modPath);
-        GlobalVariables.LOGGER.info("Created mod: " + mod);
         return mod.file();
     }
 }

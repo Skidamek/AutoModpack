@@ -8,8 +8,7 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_loader_core.loader.LoaderService;
-import pl.skidam.automodpack_loader_core.mods.SetupMods;
+import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_loader_core.utils.ManifestReader;
 
 import java.io.IOException;
@@ -25,17 +24,11 @@ public class Preload {
     public Preload() {
         try {
             long start = System.currentTimeMillis();
-
             LOGGER.info("Prelaunching AutoModpack...");
-
             initializeGlobalVariables();
-
             loadConfigs();
-
             createPaths();
-
             updateAll(clientConfig.selectedModpack);
-
             LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
         } catch (Exception e) {
             e.printStackTrace();
@@ -45,7 +38,7 @@ public class Preload {
 
     private void updateAll(String selectedModpack) {
         var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
-        if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT && optionalSelectedModpackDir.isPresent()) {
+        if (LOADER_MANAGER.getEnvironmentType() == LoaderService.EnvironmentType.CLIENT && optionalSelectedModpackDir.isPresent()) {
 
             selectedModpackDir = optionalSelectedModpackDir.get();
 
@@ -73,11 +66,12 @@ public class Preload {
     private void initializeGlobalVariables() {
         // Initialize global variables
         preload = true;
-        MC_VERSION = new LoaderManager().getModVersion("minecraft");
+        LOADER_MANAGER = new LoaderManager();
+        MC_VERSION = LOADER_MANAGER.getModVersion("minecraft");
         // Can't get via automodpack version though loader methods since this mod isn't loaded yet... At least on forge...
         AM_VERSION = ManifestReader.getAutoModpackVersion();
-        LOADER_VERSION = new LoaderManager().getLoaderVersion();
-        LOADER = new LoaderManager().getPlatformType().toString().toLowerCase();
+        LOADER_VERSION = LOADER_MANAGER.getLoaderVersion();
+        LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
     }
 
     private void loadConfigs() {

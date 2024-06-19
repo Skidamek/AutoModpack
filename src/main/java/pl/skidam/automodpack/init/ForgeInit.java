@@ -1,22 +1,19 @@
 package pl.skidam.automodpack.init;
 
 //#if FORGE
-//$$ import pl.skidam.automodpack.ModpackGenAdditions;
 //$$ import pl.skidam.automodpack.client.ScreenImpl;
 //$$ import pl.skidam.automodpack.client.audio.AudioManager;
 //$$ import pl.skidam.automodpack.modpack.Commands;
 //$$ import pl.skidam.automodpack.networking.ModPackets;
-//$$ import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-//$$ import pl.skidam.automodpack_loader_core.loader.LoaderService;
+//$$ import pl.skidam.automodpack_core.loader.LoaderService;
 //$$ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
-//$$ import pl.skidam.automodpack_core.netty.HttpServer;
 //$$
-//$$ import static pl.skidam.automodpack_core.GlobalVariables.*;
-//$$ import net.minecraftforge.common.MinecraftForge;
 //$$ import net.minecraftforge.event.RegisterCommandsEvent;
 //$$ import net.minecraftforge.eventbus.api.SubscribeEvent;
 //$$ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 //$$ import net.minecraftforge.fml.common.Mod;
+//$$
+//$$ import static pl.skidam.automodpack_core.GlobalVariables.*;
 //$$
 //$$ @Mod(MOD_ID)
 //$$ public class ForgeInit {
@@ -28,14 +25,14 @@ package pl.skidam.automodpack.init;
 //$$         long start = System.currentTimeMillis();
 //$$         LOGGER.info("Launching AutoModpack...");
 //$$
-//$$         // initialize httpserver
-//$$         httpServer = new HttpServer();
+//$$          Common.init();
 //$$
-//$$         if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.SERVER) {
+//$$         if (LOADER_MANAGER.getEnvironmentType() == LoaderService.EnvironmentType.SERVER) {
+//$$             Common.serverInit();
 //$$             if (serverConfig.generateModpackOnStart) {
 //$$                 LOGGER.info("Generating modpack...");
 //$$                 long genStart = System.currentTimeMillis();
-//$$                 if (ModpackGenAdditions.generate()) {
+//$$                 if (modpack.generateNew()) {
 //$$                     LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
 //$$                 } else {
 //$$                     LOGGER.error("Failed to generate modpack!");

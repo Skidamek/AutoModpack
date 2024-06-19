@@ -10,6 +10,8 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 // Inspired by preloading tricks by settingdust
@@ -25,6 +27,10 @@ public class FabricLanguageAdapter implements LanguageAdapter {
         } catch (IllegalAccessException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static Collection<ModContainer> getAllMods() {
+        return  Collections.unmodifiableList(mods);
     }
 
     public FabricLanguageAdapter() throws IllegalAccessException {

@@ -5,6 +5,8 @@ import net.minecraft.client.sound.SoundManager;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.util.Identifier;
 import net.minecraft.registry.Registry;
+import java.util.function.Supplier;
+import pl.skidam.automodpack.init.Common;
 
 //#if MC >= 1193
 import net.minecraft.registry.Registries;
@@ -14,6 +16,7 @@ import net.minecraft.registry.Registries;
 //$$ import net.neoforged.bus.api.IEventBus;
 //$$ import net.neoforged.neoforge.registries.DeferredRegister;
 //$$ import net.neoforged.neoforge.registries.NeoForgeRegistries;
+//$$ import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 //#endif
 
 //#if FORGE
@@ -21,18 +24,15 @@ import net.minecraft.registry.Registries;
 //$$ import net.minecraftforge.registries.DeferredRegister;
 //$$ import net.minecraftforge.registries.ForgeRegistries;
 //$$ import net.minecraftforge.registries.RegistryObject;
+//$$ import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 //#endif
-
-import java.util.function.Supplier;
-
-import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 
 public class AudioManager {
     private static CustomSoundInstance SOUND_INSTANCE;
     private static SoundManager soundManager;
     private static boolean playing = false;
 
-    private static final Identifier WAITING_MUSIC_ID = new Identifier(MOD_ID, "waiting_music");
+    private static final Identifier WAITING_MUSIC_ID = Common.id("waiting_music");
 
 //#if MC >= 1193
    public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.of(WAITING_MUSIC_ID);
@@ -66,7 +66,7 @@ public class AudioManager {
 //#endif
 
     private SoundEvent register() {
-        Identifier id = new Identifier(MOD_ID, "waiting_music");
+        Identifier id = Common.id("waiting_music");
 //#if MC >= 1193
    Registry<SoundEvent> register = Registries.SOUND_EVENT;
 //#else

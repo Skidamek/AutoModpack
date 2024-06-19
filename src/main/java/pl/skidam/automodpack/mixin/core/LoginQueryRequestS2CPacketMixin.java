@@ -15,11 +15,11 @@ import pl.skidam.automodpack.networking.PayloadHelper;
 import pl.skidam.automodpack.networking.server.LoginRequestPayload;
 import pl.skidam.automodpack_core.GlobalVariables;
 
-// TODO find better way to do this
+// TODO find better way to do this, its mixin only for 1.20.2 and above
 @Mixin(value = LoginQueryRequestS2CPacket.class, priority = 300)
 //#else
-//$$ import pl.skidam.automodpack.init.CommonInit;
-//$$ @Mixin(CommonInit.class)
+//$$ import pl.skidam.automodpack.init.Common;
+//$$ @Mixin(Common.class)
 //#endif
 public class LoginQueryRequestS2CPacketMixin {
 

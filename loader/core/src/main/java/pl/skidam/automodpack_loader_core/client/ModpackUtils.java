@@ -2,6 +2,8 @@ package pl.skidam.automodpack_loader_core.client;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -11,19 +13,13 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.ConnectException;
-import java.net.HttpURLConnection;
-import java.net.SocketTimeoutException;
-import java.net.URL;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -84,35 +80,89 @@ public class ModpackUtils {
         }
     }
 
+    // returns true if requires restart
     public static void correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
             return;
         }
 
+        // correct the files locations
         for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
             String file = contentItem.file;
 
-            if (ignoreFiles.contains(file)) {
-                continue;
-            }
-
-            if (contentItem.type != null && contentItem.type.equals("mod")) {
-                continue;
-            }
+            if (ignoreFiles.contains(file)) continue;
 
             Path modpackFile = Paths.get(modpackDir + file);
             Path runFile = Paths.get("." + file);
 
-            if (Files.exists(modpackFile)) {
+            boolean modpackFileExists = Files.exists(modpackFile);
+            boolean runFileExists = Files.exists(runFile);
+
+            if (modpackFileExists && !runFileExists) {
+                // Don't copy from modpack to run if it's a mod
+                if (contentItem.type != null && contentItem.type.equals("mod")) continue;
                 CustomFileUtils.copyFile(modpackFile, runFile);
-            } else if (Files.exists(runFile)) {
+            } else if (!modpackFileExists && runFileExists) {
                 CustomFileUtils.copyFile(runFile, modpackFile);
-            } else {
+            } else if (!modpackFileExists) {
                 LOGGER.error("File " + file + " doesn't exist!?");
             }
         }
     }
+
+    private record ID_PATH(String id, Path path) {}
+
+    // TODO walk into sub dirs
+    // Returns true if removed any mod
+    public static boolean removeModpackModsFromDefaultModsFolder(List<Jsons.ModpackContentFields.ModpackContentItem> modpackList) throws IOException {
+        final List<Path> defaultMods = Files.list(Path.of("./mods")).toList();
+        final Collection<LoaderService.Mod> defaultModList = LOADER_MANAGER.getModList();
+
+        if (defaultModList.isEmpty()) return false;
+
+        final List<String> clientModDeps = new ArrayList<>();
+        final List<ID_PATH> modpackDefaultModIDs = new ArrayList<>();
+
+        boolean removedAny = false;
+
+        List<String> modpackHashes = modpackList.stream().map(modpackContentItem -> modpackContentItem.sha1).toList();
+
+        for (Path defaultMod : defaultMods) {
+            String fileHash = CustomFileUtils.getHash(defaultMod, "sha1").orElse(null);
+            if (fileHash == null) {
+                LOGGER.error("Couldn't get hash of {}", defaultMod);
+                continue;
+            }
+            String modId = LOADER_MANAGER.getModId(defaultMod, true);
+            if (modId == null) continue;
+
+            if (modpackHashes.contains(fileHash)) {
+                LOGGER.warn("Modpack file {} is in default mods folder", defaultMod);
+                modpackDefaultModIDs.add(new ID_PATH(modId, defaultMod));
+                continue;
+            }
+
+            LOGGER.info("Mod {} is not a modpack mod", defaultMod);
+            defaultModList.stream().filter(mod -> mod.modID().equals(modId)).findFirst().ifPresent(mod -> {
+                clientModDeps.addAll(mod.dependencies());
+            });
+        }
+
+        for (ID_PATH defaultMod : modpackDefaultModIDs) {
+            if (clientModDeps.contains(defaultMod.id)) {
+                LOGGER.info("Mod {} is required by other mods", defaultMod.path);
+                continue;
+            }
+
+            LOGGER.warn("Removing mod {}", defaultMod.path);
+            CustomFileUtils.forceDelete(defaultMod.path);
+            removedAny = true;
+        }
+
+        return removedAny;
+    }
+
 
 
     public static List<Path> renameModpackDir(Path modpackContentFile, Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
@@ -210,8 +260,8 @@ public class ModpackUtils {
         try {
             connection = (HttpURLConnection) new URL(link).openConnection();
             connection.setRequestMethod("GET");
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(3000);
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
             connection.connect();
@@ -248,7 +298,7 @@ public class ModpackUtils {
                 LOGGER.error("Couldn't connect to modpack server " + link + ", Response Code: " + responseCode);
             }
 
-        } catch (ConnectException | SocketTimeoutException e) {
+        } catch (SocketException | SocketTimeoutException e) {
             LOGGER.error("Couldn't connect to modpack server " + link);
         } catch (Exception e) {
             LOGGER.error("Error while getting server modpack content");

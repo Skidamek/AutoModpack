@@ -12,10 +12,11 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import static pl.skidam.automodpack_core.GlobalVariables.hostContentModpackDir;
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class CustomFileUtils {
     // TODO change this dummy byte array to contain also some metadata that we have created it
@@ -102,20 +103,25 @@ public class CustomFileUtils {
         return true;
     }
 
-    // Formats path to be relative to the modpack directory, e.g. modpack-content format
-    public static String formatPath(final Path modpackPath) {
-        String modpackFile = modpackPath.normalize().toString();
-        if (modpackPath.toAbsolutePath().toString().contains(hostContentModpackDir.toAbsolutePath().normalize().toString())) {
-            modpackFile = modpackFile.replace(hostContentModpackDir.toAbsolutePath().normalize().toString(), "");
-        } else if (modpackPath.toAbsolutePath().toString().contains(Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize().toString())) {
-            modpackFile = modpackFile.replace(Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize().toString(), "");
+    // Formats path to be relative to the modpack directory - modpack-content format
+    public static String formatPath(final Path modpackFile, final Path modpackPath) {
+        final String modpackFileStr = modpackFile.normalize().toString();
+        final String modpackFileStrAbs = modpackFile.toAbsolutePath().normalize().toString();
+        final String modpackPathStrAbs = modpackPath.toAbsolutePath().normalize().toString();
+        final String cwdStrAbs = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize().toString();
+
+        String formattedFile = modpackFileStr;
+
+        // Checks if in file parents paths (absolute path) there is modpack directory (absolute path)
+        if (modpackFileStrAbs.contains(modpackPathStrAbs)) {
+            formattedFile = modpackFileStrAbs.replace(modpackPathStrAbs, "");
+        } else if (modpackFileStrAbs.contains(cwdStrAbs)) {
+            formattedFile = modpackFileStrAbs.replace(cwdStrAbs, "");
+        } else {
+            LOGGER.error("File: " + modpackFileStr + " is not in modpack directory: " + modpackPathStrAbs + " or current working directory: " + cwdStrAbs);
         }
 
-//        if (modpackFile.charAt(0) == '.') {
-//            modpackFile = modpackFile.substring(1);
-//        }
-
-        return  "/" + modpackFile.replace(File.separator, "/");
+        return  "/" + formattedFile.replace(File.separator, "/");
     }
 
 
@@ -141,7 +147,7 @@ public class CustomFileUtils {
             return false;
         }
 
-        String modpackFile = CustomFileUtils.formatPath(file);
+        String modpackFile = CustomFileUtils.formatPath(file, Objects.requireNonNullElse(selectedModpackDir, hostContentModpackDir));
 
         for (Jsons.ModpackContentFields.ModpackContentItem item : ignoreList) {
             if (item.file.equals(modpackFile)) {
