@@ -195,15 +195,17 @@ public class ModpackUtils {
                         LOGGER.info("Removing mod {}", dupeMod.defaultMod.modPath());
                         CustomFileUtils.forceDelete(dupeMod.defaultMod.modPath());
                     }
+                    changedAnyThing = true;
                 }
                 continue;
             }
 
             LOGGER.warn("Removing mod {}", dupeMod.defaultMod.modPath());
             CustomFileUtils.forceDelete(dupeMod.defaultMod.modPath());
+            changedAnyThing = true;
         }
 
-        LOGGER.info("Removed duplicate mods from default mods folder");
+        LOGGER.info("Finishing removing duplicate mods from default mods folder");
 
         return changedAnyThing;
     }
