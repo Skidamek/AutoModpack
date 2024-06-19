@@ -163,7 +163,7 @@ tasks.named<ProcessResources>("processResources") {
 		"fabric" to listOf("fabric.mod.json"),
 		"quilt" to listOf("quilt.mod.json"),
 		"forge" to listOf("META-INF/mods.toml", "pack.mcmeta"),
-		"neoforge" to listOf("META-INF/neoforge.mods.toml", "pack.mcmeta"),
+		"neoforge" to listOf("META-INF/neoforge.mods.toml", "pack.mcmeta")
 	).forEach { (brand, files) ->
 		files.forEach { file ->
 			if (modBrand.contains(brand)) {
@@ -176,7 +176,7 @@ tasks.named<ProcessResources>("processResources") {
 						"description" to rootProject.findProperty("mod_description")
 					))
 				}
-			} else {
+			} else if (!brand.contains("forge") && !file.contains("pack.mcmeta")) {
 				exclude(file)
 			}
 		}

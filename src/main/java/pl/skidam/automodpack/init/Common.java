@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.init;
 
-import com.mojang.authlib.GameProfile;
 import net.minecraft.util.Identifier;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.netty.HttpServer;

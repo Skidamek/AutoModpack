@@ -29,8 +29,8 @@ repositories {
 }
 
 dependencies {
-    implementation(project(":core"))
-    implementation(project(":loader-core"))
+    compileOnly(project(":core"))
+    compileOnly(project(":loader-core"))
 
     minecraft("com.mojang:minecraft:${project.findProperty("minecraft_version")}")
 
@@ -48,7 +48,7 @@ dependencies {
 
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
-    include("org.tomlj:tomlj:1.1.1")
+    implementation("org.tomlj:tomlj:1.1.1")
 
     if (project.name.contains("quilt")) {
         modImplementation("org.quiltmc:quilt-loader:${rootProject.findProperty("quilt_loader_version")}")
@@ -61,12 +61,29 @@ dependencies {
     }
 }
 
+configurations {
+    create("shadowImplementation") {
+        extendsFrom(configurations.getByName("implementation"))
+        isCanBeResolved = true
+    }
+}
+
 tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
     mergeServiceFiles()
 
     from(project(":core").sourceSets.main.get().output)
     from(project(":loader-core").sourceSets.main.get().output)
+
+    // Include the tomlj dependency in the shadow jar
+    configurations = listOf(project.configurations.getByName("shadowImplementation"))
+
+    relocate("org.antlr.v4", "pl.skidam.tomlj")
+    relocate("org.tomlj", "pl.skidam.tomlj")
+    relocate("org.checkerframework", "pl.skidam.tomlj")
+
+
+//    configurations = emptyList()
 
     if (project.name.contains("fabric")) {
         relocate("pl.skidam.automodpack_loader_core_fabric", "pl.skidam.automodpack_loader_core")
@@ -81,7 +98,6 @@ tasks.named<ShadowJar>("shadowJar") {
     exclude("pl/skidam/automodpack_loader_core/loader/LoaderManager.class")
     exclude("pl/skidam/automodpack_loader_core/mods/SetupMods.class")
 
-    configurations = emptyList()
 
     manifest {
         attributes["AutoModpack-Version"] = version

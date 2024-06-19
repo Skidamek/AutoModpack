@@ -440,54 +440,6 @@ public class ModpackUpdater {
         return ModpackUtils.removeDupeMods(dupeMods);
     }
 
-//    private record ID_PATH(String id, Path path) {}
-
-
-    // FIXME its wrong, it should take Path to the modpack get Mod of every mod in default and from the modpack and compare them and rest is fine, also this method should not be in ModpackUpdater class since we need to also do this on evert boot
-
-    // TODO walk into sub dirs
-    // returns true if restart is required
-//    private boolean removeModpackModsFromDefaultModsFolder(List<String> modpackFiles) throws IOException {
-//        final List<Path> defaultMods = Files.list(Path.of("./mods")).toList();
-//        final Collection<LoaderService.Mod> modList = LOADER_MANAGER.getModList();
-//
-//        if (modList.isEmpty()) return false;
-//
-//        final List<String> clientModDeps = new ArrayList<>();
-//        final List<ID_PATH> modpackDefaultModIds = new ArrayList<>();
-//
-//        boolean requiresRestart = false;
-//
-//        for (Path defaultMod : defaultMods) {
-//            String file = CustomFileUtils.formatPath(defaultMod, defaultMod.getParent().getParent()); // format path to modpack content file
-//            file = file.charAt(0) == '/' ? file.substring(1) : file;
-//
-//            String modId = LOADER_MANAGER.getModId(defaultMod, true);
-//            if (modId == null) continue;
-//
-//            if (modpackFiles.contains(file)) {
-//                LOGGER.warn("Modpack file {} is in default mods folder", file);
-//                modpackDefaultModIds.add(new ID_PATH(modId, defaultMod));
-//                continue;
-//            }
-//
-//            LOGGER.error("Not a modpack file {}", file);
-//            modList.stream().filter(mod -> mod.modID().equals(modId)).findFirst().ifPresent(mod -> clientModDeps.addAll(mod.dependencies()));
-//        }
-//
-//        for (ID_PATH defaultMod : modpackDefaultModIds) {
-//            // delete mods which arent dependencies of any of client mods
-//            if (clientModDeps.contains(defaultMod.id)) continue;
-//            if (preload) {
-//                new SetupMods().removeMod(defaultMod.path);
-//            }
-//            CustomFileUtils.forceDelete(defaultMod.path);
-//            requiresRestart = true;
-//        }
-//
-//        return requiresRestart;
-//    }
-
     private void deleteDeletedFiles(Path modpackDir, Path modpackContentFile, List<String> modpackFiles, List<Path> pathList) {
         for (Path path : pathList) {
             if (Files.isDirectory(path)) continue;

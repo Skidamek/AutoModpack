@@ -18,8 +18,6 @@ import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.utils.Ip;
 
-import java.net.SocketAddress;
-
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 

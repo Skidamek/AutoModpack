@@ -8,7 +8,6 @@ import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
-
 //#if MC <= 1165
 //$$import net.minecraft.client.MinecraftClient;
 //$$import net.minecraft.client.gui.Element;

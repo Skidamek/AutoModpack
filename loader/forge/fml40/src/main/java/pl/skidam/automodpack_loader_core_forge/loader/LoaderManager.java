@@ -6,6 +6,7 @@ import net.minecraftforge.fml.loading.moddiscovery.ModFile;
 import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
 import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 import net.minecraftforge.forgespi.language.IModInfo;
+import net.minecraftforge.forgespi.locating.IModFile;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_loader_core_forge.mods.LoadedMods;
@@ -43,6 +44,10 @@ public class LoaderManager implements LoaderService {
     @Override
     public Collection<Mod> getModList() {
 
+        if (preload) {
+            return modList;
+        }
+
         List<ModInfo> modInfo = FMLLoader.getLoadingModList().getMods();
 
         if (!modList.isEmpty() && lastLoadingModListSize == modInfo.size()) {
@@ -75,11 +80,33 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public Mod getMod(String modId) {
-        for (Mod mod : getModList()) {
-            if (mod.modID().equals(modId)) {
+        Collection<Mod> modList = getModList();
+
+        if (!modList.isEmpty()) {
+            for (Mod mod : getModList()) {
+                if (!mod.modID().equals(modId)) {
+                    continue;
+                }
+
                 return mod;
             }
         }
+
+        Collection<ModFile> modFiles = LoadedMods.INSTANCE.candidateMods;
+
+        for (ModFile mod : modFiles) {
+            if (mod.getModFileInfo() == null || mod.getModInfos().isEmpty()) {
+                continue;
+            }
+
+            if (!mod.getModInfos().get(0).getModId().equals(modId)) {
+                continue;
+            }
+
+            Path modPath = mod.getModFileInfo().getFile().getFilePath();
+            return getMod(modPath);
+        }
+
         return null;
     }
 
@@ -239,11 +266,12 @@ public class LoaderManager implements LoaderService {
     }
 
     public String getModId(Path file, boolean checkAlsoOutOfContainer) {
-        List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
-
-        for (ModInfo modInfo: modInfos) {
-            if (modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
-                return modInfo.getModId();
+        if (FMLLoader.getLoadingModList() != null) {
+            List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
+            for (ModInfo modInfo : modInfos) {
+                if (modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
+                    return modInfo.getModId();
+                }
             }
         }
 

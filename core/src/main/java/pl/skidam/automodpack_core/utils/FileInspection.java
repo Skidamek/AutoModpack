@@ -16,6 +16,7 @@ import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -160,13 +161,15 @@ public class FileInspection {
 
                 if (entry.getName().equals("fabric.mod.json")) {
                     if (json.has("depends")) {
-                        dependencies.addAll(json.get("depends").getAsJsonObject().asMap().keySet());
+                        // Dont use asMap() since its only on gson 2.10^ - forge 1.18
+                        dependencies.addAll(json.get("depends").getAsJsonObject().entrySet().stream().map(Map.Entry::getKey).toList());
                     }
 
                 } else if (entry.getName().equals("quilt.mod.json") && json.has("quilt_loader")) {
                     JsonObject quiltLoader = json.get("quilt_loader").getAsJsonObject();
                     if (quiltLoader.has("depends")) {
-                        dependencies.addAll(quiltLoader.get("depends").getAsJsonObject().asMap().keySet());
+                        // Dont use asMap() since its only on gson 2.10^ - forge 1.18
+                        dependencies.addAll(json.get("depends").getAsJsonObject().entrySet().stream().map(Map.Entry::getKey).toList());
                     }
                 }
             }
