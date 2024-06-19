@@ -16,7 +16,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class Common {
 
     // True if has AutoModpack installed
-    public static Map<GameProfile, Boolean> players = new HashMap<>();
+    public static Map<String, Boolean> players = new HashMap<>();
 
     public static void serverInit() {
         modpack = new Modpack();

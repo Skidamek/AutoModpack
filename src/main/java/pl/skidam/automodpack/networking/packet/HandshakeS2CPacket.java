@@ -43,7 +43,7 @@ public class HandshakeS2CPacket {
 //        }
 
         if (!understood) {
-            Common.players.put(profile, false);
+            Common.players.put(playerName, false);
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
             if (serverConfig.requireAutoModpackOnClient) {
                 Text reason = VersionedText.literal("AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
@@ -51,7 +51,7 @@ public class HandshakeS2CPacket {
                 connection.disconnect(reason);
             }
         } else {
-            Common.players.put(profile, true);
+            Common.players.put(playerName, true);
             loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, buf, sender)));
         }
     }

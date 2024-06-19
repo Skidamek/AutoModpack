@@ -26,16 +26,18 @@ public class PlayerManagerMixin {
     @Inject(at = @At("TAIL"), method = "onPlayerConnect")
     private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
 //#else
-//$$@Inject(at = @At("TAIL"), method = "onPlayerConnect")
-//$$private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity player, CallbackInfo ci) {
+//$$ @Inject(at = @At("TAIL"), method = "onPlayerConnect")
+//$$ private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity player, CallbackInfo ci) {
 //#endif
         GameProfile profile = player.getGameProfile();
-        if (!Common.players.containsKey(profile)) {
-            LOGGER.error("{} isn't in the players map.", profile.getName());
+        String playerName = profile.getName();
+
+        if (!Common.players.containsKey(playerName)) {
+            LOGGER.error("{} isn't in the players map.", playerName);
             return;
         }
 
-        if (serverConfig.nagUnModdedClients && !Common.players.get(profile)) {
+        if (serverConfig.nagUnModdedClients && !Common.players.get(playerName)) {
             // Send chat nag message which is clickable and opens the link
             Text nagText = VersionedText.literal(serverConfig.nagMessage).styled(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://modrinth.com/project/automodpack")));
             // TODO check if link is clickable and if not, make it so

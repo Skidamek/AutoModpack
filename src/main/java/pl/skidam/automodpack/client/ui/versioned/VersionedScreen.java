@@ -43,10 +43,16 @@ public class VersionedScreen extends Screen {
 //$$    super.renderBackground(matrices, mouseX, mouseY, delta);
 //#endif
 
+//#if MC >= 1206
         super.render(matrices, mouseX, mouseY, delta);
+//#endif
 
         // Render the rest of our screen
         versionedRender(matrices, mouseX, mouseY, delta);
+
+//#if MC < 1206
+//$$    super.render(matrices, mouseX, mouseY, delta);
+//#endif
     }
 
     // This method is to be override by the child classes
