@@ -41,7 +41,7 @@ public class FetchManager {
         for (Map.Entry<String, Datas> entry : fetchDatas.entrySet()) {
             FetchData fetchData = entry.getValue().fetchData();
             if (fetchData.murmur != null) {
-                cf.put(fetchData.file, fetchData.murmur);
+                cf.put(fetchData.sha1, fetchData.murmur);
             }
 
             mo.add(fetchData.sha1);
@@ -49,8 +49,8 @@ public class FetchManager {
 
         try {
             completableFuture = CompletableFuture.runAsync(() -> {
-                fetchBySha1(mo);
                 fetchByMurmur(cf);
+                fetchBySha1(mo);
             });
             completableFuture.join();
         } catch (CancellationException e) {
@@ -74,7 +74,6 @@ public class FetchManager {
         }
     }
 
-    // TODO check if it really works
     private void fetchByMurmur(Map<String, String> hashes) {
         List<CurseForgeAPI> cfFileInfos = CurseForgeAPI.getModInfosFromFingerPrints(hashes);
         if (cfFileInfos == null) return;

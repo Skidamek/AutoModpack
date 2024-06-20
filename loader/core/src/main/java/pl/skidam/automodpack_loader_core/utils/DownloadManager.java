@@ -43,11 +43,12 @@ public class DownloadManager {
     }
 
     private void downloadTask(HashAndPath hashAndPath, QueuedDownload queuedDownload) {
+        LOGGER.info("Downloading {} - {}", queuedDownload.file.getFileName(), queuedDownload.urls.toString());
+
         int numberOfIndexes = queuedDownload.urls.numberOfUrls - 1;
         int urlIndex = Math.min(queuedDownload.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
 
         String url = queuedDownload.urls.URLs.get(numberOfIndexes - urlIndex).url;
-        LOGGER.info("Downloading {} from {}", queuedDownload.file.getFileName(), url);
 
         boolean interrupted = false;
 

@@ -9,7 +9,6 @@ import pl.skidam.automodpack_loader_core.mods.SetupMods;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.*;
 
-import java.io.File;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;

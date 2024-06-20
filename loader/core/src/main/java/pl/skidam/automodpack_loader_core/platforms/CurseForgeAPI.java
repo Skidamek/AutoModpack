@@ -5,7 +5,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import pl.skidam.automodpack_core.utils.Json;
 
-import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -40,13 +39,9 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
         return curseForgeAPIList;
     }
 
-//    public static void main(String[] args) {
-//        var ww = getModInfosFromFingerPrints(Map.of("2ff512a70c437c20523de01ea95b6fc9b164a5c0", "197497879"));
-//        ww.forEach(System.out::println);
-//    }
-
     public static CurseForgeAPI parseJsonObject(JsonObject JSONObject, Map<String, String> hashes) {
         if (JSONObject == null) {
+            LOGGER.error("CurseForgeAPI Can't parse null object");
             return null;
         }
 
@@ -63,7 +58,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 
         JsonArray fileHashes = fileJson.getAsJsonArray("hashes");
 
-        String sha1 = hashes.size() == 1 ? hashes.keySet().stream().findFirst().get() : null;
+        String sha1 = null;
         boolean found = false;
 
         for (JsonElement hashElement : fileHashes) {
@@ -71,10 +66,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
             // sha1 - https://docs.curseforge.com/?java#tocS_FileHash
             if (hashObject.get("algo").getAsInt() == 1) {
                 var hash = hashObject.get("value").getAsString();
-                if (sha1 != null && sha1.equals(hash)) {
-                    found = true;
-                    break;
-                } else if (hashes.containsKey(hash)) {
+                if (hashes.containsKey(hash)) {
                     sha1 = hash;
                     found = true;
                     break;
@@ -83,11 +75,13 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
         }
 
         if (!found) {
-            if (sha1 != null) LOGGER.error("Can't find file with SHA1 hash: " + sha1);
+            LOGGER.error("CurseForgeAPI Can't find file with SHA1 hash: {}", sha1);
             return null;
         }
 
-        String downloadUrl = fileJson.get("downloadUrl").getAsString();
+        // Download url may be null if mod author dont allow it
+        String downloadUrl = fileJson.get("downloadUrl").isJsonNull() ? null : fileJson.get("downloadUrl").getAsString();
+        if (downloadUrl == null) return null;
         String fileName = fileJson.get("fileName").getAsString();
         String fileVersion = fileJson.get("displayName").getAsString();
         String fileSize = String.valueOf(fileJson.get("fileLength").getAsLong());
