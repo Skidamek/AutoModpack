@@ -25,6 +25,7 @@ public class SelfUpdater {
 
     static {
         try {
+            // TODO find better way to parse that path
             URI uri = SelfUpdater.class.getProtectionDomain().getCodeSource().getLocation().toURI();
             // Example: union:/home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar%2354!/
             // Format it into proper path like: /home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar
@@ -38,6 +39,13 @@ public class SelfUpdater {
             index = path.indexOf('#');
             if (index != -1) {
                 path = path.substring(0, index);
+            }
+
+            // check for windows
+            if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                if (path.startsWith("/")) {
+                    path = path.substring(1);
+                }
             }
 
             AUTOMODPACK_JAR = Paths.get(path);
