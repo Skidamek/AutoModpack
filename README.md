@@ -112,9 +112,9 @@ Launch the game your game/server.
 * Feel free to contact me via discord: [skidam](https://discordapp.com/users/464522287618457631)
 
 ## Credits
-**HyperDraw** for amazing mod icon!
-[**@Fallen-Breath**](https://github.com/Fallen-Breath) for awesome [mod template](https://github.com/Fallen-Breath/fabric-mod-template/)
-Thanks to all [**contributors**](https://github.com/Skidamek/AutoModpack/graphs/contributors)!
+- **HyperDraw** for amazing mod icon!
+- [**@Fallen-Breath**](https://github.com/Fallen-Breath) for awesome [mod template](https://github.com/Fallen-Breath/fabric-mod-template/)
+- Thanks to all [**contributors**](https://github.com/Skidamek/AutoModpack/graphs/contributors)!
 
 **Contributors are welcome!**
 [**see**](CONTRIBUTING.md)
