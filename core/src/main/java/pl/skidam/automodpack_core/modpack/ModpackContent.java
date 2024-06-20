@@ -11,10 +11,7 @@ import pl.skidam.automodpack_core.utils.WildCards;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -211,11 +208,11 @@ public class ModpackContent {
             String type;
 
             if (FileInspection.isMod(file)) {
+                type = "mod";
                 if (serverConfig.autoExcludeServerSideMods && isServerMod(LOADER_MANAGER.getModList(), file)) {
                     LOGGER.info("File {} is server mod! Skipping...", modpackFile);
                     return null;
                 }
-                type = "mod";
             } else if (modpackFile.contains("/config/")) {
                 type = "config";
             } else if (modpackFile.contains("/shaderpacks/")) {
@@ -274,8 +271,7 @@ public class ModpackContent {
 
     private boolean isServerMod(Collection<LoaderService.Mod> modList, Path path) {
         if (modList == null) {
-            // TODO open jar file and check manually metadata, useful for other mods like connector to know if fabric mod is server or client side
-            return false;
+            return Objects.equals(FileInspection.getModEnvironment(path), LoaderService.EnvironmentType.SERVER);
         }
 
         for (var mod : modList) {

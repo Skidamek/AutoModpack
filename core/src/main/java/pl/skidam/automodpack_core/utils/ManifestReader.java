@@ -1,5 +1,6 @@
-package pl.skidam.automodpack_loader_core.utils;
+package pl.skidam.automodpack_core.utils;
 
+import java.io.InputStream;
 import java.net.URL;
 import java.util.Enumeration;
 import java.util.jar.Attributes;
@@ -25,5 +26,15 @@ public class ManifestReader {
         }
 
         throw new RuntimeException("Couldn't find AutoModpack version in manifest file.");
+    }
+
+    public static String readForgeModVersion(InputStream fileStream) {
+        try {
+            Manifest manifest = new Manifest(fileStream);
+            Attributes mainAttributes = manifest.getMainAttributes();
+            return mainAttributes.getValue("Implementation-Version");
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

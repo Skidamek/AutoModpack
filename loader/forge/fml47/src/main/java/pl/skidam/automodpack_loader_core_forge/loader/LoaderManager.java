@@ -6,21 +6,15 @@ import net.minecraftforge.fml.loading.moddiscovery.ModFile;
 import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
 import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 import net.minecraftforge.forgespi.language.IModInfo;
-import net.minecraftforge.forgespi.locating.IModFile;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_loader_core_forge.mods.LoadedMods;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipException;
-import java.util.zip.ZipFile;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -174,42 +168,7 @@ public class LoaderManager implements LoaderService {
 
     @Override
     public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
-        if (file == null || !Files.isRegularFile(file)) {
-            return EnvironmentType.UNIVERSAL;
-        }
-
-        try {
-            ZipFile zipFile = new ZipFile(file.toFile());
-            ZipEntry entry = zipFile.getEntry("META-INF/mods.toml");
-
-            if (entry != null) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(entry)));
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.startsWith("side")) {
-                        continue;
-                    }
-
-                    String[] split = line.split("=");
-                    if (split.length > 1) {
-                        String env = split[1].replaceAll("\"", "").trim();
-                        env = env.split(" ")[0];
-                        if (env.equalsIgnoreCase("client")) {
-                            return EnvironmentType.CLIENT;
-                        } else if (env.equalsIgnoreCase("server")) {
-                            return EnvironmentType.SERVER;
-                        } else {
-                            return EnvironmentType.UNIVERSAL;
-                        }
-                    }
-                }
-            }
-        } catch (ZipException ignored) {
-        } catch (Exception e) {
-            LOGGER.error("Failed to get mod environment from file: " + file.getFileName() + " - " + file.getFileSystem() + " - " + file.getRoot() + " - " + file.getParent());
-            e.printStackTrace();
-        }
-
+        // Forge doesnt seem to have a way to get mod environment from jar file
         return EnvironmentType.UNIVERSAL;
     }
 

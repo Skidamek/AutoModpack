@@ -9,7 +9,7 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.LoaderService;
-import pl.skidam.automodpack_loader_core.utils.ManifestReader;
+import pl.skidam.automodpack_core.utils.ManifestReader;
 
 import java.io.IOException;
 import java.nio.file.*;

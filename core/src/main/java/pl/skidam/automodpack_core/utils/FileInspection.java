@@ -1,13 +1,13 @@
 package pl.skidam.automodpack_core.utils;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.tomlj.Toml;
 import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.loader.LoaderService;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -219,49 +219,33 @@ public class FileInspection {
             BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
 
             if (entry.getName().equals("META-INF/mods.toml") || entry.getName().equals("META-INF/neoforge.mods.toml")) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.startsWith("version")) {
-                        continue;
-                    }
 
-                    String[] split = line.split("=");
-                    if (split.length <= 1) {
-                        continue;
-                    }
+                TomlParseResult result = Toml.parse(reader);
+                result.errors().forEach(error -> GlobalVariables.LOGGER.error(error.toString()));
 
-                    String version = split[1].substring(0, split[1].lastIndexOf("\""));
-                    version = version.replaceAll("\"", "").trim();
 
-                    if ("${file.jarVersion}".equals(version)) {
-
-                        ZipEntry manifestEntry = zipFile.getEntry("META-INF/MANIFEST.MF");
-                        if (manifestEntry == null) {
-                            reader.close();
-                            stream.close();
-                            zipFile.close();
-                            return null;
+                TomlArray array = result.getArray("mods");
+                if (array != null) {
+                    for (Object o : array.toList()) {
+                        TomlTable mod = (TomlTable) o;
+                        if (mod != null) {
+                            modVersion = mod.getString("version");
                         }
-
-                        BufferedReader manifestReader = new BufferedReader(new InputStreamReader(zipFile.getInputStream(manifestEntry)));
-                        String manifestLine;
-                        while ((manifestLine = manifestReader.readLine()) != null) {
-                            if (!manifestLine.startsWith("Implementation-Version")) {
-                                continue;
-                            }
-
-                            String[] manifestSplit = manifestLine.split(":");
-                            if (manifestSplit.length > 1) {
-                                version = manifestSplit[1].trim();
-                            }
-                        }
-
                     }
-
-                    version = version.split(" ")[0]; // get first string before any # comments starts
-                    modVersion = version;
                 }
 
+                if ("${file.jarVersion}".equals(modVersion)) {
+                    ZipEntry manifestEntry = zipFile.getEntry("META-INF/MANIFEST.MF");
+                    if (manifestEntry == null) {
+                        reader.close();
+                        stream.close();
+                        zipFile.close();
+                        return null;
+                    }
+
+                    InputStream fileStream = zipFile.getInputStream(manifestEntry);
+                    modVersion = ManifestReader.readForgeModVersion(fileStream);
+                }
             } else {
 
                 JsonObject json = gson.fromJson(reader, JsonObject.class);
@@ -289,8 +273,80 @@ public class FileInspection {
             e.printStackTrace();
         }
 
-
         return modVersion;
+    }
+
+    public static LoaderService.EnvironmentType getModEnvironment(Path file) {
+        if (!file.getFileName().toString().endsWith(".jar")) {
+            return null;
+        }
+
+        LoaderService.EnvironmentType environmentType = LoaderService.EnvironmentType.UNIVERSAL;
+
+        try {
+            ZipFile zipFile = new ZipFile(file.toFile());
+            ZipEntry entry = null;
+            if (zipFile.getEntry("fabric.mod.json") != null) {
+                entry = zipFile.getEntry("fabric.mod.json");
+            } else if (zipFile.getEntry("quilt.mod.json") != null) {
+                entry = zipFile.getEntry("quilt.mod.json");
+            } else if (zipFile.getEntry("META-INF/mods.toml") != null) {
+                entry = zipFile.getEntry("META-INF/mods.toml");
+            } else if (zipFile.getEntry("META-INF/neoforge.mods.toml") != null) {
+                entry = zipFile.getEntry("META-INF/neoforge.mods.toml");
+            }
+
+            if (entry == null) {
+                zipFile.close();
+                return null;
+            }
+
+            Gson gson = new Gson();
+            InputStream stream = zipFile.getInputStream(entry);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
+
+            if (entry.getName().equals("META-INF/mods.toml") || entry.getName().equals("META-INF/neoforge.mods.toml")) {
+                // Forges doesnt seem to have a way to specify environment in mods.toml
+            } else {
+
+                JsonObject json = gson.fromJson(reader, JsonObject.class);
+
+                if (entry.getName().equals("fabric.mod.json")) {
+                    if (json.has("environment")) {
+                        String environment = json.get("environment").getAsString();
+                        // switch (environment) set environmentType
+                        environmentType = switch (environment) {
+                            case "client" -> LoaderService.EnvironmentType.CLIENT;
+                            case "server" -> LoaderService.EnvironmentType.SERVER;
+                            default -> environmentType;
+                        };
+                    }
+                } else if (entry.getName().equals("quilt.mod.json") && json.has("quilt_loader")) {
+                    JsonObject quiltLoader = json.get("minecraft").getAsJsonObject();
+                    if (quiltLoader.has("environment")) {
+                        String environment = quiltLoader.get("environment").getAsString();
+
+                        environmentType = switch (environment) {
+                            case "client" -> LoaderService.EnvironmentType.CLIENT;
+                            case "dedicated_server" -> LoaderService.EnvironmentType.SERVER;
+                            default -> environmentType;
+                        };
+                    }
+                }
+            }
+
+            // close everything
+            reader.close();
+            stream.close();
+            zipFile.close();
+
+        } catch (ZipException ignored) {
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return environmentType;
     }
 
     public static boolean isInValidFileName(String fileName) {
