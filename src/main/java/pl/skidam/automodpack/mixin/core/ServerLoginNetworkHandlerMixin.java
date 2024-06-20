@@ -56,7 +56,6 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             return;
         }
 
-        // TODO check if player isn't banned, before sending any packets
 //#if MC < 1202
 //$$        if (state != ServerLoginNetworkHandler.State.NEGOTIATING && state != ServerLoginNetworkHandler.State.READY_TO_ACCEPT) {
 //$$            return;

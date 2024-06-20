@@ -13,6 +13,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ReLauncher {
 
+    // TODO clean up this class
     private static final String updateMessage = "Successfully updated AutoModpack!";
 
     private final Path modpackDir;

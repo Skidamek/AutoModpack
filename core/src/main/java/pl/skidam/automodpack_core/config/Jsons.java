@@ -32,7 +32,7 @@ public class Jsons {
         public boolean updateIpsOnEveryStart = false;
         public int hostPort = -1;
         public boolean reverseProxy = false;
-        public boolean selfUpdater = false; // consider defaulting it to true
+        public boolean selfUpdater = false;
         public List<String> acceptedLoaders;
     }
 

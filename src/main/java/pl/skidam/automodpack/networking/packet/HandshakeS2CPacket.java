@@ -29,7 +29,7 @@ public class HandshakeS2CPacket {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         String playerName = profile.getName();
 
-// TODO: send this packet only if player can join
+// TODO: send this packet only if player can join (isnt banned, is whitelisted, etc.)
 //  at the moment it's not possible because of
 //  'Cannot invoke "java.util.UUID.toString()" because the return value of "com.mojang.authlib.GameProfile.getId()" is null'
 //

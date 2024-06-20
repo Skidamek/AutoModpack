@@ -40,7 +40,6 @@ public class PlayerManagerMixin {
         if (serverConfig.nagUnModdedClients && !Common.players.get(playerName)) {
             // Send chat nag message which is clickable and opens the link
             Text nagText = VersionedText.literal(serverConfig.nagMessage).styled(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://modrinth.com/project/automodpack")));
-            // TODO check if link is clickable and if not, make it so
             player.sendMessage(nagText, false);
         }
     }

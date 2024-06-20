@@ -10,7 +10,6 @@ import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -27,8 +26,24 @@ public class SelfUpdater {
     static {
         try {
             URI uri = SelfUpdater.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-            AUTOMODPACK_JAR = Paths.get(uri).toAbsolutePath().normalize();
-        } catch (URISyntaxException e) {
+            // Example: union:/home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar%2354!/
+            // Format it into proper path like: /home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar
+
+            String path = uri.getPath();
+            int index = path.indexOf('!');
+            if (index != -1) {
+                path = path.substring(0, index);
+            }
+
+            index = path.indexOf('#');
+            if (index != -1) {
+                path = path.substring(0, index);
+            }
+
+            AUTOMODPACK_JAR = Paths.get(path);
+
+//            LOGGER.info("AutoModpack jar path: {}", AUTOMODPACK_JAR);
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
@@ -204,7 +219,7 @@ public class SelfUpdater {
         // The only solutions i see to fix this are:
         //   1. Restart the game...
         //   2. Rearrange our mod structure to have a separate jar only for updating the AutoModpack and then conditionally load automodpack mod jar, but with sacrificing the ability to update the 'this' updating code...
-        //   3. Remove the self-updating feature and let the user update the mod manually - however this would entirely break the purpose of this mod since when there would be a bug and server would update to new version client might stop being compatible...
+        //   3. Remove the self-updating feature and let the user update the mod manually - however this would entirely break the purpose of this mod since when server would update to new version client might stop being compatible...
         //
         // For now let's just restart the game since it's simpler
         // TODO - implement a way to conditionally load automodpack mod jar without breaking the jvm and hope that self-updating logic won't need to be updated anymore
