@@ -53,13 +53,13 @@ public class ModpackUtils {
                 if (!Files.exists(path)) {
                     path = Path.of("." + file);
                     if (!Files.exists(path)) {
-                        LOGGER.error("File does not exists {}", path);
+                        LOGGER.info("File does not exists {}", path);
                         return true;
                     }
                 }
 
                 if (!Objects.equals(serverSHA1, CustomFileUtils.getHash(path, "sha1").orElse(null))) {
-                    LOGGER.error("File does not match hash {}", path);
+                    LOGGER.info("File does not match hash {}", path);
                     return true;
                 }
             }
@@ -67,7 +67,7 @@ public class ModpackUtils {
             // Server also might have deleted some files
             for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : clientModpackContent.list) {
                 if (serverModpackContent.list.stream().noneMatch(serverModpackContentItem -> serverModpackContentItem.sha1.equals(modpackContentField.sha1))) {
-                    LOGGER.error("File does not exist on server {}", modpackContentField.file);
+                    LOGGER.info("File does not exist on server {}", modpackContentField.file);
                     return true;
                 }
             }

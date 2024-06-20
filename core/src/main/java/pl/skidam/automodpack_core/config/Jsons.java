@@ -22,7 +22,7 @@ public class Jsons {
 //        public List<List<String>> forceLoad = new ArrayList<>();
         public boolean requireAutoModpackOnClient = true;
         public boolean nagUnModdedClients = true;
-        public String nagMessage= "This server provides dedicated modpack through AutoModpack!";
+        public String nagMessage= "This server provides dedicated modpack through AutoModpack! Check it out!";
         public boolean autoExcludeServerSideMods = true;
 //        public boolean velocityMode = false; compat plugin... someday I hope
 //        public boolean forceToDisableAllOtherModsOnClients = false;

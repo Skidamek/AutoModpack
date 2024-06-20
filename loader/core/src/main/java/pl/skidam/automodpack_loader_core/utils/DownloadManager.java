@@ -47,7 +47,7 @@ public class DownloadManager {
         int urlIndex = Math.min(queuedDownload.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
 
         String url = queuedDownload.urls.URLs.get(numberOfIndexes - urlIndex).url;
-        LOGGER.info("Downloading {} from {}", queuedDownload.file, url);
+        LOGGER.info("Downloading {} from {}", queuedDownload.file.getFileName(), url);
 
         boolean interrupted = false;
 
@@ -73,11 +73,12 @@ public class DownloadManager {
 
                 if (!Objects.equals(hash, hashAndPath.hash)) {
                     bytesDownloaded -= queuedDownload.file.toFile().length();
-                    LOGGER.error("File size: {} File hash: {} Desired file hash: {}", queuedDownload.file.toFile().length(), hash, hashAndPath.hash);
+                    LOGGER.error("File {} File size: {} File hash: {} Desired file hash: {}", queuedDownload.file, queuedDownload.file.toFile().length(), hash, hashAndPath.hash);
                 } else {
                     // Runs on success
                     failed = false;
                     downloaded++;
+                    LOGGER.info("Successfully downloaded {} from {}", queuedDownload.file.getFileName(), url);
                     queuedDownload.successCallback.run();
                     semaphore.release();
                 }
@@ -92,12 +93,13 @@ public class DownloadManager {
                 }
 
                 if (queuedDownload.attempts < queuedDownload.urls.numberOfUrls * MAX_DOWNLOAD_ATTEMPTS) {
-                    LOGGER.warn("Download failed, retrying: " + url);
+                    LOGGER.warn("Download of {} failed, retrying!", queuedDownload.file.getFileName());
                     queuedDownload.attempts++;
                     synchronized (queuedDownloads) {
                         queuedDownloads.put(hashAndPath, queuedDownload);
                     }
                 } else {
+                    LOGGER.error("Download of {} failed!", queuedDownload.file.getFileName());
                     queuedDownload.failureCallback.run();
                     semaphore.release();
                 }

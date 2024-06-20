@@ -171,7 +171,8 @@ public class ModpackUpdater {
                 String file = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
-                Path path = modpackDir.resolve(file);
+                // Dont use resolve, it wont work because of the leading slash in file
+                Path path = Path.of(modpackDir + file);
 
                 if (Files.exists(path) && modpackContentField.editable) {
                     LOGGER.info("Skipping editable file: {}", file);
@@ -180,7 +181,8 @@ public class ModpackUpdater {
                 }
 
                 if (!Files.exists(path)) {
-                    path = Path.of(System.getProperty("user.dir")).resolve(file);
+                    // Dont use resolve, it wont work because of the leading slash in file
+                    path = Path.of(System.getProperty("user.dir") + file);
                 }
 
                 if (!Files.exists(path)) {
@@ -231,7 +233,7 @@ public class ModpackUpdater {
                     String fileName = item.file;
                     String serverSHA1 = item.sha1;
 
-                    Path downloadFile = Paths.get(modpackDir + File.separator + fileName);
+                    Path downloadFile = Paths.get(modpackDir + fileName);
                     DownloadManager.Urls urls = new DownloadManager.Urls();
 
                     urls.addUrl(new DownloadManager.Url().getUrl(link + serverSHA1));
@@ -241,13 +243,10 @@ public class ModpackUpdater {
                     }
 
                     Runnable failureCallback = () -> {
-                        LOGGER.error("Failed to download {} from {}", fileName, urls);
                         failedDownloads.put(item, urls);
                     };
 
                     Runnable successCallback = () -> {
-                        LOGGER.info("Successfully downloaded {} from {}", fileName, urls);
-
                         List<String> mainPageUrls = new LinkedList<>();
                         if (fetchManager != null && fetchManager.getFetchDatas().get(item.sha1) != null) {
                             mainPageUrls = fetchManager.getFetchDatas().get(item.sha1).fetchedData().mainPageUrls();
@@ -309,22 +308,19 @@ public class ModpackUpdater {
                         String fileName = item.file;
                         String serverSHA1 = item.sha1;
 
-                        Path downloadFile = Paths.get(modpackDir + File.separator + fileName);
+                        Path downloadFile = Paths.get(modpackDir + fileName);
                         DownloadManager.Urls urls = new DownloadManager.Urls();
                         urls.addUrl(new DownloadManager.Url().getUrl(link + serverSHA1));
 
                         LOGGER.info("Retrying to download {} from {}", fileName, urls);
 
                         Runnable failureCallback = () -> {
-                            LOGGER.error("Failed to download {} from {}", fileName, urls);
                             failedDownloads.put(item, urls);
                         };
 
                         Runnable successCallback = () -> {
-                            LOGGER.info("Successfully downloaded {} from {}", fileName, urls);
                             changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
                         };
-
 
                         downloadManager.download(downloadFile, serverSHA1, urls, successCallback, failureCallback);
                     }
