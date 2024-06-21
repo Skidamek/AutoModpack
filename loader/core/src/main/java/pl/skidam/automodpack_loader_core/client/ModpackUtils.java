@@ -112,22 +112,21 @@ public class ModpackUtils {
 
     // Checks if in default mods folder are any mods that are in modpack
     // Returns map of modpack mods and default mods that have the same mod id they dont necessarily have to be the same*
-    public static List<LoaderService.Mod> getDupeMods(Path modpackPath) throws IOException {
+    public static Map<LoaderService.Mod, LoaderService.Mod> getDupeMods(Path modpackPath) throws IOException {
         // maybe also check subfolders...
         final List<Path> defaultMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
         final List<Path> modpackMods = Files.list(modpackPath.resolve("mods")).toList();
         final Collection<LoaderService.Mod> defaultModList = defaultMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
         final Collection<LoaderService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
 
-        if (defaultModList.isEmpty() || modpackModList.isEmpty()) return List.of();
+        if (defaultModList.isEmpty() || modpackModList.isEmpty()) return Map.of();
 
-        final List<LoaderService.Mod> duplicates = new ArrayList<>();
-
+        final Map<LoaderService.Mod, LoaderService.Mod> duplicates = new HashMap<>();
 
         for (LoaderService.Mod modpackMod : modpackModList) {
             LoaderService.Mod defaultMod = defaultModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null);
             if (defaultMod != null) {
-                duplicates.add(defaultMod);
+                duplicates.put(modpackMod, defaultMod);
             }
         }
 
@@ -137,7 +136,7 @@ public class ModpackUtils {
     // Returns true if removed any mod from default mods folder
     // if the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // if you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
-    public static boolean removeDupeMods(List<LoaderService.Mod> dupeMods) throws IOException {
+    public static boolean removeDupeMods(Map<LoaderService.Mod, LoaderService.Mod> dupeMods) throws IOException {
         LOGGER.info("Removing duplicate mods from default mods folder");
 
         List<Path> defaultMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
@@ -149,7 +148,7 @@ public class ModpackUtils {
 
         // Grabs dependencies of non dupe mods
         for (LoaderService.Mod defaultMod : defaultModList) {
-            if (dupeMods.contains(defaultMod)) {
+            if (dupeMods.containsValue(defaultMod)) {
                 LOGGER.info("{} is a dupe mod of modpack", defaultMod.modID());
             } else {
                 defaultModDeps.addAll(defaultMod.dependencies());
@@ -159,15 +158,26 @@ public class ModpackUtils {
         boolean changedAnyThing = false;
 
         // Removes unnecessary dupe mods
-        for (LoaderService.Mod dupeMod : dupeMods) {
-            if (defaultModDeps.contains(dupeMod.modID())) {
-                LOGGER.info("Dupe mod {} is dependent on other mods", dupeMod.modID());
-                continue;
+        for (var dupeMod : dupeMods.entrySet()) {
+            if (defaultModDeps.contains(dupeMod.getKey().modID())) {
+                LOGGER.info("Dupe mod {} is dependent on other mods", dupeMod.getKey().modID());
+                // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
+                // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
+                Path modpackModPath = dupeMod.getKey().modPath();
+                Path defaultModPath = dupeMod.getValue().modPath();
+                String modpackModHash = CustomFileUtils.getHash(modpackModPath, "sha1").orElse(null);
+                String defaultModHash = CustomFileUtils.getHash(defaultModPath, "sha1").orElse(null);
+                if (!Objects.equals(modpackModHash, defaultModHash)) {
+                    LOGGER.warn("Removing dupe mod {} because it's not the same as modpack mod", dupeMod.getKey().modID());
+                    CustomFileUtils.forceDelete(defaultModPath);
+                    CustomFileUtils.copyFile(modpackModPath, defaultModPath.getParent().resolve(modpackModPath.getFileName()));
+                    changedAnyThing = true;
+                }
+            } else {
+                LOGGER.warn("Removing dupe mod {}", dupeMod.getKey().modID());
+                CustomFileUtils.forceDelete(dupeMod.getKey().modPath());
+                changedAnyThing = true;
             }
-
-            LOGGER.warn("Removing dupe mod {}", dupeMod.modID());
-            CustomFileUtils.forceDelete(dupeMod.modPath());
-            changedAnyThing = true;
         }
 
         LOGGER.info("Finishing removing duplicate mods from default mods folder");
