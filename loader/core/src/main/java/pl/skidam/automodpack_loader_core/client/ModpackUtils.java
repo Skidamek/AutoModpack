@@ -159,23 +159,25 @@ public class ModpackUtils {
 
         // Removes unnecessary dupe mods
         for (var dupeMod : dupeMods.entrySet()) {
-            if (defaultModDeps.contains(dupeMod.getKey().modID())) {
-                LOGGER.info("Dupe mod {} is dependent on other mods", dupeMod.getKey().modID());
+            Path modpackModPath = dupeMod.getKey().modPath();
+            Path defaultModPath = dupeMod.getValue().modPath();
+            String modId = dupeMod.getKey().modID();
+
+            if (defaultModDeps.contains(modId)) {
+                LOGGER.info("Dupe mod {} is dependent on other mods", modId);
                 // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
-                Path modpackModPath = dupeMod.getKey().modPath();
-                Path defaultModPath = dupeMod.getValue().modPath();
                 String modpackModHash = CustomFileUtils.getHash(modpackModPath, "sha1").orElse(null);
                 String defaultModHash = CustomFileUtils.getHash(defaultModPath, "sha1").orElse(null);
                 if (!Objects.equals(modpackModHash, defaultModHash)) {
-                    LOGGER.warn("Removing dupe mod {} because it's not the same as modpack mod", dupeMod.getKey().modID());
+                    LOGGER.warn("Removing dupe mod {} because it's not the same as modpack mod", modId);
                     CustomFileUtils.forceDelete(defaultModPath);
                     CustomFileUtils.copyFile(modpackModPath, defaultModPath.getParent().resolve(modpackModPath.getFileName()));
                     changedAnyThing = true;
                 }
             } else {
-                LOGGER.warn("Removing dupe mod {}", dupeMod.getKey().modID());
-                CustomFileUtils.forceDelete(dupeMod.getKey().modPath());
+                LOGGER.warn("Removing dupe mod {}", modId);
+                CustomFileUtils.forceDelete(defaultModPath);
                 changedAnyThing = true;
             }
         }
