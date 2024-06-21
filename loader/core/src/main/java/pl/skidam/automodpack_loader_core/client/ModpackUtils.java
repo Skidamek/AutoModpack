@@ -138,7 +138,6 @@ public class ModpackUtils {
     // if the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // if you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
     public static boolean removeDupeMods(List<LoaderService.Mod> dupeMods) throws IOException {
-        boolean changedAnyThing = false;
         LOGGER.info("Removing duplicate mods from default mods folder");
 
         List<Path> defaultMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
@@ -156,6 +155,8 @@ public class ModpackUtils {
                 defaultModDeps.addAll(defaultMod.dependencies());
             }
         }
+
+        boolean changedAnyThing = false;
 
         // Removes unnecessary dupe mods
         for (LoaderService.Mod dupeMod : dupeMods) {

@@ -9,6 +9,8 @@ import net.minecraft.server.network.ConnectedClientData;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.Text;
+import net.minecraft.text.TextColor;
+import net.minecraft.util.Formatting;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -39,8 +41,10 @@ public class PlayerManagerMixin {
 
         if (serverConfig.nagUnModdedClients && !Common.players.get(playerName)) {
             // Send chat nag message which is clickable and opens the link
-            Text nagText = VersionedText.literal(serverConfig.nagMessage).styled(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://modrinth.com/project/automodpack")));
+            Text nagText = VersionedText.literal(serverConfig.nagMessage).styled(style -> style.withBold(true));
+            Text nagClickableText = VersionedText.literal(serverConfig.nagClickableMessage).styled(style -> style.withUnderline(true).withColor(TextColor.fromFormatting(Formatting.BLUE)).withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, serverConfig.nagClickableLink)));
             player.sendMessage(nagText, false);
+            player.sendMessage(nagClickableText, false);
         }
     }
 }
