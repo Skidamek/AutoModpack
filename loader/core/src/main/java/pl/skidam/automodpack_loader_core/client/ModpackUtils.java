@@ -170,7 +170,7 @@ public class ModpackUtils {
                 String modpackModHash = CustomFileUtils.getHash(modpackModPath, "sha1").orElse(null);
                 String defaultModHash = CustomFileUtils.getHash(defaultModPath, "sha1").orElse(null);
                 if (!Objects.equals(modpackModHash, defaultModHash)) {
-                    LOGGER.warn("Removing dupe mod {} because it's not the same as modpack mod", modId);
+                    LOGGER.warn("Changing dupe mod {} to modpack version of this mod", modId);
                     CustomFileUtils.forceDelete(defaultModPath);
                     CustomFileUtils.copyFile(modpackModPath, defaultModPath.getParent().resolve(modpackModPath.getFileName()));
                     changedAnyThing = true;
