@@ -14,15 +14,18 @@ import java.util.List;
 
 public class MmcPackMagic {
     public static final Path mmcPackFile = Paths.get("./../mmc-pack.json");
-    public static final List<String> mcVerUIDs = Arrays.asList("net.minecraft", "net.fabricmc.intermediary");
-    public static final List<String> modLoaderUIDs = Arrays.asList("net.fabricmc.fabric-loader", "org.quiltmc.quilt-loader", "net.minecraftforge", "net.neoforged");
+    public static final List<String> MINECRAFT_UID = Arrays.asList("net.minecraft", "net.fabricmc.intermediary");
+    public static final List<String> FABRIC_LOADER_UID = List.of("net.fabricmc.fabric-loader");
+    public static final List<String> QUILT_LOADER_UID = List.of("org.quiltmc.quilt-loader");
+    public static final List<String> FORGE_LOADER_UID = List.of("net.minecraftforge");
+    public static final List<String> NEOFORGE_LOADER_UID = List.of("net.neoforged");
 
     public static JsonObject getJson() throws IOException {
         return Json.fromFile(mmcPackFile);
     }
 
-    public static void changeVersion(List<String> listOfUIDs, String newVersion) throws IOException {
-        if (newVersion == null || listOfUIDs == null) {
+    public static void changeVersion(List<String> UID, String newVersion) throws IOException {
+        if (newVersion == null || UID == null) {
             return;
         }
 
@@ -39,7 +42,7 @@ public class MmcPackMagic {
 
         for (JsonElement comp : components) {
             JsonObject component = comp.getAsJsonObject();
-            if (listOfUIDs.contains(component.get("uid").getAsString())) {
+            if (UID.contains(component.get("uid").getAsString())) {
                 String oldVersion = component.get("version").getAsString();
                 component.remove("version");
                 component.addProperty("version", newVersion);

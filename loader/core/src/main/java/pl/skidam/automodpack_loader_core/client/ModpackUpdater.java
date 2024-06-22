@@ -393,12 +393,19 @@ public class ModpackUpdater {
             // Change loader and minecraft version in launchers like prism, multimc.
             if (serverModpackContent.loader != null && serverModpackContent.loaderVersion != null) {
                 if (serverModpackContent.loader.equals(LOADER)) { // Server may use different loader than client
-                    MmcPackMagic.changeVersion(MmcPackMagic.modLoaderUIDs, serverModpackContent.loaderVersion); // Update loader version
+                    var UID = switch (LOADER) {
+                        case "fabric" -> MmcPackMagic.FABRIC_LOADER_UID;
+                        case "quilt" -> MmcPackMagic.QUILT_LOADER_UID;
+                        case "forge" -> MmcPackMagic.FORGE_LOADER_UID;
+                        case "neoforge" -> MmcPackMagic.NEOFORGE_LOADER_UID;
+                        default -> null;
+                    };
+                    MmcPackMagic.changeVersion(UID, serverModpackContent.loaderVersion); // Update loader version
                 }
             }
 
             if (serverModpackContent.mcVersion != null) {
-                MmcPackMagic.changeVersion(MmcPackMagic.mcVerUIDs, serverModpackContent.mcVersion); // Update minecraft version
+                MmcPackMagic.changeVersion(MmcPackMagic.MINECRAFT_UID, serverModpackContent.mcVersion); // Update minecraft version
             }
         }
 
