@@ -10,7 +10,6 @@ import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.net.URI;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -186,20 +185,20 @@ public class SelfUpdater {
             downloadManager.joinAll();
             downloadManager.cancelAllAndShutdown();
 
-            // We assume that update jar has always different name than current jar
             newAutomodpackJar = AUTOMODPACK_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
-            // It has to have different name than current jar, so add num to the end of the file name
-            int num = 0;
-            while (Files.exists(newAutomodpackJar)) {
-                String numStr = num == 0 ? "" : String.valueOf(num);
-                String fileName = automodpackUpdateJar.getFileName().toString().replace(numStr + ".jar", "");
-                if (!fileName.endsWith("-")) fileName += "-";
-                newAutomodpackJar = newAutomodpackJar.getParent().resolve(fileName + ++num + ".jar");
-            }
+
+            // preload classes
+            new ReLauncher();
+            var updateType = UpdateType.AUTOMODPACK;
+
+            CustomFileUtils.forceDelete(AUTOMODPACK_JAR);
             CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
+            CustomFileUtils.forceDelete(automodpackUpdateJar);
+            new ReLauncher(updateType).restart(true, () -> {
+                LOGGER.info("Successfully updated AutoModpack!");
+            });
         } catch (Exception e) {
             LOGGER.error("Failed to update! " + e);
-            return;
         }
 
         // As far as i know there isn't really a way to force jvm to unload our old jar, so we need to restart...
@@ -231,11 +230,5 @@ public class SelfUpdater {
         //
         // For now let's just restart the game since it's simpler
         // TODO - implement a way to conditionally load automodpack mod jar without breaking the jvm and hope that self-updating logic won't need to be updated anymore
-
-        LOGGER.info("Successfully updated AutoModpack!");
-        new ReLauncher(UpdateType.AUTOMODPACK).restart(true, () -> {
-            CustomFileUtils.forceDelete(AUTOMODPACK_JAR);
-            CustomFileUtils.forceDelete(automodpackUpdateJar);
-        });
     }
 }

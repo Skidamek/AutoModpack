@@ -137,7 +137,6 @@ public class ModpackUtils {
     // if the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // if you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
     public static boolean removeDupeMods(Map<LoaderService.Mod, LoaderService.Mod> dupeMods) throws IOException {
-        LOGGER.info("Removing duplicate mods from default mods folder");
 
         List<Path> defaultMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
         Collection<LoaderService.Mod> defaultModList = defaultMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
@@ -149,7 +148,7 @@ public class ModpackUtils {
         // Grabs dependencies of non dupe mods
         for (LoaderService.Mod defaultMod : defaultModList) {
             if (dupeMods.containsValue(defaultMod)) {
-                LOGGER.info("{} is a dupe mod of modpack", defaultMod.modID());
+//                LOGGER.info("{} is a dupe mod of modpack", defaultMod.modID());
             } else {
                 defaultModDeps.addAll(defaultMod.dependencies());
             }
@@ -164,7 +163,6 @@ public class ModpackUtils {
             String modId = dupeMod.getKey().modID();
 
             if (defaultModDeps.contains(modId)) {
-                LOGGER.info("Dupe mod {} is dependent on other mods", modId);
                 // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 String modpackModHash = CustomFileUtils.getHash(modpackModPath, "sha1").orElse(null);
@@ -181,8 +179,6 @@ public class ModpackUtils {
                 changedAnyThing = true;
             }
         }
-
-        LOGGER.info("Finishing removing duplicate mods from default mods folder");
 
         return changedAnyThing;
     }

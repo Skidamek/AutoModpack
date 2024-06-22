@@ -33,24 +33,14 @@ This is only intended for personal use. Other developers work very hard on their
 
 ## How to use
 
-First of all download the latest version of the mod from [here](https://modrinth.com/mod/automodpack/versions) or use our [modified version of fabric installer](https://github.com/Skidamek/AutoModpack-Installer/releases/tag/Latest) which will install fabric loader and AutoModpack.
+Installation process is same as for any other mod. Just put it into the `/mods/` folder of your minecraft/server installation.
 
-Put it into the `/mods/` folder of your minecraft/server installation.
+Or use our [modified version of fabric installer](https://github.com/Skidamek/AutoModpack-Installer/releases/tag/Latest) which will install fabric loader and AutoModpack.
 
-Launch the game your game/server.
+Optionally configure automodpack to your liking.
 
-**- Client**
-
-1. Join the server.
-2. Wait for the modpack to download and install.
-3. Restart the game.
-4. Done.
-
-**- Server**
-
-1. Start the server.
-2. Done.
-3. (Optional) Configure the automodpack to your liking.
+#### Do i have to open any ports on my router?
+- No, AutoModpack uses minecraft network IO to host modpack, so you don't have to open any additional ports. However if you want to host modpack on different port than minecraft server, you can do it by changing `hostPort` and disabling `hostModpackOnMinecraftPort` in `/automodpack/automodpack-server.json` file.
 
 #### Do you want to add more content to your modpack?
 - By default, the modpack will automatically synchronize all mods, configs from default server directories to the modpack. (Check `syncedFiles` list in `/automodpack/automodpack-server.json`)
@@ -78,6 +68,10 @@ Launch the game your game/server.
 | `syncedFiles`                | `"/mods/*.jar", "!/mods/iDontWantThisModInModpack.jar", "!/config/andThisConfigToo.json", "!/mods/andAllTheseMods-*.jar", "!/mods/server-*.jar"` | A list of files and directories that will be synced from the default server directory to the modpack.                                                                                                                                                             |
 | `allowEditsInFiles`          | `"/options.txt", "/config/*", "!/config/excludeThisFile"`                                                                                        | A list of *only* files that clients are allowed to edit. In other words, just a files that are downloaded one time and then ignored from updating. There you can also use wildcards.                                                                              |
 | `requireAutoModpackOnClient` | `true`                                                                                                                                           | Whether or not this mod is optional for clients to join server. (Works only for fabric/quilt mods and only if mod developer specified environment type in mod metadata)                                                                                           |
+| `nagUnModdedClients`         | `true`                                                                                                                                           | If `true` clients without AutoModpack will be nagged with a chat message on join.                                                                                                                                                                                 |
+| `nagMessage`                 | `"This server provides dedicated modpack through AutoModpack!"`                                                                                  | The message that will be displayed to clients without AutoModpack.                                                                                                                                                                                                |
+| `nagClickableMessage`        | `"Click here to get the AutoModpack!"`                                                                                                           | The clickable part of the message that will be displayed to clients without AutoModpack.                                                                                                                                                                          |
+| `nagClickableLink`           | `"https://modrinth.com/project/automodpack"`                                                                                                     | The link that will be opened when the message is clicked.                                                                                                                                                                                                         |
 | `autoExcludeServerSideMods`  | `true`                                                                                                                                           | Automatically excludes server-side mods from the modpack.                                                                                                                                                                                                         |
 | `hostModpackOnMinecraftPort` | `true`                                                                                                                                           | Injects into minecraft network IO thanks to which modpack hosting doesn't require any additional port.                                                                                                                                                            |
 | `hostIp`                     |                                                                                                                                                  | The IP address on which the HTTP server binds.                                                                                                                                                                                                                    |
@@ -112,9 +106,12 @@ Launch the game your game/server.
 * Feel free to contact me via discord: [skidam](https://discordapp.com/users/464522287618457631)
 
 ## Credits
+Thanks to:[
+- All the [**contributors**](https://github.com/Skidamek/AutoModpack/graphs/contributors)!
+- All the supporters on [**Ko-fi**](https://ko-fi.com/skidam)
+- Special thanks to Merith, SettingDust, Suerion as well as everyone else who helped with testing, code and ideas!
 - **HyperDraw** for amazing mod icon!
 - [**@Fallen-Breath**](https://github.com/Fallen-Breath) for awesome [mod template](https://github.com/Fallen-Breath/fabric-mod-template/)
-- Thanks to all [**contributors**](https://github.com/Skidamek/AutoModpack/graphs/contributors)!
 
 **Contributors are welcome!**
 [**see**](CONTRIBUTING.md)
