@@ -106,7 +106,7 @@ Optionally configure automodpack to your liking.
 * Feel free to contact me via discord: [skidam](https://discordapp.com/users/464522287618457631)
 
 ## Credits
-Thanks to:[
+Thanks to:
 - All the [**contributors**](https://github.com/Skidamek/AutoModpack/graphs/contributors)!
 - All the supporters on [**Ko-fi**](https://ko-fi.com/skidam)
 - Special thanks to Merith, SettingDust, Suerion and griffin4cats as well as everyone else who helped with testing, code and ideas!
