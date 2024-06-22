@@ -109,7 +109,7 @@ Optionally configure automodpack to your liking.
 Thanks to:[
 - All the [**contributors**](https://github.com/Skidamek/AutoModpack/graphs/contributors)!
 - All the supporters on [**Ko-fi**](https://ko-fi.com/skidam)
-- Special thanks to Merith, SettingDust, Suerion as well as everyone else who helped with testing, code and ideas!
+- Special thanks to Merith, SettingDust, Suerion and griffin4cats as well as everyone else who helped with testing, code and ideas!
 - **HyperDraw** for amazing mod icon!
 - [**@Fallen-Breath**](https://github.com/Fallen-Breath) for awesome [mod template](https://github.com/Fallen-Breath/fabric-mod-template/)
 
