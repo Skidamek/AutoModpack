@@ -95,7 +95,7 @@ public class HttpServer {
     public boolean isRunning() {
         // TODO Change that
         // good enough for now
-        if (serverConfig.hostModpackOnMinecraftPort && serverConfig.modpackHost && paths.size() > 1) {
+        if (serverConfig.hostModpackOnMinecraftPort && serverConfig.modpackHost && !paths.isEmpty()) {
             return true;
         }
 
