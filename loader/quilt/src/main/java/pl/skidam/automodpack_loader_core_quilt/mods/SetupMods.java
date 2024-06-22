@@ -16,14 +16,6 @@ public class SetupMods implements SetupModsService {
     }
 
     @Override
-    public void removeMod(Path path) {
-    }
-
-    @Override
-    public void removeMod(String modId) {
-    }
-
-    @Override
     public void addMod(Path path) {
     }
 }

@@ -9,15 +9,5 @@ public class SetupMods implements SetupModsService {
     }
 
     @Override
-    public void removeMod(Path path) {
-        throw new AssertionError("Loader class not found");
-    }
-
-    @Override
-    public void removeMod(String modId) {
-        throw new AssertionError("Loader class not found");
-    }
-
-    @Override
     public void addMod(Path path) { throw new AssertionError("Loader class not found"); }
 }

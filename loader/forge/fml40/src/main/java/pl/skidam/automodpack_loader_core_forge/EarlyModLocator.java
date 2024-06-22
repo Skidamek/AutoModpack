@@ -26,7 +26,7 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
 
         new Preload();
 
-        SetupMods.modsToAdd.forEach(path -> LOGGER.info("Adding mod: " + path.getFileName()));
+        SetupMods.modsToAdd.forEach(path -> LOGGER.info("Adding mod: {}", path.getFileName()));
 
         return SetupMods.modsToAdd.stream();
     }

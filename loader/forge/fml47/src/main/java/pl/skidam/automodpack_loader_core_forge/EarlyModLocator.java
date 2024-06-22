@@ -1,126 +1,228 @@
 package pl.skidam.automodpack_loader_core_forge;
 
+import com.google.common.collect.Maps;
 import cpw.mods.modlauncher.Launcher;
 import cpw.mods.modlauncher.api.IModuleLayerManager;
-import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.fml.loading.*;
 import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileModLocator;
+import net.minecraftforge.fml.loading.moddiscovery.InvalidModFileException;
 import net.minecraftforge.fml.loading.moddiscovery.ModDiscoverer;
+import net.minecraftforge.fml.loading.moddiscovery.ModFile;
+import net.minecraftforge.forgespi.language.IModFileInfo;
 import net.minecraftforge.forgespi.locating.IDependencyLocator;
+import net.minecraftforge.forgespi.locating.IModFile;
 import net.minecraftforge.forgespi.locating.IModLocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_loader_core.Preload;
 import pl.skidam.automodpack_loader_core_forge.mods.SetupMods;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 @SuppressWarnings("unused")
 public class EarlyModLocator extends AbstractJarFileModLocator {
-    public static Logger LOGGER = LogManager.getLogger("AutoModpack/BootStrap");
+    private final Logger LOGGER = LogManager.getLogger("AutoModpack/BootStrap");
+    private Map<String, ?> arguments;
+
     @Override
-    public void initArguments(Map<String, ?> arguments) { }
+    public void initArguments(Map<String, ?> arguments) {
+        this.arguments = arguments;
+    }
     @Override
     public String name() {
         return "automodpack_bootstrap";
     }
 
-//    public static List<IModLocator> wModLocatorList = new ArrayList<>();
 
     @Override
     public Stream<Path> scanCandidates() {
 
         new Preload();
 
-        SetupMods.modsToAdd.forEach(path -> LOGGER.info("Adding mod: " + path.getFileName()));
+        SetupMods.modsToAdd.forEach(path -> LOGGER.info("Adding mod: {}", path.getFileName()));
+
+        // we would need to force load there e.g. connector mod and its locators to loader
+        // and in the lazy mod locator load its dependency locator
+
+//        try {
+//            boolean success = loadNewModLocators();
+//            if (success) {
+//                LOGGER.info("Successfully loaded new mod locators");
+//            }
+//        } catch (Exception e) {
+//            LOGGER.error("Error loading new mod locators", e);
+//        }
 
         try {
-            // Adds new locators from newly added mods
-            // refresh locator lists
-//            final var moduleLayerManager = Launcher.INSTANCE.environment().findModuleLayerManager().orElseThrow();
-//            var newModLocators = ServiceLoader.load(moduleLayerManager.getLayer(IModuleLayerManager.Layer.SERVICE).orElseThrow(), IModLocator.class);
-//            Map<Class<IModLocator>, IModLocator> newModLocatorMap = new HashMap<>();
-//            newModLocators.forEach(modLocator -> newModLocatorMap.put((Class<IModLocator>) modLocator.getClass(), modLocator));
-//
-//
-//            var newDependencyLocators = ServiceLoader.load(moduleLayerManager.getLayer(IModuleLayerManager.Layer.SERVICE).orElseThrow(), IDependencyLocator.class);
-//            Map<Class<IDependencyLocator>, IDependencyLocator> newDependencyLocatorMap = new HashMap<>();
-//            newDependencyLocators.forEach(dependencyLocator -> newDependencyLocatorMap.put((Class<IDependencyLocator>) dependencyLocator.getClass(), dependencyLocator));
-
             Method method = FMLLoader.class.getDeclaredMethod("getModDiscoverer");
             method.setAccessible(true);
             ModDiscoverer discoverer = (ModDiscoverer) method.invoke(null);
-
-//
-//            Field modLocList = ModDiscoverer.class.getDeclaredField("modLocatorList");
-//            modLocList.setAccessible(true);
-//
-//            List<IModLocator> originalModLocatorList = (List<IModLocator>) modLocList.get(discoverer);
-//            Map<Class<IModLocator>, IModLocator> originalModLocatorMap = new HashMap<>();
-//            originalModLocatorList.forEach(locator -> originalModLocatorMap.put((Class<IModLocator>) locator.getClass(), locator));
-
 
             Field dependencyLocList = ModDiscoverer.class.getDeclaredField("dependencyLocatorList");
             dependencyLocList.setAccessible(true);
 
             List<IDependencyLocator> originalDependencyLocatorList = (List<IDependencyLocator>) dependencyLocList.get(discoverer);
-//            Map<Class<IDependencyLocator>, IDependencyLocator> originalDependencyLocatorMap = new HashMap<>();
-//            originalDependencyLocatorList.forEach(locator -> originalDependencyLocatorMap.put((Class<IDependencyLocator>) locator.getClass(), locator));
 
-//            newModLocatorMap.forEach((clazz, modLocator) -> System.out.println("New mod locator: " + clazz.getName()));
-//            originalModLocatorMap.forEach((clazz, modLocator) -> System.out.println("Original mod locator: " + clazz.getName()));
-
-//            newDependencyLocatorMap.forEach((clazz, depLocator) -> System.out.println("New dependency locator: " + clazz.getName()));
-//            originalDependencyLocatorMap.forEach((clazz, depLocator) -> System.out.println("Original dependency locator: " + clazz.getName()));
-//
-
-//            wModLocatorList.addAll(originalModLocatorList);
-//            // make it proxy
-//            modLocList.set(discoverer, Proxy.newProxyInstance(originalModLocatorList.getClass().getClassLoader(), originalModLocatorList.getClass().getInterfaces(), new ListProxy()));
-//
-//            // check if the lists are equal to the ones we got from the ServiceLoader
-//            newModLocatorMap.forEach((clazz, modLocator) -> {
-//                if (!originalModLocatorMap.containsKey(clazz)) {
-//                    LOGGER.warn("Adding mod locator: " + clazz.getName());
-//                    wModLocatorList.add(modLocator);
-//                }
-//            });
-//
-////            newDependencyLocatorMap.forEach((clazz, depLocator)  -> {
-////                if (!originalModLocatorMap.containsKey(clazz)) {
-////                    LOGGER.warn("Adding dependency locator: " + clazz.getName());
-////                    originalDependencyLocatorList.add(depLocator);
-////                }
-////            });
-//
-//            // 1 - move under; 0 - preserve original order
-//            originalDependencyLocatorList.forEach(loc -> System.out.println(loc.getClass().getName()));
+            // 1 - move under; 0 - preserve original order
             originalDependencyLocatorList.sort(Comparator.comparingInt(loc -> loc instanceof LazyModLocator ? 1 : 0));
-        } catch (Throwable t) {
-            LOGGER.error("Error sorting FML dependency locators", t);
+        } catch (Exception e) {
+            LOGGER.error("Error sorting FML dependency locators", e);
         }
 
 
         return SetupMods.modsToAdd.stream();
     }
-//
-//    // Proxy is necessary to be able to add/remove mods there
-//    // See: https://gist.github.com/Skidamek/605fe5bbdd9b62a5aeef823e5a5ba3d9
-//    // And: https://github.com/FabricMC/fabric-loader/blob/c56386687036dbef28b065da4e3af63671240f38/src/main/java/net/fabricmc/loader/impl/FabricLoaderImpl.java#L465
-//    public static class ListProxy implements InvocationHandler {
-//        @Override
-//        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-//            return method.invoke(wModLocatorList, args);
-//        }
-//    }
 
+    private boolean loadNewModLocators() throws MalformedURLException {
+        // Adds new locators from newly added mods
+        // refresh locator lists
+        final var moduleLayerManager = Launcher.INSTANCE.environment().findModuleLayerManager().orElseThrow();
+
+        var modLocators = ServiceLoader.load(moduleLayerManager.getLayer(IModuleLayerManager.Layer.SERVICE).orElseThrow(), IModLocator.class);
+        var dependencyLocators = ServiceLoader.load(moduleLayerManager.getLayer(IModuleLayerManager.Layer.SERVICE).orElseThrow(), IDependencyLocator.class);
+
+        HashMap<String, IModLocator> newModLocators = new HashMap<>();
+        HashMap<String, IDependencyLocator> newDependencyLocators = new HashMap<>();
+
+        for (Path jarPath : SetupMods.modsToAdd) {
+            URL newJarUrl = jarPath.toUri().toURL();
+            URLClassLoader newClassLoader = new URLClassLoader(new URL[]{newJarUrl}, LazyModLocator.class.getClassLoader());
+
+            var IModLocatorProviders = ServiceLoader.load(IModLocator.class, newClassLoader);
+            var IDependencyLocatorProviders = ServiceLoader.load(IDependencyLocator.class, newClassLoader);
+
+            for (IModLocator modLocator : IModLocatorProviders) {
+                newModLocators.put(modLocator.getClass().getName(), modLocator);
+            }
+
+            for (IDependencyLocator dependencyLocator : IDependencyLocatorProviders) {
+                newDependencyLocators.put(dependencyLocator.getClass().getName(), dependencyLocator);
+            }
+        }
+
+        for (IModLocator modLocator : modLocators) {
+            // check if modLocator exists in newModLocators, if so remove from newModLocators
+            newModLocators.remove(modLocator.getClass().getName());
+        }
+
+
+        for (IDependencyLocator dependencyLocator : dependencyLocators) {
+            // check if modLocator exists in newModLocators, if so remove from newModLocators
+            newDependencyLocators.remove(dependencyLocator.getClass().getName());
+        }
+
+        if (newModLocators.isEmpty() && newDependencyLocators.isEmpty()) {
+            return false;
+        }
+
+        LOGGER.error("Done loading new locators");
+
+        LOGGER.warn("New mod locators: ");
+        newModLocators.forEach((name, clazz) -> LOGGER.info(name));
+
+        LOGGER.warn("New dependency locators: ");
+        newDependencyLocators.forEach((name, clazz) -> LOGGER.info(name));
+
+        // run new mod locators
+        newModLocators.forEach((name, modLocator) -> modLocator.initArguments(arguments));
+        newDependencyLocators.forEach((name, dependencyLocator) -> dependencyLocator.initArguments(arguments));
+
+        return discoverMods(newModLocators.values());
+    }
+
+    public List<IModLocator.ModFileOrException> candidates = new ArrayList<>();
+
+    // Based of forges code
+    private boolean discoverMods(Collection<IModLocator> modLocators) {
+        LOGGER.info("Scanning for mods and other resources to load. We know {} ways to find mods", modLocators.size());
+        List<ModFile> loadedFiles = new ArrayList<>();
+        List<EarlyLoadingException.ExceptionData> discoveryErrorData = new ArrayList<>();
+        boolean successfullyLoadedMods = true;
+        List<IModFileInfo> brokenFiles = new ArrayList<>();
+        ImmediateWindowHandler.updateProgress("Discovering mod files");
+        //Loop all mod locators to get the prime mods to load from.
+        for (IModLocator locator : modLocators) {
+            try {
+                LOGGER.info("Trying locator {}", locator);
+
+                // FIXME: this crashes
+                // run new thread from locator class
+                Thread contextThread = new Thread(() -> {
+                    try {
+                        candidates = locator.scanMods();
+                    } catch (Exception e) {
+                        LOGGER.error("Error running locator {}", locator, e);
+                    }
+                });
+                contextThread.setContextClassLoader(locator.getClass().getClassLoader());
+
+                contextThread.start();
+                contextThread.join();
+
+
+                LOGGER.info("Locator {} found {} candidates or errors", locator, candidates.size());
+                var exceptions = candidates.stream().map(IModLocator.ModFileOrException::ex).filter(Objects::nonNull).toList();
+                if (!exceptions.isEmpty()) {
+                    LOGGER.info("Locator {} found {} invalid mod files", locator, exceptions.size());
+                    brokenFiles.addAll(exceptions.stream().map(e->e instanceof InvalidModFileException ime ? ime.getBrokenFile() : null).filter(Objects::nonNull).toList());
+                }
+                var locatedFiles = candidates.stream().map(IModLocator.ModFileOrException::file).filter(Objects::nonNull).collect(Collectors.toList());
+
+                var badModFiles = locatedFiles.stream().filter(file -> !(file instanceof ModFile)).toList();
+                if (!badModFiles.isEmpty()) {
+                    LOGGER.info("Locator {} returned {} files which is are not ModFile instances! They will be skipped!", locator, badModFiles.size());
+                    brokenFiles.addAll(badModFiles.stream().map(IModFile::getModFileInfo).toList());
+                }
+                locatedFiles.removeAll(badModFiles);
+                LOGGER.info("Locator {} found {} valid mod files", locator, locatedFiles.size());
+                handleLocatedFiles(loadedFiles, locatedFiles);
+            } catch (InvalidModFileException imfe) {
+                // We don't generally expect this exception, since it should come from the candidates stream above and be handled in the Locator, but just in case.
+                LOGGER.error("Locator {} found an invalid mod file {}", locator, imfe.getBrokenFile(), imfe);
+                brokenFiles.add(imfe.getBrokenFile());
+            } catch (EarlyLoadingException exception) {
+                LOGGER.error( "Failed to load mods with locator {}", locator, exception);
+                discoveryErrorData.addAll(exception.getAllData());
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        //First processing run of the mod list. Any duplicates will cause resolution failure and dependency loading will be skipped.
+        Map<IModFile.Type, List<ModFile>> modFilesMap = Maps.newHashMap();
+        try {
+            final UniqueModListBuilder modsUniqueListBuilder = new UniqueModListBuilder(loadedFiles);
+            final UniqueModListBuilder.UniqueModListData uniqueModsData = modsUniqueListBuilder.buildUniqueList();
+
+            //Grab the temporary results.
+            //This allows loading to continue to a base state, in case dependency loading fails.
+            modFilesMap = uniqueModsData.modFiles().stream()
+                    .collect(Collectors.groupingBy(IModFile::getType));
+            loadedFiles = uniqueModsData.modFiles();
+        }
+        catch (EarlyLoadingException exception) {
+            LOGGER.error("Failed to build unique mod list after mod discovery.", exception);
+            discoveryErrorData.addAll(exception.getAllData());
+            successfullyLoadedMods = false;
+        }
+
+        return successfullyLoadedMods;
+    }
+
+    // Copied from forge
+    private void handleLocatedFiles(final List<ModFile> loadedFiles, final List<IModFile> locatedFiles) {
+        var locatedModFiles = locatedFiles.stream().filter(ModFile.class::isInstance).map(ModFile.class::cast).toList();
+        for (IModFile mf : locatedModFiles) {
+            LOGGER.info("Found mod file {} of type {} with provider {}", mf.getFileName(), mf.getType(), mf.getProvider());
+        }
+        loadedFiles.addAll(locatedModFiles);
+    }
 }

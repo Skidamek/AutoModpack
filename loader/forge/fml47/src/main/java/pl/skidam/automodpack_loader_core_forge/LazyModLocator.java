@@ -3,8 +3,8 @@ package pl.skidam.automodpack_loader_core_forge;
 import com.google.common.collect.ImmutableMap;
 import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileDependencyLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
-import pl.skidam.automodpack_core.GlobalVariables;
-import pl.skidam.automodpack_loader_core_forge.mods.SetupMods;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.net.URI;
@@ -21,15 +21,19 @@ import static cpw.mods.modlauncher.api.LamdbaExceptionUtils.uncheck;
 
 @SuppressWarnings("unused")
 public class LazyModLocator extends AbstractJarFileDependencyLocator {
+
+    public static Logger LOGGER = LogManager.getLogger("AutoModpack/BootStrap");
+
     @Override
     public List<IModFile> scanMods(Iterable<IModFile> loadedMods) {
-        removeMods();
         var list = new ArrayList<IModFile>(1);
         try {
             list.add(getMainMod());
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+
+        // load new dependency locators here
 
         return list;
     }
@@ -40,16 +44,7 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
     }
 
     @Override
-    public void initArguments(Map<String, ?> arguments) {
-
-    }
-
-    // when we add option to force disable mods from remote server then this might be needed
-    public void removeMods() {
-        // remove mods
-        var modsToRemove = SetupMods.modsToRemove;
-        // TODO implement this
-    }
+    public void initArguments(Map<String, ?> arguments) { }
 
     // Code based on connector's https://github.com/Sinytra/Connector/blob/0514fec8f189b88c5cec54dc5632fbcee13d56dc/src/main/java/dev/su5ed/sinytra/connector/locator/EmbeddedDependencies.java#L88
     private IModFile getMainMod() throws IOException, URISyntaxException {

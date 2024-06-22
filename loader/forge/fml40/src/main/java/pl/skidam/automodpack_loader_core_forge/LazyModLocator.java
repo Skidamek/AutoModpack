@@ -20,7 +20,6 @@ import static cpw.mods.modlauncher.api.LamdbaExceptionUtils.uncheck;
 public class LazyModLocator extends AbstractJarFileDependencyLocator {
     @Override
     public List<IModFile> scanMods(Iterable<IModFile> loadedMods) {
-        removeMods();
         var list = new ArrayList<IModFile>(1);
         try {
             list.add(getMainMod());
@@ -37,16 +36,7 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
     }
 
     @Override
-    public void initArguments(Map<String, ?> arguments) {
-
-    }
-
-    // when we add option to force disable mods from remote server then this might be needed
-    public void removeMods() {
-        // remove mods
-        var modsToRemove = SetupMods.modsToRemove;
-        // TODO implement this
-    }
+    public void initArguments(Map<String, ?> arguments) { }
 
     // Code based on connector's https://github.com/Sinytra/Connector/blob/0514fec8f189b88c5cec54dc5632fbcee13d56dc/src/main/java/dev/su5ed/sinytra/connector/locator/EmbeddedDependencies.java#L88
     private IModFile getMainMod() throws IOException, URISyntaxException {

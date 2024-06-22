@@ -13,7 +13,6 @@ import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 public class SetupMods implements SetupModsService {
     public static String CONNECTOR_MODS_PROPERTY = "connector.additionalModLocations";
     public static Path modpackPath;
-    public static List<Path> modsToRemove = new ArrayList<>();
     public static List<Path> modsToAdd = new ArrayList<>();
 
     @Override
@@ -48,20 +47,6 @@ public class SetupMods implements SetupModsService {
         } catch (Exception e) {
             LOGGER.error("Error while loading modpack", e);
         }
-    }
-
-    @Override
-    public void removeMod(Path path) {
-        if (modsToAdd.contains(path)) {
-            modsToAdd.remove(path);
-        } else {
-            modsToRemove.add(path);
-        }
-    }
-
-    @Override
-    public void removeMod(String modId) {
-        // yet to implement
     }
 
     @Override

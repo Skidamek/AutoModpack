@@ -5,7 +5,6 @@ import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.ModContainerImpl;
 import net.fabricmc.loader.impl.discovery.*;
-import net.fabricmc.loader.impl.entrypoint.EntrypointStorage;
 import net.fabricmc.loader.impl.gui.FabricGuiEntry;
 import net.fabricmc.loader.impl.launch.FabricLauncherBase;
 import net.fabricmc.loader.impl.metadata.DependencyOverrides;
@@ -15,7 +14,6 @@ import pl.skidam.automodpack_loader_core.mods.SetupModsService;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -49,44 +47,6 @@ public class SetupMods implements SetupModsService {
         } catch (Exception e) {
             FabricGuiEntry.displayCriticalError(e, true);
         }
-    }
-
-    @Override
-    public void removeMod(Path path) {
-        getModContainer(path).ifPresent(this::removeMod);
-    }
-
-    @Override
-    public void removeMod(String modId) {
-        getModContainer(modId).ifPresent(this::removeMod);
-    }
-
-    private void removeMods(Collection<ModContainer> modContainers) {
-        try {
-            Field f = EntrypointStorage.class.getDeclaredField("entryMap");
-            f.setAccessible(true);
-
-            for (ModContainer container : modContainers) {
-
-                FabricLanguageAdapter.mods.remove((ModContainerImpl) container);
-
-                var modMap = (Map<String, ModContainerImpl>) FIELD_MOD_MAP.get(FabricLoaderImpl.INSTANCE);
-                modMap.remove(container.getMetadata().getId());
-                FIELD_MOD_MAP.set(FabricLoaderImpl.INSTANCE, modMap);
-
-                ((ModContainerImpl) container).getCodeSourcePaths().forEach(path -> {
-                    FabricLauncherBase.getLauncher().getClassPath().remove(path);
-                });
-            }
-        } catch (Exception e) {
-            FabricGuiEntry.displayCriticalError(e, true);
-        }
-    }
-
-    private void removeMod(ModContainer modContainer) {
-        Collection<ModContainer> containers = getNestedContainers(modContainer);
-        containers.add(modContainer);
-        removeMods(containers);
     }
 
     public Collection<ModContainer> getNestedContainers(ModContainer originalContainer) {

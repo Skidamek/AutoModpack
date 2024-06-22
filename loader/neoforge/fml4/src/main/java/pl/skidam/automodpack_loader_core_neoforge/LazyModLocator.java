@@ -3,7 +3,6 @@ package pl.skidam.automodpack_loader_core_neoforge;
 import com.google.common.collect.ImmutableMap;
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.locating.*;
-import pl.skidam.automodpack_loader_core_neoforge.mods.SetupMods;
 
 import java.io.IOException;
 import java.net.URI;
@@ -18,13 +17,6 @@ import static cpw.mods.modlauncher.api.LambdaExceptionUtils.uncheck;
 
 @SuppressWarnings("unused")
 public class LazyModLocator implements IModFileCandidateLocator {
-
-    // when we add option to force disable mods from remote server then this might be needed
-    public void removeMods() {
-        // remove mods
-        var modsToRemove = SetupMods.modsToRemove;
-        // TODO implement this
-    }
 
     // TODO i dont think we need this, since we are lunching on AbstractJarFileModLocator
     //  meaning that we are already before jij so if we use normal jij we should get the same result (even with update, if path and name wont change... which shouldn't)
@@ -48,8 +40,6 @@ public class LazyModLocator implements IModFileCandidateLocator {
 
     @Override
     public void findCandidates(ILaunchContext context, IDiscoveryPipeline pipeline) {
-        removeMods();
-
         try {
             Path modPath = getMainMod();
             pipeline.addPath(modPath, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.ERROR);
