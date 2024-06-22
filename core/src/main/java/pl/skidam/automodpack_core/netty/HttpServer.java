@@ -116,6 +116,11 @@ public class HttpServer {
             return false;
         }
 
+        if (paths.isEmpty()) {
+            LOGGER.warn("No file to host. Can't start modpack host server.");
+            return false;
+        }
+
         if (serverConfig.hostModpackOnMinecraftPort) {
             LOGGER.info("Hosting modpack on Minecraft port");
             return false;

@@ -1,7 +1,6 @@
 package pl.skidam.automodpack.init;
 
 import net.minecraft.util.Identifier;
-import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.netty.HttpServer;
