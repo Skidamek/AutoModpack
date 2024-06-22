@@ -154,7 +154,7 @@ public class DownloadScreen extends VersionedScreen {
     }
 
     private void checkAndStartMusic() {
-        if (ticks <= 60) {
+        if (ticks <= 30) {
             ticks++;
             return;
         }
@@ -163,13 +163,7 @@ public class DownloadScreen extends VersionedScreen {
             return;
         }
 
-        try {
-            int etaInSeconds = Integer.parseInt(lastETA.substring(0, lastETA.length() - 1));
-            if (etaInSeconds > 5) {
-                AudioManager.playMusic();
-            }
-        } catch (NumberFormatException ignored) {
-        }
+        AudioManager.playMusic();
     }
 
 
