@@ -3,10 +3,7 @@ package pl.skidam.automodpack_core.modpack;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderService;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
-import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.ObservableMap;
-import pl.skidam.automodpack_core.utils.WildCards;
+import pl.skidam.automodpack_core.utils.*;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -67,6 +64,37 @@ public class ModpackContent {
         }
 
         saveModpackContent();
+        if (httpServer != null) {
+            httpServer.addPaths(pathsMap);
+        }
+
+        return true;
+    }
+
+    public boolean loadPreviousContent(Path cwd, Path modpackDir) {
+        var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
+
+        if (optionalModpackContentFile.isEmpty()) return false;
+
+        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(optionalModpackContentFile.get());
+
+        if (modpackContent == null) return false;
+
+        synchronized (list) {
+            list.addAll(modpackContent.list);
+
+            for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : list) {
+                Path file = Path.of(modpackDir + modpackContentItem.file);
+                if (!Files.exists(file)) file = Path.of(cwd + modpackContentItem.file);
+                if (!Files.exists(file)) {
+                    LOGGER.warn("File {} does not exist!", file);
+                    continue;
+                }
+
+                pathsMap.put(modpackContentItem.sha1, file);
+            }
+        }
+
         if (httpServer != null) {
             httpServer.addPaths(pathsMap);
         }

@@ -39,7 +39,7 @@ public class VersionedScreen extends Screen {
 //#if MC < 1202
 //$$    super.renderBackground(matrices);
 //#else if MC < 1206
-//$$    super.renderBackground(matrices, mouseX, mouseY, delta);
+   super.renderBackground(matrices, mouseX, mouseY, delta);
 //#endif
 
 //#if MC >= 1206

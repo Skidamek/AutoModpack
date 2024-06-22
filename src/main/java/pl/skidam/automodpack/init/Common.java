@@ -1,6 +1,8 @@
 package pl.skidam.automodpack.init;
 
 import net.minecraft.util.Identifier;
+import pl.skidam.automodpack.client.audio.AudioManager;
+import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.netty.HttpServer;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
@@ -19,6 +21,26 @@ public class Common {
 
     public static void serverInit() {
         modpack = new Modpack();
+
+        if (serverConfig.generateModpackOnStart) {
+            LOGGER.info("Generating modpack...");
+            long genStart = System.currentTimeMillis();
+            if (modpack.generateNew()) {
+                LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+            } else {
+                LOGGER.error("Failed to generate modpack!");
+            }
+        } else {
+            LOGGER.info("Loading last modpack...");
+            long genStart = System.currentTimeMillis();
+            if (modpack.loadLast()) {
+                LOGGER.info("Modpack loaded! took " + (System.currentTimeMillis() - genStart) + "ms");
+            } else {
+                LOGGER.error("Failed to load modpack!");
+            }
+        }
+
+        ModPackets.registerS2CPackets();
     }
 
     public static void init() {

@@ -44,7 +44,7 @@ public class ModpackUtils {
                 String file = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
-                Path path = Path.of(modpackDir + File.separator + file);
+                Path path = Path.of(modpackDir + file);
 
                 if (modpackContentField.editable && Files.exists(path)) {
                     continue;
@@ -124,7 +124,7 @@ public class ModpackUtils {
         final Map<LoaderService.Mod, LoaderService.Mod> duplicates = new HashMap<>();
 
         for (LoaderService.Mod modpackMod : modpackModList) {
-            LoaderService.Mod defaultMod = defaultModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null);
+            LoaderService.Mod defaultMod = defaultModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
             if (defaultMod != null) {
                 duplicates.put(modpackMod, defaultMod);
             }

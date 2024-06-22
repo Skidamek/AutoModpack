@@ -29,8 +29,36 @@ public class Modpack {
         }
 
         var content = new ModpackContent(serverConfig.modpackName, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, CREATION_EXECUTOR);
-        boolean generated = content.create(Path.of(System.getProperty("user.dir")), hostContentModpackDir);
+        Path cwd = Path.of(System.getProperty("user.dir"));
+
+        boolean generated = content.create(cwd, hostContentModpackDir);
+
         modpacks.put(content.getModpackName(), content);
+
+        return generated;
+    }
+
+    public boolean loadLast() {
+        if (isGenerating()) {
+            LOGGER.error("Called generate() twice!");
+            return false;
+        }
+
+        try {
+            if (!Files.exists(hostContentModpackDir)) {
+                Files.createDirectories(hostContentModpackDir);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        var content = new ModpackContent(serverConfig.modpackName, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, CREATION_EXECUTOR);
+        Path cwd = Path.of(System.getProperty("user.dir"));
+
+        boolean generated = content.loadPreviousContent(cwd, hostModpackDir);
+
+        modpacks.put(content.getModpackName(), content);
+
         return generated;
     }
 

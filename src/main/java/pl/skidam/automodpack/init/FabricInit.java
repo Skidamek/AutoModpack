@@ -30,16 +30,6 @@ public class FabricInit {
 
         if (LOADER_MANAGER.getEnvironmentType() == LoaderService.EnvironmentType.SERVER) {
             Common.serverInit();
-            if (serverConfig.generateModpackOnStart) {
-                LOGGER.info("Generating modpack...");
-                long genStart = System.currentTimeMillis();
-                if (modpack.generateNew()) {
-                    LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
-                } else {
-                    LOGGER.error("Failed to generate modpack!");
-                }
-            }
-            ModPackets.registerS2CPackets();
         } else {
             ModPackets.registerC2SPackets();
             new AudioManager();
