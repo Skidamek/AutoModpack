@@ -28,16 +28,7 @@ public class FileInspection {
             return false;
         }
 
-        try (ZipFile zipFile = new ZipFile(file.toFile())) {
-            zipFile.close();
-            return true;
-        } catch (ZipException ignored) {
-            // Handle the exception as necessary
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        return false;
+        return getModID(file) != null;
     }
 
     public static String getModID(Path file) {

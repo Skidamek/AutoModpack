@@ -303,7 +303,7 @@ public class ModpackContent {
         }
 
         for (var mod : modList) {
-            if (!mod.modPath().equals(path)) {
+            if (!mod.modPath().toAbsolutePath().normalize().equals(path.toAbsolutePath().normalize())) {
                 continue;
             }
 
