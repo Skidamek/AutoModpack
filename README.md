@@ -41,7 +41,7 @@ Or use our [modified version of fabric installer](https://github.com/Skidamek/Au
 
 Optionally configure automodpack to your liking.
 
-**Read more on [wiki](https://github.com/Skidamek/AutoModpack/wiki)**
+**Please read the [wiki](https://github.com/Skidamek/AutoModpack/wiki) for more information.**
 
 ## Credits
 Thanks to:
