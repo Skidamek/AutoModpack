@@ -11,13 +11,13 @@ AutoModpack is a Minecraft modification that aims to simplify the process of upd
 
 I do not take credit for any of the content that can be downloaded from the mod. Likely all materials, except for the mod itself, were created by various talented individuals!
 
-## Key features
+## Key Features
 - Seamless modpack updates for players without disrupting experience of gaming.
 - Effortless modpack management for admins, including the ability to easily manage mods, configs, resource packs, and more.
 - Direct downloads from Modrinth and CurseForge.
 - Quick and simple installation process.
 
-## How it works?
+## How It Works
 On server AutoModpack generates a metadata file, which contains all the mods, configs, resource packs, and any other files of your modpack. Server hosts this file, as well as all the files contained within it, on an HTTP server.
 
 When a client joins the server, the AutoModpack consumes the metadata file, fetches Modrinth and Curseforge APIs to get direct downloads of most if not all your mod/resourcepacks/shaders files and then it downloads all the modpack files. Once the process is completed, client needs to restart game and then can join the server enjoying the modpack.
@@ -28,12 +28,12 @@ Also on every boot client checks if there're any updates to modpack, if so it up
 
 This mod allows ANY server running it to put ANY file in your game folder, such as a virus. So if you use it please make sure you trust your server administrator. Please direct any useful security material to the github issues. However as long you know server is safe and owner isn't an impostor, you *should* be good.
 
-## Desclaimer
+## Disclaimer
 
 Other mod developers may work very hard on their mods and simply visiting their website, Modrinth/CurseForge page is just a common courtesy. Please don't use this to mass distribute other people's mods without explicit permission. Depending on the copyright and/or pattent laws in your area using this mod distributing other developer's mods for a commercial purpose could be ILLEGAL, check licenses.
 
 
-## How to use
+## How To Use
 
 Installation process is same as for any other mod. Just put it into the `/mods/` folder of your minecraft/server installation.
 
@@ -42,6 +42,7 @@ Or use our [modified version of fabric installer](https://github.com/Skidamek/Au
 Optionally configure automodpack to your liking.
 
 **Please read the [wiki](https://github.com/Skidamek/AutoModpack/wiki) for more information.**
+
 
 ## Credits
 Thanks to:
