@@ -5,7 +5,7 @@
     <a href="https://modrinth.com/mod/automodpack"><img src="https://img.shields.io/modrinth/dt/k68glP2e?logo=modrinth&label=&style=flat&color=242629" alt="Modrinth"></a>
 </h1>
 
-AutoModpack is a Minecraft modification that aims to simplify the process of updating modpacks. Designed for private servers. With this mod, players no longer have to manually update each mod or the entire modpack. The tedious task of updating is handled automatically, making the gaming experience more seamless and enjoyable.
+**AutoModpack** is a Minecraft modification that aims to simplify the process of managing modpacks. Designed for private **servers**. With this mod, players no longer have to manually update each mod or the entire modpack to achive parity with the server. This tedious task is handled automatically, making the gaming experience more seamless and enjoyable.
 
 [(OUTDATED) Showcase (YouTube video)](https://youtu.be/lPPzaNPn8g8)
 
