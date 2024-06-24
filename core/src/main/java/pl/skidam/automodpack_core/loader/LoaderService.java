@@ -7,7 +7,7 @@ public interface LoaderService {
 
     enum ModPlatform { FABRIC, QUILT, FORGE, NEOFORGE }
     enum EnvironmentType { CLIENT, SERVER, UNIVERSAL }
-    record Mod(String modID, String modVersion, Path modPath, EnvironmentType environmentType, Collection<String> dependencies) {}
+    record Mod(String modID, Collection<String> providesIDs, String modVersion, Path modPath, EnvironmentType environmentType, Collection<String> dependencies) {}
     ModPlatform getPlatformType();
     Collection<Mod> getModList();
     Mod getMod(String modId);

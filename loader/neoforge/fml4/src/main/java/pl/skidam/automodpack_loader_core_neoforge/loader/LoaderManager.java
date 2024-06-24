@@ -60,6 +60,7 @@ public class LoaderManager implements LoaderService {
             }
             List<String> dependencies = info.getDependencies().stream().filter(d -> d.getType() == IModInfo.DependencyType.REQUIRED).map(IModInfo.ModVersion::getModId).toList();
             Mod mod = new Mod(modID,
+                    List.of(),
                     info.getOwningFile().versionString(),
                     path,
                     getModEnvironment(modID),
@@ -120,9 +121,10 @@ public class LoaderManager implements LoaderService {
         String modVersion = FileInspection.getModVersion(file);
         EnvironmentType environmentType = getModEnvironmentFromNotLoadedJar(file);
         List<String> dependencies = FileInspection.getModDependencies(file);
+        List<String> providesIDs = FileInspection.getAllProvidedIDs(file);
 
         if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
-            return new Mod(modId, modVersion, file, environmentType, dependencies);
+            return new Mod(modId, providesIDs, modVersion, file, environmentType, dependencies);
         }
 
         return null;

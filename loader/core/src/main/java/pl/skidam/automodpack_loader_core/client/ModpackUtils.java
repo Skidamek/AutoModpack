@@ -161,8 +161,21 @@ public class ModpackUtils {
             Path modpackModPath = dupeMod.getKey().modPath();
             Path defaultModPath = dupeMod.getValue().modPath();
             String modId = dupeMod.getKey().modID();
+            Collection<String> providesIDs = dupeMod.getKey().providesIDs();
+            List<String> IDs = new ArrayList<>();
+            IDs.add(modId);
+            IDs.addAll(providesIDs);
 
-            if (defaultModDeps.contains(modId)) {
+            boolean contains = false;
+
+            for (String ID : IDs) {
+                if (defaultModDeps.contains(ID)) {
+                    contains = true;
+                    break;
+                }
+            }
+
+            if (contains) {
                 // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 String modpackModHash = CustomFileUtils.getHash(modpackModPath, "sha1").orElse(null);

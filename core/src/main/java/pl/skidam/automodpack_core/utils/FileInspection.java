@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.utils;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.tomlj.Toml;
 import org.tomlj.TomlArray;
@@ -265,6 +266,77 @@ public class FileInspection {
         }
 
         return modVersion;
+    }
+
+    public static List<String> getAllProvidedIDs(Path file) {
+        if (!file.getFileName().toString().endsWith(".jar")) {
+            return null;
+        }
+
+        List<String> providedIDs = new ArrayList<>();
+
+        try {
+            ZipFile zipFile = new ZipFile(file.toFile());
+            ZipEntry entry = null;
+            if (zipFile.getEntry("fabric.mod.json") != null) {
+                entry = zipFile.getEntry("fabric.mod.json");
+            } else if (zipFile.getEntry("quilt.mod.json") != null) {
+                entry = zipFile.getEntry("quilt.mod.json");
+            } else if (zipFile.getEntry("META-INF/mods.toml") != null) {
+                entry = zipFile.getEntry("META-INF/mods.toml");
+            } else if (zipFile.getEntry("META-INF/neoforge.mods.toml") != null) {
+                entry = zipFile.getEntry("META-INF/neoforge.mods.toml");
+            }
+
+            if (entry == null) {
+                zipFile.close();
+                return null;
+            }
+
+            Gson gson = new Gson();
+            InputStream stream = zipFile.getInputStream(entry);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
+
+            if (entry.getName().equals("META-INF/mods.toml") || entry.getName().equals("META-INF/neoforge.mods.toml")) {
+
+                TomlParseResult result = Toml.parse(reader);
+                result.errors().forEach(error -> GlobalVariables.LOGGER.error(error.toString()));
+
+                // TODO
+            } else {
+
+                JsonObject json = gson.fromJson(reader, JsonObject.class);
+
+                if (entry.getName().equals("fabric.mod.json")) {
+                    if (json.has("provides")) {
+                        for (JsonElement provides : json.get("provides").getAsJsonArray()) {
+                            providedIDs.add(provides.getAsString());
+                        }
+                    }
+                } else if (entry.getName().equals("quilt.mod.json") && json.has("quilt_loader")) {
+                    JsonObject quiltLoader = json.get("quilt_loader").getAsJsonObject();
+                    if (quiltLoader.has("provides")) {
+                        for (JsonElement provides : quiltLoader.get("provides").getAsJsonArray()) {
+                            JsonObject providesObject = provides.getAsJsonObject();
+                            String id = providesObject.get("id").getAsString();
+                            providedIDs.add(id);
+                        }
+                    }
+                }
+            }
+
+            // close everything
+            reader.close();
+            stream.close();
+            zipFile.close();
+
+        } catch (ZipException ignored) {
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return providedIDs;
     }
 
     public static LoaderService.EnvironmentType getModEnvironment(Path file) {

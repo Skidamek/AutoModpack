@@ -6,10 +6,7 @@ import com.google.gson.JsonSyntaxException;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.metadata.ModEnvironment;
-import org.quiltmc.loader.api.LoaderValue;
-import org.quiltmc.loader.api.ModContainer;
-import org.quiltmc.loader.api.ModDependency;
-import org.quiltmc.loader.api.QuiltLoader;
+import org.quiltmc.loader.api.*;
 import org.quiltmc.loader.api.minecraft.MinecraftQuiltLoader;
 import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -63,6 +60,7 @@ public class LoaderManager implements LoaderService {
         for (var info : mods) {
             String modID = info.metadata().id();
             Path path = getModPath(modID);
+            List<String> provideIDs = info.metadata().provides().stream().map(ModMetadata.ProvidedMod::id).toList();
             // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
             if (path == null || path.toString().isEmpty()) {
                 continue;
@@ -74,6 +72,7 @@ public class LoaderManager implements LoaderService {
                 return null;
             }).filter(Objects::nonNull).toList();
             Mod mod = new Mod(modID,
+                    provideIDs,
                     info.metadata().version().raw(),
                     path,
                     getModEnvironment(modID),
@@ -111,9 +110,10 @@ public class LoaderManager implements LoaderService {
         String modVersion = FileInspection.getModVersion(file);
         EnvironmentType environmentType = getModEnvironmentFromNotLoadedJar(file);
         List<String> dependencies = FileInspection.getModDependencies(file);
+        List<String> providesIDs = FileInspection.getAllProvidedIDs(file);
 
         if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
-            return new Mod(modId, modVersion, file, environmentType, dependencies);
+            return new Mod(modId, providesIDs, modVersion, file, environmentType, dependencies);
         }
 
         return null;
