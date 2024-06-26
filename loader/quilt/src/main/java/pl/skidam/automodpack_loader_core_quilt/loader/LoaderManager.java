@@ -100,7 +100,7 @@ public class LoaderManager implements LoaderService {
         if (!file.getFileName().toString().endsWith(".jar")) return null;
 
         for (Mod mod : getModList()) {
-            if (mod.modPath().toAbsolutePath().equals(file.toAbsolutePath())) {
+            if (mod.modPath().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
                 return mod;
             }
         }

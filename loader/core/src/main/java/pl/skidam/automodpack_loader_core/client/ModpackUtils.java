@@ -166,16 +166,17 @@ public class ModpackUtils {
             IDs.add(modId);
             IDs.addAll(providesIDs);
 
-            boolean contains = false;
+            boolean isDependent = false;
 
+            // Check for mods like fabric api which provides more than one ID 'fabric-api' and 'fabric'
             for (String ID : IDs) {
                 if (defaultModDeps.contains(ID)) {
-                    contains = true;
+                    isDependent = true;
                     break;
                 }
             }
 
-            if (contains) {
+            if (isDependent) {
                 // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 String modpackModHash = CustomFileUtils.getHash(modpackModPath, "sha1").orElse(null);

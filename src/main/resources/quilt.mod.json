@@ -4,12 +4,6 @@
     "group": "pl.skidam.automodpack",
     "id": "${id}",
     "version": "${version}",
-    "provides": [
-      {
-        "id": "automodpack",
-        "version": "${version}"
-      }
-    ],
     "metadata": {
       "name": "${name}",
       "description": "${description}",
