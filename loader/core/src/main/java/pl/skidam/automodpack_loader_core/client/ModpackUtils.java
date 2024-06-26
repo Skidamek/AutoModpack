@@ -110,56 +110,62 @@ public class ModpackUtils {
     }
 
 
-    // Checks if in default mods folder are any mods that are in modpack
-    // Returns map of modpack mods and default mods that have the same mod id they dont necessarily have to be the same*
+    // Checks if in standard mods folder are any mods that are in modpack
+    // Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
     public static Map<LoaderService.Mod, LoaderService.Mod> getDupeMods(Path modpackPath) throws IOException {
         // maybe also check subfolders...
-        final List<Path> defaultMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
+        final List<Path> standardMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
         final List<Path> modpackMods = Files.list(modpackPath.resolve("mods")).toList();
-        final Collection<LoaderService.Mod> defaultModList = defaultMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+        final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
         final Collection<LoaderService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
 
-        if (defaultModList.isEmpty() || modpackModList.isEmpty()) return Map.of();
+        if (standardModList.isEmpty() || modpackModList.isEmpty()) return Map.of();
 
         final Map<LoaderService.Mod, LoaderService.Mod> duplicates = new HashMap<>();
 
         for (LoaderService.Mod modpackMod : modpackModList) {
-            LoaderService.Mod defaultMod = defaultModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
-            if (defaultMod != null) {
-                duplicates.put(modpackMod, defaultMod);
+            LoaderService.Mod standardMod = standardModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
+            if (standardMod != null) {
+                duplicates.put(modpackMod, standardMod);
             }
         }
 
         return duplicates;
     }
 
-    // Returns true if removed any mod from default mods folder
+    // Returns true if removed any mod from standard mods folder
     // if the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // if you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
+    // TODO rewrite it to be more clear and handle more depth of chain dependencies
     public static boolean removeDupeMods(Map<LoaderService.Mod, LoaderService.Mod> dupeMods) throws IOException {
 
-        List<Path> defaultMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
-        Collection<LoaderService.Mod> defaultModList = defaultMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+        List<Path> standardMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
+        Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
 
-        if (defaultModList.isEmpty()) return false;
+        if (standardModList.isEmpty()) return false;
 
-        List<String> defaultModDeps = new ArrayList<>();
+        List<String> standardModDeps = new ArrayList<>();
+        List<LoaderService.Mod> nonDupeMods = new ArrayList<>();
 
         // Grabs dependencies of non dupe mods
-        for (LoaderService.Mod defaultMod : defaultModList) {
-            if (dupeMods.containsValue(defaultMod)) {
-//                LOGGER.info("{} is a dupe mod of modpack", defaultMod.modID());
+        for (LoaderService.Mod standardMod : standardModList) {
+            if (dupeMods.containsValue(standardMod)) {
+                LOGGER.info("{} is a dupe mod of modpack", standardMod.modID());
             } else {
-                defaultModDeps.addAll(defaultMod.dependencies());
+                LOGGER.info("{} is NOT a dupe mod of modpack", standardMod.modID());
+                standardModDeps.addAll(standardMod.dependencies());
+                nonDupeMods.add(standardMod);
             }
         }
 
-        boolean changedAnyThing = false;
+        LOGGER.info("\n\n{}\n\n", standardModDeps);
+
+        List<Path> deletedMods = new ArrayList<>();
 
         // Removes unnecessary dupe mods
         for (var dupeMod : dupeMods.entrySet()) {
             Path modpackModPath = dupeMod.getKey().modPath();
-            Path defaultModPath = dupeMod.getValue().modPath();
+            Path standardModPath = dupeMod.getValue().modPath();
             String modId = dupeMod.getKey().modID();
             Collection<String> providesIDs = dupeMod.getKey().providesIDs();
             List<String> IDs = new ArrayList<>();
@@ -170,31 +176,61 @@ public class ModpackUtils {
 
             // Check for mods like fabric api which provides more than one ID 'fabric-api' and 'fabric'
             for (String ID : IDs) {
-                if (defaultModDeps.contains(ID)) {
+                if (standardModDeps.contains(ID)) {
                     isDependent = true;
                     break;
                 }
             }
 
             if (isDependent) {
+                LOGGER.info("Mod {} is dependent on other mods, not removing", modId);
                 // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 String modpackModHash = CustomFileUtils.getHash(modpackModPath, "sha1").orElse(null);
-                String defaultModHash = CustomFileUtils.getHash(defaultModPath, "sha1").orElse(null);
-                if (!Objects.equals(modpackModHash, defaultModHash)) {
+                String standardModHash = CustomFileUtils.getHash(standardModPath, "sha1").orElse(null);
+                if (!Objects.equals(modpackModHash, standardModHash)) {
                     LOGGER.warn("Changing dupe mod {} to modpack version of this mod", modId);
-                    CustomFileUtils.forceDelete(defaultModPath);
-                    CustomFileUtils.copyFile(modpackModPath, defaultModPath.getParent().resolve(modpackModPath.getFileName()));
-                    changedAnyThing = true;
+                    CustomFileUtils.forceDelete(standardModPath);
+                    CustomFileUtils.copyFile(modpackModPath, standardModPath.getParent().resolve(modpackModPath.getFileName()));
+                    deletedMods.add(standardModPath);
                 }
             } else {
+                LOGGER.info("Mod {} is NOT dependent on other mods, removing", modId);
                 LOGGER.warn("Removing dupe mod {}", modId);
-                CustomFileUtils.forceDelete(defaultModPath);
-                changedAnyThing = true;
+                CustomFileUtils.forceDelete(standardModPath);
+                deletedMods.add(standardModPath);
             }
         }
 
-        return changedAnyThing;
+        // Handles chained dependencies
+        // E.g. Mod A depends on Mod B, Mod B depends on Mod C
+        // Mod A is a dupe mod, Mod B is a standard mod, Mod C is a standard mod
+        // Mod B depends on Mod A and Mod C depends on Mod B
+        // In this case all of these mods should stay
+        for (LoaderService.Mod nonDupeMod : nonDupeMods) {
+            Collection<String> deps = nonDupeMod.dependencies();
+
+            for (LoaderService.Mod mod : dupeMods.keySet()) {
+                if (deps.contains(mod.modID())) {
+
+                    Collection<String> depsOfDeleteDupe = mod.dependencies();
+                    depsOfDeleteDupe.removeAll(standardModDeps);
+
+                    // FIXME: These mods should NOT be deleted in the first place.
+                    for (LoaderService.Mod deletedDupeMod : dupeMods.keySet()) {
+                        if (depsOfDeleteDupe.contains(deletedDupeMod.modID())) {
+                            LOGGER.info("Mod {} is dependent on {}, coping again", deletedDupeMod.modID(), nonDupeMod.modID());
+                            Path standardModPath = nonDupeMod.modPath().getParent().resolve(deletedDupeMod.modPath().getFileName());
+                            CustomFileUtils.copyFile(deletedDupeMod.modPath(), standardModPath);
+                            deletedMods.remove(standardModPath);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return !deletedMods.isEmpty();
     }
 
 
