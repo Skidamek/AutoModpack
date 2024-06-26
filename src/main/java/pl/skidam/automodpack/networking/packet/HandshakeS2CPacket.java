@@ -96,11 +96,15 @@ public class HandshakeS2CPacket {
         // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
         String formattedPlayerIp = Ip.refactorToTrueIp(playerIp);
 
+//        LOGGER.info("Player IP: {}", formattedPlayerIp);
+
         if (Ip.isLocal(formattedPlayerIp, serverConfig.hostLocalIp)) { // local
             linkToSend = serverConfig.hostLocalIp;
         } else { // Otherwise, use the public host IP and port
             linkToSend = serverConfig.hostIp;
         }
+
+//        LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
 
         DataPacket dataPacket = new DataPacket("", serverConfig.modpackName, serverConfig.requireAutoModpackOnClient);
 

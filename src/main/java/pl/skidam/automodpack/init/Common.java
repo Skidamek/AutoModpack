@@ -19,8 +19,6 @@ public class Common {
     public static Map<String, Boolean> players = new HashMap<>();
 
     public static void serverInit() {
-        modpack = new Modpack();
-
         if (serverConfig.generateModpackOnStart) {
             LOGGER.info("Generating modpack...");
             long genStart = System.currentTimeMillis();
@@ -44,6 +42,7 @@ public class Common {
 
     public static void init() {
         httpServer = new HttpServer();
+        modpack = new Modpack();
     }
 
     public static void afterSetupServer() {

@@ -49,7 +49,7 @@ public class Ip {
                 }
             }
         } catch (SocketException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
         }
         return null;
     }
@@ -90,9 +90,7 @@ public class Ip {
             InetAddress ia1 = InetAddress.getByName(ip1);
             InetAddress ia2 = InetAddress.getByName(ip2);
             return ia1.equals(ia2);
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-        }
+        } catch (UnknownHostException ignored) { }
 
         return false;
     }
