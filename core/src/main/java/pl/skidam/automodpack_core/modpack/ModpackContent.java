@@ -41,7 +41,7 @@ public class ModpackContent {
 
             if (modpackDir != null) {
                 LOGGER.info("Syncing {}...", modpackDir.getFileName());
-                Files.list(modpackDir).forEach((path ->  creationFutures.add(generateAsync(path.getParent(), path))));
+                Files.list(modpackDir).forEach(path ->  creationFutures.add(generateAsync(path.getParent(), path)));
 
                 // Wait till finish
                 creationFutures.forEach((CompletableFuture::join));

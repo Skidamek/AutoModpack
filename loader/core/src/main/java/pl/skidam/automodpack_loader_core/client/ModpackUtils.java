@@ -51,9 +51,13 @@ public class ModpackUtils {
                 }
 
                 if (!Files.exists(path)) {
-                    path = Path.of("." + file);
-                    if (!Files.exists(path)) {
-                        LOGGER.info("File does not exists {}", path);
+                    Path standardPath = Path.of("." + file);
+                    if (Files.exists(standardPath) && Objects.equals(serverSHA1, CustomFileUtils.getHash(standardPath, "sha1").orElse(null))) {
+                        LOGGER.info("File {} already exists on client, coping to modpack", standardPath.getFileName());
+                        try { CustomFileUtils.copyFile(standardPath, path); } catch (IOException e) { e.printStackTrace(); }
+                        continue;
+                    } else {
+                        LOGGER.info("File does not exists {}", standardPath);
                         return true;
                     }
                 }
