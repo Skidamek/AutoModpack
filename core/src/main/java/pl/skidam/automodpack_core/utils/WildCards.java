@@ -83,7 +83,7 @@ public class WildCards {
 
 
     private void processFile(Path file, String pathStr, String finalWildcard, boolean startsWithSlash, boolean blackListed) {
-        int index = file.toString().replace(File.separatorChar, '/').indexOf(pathStr);
+        int index = file.toString().replace(File.separator, "/").indexOf(pathStr);
         if (index != -1) {
             pathStr = pathStr + file.toString().substring(index + pathStr.length());
             pathStr = pathStr.replace(File.separator, "/");
@@ -97,6 +97,7 @@ public class WildCards {
     private void matchFile(Path path, String formattedPath, String finalWildcard, boolean startsWithSlash, boolean blackListed) {
         String formatedPath = path.toString().replace(File.separator, "/");
         String matchFileStr = startsWithSlash ? "/" + formatedPath : formatedPath;
+        finalWildcard = finalWildcard.replace(File.separator, "/");
         if (fileMatches(matchFileStr, finalWildcard)) {
             if (blackListed) {
                 wildcardMatches.remove(formattedPath, path);
