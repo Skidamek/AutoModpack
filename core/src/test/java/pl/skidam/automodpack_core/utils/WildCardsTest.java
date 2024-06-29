@@ -24,10 +24,15 @@ class WildCardsTest {
                 "!" + testFilesDir + "/mods/*19.jar",
                 "!" + testFilesDir + "/shaders/*.txt",
                 testFilesDir + "/thisfiledoesnotexist.txt",
-                testFilesDir + "/shaders/",
+                testFilesDir + "/shaders/*",
                 "!/" + testFilesDir + "/shaders/notashader.zip"
         );
-        wildCards = new WildCards(wildcards);
+        wildCards = new WildCards(wildcards, List.of(testFilesDir));
+
+        System.out.println();
+        System.out.println();
+        System.out.println();
+        System.out.println();
     }
 
     @Test
@@ -49,18 +54,23 @@ class WildCardsTest {
                 testFilesDir.resolve("shaders/shader2.zip"),
                 testFilesDir.resolve("shaders/shader3.zip")
         );
-
         boolean correct = true;
 
         for (var item : wildCards.getWildcardMatches().values()) {
+            System.out.println(item);
             if (!correctResult.contains(item)) {
                 correct = false;
+                System.out.println("INCORRECT");
                 break;
             }
         }
 
+        System.out.println();
+
         for (var item : correctResult) {
+            System.out.println(item);
             if (!wildCards.getWildcardMatches().containsValue(item)) {
+                System.out.println("INCORRECT");
                 correct = false;
                 break;
             }

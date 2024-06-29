@@ -14,10 +14,10 @@ public class Modpack {
     public final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
     public final Map<String, ModpackContent> modpacks = Collections.synchronizedMap(new HashMap<>());
 
-    public boolean generateNew() {
+    private ModpackContent init() {
         if (isGenerating()) {
             LOGGER.error("Called generate() twice!");
-            return false;
+            return null;
         }
 
         try {
@@ -28,37 +28,23 @@ public class Modpack {
             e.printStackTrace();
         }
 
-        var content = new ModpackContent(serverConfig.modpackName, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, CREATION_EXECUTOR);
         Path cwd = Path.of(System.getProperty("user.dir"));
+        return new ModpackContent(serverConfig.modpackName, cwd, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, CREATION_EXECUTOR);
+    }
 
-        boolean generated = content.create(cwd, hostContentModpackDir);
-
+    public boolean generateNew() {
+        ModpackContent content = init();
+        if (content == null) return false;
+        boolean generated = content.create();
         modpacks.put(content.getModpackName(), content);
-
         return generated;
     }
 
     public boolean loadLast() {
-        if (isGenerating()) {
-            LOGGER.error("Called generate() twice!");
-            return false;
-        }
-
-        try {
-            if (!Files.exists(hostContentModpackDir)) {
-                Files.createDirectories(hostContentModpackDir);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        var content = new ModpackContent(serverConfig.modpackName, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, CREATION_EXECUTOR);
-        Path cwd = Path.of(System.getProperty("user.dir"));
-
-        boolean generated = content.loadPreviousContent(cwd, hostModpackDir);
-
+        ModpackContent content = init();
+        if (content == null) return false;
+        boolean generated = content.loadPreviousContent();
         modpacks.put(content.getModpackName(), content);
-
         return generated;
     }
 
@@ -82,7 +68,7 @@ public class Modpack {
             return false;
         }
 
-        boolean generated = content.create(Path.of(System.getProperty("user.dir")), hostContentModpackDir);
+        boolean generated = content.create();
         modpacks.put(content.getModpackName(), content);
         return generated;
     }

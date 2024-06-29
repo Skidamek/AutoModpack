@@ -19,36 +19,45 @@ public class ModpackContent {
     public final List<Jsons.ModpackContentFields.ModpackContentItem> list = Collections.synchronizedList(new ArrayList<>());
     public final ObservableMap<String, Path> pathsMap = new ObservableMap<>();
     private final List<CompletableFuture<Void>> creationFutures = Collections.synchronizedList(new ArrayList<>());
-    private final String modpackName;
-    private final WildCards syncedFilesWildCards;
-    private final WildCards allowEditsWildCards;
+    private final String MODPACK_NAME;
+    private final WildCards SYNCED_FILES_CARDS;
+    private final WildCards EDITABLE_CARDS;
+    private final Path CWD;
+    private final Path MODPACK_DIR;
     private final ThreadPoolExecutor CREATION_EXECUTOR;
 
-    public ModpackContent(String modpackName, List<String> syncedFiles, List<String> allowEditsInFiles, ThreadPoolExecutor CREATION_EXECUTOR) {
-        this.modpackName = modpackName;
-        this.syncedFilesWildCards = new WildCards(syncedFiles);
-        this.allowEditsWildCards = new WildCards(allowEditsInFiles);
+    public ModpackContent(String modpackName, Path cwd, Path modpackDir, List<String> syncedFiles, List<String> allowEditsInFiles, ThreadPoolExecutor CREATION_EXECUTOR) {
+        this.MODPACK_NAME = modpackName;
+        this.CWD = cwd;
+        this.MODPACK_DIR = modpackDir;
+        List<Path> directoriesToSearch = new ArrayList<>(2);
+        if (CWD != null) directoriesToSearch.add(CWD);
+        if (MODPACK_DIR != null) directoriesToSearch.add(MODPACK_DIR);
+        this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, directoriesToSearch);
+        this.EDITABLE_CARDS = new WildCards(allowEditsInFiles, directoriesToSearch);
         this.CREATION_EXECUTOR = CREATION_EXECUTOR;
     }
 
     public String getModpackName() {
-        return modpackName;
+        return MODPACK_NAME;
     }
 
-    public boolean create(Path cwd, Path modpackDir) {
+    public boolean create() {
         try {
             pathsMap.clear();
 
-            if (modpackDir != null) {
-                LOGGER.info("Syncing {}...", modpackDir.getFileName());
-                Files.list(modpackDir).forEach(path ->  creationFutures.add(generateAsync(path.getParent(), path)));
+            // host-modpack generation
+            if (MODPACK_DIR != null) {
+                LOGGER.info("Syncing {}...", MODPACK_DIR.getFileName());
+                Files.list(MODPACK_DIR).forEach(path ->  creationFutures.add(generateAsync(path.getParent(), path)));
 
                 // Wait till finish
                 creationFutures.forEach((CompletableFuture::join));
                 creationFutures.clear();
             }
 
-            syncedFilesWildCards.getWildcardMatches().values().forEach(path -> creationFutures.add(generateAsync(cwd, path)));
+            // synced files generation
+            SYNCED_FILES_CARDS.getWildcardMatches().values().forEach(path -> creationFutures.add(generateAsync(CWD, path)));
 
             // Wait till finish
             creationFutures.forEach((CompletableFuture::join));
@@ -71,8 +80,8 @@ public class ModpackContent {
         return true;
     }
 
-    public boolean loadPreviousContent(Path cwd, Path modpackDir) {
-        var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
+    public boolean loadPreviousContent() {
+        var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(MODPACK_DIR);
 
         if (optionalModpackContentFile.isEmpty()) return false;
 
@@ -84,8 +93,8 @@ public class ModpackContent {
             list.addAll(modpackContent.list);
 
             for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : list) {
-                Path file = Path.of(modpackDir + modpackContentItem.file);
-                if (!Files.exists(file)) file = Path.of(cwd + modpackContentItem.file);
+                Path file = Path.of(MODPACK_DIR + modpackContentItem.file);
+                if (!Files.exists(file)) file = Path.of(CWD + modpackContentItem.file);
                 if (!Files.exists(file)) {
                     LOGGER.warn("File {} does not exist!", file);
                     continue;
@@ -111,7 +120,7 @@ public class ModpackContent {
             modpackContent.mcVersion = MC_VERSION;
             modpackContent.loaderVersion = LOADER_VERSION;
             modpackContent.loader = LOADER;
-            modpackContent.modpackName = modpackName;
+            modpackContent.modpackName = MODPACK_NAME;
 
             ConfigTools.saveConfig(hostModpackContentFile, modpackContent);
         }
@@ -162,16 +171,7 @@ public class ModpackContent {
         }
     }
 
-    private boolean internalFile(Path file) {
-        // check if file is any path from global variables if so return true besides `hostContentModpackDir`
-        return file.equals(automodpackDir) || file.equals(hostModpackDir) || file.equals(hostModpackContentFile) || file.equals(modpacksDir) || file.equals(clientConfigFile) || file.equals(serverConfigFile);
-    }
-
     private Jsons.ModpackContentFields.ModpackContentItem generateContent(Path modpackDir, final Path file) throws Exception {
-        if (internalFile(file)) {
-            return null;
-        }
-
         if (modpackDir != null) {
             modpackDir = modpackDir.toAbsolutePath().normalize();
         }
@@ -210,6 +210,11 @@ public class ModpackContent {
             }
 
             modpackFile = modpackFile.replace(File.separator, "/");
+
+            // modpackFile is relative path to ~/.minecraft/ (content format) so if it starts with /automodpack/ something is wrong
+            if (modpackFile.startsWith("/automodpack/")) {
+                return null;
+            }
 
             if (!hostContentModpackDir.equals(modpackDir)) {
                 if (file.toString().startsWith(".")) {
@@ -266,28 +271,10 @@ public class ModpackContent {
                 murmur = CustomFileUtils.getHash(file, "murmur").orElseThrow();
             }
 
-
-            if (allowEditsWildCards.fileMatches(modpackFile, file)) {
+            if (EDITABLE_CARDS.fileMatches(modpackFile, file)) {
                 isEditable = true;
                 LOGGER.info("File {} is editable!", modpackFile);
             }
-
-
-            // TODO re-add this feature since now it does not seem to make any sense when we are generating this async
-//                // It should overwrite existing file in the list
-//                // because first this syncs files from server running dir
-//                // And then it gets files from host-modpack dir,
-//                // So we want to overwrite files from server running dir with files from host-modpack dir
-//                // if there are likely same or a bit changed
-//                for (Jsons.ModpackContentFields.ModpackContentItem item : list) {
-//                    if (item.file.equals(modpackFile) && item.sha1.equals(sha1)) {
-//                        list.remove(item);
-//                        pathsMap.remove(item.sha1);
-//                        break;
-//                    }
-//                }
-
-            // Add to path to then add it to the file checker
 
             pathsMap.put(sha1, file);
 

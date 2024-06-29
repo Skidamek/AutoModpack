@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.modpack;
 
 import org.junit.jupiter.api.Test;
-import pl.skidam.automodpack_core.loader.NullLoaderManager;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -46,12 +45,17 @@ class ModpackTest {
                 "ModpackContentItems(file=/config/config.json, size=1, type=config, editable=true, sha1=86f7e437faa5a7fce15d1ddcb9eaeaea377667b8, murmur=null)"
         );
 
-        ModpackContent content = new ModpackContent("TestPack", new ArrayList<>(wildcards), new ArrayList<>(editable), new Modpack().CREATION_EXECUTOR);
-        content.create(testFilesDir, null);
+        ModpackContent content = new ModpackContent("TestPack", testFilesDir, null, new ArrayList<>(wildcards), new ArrayList<>(editable), new Modpack().CREATION_EXECUTOR);
+        content.create();
 
         boolean correct = false;
 
+        System.out.println();
+        System.out.println();
+        System.out.println();
+
         for (var item : content.list) {
+            System.out.println(item);
             if (correctResoults.contains(item.toString())) {
                 correct = true;
             } else {

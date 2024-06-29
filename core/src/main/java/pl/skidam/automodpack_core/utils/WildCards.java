@@ -14,7 +14,7 @@ public class WildCards {
     private final Map<String, Path> wildcardMatches = new HashMap<>();
     private final Map<String, Path> wildcardBlackListed = new HashMap<>();
 
-    public WildCards(List<String> wildcardsList) {
+    public WildCards(List<String> wildcardsList, List<Path> directoriesToSearch) {
 
         wildcardsList = new ArrayList<>(wildcardsList);
 
@@ -26,53 +26,64 @@ public class WildCards {
 
             wildcard = blackListed ? wildcard.replaceFirst("!", "") : wildcard;
 
-            String pathStr = wildcard;
+            String wildcardPathStr = wildcard;
             // this isn't filesystem related yet, must be in modpack content format
             if (wildcard.contains("/")) {
                 if (wildcard.lastIndexOf('/') == 0) {
                     wildcard = wildcard.replace("/", "");
-                    pathStr = wildcard;
+                    wildcardPathStr = wildcard;
                 } else {
-                    pathStr = wildcard.substring(0, wildcard.lastIndexOf('/'));
+                    wildcardPathStr = wildcard.substring(0, wildcard.lastIndexOf('/'));
                 }
             }
 
             String finalWildcard = wildcard;
 
-            boolean startsWithSlash;
-
-            if (pathStr.contains("*")) {
+            if (wildcardPathStr.contains("*")) {
                 LOGGER.warn("Wildcard: \"{}\" contains '*' in a directory, which is not supported. Wildcards only works with filenames not directories.", wildcard);
                 continue;
             }
 
-            pathStr = pathStr.replace("/", File.separator);
-            Path path = Path.of(pathStr);
+            wildcardPathStr = wildcardPathStr.replace("/", File.separator);
 
-            if (!Files.exists(path)) {
-                startsWithSlash = pathStr.charAt(0) == File.separatorChar;
-                pathStr = startsWithSlash ? pathStr.replaceFirst(Matcher.quoteReplacement(File.separator), "") : pathStr;
-                path = Path.of(pathStr);
-            } else {
-                startsWithSlash = false;
-            }
+            for (Path pathToSearch : directoriesToSearch) {
+                Path wildcardPath = Path.of(wildcardPathStr);
+                boolean startsWithSlash;
 
-            if (Files.isDirectory(path)) {
-                try (var files = Files.list(path)) {
-                    String finalPathStr = pathStr;
-                    files.forEach(childPath -> processFile(childPath, finalPathStr, finalWildcard, startsWithSlash, blackListed));
-                } catch (IOException e) {
-                    LOGGER.error("Error occurred while processing directory for wildcard: {} path: {}", wildcard, path, e);
+                if (!Files.exists(wildcardPath)) {
+                    startsWithSlash = wildcardPathStr.charAt(0) == File.separatorChar;
+                    wildcardPathStr = startsWithSlash ? wildcardPathStr.replaceFirst(Matcher.quoteReplacement(File.separator), "") : wildcardPathStr;
+                    wildcardPath = Path.of(wildcardPathStr);
+                } else {
+                    startsWithSlash = false;
                 }
-            } else {
-                processFile(path, pathStr, finalWildcard, startsWithSlash, blackListed);
+
+                Path path;
+                if (!wildcardPath.startsWith(pathToSearch)) {
+                    path = pathToSearch.resolve(wildcardPath);
+                } else {
+                    path = wildcardPath;
+                }
+
+//                System.out.println("Path: " + path + " WildcardPath: " + wildcardPath + " PathStr: " + wildcardPathStr + " FinalWildcard: " + finalWildcard + " BlackListed: " + blackListed);
+
+                if (Files.isDirectory(path)) {
+                    try (var files = Files.list(path)) {
+                        String finalPathStr = wildcardPathStr;
+                        files.forEach(childPath -> processFile(childPath, finalPathStr, finalWildcard, startsWithSlash, blackListed));
+                    } catch (IOException e) {
+                        LOGGER.error("Error occurred while processing directory for wildcard: {} path: {}", wildcard, path, e);
+                    }
+                } else {
+                    processFile(path, wildcardPathStr, finalWildcard, startsWithSlash, blackListed);
+                }
             }
         }
     }
 
 
     private void processFile(Path file, String pathStr, String finalWildcard, boolean startsWithSlash, boolean blackListed) {
-        int index = file.toString().indexOf(pathStr);
+        int index = file.toString().replace(File.separatorChar, '/').indexOf(pathStr);
         if (index != -1) {
             pathStr = pathStr + file.toString().substring(index + pathStr.length());
             pathStr = pathStr.replace(File.separator, "/");
@@ -84,15 +95,18 @@ public class WildCards {
     }
 
     private void matchFile(Path path, String formattedPath, String finalWildcard, boolean startsWithSlash, boolean blackListed) {
-        String matchFileStr = startsWithSlash ? "/" + path.toString().replace(File.separator, "/") : path.toString().replace(File.separator, "/");
+        String formatedPath = path.toString().replace(File.separator, "/");
+        String matchFileStr = startsWithSlash ? "/" + formatedPath : formatedPath;
         if (fileMatches(matchFileStr, finalWildcard)) {
             if (blackListed) {
                 wildcardMatches.remove(formattedPath, path);
                 wildcardBlackListed.put(formattedPath, path);
-                LOGGER.info("File {} is excluded! Skipping...", formattedPath);
+//                LOGGER.info("File {} is excluded! Skipping...", formattedPath);
+//                System.out.println("File " + formattedPath + " is excluded! Skipping...");
             } else if (!wildcardMatches.containsKey(formattedPath)) {
                 wildcardMatches.put(formattedPath, path);
 //                LOGGER.info("File {} matches!", formattedPath);
+//                System.out.println("File " + formattedPath + " matches!");
             }
         }
     }
@@ -100,7 +114,7 @@ public class WildCards {
 
     private boolean fileMatches(String file, String wildCardString) {
         if (!wildCardString.contains("*")) {
-            return file.startsWith(wildCardString);
+            return file.endsWith(wildCardString);
         }
 
         // Wild card magic
@@ -119,26 +133,15 @@ public class WildCards {
     }
 
     public boolean fileMatches(String path, Path file) {
-        if (wildcardMatches.containsKey(path)) {
-            return true;
-        }
-        if (wildcardMatches.containsValue(file)) {
-            return true;
-        }
-        return false;
+        return wildcardMatches.containsKey(path) || wildcardMatches.containsValue(file);
     }
+
     public Map<String, Path> getWildcardMatches() {
         return wildcardMatches;
     }
 
     public boolean fileBlackListed(String path, Path file) {
-        if (wildcardBlackListed.containsKey(path)) {
-            return true;
-        }
-        if (wildcardBlackListed.containsValue(file)) {
-            return true;
-        }
-        return false;
+        return wildcardBlackListed.containsKey(path) || wildcardBlackListed.containsValue(file);
     }
 
     public Map<String, Path> getWildcardBlackListed() {
