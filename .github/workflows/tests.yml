@@ -20,9 +20,11 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
             ./.gradle/loom-cache
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle.properties', '**/*.accesswidener', 'settings.json') }}
+          enableCrossOsArchive: true
+          key: gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties', '**/gradle.properties', '**/*.accesswidener', 'settings.json') }}
           restore-keys: |
-            ${{ runner.os }}-gradle-
+            ${{ runner.os }}-gradle
+            gradle
 
       - name: Run tests
         run: |
