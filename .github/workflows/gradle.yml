@@ -1,6 +1,6 @@
 name: Dev Builds
 
-on: [workflow_call, pull_request, push]
+on: [workflow_dispatch, pull_request, push]
 
 jobs:
   tests: # runs on linux and windows

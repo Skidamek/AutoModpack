@@ -1,6 +1,6 @@
 name: step.tests
 
-on: [workflow_call]
+on: [workflow_dispatch]
 
 jobs:
   tests:
