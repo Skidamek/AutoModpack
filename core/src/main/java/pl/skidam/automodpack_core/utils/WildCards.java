@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Matcher;
 
+import static pl.skidam.automodpack_core.GlobalVariables.DEBUG;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class WildCards {
@@ -62,7 +63,7 @@ public class WildCards {
                     path = wildcardPath;
                 }
 
-                System.out.println("Path: " + path + " wildcard: " + wildcard + " startsWithSlash: " + startsWithSlash + " blackListed: " + blackListed);
+                if (DEBUG) System.out.println("Path: " + path + " wildcard: " + wildcard + " startsWithSlash: " + startsWithSlash + " blackListed: " + blackListed);
 
                 if (Files.isDirectory(path)) {
                     try (var files = Files.list(path)) {
@@ -99,12 +100,10 @@ public class WildCards {
             if (blackListed) {
                 wildcardMatches.remove(formattedPath, path);
                 wildcardBlackListed.put(formattedPath, path);
-//                LOGGER.info("File {} is excluded! Skipping...", formattedPath);
-                System.out.println("File " + formattedPath + " is excluded! Skipping...");
+                if (DEBUG) System.out.println("File " + formattedPath + " is excluded! Skipping...");
             } else if (!wildcardMatches.containsKey(formattedPath)) {
                 wildcardMatches.put(formattedPath, path);
-//                LOGGER.info("File {} matches!", formattedPath);
-                System.out.println("File " + formattedPath + " matches!");
+                if (DEBUG) System.out.println("File " + formattedPath + " matches!");
             }
         }
     }
@@ -112,10 +111,10 @@ public class WildCards {
 
     private boolean fileMatches(String file, String wildCardString) {
         if (!wildCardString.contains("*")) {
-            System.out.println("* NOT found in wildcard: " + wildCardString + " file: " + file);
+            if (DEBUG) System.out.println("* NOT found in wildcard: " + wildCardString + " file: " + file);
             return file.endsWith(wildCardString);
         } else {
-            System.out.println("* found in wildcard: " + wildCardString + " file: " + file);
+            if (DEBUG) System.out.println("* found in wildcard: " + wildCardString + " file: " + file);
         }
 
         // Wild card magic

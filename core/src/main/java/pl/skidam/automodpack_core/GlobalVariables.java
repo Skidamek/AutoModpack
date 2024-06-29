@@ -13,6 +13,7 @@ import java.nio.file.Path;
 public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
+    public static Boolean DEBUG;
     public static Boolean preload;
     public static String MC_VERSION;
     public static String AM_VERSION;

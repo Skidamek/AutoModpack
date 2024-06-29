@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.skidam.automodpack_core.GlobalVariables.DEBUG;
 
 class WildCardsTest {
 
@@ -15,6 +16,8 @@ class WildCardsTest {
 
     @BeforeEach
     void setUp() {
+        DEBUG = true;
+
         var wildcards = List.of(
                 testFilesDir + "/file.txt",
                 testFilesDir + "/config/config*",
