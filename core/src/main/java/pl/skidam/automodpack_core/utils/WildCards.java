@@ -62,6 +62,8 @@ public class WildCards {
                     path = wildcardPath;
                 }
 
+                System.out.println("Path: " + path + " wildcard: " + wildcard + " startsWithSlash: " + startsWithSlash + " blackListed: " + blackListed);
+
                 if (Files.isDirectory(path)) {
                     try (var files = Files.list(path)) {
                         String finalWildcardPathStr = wildcardPathStr;
@@ -98,9 +100,11 @@ public class WildCards {
                 wildcardMatches.remove(formattedPath, path);
                 wildcardBlackListed.put(formattedPath, path);
 //                LOGGER.info("File {} is excluded! Skipping...", formattedPath);
+                System.out.println("File " + formattedPath + " is excluded! Skipping...");
             } else if (!wildcardMatches.containsKey(formattedPath)) {
                 wildcardMatches.put(formattedPath, path);
 //                LOGGER.info("File {} matches!", formattedPath);
+                System.out.println("File " + formattedPath + " matches!");
             }
         }
     }
@@ -108,7 +112,10 @@ public class WildCards {
 
     private boolean fileMatches(String file, String wildCardString) {
         if (!wildCardString.contains("*")) {
+            System.out.println("* NOT found in wildcard: " + wildCardString + " file: " + file);
             return file.endsWith(wildCardString);
+        } else {
+            System.out.println("* found in wildcard: " + wildCardString + " file: " + file);
         }
 
         // Wild card magic
