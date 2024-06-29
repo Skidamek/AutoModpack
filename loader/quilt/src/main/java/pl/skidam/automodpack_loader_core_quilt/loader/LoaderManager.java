@@ -58,27 +58,29 @@ public class LoaderManager implements LoaderService {
         Collection<Mod> modList = new ArrayList<>();
 
         for (var info : mods) {
-            String modID = info.metadata().id();
-            Path path = getModPath(modID);
-            List<String> provideIDs = info.metadata().provides().stream().map(ModMetadata.ProvidedMod::id).toList();
-            // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
-            if (path == null || path.toString().isEmpty()) {
-                continue;
-            }
-            List<String> dependencies = info.metadata().depends().stream().map(d -> {
-                if (d instanceof ModDependency.Only only) {
-                    return only.id().id(); // what the heck
+            try {
+                String modID = info.metadata().id();
+                Path path = getModPath(modID);
+                List<String> provideIDs = info.metadata().provides().stream().map(ModMetadata.ProvidedMod::id).toList();
+                // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
+                if (path == null || path.toString().isEmpty()) {
+                    continue;
                 }
-                return null;
-            }).filter(Objects::nonNull).toList();
-            Mod mod = new Mod(modID,
-                    provideIDs,
-                    info.metadata().version().raw(),
-                    path,
-                    getModEnvironment(modID),
-                    dependencies
-            );
-            modList.add(mod);
+                List<String> dependencies = info.metadata().depends().stream().map(d -> {
+                    if (d instanceof ModDependency.Only only) {
+                        return only.id().id(); // what the heck
+                    }
+                    return null;
+                }).filter(Objects::nonNull).toList();
+                Mod mod = new Mod(modID,
+                        provideIDs,
+                        info.metadata().version().raw(),
+                        path,
+                        getModEnvironment(modID),
+                        dependencies
+                );
+                modList.add(mod);
+            } catch (Exception ignored) {}
         }
 
         return this.modList = modList;
@@ -130,15 +132,17 @@ public class LoaderManager implements LoaderService {
     public Path getModPath(String modId) {
         ModContainer container = QuiltLoader.getModContainer(modId).isPresent() ? QuiltLoader.getModContainer(modId).get() : null;
 
-        if (container != null && container.getSourcePaths().stream().findFirst().isPresent()) {
-            for (Path path: container.getSourcePaths().stream().findFirst().get()) {
-                if (path == null) {
-                    continue;
-                }
+        try {
+            if (container != null && container.getSourcePaths().stream().findFirst().isPresent()) {
+                for (Path path: container.getSourcePaths().stream().findFirst().get()) {
+                    if (path == null) {
+                        continue;
+                    }
 
-                return path;
+                    return path;
+                }
             }
-        }
+        } catch (Exception ignored) {}
 
         LOGGER.error("Could not find jar file for " + modId);
         return null;

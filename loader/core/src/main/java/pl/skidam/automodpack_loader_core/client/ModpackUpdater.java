@@ -439,9 +439,12 @@ public class ModpackUpdater {
 
         var dupeMods = ModpackUtils.getDupeMods(modpackDir);
 
-        return ModpackUtils.removeDupeMods(dupeMods);
+        boolean requiresRestart = ModpackUtils.removeDupeMods(dupeMods);
+
+        return requiresRestart;
     }
 
+    // returns true if requires restart
     private void deleteDeletedFiles(Path modpackDir, Path modpackContentFile, List<String> modpackFiles, List<Path> pathList) {
         for (Path path : pathList) {
             if (Files.isDirectory(path)) continue;
@@ -454,7 +457,11 @@ public class ModpackUpdater {
             Path runPath = Path.of("." + file);
             if (Files.exists(runPath) && CustomFileUtils.compareFileHashes(path, runPath, "SHA-1")) {
                 LOGGER.info("Deleting {} and {}", path, runPath);
-                CustomFileUtils.forceDelete(runPath);
+                // TODO: confirm with content.json if its a mod or not
+                if (!runPath.getParent().getFileName().toString().equals("mods")) {
+                    // we dont delete mods, as we dont ever add mods there
+                    CustomFileUtils.forceDelete(runPath);
+                }
             } else {
                 LOGGER.info("Deleting {}", path);
             }

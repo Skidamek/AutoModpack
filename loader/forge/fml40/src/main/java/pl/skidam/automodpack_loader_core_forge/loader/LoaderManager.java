@@ -52,21 +52,24 @@ public class LoaderManager implements LoaderService {
         Collection<Mod> modList = new ArrayList<>();
 
         for (ModInfo info: modInfo) {
-            String modID = info.getModId();
-            Path path = getModPath(modID);
-            // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
-            if (path == null || path.toString().isEmpty()) {
-                continue;
-            }
-            List<String> dependencies = info.getDependencies().stream().filter(IModInfo.ModVersion::isMandatory).map(IModInfo.ModVersion::getModId).toList();
-            Mod mod = new Mod(modID,
-                    List.of(),
-                    info.getOwningFile().versionString(),
-                    path,
-                    getModEnvironment(modID),
-                    dependencies
-            );
-            modList.add(mod);
+            try {
+                String modID = info.getModId();
+                Path path = getModPath(modID);
+                // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
+                if (path == null || path.toString().isEmpty()) {
+                    continue;
+                }
+                List<String> dependencies = info.getDependencies().stream().filter(IModInfo.ModVersion::isMandatory).map(IModInfo.ModVersion::getModId).toList();
+                Mod mod = new Mod(modID,
+                        List.of(),
+                        info.getOwningFile().versionString(),
+                        path,
+                        getModEnvironment(modID),
+                        dependencies
+                );
+
+                modList.add(mod);
+            } catch (Exception ignored) {}
         }
 
         return this.modList = modList;
@@ -140,25 +143,27 @@ public class LoaderManager implements LoaderService {
             return null;
         }
 
-        if (preload) {
-            Collection<ModFile> modFiles = LoadedMods.INSTANCE.candidateMods;
-            for (var modFile: modFiles) {
-                if (modFile.getModFileInfo() == null || modFile.getModInfos().isEmpty()) {
-                    continue;
+        try {
+            if (preload) {
+                Collection<ModFile> modFiles = LoadedMods.INSTANCE.candidateMods;
+                for (var modFile : modFiles) {
+                    if (modFile.getModFileInfo() == null || modFile.getModInfos().isEmpty()) {
+                        continue;
+                    }
+                    if (modFile.getModInfos().get(0).getModId().equals(modId)) {
+                        return modFile.getModInfos().get(0).getOwningFile().getFile().getFilePath().toAbsolutePath();
+                    }
                 }
-                if (modFile.getModInfos().get(0).getModId().equals(modId)) {
-                    return modFile.getModInfos().get(0).getOwningFile().getFile().getFilePath().toAbsolutePath();
+
+            } else if (isModLoaded(modId)) {
+                ModFileInfo modInfo = FMLLoader.getLoadingModList().getModFileById(modId);
+
+                List<IModInfo> mods = modInfo.getMods();
+                if (!mods.isEmpty()) {
+                    return mods.get(0).getOwningFile().getFile().getFilePath().toAbsolutePath();
                 }
             }
-
-        } else if (isModLoaded(modId)) {
-            ModFileInfo modInfo = FMLLoader.getLoadingModList().getModFileById(modId);
-
-            List<IModInfo> mods = modInfo.getMods();
-            if (!mods.isEmpty()) {
-                return mods.get(0).getOwningFile().getFile().getFilePath().toAbsolutePath();
-            }
-        }
+        } catch (Exception ignored) {}
 
         return null;
     }
@@ -224,14 +229,16 @@ public class LoaderManager implements LoaderService {
     }
 
     public String getModId(Path file, boolean checkAlsoOutOfContainer) {
-        if (FMLLoader.getLoadingModList() != null) {
-            List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
-            for (ModInfo modInfo : modInfos) {
-                if (modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
-                    return modInfo.getModId();
+        try {
+            if (FMLLoader.getLoadingModList() != null) {
+                List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
+                for (ModInfo modInfo : modInfos) {
+                    if (modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
+                        return modInfo.getModId();
+                    }
                 }
             }
-        }
+        } catch (Exception ignored) {}
 
         if (checkAlsoOutOfContainer) {
             return getModIdFromNotLoadedJar(file);
