@@ -199,10 +199,10 @@ public class SelfUpdater {
             new ReLauncher();
             var updateType = UpdateType.AUTOMODPACK;
 
-            CustomFileUtils.forceDelete(AUTOMODPACK_JAR);
             CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
             CustomFileUtils.forceDelete(automodpackUpdateJar);
             new ReLauncher(updateType).restart(true, () -> {
+                CustomFileUtils.forceDelete(AUTOMODPACK_JAR);
                 LOGGER.info("Successfully updated AutoModpack!");
             });
         } catch (Exception e) {
