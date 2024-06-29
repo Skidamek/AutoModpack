@@ -63,10 +63,10 @@ public class SelfUpdater {
 
         var loader = new LoaderManager();
         if (loader.isDevelopmentEnvironment()) return false;
-        if (loader.getEnvironmentType() == LoaderService.EnvironmentType.SERVER && !serverConfig.selfUpdater) return false;
-        if (loader.getEnvironmentType() == LoaderService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) return false;
-
-        LOGGER.info("Checking if AutoModpack is up-to-date...");
+        if (loader.getEnvironmentType() == LoaderService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {
+            LOGGER.info("AutoModpack self-updater is disabled in server config.");
+            return false;
+        }
 
         List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
         boolean gettingServerVersion = false;
@@ -75,9 +75,17 @@ public class SelfUpdater {
         if (serverModpackContent != null && serverModpackContent.automodpackVersion != null) {
             modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
             gettingServerVersion = true;
-            LOGGER.info("getting server version: " + serverModpackContent.automodpackVersion);
         } else {
             modrinthAPIList = ModrinthAPI.getModInfosFromID(AUTOMODPACK_ID);
+        }
+
+        if (gettingServerVersion) {
+            LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
+        } else if (loader.getEnvironmentType() == LoaderService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) {
+            LOGGER.info("AutoModpack self-updater is disabled in client config.");
+            return false;
+        } else {
+            LOGGER.info("Checking if AutoModpack is up-to-date...");
         }
 
         String message = "Couldn't get latest version of AutoModpack from Modrinth API. Likely automodpack isn't updated to your version of minecraft yet...";

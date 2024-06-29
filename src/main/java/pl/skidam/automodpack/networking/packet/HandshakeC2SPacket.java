@@ -45,6 +45,8 @@ public class HandshakeC2SPacket {
             return;
         }
 
+        LOGGER.info("Syncing AutoModpack to server version: {}", serverAMVersion);
+
         ModrinthAPI automodpack = ModrinthAPI.getModSpecificVersion(SelfUpdater.AUTOMODPACK_ID, serverAMVersion, MC_VERSION);
 
         if (automodpack == null) {
