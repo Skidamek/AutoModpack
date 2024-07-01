@@ -29,5 +29,4 @@ jobs:
       - name: Run tests
         run: |
           chmod +x gradlew
-          ./gradlew build -x test
-# Will it even build?
+          ./gradlew test

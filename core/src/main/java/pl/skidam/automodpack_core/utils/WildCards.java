@@ -63,6 +63,8 @@ public class WildCards {
                     path = wildcardPath;
                 }
 
+                wildcardPathStr = wildcardPathStr.replace(File.separator, "/");
+
                 if (DEBUG) System.out.println("Path: " + path + " wildcard: " + wildcard + " startsWithSlash: " + startsWithSlash + " blackListed: " + blackListed);
 
                 if (Files.isDirectory(path)) {
@@ -82,14 +84,15 @@ public class WildCards {
 
 
     private void processFile(Path file, String pathStr, String finalWildcard, boolean startsWithSlash, boolean blackListed) {
-        int index = file.toString().replace(File.separator, "/").indexOf(pathStr);
+        String formattedPath = file.toString().replace(File.separator, "/");
+        int index = formattedPath.indexOf(pathStr);
         if (index != -1) {
             pathStr = pathStr + file.toString().substring(index + pathStr.length());
             pathStr = pathStr.replace(File.separator, "/");
             pathStr = pathStr.startsWith("/") ? pathStr : "/" + pathStr;
             matchFile(file, pathStr, finalWildcard, startsWithSlash, blackListed);
         } else {
-            throw new IllegalStateException("File " + file + " does not match the wildcard " + pathStr + " " + finalWildcard + " " + startsWithSlash + " " + blackListed);
+            throw new IllegalStateException("FormattedPath: " + formattedPath + " PathStr: " + pathStr + " Does not match the wildcard: " + finalWildcard + " StartsWithSlash: " + startsWithSlash + " IsBlackListed: " + blackListed);
         }
     }
 
