@@ -50,11 +50,7 @@ public class Common {
             return;
         }
 
-        try {
-            httpServer.start();
-        } catch (IOException e) {
-            LOGGER.error("Couldn't start server.", e);
-        }
+        httpServer.start();
     }
 
     public static void beforeShutdownServer() {

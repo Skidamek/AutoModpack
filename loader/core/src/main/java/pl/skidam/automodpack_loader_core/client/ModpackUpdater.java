@@ -439,9 +439,7 @@ public class ModpackUpdater {
 
         var dupeMods = ModpackUtils.getDupeMods(modpackDir);
 
-        boolean requiresRestart = ModpackUtils.removeDupeMods(dupeMods);
-
-        return requiresRestart;
+        return ModpackUtils.removeDupeMods(dupeMods);
     }
 
     // returns true if requires restart

@@ -3,6 +3,7 @@ package pl.skidam.automodpack.modpack;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
+import io.netty.channel.ChannelFuture;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
@@ -11,7 +12,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 
-import java.io.IOException;
+import java.util.Optional;
 
 import static net.minecraft.server.command.CommandManager.literal;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -55,100 +56,68 @@ public class Commands {
     private static int reload(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
             serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class);
-            VersionedCommandSource.sendFeedback(context, VersionedText.literal("AutoModpack server config reloaded!").formatted(Formatting.GREEN), true);
+            send(context, "AutoModpack server config reloaded!", Formatting.GREEN, true);
         });
+
         return Command.SINGLE_SUCCESS;
     }
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
             if (!httpServer.isRunning()) {
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Starting modpack hosting...")
-                                .formatted(Formatting.YELLOW),
-                        true);
-                try {
-                    httpServer.start();
-                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting started!")
-                                    .formatted(Formatting.GREEN),
-                            true);
-                } catch (IOException e) {
-                    LOGGER.error("Couldn't start server.", e);
-
-                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Couldn't start server." + e.getCause())
-                                    .formatted(Formatting.RED),
-                            true);
+                send(context, "Starting modpack hosting...", Formatting.YELLOW, true);
+                Optional<ChannelFuture> server = httpServer.start();
+                if (server.isPresent()) {
+                    send(context, "Modpack hosting started!", Formatting.GREEN, true);
+                } else {
+                    send(context, "Couldn't start server!", Formatting.RED, true);
                 }
-
             } else {
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting is already running!")
-                                .formatted(Formatting.RED),
-                        false);
+                send(context, "Modpack hosting is already running!", Formatting.RED, false);
             }
         });
+
         return Command.SINGLE_SUCCESS;
     }
 
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
             if (httpServer.isRunning()) {
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Stopping modpack hosting...")
-                                .formatted(Formatting.RED),
-                        true);
-                httpServer.stop();
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting stopped!")
-                                .formatted(Formatting.RED),
-                        true);
+                send(context, "Stopping modpack hosting...", Formatting.RED, true);
+                if (httpServer.stop()) {
+                    send(context, "Modpack hosting stopped!", Formatting.RED, true);
+                } else {
+                    send(context, "Couldn't stop server!", Formatting.RED, true);
+                }
             } else {
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting is not running!")
-                                .formatted(Formatting.RED),
-                        false);
+                send(context, "Modpack hosting is not running!", Formatting.RED, false);
             }
         });
+
         return Command.SINGLE_SUCCESS;
     }
 
     private static int restartModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            VersionedCommandSource.sendFeedback(context, VersionedText.literal("Restarting modpack hosting...")
-                            .formatted(Formatting.YELLOW),
-                    true);
-            if (httpServer.isRunning()) {
-                httpServer.stop();
-                try {
-                    httpServer.start();
+            send(context, "Restarting modpack hosting...", Formatting.YELLOW, true);
+            boolean needStop = httpServer.isRunning();
+            boolean stopped = false;
+            if (needStop) {
+                stopped = httpServer.stop();
+            }
 
-                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting restarted!")
-                                    .formatted(Formatting.GREEN),
-                            true);
-
-                } catch (IOException e) {
-                    LOGGER.error("Couldn't start server.", e);
-
-                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Couldn't start server." + e.getCause())
-                                    .formatted(Formatting.RED),
-                            true);
-                }
-
-            } else if (serverConfig.modpackHost){
-                try {
-                    httpServer.start();
-
-                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting restarted!")
-                                    .formatted(Formatting.GREEN),
-                            true);
-                } catch (IOException e) {
-                    LOGGER.error("Couldn't start server.", e);
-
-                    VersionedCommandSource.sendFeedback(context, VersionedText.literal("Couldn't start server." + e.getCause())
-                                    .formatted(Formatting.RED),
-                            true);
-                }
+            if (needStop && !stopped) {
+                send(context, "Couldn't restart server!", Formatting.RED, true);
             } else {
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting is disabled in config!")
-                                .formatted(Formatting.RED),
-                        false);
+                Optional<ChannelFuture> server = httpServer.start();
+                if (server.isPresent()) {
+                    send(context, "Modpack hosting restarted!", Formatting.GREEN, true);
+                } else {
+                    send(context, "Couldn't restart server!", Formatting.RED, true);
+                }
             }
         });
+
         return Command.SINGLE_SUCCESS;
     }
 
@@ -156,56 +125,51 @@ public class Commands {
     private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
         Formatting statusColor = httpServer.isRunning() ? Formatting.GREEN : Formatting.RED;
         String status = httpServer.isRunning() ? "running" : "not running";
-        VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack hosting status")
-                .formatted(Formatting.GREEN)
-                .append(VersionedText.literal(" - ")
-                        .formatted(Formatting.WHITE)
-                        .append(VersionedText.literal(status)
-                                .formatted(statusColor)
-                        )
-                ), false);
+        send(context, "Modpack hosting status", Formatting.GREEN, status, statusColor, false);
         return Command.SINGLE_SUCCESS;
     }
 
     private static int about(CommandContext<ServerCommandSource> context) {
-        VersionedCommandSource.sendFeedback(context, VersionedText.literal("AutoModpack")
-                .formatted(Formatting.GREEN)
-                .append(VersionedText.literal(" - " + AM_VERSION)
-                        .formatted(Formatting.WHITE)
-                ), false);
-        VersionedCommandSource.sendFeedback(context, VersionedText.literal("/automodpack generate")
-                .formatted(Formatting.YELLOW), false);
-        VersionedCommandSource.sendFeedback(context, VersionedText.literal("/automodpack host start/stop/restart")
-                .formatted(Formatting.YELLOW), false);
-        VersionedCommandSource.sendFeedback(context, VersionedText.literal("/automodpack config reload")
-                .formatted(Formatting.YELLOW), false);
+        send(context, "AutoModpack", Formatting.GREEN, AM_VERSION, Formatting.GREEN, false);
+        send(context, "/automodpack generate", Formatting.YELLOW, false);
+        send(context, "/automodpack host start/stop/restart", Formatting.YELLOW, false);
+        send(context, "/automodpack config reload", Formatting.YELLOW, false);
         return Command.SINGLE_SUCCESS;
     }
 
     private static int generateModpack(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-
             if (modpack.isGenerating()) {
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack is already generating! Please wait!")
-                                .formatted(Formatting.RED),
-                        false);
+                send(context, "Modpack is already generating! Please wait!", Formatting.RED, false);
                 return;
             }
-
-            VersionedCommandSource.sendFeedback(context, VersionedText.literal("Generating Modpack...")
-                            .formatted(Formatting.YELLOW),
-                    true);
+            send(context, "Generating Modpack...", Formatting.YELLOW, true);
             long start = System.currentTimeMillis();
-            if (modpack.generateNew()) { // TODO generate old if exists
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack generated! took " + (System.currentTimeMillis() - start) + "ms")
-                                .formatted(Formatting.GREEN),
-                        true);
+            if (modpack.generateNew()) {
+                send(context, "Modpack generated! took " + (System.currentTimeMillis() - start) + "ms", Formatting.GREEN, true);
             } else {
-                VersionedCommandSource.sendFeedback(context, VersionedText.literal("Modpack generation failed! Check logs for more info.")
-                                .formatted(Formatting.RED),
-                        true);
+                send(context, "Modpack generation failed! Check logs for more info.", Formatting.RED, true);
             }
         });
+
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, boolean broadcast) {
+        VersionedCommandSource.sendFeedback(context,
+                VersionedText.literal(msg)
+                        .formatted(Formatting.GREEN),
+                broadcast);
+    }
+
+    private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, String appendMsg, Formatting appendMsgColor, boolean broadcast) {
+        VersionedCommandSource.sendFeedback(context,
+                VersionedText.literal(msg)
+                .formatted(Formatting.GREEN)
+                .append(VersionedText.literal(" - ")
+                        .formatted(Formatting.WHITE)
+                        .append(VersionedText.literal(appendMsg))
+                                .formatted(appendMsgColor)),
+                broadcast);
     }
 }

@@ -38,7 +38,7 @@ public class HttpServer {
         return Optional.ofNullable(paths.get(hash));
     }
 
-    public Optional<ChannelFuture> start() throws IOException {
+    public Optional<ChannelFuture> start() {
         if (!canStart()) {
             return Optional.empty();
         }
@@ -49,7 +49,7 @@ public class HttpServer {
         MultithreadEventLoopGroup eventLoopGroup;
         Class<? extends ServerChannel> socketChannelClass;
         if (Epoll.isAvailable()) {
-            socketChannelClass =  EpollServerSocketChannel.class;
+            socketChannelClass = EpollServerSocketChannel.class;
             eventLoopGroup = new EpollEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
         } else {
             socketChannelClass = NioServerSocketChannel.class;
@@ -80,16 +80,20 @@ public class HttpServer {
         return Optional.ofNullable(serverChannel);
     }
 
-    public void stop() {
+    // Returns true if stopped successfully
+    public boolean stop() {
         if (serverChannel == null) {
-            return;
+            return false;
         }
 
         try {
             serverChannel.channel().close().sync();
         } catch (InterruptedException e) {
             LOGGER.error("Interrupted server channel", e);
+            return false;
         }
+
+        return true;
     }
 
     public boolean isRunning() {
