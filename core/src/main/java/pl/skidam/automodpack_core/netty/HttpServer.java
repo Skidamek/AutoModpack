@@ -14,12 +14,19 @@ import pl.skidam.automodpack_core.utils.ObservableMap;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.*;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class HttpServer {
+    public static final String HTTP_REQUEST_BASE = "/automodpack/";
+    public static final String HTTP_REQUEST_GET = "GET " + HTTP_REQUEST_BASE;
+    public static final String HTTP_REQUEST_REFRESH = "POST " + HTTP_REQUEST_BASE + "refresh";
+    public static final byte[] HTTP_REQUEST_GET_BASE_BYTES = HTTP_REQUEST_GET.getBytes(StandardCharsets.UTF_8);
+    public static final byte[] HTTP_REQUEST_REFRESH_BYTES = HTTP_REQUEST_REFRESH.getBytes(StandardCharsets.UTF_8);
+
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port

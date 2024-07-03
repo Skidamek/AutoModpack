@@ -19,23 +19,18 @@ import java.util.concurrent.CompletableFuture;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
-    private static final String HTTP_REQUEST_BASE = "/automodpack/";
-    private static final String HTTP_REQUEST_GET = "GET " + HTTP_REQUEST_BASE;
-    private static final String HTTP_REQUEST_REFRESH = "POST " + HTTP_REQUEST_BASE + "refresh";
-    private static final byte[] HTTP_REQUEST_GET_BASE_BYTES = HTTP_REQUEST_GET.getBytes(StandardCharsets.UTF_8);
-    private static final byte[] HTTP_REQUEST_REFRESH_BYTES = HTTP_REQUEST_REFRESH.getBytes(StandardCharsets.UTF_8);
 
     public boolean isAutoModpackRequest(ByteBuf buf) {
         boolean equals = false;
         try {
             buf.markReaderIndex();
-            byte[] data1 = new byte[HTTP_REQUEST_GET_BASE_BYTES.length];
+            byte[] data1 = new byte[HttpServer.HTTP_REQUEST_GET_BASE_BYTES.length];
             buf.readBytes(data1);
             buf.resetReaderIndex();
-            byte[] data2 = new byte[HTTP_REQUEST_REFRESH_BYTES.length];
+            byte[] data2 = new byte[HttpServer.HTTP_REQUEST_REFRESH_BYTES.length];
             buf.readBytes(data2);
             buf.resetReaderIndex();
-            equals = Arrays.equals(data1, HTTP_REQUEST_GET_BASE_BYTES) || Arrays.equals(data2, HTTP_REQUEST_REFRESH_BYTES);
+            equals = Arrays.equals(data1, HttpServer.HTTP_REQUEST_GET_BASE_BYTES) || Arrays.equals(data2, HttpServer.HTTP_REQUEST_REFRESH_BYTES);
         } catch (IndexOutOfBoundsException ignored) {
         } catch (Exception e) {
             LOGGER.error("Couldn't read channel!", e);
@@ -49,8 +44,8 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         final String[] requestFirstLine = requestLines[0].split(" ");
         final String requestUrl = requestFirstLine[1];
 
-        if (requestUrl.contains(HTTP_REQUEST_BASE)) {
-            return requestUrl.replaceFirst("/automodpack/", "");
+        if (requestUrl.contains(HttpServer.HTTP_REQUEST_BASE)) {
+            return requestUrl.replaceFirst(HttpServer.HTTP_REQUEST_BASE, "");
         } else {
             return null;
         }
@@ -77,7 +72,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private String getRequest(ByteBuf buf) {
         try {
             buf.markReaderIndex();
-            if (buf.readableBytes() > 4096 || buf.readableBytes() < HTTP_REQUEST_BASE.length()) {
+            if (buf.readableBytes() > 4096 || buf.readableBytes() < HttpServer.HTTP_REQUEST_BASE.length()) {
                 return null;
             }
 
@@ -104,9 +99,9 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
         var firstContext = context.pipeline().firstContext();
 
-        if (request.contains(HTTP_REQUEST_GET)) {
+        if (request.contains(HttpServer.HTTP_REQUEST_GET)) {
             sendFile(firstContext, requestUri);
-        } else if (request.contains(HTTP_REQUEST_REFRESH)) {
+        } else if (request.contains(HttpServer.HTTP_REQUEST_REFRESH)) {
             // TODO set limit for one ip max 1 request per 5 seconds
             refreshModpackFiles(firstContext, request);
         }
