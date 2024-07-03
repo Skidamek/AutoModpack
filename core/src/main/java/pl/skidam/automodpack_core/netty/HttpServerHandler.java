@@ -8,7 +8,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
-import pl.skidam.automodpack_core.modpack.Modpack;
 
 import java.io.FileNotFoundException;
 import java.io.RandomAccessFile;
@@ -98,6 +97,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     // TODO append our handler in different place (should bring better performance), "context.fireChannelRead(msg)" here will result in breaking minecraft packet, we don't want it
     @Override
     public void channelRead(ChannelHandlerContext context, Object msg) {
+        if (!httpServer.shouldHost()) return;
         final String request = getRequest((ByteBuf) msg);
         if (request == null) return;
         final String requestUri = parseRequestUri(request);

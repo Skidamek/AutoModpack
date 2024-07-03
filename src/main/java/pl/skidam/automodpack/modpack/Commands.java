@@ -3,7 +3,6 @@ package pl.skidam.automodpack.modpack;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
-import io.netty.channel.ChannelFuture;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
@@ -11,8 +10,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-
-import java.util.Optional;
 
 import static net.minecraft.server.command.CommandManager.literal;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -66,8 +63,8 @@ public class Commands {
         Util.getMainWorkerExecutor().execute(() -> {
             if (!httpServer.isRunning()) {
                 send(context, "Starting modpack hosting...", Formatting.YELLOW, true);
-                Optional<ChannelFuture> server = httpServer.start();
-                if (server.isPresent()) {
+                httpServer.start();
+                if (httpServer.isRunning()) {
                     send(context, "Modpack hosting started!", Formatting.GREEN, true);
                 } else {
                     send(context, "Couldn't start server!", Formatting.RED, true);
@@ -109,8 +106,8 @@ public class Commands {
             if (needStop && !stopped) {
                 send(context, "Couldn't restart server!", Formatting.RED, true);
             } else {
-                Optional<ChannelFuture> server = httpServer.start();
-                if (server.isPresent()) {
+                httpServer.start();
+                if (httpServer.isRunning()) {
                     send(context, "Modpack hosting restarted!", Formatting.GREEN, true);
                 } else {
                     send(context, "Couldn't restart server!", Formatting.RED, true);

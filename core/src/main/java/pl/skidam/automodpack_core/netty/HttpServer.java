@@ -12,7 +12,6 @@ import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.Ip;
 import pl.skidam.automodpack_core.utils.ObservableMap;
 
-import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
@@ -23,6 +22,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class HttpServer {
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
     private ChannelFuture serverChannel;
+    private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
 
     public void addPaths(ObservableMap<String, Path> paths) {
         this.paths.putAll(paths.getMap());
@@ -68,6 +68,7 @@ public class HttpServer {
                                     // ignore it
                                 }
 
+                                shouldHost = true;
                                 channel.pipeline().addLast("automodpack_http", new HttpServerHandler());
                             }
                         }
@@ -83,6 +84,10 @@ public class HttpServer {
     // Returns true if stopped successfully
     public boolean stop() {
         if (serverChannel == null) {
+            if (shouldHost) {
+                shouldHost = false;
+                return true;
+            }
             return false;
         }
 
@@ -96,15 +101,13 @@ public class HttpServer {
         return true;
     }
 
-    public boolean isRunning() {
-        // TODO Change that
-        // good enough for now
-        if (serverConfig.hostModpackOnMinecraftPort && serverConfig.modpackHost && !paths.isEmpty()) {
-            return true;
-        }
+    public boolean shouldHost() {
+        return shouldHost;
+    }
 
+    public boolean isRunning() {
         if (serverChannel == null) {
-            return false;
+            return shouldHost;
         }
 
         return serverChannel.channel().isOpen();
@@ -126,6 +129,7 @@ public class HttpServer {
         }
 
         if (serverConfig.hostModpackOnMinecraftPort) {
+            shouldHost = true;
             LOGGER.info("Hosting modpack on Minecraft port");
             return false;
         }
