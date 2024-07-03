@@ -19,23 +19,22 @@ import java.util.concurrent.CompletableFuture;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
-    private final String HTTP_REQUEST_BASE = "/automodpack";
-    private final String HTTP_REQUEST_GET = "GET " + HTTP_REQUEST_BASE;
-    private final String HTTP_REQUEST_REFRESH = "POST " + HTTP_REQUEST_BASE + "/refresh";
-    private final byte[] HTTP_REQUEST_GET_BASE_BYTES = HTTP_REQUEST_GET.getBytes(StandardCharsets.UTF_8);
-    private final byte[] HTTP_REQUEST_REFRESH_BYTES = HTTP_REQUEST_REFRESH.getBytes(StandardCharsets.UTF_8);
+    private static final String HTTP_REQUEST_BASE = "/automodpack/";
+    private static final String HTTP_REQUEST_GET = "GET " + HTTP_REQUEST_BASE;
+    private static final String HTTP_REQUEST_REFRESH = "POST " + HTTP_REQUEST_BASE + "refresh";
+    private static final byte[] HTTP_REQUEST_GET_BASE_BYTES = HTTP_REQUEST_GET.getBytes(StandardCharsets.UTF_8);
+    private static final byte[] HTTP_REQUEST_REFRESH_BYTES = HTTP_REQUEST_REFRESH.getBytes(StandardCharsets.UTF_8);
 
     public boolean isAutoModpackRequest(ByteBuf buf) {
         boolean equals = false;
         try {
-            // TODO optimize it if possible
+            buf.markReaderIndex();
             byte[] data1 = new byte[HTTP_REQUEST_GET_BASE_BYTES.length];
             buf.readBytes(data1);
             buf.resetReaderIndex();
             byte[] data2 = new byte[HTTP_REQUEST_REFRESH_BYTES.length];
             buf.readBytes(data2);
             buf.resetReaderIndex();
-
             equals = Arrays.equals(data1, HTTP_REQUEST_GET_BASE_BYTES) || Arrays.equals(data2, HTTP_REQUEST_REFRESH_BYTES);
         } catch (IndexOutOfBoundsException ignored) {
         } catch (Exception e) {
@@ -77,11 +76,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     private String getRequest(ByteBuf buf) {
         try {
+            buf.markReaderIndex();
             if (buf.readableBytes() > 4096 || buf.readableBytes() < HTTP_REQUEST_BASE.length()) {
                 return null;
             }
 
-            buf.resetReaderIndex();
             byte[] data = new byte[buf.readableBytes()];
             buf.readBytes(data);
             buf.resetReaderIndex();
@@ -111,6 +110,8 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             // TODO set limit for one ip max 1 request per 5 seconds
             refreshModpackFiles(firstContext, request);
         }
+
+        buf.release();
     }
 
     private void refreshModpackFiles(ChannelHandlerContext context, String request) {

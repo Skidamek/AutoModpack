@@ -21,22 +21,15 @@ public class LegacyQueryHandlerMixin {
             cancellable = true
     )
     public void handle(ChannelHandlerContext context, Object msg, CallbackInfo ci) {
-        if (httpServer.isRunning()) {
-            HttpServerHandler handler = new HttpServerHandler();
+        if (!httpServer.isRunning()) return;
 
-            ByteBuf byteBuf = (ByteBuf) msg;
-            byteBuf.markReaderIndex();
-
-            if (handler.isAutoModpackRequest(byteBuf)) {
-                // Cancel the legacy query request as it is http request
-                // Pass to our http handler
-                ci.cancel();
-                handler.channelRead(context, byteBuf);
-                byteBuf.release();
-            }
-
-            byteBuf.resetReaderIndex();
+        HttpServerHandler handler = new HttpServerHandler();
+        ByteBuf byteBuf = (ByteBuf) msg;
+        if (handler.isAutoModpackRequest(byteBuf)) {
+            // Cancel the legacy query request as it is http request
+            // Pass to our http handler
+            handler.channelRead(context, byteBuf);
+            ci.cancel();
         }
     }
-
 }
