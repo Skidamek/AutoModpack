@@ -29,12 +29,9 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         boolean equals = false;
         try {
             // TODO optimize it if possible
-            buf.markReaderIndex();
             byte[] data1 = new byte[HTTP_REQUEST_GET_BASE_BYTES.length];
             buf.readBytes(data1);
             buf.resetReaderIndex();
-
-            buf.markReaderIndex();
             byte[] data2 = new byte[HTTP_REQUEST_REFRESH_BYTES.length];
             buf.readBytes(data2);
             buf.resetReaderIndex();
@@ -84,7 +81,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 return null;
             }
 
-            buf.markReaderIndex();
+            buf.resetReaderIndex();
             byte[] data = new byte[buf.readableBytes()];
             buf.readBytes(data);
             buf.resetReaderIndex();
@@ -97,8 +94,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     // TODO append our handler in different place (should bring better performance), "context.fireChannelRead(msg)" here will result in breaking minecraft packet, we don't want it
     @Override
     public void channelRead(ChannelHandlerContext context, Object msg) {
-        if (!httpServer.shouldHost()) return;
-        final String request = getRequest((ByteBuf) msg);
+        channelRead(context, (ByteBuf) msg);
+    }
+
+    public void channelRead(ChannelHandlerContext context, ByteBuf buf) {
+        final String request = getRequest(buf);
         if (request == null) return;
         final String requestUri = parseRequestUri(request);
         if (requestUri == null) return;

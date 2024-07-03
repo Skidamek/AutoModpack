@@ -101,10 +101,6 @@ public class HttpServer {
         return true;
     }
 
-    public boolean shouldHost() {
-        return shouldHost;
-    }
-
     public boolean isRunning() {
         if (serverChannel == null) {
             return shouldHost;
