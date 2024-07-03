@@ -33,7 +33,7 @@ public class ModpackUtils {
         var optionalClientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
         if (optionalClientModpackContentFile.isPresent() && Files.exists(optionalClientModpackContentFile.get())) {
 
-            Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadConfig(optionalClientModpackContentFile.get(), Jsons.ModpackContentFields.class);
+            Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
 
             if (clientModpackContent == null) {
                 return true;
@@ -46,11 +46,9 @@ public class ModpackUtils {
 
                 Path path = Path.of(modpackDir + file);
 
-                if (modpackContentField.editable && Files.exists(path)) {
-                    continue;
-                }
-
-                if (!Files.exists(path)) {
+                if (Files.exists(path)) {
+                    if (modpackContentField.editable) continue;
+                } else {
                     Path standardPath = Path.of("." + file);
                     if (Files.exists(standardPath) && Objects.equals(serverSHA1, CustomFileUtils.getHash(standardPath, "sha1").orElse(null))) {
                         LOGGER.info("File {} already exists on client, coping to modpack", standardPath.getFileName());

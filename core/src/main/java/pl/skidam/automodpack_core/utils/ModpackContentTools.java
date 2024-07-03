@@ -30,7 +30,7 @@ public class ModpackContentTools {
 
         Path path = modpackDir.resolve(hostModpackContentFile.getFileName());
 
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadConfig(path, Jsons.ModpackContentFields.class);
+        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(path);
         if (modpackContent != null && modpackContent.link != null && !modpackContent.link.isEmpty()) {
             return Optional.of(modpackContent.link);
         }

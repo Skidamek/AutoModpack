@@ -50,7 +50,7 @@ public class Preload {
 
             selectedModpackLink = optionalSelectedModpackLink.get();
             var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackLink);
-            var latestModpackContent = ConfigTools.loadConfig(selectedModpackDir.resolve(hostModpackContentFile.getFileName()), Jsons.ModpackContentFields.class);
+            var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
             if (optionalLatestModpackContent.isPresent()) {
                 latestModpackContent = optionalLatestModpackContent.get();
             }
