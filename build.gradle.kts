@@ -52,3 +52,10 @@ tasks.register("build") {
         dependsOn("${it.name}:build")
     }
 }
+
+// clean merged directory
+tasks.register("clean") {
+    doLast {
+        mergedDir.deleteRecursively()
+    }
+}
