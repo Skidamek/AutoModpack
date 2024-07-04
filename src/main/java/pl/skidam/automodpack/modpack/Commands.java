@@ -155,14 +155,14 @@ public class Commands {
     private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, boolean broadcast) {
         VersionedCommandSource.sendFeedback(context,
                 VersionedText.literal(msg)
-                        .formatted(Formatting.GREEN),
+                        .formatted(msgColor),
                 broadcast);
     }
 
     private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, String appendMsg, Formatting appendMsgColor, boolean broadcast) {
         VersionedCommandSource.sendFeedback(context,
                 VersionedText.literal(msg)
-                .formatted(Formatting.GREEN)
+                .formatted(msgColor)
                 .append(VersionedText.literal(" - ")
                         .formatted(Formatting.WHITE)
                         .append(VersionedText.literal(appendMsg))
