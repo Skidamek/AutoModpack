@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.utils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -13,22 +14,23 @@ class WildCardsTest {
 
     private WildCards wildCards;
     private final Path testFilesDir = Path.of("src/test/resources/testFiles");
+    private final String testFilesStr = testFilesDir.toString().replace(File.separator, "/");
 
     @BeforeEach
     void setUp() {
         DEBUG = true;
 
         var wildcards = List.of(
-                "/" + testFilesDir + "/file.txt",
-                "/" + testFilesDir + "/config/config*",
-                "/" + testFilesDir + "/config/mod-config.toml",
-                "/" + testFilesDir + "/mods/*.jar",
-                "!/" + testFilesDir + "/mods/server-*jar",
-                "!/" + testFilesDir + "/mods/*19.jar",
-                "!/" + testFilesDir + "/shaders/*.txt",
-                "/" + testFilesDir + "/thisfiledoesnotexist.txt",
-                "/" + testFilesDir + "/shaders/*",
-                "!/" + testFilesDir + "/shaders/notashader.zip"
+                "/" + testFilesStr + "/file.txt",
+                "/" + testFilesStr + "/config/config*",
+                "/" + testFilesStr + "/config/mod-config.toml",
+                "/" + testFilesStr + "/mods/*.jar",
+                "!/" + testFilesStr + "/mods/server-*jar",
+                "!/" + testFilesStr + "/mods/*19.jar",
+                "!/" + testFilesStr + "/shaders/*.txt",
+                "/" + testFilesStr + "/thisfiledoesnotexist.txt",
+                "/" + testFilesStr + "/shaders/*",
+                "!/" + testFilesStr + "/shaders/notashader.zip"
         );
         wildCards = new WildCards(wildcards, List.of(testFilesDir));
 

@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.modpack;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,16 +13,19 @@ import static pl.skidam.automodpack_core.GlobalVariables.DEBUG;
 class ModpackTest {
 
     private final Path testFilesDir = Path.of("src/test/resources/testFiles");
+    private final String testFilesStr = testFilesDir.toString().replace(File.separator, "/");
 
     @Test
     void modpackTest() {
         DEBUG = true;
 
         var editable = List.of(
-                "/" + testFilesDir + "/file.txt",
-                "/" + testFilesDir + "/config/*",
-                "!/" + testFilesDir + "/config/config-mod.json5"
+                "/" + testFilesStr + "/file.txt",
+                "/" + testFilesStr + "/config/*",
+                "!/" + testFilesStr + "/config/config-mod.json5"
         );
+
+        editable.forEach(System.out::println);
 
         var correctResults = List.of(
                 "ModpackContentItems(file=/shaders/notashader.zip, size=1, type=other, editable=false, sha1=86f7e437faa5a7fce15d1ddcb9eaeaea377667b8, murmur=null)",

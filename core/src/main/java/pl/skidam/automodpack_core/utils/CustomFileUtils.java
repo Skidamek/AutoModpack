@@ -128,12 +128,14 @@ public class CustomFileUtils {
             LOGGER.error("File: " + modpackFileStr + " is not in modpack directory: " + modpackPathStrAbs + " or current working directory: " + cwdStrAbs);
         }
 
+        formattedFile =  formattedFile.replace(File.separator, "/");
+
         // Its probably useless, but just in case
         if (!formattedFile.startsWith("/")) {
             formattedFile = "/" + formattedFile;
         }
 
-        return formattedFile.replace(File.separator, "/");
+        return formattedFile;
     }
 
 
