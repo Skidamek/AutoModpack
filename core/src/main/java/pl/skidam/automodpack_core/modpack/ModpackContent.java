@@ -5,7 +5,6 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_core.utils.*;
 
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -49,7 +48,7 @@ public class ModpackContent {
             // host-modpack generation
             if (MODPACK_DIR != null) {
                 LOGGER.info("Syncing {}...", MODPACK_DIR.getFileName());
-                Files.list(MODPACK_DIR).forEach(path ->  creationFutures.add(generateAsync(path.getParent(), path)));
+                Files.list(MODPACK_DIR).forEach(path ->  creationFutures.add(generateAsync(path)));
 
                 // Wait till finish
                 creationFutures.forEach((CompletableFuture::join));
@@ -57,7 +56,7 @@ public class ModpackContent {
             }
 
             // synced files generation
-            SYNCED_FILES_CARDS.getWildcardMatches().values().forEach(path -> creationFutures.add(generateAsync(CWD, path)));
+            SYNCED_FILES_CARDS.getWildcardMatches().values().forEach(path -> creationFutures.add(generateAsync(path)));
 
             // Wait till finish
             creationFutures.forEach((CompletableFuture::join));
@@ -122,38 +121,38 @@ public class ModpackContent {
             modpackContent.loader = LOADER;
             modpackContent.modpackName = MODPACK_NAME;
 
-            ConfigTools.saveConfig(hostModpackContentFile, modpackContent);
+            ConfigTools.saveModpackContent(hostModpackContentFile, modpackContent);
         }
     }
 
-    private CompletableFuture<Void> generateAsync(Path modpackDir, Path file) {
-        return CompletableFuture.runAsync(() -> generate(modpackDir, file), CREATION_EXECUTOR);
+    private CompletableFuture<Void> generateAsync(Path file) {
+        return CompletableFuture.runAsync(() -> generate( file), CREATION_EXECUTOR);
     }
 
-    private void generate(Path modpackDir, Path file) {
+    private void generate(Path file) {
         try {
-            Jsons.ModpackContentFields.ModpackContentItem item = generateContent(modpackDir, file);
+            Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file);
             if (item != null && !list.contains(item)) {
                 LOGGER.info("generated content for {}", item.file);
                 list.add(item);
             }
         } catch (Exception e) {
-            LOGGER.error("Error while generating content for: " + file + " generated from: " + modpackDir, e);
+            LOGGER.error("Error while generating content for: " + file + " generated from: " + MODPACK_DIR, e);
         }
     }
 
-    public CompletableFuture<Void> replaceAsync(Path modpackDir, Path file) {
-        return CompletableFuture.runAsync(() -> replace(modpackDir, file), CREATION_EXECUTOR);
+    public CompletableFuture<Void> replaceAsync(Path file) {
+        return CompletableFuture.runAsync(() -> replace(file), CREATION_EXECUTOR);
     }
 
-    public void replace(Path modpackDir, Path file) {
-        remove(file, false);
-        generate(modpackDir, file);
+    public void replace(Path file) {
+        remove(file);
+        generate(file);
     }
 
-    public void remove(Path file, boolean save) {
+    public void remove(Path file) {
 
-        String modpackFile = CustomFileUtils.formatPath(file, hostContentModpackDir);
+        String modpackFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
 
         synchronized (list) {
             for (Jsons.ModpackContentFields.ModpackContentItem item : this.list) {
@@ -165,15 +164,12 @@ public class ModpackContent {
                 }
             }
         }
-
-        if (save) {
-            saveModpackContent();
-        }
     }
 
-    private Jsons.ModpackContentFields.ModpackContentItem generateContent(Path modpackDir, final Path file) throws Exception {
-        if (modpackDir != null) {
-            modpackDir = modpackDir.toAbsolutePath().normalize();
+    private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file) throws Exception {
+        Path absoluteModpackDir = MODPACK_DIR;
+        if (MODPACK_DIR != null) {
+            absoluteModpackDir = MODPACK_DIR.toAbsolutePath().normalize();
         }
 
         if (Files.isDirectory(file)) {
@@ -185,14 +181,13 @@ public class ModpackContent {
             List<Path> childFiles = Files.list(file).toList();
 
             for (Path childFile : childFiles) {
-                // FIXME concerning
-                var generated = generateContent(modpackDir, childFile);
+                var generated = generateContent(childFile);
                 if (generated != null) {
                     list.add(generated);
                 }
             }
-        } else {
-            String modpackFile = CustomFileUtils.formatPath(file, hostContentModpackDir);
+        } else if (Files.isRegularFile(file)) {
+            String modpackFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
 
             boolean isEditable = false;
 
@@ -203,20 +198,12 @@ public class ModpackContent {
                 return null;
             }
 
-            if (modpackDir == null) {
-                modpackFile = "/" + file.getFileName();
-            } else if (!modpackDir.toString().startsWith(hostContentModpackDir.normalize().toString())) {
-                modpackFile = "/" + modpackDir.relativize(file.toAbsolutePath().normalize());
-            }
-
-            modpackFile = modpackFile.replace(File.separator, "/");
-
             // modpackFile is relative path to ~/.minecraft/ (content format) so if it starts with /automodpack/ something is wrong
             if (modpackFile.startsWith("/automodpack/")) {
                 return null;
             }
 
-            if (!hostContentModpackDir.equals(modpackDir)) {
+            if (!hostContentModpackDir.equals(absoluteModpackDir)) {
                 if (file.toString().startsWith(".")) {
                     LOGGER.info("Skipping file {} is hidden", modpackFile);
                     return null;

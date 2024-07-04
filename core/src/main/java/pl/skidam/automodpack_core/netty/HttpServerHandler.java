@@ -134,14 +134,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
             modpacks.add(modpack);
 
-            Path modpackDir;
-            if (path.toAbsolutePath().toString().contains(hostContentModpackDir.toAbsolutePath().toString())) {
-                modpackDir = hostContentModpackDir;
-            } else {
-                modpackDir = Path.of(System.getProperty("user.dir"));
-            }
-
-            creationFutures.add(modpack.replaceAsync(modpackDir, path));
+            creationFutures.add(modpack.replaceAsync(path));
         }
 
         creationFutures.forEach(CompletableFuture::join);
@@ -168,11 +161,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             raf = new RandomAccessFile(path.toFile(), "r");
         } catch (FileNotFoundException e) {
             sendError(context, 404);
-            LOGGER.error("Requested file not found!", e);
+            LOGGER.error("Requested file not found!", e.getCause());
             return;
         } catch (Exception e) {
             sendError(context, 418);
-            LOGGER.error("Failed to open the file " + path, e);
+            LOGGER.error("Failed to open the file {}", path, e);
             return;
         }
 

@@ -19,15 +19,15 @@ class WildCardsTest {
         DEBUG = true;
 
         var wildcards = List.of(
-                testFilesDir + "/file.txt",
-                testFilesDir + "/config/config*",
+                "/" + testFilesDir + "/file.txt",
+                "/" + testFilesDir + "/config/config*",
                 "/" + testFilesDir + "/config/mod-config.toml",
                 "/" + testFilesDir + "/mods/*.jar",
                 "!/" + testFilesDir + "/mods/server-*jar",
-                "!" + testFilesDir + "/mods/*19.jar",
-                "!" + testFilesDir + "/shaders/*.txt",
-                testFilesDir + "/thisfiledoesnotexist.txt",
-                testFilesDir + "/shaders/*",
+                "!/" + testFilesDir + "/mods/*19.jar",
+                "!/" + testFilesDir + "/shaders/*.txt",
+                "/" + testFilesDir + "/thisfiledoesnotexist.txt",
+                "/" + testFilesDir + "/shaders/*",
                 "!/" + testFilesDir + "/shaders/notashader.zip"
         );
         wildCards = new WildCards(wildcards, List.of(testFilesDir));

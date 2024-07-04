@@ -104,16 +104,23 @@ public class CustomFileUtils {
     }
 
     // Formats path to be relative to the modpack directory - modpack-content format
+    // modpackFile can not be null
+    // modpackPath can be null
     public static String formatPath(final Path modpackFile, final Path modpackPath) {
         final String modpackFileStr = modpackFile.normalize().toString();
         final String modpackFileStrAbs = modpackFile.toAbsolutePath().normalize().toString();
-        final String modpackPathStrAbs = modpackPath.toAbsolutePath().normalize().toString();
+
+        String modpackPathStrAbs = null;
+        if (modpackPath != null) {
+            modpackPathStrAbs = modpackPath.toAbsolutePath().normalize().toString();
+        }
+
         final String cwdStrAbs = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize().toString();
 
         String formattedFile = modpackFileStr;
 
         // Checks if in file parents paths (absolute path) there is modpack directory (absolute path)
-        if (modpackFileStrAbs.contains(modpackPathStrAbs)) {
+        if (modpackPathStrAbs != null && modpackFileStrAbs.contains(modpackPathStrAbs)) {
             formattedFile = modpackFileStrAbs.replace(modpackPathStrAbs, "");
         } else if (modpackFileStrAbs.contains(cwdStrAbs)) {
             formattedFile = modpackFileStrAbs.replace(cwdStrAbs, "");
@@ -121,7 +128,12 @@ public class CustomFileUtils {
             LOGGER.error("File: " + modpackFileStr + " is not in modpack directory: " + modpackPathStrAbs + " or current working directory: " + cwdStrAbs);
         }
 
-        return  "/" + formattedFile.replace(File.separator, "/");
+        // Its probably useless, but just in case
+        if (!formattedFile.startsWith("/")) {
+            formattedFile = "/" + formattedFile;
+        }
+
+        return formattedFile.replace(File.separator, "/");
     }
 
 
@@ -342,5 +354,11 @@ public class CustomFileUtils {
             byteList.add(b);
         }
         return byteList;
+    }
+
+    public static boolean isEmptyDirectory(Path parentPath) throws IOException {
+        if (!Files.isDirectory(parentPath)) return false;
+        List<Path> files = Files.list(parentPath).toList();
+        return files.isEmpty();
     }
 }

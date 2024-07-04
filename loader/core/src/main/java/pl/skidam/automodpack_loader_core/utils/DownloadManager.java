@@ -17,7 +17,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class DownloadManager {
     private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
-    private static final int MAX_DOWNLOAD_ATTEMPTS = 3;
+    private static final int MAX_DOWNLOAD_ATTEMPTS = 2; // its actually 3, but we start from 0
     private static final int BUFFER_SIZE = 128 * 1024;
     private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
     private final Map<HashAndPath, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
@@ -59,10 +59,10 @@ public class DownloadManager {
             interrupted = true;
         } catch (SocketTimeoutException e) {
             CustomFileUtils.forceDelete(queuedDownload.file);
-            LOGGER.error("Timeout - {} - {}", queuedDownload.file, e);
+            LOGGER.warn("Timeout - {} - {}", queuedDownload.file, e);
         } catch (Exception e) {
             CustomFileUtils.forceDelete(queuedDownload.file);
-            LOGGER.error("Download failed - {} - {}", queuedDownload.file, e);
+            LOGGER.warn("Error while downloading file - {} - {}", queuedDownload.file, e);
         } finally {
             synchronized (downloadsInProgress) {
                 downloadsInProgress.remove(hashAndPath);
@@ -74,7 +74,6 @@ public class DownloadManager {
 
                 if (!Objects.equals(hash, hashAndPath.hash)) {
                     bytesDownloaded -= queuedDownload.file.toFile().length();
-                    LOGGER.error("File {} File size: {} File hash: {} Desired file hash: {}", queuedDownload.file, queuedDownload.file.toFile().length(), hash, hashAndPath.hash);
                 } else {
                     // Runs on success
                     failed = false;

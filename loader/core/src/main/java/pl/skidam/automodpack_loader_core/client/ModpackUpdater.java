@@ -9,6 +9,7 @@ import pl.skidam.automodpack_loader_core.mods.SetupMods;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.*;
 
+import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
@@ -282,6 +283,7 @@ public class ModpackUpdater {
                 // send it to the server and get the new modpack content
                 // TODO set client to a waiting for the server to respond screen
                 LOGGER.warn("Trying to refresh the modpack content");
+                LOGGER.info("Sending hashes to refresh: {}", hashesJson);
                 var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(link, hashesJson);
                 if (refreshedContentOptional.isEmpty()) {
                     LOGGER.error("Failed to refresh the modpack content");
@@ -434,7 +436,6 @@ public class ModpackUpdater {
         deleteDeletedFiles(modpackDir, modpackContentFile, modpackFiles, pathList);
 
         // copy files to running directory
-        // map running dir files
         ModpackUtils.correctFilesLocations(modpackDir, modpackContent, editableFiles);
 
         var dupeMods = ModpackUtils.getDupeMods(modpackDir);
@@ -442,14 +443,14 @@ public class ModpackUpdater {
         return ModpackUtils.removeDupeMods(dupeMods);
     }
 
-    // returns true if requires restart
-    private void deleteDeletedFiles(Path modpackDir, Path modpackContentFile, List<String> modpackFiles, List<Path> pathList) {
+    private void deleteDeletedFiles(Path modpackDir, Path modpackContentFile, List<String> modpackFiles, List<Path> pathList) throws IOException {
+        List<Path> parentPaths = new ArrayList<>();
+
         for (Path path : pathList) {
             if (Files.isDirectory(path)) continue;
             if (path.equals(modpackContentFile)) continue;
 
             String file = CustomFileUtils.formatPath(path, modpackDir); // format path to modpack content file
-            file = file.charAt(0) == '/' ? file.substring(1) : file;
             if (modpackFiles.contains(file)) continue;
 
             Path runPath = Path.of("." + file);
@@ -458,14 +459,31 @@ public class ModpackUpdater {
                 // TODO: confirm with content.json if its a mod or not
                 if (!runPath.getParent().getFileName().toString().equals("mods")) {
                     // we dont delete mods, as we dont ever add mods there
+                    parentPaths.add(runPath.getParent());
                     CustomFileUtils.forceDelete(runPath);
                 }
             } else {
                 LOGGER.info("Deleting {}", path);
             }
 
+            parentPaths.add(path.getParent());
             CustomFileUtils.forceDelete(path);
             changelogs.changesDeletedList.put(path.getFileName().toString(), null);
         }
+
+        // recursively delete empty directories
+        for (Path parentPath : parentPaths) {
+            deleteEmptyParentDirectoriesRecursively(parentPath);
+        }
+    }
+
+    private void deleteEmptyParentDirectoriesRecursively(Path directory) throws IOException {
+        if (directory == null || !CustomFileUtils.isEmptyDirectory(directory)) {
+            return;
+        }
+
+        LOGGER.info("Deleting empty directory {}", directory);
+        CustomFileUtils.forceDelete(directory);
+        deleteEmptyParentDirectoriesRecursively(directory.getParent());
     }
 }

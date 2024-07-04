@@ -1,5 +1,8 @@
 package pl.skidam.automodpack_loader_core.client;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderService;
@@ -8,10 +11,7 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.Url;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -99,14 +99,23 @@ public class ModpackUtils {
             boolean modpackFileExists = Files.exists(modpackFile);
             boolean runFileExists = Files.exists(runFile);
 
+            boolean needsReCheck = true;
+
             if (modpackFileExists && !runFileExists) {
                 // Don't copy from modpack to run if it's a mod
                 if (contentItem.type != null && contentItem.type.equals("mod")) continue;
                 CustomFileUtils.copyFile(modpackFile, runFile);
             } else if (!modpackFileExists && runFileExists) {
                 CustomFileUtils.copyFile(runFile, modpackFile);
+                needsReCheck = false;
             } else if (!modpackFileExists) {
                 LOGGER.error("File " + file + " doesn't exist!?");
+            }
+
+            // we need to update run file and we assume that modpack file is up to date
+            if (needsReCheck && !Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile, "sha1").orElse(null))) {
+                LOGGER.info("File {} is not up to date, copying from modpack", file);
+                CustomFileUtils.copyFile(modpackFile, runFile);
             }
         }
     }
@@ -301,49 +310,10 @@ public class ModpackUtils {
         try {
             connection = (HttpURLConnection) new URL(link).openConnection();
             connection.setRequestMethod("GET");
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-            connection.connect();
 
-            int responseCode = connection.getResponseCode();
-
-            if (responseCode == 200) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
-                }
-                reader.close();
-
-                String contentResponse = response.toString();
-
-                Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse, Jsons.ModpackContentFields.class);
-
-                if (serverModpackContent == null) {
-                    LOGGER.error("Couldn't connect to modpack server " + link);
-                    return Optional.empty();
-                }
-
-                if (serverModpackContent.list.isEmpty()) {
-                    LOGGER.error("Modpack content is empty!");
-                    return Optional.empty();
-                }
-
-                if (!potentiallyMalicious(serverModpackContent)) {
-                    return Optional.of(serverModpackContent);
-                }
-            } else {
-                LOGGER.error("Couldn't connect to modpack server " + link + ", Response Code: " + responseCode);
-            }
-
-        } catch (SocketException | SocketTimeoutException e) {
-            LOGGER.error("Couldn't connect to modpack server " + link);
+            return connectionToModpack(connection);
         } catch (Exception e) {
-            LOGGER.error("Error while getting server modpack content");
-            e.printStackTrace();
+            LOGGER.error("Error while getting server modpack content", e);
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -351,6 +321,103 @@ public class ModpackUtils {
         }
 
         return Optional.empty();
+    }
+
+
+    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(String link, String body) {
+        // send custom http body request to get modpack content, rest the same as getServerModpackContent
+        if (link == null || body == null) {
+            throw new IllegalArgumentException("Link or body is null");
+        }
+
+        HttpURLConnection connection = null;
+
+        try {
+            connection = (HttpURLConnection) new URL(link + "refresh").openConnection();
+            connection.setRequestMethod("POST");
+
+            return connectionToModpack(connection, body);
+        } catch (Exception e) {
+            LOGGER.error("Error while getting server modpack content", e);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    public static Optional<Jsons.ModpackContentFields> connectionToModpack(HttpURLConnection connection) {
+        return connectionToModpack(connection, null);
+    }
+
+    public static Optional<Jsons.ModpackContentFields> connectionToModpack(HttpURLConnection connection, String body) {
+        int responseCode = -1;
+        try {
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(10000);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
+            if (body != null) {
+                connection.setDoOutput(true);
+                connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
+            }
+            connection.connect();
+
+            responseCode = connection.getResponseCode();
+
+            if (responseCode == 200) {
+                return parseStreamToModpack(connection.getInputStream());
+            } else {
+                LOGGER.error("Couldn't connect to modpack server: {} Response Code: {}", connection.getURL(), responseCode);
+            }
+
+        } catch (SocketException | SocketTimeoutException e) {
+            LOGGER.error("Couldn't connect to modpack server: {} Response Code: {} Error: {}", connection.getURL(), responseCode, e.getCause());
+        } catch (Exception e) {
+            LOGGER.error("Error while getting server modpack content", e);
+        }
+
+        return Optional.empty();
+    }
+
+    public static Optional<Jsons.ModpackContentFields> parseStreamToModpack(InputStream stream) {
+
+        String response = null;
+
+        try (InputStreamReader isr = new InputStreamReader(stream)) {
+            JsonElement element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
+            if (element != null && !element.isJsonArray()) {
+                JsonObject obj = element.getAsJsonObject();
+                response = obj.toString();
+            }
+        } catch (Exception e) {
+            LOGGER.error("Couldn't parse modpack content", e);
+        }
+
+        if (response == null) {
+            LOGGER.error("Couldn't parse modpack content");
+            return Optional.empty();
+        }
+
+        Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(response, Jsons.ModpackContentFields.class);
+
+        if (serverModpackContent == null) {
+            LOGGER.error("Couldn't parse modpack content");
+            return Optional.empty();
+        }
+
+        if (serverModpackContent.list.isEmpty()) {
+            LOGGER.error("Modpack content is empty!");
+            return Optional.empty();
+        }
+
+        if (potentiallyMalicious(serverModpackContent)) {
+            return Optional.empty();
+        }
+
+        return Optional.of(serverModpackContent);
     }
 
     // check if modpackContent is valid/isn't malicious
@@ -367,80 +434,14 @@ public class ModpackUtils {
                 LOGGER.error("Modpack content is invalid, it contains /../ in file name of {}", file);
                 return true;
             }
+
+            String sha1 = modpackContentItem.sha1;
+            if (sha1 == null || sha1.equals("null")) {
+                LOGGER.error("Modpack content is invalid, it contains null sha1 in file of {}", file);
+                return true;
+            }
         }
 
         return false;
-    }
-
-    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(String link, String body) {
-        // send custom http body request to get modpack content, rest the same as getServerModpackContent
-        if (link == null || body == null) {
-            throw new IllegalArgumentException("Link or body is null");
-        }
-
-        HttpURLConnection connection = null;
-
-        try {
-            connection = (HttpURLConnection) new URL(link + "refresh").openConnection();
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(10000); // bigger timout to give server enough time to refresh modpack content, it shouldn't anyways in most cases take more than one second
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-            connection.setDoOutput(true);
-            connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
-            connection.connect();
-
-            int responseCode = connection.getResponseCode();
-
-            if (responseCode == 200) {
-                BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                StringBuilder response = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    response.append(line);
-                }
-                reader.close();
-
-                String contentResponse = response.toString();
-
-                Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(contentResponse, Jsons.ModpackContentFields.class);
-
-                if (serverModpackContent == null) {
-                    LOGGER.error("Couldn't connect to modpack server " + link);
-                    return Optional.empty();
-                }
-
-                if (serverModpackContent.list.isEmpty()) {
-                    LOGGER.error("Modpack content is empty!");
-                    return Optional.empty();
-                }
-
-                // check if modpackContent is valid/isn't malicious
-                for (var modpackContentItem : serverModpackContent.list) {
-                    String file = modpackContentItem.file.replace("\\", "/");
-                    if (file.contains("../") || file.contains("/..")) {
-                        LOGGER.error("Modpack content is invalid, it contains /../ in file name or url");
-                        return Optional.empty();
-                    }
-                }
-
-                return Optional.of(serverModpackContent);
-            } else {
-                LOGGER.error("Couldn't connect to modpack server " + link + ", Response Code: " + responseCode);
-            }
-        } catch (ConnectException | SocketTimeoutException e) {
-            LOGGER.error("Couldn't connect to modpack server " + link);
-        } catch (Exception e) {
-            LOGGER.error("Error while getting server modpack content");
-            e.printStackTrace();
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
-        }
-
-        return Optional.empty();
-
     }
 }
