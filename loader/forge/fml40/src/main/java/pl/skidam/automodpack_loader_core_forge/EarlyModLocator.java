@@ -4,7 +4,7 @@ import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileModLocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_loader_core.Preload;
-import pl.skidam.automodpack_loader_core_forge.mods.SetupMods;
+import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -26,8 +26,8 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
 
         new Preload();
 
-        SetupMods.modsToAdd.forEach(path -> LOGGER.info("Adding mod: {}", path.getFileName()));
+        ModpackLoader.modsToAdd.forEach(path -> LOGGER.info("Adding mod: {}", path.getFileName()));
 
-        return SetupMods.modsToAdd.stream();
+        return ModpackLoader.modsToAdd.stream();
     }
 }

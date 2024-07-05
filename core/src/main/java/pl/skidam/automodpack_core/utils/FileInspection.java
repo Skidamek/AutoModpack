@@ -32,6 +32,23 @@ public class FileInspection {
         return getModID(file) != null;
     }
 
+    public static boolean hasServices(Path file) {
+        if (!file.getFileName().toString().endsWith(".jar")) {
+            return false;
+        }
+
+        try {
+            ZipFile zipFile = new ZipFile(file.toFile());
+            ZipEntry entry = zipFile.getEntry("META-INF/services/");
+            zipFile.close();
+            return entry != null;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return false;
+    }
+
     public static String getModID(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
             return null;

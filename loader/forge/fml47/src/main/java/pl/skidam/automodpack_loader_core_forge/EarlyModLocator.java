@@ -15,7 +15,7 @@ import net.minecraftforge.forgespi.locating.IModLocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_loader_core.Preload;
-import pl.skidam.automodpack_loader_core_forge.mods.SetupMods;
+import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -47,7 +47,7 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
 
         new Preload();
 
-        SetupMods.modsToAdd.forEach(path -> LOGGER.info("Adding mod: {}", path.getFileName()));
+        ModpackLoader.modsToAdd.forEach(path -> LOGGER.info("Adding mod: {}", path.getFileName()));
 
         // we would need to force load there e.g. connector mod and its locators to loader
         // and in the lazy mod locator load its dependency locator
@@ -78,7 +78,7 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
         }
 
 
-        return SetupMods.modsToAdd.stream();
+        return ModpackLoader.modsToAdd.stream();
     }
 
     private boolean loadNewModLocators() throws MalformedURLException {
@@ -92,7 +92,7 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
         HashMap<String, IModLocator> newModLocators = new HashMap<>();
         HashMap<String, IDependencyLocator> newDependencyLocators = new HashMap<>();
 
-        for (Path jarPath : SetupMods.modsToAdd) {
+        for (Path jarPath : ModpackLoader.modsToAdd) {
             URL newJarUrl = jarPath.toUri().toURL();
             URLClassLoader newClassLoader = new URLClassLoader(new URL[]{newJarUrl}, LazyModLocator.class.getClassLoader());
 

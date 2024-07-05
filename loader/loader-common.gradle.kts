@@ -96,7 +96,7 @@ tasks.named<ShadowJar>("shadowJar") {
     }
 
     exclude("pl/skidam/automodpack_loader_core/loader/LoaderManager.class")
-    exclude("pl/skidam/automodpack_loader_core/mods/SetupMods.class")
+    exclude("pl/skidam/automodpack_loader_core/mods/ModpackLoader.class")
 
 
     manifest {

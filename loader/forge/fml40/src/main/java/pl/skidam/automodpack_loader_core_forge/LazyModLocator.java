@@ -3,7 +3,6 @@ package pl.skidam.automodpack_loader_core_forge;
 import com.google.common.collect.ImmutableMap;
 import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileDependencyLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
-import pl.skidam.automodpack_loader_core_forge.mods.SetupMods;
 
 import java.io.IOException;
 import java.net.URI;

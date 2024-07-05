@@ -81,20 +81,22 @@ public class ModpackUtils {
         }
     }
 
-    public static void correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles) throws IOException {
+    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles, Set<String> workaroundMods) throws IOException {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
-            return;
+            return false;
         }
+
+        boolean needsRestart = false;
 
         // correct the files locations
         for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
-            String file = contentItem.file;
+            String formattedFile = contentItem.file;
 
-            if (ignoreFiles.contains(file)) continue;
+            if (ignoreFiles.contains(formattedFile)) continue;
 
-            Path modpackFile = Paths.get(modpackDir + file);
-            Path runFile = Paths.get("." + file);
+            Path modpackFile = Paths.get(modpackDir + formattedFile);
+            Path runFile = Paths.get("." + formattedFile);
 
             boolean modpackFileExists = Files.exists(modpackFile);
             boolean runFileExists = Files.exists(runFile);
@@ -102,27 +104,37 @@ public class ModpackUtils {
             boolean needsReCheck = true;
 
             if (modpackFileExists && !runFileExists) {
-                // Don't copy from modpack to run if it's a mod
-                if (contentItem.type != null && contentItem.type.equals("mod")) continue;
+                // Don't copy from modpack to run if it's a mod unless workaround applies to it.
+                if (contentItem.type.equals("mod")) {
+                    if (!workaroundMods.contains(formattedFile)) {
+                        continue;
+                    }
+
+                    LOGGER.info("Applying workaround for {} mod", formattedFile);
+                    needsRestart = true;
+                }
+
                 CustomFileUtils.copyFile(modpackFile, runFile);
             } else if (!modpackFileExists && runFileExists) {
                 CustomFileUtils.copyFile(runFile, modpackFile);
                 needsReCheck = false;
             } else if (!modpackFileExists) {
-                LOGGER.error("File " + file + " doesn't exist!?");
+                LOGGER.error("File " + formattedFile + " doesn't exist!?");
             }
 
             // we need to update run file and we assume that modpack file is up to date
             if (needsReCheck && !Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile, "sha1").orElse(null))) {
-                LOGGER.info("File {} is not up to date, copying from modpack", file);
+                LOGGER.info("File {} is not up to date, copying from modpack", formattedFile);
                 CustomFileUtils.copyFile(modpackFile, runFile);
             }
         }
+
+        return needsRestart;
     }
 
     // Checks if in standard mods folder are any mods that are in modpack
     // Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
-    public static Map<LoaderService.Mod, LoaderService.Mod> getDupeMods(Path modpackPath) throws IOException {
+    public static Map<LoaderService.Mod, LoaderService.Mod> getDupeMods(Path modpackPath, Set<String> workaroundMods) throws IOException {
         // maybe also check subfolders...
         final List<Path> standardMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
         final List<Path> modpackMods = Files.list(modpackPath.resolve("mods")).toList();
@@ -136,6 +148,8 @@ public class ModpackUtils {
         for (LoaderService.Mod modpackMod : modpackModList) {
             LoaderService.Mod standardMod = standardModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
             if (standardMod != null) {
+                String formattedFile = CustomFileUtils.formatPath(modpackMod.modPath(), modpackPath);
+                if (workaroundMods.contains(formattedFile)) continue;
                 duplicates.put(modpackMod, standardMod);
             }
         }
@@ -251,7 +265,7 @@ public class ModpackUtils {
         String modpackToSelect = modpackDir.getFileName().toString();
         String selectedModpack = clientConfig.selectedModpack;
         clientConfig.selectedModpack = modpackToSelect;
-        ConfigTools.saveConfig(clientConfigFile, clientConfig);
+        ConfigTools.save(clientConfigFile, clientConfig);
         return !modpackToSelect.equals(selectedModpack);
     }
 
@@ -268,7 +282,7 @@ public class ModpackUtils {
             clientConfig.installedModpacks = newList;
         }
 
-        ConfigTools.saveConfig(clientConfigFile, clientConfig);
+        ConfigTools.save(clientConfigFile, clientConfig);
     }
 
     // Returns modpack name formatted for path or url if server doesn't provide modpack name

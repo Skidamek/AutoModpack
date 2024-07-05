@@ -52,7 +52,7 @@ public class Commands {
 
     private static int reload(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class);
+            serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
             send(context, "AutoModpack server config reloaded!", Formatting.GREEN, true);
         });
 

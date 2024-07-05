@@ -2,6 +2,7 @@
 package pl.skidam.automodpack_core.config;
 
 import java.util.List;
+import java.util.Set;
 
 
 public class Jsons {
@@ -36,6 +37,10 @@ public class Jsons {
         public boolean reverseProxy = false;
         public boolean selfUpdater = false;
         public List<String> acceptedLoaders;
+    }
+
+    public static class WorkaroundFields {
+        public Set<String> workaroundMods;
     }
 
     public static class ModpackContentFields {

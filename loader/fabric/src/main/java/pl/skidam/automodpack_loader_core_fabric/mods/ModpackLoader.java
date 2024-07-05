@@ -10,7 +10,7 @@ import net.fabricmc.loader.impl.launch.FabricLauncherBase;
 import net.fabricmc.loader.impl.metadata.DependencyOverrides;
 import net.fabricmc.loader.impl.metadata.VersionOverrides;
 import net.fabricmc.loader.impl.util.SystemProperties;
-import pl.skidam.automodpack_loader_core.mods.SetupModsService;
+import pl.skidam.automodpack_loader_core.mods.ModpackLoaderService;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
 import java.io.IOException;
@@ -23,21 +23,17 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_loader_core_fabric.FabricLoaderImplAccessor.*;
 
 @SuppressWarnings({"unchecked", "unused"})
-public class SetupMods implements SetupModsService {
+public class ModpackLoader implements ModpackLoaderService {
     private final Map<String, Set<ModCandidate>> envDisabledMods = new HashMap<>();
 
     @Override
-    public void loadModpack(Path modpack) {
-        if (modpack == null || !Files.isDirectory(modpack)) {
-            LOGGER.warn("Incorrect path to modpack");
-            return;
-        }
+    public void loadModpack(List<Path> modpackMods) {
 
-        modpack = modpack.toAbsolutePath();
+        Path modpackDir = modpackMods.get(0).getParent();
 
         try {
             List<ModCandidate> candidates;
-            candidates = (List<ModCandidate>) discoverMods(modpack);
+            candidates = (List<ModCandidate>) discoverMods(modpackDir);
             candidates = (List<ModCandidate>) resolveMods(candidates);
 
             METHOD_DUMP_MOD_LIST.invoke(FabricLoaderImpl.INSTANCE, candidates);
@@ -99,32 +95,6 @@ public class SetupMods implements SetupModsService {
         return Optional.empty();
     }
 
-    @Override
-    public void addMod(Path path) {
-        if (path == null || !Files.isRegularFile(path)) {
-            return;
-        }
-
-        try {
-            ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));
-
-            List<?> candidateFinders = List.of(
-                    new ModContainerModCandidateFinder(FabricLoaderImpl.INSTANCE.getAllMods().stream().toList()),
-                    new PathModCandidateFinder(path, FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()));
-
-            FIELD_CANDIDATE_FINDERS.set(discoverer, candidateFinders);
-
-            List<ModCandidate> candidates = discoverer.discoverMods(FabricLoaderImpl.INSTANCE, envDisabledMods);
-            candidates = (List<ModCandidate>) resolveMods(candidates);
-
-            METHOD_DUMP_MOD_LIST.invoke(FabricLoaderImpl.INSTANCE, candidates);
-
-            addMods(candidates);
-            setupLanguageAdapters(candidates);
-        } catch (Exception e) {
-            FabricGuiEntry.displayCriticalError(e, true);
-        }
-    }
 
     private Collection<ModCandidate> discoverMods(Path modpack) throws ModResolutionException, IllegalAccessException, IOException {
         ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));

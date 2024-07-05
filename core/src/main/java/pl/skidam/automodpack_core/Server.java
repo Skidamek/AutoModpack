@@ -1,12 +1,7 @@
 package pl.skidam.automodpack_core;
 
-import io.netty.channel.ChannelFuture;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.netty.HttpServer;
-
-import java.util.ArrayList;
-import java.util.Optional;
 
 import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
 import static pl.skidam.automodpack_core.GlobalVariables.serverConfigFile;
@@ -17,7 +12,7 @@ public class Server {
     public static void main(String[] args) {
         System.out.println("Hello, world!");
 
-        serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class);
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
 
         serverConfig.hostPort = 30037;
         serverConfig.hostModpackOnMinecraftPort = false;

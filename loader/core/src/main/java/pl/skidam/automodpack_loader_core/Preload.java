@@ -76,8 +76,8 @@ public class Preload {
 
     private void loadConfigs() {
         long startTime = System.currentTimeMillis();
-        clientConfig = ConfigTools.loadConfig(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
-        serverConfig = ConfigTools.loadConfig(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
+        clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
 
         if (serverConfig != null) {
 
@@ -95,7 +95,7 @@ public class Preload {
             }
 
             // Save changes
-            ConfigTools.saveConfig(serverConfigFile, serverConfig);
+            ConfigTools.save(serverConfigFile, serverConfig);
         }
 
         if (clientConfig != null) {
@@ -104,7 +104,7 @@ public class Preload {
             ModpackUtils.addModpackToList(clientConfig.selectedModpack);
 
             // Save changes
-            ConfigTools.saveConfig(clientConfigFile, clientConfig);
+            ConfigTools.save(clientConfigFile, clientConfig);
 
         }
 

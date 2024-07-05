@@ -182,7 +182,7 @@ public class ModpackContent {
 
             for (Path childFile : childFiles) {
                 var generated = generateContent(childFile);
-                if (generated != null) {
+                if (generated != null && !list.contains(generated)) {
                     list.add(generated);
                 }
             }

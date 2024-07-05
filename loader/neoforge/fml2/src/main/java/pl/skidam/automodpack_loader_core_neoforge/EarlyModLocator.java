@@ -7,7 +7,7 @@ import net.neoforged.neoforgespi.locating.IDependencyLocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_loader_core.Preload;
-import pl.skidam.automodpack_loader_core_neoforge.mods.SetupMods;
+import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -43,6 +43,6 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
         }
 
         new Preload();
-        return SetupMods.modsToAdd.stream();
+        return ModpackLoader.modsToAdd.stream();
     }
 }

@@ -4,8 +4,9 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.MmcPackMagic;
+import pl.skidam.automodpack_core.utils.WorkaroundUtil;
 import pl.skidam.automodpack_loader_core.ReLauncher;
-import pl.skidam.automodpack_loader_core.mods.SetupMods;
+import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.*;
 
@@ -27,11 +28,13 @@ public class ModpackUpdater {
     public static boolean fullDownload = false;
     private static Jsons.ModpackContentFields serverModpackContent;
     private static String unModifiedSMC;
+    private static WorkaroundUtil workaroundUtil;
     public Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.Urls> failedDownloads = new HashMap<>();
     public static String getModpackName() {
         return serverModpackContent.modpackName;
     }
 
+    // TODO clean up this method
     public void startModpackUpdate(Jsons.ModpackContentFields serverModpackContent, String link, Path modpackDir) {
         if (link == null || link.isEmpty() || modpackDir.toString().isEmpty()) {
             throw new IllegalArgumentException("Link or modpackDir is null or empty");
@@ -40,6 +43,8 @@ public class ModpackUpdater {
         try {
             Path modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
             Path workingDirectory = Path.of("./");
+
+            workaroundUtil = new WorkaroundUtil(modpackDir);
 
             if (serverModpackContent == null)  { // the server is down, or you don't have access to internet, but we still want to load selected modpack
 
@@ -101,13 +106,19 @@ public class ModpackUpdater {
         }
     }
 
+    // TODO clean up this method
     public void CheckAndLoadModpack(Path modpackDir, Path modpackContentFile, Path workingDirectory) throws Exception {
 
         if (preload) {
             if (finishModpackUpdate(modpackDir, modpackContentFile)) {
                 new ReLauncher(modpackDir, UpdateType.UPDATE, changelogs).restart(true);
             }
-            new SetupMods().loadModpack(modpackDir);
+
+            List<Path> modsToLoad = Files.list(modpackDir.resolve("mods")).toList();
+            // exclude workaround mods
+            modsToLoad = modsToLoad.stream().filter(mod -> !workaroundUtil.getWorkaroundMods(serverModpackContent).contains(CustomFileUtils.formatPath(mod, modpackDir))).toList();
+
+            new ModpackLoader().loadModpack(modsToLoad);
             return;
         }
 
@@ -381,7 +392,6 @@ public class ModpackUpdater {
         }
     }
 
-    // TODO clean up this method
     // returns true if restart is required
     private boolean finishModpackUpdate(Path modpackDir, Path modpackContentFile) throws Exception {
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
@@ -411,54 +421,58 @@ public class ModpackUpdater {
             }
         }
 
+
         // make a list of editable files to ignore them while copying
-        List<String> editableFiles = new ArrayList<>();
-        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : modpackContent.list) {
+        List<String> editableFiles = modpackContent.list.stream().filter(modpackContentItem -> modpackContentItem.editable).map(modpackContentField -> modpackContentField.file).toList();
+//        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : modpackContent.list) {
+//
+//            String fileName = Paths.get(modpackContentField.file).getFileName().toString();
+//
+//            // Don't add to editable if just downloaded
+//            if (changelogs.changesAddedList.containsKey(fileName)) {
+//                continue;
+//            }
+//
+//            if (modpackContentField.editable) {
+//                editableFiles.add(modpackContentField.file);
+//            }
+//        }
 
-            String fileName = Paths.get(modpackContentField.file).getFileName().toString();
+        Set<String> workaroundMods = deleteNonModpackFiles(modpackDir, modpackContentFile, modpackContent, workaroundUtil);
 
-            // Don't add to editable if just downloaded
-            if (changelogs.changesAddedList.containsKey(fileName)) {
-                continue;
-            }
-
-            if (modpackContentField.editable) {
-                editableFiles.add(modpackContentField.file);
-            }
-        }
-
-        List<String> modpackFiles = new ArrayList<>();
-        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : modpackContent.list) {
-            modpackFiles.add(modpackContentField.file);
-        }
-
-        List<Path> pathList = Files.walk(modpackDir).toList();
-        deleteDeletedFiles(modpackDir, modpackContentFile, modpackFiles, pathList);
+        workaroundUtil.saveWorkaroundList(workaroundMods);
 
         // copy files to running directory
-        ModpackUtils.correctFilesLocations(modpackDir, modpackContent, editableFiles);
+        boolean needsRestart0 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, editableFiles, workaroundMods);
 
-        var dupeMods = ModpackUtils.getDupeMods(modpackDir);
+        var dupeMods = ModpackUtils.getDupeMods(modpackDir, workaroundMods);
 
-        return ModpackUtils.removeDupeMods(dupeMods);
+        boolean needsRestart1 = ModpackUtils.removeDupeMods(dupeMods);
+
+        return needsRestart0 || needsRestart1;
     }
 
-    private void deleteDeletedFiles(Path modpackDir, Path modpackContentFile, List<String> modpackFiles, List<Path> pathList) throws IOException {
+    // returns changed workaroundMods list
+    private Set<String> deleteNonModpackFiles(Path modpackDir, Path modpackContentFile, Jsons.ModpackContentFields modpackContent, WorkaroundUtil workaroundUtil) throws IOException {
+        List<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).toList();
+        List<Path> pathList = Files.walk(modpackDir).toList();
+        Set<String> workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
         List<Path> parentPaths = new ArrayList<>();
 
         for (Path path : pathList) {
             if (Files.isDirectory(path)) continue;
             if (path.equals(modpackContentFile)) continue;
+            if (path.equals(workaroundUtil.getWorkaroundFile())) continue;
 
-            String file = CustomFileUtils.formatPath(path, modpackDir); // format path to modpack content file
-            if (modpackFiles.contains(file)) continue;
+            String formattedFile = CustomFileUtils.formatPath(path, modpackDir); // format path to modpack content file
+            if (modpackFiles.contains(formattedFile)) continue;
 
-            Path runPath = Path.of("." + file);
+            Path runPath = Path.of("." + formattedFile);
             if (Files.exists(runPath) && CustomFileUtils.compareFileHashes(path, runPath, "SHA-1")) {
-                LOGGER.info("Deleting {} and {}", path, runPath);
-                // TODO: confirm with content.json if its a mod or not
-                if (!runPath.getParent().getFileName().toString().equals("mods")) {
-                    // we dont delete mods, as we dont ever add mods there
+                // we generally dont delete mods, as we dont ever add mods there. However, we do delete mods which need that since they need a workaround
+                if (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile)) {
+                    LOGGER.info("Deleting {} and {}", path, runPath);
+                    workaroundMods.remove(formattedFile);
                     parentPaths.add(runPath.getParent());
                     CustomFileUtils.forceDelete(runPath);
                 }
@@ -475,6 +489,8 @@ public class ModpackUpdater {
         for (Path parentPath : parentPaths) {
             deleteEmptyParentDirectoriesRecursively(parentPath);
         }
+
+        return workaroundMods;
     }
 
     private void deleteEmptyParentDirectoriesRecursively(Path directory) throws IOException {

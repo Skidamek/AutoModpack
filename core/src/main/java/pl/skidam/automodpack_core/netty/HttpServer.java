@@ -141,7 +141,7 @@ public class HttpServer {
             String publicIp = Ip.getPublic();
             if (publicIp != null) {
                 serverConfig.hostIp = publicIp;
-                ConfigTools.saveConfig(serverConfigFile, serverConfig);
+                ConfigTools.save(serverConfigFile, serverConfig);
                 LOGGER.warn("Setting Host IP to {}", serverConfig.hostIp);
             } else {
                 LOGGER.error("Host IP isn't set in config, please change it manually! Couldn't get public IP");
@@ -152,7 +152,7 @@ public class HttpServer {
         if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostLocalIp == null || serverConfig.hostLocalIp.isEmpty())) {
             try {
                 serverConfig.hostLocalIp = Ip.getLocal();
-                ConfigTools.saveConfig(serverConfigFile, serverConfig);
+                ConfigTools.save(serverConfigFile, serverConfig);
                 LOGGER.warn("Setting Host local IP to {}", serverConfig.hostLocalIp);
             } catch (Exception e) {
                 e.printStackTrace();

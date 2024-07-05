@@ -25,7 +25,7 @@ public class ConfigTools {
     }
 
     // Config stuff
-    public static <T> T loadConfig(Path configFile, Class<T> configClass) {
+    public static <T> T load(Path configFile, Class<T> configClass) {
         try {
             if (!Files.isDirectory(configFile.getParent())) {
                  Files.createDirectories(configFile.getParent());
@@ -34,7 +34,7 @@ public class ConfigTools {
             if (Files.isRegularFile(configFile)) {
                 String json = Files.readString(configFile);
                 T obj = GSON.fromJson(json, configClass);
-                saveConfig(configFile, obj);
+                save(configFile, obj);
                 return obj;
             }
         } catch (Exception e) {
@@ -44,7 +44,7 @@ public class ConfigTools {
 
         try { // create new config
             T obj = getConfigObject(configClass);
-            saveConfig(configFile, obj);
+            save(configFile, obj);
             return obj;
         } catch (Exception e) {
             LOGGER.error("Invalid config class! " + configClass);
@@ -53,7 +53,7 @@ public class ConfigTools {
         }
     }
 
-    public static void saveConfig(Path configFile, Object configObject) {
+    public static void save(Path configFile, Object configObject) {
         try {
             if (!Files.isDirectory(configFile.getParent())) {
                 Files.createDirectories(configFile.getParent());
