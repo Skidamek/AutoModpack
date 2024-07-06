@@ -24,6 +24,7 @@ public class ModpackContent {
     private final Path CWD;
     private final Path MODPACK_DIR;
     private final ThreadPoolExecutor CREATION_EXECUTOR;
+    private final Map<String, String> sha1MurmurMapPreviousContent = new HashMap<>();
 
     public ModpackContent(String modpackName, Path cwd, Path modpackDir, List<String> syncedFiles, List<String> allowEditsInFiles, ThreadPoolExecutor CREATION_EXECUTOR) {
         this.MODPACK_NAME = modpackName;
@@ -44,11 +45,13 @@ public class ModpackContent {
     public boolean create() {
         try {
             pathsMap.clear();
+            sha1MurmurMapPreviousContent.clear();
+            getPreviousContent().ifPresent(previousContent -> previousContent.list.forEach(item -> sha1MurmurMapPreviousContent.put(item.sha1, item.murmur)));
 
             // host-modpack generation
             if (MODPACK_DIR != null) {
                 LOGGER.info("Syncing {}...", MODPACK_DIR.getFileName());
-                Files.list(MODPACK_DIR).forEach(path ->  creationFutures.add(generateAsync(path)));
+                creationFutures.addAll(generateAsync(Files.walk(MODPACK_DIR).toList()));
 
                 // Wait till finish
                 creationFutures.forEach((CompletableFuture::join));
@@ -56,7 +59,7 @@ public class ModpackContent {
             }
 
             // synced files generation
-            SYNCED_FILES_CARDS.getWildcardMatches().values().forEach(path -> creationFutures.add(generateAsync(path)));
+            creationFutures.addAll(generateAsync(SYNCED_FILES_CARDS.getWildcardMatches().values().stream().toList()));
 
             // Wait till finish
             creationFutures.forEach((CompletableFuture::join));
@@ -79,14 +82,16 @@ public class ModpackContent {
         return true;
     }
 
-    public boolean loadPreviousContent() {
+    public Optional<Jsons.ModpackContentFields> getPreviousContent() {
         var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(MODPACK_DIR);
+        return optionalModpackContentFile.map(ConfigTools::loadModpackContent);
+    }
 
-        if (optionalModpackContentFile.isEmpty()) return false;
 
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(optionalModpackContentFile.get());
-
-        if (modpackContent == null) return false;
+    public boolean loadPreviousContent() {
+        var optionalModpackContent = getPreviousContent();
+        if (optionalModpackContent.isEmpty()) return false;
+        Jsons.ModpackContentFields modpackContent = optionalModpackContent.get();
 
         synchronized (list) {
             list.addAll(modpackContent.list);
@@ -125,8 +130,15 @@ public class ModpackContent {
         }
     }
 
-    private CompletableFuture<Void> generateAsync(Path file) {
-        return CompletableFuture.runAsync(() -> generate( file), CREATION_EXECUTOR);
+    // For every 6 files we generate content in parallel
+    private List<CompletableFuture<Void>> generateAsync(List<Path> files) {
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        for (int i = 0; i < files.size(); i += 6) {
+            List<Path> subList = files.subList(i, Math.min(files.size(), i + 6));
+            futures.add(CompletableFuture.runAsync(() -> subList.forEach(this::generate), CREATION_EXECUTOR));
+        }
+
+        return futures;
     }
 
     private void generate(Path file) {
@@ -134,7 +146,10 @@ public class ModpackContent {
             Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file);
             if (item != null) {
                 LOGGER.info("generated content for {}", item.file);
-                list.add(item);
+                synchronized (list) {
+                    list.add(item);
+                }
+                pathsMap.put(item.sha1, file);
             }
         } catch (Exception e) {
             LOGGER.error("Error while generating content for: " + file + " generated from: " + MODPACK_DIR, e);
@@ -172,103 +187,91 @@ public class ModpackContent {
             absoluteModpackDir = MODPACK_DIR.toAbsolutePath().normalize();
         }
 
-        if (Files.isDirectory(file)) {
-            if (file.getFileName().toString().startsWith(".")) {
-                LOGGER.info("Skipping " + file.getFileName() + " because it starts with a dot");
-                return null;
-            }
+        if (!Files.isRegularFile(file)) return null;
 
-            List<Path> childFiles = Files.list(file).toList();
+        String formattedFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
 
-            for (Path childFile : childFiles) {
-                var generated = generateContent(childFile);
-                if (generated != null) {
-                    list.add(generated);
-                }
-            }
-        } else if (Files.isRegularFile(file)) {
-            String modpackFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
+        boolean isEditable = false;
 
-            boolean isEditable = false;
+        final String size = String.valueOf(Files.size(file));
 
-            final String size = String.valueOf(Files.size(file));
-
-            if (size.equals("0")) {
-                LOGGER.info("Skipping file {} because it is empty", modpackFile);
-                return null;
-            }
-
-            // modpackFile is relative path to ~/.minecraft/ (content format) so if it starts with /automodpack/ something is wrong
-            if (modpackFile.startsWith("/automodpack/")) {
-                return null;
-            }
-
-            if (!hostContentModpackDir.equals(absoluteModpackDir)) {
-                if (file.toString().startsWith(".")) {
-                    LOGGER.info("Skipping file {} is hidden", modpackFile);
-                    return null;
-                }
-
-                if (modpackFile.endsWith(".tmp")) {
-                    LOGGER.info("File {} is temporary! Skipping...", modpackFile);
-                    return null;
-                }
-
-                if (modpackFile.endsWith(".disabled")) {
-                    LOGGER.info("File {} is disabled! Skipping...", modpackFile);
-                    return null;
-                }
-
-                if (modpackFile.endsWith(".bak")) {
-                    LOGGER.info("File {} is backup file, unnecessary on client! Skipping...", modpackFile);
-                    return null;
-                }
-            }
-
-            String type;
-
-            if (FileInspection.isMod(file)) {
-                type = "mod";
-                if (serverConfig.autoExcludeServerSideMods && isServerMod(LOADER_MANAGER.getModList(), file)) {
-                    LOGGER.info("File {} is server mod! Skipping...", modpackFile);
-                    return null;
-                }
-            } else if (modpackFile.contains("/config/")) {
-                type = "config";
-            } else if (modpackFile.contains("/shaderpacks/")) {
-                type = "shader";
-            } else if (modpackFile.contains("/resourcepacks/")) {
-                type = "resourcepack";
-            } else if (modpackFile.endsWith("/options.txt")) {
-                type = "mc_options";
-            } else {
-                type = "other";
-            }
-
-            // Exclude automodpack mod
-            if (type.equals("mod") && (MOD_ID + "-bootstrap").equals(FileInspection.getModID(file))) {
-                return null;
-            }
-
-            String sha1 = CustomFileUtils.getHash(file, "SHA-1").orElseThrow();
-
-            // For CF API
-            String murmur = null;
-            if (type.equals("mod") || type.equals("shader") || type.equals("resourcepack")) {
-                murmur = CustomFileUtils.getHash(file, "murmur").orElseThrow();
-            }
-
-            if (EDITABLE_CARDS.fileMatches(modpackFile, file)) {
-                isEditable = true;
-                LOGGER.info("File {} is editable!", modpackFile);
-            }
-
-            pathsMap.put(sha1, file);
-
-            return new Jsons.ModpackContentFields.ModpackContentItem(modpackFile, size, type, isEditable, sha1, murmur);
+        if (size.equals("0")) {
+            LOGGER.info("Skipping file {} because it is empty", formattedFile);
+            return null;
         }
 
-        return null;
+        // modpackFile is relative path to ~/.minecraft/ (content format) so if it starts with /automodpack/ something is wrong
+        if (formattedFile.startsWith("/automodpack/")) {
+            return null;
+        }
+
+        // Check if file is generated from host-modpack, if not apply skip rules
+        if (!hostContentModpackDir.equals(absoluteModpackDir)) {
+            if (file.getFileName().toString().startsWith(".")) {
+                LOGGER.info("Skipping file {} is hidden", formattedFile);
+                return null;
+            }
+
+            if (formattedFile.endsWith(".tmp")) {
+                LOGGER.info("File {} is temporary! Skipping...", formattedFile);
+                return null;
+            }
+
+            if (formattedFile.endsWith(".disabled")) {
+                LOGGER.info("File {} is disabled! Skipping...", formattedFile);
+                return null;
+            }
+
+            if (formattedFile.endsWith(".bak")) {
+                LOGGER.info("File {} is backup file, unnecessary on client! Skipping...", formattedFile);
+                return null;
+            }
+        }
+
+        String type;
+
+        if (FileInspection.isMod(file)) {
+            type = "mod";
+            if (serverConfig.autoExcludeServerSideMods && isServerMod(LOADER_MANAGER.getModList(), file)) {
+                LOGGER.info("File {} is server mod! Skipping...", formattedFile);
+                return null;
+            }
+        } else if (formattedFile.contains("/config/")) {
+            type = "config";
+        } else if (formattedFile.contains("/shaderpacks/")) {
+            type = "shader";
+        } else if (formattedFile.contains("/resourcepacks/")) {
+            type = "resourcepack";
+        } else if (formattedFile.endsWith("/options.txt")) {
+            type = "mc_options";
+        } else {
+            type = "other";
+        }
+
+        // Exclude automodpack mod
+        if (type.equals("mod") && (MOD_ID + "-bootstrap").equals(FileInspection.getModID(file))) {
+            return null;
+        }
+
+        String sha1 = CustomFileUtils.getHash(file, "SHA-1").orElseThrow();
+
+        // For CF API
+        String murmur = null;
+        if (type.equals("mod") || type.equals("shader") || type.equals("resourcepack")) {
+            // get murmur hash from previousContent.list of item with same sha1
+            murmur = sha1MurmurMapPreviousContent.get(sha1);
+            if (murmur == null) {
+                murmur = CustomFileUtils.getHash(file, "murmur").orElseThrow();
+            }
+        }
+
+        if (EDITABLE_CARDS.fileMatches(formattedFile, file)) {
+            isEditable = true;
+            LOGGER.info("File {} is editable!", formattedFile);
+        }
+
+        return new Jsons.ModpackContentFields.ModpackContentItem(formattedFile, size, type, isEditable, sha1, murmur);
+
     }
 
     private boolean isServerMod(Collection<LoaderService.Mod> modList, Path path) {

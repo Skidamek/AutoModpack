@@ -53,17 +53,14 @@ public class ModpackContentTools {
             return Optional.empty();
         }
 
-        try {
-            for (Path path : Files.list(modpackDir).toList()) {
-                if (Objects.equals(path.getFileName(), hostModpackContentFile.getFileName())) {
-                    return Optional.of(path);
-                }
+        Path path = modpackDir.getParent().resolve(hostModpackContentFile.getFileName()); // server
+        if (!Files.exists(path)) {
+            path = modpackDir.resolve(hostModpackContentFile.getFileName()); // client
+            if (!Files.exists(path)) {
+                return Optional.empty();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
 
-
-        return Optional.empty();
+        return Optional.of(path);
     }
 }
