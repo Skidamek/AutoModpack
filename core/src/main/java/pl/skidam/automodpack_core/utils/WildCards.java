@@ -15,7 +15,7 @@ public class WildCards {
     private final Map<String, Path> wildcardMatches = new HashMap<>();
     private final Map<String, Path> wildcardBlackListed = new HashMap<>();
 
-    public WildCards(List<String> wildcardsList, List<Path> directoriesToSearch) {
+    public WildCards(List<String> wildcardsList, Set<Path> directoriesToSearch) {
 
         wildcardsList = new ArrayList<>(wildcardsList);
 

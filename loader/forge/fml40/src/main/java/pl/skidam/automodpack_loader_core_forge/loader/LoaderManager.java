@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import static pl.skidam.automodpack_core.GlobalVariables.preload;
 
@@ -122,8 +123,8 @@ public class LoaderManager implements LoaderService {
         String modId = getModId(file, true);
         String modVersion = FileInspection.getModVersion(file);
         EnvironmentType environmentType = getModEnvironmentFromNotLoadedJar(file);
-        List<String> dependencies = FileInspection.getModDependencies(file);
-        List<String> providesIDs = FileInspection.getAllProvidedIDs(file);
+        Set<String> dependencies = FileInspection.getModDependencies(file);
+        Set<String> providesIDs = FileInspection.getAllProvidedIDs(file);
 
         if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
             return new Mod(modId, providesIDs, modVersion, file, environmentType, dependencies);

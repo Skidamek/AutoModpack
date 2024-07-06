@@ -19,10 +19,7 @@ import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -105,8 +102,8 @@ public class LoaderManager implements LoaderService {
         String modId = FileInspection.getModID(file);
         String modVersion = FileInspection.getModVersion(file);
         EnvironmentType environmentType = getModEnvironmentFromNotLoadedJar(file);
-        List<String> dependencies = FileInspection.getModDependencies(file);
-        List<String> providesIDs = FileInspection.getAllProvidedIDs(file);
+        Set<String> dependencies = FileInspection.getModDependencies(file);
+        Set<String> providesIDs = FileInspection.getAllProvidedIDs(file);
 
         if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
             return new Mod(modId, providesIDs, modVersion, file, environmentType, dependencies);

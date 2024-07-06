@@ -15,7 +15,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class ModpackContent {
-    public final List<Jsons.ModpackContentFields.ModpackContentItem> list = Collections.synchronizedList(new ArrayList<>());
+    public final Set<Jsons.ModpackContentFields.ModpackContentItem> list = Collections.synchronizedSet(new HashSet<>());
     public final ObservableMap<String, Path> pathsMap = new ObservableMap<>();
     private final List<CompletableFuture<Void>> creationFutures = Collections.synchronizedList(new ArrayList<>());
     private final String MODPACK_NAME;
@@ -29,7 +29,7 @@ public class ModpackContent {
         this.MODPACK_NAME = modpackName;
         this.CWD = cwd;
         this.MODPACK_DIR = modpackDir;
-        List<Path> directoriesToSearch = new ArrayList<>(2);
+        Set<Path> directoriesToSearch = new HashSet<>(2);
         if (CWD != null) directoriesToSearch.add(CWD);
         if (MODPACK_DIR != null) directoriesToSearch.add(MODPACK_DIR);
         this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, directoriesToSearch);
@@ -132,7 +132,7 @@ public class ModpackContent {
     private void generate(Path file) {
         try {
             Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file);
-            if (item != null && !list.contains(item)) {
+            if (item != null) {
                 LOGGER.info("generated content for {}", item.file);
                 list.add(item);
             }
@@ -182,7 +182,7 @@ public class ModpackContent {
 
             for (Path childFile : childFiles) {
                 var generated = generateContent(childFile);
-                if (generated != null && !list.contains(generated)) {
+                if (generated != null) {
                     list.add(generated);
                 }
             }

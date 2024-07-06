@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static pl.skidam.automodpack_core.GlobalVariables.DEBUG;
@@ -32,7 +33,7 @@ class WildCardsTest {
                 "/" + testFilesStr + "/shaders/*",
                 "!/" + testFilesStr + "/shaders/notashader.zip"
         );
-        wildCards = new WildCards(wildcards, List.of(testFilesDir));
+        wildCards = new WildCards(wildcards, Set.of(testFilesDir));
 
         System.out.println();
         System.out.println();

@@ -15,9 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
@@ -122,12 +120,12 @@ public class FileInspection {
         return modID;
     }
 
-    public static List<String> getModDependencies(Path file) {
+    public static Set<String> getModDependencies(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
-            return List.of();
+            return Set.of();
         }
 
-        List<String> dependencies = new ArrayList<>();
+        Set<String> dependencies = new HashSet<>();
 
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
@@ -285,12 +283,12 @@ public class FileInspection {
         return modVersion;
     }
 
-    public static List<String> getAllProvidedIDs(Path file) {
+    public static Set<String> getAllProvidedIDs(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
             return null;
         }
 
-        List<String> providedIDs = new ArrayList<>();
+        Set<String> providedIDs = new HashSet<>();
 
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
@@ -319,7 +317,23 @@ public class FileInspection {
                 TomlParseResult result = Toml.parse(reader);
                 result.errors().forEach(error -> GlobalVariables.LOGGER.error(error.toString()));
 
-                // TODO
+                TomlArray modsArray = result.getArray("mods");
+                if (modsArray != null) {
+                    for (int i = 0; i < modsArray.size(); i++) {
+                        TomlTable mod = modsArray.getTable(i);
+                        if (mod != null) {
+                            TomlArray providesArray = mod.getArray("provides");
+                            if (providesArray != null) {
+                                for (int j = 0; j < providesArray.size(); j++) {
+                                    String id = providesArray.getString(j);
+                                    if (id != null && !id.isEmpty()) {
+                                        providedIDs.add(id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             } else {
 
                 JsonObject json = gson.fromJson(reader, JsonObject.class);

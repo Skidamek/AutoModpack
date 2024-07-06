@@ -10,10 +10,7 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -139,7 +136,7 @@ public class CustomFileUtils {
     }
 
 
-    public static void deleteDummyFiles(Path file, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
+    public static void deleteDummyFiles(Path file, Set<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
         if (file == null || ignoreList == null) {
             return;
         }
@@ -156,7 +153,7 @@ public class CustomFileUtils {
         }
     }
 
-    private static boolean shouldIgnore(Path file, List<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
+    private static boolean shouldIgnore(Path file, Set<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
         if (ignoreList == null) {
             return false;
         }

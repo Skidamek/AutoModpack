@@ -50,15 +50,15 @@ public class Jsons {
         public String loader = "";
         public String loaderVersion = "";
         public String mcVersion = "";
-        public List<ModpackContentItem> list;
-        public ModpackContentFields(String link, List<ModpackContentItem> list) {
+        public Set<ModpackContentItem> list;
+        public ModpackContentFields(String link, Set<ModpackContentItem> list) {
             this.link = link; // Set it on the client side only
             this.list = list;
         }
 
         public ModpackContentFields() {
             this.link = "";
-            this.list = List.of();
+            this.list = Set.of();
         }
 
         public static class ModpackContentItem {

@@ -30,6 +30,7 @@ public class ModpackUpdater {
     private static String unModifiedSMC;
     private static WorkaroundUtil workaroundUtil;
     public Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.Urls> failedDownloads = new HashMap<>();
+
     public static String getModpackName() {
         return serverModpackContent.modpackName;
     }
