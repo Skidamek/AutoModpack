@@ -127,7 +127,7 @@ public class Commands {
     }
 
     private static int about(CommandContext<ServerCommandSource> context) {
-        send(context, "AutoModpack", Formatting.GREEN, AM_VERSION, Formatting.GREEN, false);
+        send(context, "AutoModpack", Formatting.GREEN, AM_VERSION, Formatting.WHITE, false);
         send(context, "/automodpack generate", Formatting.YELLOW, false);
         send(context, "/automodpack host start/stop/restart", Formatting.YELLOW, false);
         send(context, "/automodpack config reload", Formatting.YELLOW, false);
@@ -162,11 +162,11 @@ public class Commands {
     private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, String appendMsg, Formatting appendMsgColor, boolean broadcast) {
         VersionedCommandSource.sendFeedback(context,
                 VersionedText.literal(msg)
-                .formatted(msgColor)
-                .append(VersionedText.literal(" - ")
-                        .formatted(Formatting.WHITE)
-                        .append(VersionedText.literal(appendMsg))
-                                .formatted(appendMsgColor)),
+                    .formatted(msgColor)
+                    .append(VersionedText.literal(" - ")
+                            .formatted(Formatting.WHITE))
+                    .append(VersionedText.literal(appendMsg)
+                            .formatted(appendMsgColor)),
                 broadcast);
     }
 }
