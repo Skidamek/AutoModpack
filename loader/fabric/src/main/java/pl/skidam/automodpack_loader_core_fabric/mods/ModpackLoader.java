@@ -14,8 +14,6 @@ import pl.skidam.automodpack_loader_core.mods.ModpackLoaderService;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
 import java.io.IOException;
-import java.nio.file.FileSystem;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -29,7 +27,16 @@ public class ModpackLoader implements ModpackLoaderService {
     @Override
     public void loadModpack(List<Path> modpackMods) {
 
-        Path modpackDir = modpackMods.get(0).getParent();
+        Path modpackDir = null;
+
+        for (Path path : modpackMods) {
+            modpackDir = path.toAbsolutePath().normalize().getParent();
+            break;
+        }
+
+        if (modpackDir == null) {
+            return;
+        }
 
         try {
             List<ModCandidate> candidates;
@@ -58,65 +65,17 @@ public class ModpackLoader implements ModpackLoaderService {
         return containers;
     }
 
-    public Optional<ModContainer> getModContainer(Path path) {
-        if (path == null) {
-            return Optional.empty();
-        }
-
-        path = path.normalize();
-
-        for (ModContainer modContainer : FabricLanguageAdapter.getAllMods()) {
-            for (Path rootPath : modContainer.getRootPaths()) {
-                FileSystem fileSys = rootPath.getFileSystem();
-                Path modPath = Path.of(fileSys.toString()).toAbsolutePath();
-                if (modPath.equals(path.toAbsolutePath())) {
-                    System.out.println("Found mod: " + modPath);
-                    return Optional.of(modContainer);
-                } else {
-                    System.out.println("Not found mod: " + modPath + " " + path.toAbsolutePath());
-                }
-            }
-        }
-
-        return Optional.empty();
-    }
-
-    public Optional<ModContainer> getModContainer(String modId) {
-        if (modId == null) {
-            return Optional.empty();
-        }
-
-        for (ModContainer modContainer : FabricLanguageAdapter.getAllMods()) {
-            if (modId.equals(modContainer.getMetadata().getId())) {
-                return Optional.of(modContainer);
-            }
-        }
-
-        return Optional.empty();
-    }
-
-
-    private Collection<ModCandidate> discoverMods(Path modpack) throws ModResolutionException, IllegalAccessException, IOException {
+    private Collection<ModCandidate> discoverMods(Path modpackModsDir) throws ModResolutionException, IllegalAccessException, IOException {
         ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));
 
-        List<Path> pathList = Files.list(modpack).toList();
-        for (Path path : pathList) {
-            if (!Files.isDirectory(path)) {
-                continue;
-            }
+        LOGGER.info("Discovering mods from {}", modpackModsDir.getParent().getFileName() + "/" + modpackModsDir.getFileName());
 
-            if (!path.getFileName().toString().equals("mods")) {
-                continue;
-            }
+        List<?> candidateFinders = List.of(
+                new ModContainerModCandidateFinder(FabricLanguageAdapter.getAllMods().stream().toList()),
+                new DirectoryModCandidateFinder(modpackModsDir, FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()));
 
-            LOGGER.info("Discovering mods from {}", path.getParent().getFileName() + "/" + path.getFileName());
+        FIELD_CANDIDATE_FINDERS.set(discoverer, candidateFinders);
 
-            List<?> candidateFinders = List.of(
-                    new ModContainerModCandidateFinder(FabricLanguageAdapter.getAllMods().stream().toList()),
-                    new DirectoryModCandidateFinder(path, FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()));
-
-            FIELD_CANDIDATE_FINDERS.set(discoverer, candidateFinders);
-        }
 
         return discoverer.discoverMods(FabricLoaderImpl.INSTANCE, envDisabledMods);
     }

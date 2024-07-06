@@ -17,7 +17,6 @@ import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 public class ModpackContent {
     public final Set<Jsons.ModpackContentFields.ModpackContentItem> list = Collections.synchronizedSet(new HashSet<>());
     public final ObservableMap<String, Path> pathsMap = new ObservableMap<>();
-    private final List<CompletableFuture<Void>> creationFutures = Collections.synchronizedList(new ArrayList<>());
     private final String MODPACK_NAME;
     private final WildCards SYNCED_FILES_CARDS;
     private final WildCards EDITABLE_CARDS;
@@ -47,6 +46,8 @@ public class ModpackContent {
             pathsMap.clear();
             sha1MurmurMapPreviousContent.clear();
             getPreviousContent().ifPresent(previousContent -> previousContent.list.forEach(item -> sha1MurmurMapPreviousContent.put(item.sha1, item.murmur)));
+
+            List<CompletableFuture<Void>> creationFutures = Collections.synchronizedList(new ArrayList<>());
 
             // host-modpack generation
             if (MODPACK_DIR != null) {
@@ -182,16 +183,14 @@ public class ModpackContent {
     }
 
     private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file) throws Exception {
+        if (!Files.isRegularFile(file)) return null;
+
         Path absoluteModpackDir = MODPACK_DIR;
         if (MODPACK_DIR != null) {
             absoluteModpackDir = MODPACK_DIR.toAbsolutePath().normalize();
         }
 
-        if (!Files.isRegularFile(file)) return null;
-
         String formattedFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
-
-        boolean isEditable = false;
 
         final String size = String.valueOf(Files.size(file));
 
@@ -265,6 +264,7 @@ public class ModpackContent {
             }
         }
 
+        boolean isEditable = false;
         if (EDITABLE_CARDS.fileMatches(formattedFile, file)) {
             isEditable = true;
             LOGGER.info("File {} is editable!", formattedFile);
