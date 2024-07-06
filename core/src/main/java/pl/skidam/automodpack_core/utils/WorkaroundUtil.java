@@ -32,7 +32,7 @@ public class WorkaroundUtil {
         for (Jsons.ModpackContentFields.ModpackContentItem mod : modpackContentFields.list) {
             if (mod.type.equals("mod")) {
                 Path modPath = Path.of(modpackPath + mod.file);
-                if (FileInspection.hasServices(modPath)) {
+                if (FileInspection.hasSpecificServices(modPath)) {
                     workaroundMods.add(mod.file);
                 }
             }

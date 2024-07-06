@@ -30,16 +30,22 @@ public class FileInspection {
         return getModID(file) != null;
     }
 
-    public static boolean hasServices(Path file) {
+    // Checks for neo/forge mod locators
+    public static boolean hasSpecificServices(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
             return false;
         }
 
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
-            ZipEntry entry = zipFile.getEntry("META-INF/services/");
+            ZipEntry forgeIModLocator = zipFile.getEntry("META-INF/services/net.minecraftforge.forgespi.locating.IModLocator");
+            ZipEntry forgeIDependencyLocator = zipFile.getEntry("META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator");
+            ZipEntry neoforgeIModLocator = zipFile.getEntry("META-INF/services/net.neoforged.neoforgespi.locating.IModLocator");
+            ZipEntry neoforgeIDependencyLocator = zipFile.getEntry("META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator");
+            ZipEntry neoforgeIModFileCandidateLocator = zipFile.getEntry("META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator");
+            ZipEntry neoforgeGraphicsBootstrapper = zipFile.getEntry("META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper");
             zipFile.close();
-            return entry != null;
+            return forgeIModLocator != null || forgeIDependencyLocator != null || neoforgeIModLocator != null || neoforgeIDependencyLocator != null || neoforgeIModFileCandidateLocator != null || neoforgeGraphicsBootstrapper != null;
         } catch (IOException e) {
             e.printStackTrace();
         }
