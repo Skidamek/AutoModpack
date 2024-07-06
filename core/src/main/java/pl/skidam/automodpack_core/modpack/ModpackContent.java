@@ -185,27 +185,21 @@ public class ModpackContent {
     private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file) throws Exception {
         if (!Files.isRegularFile(file)) return null;
 
-        Path absoluteModpackDir = MODPACK_DIR;
-        if (MODPACK_DIR != null) {
-            absoluteModpackDir = MODPACK_DIR.toAbsolutePath().normalize();
-        }
-
         String formattedFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
 
-        final String size = String.valueOf(Files.size(file));
-
-        if (size.equals("0")) {
-            LOGGER.info("Skipping file {} because it is empty", formattedFile);
-            return null;
-        }
-
-        // modpackFile is relative path to ~/.minecraft/ (content format) so if it starts with /automodpack/ something is wrong
+        // modpackFile is relative path to ~/.minecraft/ (content format) so if it starts with /automodpack/ we dont want it
         if (formattedFile.startsWith("/automodpack/")) {
             return null;
         }
 
-        // Check if file is generated from host-modpack, if not apply skip rules
-        if (!hostContentModpackDir.equals(absoluteModpackDir)) {
+        final String size = String.valueOf(Files.size(file));
+
+        if (serverConfig.autoExcludeUnnecessaryFiles) {
+            if (size.equals("0")) {
+                LOGGER.info("Skipping file {} because it is empty", formattedFile);
+                return null;
+            }
+
             if (file.getFileName().toString().startsWith(".")) {
                 LOGGER.info("Skipping file {} is hidden", formattedFile);
                 return null;
