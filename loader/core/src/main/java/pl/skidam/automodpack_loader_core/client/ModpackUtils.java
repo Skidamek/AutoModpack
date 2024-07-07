@@ -234,6 +234,10 @@ public class ModpackUtils {
     }
 
     public static Path renameModpackDir(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+        if (clientConfig.installedModpacks == null || clientConfig.selectedModpack == null || clientConfig.selectedModpack.isBlank()) {
+            return modpackDir;
+        }
+
         String installedModpackName = clientConfig.selectedModpack;
         String installedModpackLink = clientConfig.installedModpacks.get(installedModpackName);
         String serverModpackName = serverModpackContent.modpackName;

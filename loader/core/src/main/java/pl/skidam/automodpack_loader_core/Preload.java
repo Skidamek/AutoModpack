@@ -26,7 +26,7 @@ public class Preload {
             initializeGlobalVariables();
             loadConfigs();
             createPaths();
-            updateAll(clientConfig.selectedModpack);
+            updateAll();
             LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
         } catch (Exception e) {
             e.printStackTrace();
@@ -34,9 +34,9 @@ public class Preload {
         }
     }
 
-    private void updateAll(String selectedModpack) {
+    private void updateAll() {
 
-        var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
+        var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(clientConfig.selectedModpack);
 
         if (LOADER_MANAGER.getEnvironmentType() == LoaderService.EnvironmentType.SERVER || optionalSelectedModpackDir.isEmpty()) {
             SelfUpdater.update();
@@ -44,11 +44,14 @@ public class Preload {
         }
 
         selectedModpackDir = optionalSelectedModpackDir.get();
-        String selectedModpackLink = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
+        String selectedModpackLink = "";
+        if (!clientConfig.selectedModpack.isBlank() && clientConfig.installedModpacks.containsKey(clientConfig.selectedModpack)) {
+            selectedModpackLink = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
+        }
 
         // Check if the modpack link is missing or blank
         if (selectedModpackLink == null || selectedModpackLink.isBlank()) {
-            if (SelfUpdater.update()) return;
+            SelfUpdater.update();
             return;
         }
 

@@ -16,7 +16,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -57,7 +56,7 @@ public class FileInspection {
                 }
             }
 
-            return Paths.get(path).toAbsolutePath().normalize();
+            return Path.of(path).toAbsolutePath().normalize();
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
