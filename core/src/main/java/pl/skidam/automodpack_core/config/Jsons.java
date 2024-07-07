@@ -43,6 +43,13 @@ public class Jsons {
         public List<String> acceptedLoaders;
     }
 
+    public static class ServerCoreConfigFields {
+        public String automodpackVersion = "4.0.0-beta9";
+        public String loader = "fabric";
+        public String loaderVersion = "0.15.11";
+        public String mcVersion = "1.20.1";
+    }
+
     public static class WorkaroundFields {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public Set<String> workaroundMods;

@@ -32,6 +32,13 @@ public class Modpack {
         return new ModpackContent(serverConfig.modpackName, cwd, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, CREATION_EXECUTOR);
     }
 
+    public boolean generateNew(ModpackContent content) {
+        if (content == null) return false;
+        boolean generated = content.create();
+        modpacks.put(content.getModpackName(), content);
+        return generated;
+    }
+
     public boolean generateNew() {
         ModpackContent content = init();
         if (content == null) return false;

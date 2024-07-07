@@ -185,8 +185,20 @@ public class ModpackContent {
         }
     }
 
+    // check if file is hostModpackContentFile, serverConfigFile or serverCoreConfigFile
+    private boolean isInnerFile(Path file) {
+        Path normalizedFilePath = file.toAbsolutePath().normalize();
+        return normalizedFilePath.equals(hostModpackContentFile.toAbsolutePath().normalize()) ||
+                normalizedFilePath.equals(serverConfigFile.toAbsolutePath().normalize()) ||
+                normalizedFilePath.equals(serverCoreConfigFile.toAbsolutePath().normalize());
+    }
+
     private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file) throws Exception {
         if (!Files.isRegularFile(file)) return null;
+
+        if (isInnerFile(file)) {
+            return null;
+        }
 
         String formattedFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
 

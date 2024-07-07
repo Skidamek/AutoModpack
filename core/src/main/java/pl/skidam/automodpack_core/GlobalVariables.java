@@ -33,8 +33,9 @@ public class GlobalVariables {
     // Addons - optional addon packs
     // Switches - optional or required packs, chosen by the player, only one can be installed at a time
     public final static Path hostContentModpackDir = hostModpackDir.resolve("main");
-    public final static Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
-    public static final Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
+    public static Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
+    public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
+    public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
 
     // Client
 

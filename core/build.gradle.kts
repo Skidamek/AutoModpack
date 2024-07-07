@@ -1,5 +1,8 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+
 plugins {
     java
+    id("com.github.johnrengelman.shadow")
 }
 
 base {
@@ -35,4 +38,19 @@ tasks.withType<JavaCompile> {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+}
+
+// Configure the ShadowJar task
+tasks.named<ShadowJar>("shadowJar") {
+    archiveBaseName.set("automodpack-server")
+    configurations = listOf(project.configurations.runtimeClasspath.get())
+    manifest {
+        attributes(
+            "Main-Class" to "pl.skidam.automodpack_core.Server"
+        )
+    }
+}
+
+tasks.named("assemble") {
+    dependsOn("shadowJar")
 }
