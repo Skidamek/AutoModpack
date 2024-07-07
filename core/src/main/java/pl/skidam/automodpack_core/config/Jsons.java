@@ -2,18 +2,21 @@
 package pl.skidam.automodpack_core.config;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 
 public class Jsons {
 
     public static class ClientConfigFields {
-        public String selectedModpack = "";
-        public List<String> installedModpacks;
+        public int DO_NOT_CHANGE_IT = 1; // file version
+        public String selectedModpack = ""; // modpack name
+        public Map<String, String> installedModpacks; // modpack name, link
         public boolean selfUpdater = false;
     }
 
     public static class ServerConfigFields {
+        public int DO_NOT_CHANGE_IT = 1; // file version
         public String modpackName = "";
         public boolean modpackHost = true;
         public boolean generateModpackOnStart = true;
@@ -41,24 +44,23 @@ public class Jsons {
     }
 
     public static class WorkaroundFields {
+        public int DO_NOT_CHANGE_IT = 1; // file version
         public Set<String> workaroundMods;
     }
 
     public static class ModpackContentFields {
         public String modpackName = "";
-        public String link = "";
         public String automodpackVersion = "";
         public String loader = "";
         public String loaderVersion = "";
         public String mcVersion = "";
         public Set<ModpackContentItem> list;
-        public ModpackContentFields(String link, Set<ModpackContentItem> list) {
-            this.link = link; // Set it on the client side only
+
+        public ModpackContentFields(Set<ModpackContentItem> list) {
             this.list = list;
         }
 
         public ModpackContentFields() {
-            this.link = "";
             this.list = Set.of();
         }
 

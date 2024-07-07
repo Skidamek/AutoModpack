@@ -1,14 +1,11 @@
 package pl.skidam.automodpack_core.utils;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Objects;
 import java.util.Optional;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -21,21 +18,6 @@ public class ModpackContentTools {
             }
         }
         return "other";
-    }
-
-    public static Optional<String> getModpackLink(Path modpackDir) {
-        if (modpackDir == null) {
-            throw new IllegalArgumentException("Modpack dir cannot be null or empty!");
-        }
-
-        Path path = modpackDir.resolve(hostModpackContentFile.getFileName());
-
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(path);
-        if (modpackContent != null && modpackContent.link != null && !modpackContent.link.isEmpty()) {
-            return Optional.of(modpackContent.link);
-        }
-
-        return Optional.empty();
     }
 
     public static Optional<Path> getModpackDir(String modpack) {

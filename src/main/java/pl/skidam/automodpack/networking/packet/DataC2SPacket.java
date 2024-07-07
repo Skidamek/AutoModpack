@@ -68,6 +68,12 @@ public class DataC2SPacket {
                 reply = true;
             } else if (selectedModpackChanged) {
                 disconnectImmediately(handler);
+
+                // select modpack and restart
+                String modpackName = modpackDir.getFileName().toString();
+                ModpackUtils.addModpackToList(modpackName, link);
+                ModpackUtils.selectModpack(modpackDir);
+
                 new ReLauncher(modpackDir, UpdateType.SELECT).restart(false);
                 reply = true;
             } else {

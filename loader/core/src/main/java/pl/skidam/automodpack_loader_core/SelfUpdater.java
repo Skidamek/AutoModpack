@@ -20,40 +20,6 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class SelfUpdater {
 
     public static final String AUTOMODPACK_ID = "k68glP2e"; // AutoModpack modrinth id
-    public static final Path AUTOMODPACK_JAR;
-
-    static {
-        try {
-            // TODO find better way to parse that path
-            URI uri = SelfUpdater.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-            // Example: union:/home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar%2354!/
-            // Format it into proper path like: /home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar
-
-            String path = uri.getPath();
-            int index = path.indexOf('!');
-            if (index != -1) {
-                path = path.substring(0, index);
-            }
-
-            index = path.indexOf('#');
-            if (index != -1) {
-                path = path.substring(0, index);
-            }
-
-            // check for windows
-            if (System.getProperty("os.name").toLowerCase().contains("win")) {
-                if (path.startsWith("/")) {
-                    path = path.substring(1);
-                }
-            }
-
-            AUTOMODPACK_JAR = Paths.get(path);
-
-//            LOGGER.info("AutoModpack jar path: {}", AUTOMODPACK_JAR);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
 
     public static boolean update () {
         return update(null);

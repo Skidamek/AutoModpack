@@ -14,10 +14,8 @@ import pl.skidam.automodpack_core.utils.ManifestReader;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.List;
-import java.util.Optional;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
-import static pl.skidam.automodpack_core.GlobalVariables.selectedModpackLink;
 
 public class Preload {
 
@@ -37,31 +35,43 @@ public class Preload {
     }
 
     private void updateAll(String selectedModpack) {
+
         var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(selectedModpack);
-        if (LOADER_MANAGER.getEnvironmentType() == LoaderService.EnvironmentType.CLIENT && optionalSelectedModpackDir.isPresent()) {
 
-            selectedModpackDir = optionalSelectedModpackDir.get();
-
-            Optional<String> optionalSelectedModpackLink = ModpackContentTools.getModpackLink(selectedModpackDir);
-            if (optionalSelectedModpackLink.isEmpty()) {
-                if (SelfUpdater.update()) return;
-                return;
-            }
-
-            selectedModpackLink = optionalSelectedModpackLink.get();
-            var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackLink);
-            var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
-            if (optionalLatestModpackContent.isPresent()) {
-                latestModpackContent = optionalLatestModpackContent.get();
-            }
-
-            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
-            if (SelfUpdater.update(latestModpackContent)) return;
-            new ModpackUpdater().startModpackUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
-        } else {
-            if (SelfUpdater.update()) return;
+        if (LOADER_MANAGER.getEnvironmentType() == LoaderService.EnvironmentType.SERVER || optionalSelectedModpackDir.isEmpty()) {
+            SelfUpdater.update();
+            return;
         }
+
+        selectedModpackDir = optionalSelectedModpackDir.get();
+        String selectedModpackLink = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
+
+        // Check if the modpack link is missing or blank
+        if (selectedModpackLink == null || selectedModpackLink.isBlank()) {
+            if (SelfUpdater.update()) return;
+            return;
+        }
+
+        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackLink);
+        var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+
+        // Use the latest modpack content if available
+        if (optionalLatestModpackContent.isPresent()) {
+            latestModpackContent = optionalLatestModpackContent.get();
+        }
+
+        // Delete dummy files
+        CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
+
+        // Update AutoModpack
+        if (SelfUpdater.update(latestModpackContent)) {
+            return;
+        }
+
+        // Update modpack
+        new ModpackUpdater().startModpackUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
     }
+
 
     private void initializeGlobalVariables() {
         // Initialize global variables
@@ -72,6 +82,8 @@ public class Preload {
         AM_VERSION = ManifestReader.getAutoModpackVersion();
         LOADER_VERSION = LOADER_MANAGER.getLoaderVersion();
         LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
+        AUTOMODPACK_JAR = FileInspection.getAutoModpackJar();
+        MODS_DIR = AUTOMODPACK_JAR.getParent();
     }
 
     private void loadConfigs() {
@@ -80,6 +92,12 @@ public class Preload {
         serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
 
         if (serverConfig != null) {
+            int previousServerConfigVersion = serverConfig.DO_NOT_CHANGE_IT;
+            serverConfig.DO_NOT_CHANGE_IT = new Jsons.ServerConfigFields().DO_NOT_CHANGE_IT;
+
+            if (previousServerConfigVersion != serverConfig.DO_NOT_CHANGE_IT) {
+                LOGGER.info("Updated server config version to {}", serverConfig.DO_NOT_CHANGE_IT);
+            }
 
             // Add current loader to the list
             if (serverConfig.acceptedLoaders == null) {
@@ -99,13 +117,15 @@ public class Preload {
         }
 
         if (clientConfig != null) {
+            int previousClientConfigVersion = clientConfig.DO_NOT_CHANGE_IT;
+            clientConfig.DO_NOT_CHANGE_IT = new Jsons.ClientConfigFields().DO_NOT_CHANGE_IT;
 
-            // Make sure to have modpack in installed modpacks
-            ModpackUtils.addModpackToList(clientConfig.selectedModpack);
+            if (previousClientConfigVersion != clientConfig.DO_NOT_CHANGE_IT) {
+                LOGGER.info("Updated client config version to {}", clientConfig.DO_NOT_CHANGE_IT);
+            }
 
             // Save changes
             ConfigTools.save(clientConfigFile, clientConfig);
-
         }
 
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");

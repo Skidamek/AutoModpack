@@ -20,7 +20,8 @@ public class GlobalVariables {
     public static String LOADER_VERSION;
     public static String LOADER;
     public static LoaderService LOADER_MANAGER = new NullLoaderManager();
-    public static Path MODS_DIR; // TODO make use of this, its useful for clients using non-standard mods dir
+    public static Path AUTOMODPACK_JAR;
+    public static Path MODS_DIR;
     public static Modpack modpack;
     public static HttpServer httpServer;
     public static Jsons.ServerConfigFields serverConfig;

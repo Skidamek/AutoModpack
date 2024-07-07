@@ -8,6 +8,9 @@ import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.GlobalVariables.clientConfig;
+
 
 public class WorkaroundUtil {
 
@@ -56,6 +59,14 @@ public class WorkaroundUtil {
     public Set<String> getWorkaroundList() {
         Jsons.WorkaroundFields workaroundFields = ConfigTools.load(workaroundFile, Jsons.WorkaroundFields.class);
         if (workaroundFields == null || workaroundFields.workaroundMods == null) return new HashSet<>();
+
+        int previousWorkaroundVersion = workaroundFields.DO_NOT_CHANGE_IT;
+        workaroundFields.DO_NOT_CHANGE_IT = new Jsons.WorkaroundFields().DO_NOT_CHANGE_IT;
+
+        if (previousWorkaroundVersion != workaroundFields.DO_NOT_CHANGE_IT) {
+            LOGGER.info("Updated workaround file version to {}", clientConfig.DO_NOT_CHANGE_IT);
+        }
+
         return workaroundFields.workaroundMods;
     }
 

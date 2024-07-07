@@ -16,7 +16,6 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 
@@ -95,8 +94,12 @@ public class ModpackUtils {
 
             if (ignoreFiles.contains(formattedFile)) continue;
 
-            Path modpackFile = Paths.get(modpackDir + formattedFile);
-            Path runFile = Paths.get("." + formattedFile);
+            Path modpackFile = Path.of(modpackDir + formattedFile);
+            Path runFile = Path.of("." + formattedFile);
+
+            if (contentItem.type.equals("mod")) {
+                runFile = Path.of(MODS_DIR + formattedFile);
+            }
 
             boolean modpackFileExists = Files.exists(modpackFile);
             boolean runFileExists = Files.exists(runFile);
@@ -136,7 +139,7 @@ public class ModpackUtils {
     // Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
     public static Map<LoaderService.Mod, LoaderService.Mod> getDupeMods(Path modpackPath, Set<String> workaroundMods) throws IOException {
         // maybe also check subfolders...
-        final List<Path> standardMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
+        final List<Path> standardMods = Files.list(MODS_DIR).toList();
         final List<Path> modpackMods = Files.list(modpackPath.resolve("mods")).toList();
         final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
         final Collection<LoaderService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
@@ -161,7 +164,7 @@ public class ModpackUtils {
     // If the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // If you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
     public static boolean removeDupeMods(Map<LoaderService.Mod, LoaderService.Mod> dupeMods) throws IOException {
-        List<Path> standardMods = Files.list(Path.of("./mods")).toList(); // TODO replace this with standardized mods path
+        List<Path> standardMods = Files.list(MODS_DIR).toList();
         Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
 
         if (standardModList.isEmpty()) return false;
@@ -229,35 +232,31 @@ public class ModpackUtils {
         }
     }
 
-    public static List<Path> renameModpackDir(Path modpackContentFile, Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
-        Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(modpackContentFile);
-        if (clientModpackContent != null) {
-            String installedModpackName = clientModpackContent.modpackName;
-            String serverModpackName = serverModpackContent.modpackName;
+    public static Path renameModpackDir(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+        String installedModpackName = clientConfig.selectedModpack;
+        String installedModpackLink = clientConfig.installedModpacks.get(installedModpackName);
+        String serverModpackName = serverModpackContent.modpackName;
 
-            if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
+        if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
 
-                Path newModpackDir = Path.of(modpackDir.getParent() + File.separator + serverModpackName);
+            Path newModpackDir = Path.of(modpackDir.getParent() + File.separator + serverModpackName);
 
-                try {
-                    Files.move(modpackDir, newModpackDir, StandardCopyOption.REPLACE_EXISTING);
+            try {
+                Files.move(modpackDir, newModpackDir, StandardCopyOption.REPLACE_EXISTING);
 
-                    // TODO remove old modpack from list
-                    addModpackToList(newModpackDir.getFileName().toString());
-                    selectModpack(newModpackDir);
+                addModpackToList(newModpackDir.getFileName().toString(), installedModpackLink);
+                removeModpackFromList(installedModpackName);
+                selectModpack(newModpackDir);
 
-                    LOGGER.info("Changed modpack name of {} to {}", modpackDir.getFileName().toString(), serverModpackName);
+                LOGGER.info("Changed modpack name of {} to {}", modpackDir.getFileName().toString(), serverModpackName);
 
-                    modpackContentFile = Path.of(newModpackDir + File.separator + modpackContentFile.getFileName());
-
-                    return List.of(newModpackDir, modpackContentFile);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                return newModpackDir;
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
 
-        return null;
+        return modpackDir;
     }
 
     // Returns true if value changed
@@ -269,17 +268,32 @@ public class ModpackUtils {
         return !modpackToSelect.equals(selectedModpack);
     }
 
-    public static void addModpackToList(String modpackName) {
+    public static void removeModpackFromList(String modpackName) {
         if (modpackName == null || modpackName.isEmpty()) {
             return;
         }
 
+        if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.containsKey(modpackName)) {
+            Map<String, String> modpacks = new HashMap<>(clientConfig.installedModpacks);
+            modpacks.remove(modpackName);
+            clientConfig.installedModpacks = modpacks;
+            ConfigTools.save(clientConfigFile, clientConfig);
+        }
+    }
+
+    public static void addModpackToList(String modpackName, String link) {
+        if (modpackName == null || modpackName.isEmpty() || link == null || link.isEmpty()) {
+            return;
+        }
+
         if (clientConfig.installedModpacks == null) {
-            clientConfig.installedModpacks = List.of(modpackName);
-        } else if (!clientConfig.installedModpacks.contains(modpackName)) {
-            LinkedList<String> newList = new LinkedList<>(clientConfig.installedModpacks);
-            newList.add(modpackName);
-            clientConfig.installedModpacks = newList;
+            Map<String, String> modpacks = new HashMap<>();
+            modpacks.put(modpackName, link);
+            clientConfig.installedModpacks = modpacks;
+        } else if (!clientConfig.installedModpacks.containsKey(modpackName)) {
+            Map<String, String> modpacks = new HashMap<>(clientConfig.installedModpacks);
+            modpacks.put(modpackName, link);
+            clientConfig.installedModpacks = modpacks;
         }
 
         ConfigTools.save(clientConfigFile, clientConfig);
@@ -298,7 +312,7 @@ public class ModpackUtils {
 
         if (!modpackName.isEmpty()) {
             // Check if we don't have already installed modpack via this link
-            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.contains(nameFromUrl)) {
+            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.containsValue(nameFromUrl)) {
                 return modpackDir;
             }
 

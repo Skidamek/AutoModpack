@@ -113,13 +113,16 @@ public class ModpackContent {
             httpServer.addPaths(pathsMap);
         }
 
+        // set all new variables
+        saveModpackContent();
+
         return true;
     }
 
     // This is important to make it synchronized otherwise it could corrupt the file and crash
     public synchronized void saveModpackContent() {
         synchronized (list) {
-            Jsons.ModpackContentFields modpackContent = new Jsons.ModpackContentFields(null, list);
+            Jsons.ModpackContentFields modpackContent = new Jsons.ModpackContentFields(list);
 
             modpackContent.automodpackVersion = AM_VERSION;
             modpackContent.mcVersion = MC_VERSION;
