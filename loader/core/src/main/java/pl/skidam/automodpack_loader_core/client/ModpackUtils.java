@@ -94,11 +94,12 @@ public class ModpackUtils {
 
             if (ignoreFiles.contains(formattedFile)) continue;
 
-            Path modpackFile = Path.of(modpackDir + formattedFile);
-            Path runFile = Path.of("." + formattedFile);
+            Path modpackFile = Path.of(modpackDir + formattedFile).toAbsolutePath().normalize();
+            Path runFile = Path.of("." + formattedFile).toAbsolutePath().normalize();
 
             if (contentItem.type.equals("mod")) {
-                runFile = Path.of(MODS_DIR + formattedFile);
+                // Make it into standardized mods directory, for support custom launchers
+                runFile = MODS_DIR.resolve(formattedFile.replaceFirst("/mods/", ""));
             }
 
             boolean modpackFileExists = Files.exists(modpackFile);
@@ -122,11 +123,11 @@ public class ModpackUtils {
                 CustomFileUtils.copyFile(runFile, modpackFile);
                 needsReCheck = false;
             } else if (!modpackFileExists) {
-                LOGGER.error("File " + formattedFile + " doesn't exist!?");
+                LOGGER.error("File {} doesn't exist!?", formattedFile);
             }
 
             // we need to update run file and we assume that modpack file is up to date
-            if (needsReCheck && !Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile, "sha1").orElse(null))) {
+            if (needsReCheck && Files.exists(runFile) && !Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile, "sha1").orElse(null))) {
                 LOGGER.info("File {} is not up to date, copying from modpack", formattedFile);
                 CustomFileUtils.copyFile(modpackFile, runFile);
             }
