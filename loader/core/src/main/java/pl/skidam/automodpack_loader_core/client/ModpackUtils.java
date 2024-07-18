@@ -80,7 +80,7 @@ public class ModpackUtils {
         }
     }
 
-    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, List<String> ignoreFiles, Set<String> workaroundMods) throws IOException {
+    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> ignoreFiles) throws IOException {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
             return false;
@@ -108,13 +108,8 @@ public class ModpackUtils {
             boolean needsReCheck = true;
 
             if (modpackFileExists && !runFileExists) {
-                // Don't copy from modpack to run if it's a mod unless workaround applies to it.
+                // We only copy mods which are not ignored -- which need a workaround
                 if (contentItem.type.equals("mod")) {
-                    if (!workaroundMods.contains(formattedFile)) {
-                        continue;
-                    }
-
-                    LOGGER.info("Applying workaround for {} mod", formattedFile);
                     needsRestart = true;
                 }
 

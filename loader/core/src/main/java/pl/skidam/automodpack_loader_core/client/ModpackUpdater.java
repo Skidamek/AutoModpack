@@ -30,6 +30,7 @@ public class ModpackUpdater {
     private static String unModifiedSMC;
     private static WorkaroundUtil workaroundUtil;
     public Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.Urls> failedDownloads = new HashMap<>();
+    private static final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
 
     public static String getModpackName() {
         return serverModpackContent.modpackName;
@@ -195,6 +196,7 @@ public class ModpackUpdater {
 
             // DOWNLOAD
 
+            newDownloadedFiles.clear();
             int wholeQueue = serverModpackContent.list.size();
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
@@ -208,6 +210,11 @@ public class ModpackUpdater {
                     String serverSHA1 = item.sha1;
 
                     Path downloadFile = Paths.get(modpackDir + fileName);
+
+                    if (!Files.exists(downloadFile)) {
+                        newDownloadedFiles.add(fileName);
+                    }
+
                     DownloadManager.Urls urls = new DownloadManager.Urls();
 
                     urls.addUrl(new DownloadManager.Url().getUrl(link + serverSHA1));
@@ -383,18 +390,40 @@ public class ModpackUpdater {
             }
         }
 
-        // make a list of editable files to ignore them while copying
-        List<String> editableFiles = modpackContent.list.stream().filter(modpackContentItem -> modpackContentItem.editable).map(modpackContentField -> modpackContentField.file).toList();
+        // Make a list of ignored files to ignore them while copying
         Set<String> workaroundMods = deleteNonModpackFiles(modpackDir, modpackContentFile, modpackContent, workaroundUtil);
         workaroundUtil.saveWorkaroundList(workaroundMods);
 
-        // copy files to running directory
-        boolean needsRestart0 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, editableFiles, workaroundMods);
+        // Copy files to running directory
+        Set<String> ignoredFiles = getIgnoredFiles(modpackContent.list, workaroundMods);
+        boolean needsRestart0 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, ignoredFiles);
 
         var dupeMods = ModpackUtils.getDupeMods(modpackDir, workaroundMods);
         boolean needsRestart1 = ModpackUtils.removeDupeMods(dupeMods);
 
         return needsRestart0 || needsRestart1;
+    }
+
+    private Set<String> getIgnoredFiles(Set<Jsons. ModpackContentFields. ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
+        Set<String> ignoredFiles = new HashSet<>();
+
+
+        // Make list of files which we do not copy to the running directory
+        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : modpackContentItems) {
+            // We only want to copy editable file if its downloaded first time
+            // So we add to ignored any other editable file
+            if (modpackContentItem.editable && !newDownloadedFiles.contains(modpackContentItem.file)) {
+                ignoredFiles.add(modpackContentItem.file);
+            }
+
+            // We only want to copy mods which need a workaround
+            if (modpackContentItem.type.equals("mod") && !workaroundMods.contains(modpackContentItem.file)) {
+                ignoredFiles.add(modpackContentItem.file);
+                LOGGER.info("Applying workaround for {}", modpackContentItem.file);
+            }
+        }
+
+        return ignoredFiles;
     }
 
     // returns changed workaroundMods list
