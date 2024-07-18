@@ -111,6 +111,7 @@ public class ModpackUtils {
                 // We only copy mods which are not ignored -- which need a workaround
                 if (contentItem.type.equals("mod")) {
                     needsRestart = true;
+                    LOGGER.info("Applying workaround for {} mod", formattedFile);
                 }
 
                 CustomFileUtils.copyFile(modpackFile, runFile);

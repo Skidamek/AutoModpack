@@ -419,7 +419,6 @@ public class ModpackUpdater {
             // We only want to copy mods which need a workaround
             if (modpackContentItem.type.equals("mod") && !workaroundMods.contains(modpackContentItem.file)) {
                 ignoredFiles.add(modpackContentItem.file);
-                LOGGER.info("Applying workaround for {}", modpackContentItem.file);
             }
         }
 
