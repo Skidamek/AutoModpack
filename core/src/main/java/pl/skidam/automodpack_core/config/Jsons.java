@@ -11,7 +11,7 @@ public class Jsons {
     public static class ClientConfigFields {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public String selectedModpack = ""; // modpack name
-        public Map<String, String> installedModpacks; // modpack name, link
+        public Map<String, String> installedModpacks = Map.of(); // modpack name, link
         public boolean selfUpdater = false;
     }
 

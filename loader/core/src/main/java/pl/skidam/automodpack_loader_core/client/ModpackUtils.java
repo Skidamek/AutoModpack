@@ -264,9 +264,11 @@ public class ModpackUtils {
     public static boolean selectModpack(Path modpackDir) {
         String modpackToSelect = modpackDir.getFileName().toString();
         String selectedModpack = clientConfig.selectedModpack;
+        String modpackToSelectLink = clientConfig.installedModpacks.get(modpackToSelect);
+        String selectedModpackLink = clientConfig.installedModpacks.get(selectedModpack);
         clientConfig.selectedModpack = modpackToSelect;
         ConfigTools.save(clientConfigFile, clientConfig);
-        return !modpackToSelect.equals(selectedModpack);
+        return !Objects.equals(modpackToSelect, selectedModpack) || !Objects.equals(modpackToSelectLink, selectedModpackLink);
     }
 
     public static void removeModpackFromList(String modpackName) {
