@@ -13,18 +13,17 @@ import org.jetbrains.annotations.Nullable;
 
 public class VersionedCommandSource extends ServerCommandSource {
 
-
     public VersionedCommandSource(CommandOutput output, Vec3d pos, Vec2f rot, ServerWorld world, int level, String name, Text displayName, MinecraftServer server, @Nullable Entity entity) {
         super(output, pos, rot, world, level, name, displayName, server, entity);
     }
 
-//#if MC >= 1200
+/*? if >=1.20 {*/
    public static void sendFeedback(CommandContext<ServerCommandSource> context, Text message, boolean broadcastToOps) {
        context.getSource().sendFeedback(() -> message, broadcastToOps);
    }
-//#else
-//$$     public static void sendFeedback(CommandContext<ServerCommandSource> context, Text message, boolean broadcastToOps) {
-//$$         context.getSource().sendFeedback(message, broadcastToOps);
-//$$     }
-//#endif
+/*?} else {*/
+    /*public static void sendFeedback(CommandContext<ServerCommandSource> context, Text message, boolean broadcastToOps) {
+        context.getSource().sendFeedback(message, broadcastToOps);
+    }
+*//*?}*/
 }

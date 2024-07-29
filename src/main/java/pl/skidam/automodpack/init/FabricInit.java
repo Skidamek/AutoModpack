@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.init;
 
-//#if FABRIC
+/*? if fabric {*/
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
@@ -9,12 +9,7 @@ import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
-
-//#if MC < 1192
-//$$ import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
-//#else
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-//#endif
+import net.fabricmc.fabric.api.command./*? if <1.19.1 {*/ /*v1 *//*?} else {*/ v2 /*?}*/.CommandRegistrationCallback;
 
 public class FabricInit {
 
@@ -35,15 +30,11 @@ public class FabricInit {
             new AudioManager();
         }
 
-//#if MC >= 1192
-    CommandRegistrationCallback.EVENT.register((dispatcher, w, dedicated) -> {
-//#else
-//$$   CommandRegistrationCallback.EVENT.register((dispatcher, dedicated) -> {
-//#endif
+    CommandRegistrationCallback.EVENT.register((dispatcher, /*? if >=1.19.1 {*/ w, /*?}*/ dedicated) -> {
        Commands.register(dispatcher);
    });
 
         LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
     }
 }
-//#endif
+/*?}*/

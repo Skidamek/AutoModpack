@@ -1,4 +1,4 @@
-import groovy.json.JsonSlurper
+import dev.kikugie.stonecutter.StonecutterSettings
 
 pluginManagement {
     repositories {
@@ -6,19 +6,17 @@ pluginManagement {
         gradlePluginPortal()
         maven { url = uri("https://maven.architectury.dev/") }
         maven { url = uri("https://maven.fabricmc.net/") }
-        maven { url = uri("https://maven.quiltmc.org/repository/release") }
         maven { url = uri("https://maven.neoforged.net/releases") }
         maven { url = uri("https://files.minecraftforge.net/maven/") }
-        maven { url = uri("https://jitpack.io") }
+        maven { url = uri("https://maven.kikugie.dev/releases") }
         mavenLocal()
     }
-    resolutionStrategy {
-        eachPlugin {
-            when (requested.id.id) {
-                "com.replaymod.preprocess" -> useModule("com.github.Fallen-Breath:preprocessor:${requested.version}")
-            }
-        }
-    }
+}
+
+plugins {
+    id("com.github.johnrengelman.shadow") version "8.1.1" apply false
+    id("dev.architectury.loom") version "1.7-SNAPSHOT" apply false
+    id("dev.kikugie.stonecutter") version "0.4.2"
 }
 
 include(":core")
@@ -26,7 +24,6 @@ include(":core")
 val coreModules = arrayOf(
     "core",
     "fabric",
-    "quilt",
     "forge-fml40",
     "forge-fml47",
     "neoforge-fml2",
@@ -45,13 +42,32 @@ coreModules.forEach { module ->
     }
 }
 
-val settingsFile = File("$rootDir/settings.json")
-val settings = JsonSlurper().parseText(settingsFile.readText()) as Map<String, List<String>>
+fun getProperty(key: String): String? {
+    return settings.extra[key] as? String
+}
 
-for (version in settings["versions"]!!) {
-    include(":$version")
+fun getVersions(key: String): Set<String> {
+    return getProperty(key)!!.split(',').map { it.trim() }.toSet()
+}
 
-    val project = project(":$version")
-    project.projectDir = file("versions/$version")
-    project.buildFileName = "../build.gradle.kts"
+val versions = mapOf(
+    "forge" to getVersions("forge_versions"),
+    "fabric" to getVersions("fabric_versions"),
+    "neoforge" to getVersions("neoforge_versions")
+)
+
+val sharedVersions = versions.map { entry ->
+    val loader = entry.key
+    entry.value.map { "$it-$loader" }
+}.flatten().toSet()
+
+extensions.configure<StonecutterSettings> {
+    kotlinController = true
+    centralScript = "build.gradle.kts"
+
+    shared {
+        versions(sharedVersions)
+    }
+
+    create(rootProject)
 }

@@ -3,9 +3,9 @@ package pl.skidam.automodpack.mixin.core;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.server.PlayerManager;
-//#if MC >= 1202
+/*? if >=1.20.2 {*/
 import net.minecraft.server.network.ConnectedClientData;
-//#endif
+/*?}*/
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.Text;
@@ -24,13 +24,13 @@ import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
 @Mixin(PlayerManager.class)
 public class PlayerManagerMixin {
 
-//#if MC >= 1202
+/*? if >=1.20.2 {*/
     @Inject(at = @At("TAIL"), method = "onPlayerConnect")
     private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
-//#else
-//$$ @Inject(at = @At("TAIL"), method = "onPlayerConnect")
-//$$ private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity player, CallbackInfo ci) {
-//#endif
+/*?} else {*/
+/*@Inject(at = @At("TAIL"), method = "onPlayerConnect")
+private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity player, CallbackInfo ci) {
+*//*?}*/
         GameProfile profile = player.getGameProfile();
         String playerName = profile.getName();
 

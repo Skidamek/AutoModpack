@@ -3,9 +3,9 @@ plugins {
 }
 
 base {
-    archivesName = rootProject.findProperty("archives_base_name") as String + "-" + project.name
-    version =  rootProject.findProperty("mod_version") as String
-    group = rootProject.findProperty("maven_group") as String
+    archivesName = property("mod_id") as String + "-3" + project.name
+    version =  property("mod_version") as String
+    group = property("mod_group") as String
 }
 
 repositories {

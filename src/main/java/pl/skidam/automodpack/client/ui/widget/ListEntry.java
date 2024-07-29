@@ -7,91 +7,91 @@ import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 
-//#if MC < 1200
-//$$ import net.minecraft.client.util.math.MatrixStack;
-//#else
+/*? if <1.20 {*/
+/*import net.minecraft.client.util.math.MatrixStack;
+*//*?} else {*/
 import net.minecraft.client.gui.DrawContext;
-//#endif
+/*?}*/
 
 public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
 
-    protected final MinecraftClient client;
-    private final MutableText text;
-    private final String mainPageUrl;
-    private final boolean bigFont;
+	protected final MinecraftClient client;
+	private final MutableText text;
+	private final String mainPageUrl;
+	private final boolean bigFont;
 
-    public ListEntry(MutableText text, String mainPageUrl, boolean bigFont, MinecraftClient client) {
-        this.text = text;
-        this.mainPageUrl = mainPageUrl;
-        this.client = client;
-        this.bigFont = bigFont;
-    }
+	public ListEntry(MutableText text, String mainPageUrl, boolean bigFont, MinecraftClient client) {
+		this.text = text;
+		this.mainPageUrl = mainPageUrl;
+		this.client = client;
+		this.bigFont = bigFont;
+	}
 
-    public ListEntry(MutableText text, boolean bigFont, MinecraftClient client) {
-        this.text = text;
-        this.mainPageUrl = null;
-        this.client = client;
-        this.bigFont = bigFont;
-    }
+	public ListEntry(MutableText text, boolean bigFont, MinecraftClient client) {
+		this.text = text;
+		this.mainPageUrl = null;
+		this.client = client;
+		this.bigFont = bigFont;
+	}
 
-//#if MC >= 1170
-    @Override
-    public Text getNarration() {
-        return text;
-    }
-//#endif
+	/*? if >=1.17 {*/
+	@Override
+	public Text getNarration() {
+		return text;
+	}
+	/*?}*/
 
-    @Override
-//#if MC < 1200
-//$$     public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-//$$         VersionedMatrices versionedMatrices = new VersionedMatrices();
-//#else
-public void render(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-   VersionedMatrices versionedMatrices = new VersionedMatrices(this.client, context.getVertexConsumers());
-//#endif
-        versionedMatrices.push();
+	@Override
+	/*? if <1.20 {*/
+    /*public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+        VersionedMatrices versionedMatrices = new VersionedMatrices();
+    *//*?} else {*/
+	public void render(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+		VersionedMatrices versionedMatrices = new VersionedMatrices(this.client, context.getVertexConsumers());
+	/*?}*/
+		versionedMatrices.push();
 
-        int centeredX = x + entryWidth / 2;
-        int centeredY = y + entryHeight / 2;
-        if (bigFont) {
-            float scale = 1.5f;
-            versionedMatrices.scale(scale, scale, scale);
-            centeredX = (int) (centeredX / scale);
-            centeredY = (int) (centeredY - 10 / 2 * scale);
-        } else {
-            centeredY = centeredY - 10 / 2;
-        }
+		int centeredX = x + entryWidth / 2;
+		int centeredY = y + entryHeight / 2;
+		if (bigFont) {
+			float scale = 1.5f;
+			versionedMatrices.scale(scale, scale, scale);
+			centeredX = (int) (centeredX / scale);
+			centeredY = (int) (centeredY - 10 / 2 * scale);
+		} else {
+			centeredY = centeredY - 10 / 2;
+		}
 
-        VersionedScreen.drawCenteredTextWithShadow(versionedMatrices, client.textRenderer, text, centeredX, centeredY, 16777215);
+		VersionedScreen.drawCenteredTextWithShadow(versionedMatrices, client.textRenderer, text, centeredX, centeredY, 16777215);
 
-//        if (mainPageUrls != null) {
-//            int badgeX = x - 42;
-//            int badgeY = y + 2;
-//            if (mainPageUrls.contains("modrinth")) {
-//                Badge.renderModrinthBadge(versionedMatrices, badgeX, badgeY);
-//            } else if (mainPageUrls.contains("curseforge")) {
-//                Badge.renderCurseForgeBadge(versionedMatrices, badgeX, badgeY);
-//            }
-//        }
+		// if (mainPageUrls != null) {
+		//     int badgeX = x - 42;
+		//     int badgeY = y + 2;
+		//     if (mainPageUrls.contains("modrinth")) {
+		//         Badge.renderModrinthBadge(versionedMatrices, badgeX, badgeY);
+		//     } else if (mainPageUrls.contains("curseforge")) {
+		//         Badge.renderCurseForgeBadge(versionedMatrices, badgeX, badgeY);
+		//     }
+		// }
 
-        versionedMatrices.pop();
-    }
+		versionedMatrices.pop();
+	}
 
-    public MutableText getText() {
-        return this.text;
-    }
+	public MutableText getText() {
+		return this.text;
+	}
 
-    public String getMainPageUrl() {
-        return mainPageUrl;
-    }
+	public String getMainPageUrl() {
+		return mainPageUrl;
+	}
 
-    @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int delta) {
-        return !bigFont;
-    }
+	@Override
+	public boolean mouseClicked(double mouseX, double mouseY, int delta) {
+		return !bigFont;
+	}
 
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return false;
-    }
+	@Override
+	public boolean mouseReleased(double mouseX, double mouseY, int button) {
+		return false;
+	}
 }

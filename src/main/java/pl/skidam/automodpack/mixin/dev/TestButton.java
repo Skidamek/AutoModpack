@@ -31,11 +31,11 @@ public class TestButton extends Screen {
             return;
         }
 
-//#if MC >= 1170
+/*? if >=1.17 {*/
         this.addDrawableChild(
-//#else
-//$$    this.addButton(
-//#endif
+/*?} else {*//*
+   this.addButton(
+*//*?}*/
                 VersionedScreen.buttonWidget(
                         this.width / 2 - 124,
                         90,

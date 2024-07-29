@@ -4,28 +4,28 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.sound.SoundManager;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.util.Identifier;
-import net.minecraft.registry.Registry;
 import java.util.function.Supplier;
+
 import pl.skidam.automodpack.init.Common;
 
-//#if MC >= 1193
+/*? if >=1.19.3 {*/
+import net.minecraft.registry.Registry;
 import net.minecraft.registry.Registries;
-//#endif
+/*?} else {*/
+/*import net.minecraft.util.registry.Registry;
+*//*?}*/
 
-//#if NEOFORGE
-//$$ import net.neoforged.bus.api.IEventBus;
-//$$ import net.neoforged.neoforge.registries.DeferredRegister;
-//$$ import net.neoforged.neoforge.registries.NeoForgeRegistries;
-//$$ import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
-//#endif
-
-//#if FORGE
-//$$ import net.minecraftforge.eventbus.api.IEventBus;
-//$$ import net.minecraftforge.registries.DeferredRegister;
-//$$ import net.minecraftforge.registries.ForgeRegistries;
-//$$ import net.minecraftforge.registries.RegistryObject;
-//$$ import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
-//#endif
+/*? if neoforge {*/
+/*import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
+import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
+*//*?} elif forge {*/
+/*import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
+*//*?}*/
 
 public class AudioManager {
     private static CustomSoundInstance SOUND_INSTANCE;
@@ -34,44 +34,44 @@ public class AudioManager {
 
     private static final Identifier WAITING_MUSIC_ID = Common.id("waiting_music");
 
-//#if MC >= 1193
+/*? if >=1.19.3 {*/
    public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.of(WAITING_MUSIC_ID);
-//#else
-//$$     private static final SoundEvent WAITING_MUSIC_EVENT = new SoundEvent(WAITING_MUSIC_ID);
-//#endif
+/*?} else {*/
+    /*private static final SoundEvent WAITING_MUSIC_EVENT = new SoundEvent(WAITING_MUSIC_ID);
+*//*?}*/
 
     private static Supplier<SoundEvent> WAITING_MUSIC;
 
-//#if FORGE
-//$$    public AudioManager(IEventBus eventBus) {
-//$$        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, MOD_ID);
-//$$        SOUND_REGISTER.register(eventBus);
-//$$        WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
-//$$    }
-//#endif
+/*? if forge {*/
+    /*public AudioManager(IEventBus eventBus) {
+        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, MOD_ID);
+        SOUND_REGISTER.register(eventBus);
+        WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
+    }
+*//*?}*/
 
-//#if NEOFORGE
-//$$     public AudioManager(IEventBus eventBus) {
-//$$         DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(Registries.SOUND_EVENT, MOD_ID);
-//$$         SOUND_REGISTER.register(eventBus);
-//$$         WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
-//$$     }
-//#endif
+/*? if neoforge {*/
+    /*public AudioManager(IEventBus eventBus) {
+        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(Registries.SOUND_EVENT, MOD_ID);
+        SOUND_REGISTER.register(eventBus);
+        WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
+    }
+*//*?}*/
 
-//#if FABRIC
-   public AudioManager() {
-       SoundEvent waiting_music = register();
-       WAITING_MUSIC = () -> waiting_music;
-   }
-//#endif
+/*? if fabric {*/
+    public AudioManager() {
+        SoundEvent waiting_music = register();
+        WAITING_MUSIC = () -> waiting_music;
+    }
+/*?}*/
 
     private SoundEvent register() {
         Identifier id = Common.id("waiting_music");
-//#if MC >= 1193
-   Registry<SoundEvent> register = Registries.SOUND_EVENT;
-//#else
-//$$         Registry<SoundEvent> register = Registry.SOUND_EVENT;
-//#endif
+/*? if >=1.19.3 {*/
+        Registry<SoundEvent> register = Registries.SOUND_EVENT;
+/*?} else {*/
+        /*Registry<SoundEvent> register = Registry.SOUND_EVENT;
+*//*?}*/
 
         return Registry.register(register, id, WAITING_MUSIC_EVENT);
     }

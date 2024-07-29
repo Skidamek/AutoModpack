@@ -113,11 +113,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
             return null;
         }
 
-        //#if MC < 1202
-//$$    return new LoginQueryRequestS2CPacket(queryId, channelName, buf);
-        //#else
-        return new LoginQueryRequestS2CPacket(queryId, new LoginRequestPayload(channelName, buf));
-        //#endif
+        return new LoginQueryRequestS2CPacket(queryId, /*? if <1.20.2 {*/ /*channelName, buf *//*?} else {*/ new LoginRequestPayload(channelName, buf) /*?}*/);
     }
 
     @Override

@@ -7,7 +7,6 @@ import pl.skidam.automodpack_core.netty.HttpServer;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.LoaderService;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -63,10 +62,10 @@ public class Common {
     }
 
     public static Identifier id(String path) {
-        //#if MC >= 1210
+        /*? if <1.21 && >1.19.1 {*/
         return Identifier.of(MOD_ID, path);
-        //#else
-//$$         return new Identifier(MOD_ID, path);
-        //#endif
+        /*?} else {*/
+        /*return new Identifier(MOD_ID, path);
+        *//*?}*/
     }
 }

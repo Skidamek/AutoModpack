@@ -8,12 +8,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
-////#if MC > 1165
-//import org.slf4j.Logger;
-////#else
-////$$ import org.apache.logging.log4j.Logger;
-////#endif
-
 @Mixin(value = ServerLoginNetworkHandler.class, priority = 300)
 public abstract class ServerLoginNetworkHandlerMixin  {
 
@@ -56,15 +50,9 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             return;
         }
 
-//#if MC < 1202
-//$$        if (state != ServerLoginNetworkHandler.State.NEGOTIATING && state != ServerLoginNetworkHandler.State.READY_TO_ACCEPT) {
-//$$            return;
-//$$        }
-//#else
-        if (state != ServerLoginNetworkHandler.State.NEGOTIATING && state != ServerLoginNetworkHandler.State.VERIFYING) {
+        if (state != ServerLoginNetworkHandler.State.NEGOTIATING && state != ServerLoginNetworkHandler.State./*? if <1.20.2 {*/ /*READY_TO_ACCEPT *//*?} else {*/VERIFYING/*?}*/) {
             return;
         }
-//#endif
 
         // Send first automodpack packet
         if (!this.automodpack$addon.queryTick()) {
@@ -77,21 +65,4 @@ public abstract class ServerLoginNetworkHandlerMixin  {
         this.automodpack$addon = null;
     }
 
-//    @WrapWithCondition(
-//            method = "onDisconnected",
-//            //#if MC > 1165
-//            at = @At(value = "INVOKE", target = "Lorg/slf4j/Logger;info(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V")
-//            //#else
-//            //$$ at = @At(value = "INVOKE", target = "Lorg/apache/logging/log4j/Logger;info(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V")
-//            //#endif
-//    )
-//    private boolean changeText(Logger instance, String original, Object connectionInfo, Object reason) {
-//        if (this.automodpack$addon == null || this.profile == null) {
-//            return true;
-//        }
-//
-//        this.automodpack$addon = null;
-//        instance.info(original, this.profile.getName(), "Need to install Modpack via AutoModpack");
-//        return false;
-//    }
 }
