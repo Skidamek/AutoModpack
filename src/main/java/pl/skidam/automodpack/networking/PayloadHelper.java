@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.networking;
 
-//#if MC >= 1202
+/*? if >=1.20.2 {*/
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.PacketByteBuf;
 
@@ -24,4 +24,4 @@ public class PayloadHelper {
         }
     }
 }
-//#endif
+/*?} else {*/

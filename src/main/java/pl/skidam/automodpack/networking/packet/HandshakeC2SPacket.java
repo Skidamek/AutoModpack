@@ -19,7 +19,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class HandshakeC2SPacket {
 
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf) {
-        String serverResponse = buf.readString(32767);
+        String serverResponse = buf.readString(Short.MAX_VALUE);
 
         HandshakePacket serverHandshakePacket = HandshakePacket.fromJson(serverResponse);
 
@@ -27,7 +27,7 @@ public class HandshakeC2SPacket {
 
         PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
         HandshakePacket clientHandshakePacket = new HandshakePacket(List.of(loader), AM_VERSION, MC_VERSION);
-        outBuf.writeString(clientHandshakePacket.toJson(), 32767);
+        outBuf.writeString(clientHandshakePacket.toJson(), Short.MAX_VALUE);
 
         if (serverHandshakePacket.equals(clientHandshakePacket) || (serverHandshakePacket.loaders.contains(loader) && serverHandshakePacket.amVersion.equals(AM_VERSION))) {
             LOGGER.info("Versions match " + serverHandshakePacket.amVersion);

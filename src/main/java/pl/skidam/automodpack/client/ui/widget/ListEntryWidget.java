@@ -53,7 +53,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
 	}
 
 	/*? if <=1.20.2 {*/
-    /*public void render(/^? if <1.20 {^/  MatrixStack  /^?} else {^/ /^DrawContext ^//^?}^/  matrices, int mouseX, int mouseY, float delta) {
+    /*public void render(/^? if <1.20 {^/  /^MatrixStack  ^//^?} else {^/ DrawContext /^?}^/  matrices, int mouseX, int mouseY, float delta) {
         super.render(matrices, mouseX, mouseY, delta);
     }
     *//*?}*/

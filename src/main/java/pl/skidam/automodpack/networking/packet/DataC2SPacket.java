@@ -22,7 +22,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class DataC2SPacket {
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient minecraftClient, ClientLoginNetworkHandler handler, PacketByteBuf buf) {
-        String serverResponse = buf.readString(32767);
+        String serverResponse = buf.readString(Short.MAX_VALUE);
 
         DataPacket dataPacket = DataPacket.fromJson(serverResponse);
         String link = dataPacket.link;
@@ -50,12 +50,13 @@ public class DataC2SPacket {
             LOGGER.info("Received link packet from server! {}", link);
         }
 
+        // TODO: dont require/hardcode this
         link = link + "/automodpack/";
 
         Path modpackDir = ModpackUtils.getModpackPath(link, dataPacket.modpackName);
-        boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir);
+        boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, link);
 
-        Boolean reply = null;
+        Boolean needsDisconnecting = null;
 
         var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(link);
 
@@ -65,24 +66,19 @@ public class DataC2SPacket {
             if (update) {
                 disconnectImmediately(handler);
                 new ModpackUpdater().startModpackUpdate(optionalServerModpackContent.get(), link, modpackDir);
-                reply = true;
+                needsDisconnecting = true;
             } else if (selectedModpackChanged) {
                 disconnectImmediately(handler);
-
-                // select modpack and restart
-                String modpackName = modpackDir.getFileName().toString();
-                ModpackUtils.addModpackToList(modpackName, link);
-                ModpackUtils.selectModpack(modpackDir);
-
+                // Its needed since newly selected modpack may not be loaded
                 new ReLauncher(modpackDir, UpdateType.SELECT).restart(false);
-                reply = true;
+                needsDisconnecting = true;
             } else {
-                reply = false;
+                needsDisconnecting = false;
             }
         }
 
         PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
-        response.writeString(String.valueOf(reply), 32767);
+        response.writeString(String.valueOf(needsDisconnecting), Short.MAX_VALUE);
 
         return CompletableFuture.completedFuture(response);
 

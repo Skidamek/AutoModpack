@@ -321,9 +321,7 @@ public class ModpackUpdater {
             Path cwd = Path.of(System.getProperty("user.dir"));
             CustomFileUtils.deleteDummyFiles(cwd, serverModpackContent.list);
 
-            String modpackName = modpackDir.getFileName().toString();
-            ModpackUtils.addModpackToList(modpackName, link);
-            ModpackUtils.selectModpack(modpackDir);
+            ModpackUtils.selectModpack(modpackDir, link);
 
             if (preload) {
                 LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);

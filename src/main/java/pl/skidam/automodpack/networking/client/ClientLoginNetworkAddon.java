@@ -50,7 +50,6 @@ public class ClientLoginNetworkAddon {
             future.thenAccept(resultBuf -> {
                 LoginQueryResponseC2SPacket packet = new LoginQueryResponseC2SPacket(queryId, /*? if <1.20.2 {*/ /*resultBuf *//*?} else {*/ new LoginResponsePayload(channelName, resultBuf) /*?}*/);
                 ((ClientLoginNetworkHandlerAccessor) this.handler).getConnection().send(packet);
-                ((ClientLoginNetworkHandlerAccessor) this.handler).getConnection().send(packet);
             });
         } catch (Throwable e) {
             LOGGER.error("Encountered exception while handling in channel with name \"{}\"", channelName, e);

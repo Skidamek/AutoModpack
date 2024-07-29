@@ -57,7 +57,7 @@ public class HandshakeS2CPacket {
     public static void handleHandshake(ClientConnection connection, String playerName, PacketByteBuf buf, PacketSender packetSender) {
         LOGGER.info("{} has installed AutoModpack.", playerName);
 
-        String clientResponse = buf.readString(32767);
+        String clientResponse = buf.readString(Short.MAX_VALUE);
         HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
 
         boolean isAcceptedLoader = false;
@@ -125,7 +125,7 @@ public class HandshakeS2CPacket {
         String packetContentJson = dataPacket.toJson();
 
         PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
-        outBuf.writeString(packetContentJson, 32767);
+        outBuf.writeString(packetContentJson, Short.MAX_VALUE);
         packetSender.sendPacket(DATA, outBuf);
     }
 

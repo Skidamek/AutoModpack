@@ -145,11 +145,11 @@ public class ChangelogScreen extends VersionedScreen {
         }
 
         // remove method is only available in 1.17+
-//#if MC >= 1170
+/*? if >=1.17 {*/
         this.remove(this.listEntryWidget);
         this.remove(this.backButton);
         this.remove(this.openMainPageButton);
-//#endif
+/*?}*/
 
         this.listEntryWidget = new ListEntryWidget(formattedChanges, this.client, this.width, this.height, 48, this.height - 50, 20); // 38
 

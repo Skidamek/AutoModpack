@@ -20,7 +20,7 @@ public class DataS2CPacket {
     public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 
-        String clientHasUpdate = buf.readString(32767);
+        String clientHasUpdate = buf.readString(Short.MAX_VALUE);
 
         if ("true".equals(clientHasUpdate)) { // disconnect
             LOGGER.warn("{} has not installed modpack", profile.getName());

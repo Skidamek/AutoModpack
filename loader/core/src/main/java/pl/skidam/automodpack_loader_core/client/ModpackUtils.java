@@ -245,9 +245,8 @@ public class ModpackUtils {
             try {
                 Files.move(modpackDir, newModpackDir, StandardCopyOption.REPLACE_EXISTING);
 
-                addModpackToList(newModpackDir.getFileName().toString(), installedModpackLink);
                 removeModpackFromList(installedModpackName);
-                selectModpack(newModpackDir);
+                selectModpack(newModpackDir, installedModpackLink);
 
                 LOGGER.info("Changed modpack name of {} to {}", modpackDir.getFileName().toString(), serverModpackName);
 
@@ -261,14 +260,14 @@ public class ModpackUtils {
     }
 
     // Returns true if value changed
-    public static boolean selectModpack(Path modpackDir) {
-        String modpackToSelect = modpackDir.getFileName().toString();
+    public static boolean selectModpack(Path modpackDirToSelect, String modpackLinkToSelect) {
+        String modpackToSelect = modpackDirToSelect.getFileName().toString();
         String selectedModpack = clientConfig.selectedModpack;
-        String modpackToSelectLink = clientConfig.installedModpacks.get(modpackToSelect);
         String selectedModpackLink = clientConfig.installedModpacks.get(selectedModpack);
         clientConfig.selectedModpack = modpackToSelect;
         ConfigTools.save(clientConfigFile, clientConfig);
-        return !Objects.equals(modpackToSelect, selectedModpack) || !Objects.equals(modpackToSelectLink, selectedModpackLink);
+        ModpackUtils.addModpackToList(modpackToSelect, modpackLinkToSelect);
+        return !Objects.equals(modpackToSelect, selectedModpack) || !Objects.equals(modpackLinkToSelect, selectedModpackLink);
     }
 
     public static void removeModpackFromList(String modpackName) {
@@ -289,15 +288,9 @@ public class ModpackUtils {
             return;
         }
 
-        if (clientConfig.installedModpacks == null) {
-            Map<String, String> modpacks = new HashMap<>();
-            modpacks.put(modpackName, link);
-            clientConfig.installedModpacks = modpacks;
-        } else if (!clientConfig.installedModpacks.containsKey(modpackName)) {
-            Map<String, String> modpacks = new HashMap<>(clientConfig.installedModpacks);
-            modpacks.put(modpackName, link);
-            clientConfig.installedModpacks = modpacks;
-        }
+        Map<String, String> modpacks = new HashMap<>(clientConfig.installedModpacks);
+        modpacks.put(modpackName, link);
+        clientConfig.installedModpacks = modpacks;
 
         ConfigTools.save(clientConfigFile, clientConfig);
     }

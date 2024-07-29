@@ -77,7 +77,7 @@ public class ServerLoginNetworking {
          * 		return;
          * 	}
          *
-         * 	String checkMessage = buf.readString(32767);
+         * 	String checkMessage = buf.readString(Short.MAX_VALUE);
          *
          * 	// Just send the CompletableFuture returned by the server's submit method
          * 	synchronizer.waitFor(server.submit(() -&gt; {

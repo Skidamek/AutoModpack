@@ -41,7 +41,7 @@ public class ModPackets {
             HandshakePacket handshakePacket = new HandshakePacket(serverConfig.acceptedLoaders, AM_VERSION, MC_VERSION);
             String jsonHandshakePacket = handshakePacket.toJson();
 
-            buf.writeString(jsonHandshakePacket, 32767);
+            buf.writeString(jsonHandshakePacket, Short.MAX_VALUE);
             sender.sendPacket(HANDSHAKE, buf);
         }));
     }
