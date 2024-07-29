@@ -32,8 +32,8 @@ def main():
 
 	matrix_entries = []
 	for subproject in subprojects:
-		mod_brand = subproject.split('-')[1]
 		mc_version = subproject.split('-')[0]
+		mod_brand = subproject.split('-')[1]
 		matrix_entries.append({
 			'subproject': subproject,
 			'mod_brand': mod_brand,

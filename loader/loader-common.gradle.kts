@@ -6,7 +6,7 @@ plugins {
     id("com.github.johnrengelman.shadow")
 }
 
-val loader = property("mod_platform") as String
+val loader = property("loom.platform") as String
 var mcVer = (property("minecraft_version") as String).replace(".", "").toInt()
 // make from 3 char release 4 char release e.g. 1.21 -> 1.21.0 == 1210
 if (mcVer < 1000) {
@@ -14,7 +14,7 @@ if (mcVer < 1000) {
 }
 
 base {
-    archivesName = property("mod_id") as String + "-2" + project.name
+    archivesName = property("mod_id") as String + "-" + project.name
     version =  property("mod_version") as String
     group = property("mod_group") as String
 }

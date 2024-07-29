@@ -3,7 +3,7 @@ plugins {
 }
 
 base {
-    archivesName = property("mod_id") as String + "-3" + project.name
+    archivesName = property("mod_id") as String + "-" + project.name
     version =  property("mod_version") as String
     group = property("mod_group") as String
 }

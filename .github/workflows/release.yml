@@ -103,14 +103,14 @@ jobs:
           fi
 
       - name: Read common properties
-        id: properties_g
+        id: properties_common
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: gradle.properties
           properties: 'mod_name mod_version'
 
       - name: Read version-specific properties
-        id: properties_v
+        id: properties_versioned
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: ${{ format('versions/{0}/gradle.properties', matrix.subproject) }}
@@ -121,7 +121,7 @@ jobs:
         run: |
           # Fixed \n in game_versions isn't parsed by christian-draeger/read-properties as a line separator
           echo 'value<<EOF' >> $GITHUB_OUTPUT
-          echo -e "${{ steps.properties_v.outputs.game_versions }}" >> $GITHUB_OUTPUT
+          echo -e "${{ steps.properties_versioned.outputs.game_versions }}" >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
 
       - name: Prepare file information
@@ -166,8 +166,8 @@ jobs:
 
           files: ${{ steps.file_info.outputs.path }}
 
-          name: ${{ format('{0} {1} {2}', steps.properties_g.outputs.mod_name, steps.properties_g.outputs.mod_version, matrix.mod_brand) }}
-          version: ${{ steps.properties_g.outputs.mod_version }}
+          name: ${{ format('{0} {1} {2}', steps.properties_common.outputs.mod_name, steps.properties_common.outputs.mod_version, matrix.mod_brand) }}
+          version: ${{ steps.properties_common.outputs.mod_version }}
           version-type: release
 
           loaders: ${{ matrix.mod_brand }}

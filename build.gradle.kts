@@ -1,10 +1,5 @@
 import net.fabricmc.loom.task.RemapJarTask
-import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.util.*
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
 plugins {
     id("dev.architectury.loom")
@@ -17,8 +12,6 @@ class ModData {
     val group = property("mod_group").toString()
     val minecraftDependency = property("minecraft_dependency").toString()
     val description = property("mod_description").toString()
-//    val minSupportedVersion = property("mod_min_supported_version").toString()
-//    val maxSupportedVersion = property("mod_max_supported_version").toString()
 }
 
 class LoaderData {
@@ -152,19 +145,19 @@ dependencies {
     } else if (loader.isForge) {
         "forge"("net.minecraftforge:forge:$minecraftVersion-${loader.getVersion()}")
 
-        // For pseudo mixin
-        compileOnly(fabricApi.module("fabric-networking-api-v1", property("fabric_version") as String))
+        // For pseudo mixin (compat with Forgified Fabric API)
+        compileOnly(fabricApi.module("fabric-networking-api-v1", "0.92.2+1.20.1")) // version is not important
 
         implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:${property("mixin_extras")}")!!)
         implementation(include("io.github.llamalad7:mixinextras-forge:${property("mixin_extras")}")!!)
     } else if (loader.isNeoForge) {
 
-        // For pseudo mixin
-        compileOnly(fabricApi.module("fabric-networking-api-v1", property("fabric_version") as String))
+        // For pseudo mixin (compat with Forgified Fabric API)
+        compileOnly(fabricApi.module("fabric-networking-api-v1", "0.92.2+1.20.1")) // version is not important
 
         "neoForge"("net.neoforged:neoforge:${loader.getVersion()}")
 
-        // bundle mixin extras to 1.20.2 since it has too old version of it
+        // Bundle mixin extras to 1.20.2 since it has too old version of it
         if (minecraftVersion.equals("1.20.2")) {
             implementation(include("io.github.llamalad7:mixinextras-neoforge:${property("mixin_extras")}")!!)
         }
@@ -218,7 +211,6 @@ tasks.processResources {
         filesMatching("fabric.mod.json") {
             expand(map)
         }
-        println("Fabric mod json map $map")
     } else if (loader.isNeoForge) {
         exclude("fabric.mod.json")
         exclude("META-INF/mods.toml")

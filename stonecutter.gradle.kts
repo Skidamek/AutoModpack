@@ -13,8 +13,6 @@ stonecutter active "1.21-fabric" /* [SC] DO NOT EDIT */
 stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chiseled) { 
     group = "project"
     ofTask("build")
-
-
     finalizedBy("mergeJars")
 }
 
@@ -24,6 +22,7 @@ stonecutter configureEach {
     consts(platforms)
 }
 
+// Non stonecutter stuff
 val mergedDir = File("${rootProject.projectDir}/merged")
 
 class MinecraftVersionData(private val name: String) {
@@ -73,7 +72,6 @@ tasks.register("mergeJars") {
     }
 
     doLast {
-        println("Merging jars...")
         mergedDir.mkdirs()
         val jarsToMerge = File("$rootDir/versions").listFiles()
             ?.flatMap {
@@ -82,6 +80,10 @@ tasks.register("mergeJars") {
                     ?: error("Couldn't find any mod jar!")
             }
             ?: emptyList()
+
+        val time = System.currentTimeMillis()
+        val size = jarsToMerge.size
+        var current = 0;
 
         for (jarToMerge in jarsToMerge) {
             val minecraftVersionStr = jarToMerge.name.substringAfterLast("-mc").substringBefore("-")
@@ -104,18 +106,22 @@ tasks.register("mergeJars") {
                 }
             }
 
-            val loaderFile = File("${rootProject.projectDir}/loader/$loaderModule/build/libs").listFiles()?.firstOrNull { it.isFile && !it.name.endsWith("-sources.jar") && it.name.endsWith(".jar") } ?: continue
+            val loaderFile = File("${rootProject.projectDir}/loader/$loaderModule/build/libs").listFiles()?.single { it.isFile && !it.name.endsWith("-sources.jar") && it.name.endsWith(".jar") } ?: continue
             val finalJar = File("$mergedDir/${jarToMerge.name}")
-
-            println("Merging: ${jarToMerge.name} into: ${finalJar.name} from: ${loaderFile.name}")
 
             loaderFile.copyTo(finalJar, overwrite = true)
             appendFileToZip(finalJar, jarToMerge, "automodpack-mod.jar")
 
-            println("Done: $finalJar")
+            println("${++current}/$size - Merged: ${jarToMerge.name} into: ${finalJar.name} from: ${loaderFile.name}")
         }
 
-        println("Merged jars!")
+        if (size == 0) {
+            error("No jars to merge!")
+        } else if (size != current) {
+            error("Not all jars were merged!")
+        } else {
+            println("All jars were merged! Took: ${System.currentTimeMillis() - time}ms")
+        }
     }
 }
 
