@@ -18,13 +18,12 @@ jobs:
         with:
           path: |
             ~/.gradle/caches
+            !~/.gradle/caches/**/*.lock
             ~/.gradle/wrapper
             ./.gradle/loom-cache
           key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties', '**/gradle.properties', '**/*.accesswidener', 'settings.json') }}
           restore-keys: |
             gradle-${{ runner.os }}
-          exclude: |
-            **/*.lock
       - name: Run tests
         run: |
           chmod +x gradlew
