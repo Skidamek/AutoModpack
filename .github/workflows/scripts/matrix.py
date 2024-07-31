@@ -16,7 +16,7 @@ def main():
     print('target_subprojects: {}'.format(target_subprojects))
 
     subprojects = []
-    versions = os.listdir('./../../../versions')
+    versions = os.listdir('versions')
     for subproject in versions:
         if subproject in target_subprojects:
             subprojects.append(subproject)
