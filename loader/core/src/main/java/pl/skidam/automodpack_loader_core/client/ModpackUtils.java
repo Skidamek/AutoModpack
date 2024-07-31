@@ -14,6 +14,7 @@ import pl.skidam.automodpack_core.utils.Url;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -119,12 +120,13 @@ public class ModpackUtils {
                 CustomFileUtils.copyFile(runFile, modpackFile);
                 needsReCheck = false;
             } else if (!modpackFileExists) {
-                LOGGER.error("File {} doesn't exist!?", formattedFile);
+                LOGGER.error("File {} doesn't exist!? If you see this please report this to the automodpack repo and attach this log https://github.com/Skidamek/AutoModpack/issues", formattedFile);
+                Thread.dumpStack();
             }
 
             // we need to update run file and we assume that modpack file is up to date
             if (needsReCheck && Files.exists(runFile) && !Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile, "sha1").orElse(null))) {
-                LOGGER.info("File {} is not up to date, copying from modpack", formattedFile);
+                LOGGER.info("Overwriting {} file to the modpack version", formattedFile);
                 CustomFileUtils.copyFile(modpackFile, runFile);
             }
         }
@@ -240,20 +242,22 @@ public class ModpackUtils {
 
         if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
 
-            Path newModpackDir = Path.of(modpackDir.getParent() + File.separator + serverModpackName);
+            Path newModpackDir = modpackDir.getParent().resolve(serverModpackName);
 
             try {
                 Files.move(modpackDir, newModpackDir, StandardCopyOption.REPLACE_EXISTING);
 
                 removeModpackFromList(installedModpackName);
-                selectModpack(newModpackDir, installedModpackLink);
 
                 LOGGER.info("Changed modpack name of {} to {}", modpackDir.getFileName().toString(), serverModpackName);
-
-                return newModpackDir;
+            } catch (DirectoryNotEmptyException ignored) {
             } catch (IOException e) {
                 e.printStackTrace();
             }
+
+            selectModpack(newModpackDir, installedModpackLink);
+
+            return newModpackDir;
         }
 
         return modpackDir;
@@ -261,9 +265,28 @@ public class ModpackUtils {
 
     // Returns true if value changed
     public static boolean selectModpack(Path modpackDirToSelect, String modpackLinkToSelect) {
-        String modpackToSelect = modpackDirToSelect.getFileName().toString();
+        final String modpackToSelect = modpackDirToSelect.getFileName().toString();
+
         String selectedModpack = clientConfig.selectedModpack;
         String selectedModpackLink = clientConfig.installedModpacks.get(selectedModpack);
+
+        // Save current editable files
+        Path selectedModpackDir = modpacksDir.resolve(selectedModpack);
+        Path selectedModpackContentFile = selectedModpackDir.resolve(hostModpackContentFile.getFileName());
+        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(selectedModpackContentFile);
+        if (modpackContent != null) {
+            Set<String> editableFiles = getEditableFiles(modpackContent.list);
+            ModpackUtils.preserveEditableFiles(selectedModpackDir, editableFiles);
+        }
+
+        // Copy editable files from modpack to select
+        Path modpackContentFile = modpackDirToSelect.resolve(hostModpackContentFile.getFileName());
+        Jsons.ModpackContentFields modpackContentToSelect = ConfigTools.loadModpackContent(modpackContentFile);
+        if (modpackContentToSelect != null) {
+            Set<String> editableFiles = getEditableFiles(modpackContentToSelect.list);
+            ModpackUtils.copyPreviousEditableFiles(modpackDirToSelect, editableFiles);
+        }
+
         clientConfig.selectedModpack = modpackToSelect;
         ConfigTools.save(clientConfigFile, clientConfig);
         ModpackUtils.addModpackToList(modpackToSelect, modpackLinkToSelect);
@@ -467,5 +490,43 @@ public class ModpackUtils {
         }
 
         return false;
+    }
+
+    public static void preserveEditableFiles(Path modpackDir, Set<String> editableFiles) {
+        for (String file : editableFiles) {
+            Path path = Path.of("." + file);
+            if (Files.exists(path)) {
+                try {
+                    CustomFileUtils.copyFile(path, Path.of(modpackDir + file));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    public static void copyPreviousEditableFiles(Path modpackDir, Set<String> editableFiles) {
+        for (String file : editableFiles) {
+            Path path = Path.of(modpackDir + file);
+            if (Files.exists(path)) {
+                try {
+                    CustomFileUtils.copyFile(path, Path.of("." + file));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    static Set<String> getEditableFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> modpackContentItems) {
+        Set<String> editableFiles = new HashSet<>();
+
+        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : modpackContentItems) {
+            if (modpackContentItem.editable) {
+                editableFiles.add(modpackContentItem.file);
+            }
+        }
+
+        return editableFiles;
     }
 }

@@ -47,7 +47,7 @@ public class ModpackUpdater {
 
             // Handle the case where serverModpackContent is null
             if (serverModpackContent == null) {
-                handleOfflineMode(modpackDir, modpackContentFile);
+                handleOfflineMode(modpackDir, modpackContentFile, link);
                 return;
             }
 
@@ -68,7 +68,7 @@ public class ModpackUpdater {
                 // Check if an update is needed
                 if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     LOGGER.info("Modpack is up to date");
-                    CheckAndLoadModpack(modpackDir, modpackContentFile);
+                    CheckAndLoadModpack(modpackDir, modpackContentFile, link);
                     return;
                 }
             } else if (!preload) {
@@ -88,7 +88,7 @@ public class ModpackUpdater {
         }
     }
 
-    private void handleOfflineMode(Path modpackDir, Path modpackContentFile) throws Exception {
+    private void handleOfflineMode(Path modpackDir, Path modpackContentFile, String link) throws Exception {
         if (!Files.exists(modpackContentFile)) {
             return;
         }
@@ -99,13 +99,13 @@ public class ModpackUpdater {
         }
 
         LOGGER.warn("Server is down, or you don't have access to internet, but we still want to load selected modpack");
-        CheckAndLoadModpack(modpackDir, modpackContentFile);
+        CheckAndLoadModpack(modpackDir, modpackContentFile, link);
     }
 
 
-    public void CheckAndLoadModpack(Path modpackDir, Path modpackContentFile) throws Exception {
+    public void CheckAndLoadModpack(Path modpackDir, Path modpackContentFile, String link) throws Exception {
 
-        boolean requiresRestart = finishModpackUpdate(modpackDir, modpackContentFile);
+        boolean requiresRestart = applyModpack(modpackDir, modpackContentFile, link);
 
         if (requiresRestart) {
             LOGGER.info("Modpack is not loaded");
@@ -321,13 +321,11 @@ public class ModpackUpdater {
             Path cwd = Path.of(System.getProperty("user.dir"));
             CustomFileUtils.deleteDummyFiles(cwd, serverModpackContent.list);
 
-            ModpackUtils.selectModpack(modpackDir, link);
-
             if (preload) {
                 LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
-                CheckAndLoadModpack(modpackDir, modpackContentFile);
+                CheckAndLoadModpack(modpackDir, modpackContentFile, link);
             } else {
-                finishModpackUpdate(modpackDir, modpackContentFile);
+                applyModpack(modpackDir, modpackContentFile, link);
                 if (!failedDownloads.isEmpty()) {
                     StringBuilder failedFiles = new StringBuilder();
                     for (var download : failedDownloads.entrySet()) {
@@ -360,7 +358,10 @@ public class ModpackUpdater {
     }
 
     // returns true if restart is required
-    private boolean finishModpackUpdate(Path modpackDir, Path modpackContentFile) throws Exception {
+    private boolean applyModpack(Path modpackDir, Path modpackContentFile, String link) throws Exception {
+
+        ModpackUtils.selectModpack(modpackDir, link);
+
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {

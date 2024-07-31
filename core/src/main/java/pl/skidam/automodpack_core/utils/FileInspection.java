@@ -487,10 +487,9 @@ public class FileInspection {
         return environmentType;
     }
 
-    public static boolean isInValidFileName(String fileName) {
-        // Define a list of characters that are not allowed in file names
-        String forbiddenChars = "\\/:*?\"<>|";
+    private static final String forbiddenChars = "\\/:*\"<>|!?.";
 
+    public static boolean isInValidFileName(String fileName) {
         // Check for each forbidden character in the file name
         for (char c : forbiddenChars.toCharArray()) {
             if (fileName.indexOf(c) != -1) {
@@ -503,9 +502,6 @@ public class FileInspection {
     }
 
     public static String fixFileName(String fileName) {
-        // Define a list of characters that are not allowed in file names
-        String forbiddenChars = "\\/:*?\"<>|";
-
         // Replace forbidden characters with underscores
         for (char c : forbiddenChars.toCharArray()) {
             fileName = fileName.replace(c, '-');

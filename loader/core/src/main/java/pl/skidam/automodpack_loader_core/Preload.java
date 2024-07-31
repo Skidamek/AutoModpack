@@ -13,6 +13,7 @@ import pl.skidam.automodpack_core.utils.ManifestReader;
 
 import java.io.IOException;
 import java.nio.file.*;
+import java.util.HashMap;
 import java.util.List;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -125,6 +126,10 @@ public class Preload {
 
             if (previousClientConfigVersion != clientConfig.DO_NOT_CHANGE_IT) {
                 LOGGER.info("Updated client config version to {}", clientConfig.DO_NOT_CHANGE_IT);
+            }
+
+            if (clientConfig.installedModpacks == null) {
+                clientConfig.installedModpacks = new HashMap<>();
             }
 
             // Save changes
