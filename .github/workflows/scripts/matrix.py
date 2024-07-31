@@ -37,11 +37,8 @@ def main():
             'mod_brand': mod_brand,
             'mc_version': mc_version,
         })
-        print('subproject: {}, mod_brand: {}, mc_version: {}'.format(subproject, mod_brand, mc_version))
-    matrix = {'include': matrix_entries}
 
-    print('matrix:')
-    print(json.dumps(matrix, indent=2))
+    matrix = {'include': matrix_entries}
 
     with open(os.environ['GITHUB_OUTPUT'], 'w') as f:
         f.write('matrix={}\n'.format(json.dumps(matrix)))
