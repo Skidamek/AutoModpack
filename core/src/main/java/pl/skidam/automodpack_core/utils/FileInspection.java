@@ -206,15 +206,21 @@ public class FileInspection {
 
                 if (entry.getName().equals("fabric.mod.json")) {
                     if (json.has("depends")) {
-                        // Dont use asMap() since its only on gson 2.10^ - forge 1.18
-                        dependencies.addAll(json.get("depends").getAsJsonObject().entrySet().stream().map(Map.Entry::getKey).toList());
+                        JsonObject depends = json.get("depends").getAsJsonObject();
+                        if (depends != null) {
+                            // Dont use asMap() since its only on gson 2.10^ - forge 1.18
+                            dependencies.addAll(depends.entrySet().stream().map(Map.Entry::getKey).toList());
+                        }
                     }
 
                 } else if (entry.getName().equals("quilt.mod.json") && json.has("quilt_loader")) {
                     JsonObject quiltLoader = json.get("quilt_loader").getAsJsonObject();
                     if (quiltLoader.has("depends")) {
-                        // Dont use asMap() since its only on gson 2.10^ - forge 1.18
-                        dependencies.addAll(json.get("depends").getAsJsonObject().entrySet().stream().map(Map.Entry::getKey).toList());
+                        JsonObject depends = quiltLoader.get("depends").getAsJsonObject();
+                        if (depends != null) {
+                            // Dont use asMap() since its only on gson 2.10^ - forge 1.18
+                            dependencies.addAll(depends.entrySet().stream().map(Map.Entry::getKey).toList());
+                        }
                     }
                 }
             }
