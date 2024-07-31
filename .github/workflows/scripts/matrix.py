@@ -17,13 +17,16 @@ def main():
 
     subprojects = []
     versions = os.listdir('versions')
-    for subproject in versions:
-        if subproject in target_subprojects:
-            subprojects.append(subproject)
-            target_subprojects.remove(subproject)
-    if len(target_subprojects) > 0:
-        print('Unexpected subprojects: {}'.format(target_subprojects), file=sys.stderr)
-        sys.exit(1)
+    if len(target_subprojects) == 0:
+        subprojects = versions
+    else:
+        for subproject in versions:
+            if subproject in target_subprojects:
+                subprojects.append(subproject)
+                target_subprojects.remove(subproject)
+        if len(target_subprojects) > 0:
+            print('Unexpected subprojects: {}'.format(target_subprojects), file=sys.stderr)
+            sys.exit(1)
 
     matrix_entries = []
     for subproject in subprojects:
@@ -34,7 +37,12 @@ def main():
             'mod_brand': mod_brand,
             'mc_version': mc_version,
         })
+        print('subproject: {}, mod_brand: {}, mc_version: {}'.format(subproject, mod_brand, mc_version))
     matrix = {'include': matrix_entries}
+
+    print('matrix:')
+    print(json.dumps(matrix, indent=2))
+
     with open(os.environ['GITHUB_OUTPUT'], 'w') as f:
         f.write('matrix={}\n'.format(json.dumps(matrix)))
 
