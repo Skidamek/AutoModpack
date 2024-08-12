@@ -110,7 +110,7 @@ dependencies {
                 mappings("dev.architectury:yarn-mappings-patch-neoforge:1.20.6+build.4")
             }
         )
-    } else if (loader.isNeoForge && minecraftVersion.equals("1.21")) {
+    } else if (loader.isNeoForge && minecraftVersion.greaterOrEqual("1.21")) {
         mappings(
             loom.layered {
                 mappings("net.fabricmc:yarn:${property("yarn_mappings")}:v2")
