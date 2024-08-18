@@ -1,12 +1,10 @@
-package pl.skidam.automodpack_loader_core_fabric;
+package pl.skidam.automodpack_loader_master_core_fabric;
 
 import net.fabricmc.loader.impl.FabricLoaderImpl;
-import net.fabricmc.loader.impl.discovery.ModCandidate;
 import net.fabricmc.loader.impl.discovery.ModDiscoverer;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.List;
 
 // Inspired by preloading tricks by settingdust

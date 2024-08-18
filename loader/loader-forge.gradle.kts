@@ -40,10 +40,8 @@ dependencies {
 
     if (project.name.contains("neoforge")) {
         "neoForge"("net.neoforged:neoforge:${property("loader_neoforge")}")
-    } else if (project.name.contains("forge")) {
+    } else {
         "forge"("net.minecraftforge:forge:${property("minecraft_version")}-${property("loader_forge")}")
-    } else if (project.name.contains("fabric")) {
-        modImplementation("net.fabricmc:fabric-loader:${property("loader_fabric")}")
     }
 }
 
@@ -64,18 +62,13 @@ tasks.named<ShadowJar>("shadowJar") {
     // Include the tomlj dependency in the shadow jar
     configurations = listOf(project.configurations.getByName("shadowImplementation"))
 
-    relocate("org.antlr.v4", "pl.skidam.tomlj")
-    relocate("org.tomlj", "pl.skidam.tomlj")
-    relocate("org.checkerframework", "pl.skidam.tomlj")
+    relocate("org.antlr.v4", "reloc.org.antlr.v4")
+    relocate("org.tomlj", "reloc.org.tomlj")
+    relocate("org.checkerframework", "reloc.org.checkerframework")
 
-
-//    configurations = emptyList()
-
-    if (project.name.contains("fabric")) {
-        relocate("pl.skidam.automodpack_loader_core_fabric", "pl.skidam.automodpack_loader_core")
-    } else if (project.name.contains("neoforge")) {
+    if (project.name.contains("neoforge")) {
         relocate("pl.skidam.automodpack_loader_core_neoforge", "pl.skidam.automodpack_loader_core")
-    } else if (project.name.contains("forge")) {
+    } else {
         relocate("pl.skidam.automodpack_loader_core_forge", "pl.skidam.automodpack_loader_core")
     }
 

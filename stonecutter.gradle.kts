@@ -55,15 +55,11 @@ class MinecraftVersionData(private val name: String) {
     }
 }
 
-// copy from settings.gradle.kts
-val coreModules = arrayOf(
-    "core",
-    "fabric",
-    "forge-fml40",
-    "forge-fml47",
-    "neoforge-fml2",
-    "neoforge-fml4"
-)
+val coreModules = getProperty("core_modules")!!.split(',').map { it.trim() }
+
+fun getProperty(key: String): String? {
+    return project.findProperty(key) as? String
+}
 
 // TODO find better way to do it
 tasks.register("mergeJars") {
@@ -91,7 +87,7 @@ tasks.register("mergeJars") {
 
             var loaderModule = ""
             if (jarToMerge.name.contains("fabric")) {
-                loaderModule = "fabric"
+                loaderModule = "fabric/core"
             } else if (jarToMerge.name.contains("neoforge")) {
                 loaderModule = if (minecraftVersion.greaterOrEqual("1.20.6")) {
                     "neoforge/fml4"
@@ -126,18 +122,49 @@ tasks.register("mergeJars") {
 }
 
 fun appendFileToZip(zipFile: File, fileToAppend: File, entryName: String) {
+    val entries = ZipInputStream(FileInputStream(zipFile)).use { zipStream ->
+        generateSequence { zipStream.nextEntry }
+            .toList()
+    }
+
+    val graph = mutableMapOf<String, MutableList<String>>()
+
+    entries.forEach { entry ->
+        val children = entry.name.split("/")
+        var currentParent = ""
+        children.forEach { child ->
+            if (child.isNotEmpty()) {
+                currentParent = "$currentParent$child/"
+                val parent = graph.getOrPut(currentParent) { mutableListOf() }
+                parent.add(child)
+            }
+        }
+    }
+
+//    graph.forEach { (parent, children) ->
+//        println("$parent -> $children")
+//    }
+
+    val filteredGraph = filterEntries(entries, graph, zipFile)
+
     // Doing with temp file since for some reason just adding the file breaks the zip/jar file
     val tempFile = File("$zipFile.temp")
     tempFile.createNewFile()
 
     ZipOutputStream(FileOutputStream(tempFile)).use { zipStream ->
-        // Copy existing entries
         ZipInputStream(FileInputStream(zipFile)).use { existingZipStream ->
             while (true) {
                 val entry = existingZipStream.nextEntry ?: break
-                zipStream.putNextEntry(ZipEntry(entry.name))
-                existingZipStream.copyTo(zipStream)
-                zipStream.closeEntry()
+                if (filteredGraph.containsKey("${entry.name}/")) {
+                    try {
+                        val zipEntry = ZipEntry(entry.name)
+                        zipStream.putNextEntry(zipEntry)
+                        existingZipStream.copyTo(zipStream)
+                        zipStream.closeEntry()
+                    } catch (e: Exception) {
+                        println("Error while copying entry: ${entry.name}")
+                    }
+                }
             }
         }
 
@@ -153,6 +180,74 @@ fun appendFileToZip(zipFile: File, fileToAppend: File, entryName: String) {
     zipFile.delete()
     tempFile.renameTo(zipFile)
 }
+
+val dupesDir = File("${rootProject.projectDir}/dupes")
+
+fun filterEntries(entries: List<ZipEntry>, graph: Map<String, MutableList<String>>, zipFile: File):  Map<String, MutableList<String>> {
+
+    val emptyDirs = mutableSetOf<String>()
+
+    // find empty directories
+    graph.forEach { (parent, children) ->
+        if (children.size == 0) {
+            emptyDirs.add(parent)
+        }
+    }
+
+    // dump duplicate entries
+    dupesDir.deleteRecursively()
+    dupesDir.mkdirs()
+
+    dumpDupeEntries(zipFile, entries)
+
+    // filter empty directories
+    // filter single duplicate files (leave only one)
+    val dupes = mutableSetOf<String>()
+
+    val filteredGraph = graph.filter { (parent, children) ->
+        if (emptyDirs.contains(parent)) {
+            println("Filtering empty dir: $parent -> $children")
+            return@filter false
+        }
+
+        val count = graph.count { parent == it.key }
+        if (count > 1 && !dupes.add(children[0])) {
+            return@filter false
+        }
+
+        return@filter true
+    }
+
+    return filteredGraph
+}
+
+fun dumpDupeEntries(zipFile: File, entries: List<ZipEntry>) {
+    // check for duplicates
+    val entryNames = mutableSetOf<String>()
+    entries.forEach { duplicate ->
+        if (!entryNames.add(duplicate.name)) {
+            println("Duplicate entry: $duplicate")
+
+            // write the entry to the file
+            ZipInputStream(FileInputStream(zipFile)).use { zipStream ->
+                var i = 0
+                generateSequence { zipStream.nextEntry }
+                    .filter { it.name == duplicate.name }
+                    .forEach { _ ->
+                        i++
+                        val dupeFile = File("$dupesDir/$i-$duplicate.dupe")
+                        println("Extracting to: $dupeFile")
+                        dupeFile.parentFile.mkdirs()
+                        dupeFile.createNewFile()
+                        FileOutputStream(dupeFile).use { fileOutputStream ->
+                            zipStream.copyTo(fileOutputStream)
+                        }
+                    }
+            }
+        }
+    }
+}
+
 
 tasks.register("clean") {
     dependsOn("cleanMerged")

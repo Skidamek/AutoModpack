@@ -16,19 +16,12 @@ pluginManagement {
 plugins {
     id("com.github.johnrengelman.shadow") version "8.1.1" apply false
     id("dev.architectury.loom") version "1.7-SNAPSHOT" apply false
-    id("dev.kikugie.stonecutter") version "0.4.3"
+    id("dev.kikugie.stonecutter") version "0.4.+"
 }
 
 include(":core")
 
-val coreModules = arrayOf(
-    "core",
-    "fabric",
-    "forge-fml40",
-    "forge-fml47",
-    "neoforge-fml2",
-    "neoforge-fml4"
-)
+val coreModules = getProperty("core_modules")!!.split(',').map { it.trim() }
 
 coreModules.forEach { module ->
     include(":loader-$module")
@@ -38,7 +31,9 @@ coreModules.forEach { module ->
     project.projectDir = file("loader/$dir")
     when (module) {
         "core" -> project.buildFileName = "../loader-core.gradle.kts"
-        else -> project.buildFileName = if (dir == module) "../loader-common.gradle.kts" else "../../loader-common.gradle.kts"
+        "fabric-core" -> project.buildFileName = "../../loader-fabric-core.gradle.kts"
+        "fabric-15", "fabric-16" -> project.buildFileName = "../../loader-fabric.gradle.kts"
+        "forge-fml40", "forge-fml47", "neoforge-fml2", "neoforge-fml4" -> project.buildFileName = "../../loader-forge.gradle.kts"
     }
 }
 

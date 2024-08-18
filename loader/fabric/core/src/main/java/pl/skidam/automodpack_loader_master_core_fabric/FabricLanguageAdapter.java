@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core_fabric;
+package pl.skidam.automodpack_loader_master_core_fabric;
 
 import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
@@ -15,11 +15,9 @@ import java.util.Collections;
 import java.util.List;
 
 // Inspired by preloading tricks by settingdust
-@SuppressWarnings("unused")
 public class FabricLanguageAdapter implements LanguageAdapter {
 
-
-    public static final List<ModContainerImpl> mods;
+    private static final List<ModContainerImpl> mods;
 
     static {
         try {
@@ -30,7 +28,11 @@ public class FabricLanguageAdapter implements LanguageAdapter {
     }
 
     public static Collection<ModContainer> getAllMods() {
-        return  Collections.unmodifiableList(mods);
+        return Collections.unmodifiableList(mods);
+    }
+
+    public static void addMod(ModContainerImpl mod) {
+        mods.add(mod);
     }
 
     public FabricLanguageAdapter() throws IllegalAccessException {

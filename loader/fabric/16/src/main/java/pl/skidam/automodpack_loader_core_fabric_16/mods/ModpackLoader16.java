@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core_fabric.mods;
+package pl.skidam.automodpack_loader_core_fabric_16.mods;
 
 import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
@@ -20,9 +20,10 @@ import java.util.*;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_loader_core_fabric.FabricLoaderImplAccessor.*;
 
+// suppress warnings for method invocation will produce 'NullPointerException'
 @SuppressWarnings({"unchecked", "unused"})
-public class ModpackLoader implements ModpackLoaderService {
-    private final Map<String, Set<ModCandidate>> envDisabledMods = new HashMap<>();
+public class ModpackLoader16 implements ModpackLoaderService {
+    private final Map<String, Set<ModCandidateImpl>> envDisabledMods = new HashMap<>();
 
     @Override
     public void loadModpack(List<Path> modpackMods) {
@@ -39,9 +40,9 @@ public class ModpackLoader implements ModpackLoaderService {
         }
 
         try {
-            List<ModCandidate> candidates;
-            candidates = (List<ModCandidate>) discoverMods(modpackDir);
-            candidates = (List<ModCandidate>) resolveMods(candidates);
+            List<ModCandidateImpl> candidates;
+            candidates = (List<ModCandidateImpl>) discoverMods(modpackDir);
+            candidates = (List<ModCandidateImpl>) resolveMods(candidates);
 
             METHOD_DUMP_MOD_LIST.invoke(FabricLoaderImpl.INSTANCE, candidates);
 
@@ -52,38 +53,25 @@ public class ModpackLoader implements ModpackLoaderService {
         }
     }
 
-    public Collection<ModContainer> getNestedContainers(ModContainer originalContainer) {
-        Collection<ModContainer> containers = new ArrayList<>(originalContainer.getContainedMods());
-        Collection<ModContainer> tempContainers = new ArrayList<>();
-
-        for (ModContainer container : containers) {
-            tempContainers.addAll(getNestedContainers(container));
-        }
-
-        containers.addAll(tempContainers);
-
-        return containers;
-    }
-
-    private Collection<ModCandidate> discoverMods(Path modpackModsDir) throws ModResolutionException, IllegalAccessException, IOException {
+    private Collection<ModCandidateImpl> discoverMods(Path modpackModsDir) throws ModResolutionException, IllegalAccessException, IOException {
         ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));
 
         LOGGER.info("Discovering mods from {}", modpackModsDir.getParent().getFileName() + "/" + modpackModsDir.getFileName());
 
         List<?> candidateFinders = List.of(
-                new ModContainerModCandidateFinder(FabricLanguageAdapter.getAllMods().stream().toList()),
+                new ModContainerModCandidateFinder((List<ModContainer>) FabricLanguageAdapter.getAllMods().stream().toList()),
                 new DirectoryModCandidateFinder(modpackModsDir, FabricLoaderImpl.INSTANCE.isDevelopmentEnvironment()));
 
         FIELD_CANDIDATE_FINDERS.set(discoverer, candidateFinders);
 
-
         return discoverer.discoverMods(FabricLoaderImpl.INSTANCE, envDisabledMods);
     }
 
-    private Collection<ModCandidate> resolveMods(Collection<ModCandidate> modCandidates) throws ModResolutionException {
+    private Collection<ModCandidateImpl> resolveMods(Collection<ModCandidateImpl> modCandidates) throws ModResolutionException {
         Set<String> modIds = new HashSet<>();
         for (var mod : FabricLanguageAdapter.getAllMods().stream().toList()) {
-            modIds.add(mod.getMetadata().getId());
+            ModContainerImpl container = (ModContainerImpl) mod;
+            modIds.add(container.getMetadata().getId());
         }
 
         var candidates = ModResolver.resolve(modCandidates, FabricLoaderImpl.INSTANCE.getEnvironmentType(), envDisabledMods);
@@ -94,9 +82,9 @@ public class ModpackLoader implements ModpackLoaderService {
         return candidates;
     }
 
-    private void addMods(Collection<ModCandidate> candidates) {
+    private void addMods(Collection<ModCandidateImpl> candidates) {
         try {
-            for (ModCandidate candidate : candidates) {
+            for (ModCandidateImpl candidate : candidates) {
                 addMod(candidate);
             }
         } catch (Exception e) {
@@ -104,9 +92,9 @@ public class ModpackLoader implements ModpackLoaderService {
         }
     }
 
-    public void addMod(ModCandidate candidate) throws IllegalAccessException {
+    public void addMod(ModCandidateImpl candidate) throws IllegalAccessException {
         ModContainerImpl container = new ModContainerImpl(candidate);
-        FabricLanguageAdapter.mods.add(container);
+        FabricLanguageAdapter.addMod(container);
 
         var modMap = (Map<String, ModContainerImpl>) FIELD_MOD_MAP.get(FabricLoaderImpl.INSTANCE);
 
@@ -127,7 +115,7 @@ public class ModpackLoader implements ModpackLoaderService {
         }
     }
 
-    private void applyPaths(ModCandidate candidate) {
+    private void applyPaths(ModCandidateImpl candidate) {
         try {
             Path cacheDir = FabricLoaderImpl.INSTANCE.getGameDir().resolve(FabricLoaderImpl.CACHE_DIR_NAME);
             Path processedModsDir = cacheDir.resolve("processedMods");
@@ -144,9 +132,9 @@ public class ModpackLoader implements ModpackLoaderService {
         }
     }
 
-    private void setupLanguageAdapters(Collection<ModCandidate> candidates) throws IllegalAccessException {
+    private void setupLanguageAdapters(Collection<ModCandidateImpl> candidates) throws IllegalAccessException {
         var adapterMap = (Map<String, LanguageAdapter>) FIELD_ADAPTER_MAP.get(FabricLoaderImpl.INSTANCE);
-        for (ModCandidate candidate : candidates) {
+        for (ModCandidateImpl candidate : candidates) {
 
             var definitions = candidate.getMetadata().getLanguageAdapterDefinitions();
             if (definitions.isEmpty()) {

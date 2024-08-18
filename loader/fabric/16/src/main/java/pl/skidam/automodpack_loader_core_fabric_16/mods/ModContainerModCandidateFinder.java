@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core_fabric.mods;
+package pl.skidam.automodpack_loader_core_fabric_16.mods;
 
 import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.ModOrigin;
