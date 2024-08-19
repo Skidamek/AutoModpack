@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.List;
 
 // Inspired by preloading tricks by settingdust
+@SuppressWarnings("unchecked unused")
 public class FabricLanguageAdapter implements LanguageAdapter {
 
     private static final List<ModContainerImpl> mods;

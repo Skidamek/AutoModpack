@@ -12,9 +12,9 @@ import java.util.List;
 @SuppressWarnings("unused")
 public class ModpackLoader implements ModpackLoaderService {
 
-    public static final VersionParser.Version FABRIC_VERSION = VersionParser.Version.parse(new LoaderManager().getLoaderVersion().replace(".", ""));
+    public static final Integer[] FABRIC_VERSION = VersionParser.parseVersion(new LoaderManager().getLoaderVersion());
     public static final ModpackLoaderService INSTANCE =
-            FABRIC_VERSION.minor() >= 16 && FABRIC_VERSION.patch() >= 1 ? new ModpackLoader16() :
+            VersionParser.isGreaterOrEqual(FABRIC_VERSION, VersionParser.parseVersion("0.16.1")) ? new ModpackLoader16() :
             new ModpackLoader15();
 
     @Override

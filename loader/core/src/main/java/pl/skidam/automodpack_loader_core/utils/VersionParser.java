@@ -1,24 +1,41 @@
 package pl.skidam.automodpack_loader_core.utils;
 
+@SuppressWarnings("unused")
 public class VersionParser {
-	// parse string versions like 0.15.11 or 0.16.0 and make them comparable
 
-	public record Version(int major, int minor, int patch) {
-		public static Version parse(String version) {
-			String[] parts = version.split("\\.");
-			return new Version(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
+	public static Integer[] parseVersion(String version) {
+		String[] parts = version.split("\\.");
+		Integer[] result = new Integer[parts.length];
+		for (int i = 0; i < parts.length; i++) {
+			result[i] = Integer.parseInt(parts[i]);
 		}
+		return result;
 	}
 
-	public static int compare(String version1, String version2) {
-		Version v1 = Version.parse(version1);
-		Version v2 = Version.parse(version2);
-		if (v1.major() != v2.major()) {
-			return Integer.compare(v1.major(), v2.major());
+	public static boolean isGreater(Integer[] v1, Integer[] v2) {
+		return compare(v1, v2) > 0;
+	}
+
+	public static boolean isGreaterOrEqual(Integer[] v1, Integer[] v2) {
+		return compare(v1, v2) >= 0;
+	}
+
+	public static boolean isLess(Integer[] v1, Integer[] v2) {
+		return compare(v1, v2) < 0;
+	}
+
+	public static boolean isLessOrEqual(Integer[] v1, Integer[] v2) {
+		return compare(v1, v2) <= 0;
+	}
+
+	private static int compare(Integer[] v1, Integer[] v2) {
+		for (int i = 0; i < Math.min(v1.length, v2.length); i++) {
+			if (v1[i] < v2[i]) {
+				return -1;
+			} else if (v1[i] > v2[i]) {
+				return 1;
+			}
 		}
-		if (v1.minor() != v2.minor()) {
-			return Integer.compare(v1.minor(), v2.minor());
-		}
-		return Integer.compare(v1.patch(), v2.patch());
+		return Integer.compare(v1.length, v2.length);
 	}
 }

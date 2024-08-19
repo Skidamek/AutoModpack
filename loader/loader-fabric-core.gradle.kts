@@ -36,6 +36,7 @@ configurations {
     }
 }
 
+// TODO: make it less messy
 tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
     mergeServiceFiles()
