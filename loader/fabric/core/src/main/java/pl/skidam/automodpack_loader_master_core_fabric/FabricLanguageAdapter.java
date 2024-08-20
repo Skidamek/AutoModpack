@@ -32,14 +32,17 @@ public class FabricLanguageAdapter implements LanguageAdapter {
         return Collections.unmodifiableList(mods);
     }
 
-    public static void addMod(ModContainerImpl mod) {
-        mods.add(mod);
+    public static void addMod(Object mod) {
+        if (mod instanceof ModContainerImpl modContainer) {
+            mods.add(modContainer);
+            return;
+        }
+
+        throw new IllegalArgumentException("Mod must be an instance of ModContainerImpl");
     }
 
     public FabricLanguageAdapter() throws IllegalAccessException {
-
         FabricLoaderImplAccessor.FIELD_MODS.set(FabricLoaderImpl.INSTANCE, Proxy.newProxyInstance(mods.getClass().getClassLoader(), mods.getClass().getInterfaces(), new ListProxy()));
-
         new Preload();
     }
 
