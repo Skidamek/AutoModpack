@@ -35,7 +35,7 @@ If you would like to translate automodpack to other languages, go ahead!
 
 1. Fork the repository and create a new branch for your localization.
 2. Find `/src/main/resources/assets/automodpack/lang/` directory.
-3. Here you can check if file with your language already exists by using minecraft's in-game locale codes, which you can find [there](https://minecraft.fandom.com/wiki/Language#Languages).
+3. Here you can check if file with your language already exists by using minecraft's in-game locale codes, which you can find [there](https://minecraft.wiki/w/Language#Languages).
 4. If file with your language doesn't exist just create it.
 5. Copy default values from e.g. en_us.json and translate it.
 6. Submit a pull request.
