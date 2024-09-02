@@ -42,6 +42,9 @@ public class GlobalVariables {
     public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
     public static final Path modpacksDir = automodpackDir.resolve("modpacks");
 
+    public static final String clientConfigFileOverrideResource = "overrides-automodpack-client.json";
+    public static String clientConfigOverride; // read from inside a jar file on preload, used instead of clientConfigFile if exists
+
     public static Path selectedModpackDir;
     public static String selectedModpackLink;
 }

@@ -53,7 +53,24 @@ public class ConfigTools {
         }
     }
 
+    public static <T> T load(String json, Class<T> configClass) {
+        try {
+            if (json != null) {
+	            return GSON.fromJson(json, configClass);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Couldn't load config! " + configClass);
+            e.printStackTrace();
+        }
+
+        return null;
+    }
+
     public static void save(Path configFile, Object configObject) {
+        if (clientConfigOverride != null && configObject instanceof Jsons.ClientConfigFields) {
+            return;
+        }
+
         try {
             if (!Files.isDirectory(configFile.getParent())) {
                 Files.createDirectories(configFile.getParent());

@@ -15,6 +15,8 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.HashMap;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -88,12 +90,36 @@ public class Preload {
         LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
         AUTOMODPACK_JAR = FileInspection.getAutoModpackJar();
         MODS_DIR = AUTOMODPACK_JAR.getParent();
+
+        // get "overrides-automodpack-client.json" zipfile from the AUTOMODPACK_JAR
+        try (ZipFile zipFile = new ZipFile(AUTOMODPACK_JAR.toFile())) {
+            ZipEntry entry = zipFile.getEntry(clientConfigFileOverrideResource);
+            if (entry != null) {
+                clientConfigOverride = new String(zipFile.getInputStream(entry).readAllBytes());
+            } else {
+                LOGGER.error("overrides-automodpack-client.json not found in the jar");
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to open the jar file", e);
+        }
     }
 
     private void loadConfigs() {
         long startTime = System.currentTimeMillis();
-        clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFields.class); // load client config
-        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class); // load server config
+
+        // load client config
+        if (clientConfigOverride == null) {
+            clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFields.class);
+        } else {
+            // TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
+            LOGGER.warn("You are using unofficial {} mod", MOD_ID);
+            LOGGER.warn("Using client config overrides! Editing the {} file will have no effect", clientConfigFile);
+            LOGGER.warn("Remove the {} file from inside the jar or remove and download fresh {} mod jar from modrinth/curseforge", clientConfigFileOverrideResource, MOD_ID);
+            clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFields.class);
+        }
+
+        // load server config
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
 
         if (serverConfig != null) {
             int previousServerConfigVersion = serverConfig.DO_NOT_CHANGE_IT;
@@ -125,9 +151,14 @@ public class Preload {
             clientConfig.DO_NOT_CHANGE_IT = new Jsons.ClientConfigFields().DO_NOT_CHANGE_IT;
 
             if (previousClientConfigVersion != clientConfig.DO_NOT_CHANGE_IT) {
-                LOGGER.info("Updated client config version to {}", clientConfig.DO_NOT_CHANGE_IT);
+                if (clientConfigOverride == null) {
+                    LOGGER.info("Updated client config version to {}", clientConfig.DO_NOT_CHANGE_IT);
+                } else {
+                    LOGGER.error("Client config version is outdated!");
+                }
             }
 
+            // Very important to have this map initialized
             if (clientConfig.installedModpacks == null) {
                 clientConfig.installedModpacks = new HashMap<>();
             }
