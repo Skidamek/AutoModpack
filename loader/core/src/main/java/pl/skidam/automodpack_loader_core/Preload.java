@@ -91,13 +91,11 @@ public class Preload {
         AUTOMODPACK_JAR = FileInspection.getAutoModpackJar();
         MODS_DIR = AUTOMODPACK_JAR.getParent();
 
-        // get "overrides-automodpack-client.json" zipfile from the AUTOMODPACK_JAR
+        // Get "overrides-automodpack-client.json" zipfile from the AUTOMODPACK_JAR
         try (ZipFile zipFile = new ZipFile(AUTOMODPACK_JAR.toFile())) {
             ZipEntry entry = zipFile.getEntry(clientConfigFileOverrideResource);
             if (entry != null) {
                 clientConfigOverride = new String(zipFile.getInputStream(entry).readAllBytes());
-            } else {
-                LOGGER.error("overrides-automodpack-client.json not found in the jar");
             }
         } catch (IOException e) {
             LOGGER.error("Failed to open the jar file", e);
