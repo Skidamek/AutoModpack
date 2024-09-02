@@ -1,5 +1,6 @@
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.concurrent.CompletableFuture
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -77,39 +78,47 @@ tasks.register("mergeJars") {
             }
             ?: emptyList()
 
+        val tasks = mutableListOf<CompletableFuture<Void>>()
         val time = System.currentTimeMillis()
         val size = jarsToMerge.size
         var current = 0;
 
         for (jarToMerge in jarsToMerge) {
-            val minecraftVersionStr = jarToMerge.name.substringAfterLast("-mc").substringBefore("-")
-            val minecraftVersion = MinecraftVersionData(minecraftVersionStr)
+            val task = CompletableFuture.runAsync {
+                val minecraftVersionStr = jarToMerge.name.substringAfterLast("-mc").substringBefore("-")
+                val minecraftVersion = MinecraftVersionData(minecraftVersionStr)
 
-            var loaderModule = ""
-            if (jarToMerge.name.contains("fabric")) {
-                loaderModule = "fabric/core"
-            } else if (jarToMerge.name.contains("neoforge")) {
-                loaderModule = if (minecraftVersion.greaterOrEqual("1.20.6")) {
-                    "neoforge/fml4"
-                } else {
-                    "neoforge/fml2"
+                var loaderModule = ""
+                if (jarToMerge.name.contains("fabric")) {
+                    loaderModule = "fabric/core"
+                } else if (jarToMerge.name.contains("neoforge")) {
+                    loaderModule = if (minecraftVersion.greaterOrEqual("1.20.6")) {
+                        "neoforge/fml4"
+                    } else {
+                        "neoforge/fml2"
+                    }
+                } else if (jarToMerge.name.contains("forge")) {
+                    loaderModule = if (minecraftVersion.lessOrEqual("1.18.2")) {
+                        "forge/fml40"
+                    } else {
+                        "forge/fml47"
+                    }
                 }
-            } else if (jarToMerge.name.contains("forge")) {
-                loaderModule = if (minecraftVersion.lessOrEqual("1.18.2")) {
-                    "forge/fml40"
-                } else {
-                    "forge/fml47"
-                }
+
+                val loaderFile = File("${rootProject.projectDir}/loader/$loaderModule/build/libs").listFiles()
+                    ?.single { it.isFile && !it.name.endsWith("-sources.jar") && it.name.endsWith(".jar") } ?: return@runAsync
+                val finalJar = File("$mergedDir/${jarToMerge.name}")
+
+                loaderFile.copyTo(finalJar, overwrite = true)
+                appendFileToZip(finalJar, jarToMerge, "automodpack-mod.jar")
+
+                println("${++current}/$size - Merged: ${jarToMerge.name} into: ${finalJar.name} from: ${loaderFile.name}")
             }
 
-            val loaderFile = File("${rootProject.projectDir}/loader/$loaderModule/build/libs").listFiles()?.single { it.isFile && !it.name.endsWith("-sources.jar") && it.name.endsWith(".jar") } ?: continue
-            val finalJar = File("$mergedDir/${jarToMerge.name}")
-
-            loaderFile.copyTo(finalJar, overwrite = true)
-            appendFileToZip(finalJar, jarToMerge, "automodpack-mod.jar")
-
-            println("${++current}/$size - Merged: ${jarToMerge.name} into: ${finalJar.name} from: ${loaderFile.name}")
+            tasks.add(task)
         }
+
+        tasks.forEach { it.join() }
 
         if (size == 0) {
             error("No jars to merge!")

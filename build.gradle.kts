@@ -237,6 +237,7 @@ tasks.processResources {
     }
 }
 
+// If false, build can stuck on remapping
 tasks.named<RemapJarTask>("remapJar") {
     remapperIsolation.set(true)
 }
