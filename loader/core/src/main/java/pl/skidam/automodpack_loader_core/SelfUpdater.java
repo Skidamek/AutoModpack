@@ -9,9 +9,17 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.jar.JarOutputStream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -157,6 +165,8 @@ public class SelfUpdater {
             downloadManager.joinAll();
             downloadManager.cancelAllAndShutdown();
 
+            addOverridesToJar(automodpackUpdateJar);
+
             newAutomodpackJar = AUTOMODPACK_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
 
             // preload classes
@@ -202,5 +212,62 @@ public class SelfUpdater {
         //
         // For now let's just restart the game since it's simpler
         // TODO - implement a way to conditionally load automodpack mod jar without breaking the jvm and hope that self-updating logic won't need to be updated anymore
+    }
+
+    // Helper method to get an InputStream for a JAR entry (if present)
+    public static Optional<InputStream> getJarEntryInputStream(Path jarFilePath, String entryName) throws IOException {
+        try (JarFile jarFile = new JarFile(jarFilePath.toFile())) {
+            JarEntry jarEntry = jarFile.getJarEntry(entryName);
+            if (jarEntry != null) {
+                return Optional.of(jarFile.getInputStream(jarEntry));
+            }
+        }
+        return Optional.empty();
+    }
+
+    public static void addOverridesToJar(Path jarFilePath) throws IOException {
+        if (clientConfigOverride == null || clientConfigOverride.isBlank()) {
+            return;
+        }
+
+        if (!Files.isRegularFile(jarFilePath) || !Files.isRegularFile(AUTOMODPACK_JAR)) {
+            LOGGER.error("Jar file of updated AutoModpack not found!");
+            return;
+        }
+
+        // Create a temp JAR file to write the updated contents
+        Path tempJarPath = Files.createTempFile("tempAutoModpackJar", ".jar");
+
+        try (JarFile jarFile = new JarFile(jarFilePath.toFile());
+             JarOutputStream tempJarOutputStream = new JarOutputStream(Files.newOutputStream(tempJarPath))) {
+
+            // Copy original JAR entries to the temp JAR
+            jarFile.stream().forEach(entry -> {
+                try {
+                    JarEntry newEntry = new JarEntry(entry.getName());
+                    tempJarOutputStream.putNextEntry(newEntry);
+                    try (InputStream entryInputStream = jarFile.getInputStream(entry)) {
+                        entryInputStream.transferTo(tempJarOutputStream);
+                    }
+                    tempJarOutputStream.closeEntry();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+
+            // Add the new file as a new entry in the JAR root
+            Optional<InputStream> txtInputStreamOpt = getJarEntryInputStream(AUTOMODPACK_JAR, clientConfigFileOverrideResource);
+            if (txtInputStreamOpt.isPresent()) {
+                JarEntry newTxtEntry = new JarEntry(clientConfigFileOverrideResource);
+                tempJarOutputStream.putNextEntry(newTxtEntry);
+                txtInputStreamOpt.get().transferTo(tempJarOutputStream);
+                tempJarOutputStream.closeEntry();
+            }
+        }
+
+        // Replace the old JAR file with the new one (rename temp JAR)
+        Files.move(tempJarPath, jarFilePath, StandardCopyOption.REPLACE_EXISTING);
+
+        LOGGER.info("Added config overrides to the updated AutoModpack JAR");
     }
 }
