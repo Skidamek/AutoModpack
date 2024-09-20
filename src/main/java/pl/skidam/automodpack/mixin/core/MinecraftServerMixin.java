@@ -10,7 +10,7 @@ import pl.skidam.automodpack.init.Common;
 @Mixin(MinecraftServer.class)
 public class MinecraftServerMixin {
 
-	/*? if >=1.19.4 {*/
+	/*? if >=1.19.3 {*/
 	@Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;createMetadata()Lnet/minecraft/server/ServerMetadata;", ordinal = 0), method = "runServer")
 /*?} else {*/
 	/*@Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;setFavicon(Lnet/minecraft/server/ServerMetadata;)V", ordinal = 0), method = "runServer")
