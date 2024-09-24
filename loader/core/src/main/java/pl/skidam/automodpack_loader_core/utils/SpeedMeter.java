@@ -12,7 +12,7 @@ public class SpeedMeter {
 		this.downloadManager = downloadManager;
 	}
 
-	public void addDownloadedBytes(long bytes) {
+	public void addDownloadedBytes(long newBytes) {
 		if (lastSecondTime == 0) {
 			lastSecondTime = System.currentTimeMillis();
 		}
@@ -24,7 +24,8 @@ public class SpeedMeter {
 			lastSecondTime = currentTime;
 		}
 
-		bytesDownloadedPerSec.put(currentTime, bytesDownloadedPerSec.getOrDefault(currentTime, 0L) + bytes);
+		long bytes = bytesDownloadedPerSec.getOrDefault(lastSecondTime, 0L) + newBytes;
+		bytesDownloadedPerSec.put(lastSecondTime, bytes);
 	}
 
 	// gets last measured second to calculate speed
