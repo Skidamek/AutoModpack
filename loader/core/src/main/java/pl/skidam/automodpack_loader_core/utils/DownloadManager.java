@@ -7,7 +7,6 @@ import java.io.*;
 import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
@@ -27,6 +26,7 @@ public class DownloadManager {
     private int addedToQueue = 0;
     private int downloaded = 0;
     private final Semaphore semaphore = new Semaphore(0);
+    private final SpeedMeter speedMeter = new SpeedMeter(this);
     public DownloadManager() { }
     public DownloadManager(long bytesToDownload) {
         this.bytesToDownload = bytesToDownload;
@@ -160,6 +160,7 @@ public class DownloadManager {
             int bytesRead;
             while ((bytesRead = inputStream.read(buffer)) != -1) {
                 bytesDownloaded += bytesRead;
+                speedMeter.addDownloadedBytes(bytesRead);
                 outputStream.write(buffer, 0, bytesRead);
 
                 if (Thread.currentThread().isInterrupted()) {
@@ -181,43 +182,12 @@ public class DownloadManager {
         semaphore.release(addedToQueue);
     }
 
-    public long getTotalDownloadSpeed() {
-        long totalBytesDownloaded = downloadsInProgress.values().stream()
-                .mapToLong(data -> data.file.toFile().length())
-                .sum();
-
-        long totalDownloadTimeInSeconds = downloadsInProgress.values().stream()
-                .mapToLong(data -> Duration.between(data.startTime, Instant.now()).getSeconds())
-                .sum();
-
-        return totalDownloadTimeInSeconds == 0 ? 0 : totalBytesDownloaded / totalDownloadTimeInSeconds;
+    public SpeedMeter getSpeedMeter() {
+        return speedMeter;
     }
 
-    public String getTotalDownloadSpeedInReadableFormat(long totalDownloadSpeed) {
-        if (totalDownloadSpeed == 0) {
-            return "-1";
-        }
-
-        // Use the formatSize() method to format the total download speed into a human-readable format
-        return addUnitsPerSecond(totalDownloadSpeed);
-    }
-
-    public String getTotalETA(long totalDownloadSpeed) {
-        long totalBytesRemaining = bytesToDownload - bytesDownloaded;
-
-        return totalDownloadSpeed == 0 ? "0" : totalBytesRemaining / totalDownloadSpeed + "s";
-    }
-
-    public String addUnitsPerSecond(long size) {
-        String[] units = {"B", "KB", "MB", "GB", "TB"};
-        int unitIndex = 0;
-
-        while (size > 1024 && unitIndex < units.length - 1) {
-            size /= 1024;
-            unitIndex++;
-        }
-
-        return size + units[unitIndex] + "/s";
+    public long getTotalBytesRemaining() {
+        return bytesToDownload - bytesDownloaded;
     }
 
     public float getTotalPercentageOfFileSizeDownloaded() {
@@ -229,8 +199,8 @@ public class DownloadManager {
         return downloaded + "/" + addedToQueue;
     }
 
-    public boolean isClosed() {
-        return DOWNLOAD_EXECUTOR.isShutdown();
+    public boolean isRunning() {
+        return !DOWNLOAD_EXECUTOR.isShutdown();
     }
 
     public void cancelAllAndShutdown() {

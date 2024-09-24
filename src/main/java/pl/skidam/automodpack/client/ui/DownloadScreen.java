@@ -13,9 +13,9 @@ import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_loader_core.utils.SpeedMeter;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 
 public class DownloadScreen extends VersionedScreen {
 
@@ -51,7 +51,7 @@ public class DownloadScreen extends VersionedScreen {
         this.addDrawableChild(cancelButton);
 
         Util.getMainWorkerExecutor().execute(() -> {
-            while (downloadManager != null && !downloadManager.isClosed()) {
+            while (downloadManager != null && downloadManager.isRunning()) {
 
 //                for (Map.Entry<String, DownloadManager.DownloadData> map : ModpackUpdater.downloadManager.downloadsInProgress.entrySet()) {
 //                    mapOfFileStats.put(map.getKey(), ModpackUpdater.downloadManager.getPercentageOfFileSizeDownloaded(map.getKey()) + "%");
@@ -68,9 +68,8 @@ public class DownloadScreen extends VersionedScreen {
                 lastPercentage = (int) downloadManager.getTotalPercentageOfFileSizeDownloaded();
                 lastDownloadedScale = (float) (downloadManager.getTotalPercentageOfFileSizeDownloaded() * 0.01);
 
-                long totalDownloadSpeed = downloadManager.getTotalDownloadSpeed();
-                lastSpeed = downloadManager.getTotalDownloadSpeedInReadableFormat(totalDownloadSpeed);
-                lastETA = downloadManager.getTotalETA(totalDownloadSpeed);
+                lastSpeed = SpeedMeter.formatDownloadSpeedToMbps(downloadManager.getSpeedMeter().getSpeedInBytes());
+                lastETA = SpeedMeter.formatETAToSeconds(downloadManager.getSpeedMeter().getETAInSeconds());
             }
         });
     }
@@ -141,7 +140,7 @@ public class DownloadScreen extends VersionedScreen {
 //                        text += " " + percentage;
 //                    }
 
-                    drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.literal(text), (int) (this.width / 2 * scale), currentY, 16777215);
+                    drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.literal(text).formatted(Formatting.GRAY), (int) (this.width / 2 * scale), currentY, 16777215);
                     currentY += 10;
                 }
             }
@@ -173,7 +172,7 @@ public class DownloadScreen extends VersionedScreen {
         MutableText titleText = VersionedText.literal(header).formatted(Formatting.BOLD);
         drawCenteredTextWithShadow(matrices, this.textRenderer, titleText, this.width / 2, this.height / 2 - 110, 16777215);
 
-        if (downloadManager != null && !downloadManager.isClosed()) {
+        if (downloadManager != null && downloadManager.isRunning()) {
             MutableText percentage = (MutableText) this.getPercentage();
             MutableText stage = (MutableText) this.getStage();
             MutableText eta = (MutableText) this.getTotalETA();
