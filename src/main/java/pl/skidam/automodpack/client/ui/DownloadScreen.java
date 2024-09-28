@@ -124,7 +124,7 @@ public class DownloadScreen extends VersionedScreen {
         matrices.scale(scale, scale, scale);
 
         if (downloadManager != null && !downloadManager.downloadsInProgress.isEmpty()) {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.downloading"), (int) (this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.downloading").formatted(Formatting.BOLD), this.width / 2, y, 16777215);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
