@@ -18,7 +18,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
 
 @Mixin(PlayerManager.class)
@@ -35,7 +34,7 @@ private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity pla
         String playerName = profile.getName();
 
         if (!Common.players.containsKey(playerName)) {
-            LOGGER.error("{} isn't in the players map.", playerName);
+//            LOGGER.error("{} isn't in the players map.", playerName); it should not happen but if it does then doesn't matter that much. Its only a nag message. see #292
             return;
         }
 
