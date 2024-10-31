@@ -196,6 +196,11 @@ public class ModpackContent {
     private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file) throws Exception {
         if (!Files.isRegularFile(file)) return null;
 
+        if (serverConfig == null) {
+            LOGGER.error("Server config is null!");
+            return null;
+        }
+
         if (isInnerFile(file)) {
             return null;
         }

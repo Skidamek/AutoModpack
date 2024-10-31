@@ -84,15 +84,26 @@ public class WildCards {
 
 
     private void processFile(Path file, String pathStr, String finalWildcard, boolean startsWithSlash, boolean blackListed) {
-        String formattedPath = file.toString().replace(File.separator, "/");
-        int index = formattedPath.indexOf(pathStr);
-        if (index != -1) {
-            pathStr = pathStr + file.toString().substring(index + pathStr.length());
-            pathStr = pathStr.replace(File.separator, "/");
-            pathStr = pathStr.startsWith("/") ? pathStr : "/" + pathStr;
-            matchFile(file, pathStr, finalWildcard, startsWithSlash, blackListed);
+        if (Files.isDirectory(file)) {
+            try (var files = Files.list(file)) {
+                String finalPathStr = pathStr;
+                files.forEach(childPath -> processFile(childPath, finalPathStr, finalWildcard, startsWithSlash, blackListed));
+            } catch (IOException e) {
+                LOGGER.error("Error occurred while processing directory for wildcard: {} path: {}", finalWildcard, file, e);
+            }
         } else {
-            throw new IllegalStateException("FormattedPath: " + formattedPath + " PathStr: " + pathStr + " Does not match the wildcard: " + finalWildcard + " StartsWithSlash: " + startsWithSlash + " IsBlackListed: " + blackListed);
+            String formattedPath = file.toString().replace(File.separator, "/");
+            int index = formattedPath.indexOf(pathStr);
+            if (index != -1) {
+                pathStr = pathStr + file.toString().substring(index + pathStr.length());
+                pathStr = pathStr.replace(File.separator, "/");
+                pathStr = pathStr.startsWith("/") ? pathStr : "/" + pathStr;
+                matchFile(file, pathStr, finalWildcard, startsWithSlash, blackListed);
+            } else if (finalWildcard.contains("**")) {
+                matchFile(file, formattedPath, finalWildcard, startsWithSlash, blackListed);
+            } else {
+                throw new IllegalStateException("FormattedPath: " + formattedPath + " PathStr: " + pathStr + " Does not match the wildcard: " + finalWildcard + " StartsWithSlash: " + startsWithSlash + " IsBlackListed: " + blackListed);
+            }
         }
     }
 
@@ -111,11 +122,23 @@ public class WildCards {
         }
     }
 
-
     private boolean fileMatches(String file, String wildCardString) {
         if (!wildCardString.contains("*")) {
             if (DEBUG) System.out.println("* NOT found in wildcard: " + wildCardString + " file: " + file);
             return file.endsWith(wildCardString);
+        } else if (wildCardString.contains("**")) {
+            if (DEBUG) System.out.println("** found in wildcard: " + wildCardString + " file: " + file);
+            String[] parts = wildCardString.split("\\*\\*");
+            if (parts.length == 0) return true;
+            int startIndex = 0;
+            for (String part : parts) {
+                int currentIndex = file.indexOf(part, startIndex);
+                if (currentIndex == -1) {
+                    return false;
+                }
+                startIndex = currentIndex + part.length();
+            }
+            return true;
         } else {
             if (DEBUG) System.out.println("* found in wildcard: " + wildCardString + " file: " + file);
         }

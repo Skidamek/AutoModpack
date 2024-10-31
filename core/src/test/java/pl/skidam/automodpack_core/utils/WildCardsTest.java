@@ -31,7 +31,9 @@ class WildCardsTest {
                 "!/" + testFilesStr + "/shaders/*.txt",
                 "/" + testFilesStr + "/thisfiledoesnotexist.txt",
                 "/" + testFilesStr + "/shaders/*",
-                "!/" + testFilesStr + "/shaders/notashader.zip"
+                "!/" + testFilesStr + "/shaders/notashader.zip",
+                "/" + testFilesStr + "/foo/**",
+                "/" + testFilesStr + "/directory/*/*"
         );
         wildCards = new WildCards(wildcards, Set.of(testFilesDir));
 
@@ -41,25 +43,36 @@ class WildCardsTest {
         System.out.println();
     }
 
+    List<Path> correctResult = List.of(
+            testFilesDir.resolve("file.txt"),
+            testFilesDir.resolve("config/config.json"),
+            testFilesDir.resolve("config/config-mod.json5"),
+            testFilesDir.resolve("config/mod-config.toml"),
+            testFilesDir.resolve("mods/mod-1.20.jar"),
+            testFilesDir.resolve("mods/client-mod-1.20.jar"),
+            testFilesDir.resolve("shaders/shader1.zip"),
+            testFilesDir.resolve("shaders/shader2.zip"),
+            testFilesDir.resolve("shaders/shader3.zip"),
+            testFilesDir.resolve("foo/file.json"),
+            testFilesDir.resolve("foo/bar/file.json"),
+            testFilesDir.resolve("foo/boo/file.json"),
+            testFilesDir.resolve("foo/boo/file.toml"),
+            testFilesDir.resolve("foo/poo/file.json"),
+            testFilesDir.resolve("foo/poo/moo/file.json"),
+            testFilesDir.resolve("foo/poo/moo/file2.json")
+//            ,
+//            testFilesDir.resolve("directory/which/file.json"),
+//            testFilesDir.resolve("directory/who/file.json")
+    );
+
     @Test
     void shouldReturnCorrectNumberOfMatches() {
-        assertEquals(9, wildCards.getWildcardMatches().size());
+        assertEquals(correctResult.size(), wildCards.getWildcardMatches().size());
     }
 
     // TODO split this to more specific tests
     @Test
     void shouldReturnCorrectMatches() {
-        var correctResult = List.of(
-                testFilesDir.resolve("file.txt"),
-                testFilesDir.resolve("config/config.json"),
-                testFilesDir.resolve("config/config-mod.json5"),
-                testFilesDir.resolve("config/mod-config.toml"),
-                testFilesDir.resolve("mods/mod-1.20.jar"),
-                testFilesDir.resolve("mods/client-mod-1.20.jar"),
-                testFilesDir.resolve("shaders/shader1.zip"),
-                testFilesDir.resolve("shaders/shader2.zip"),
-                testFilesDir.resolve("shaders/shader3.zip")
-        );
         boolean correct = true;
 
         for (var item : wildCards.getWildcardMatches().values()) {
