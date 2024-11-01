@@ -18,6 +18,7 @@
     "core.ClientConnectionAccessor",
     "core.ClientLoginNetworkHandlerAccessor",
     "core.ClientLoginNetworkHandlerMixin",
+    "core.DrawContextAccessor",
     "core.MusicTrackerMixin"
   ],
   "injectors": {

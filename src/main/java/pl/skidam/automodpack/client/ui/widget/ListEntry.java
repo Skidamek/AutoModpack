@@ -11,6 +11,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 /*import net.minecraft.client.util.math.MatrixStack;
 *//*?} else {*/
 import net.minecraft.client.gui.DrawContext;
+import pl.skidam.automodpack.mixin.core.DrawContextAccessor;
 /*?}*/
 
 public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
@@ -47,7 +48,7 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
         VersionedMatrices versionedMatrices = new VersionedMatrices();
     *//*?} else {*/
 	public void render(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-		VersionedMatrices versionedMatrices = new VersionedMatrices(this.client, context.vertexConsumers);
+		VersionedMatrices versionedMatrices = new VersionedMatrices(this.client, ((DrawContextAccessor) context).vertexConsumers());
 	/*?}*/
 		versionedMatrices.push();
 

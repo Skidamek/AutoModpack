@@ -21,6 +21,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 
 /*? if >=1.20 {*/
 import net.minecraft.client.gui.DrawContext;
+import pl.skidam.automodpack.mixin.core.DrawContextAccessor;
 /*?}*/
 
 /*? if >=1.21.2 {*/
@@ -41,7 +42,7 @@ public class VersionedScreen extends Screen {
 	*//*?} else {*/
 	@Override
 	public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
-		VersionedMatrices matrices = new VersionedMatrices(this.client, matrix.vertexConsumers);
+		VersionedMatrices matrices = new VersionedMatrices(this.client, ((DrawContextAccessor) matrix).vertexConsumers());
 		/*?}*/
 
 		// Render background
