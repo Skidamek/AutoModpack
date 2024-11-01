@@ -78,7 +78,7 @@ public class HandshakeS2CPacket {
             return;
         }
 
-        if (!httpServer.isRunning()) {
+        if (!httpServer.shouldRunInternally()) {
             return;
         }
 

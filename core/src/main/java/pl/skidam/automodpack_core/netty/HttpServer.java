@@ -108,7 +108,9 @@ public class HttpServer {
         return true;
     }
 
-    public boolean isRunning() {
+    // TODO: investigate what this method really means xd
+    // ... why do we rely on it in commands?
+    public boolean shouldRunInternally() {
         if (serverChannel == null) {
             return shouldHost;
         }
@@ -117,7 +119,7 @@ public class HttpServer {
     }
 
     private boolean canStart() {
-        if (isRunning()) {
+        if (shouldRunInternally()) {
             return false;
         }
 

@@ -6,13 +6,13 @@
   "compatibilityLevel": "JAVA_17",
   "mixins": [
     "core.FabricLoginMixin",
-    "core.LegacyQueryHandlerMixin",
     "core.LoginQueryRequestS2CPacketMixin",
     "core.LoginQueryResponseC2SPacketMixin",
     "core.MinecraftServerMixin",
     "core.PlayerManagerMixin",
     "core.ServerLoginNetworkHandlerAccessor",
-    "core.ServerLoginNetworkHandlerMixin"
+    "core.ServerLoginNetworkHandlerMixin",
+    "core.ServerNetworkIoMixin"
   ],
   "client": [
     "core.ClientConnectionAccessor",

@@ -20,82 +20,24 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
-    public boolean isAutoModpackRequest(ByteBuf buf) {
-        boolean equals = false;
-        try {
-            buf.markReaderIndex();
-            byte[] data1 = new byte[HttpServer.HTTP_REQUEST_GET_BASE_BYTES.length];
-            buf.readBytes(data1);
-            buf.resetReaderIndex();
-            byte[] data2 = new byte[HttpServer.HTTP_REQUEST_REFRESH_BYTES.length];
-            buf.readBytes(data2);
-            buf.resetReaderIndex();
-            equals = Arrays.equals(data1, HttpServer.HTTP_REQUEST_GET_BASE_BYTES) || Arrays.equals(data2, HttpServer.HTTP_REQUEST_REFRESH_BYTES);
-        } catch (IndexOutOfBoundsException ignored) {
-        } catch (Exception e) {
-            LOGGER.error("Couldn't read channel!", e);
-        }
-
-        return equals;
-    }
-
-    private String parseRequestUri(String request) {
-        final String[] requestLines = request.split("\r\n");
-        final String[] requestFirstLine = requestLines[0].split(" ");
-        final String requestUrl = requestFirstLine[1];
-
-        if (requestUrl.contains(HttpServer.HTTP_REQUEST_BASE)) {
-            return requestUrl.replaceFirst(HttpServer.HTTP_REQUEST_BASE, "");
-        } else {
-            return null;
-        }
-    }
-
-    public List<String> parseBodyStrings(String requestPacket) {
-        List<String> stringList = new ArrayList<>();
-        if (!requestPacket.contains("[")) {
-            return stringList;
-        }
-        String jsonPart = requestPacket.substring(requestPacket.lastIndexOf("[")).trim();
-        try {
-            JsonArray jsonArray = new Gson().fromJson(jsonPart, JsonArray.class);
-            for (int i = 0; i < jsonArray.size(); i++) {
-                stringList.add(jsonArray.get(i).getAsString());
-            }
-        } catch (JsonSyntaxException e) {
-            e.printStackTrace();
-        }
-
-        return stringList;
-    }
-
-    private String getRequest(ByteBuf buf) {
-        try {
-            buf.markReaderIndex();
-            if (buf.readableBytes() > 4096 || buf.readableBytes() < HttpServer.HTTP_REQUEST_BASE.length()) {
-                return null;
-            }
-
-            byte[] data = new byte[buf.readableBytes()];
-            buf.readBytes(data);
-            buf.resetReaderIndex();
-            return new String(data);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    // TODO append our handler in different place (should bring better performance), "context.fireChannelRead(msg)" here will result in breaking minecraft packet, we don't want it
     @Override
     public void channelRead(ChannelHandlerContext context, Object msg) {
-        channelRead(context, (ByteBuf) msg);
+        ByteBuf buf = (ByteBuf) msg;
+        channelRead(context, buf, msg);
     }
 
-    public void channelRead(ChannelHandlerContext context, ByteBuf buf) {
+    public void channelRead(ChannelHandlerContext context, ByteBuf buf, Object msg) {
         final String request = getRequest(buf);
-        if (request == null) return;
+        if (request == null) {
+            dropConnection(context, msg);
+            return;
+        }
+
         final String requestUri = parseRequestUri(request);
-        if (requestUri == null) return;
+        if (requestUri == null) {
+            dropConnection(context, msg);
+            return;
+        }
 
         var firstContext = context.pipeline().firstContext();
 
@@ -107,6 +49,11 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         buf.release();
+    }
+
+    private void dropConnection(ChannelHandlerContext ctx, Object request) {
+        ctx.pipeline().remove(MOD_ID);
+        ctx.fireChannelRead(request);
     }
 
     private void refreshModpackFiles(ChannelHandlerContext context, String request) {
@@ -213,5 +160,70 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         return httpServer.getPath(sha1);
+    }
+
+    public boolean isAutoModpackRequest(ByteBuf buf) {
+        boolean equals = false;
+        try {
+            buf.markReaderIndex();
+            byte[] data1 = new byte[HttpServer.HTTP_REQUEST_GET_BASE_BYTES.length];
+            buf.readBytes(data1);
+            buf.resetReaderIndex();
+            byte[] data2 = new byte[HttpServer.HTTP_REQUEST_REFRESH_BYTES.length];
+            buf.readBytes(data2);
+            buf.resetReaderIndex();
+            equals = Arrays.equals(data1, HttpServer.HTTP_REQUEST_GET_BASE_BYTES) || Arrays.equals(data2, HttpServer.HTTP_REQUEST_REFRESH_BYTES);
+        } catch (IndexOutOfBoundsException ignored) {
+        } catch (Exception e) {
+            LOGGER.error("Couldn't read channel!", e);
+        }
+
+        return equals;
+    }
+
+    private String parseRequestUri(String request) {
+        final String[] requestLines = request.split("\r\n");
+        final String[] requestFirstLine = requestLines[0].split(" ");
+        final String requestUrl = requestFirstLine[1];
+
+        if (requestUrl.contains(HttpServer.HTTP_REQUEST_BASE)) {
+            return requestUrl.replaceFirst(HttpServer.HTTP_REQUEST_BASE, "");
+        } else {
+            return null;
+        }
+    }
+
+    public List<String> parseBodyStrings(String requestPacket) {
+        List<String> stringList = new ArrayList<>();
+        if (!requestPacket.contains("[")) {
+            return stringList;
+        }
+        String jsonPart = requestPacket.substring(requestPacket.lastIndexOf("[")).trim();
+        try {
+            JsonArray jsonArray = new Gson().fromJson(jsonPart, JsonArray.class);
+            for (int i = 0; i < jsonArray.size(); i++) {
+                stringList.add(jsonArray.get(i).getAsString());
+            }
+        } catch (JsonSyntaxException e) {
+            e.printStackTrace();
+        }
+
+        return stringList;
+    }
+
+    private String getRequest(ByteBuf buf) {
+        try {
+            buf.markReaderIndex();
+            if (buf.readableBytes() > 4096 || buf.readableBytes() < HttpServer.HTTP_REQUEST_BASE.length()) {
+                return null;
+            }
+
+            byte[] data = new byte[buf.readableBytes()];
+            buf.readBytes(data);
+            buf.resetReaderIndex();
+            return new String(data);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
