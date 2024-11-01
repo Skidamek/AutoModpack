@@ -23,6 +23,11 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.DrawContext;
 /*?}*/
 
+/*? if >=1.21.2 {*/
+/*import net.minecraft.client.render.RenderLayer;
+import java.util.function.Function;
+*//*?}*/
+
 public class VersionedScreen extends Screen {
 
 	protected VersionedScreen(Text title) {
@@ -36,7 +41,7 @@ public class VersionedScreen extends Screen {
 	*//*?} else {*/
 	@Override
 	public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
-		VersionedMatrices matrices = new VersionedMatrices(this.client, matrix.getVertexConsumers());
+		VersionedMatrices matrices = new VersionedMatrices(this.client, matrix.vertexConsumers);
 		/*?}*/
 
 		// Render background
@@ -101,7 +106,12 @@ public class VersionedScreen extends Screen {
 	}
 	*//*?} else {*/
 	public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+		/*? if >=1.21.2 {*/
+		/*Function<Identifier, RenderLayer> renderLayers = RenderLayer::getText;
+		matrices.drawTexture(renderLayers, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		*//*?} else {*/
 		matrices.drawTexture(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		/*?}*/
 	}
 	/*?}*/
 }

@@ -47,7 +47,7 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
         VersionedMatrices versionedMatrices = new VersionedMatrices();
     *//*?} else {*/
 	public void render(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-		VersionedMatrices versionedMatrices = new VersionedMatrices(this.client, context.getVertexConsumers());
+		VersionedMatrices versionedMatrices = new VersionedMatrices(this.client, context.vertexConsumers);
 	/*?}*/
 		versionedMatrices.push();
 
@@ -57,7 +57,7 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
 			float scale = 1.5f;
 			versionedMatrices.scale(scale, scale, scale);
 			centeredX = (int) (centeredX / scale);
-			centeredY = (int) (centeredY - 10 / 2 * scale);
+			centeredY = (int) (centeredY - (float) 10 / 2 * scale);
 		} else {
 			centeredY = centeredY - 10 / 2;
 		}

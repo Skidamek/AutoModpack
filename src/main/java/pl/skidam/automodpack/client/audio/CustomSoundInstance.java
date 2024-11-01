@@ -13,7 +13,9 @@ import net.minecraft.util.math.random.Random;
 public class CustomSoundInstance extends AbstractSoundInstance {
 
     public CustomSoundInstance(Supplier<SoundEvent> event) {
-        /*? if >=1.19.1 {*/
+        /*? if >=1.21.2 {*/
+        /*super(event.get().id(), SoundCategory.MASTER, Random.create());
+        *//*?} elif >=1.19.1 {*/
         super(event.get().getId(), SoundCategory.MASTER, Random.create());
         /*?} else {*/
         /*super(event.get().getId(), SoundCategory.MASTER);
