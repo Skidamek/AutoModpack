@@ -7,6 +7,7 @@ import pl.skidam.automodpack_core.loader.LoaderService;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
+import java.awt.*;
 import java.nio.file.Path;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -48,8 +49,9 @@ public class ReLauncher {
         if (preload && !restartInPreload) return;
 
         boolean isClient = new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT;
+        boolean isHeadless = GraphicsEnvironment.isHeadless();
 
-        if (isClient) {
+        if (isClient && !isHeadless) {
             if (updateType != null && new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().toLowerCase().contains("restartscreen")) {
                 new ScreenManager().restart(modpackDir, updateType, changelogs);
                 return;
