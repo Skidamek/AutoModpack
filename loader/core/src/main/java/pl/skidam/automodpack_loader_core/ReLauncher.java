@@ -51,17 +51,21 @@ public class ReLauncher {
         boolean isClient = new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT;
         boolean isHeadless = GraphicsEnvironment.isHeadless();
 
-        if (isClient && !isHeadless) {
+        if (isClient) {
             if (updateType != null && new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().toLowerCase().contains("restartscreen")) {
                 new ScreenManager().restart(modpackDir, updateType, changelogs);
                 return;
             }
 
-            if (preload) { // show the popup
-                new Windows().restartWindow(updateMessage, callbacks);
+            if (preload) {
+                if (isHeadless) {
+                    LOGGER.info("Please restart the game to apply updates!");
+                } else {
+                    new Windows().restartWindow(updateMessage, callbacks);
+                }
             }
         } else {
-            LOGGER.info("Please restart to apply updates!");
+            LOGGER.info("Please restart the server to apply updates!");
         }
 
         for (Callback callback : callbacks) {
