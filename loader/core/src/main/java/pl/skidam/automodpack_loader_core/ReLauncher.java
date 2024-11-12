@@ -61,7 +61,7 @@ public class ReLauncher {
                 new Windows().restartWindow(updateMessage, callbacks);
             }
         } else {
-            LOGGER.info("Please restart the server to apply updates!");
+            LOGGER.info("Please restart to apply updates!");
         }
 
         for (Callback callback : callbacks) {
