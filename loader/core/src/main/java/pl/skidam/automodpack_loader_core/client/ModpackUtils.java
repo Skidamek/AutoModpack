@@ -146,7 +146,7 @@ public class ModpackUtils {
         final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
         final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
         final Collection<LoaderService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-        final Collection<String> loaderModsIDs = possibleLoaderIDs.stream().map(modID -> LOADER_MANAGER.getMod(modID).providesIDs()).filter(Objects::nonNull).flatMap(Collection::stream).toList();
+        final Collection<String> loaderModsIDs = possibleLoaderIDs.stream().map(modID -> LOADER_MANAGER.getMod(modID)).filter(Objects::nonNull).flatMap(mod -> mod.providesIDs().stream()).filter(Objects::nonNull).toList();
         final Collection<LoaderService.Mod> loaderMods = loaderModsIDs.stream().map(LOADER_MANAGER::getMod).filter(Objects::nonNull).toList();
 
         // standardModList + loaderMods
@@ -212,7 +212,7 @@ public class ModpackUtils {
     public static boolean removeDupeMods(Map<LoaderService.Mod, LoaderService.Mod> dupeMods) throws IOException {
         final List<Path> standardMods = Files.list(MODS_DIR).toList();
         final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-        final Collection<String> loaderModsIDs = possibleLoaderIDs.stream().map(modID -> LOADER_MANAGER.getMod(modID).filter(Objects::nonNull).providesIDs()).filter(Objects::nonNull).flatMap(Collection::stream).toList();
+        final Collection<String> loaderModsIDs = possibleLoaderIDs.stream().map(modID -> LOADER_MANAGER.getMod(modID)).filter(Objects::nonNull).flatMap(mod -> mod.providesIDs().stream()).filter(Objects::nonNull).toList();
         final Collection<LoaderService.Mod> loaderMods = loaderModsIDs.stream().map(LOADER_MANAGER::getMod).filter(Objects::nonNull).toList();
 
         // standardModList + loaderMods
