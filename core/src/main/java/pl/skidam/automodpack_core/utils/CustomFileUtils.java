@@ -64,7 +64,7 @@ public class CustomFileUtils {
             destinationFile.flush();
         } catch (IOException e) {
             e.printStackTrace();
-            throw new IOException("Failed to copy file: " + source + " to: " + destination, e);
+//            throw new IOException("Failed to copy file: " + source + " to: " + destination, e);
         }
     }
 
