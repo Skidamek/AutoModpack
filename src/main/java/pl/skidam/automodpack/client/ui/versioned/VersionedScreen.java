@@ -108,7 +108,7 @@ public class VersionedScreen extends Screen {
 	*//*?} else {*/
 	public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/*? if >=1.21.2 {*/
-		/*Function<Identifier, RenderLayer> renderLayers = RenderLayer::getText;
+		/*Function<Identifier, RenderLayer> renderLayers = RenderLayer::getGuiTextured;
 		matrices.drawTexture(renderLayers, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		*//*?} else {*/
 		matrices.drawTexture(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
