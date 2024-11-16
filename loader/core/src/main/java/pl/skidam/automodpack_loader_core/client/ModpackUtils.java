@@ -146,11 +146,17 @@ public class ModpackUtils {
         final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
         final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
         final Collection<LoaderService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-        final Collection<LoaderService.Mod> loaderMods = possibleLoaderIDs.stream().map(LOADER_MANAGER::getMod).filter(Objects::nonNull).toList();
+        final Collection<String> loaderModsIDs = possibleLoaderIDs.stream().map(modID -> LOADER_MANAGER.getMod(modID).providesIDs()).filter(Objects::nonNull).flatMap(Collection::stream).toList();
+        final Collection<LoaderService.Mod> loaderMods = loaderModsIDs.stream().map(LOADER_MANAGER::getMod).filter(Objects::nonNull).toList();
 
         // standardModList + loaderMods
         List<LoaderService.Mod> nonModpackModList = new ArrayList<>(standardModList);
-        nonModpackModList.addAll(loaderMods);
+        // add loader mod to the nonModpackModList if theres no other mod with the same id or lower version
+        loaderMods.forEach(loaderMod -> {
+            if (nonModpackModList.stream().noneMatch(mod -> mod.modID().equals(loaderMod.modID()) && mod.modVersion().compareTo(loaderMod.modVersion()) < 0)) {
+                nonModpackModList.add(loaderMod);
+            }
+        });
 
         for (LoaderService.Mod modpackMod : modpackModList) {
             for (String depId : modpackMod.dependencies()) {
@@ -206,11 +212,17 @@ public class ModpackUtils {
     public static boolean removeDupeMods(Map<LoaderService.Mod, LoaderService.Mod> dupeMods) throws IOException {
         final List<Path> standardMods = Files.list(MODS_DIR).toList();
         final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-        final Collection<LoaderService.Mod> loaderMods = possibleLoaderIDs.stream().map(LOADER_MANAGER::getMod).filter(Objects::nonNull).toList();
+        final Collection<String> loaderModsIDs = possibleLoaderIDs.stream().map(modID -> LOADER_MANAGER.getMod(modID).providesIDs()).filter(Objects::nonNull).flatMap(Collection::stream).toList();
+        final Collection<LoaderService.Mod> loaderMods = loaderModsIDs.stream().map(LOADER_MANAGER::getMod).filter(Objects::nonNull).toList();
 
         // standardModList + loaderMods
         List<LoaderService.Mod> nonModpackModList = new ArrayList<>(standardModList);
-        nonModpackModList.addAll(loaderMods);
+        // add loader mod to the nonModpackModList if theres no other mod with the same id or lower version
+        loaderMods.forEach(loaderMod -> {
+            if (nonModpackModList.stream().noneMatch(mod -> mod.modID().equals(loaderMod.modID()) && mod.modVersion().compareTo(loaderMod.modVersion()) < 0)) {
+                nonModpackModList.add(loaderMod);
+            }
+        });
 
         if (standardModList.isEmpty()) return false;
 
