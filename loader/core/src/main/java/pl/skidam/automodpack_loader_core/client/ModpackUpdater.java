@@ -400,7 +400,9 @@ public class ModpackUpdater {
         var dupeMods = ModpackUtils.getDupeMods(modpackDir, workaroundMods);
         boolean needsRestart1 = ModpackUtils.removeDupeMods(dupeMods);
 
-        return needsRestart0 || needsRestart1;
+        boolean needsRestart2 = ModpackUtils.correctModpackDepsOnDefaultDir(modpackDir);
+
+        return needsRestart0 || needsRestart1 || needsRestart2;
     }
 
     private Set<String> getIgnoredFiles(Set<Jsons. ModpackContentFields. ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {

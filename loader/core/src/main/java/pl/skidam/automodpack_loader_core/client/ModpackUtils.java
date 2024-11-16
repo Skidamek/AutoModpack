@@ -19,6 +19,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -134,12 +135,46 @@ public class ModpackUtils {
         return needsRestart;
     }
 
+    // Check if modpack mods are dependent on any mod in the default mods folder and if so, then check if the that dependency version is lower than required/provided by modpack mod.
+    // if so then force move that modpack mod to the default mods folder and delete the old one from the default mods folder.
+    public static boolean correctModpackDepsOnDefaultDir(Path modpackDir) throws IOException {
+        AtomicBoolean needsRestart = new AtomicBoolean(false);
+        List<LoaderService.Mod> standardModList = Files.list(MODS_DIR)
+                .map(LOADER_MANAGER::getMod)
+                .filter(Objects::nonNull)
+                .toList();
+        List<LoaderService.Mod> modpackModList = Files.list(modpackDir.resolve("mods"))
+                .map(LOADER_MANAGER::getMod)
+                .filter(Objects::nonNull)
+                .toList();
+
+        for (LoaderService.Mod modpackMod : modpackModList) {
+            for (String depId : modpackMod.dependencies()) {
+                standardModList.stream()
+                        .filter(standardMod -> standardMod.modID().equals(depId) || standardMod.providesIDs().contains(depId))
+                        .filter(standardMod -> standardMod.modVersion().compareTo(modpackMod.modVersion()) < 0)
+                        .forEach(standardMod -> {
+                            LOGGER.info("Moving {} mod to the default mods folder because it is dependent on {} mod and the version is lower", modpackMod.modID(), standardMod.modID());
+                            try {
+                                CustomFileUtils.copyFile(modpackMod.modPath(), MODS_DIR.resolve(modpackMod.modPath().getFileName()));
+                                CustomFileUtils.forceDelete(standardMod.modPath());
+                                needsRestart.set(true);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        });
+            }
+        }
+
+        return needsRestart.get();
+    }
+
     // Checks if in standard mods folder are any mods that are in modpack
     // Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
-    public static Map<LoaderService.Mod, LoaderService.Mod> getDupeMods(Path modpackPath, Set<String> workaroundMods) throws IOException {
+    public static Map<LoaderService.Mod, LoaderService.Mod> getDupeMods(Path modpackDir, Set<String> workaroundMods) throws IOException {
         // maybe also check subfolders...
         final List<Path> standardMods = Files.list(MODS_DIR).toList();
-        final List<Path> modpackMods = Files.list(modpackPath.resolve("mods")).toList();
+        final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
         final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
         final Collection<LoaderService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
 
@@ -150,7 +185,7 @@ public class ModpackUtils {
         for (LoaderService.Mod modpackMod : modpackModList) {
             LoaderService.Mod standardMod = standardModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
             if (standardMod != null) {
-                String formattedFile = CustomFileUtils.formatPath(modpackMod.modPath(), modpackPath);
+                String formattedFile = CustomFileUtils.formatPath(modpackMod.modPath(), modpackDir);
                 if (workaroundMods.contains(formattedFile)) continue;
                 duplicates.put(modpackMod, standardMod);
             }
