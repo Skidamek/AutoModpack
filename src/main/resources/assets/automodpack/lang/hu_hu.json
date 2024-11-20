@@ -1,0 +1,51 @@
+{
+    "automodpack.restart.full": "Modpack has been downloaded!",
+    "automodpack.restart.update": "An update has been downloaded to Modpack!",
+    "automodpack.restart.select": "Modpack required by server got selected!",
+    "automodpack.restart.automodpack": "Updated version of AutoModpack mod to the one required by server!",
+    "automodpack.restart.description": "To play you have to restart the game.",
+    "automodpack.restart.secDescription": "Do you want to do restart now?",
+    "automodpack.restart.confirm": "Yes, close the game",
+    "automodpack.restart.cancel": "No, back to the game",
+  
+    "automodpack.delete": "Delete Modpack",
+    "automodpack.delete.description": "You will lose all stuff from downloaded modpack.",
+    "automodpack.delete.secDescription": "You will need to restart game.",
+    "automodpack.delete.thiDescription": "Are you sure you want to delete it?",
+    "automodpack.delete.confirm": "Delete and quit",
+    "automodpack.delete.cancel": "Back to the game",
+  
+    "automodpack.danger": "This server provides an external modpack!",
+    "automodpack.danger.description": "Do you want to download it?",
+    "automodpack.danger.secDescription": "It might be risky! Do NOT download if don't trust the server owners!",
+    "automodpack.danger.confirm": "Download",
+    "automodpack.danger.cancel": "Don't download",
+
+    "automodpack.changelog.view": "View changelogs",
+    "automodpack.changelog.noChanges": "No changes found.",
+    "automodpack.changelog.openPage": "Open project page",
+
+    "automodpack.download.calculating": "Calculating...",
+    "automodpack.download.eta": "Time left: %s",
+    "automodpack.download.downloading": "Downloading:",
+    "automodpack.download.noFiles": "No files to download!",
+
+    "automodpack.redownload": "Redownload Modpack",
+    "automodpack.redownload.description": "It may fix issues with modpack.",
+
+    "automodpack.error": "Something went wrong!",
+    "automodpack.error.files": "Failed to download some files.",
+    "automodpack.error.critical": "Critical error while downloading modpack.",
+    "automodpack.error.logs": "Check for more details in logs.",
+
+    "automodpack.fetch": "Fetching direct url's from Modrinth and CurseForge...",
+    "automodpack.fetch.found": "Found %s direct url's.",
+
+    "automodpack.select": "Select Modpack",
+
+    "automodpack.yes": "Igen",
+    "automodpack.no": "Nem",
+    "automodpack.cancel": "Mégsem",
+    "automodpack.back": "Vissza",
+    "automodpack.wait": "Kérjük várjon..."
+  }
