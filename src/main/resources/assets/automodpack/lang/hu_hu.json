@@ -41,7 +41,7 @@
     "automodpack.fetch": "Fetching direct url's from Modrinth and CurseForge...",
     "automodpack.fetch.found": "Found %s direct url's.",
 
-    "automodpack.select": "Select Modpack",
+    "automodpack.select": "Modpack kiválasztása",
 
     "automodpack.yes": "Igen",
     "automodpack.no": "Nem",
