@@ -3,7 +3,7 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
@@ -35,7 +35,7 @@ public class SelfUpdater {
 
         var loader = new LoaderManager();
         if (loader.isDevelopmentEnvironment()) return false;
-        if (loader.getEnvironmentType() == LoaderService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {
+        if (loader.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {
             LOGGER.info("AutoModpack self-updater is disabled in server config.");
             return false;
         }
@@ -53,7 +53,7 @@ public class SelfUpdater {
 
         if (gettingServerVersion) {
             LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
-        } else if (loader.getEnvironmentType() == LoaderService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) {
+        } else if (loader.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) {
             LOGGER.info("AutoModpack self-updater is disabled in client config.");
             return false;
         } else {

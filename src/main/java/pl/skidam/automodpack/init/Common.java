@@ -5,7 +5,7 @@ import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.netty.HttpServer;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -45,7 +45,7 @@ public class Common {
     }
 
     public static void afterSetupServer() {
-        if (LOADER_MANAGER.getEnvironmentType() != LoaderService.EnvironmentType.SERVER) {
+        if (LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.SERVER) {
             return;
         }
 
@@ -53,7 +53,7 @@ public class Common {
     }
 
     public static void beforeShutdownServer() {
-        if (new LoaderManager().getEnvironmentType() != LoaderService.EnvironmentType.SERVER) {
+        if (new LoaderManager().getEnvironmentType() != LoaderManagerService.EnvironmentType.SERVER) {
             return;
         }
 

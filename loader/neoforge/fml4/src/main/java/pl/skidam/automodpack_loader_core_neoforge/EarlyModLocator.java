@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
+import cpw.mods.jarhandling.JarContents;
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.locating.*;
 import org.apache.logging.log4j.LogManager;
@@ -21,6 +22,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 
         for (Path path : ModpackLoader.modsToAdd) {
             pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
+            pipeline.readModFile(JarContents.of(path), ModFileDiscoveryAttributes.DEFAULT);
         }
     }
 

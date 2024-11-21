@@ -8,7 +8,7 @@ import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 import pl.skidam.automodpack_core.GlobalVariables;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -414,12 +414,12 @@ public class FileInspection {
         return providedIDs;
     }
 
-    public static LoaderService.EnvironmentType getModEnvironment(Path file) {
+    public static LoaderManagerService.EnvironmentType getModEnvironment(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
             return null;
         }
 
-        LoaderService.EnvironmentType environmentType = LoaderService.EnvironmentType.UNIVERSAL;
+        LoaderManagerService.EnvironmentType environmentType = LoaderManagerService.EnvironmentType.UNIVERSAL;
 
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
@@ -454,8 +454,8 @@ public class FileInspection {
                         String environment = json.get("environment").getAsString();
                         // switch (environment) set environmentType
                         environmentType = switch (environment) {
-                            case "client" -> LoaderService.EnvironmentType.CLIENT;
-                            case "server" -> LoaderService.EnvironmentType.SERVER;
+                            case "client" -> LoaderManagerService.EnvironmentType.CLIENT;
+                            case "server" -> LoaderManagerService.EnvironmentType.SERVER;
                             default -> environmentType;
                         };
                     }
@@ -465,8 +465,8 @@ public class FileInspection {
                         String environment = quiltLoader.get("environment").getAsString();
 
                         environmentType = switch (environment) {
-                            case "client" -> LoaderService.EnvironmentType.CLIENT;
-                            case "dedicated_server" -> LoaderService.EnvironmentType.SERVER;
+                            case "client" -> LoaderManagerService.EnvironmentType.CLIENT;
+                            case "dedicated_server" -> LoaderManagerService.EnvironmentType.SERVER;
                             default -> environmentType;
                         };
                     }

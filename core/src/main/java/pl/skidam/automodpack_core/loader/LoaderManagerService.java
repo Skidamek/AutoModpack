@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.loader;
 import java.nio.file.Path;
 import java.util.Collection;
 
-public interface LoaderService {
+public interface LoaderManagerService {
 
     enum ModPlatform { FABRIC, QUILT, FORGE, NEOFORGE }
     enum EnvironmentType { CLIENT, SERVER, UNIVERSAL }

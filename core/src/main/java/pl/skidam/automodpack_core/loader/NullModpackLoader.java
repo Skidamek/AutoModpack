@@ -1,12 +1,11 @@
-package pl.skidam.automodpack_loader_core.mods;
-
-import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+package pl.skidam.automodpack_core.loader;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
-public class ModpackLoader implements ModpackLoaderService {
+public class NullModpackLoader implements ModpackLoaderService {
+
     @Override
     public void loadModpack(List<Path> modpackMods) {
         throw new AssertionError("Loader class not found");

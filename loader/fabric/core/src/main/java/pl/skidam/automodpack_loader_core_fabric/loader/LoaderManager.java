@@ -8,7 +8,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.ModDependency;
 import net.fabricmc.loader.api.metadata.ModEnvironment;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.io.BufferedReader;
@@ -27,7 +27,7 @@ import java.util.zip.ZipFile;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 @SuppressWarnings("unused")
-public class LoaderManager implements LoaderService {
+public class LoaderManager implements LoaderManagerService {
 
     @Override
     public ModPlatform getPlatformType() {
@@ -62,14 +62,18 @@ public class LoaderManager implements LoaderService {
                 if (path == null || path.toString().isEmpty()) {
                     continue;
                 }
+
+                Set<String> providesIDs = new HashSet<>(info.getMetadata().getProvides());
                 List<String> dependencies = info.getMetadata().getDependencies().stream().filter(d -> d.getKind().equals(ModDependency.Kind.DEPENDS)).map(ModDependency::getModId).toList();
+
                 Mod mod = new Mod(modID,
-                        info.getMetadata().getProvides(),
+                        providesIDs,
                         info.getMetadata().getVersion().getFriendlyString(),
                         path,
                         getModEnvironment(modID),
                         dependencies
                 );
+
                 modList.add(mod);
             } catch (Exception ignored) {}
         }

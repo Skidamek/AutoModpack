@@ -7,7 +7,11 @@ public class VersionParser {
 		String[] parts = version.split("\\.");
 		Integer[] result = new Integer[parts.length];
 		for (int i = 0; i < parts.length; i++) {
-			result[i] = Integer.parseInt(parts[i]);
+			if (parts[i].matches("\\d+")) {
+				result[i] = Integer.parseInt(parts[i]);
+			} else {
+				result[i] = 0;
+			}
 		}
 		return result;
 	}

@@ -2,6 +2,7 @@ package pl.skidam.automodpack_loader_core_fabric_15.mods;
 
 import net.fabricmc.loader.api.LanguageAdapter;
 import net.fabricmc.loader.api.ModContainer;
+import net.fabricmc.loader.api.metadata.ModDependency;
 import net.fabricmc.loader.impl.FabricLoaderImpl;
 import net.fabricmc.loader.impl.ModContainerImpl;
 import net.fabricmc.loader.impl.discovery.*;
@@ -10,7 +11,9 @@ import net.fabricmc.loader.impl.launch.FabricLauncherBase;
 import net.fabricmc.loader.impl.metadata.DependencyOverrides;
 import net.fabricmc.loader.impl.metadata.VersionOverrides;
 import net.fabricmc.loader.impl.util.SystemProperties;
-import pl.skidam.automodpack_loader_core.mods.ModpackLoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_loader_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
 import java.io.IOException;
@@ -23,6 +26,8 @@ import static pl.skidam.automodpack_loader_core_fabric.FabricLoaderImplAccessor.
 @SuppressWarnings({"unchecked", "unused"})
 public class ModpackLoader15 implements ModpackLoaderService {
     private final Map<String, Set<ModCandidate>> envDisabledMods = new HashMap<>();
+
+    public static List<ModCandidate> nestedMods = new ArrayList<>();
 
     @Override
     public void loadModpack(List<Path> modpackMods) {
@@ -43,6 +48,11 @@ public class ModpackLoader15 implements ModpackLoaderService {
             candidates = (List<ModCandidate>) discoverMods(modpackDir);
             candidates = (List<ModCandidate>) resolveMods(candidates);
 
+            candidates.forEach(it -> it.getNestedMods().forEach(nested -> {
+                List<ModCandidate> thizNestedMods = getNestedMods(nested, new ArrayList<>());
+                nestedMods.addAll(thizNestedMods);
+            }));
+
             METHOD_DUMP_MOD_LIST.invoke(FabricLoaderImpl.INSTANCE, candidates);
 
             addMods(candidates);
@@ -50,6 +60,28 @@ public class ModpackLoader15 implements ModpackLoaderService {
         } catch (Exception e) {
             FabricGuiEntry.displayCriticalError(e, true);
         }
+    }
+
+    @Override
+    public boolean prepareModpack(Path modpackDir, Set<String> ignoredMods) throws IOException {
+        return false;
+    }
+
+    private List<ModCandidate> getNestedMods(ModCandidate modCandidate, List<ModCandidate> nestedMods) {
+        for (var nested : modCandidate.getNestedMods()) {
+            if (nested == null) {
+                continue;
+            }
+
+            if (nested.getOriginPaths().size() > 1) {
+                LOGGER.warn("Mod {} has more than one origin path: {}", nested.getId(), nested.getOriginPaths());
+            }
+
+            nestedMods.add(nested);
+            getNestedMods(nested, nestedMods);
+        }
+
+        return nestedMods;
     }
 
     private Collection<ModCandidate> discoverMods(Path modpackModsDir) throws ModResolutionException, IllegalAccessException, IOException {
@@ -76,8 +108,6 @@ public class ModpackLoader15 implements ModpackLoaderService {
 
         var candidates = ModResolver.resolve(modCandidates, FabricLoaderImpl.INSTANCE.getEnvironmentType(), envDisabledMods);
         candidates.removeIf(it -> modIds.contains(it.getId()));
-
-        candidates.forEach(this::applyPaths);
 
         return candidates;
     }

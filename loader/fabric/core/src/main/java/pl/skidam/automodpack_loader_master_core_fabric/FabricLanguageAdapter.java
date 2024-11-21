@@ -60,5 +60,4 @@ public class FabricLanguageAdapter implements LanguageAdapter {
             return method.invoke(mods, args);
         }
     }
-
 }

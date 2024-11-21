@@ -397,12 +397,9 @@ public class ModpackUpdater {
         Set<String> ignoredFiles = getIgnoredFiles(modpackContent.list, workaroundMods);
         boolean needsRestart0 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, ignoredFiles);
 
-        var dupeMods = ModpackUtils.getDupeMods(modpackDir, workaroundMods);
-        boolean needsRestart1 = ModpackUtils.removeDupeMods(dupeMods);
+        boolean needsRestart1 = MODPACK_LOADER.prepareModpack(modpackDir, workaroundMods);
 
-        boolean needsRestart2 = ModpackUtils.correctModpackDepsOnDefaultDir(modpackDir);
-
-        return needsRestart0 || needsRestart1 || needsRestart2;
+        return needsRestart0 || needsRestart1;
     }
 
     private Set<String> getIgnoredFiles(Set<Jsons. ModpackContentFields. ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {

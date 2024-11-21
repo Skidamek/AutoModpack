@@ -1,11 +1,12 @@
 package pl.skidam.automodpack_loader_core.loader;
 
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 
 import java.nio.file.Path;
 import java.util.Collection;
 
-public class LoaderManager implements LoaderService {
+public class LoaderManager implements LoaderManagerService {
+
     @Override
     public ModPlatform getPlatformType() {
         throw new AssertionError("Loader class not found");

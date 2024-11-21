@@ -3,7 +3,7 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.callbacks.Callback;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
@@ -48,7 +48,7 @@ public class ReLauncher {
     public void restart(boolean restartInPreload, Callback... callbacks) {
         if (preload && !restartInPreload) return;
 
-        boolean isClient = new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT;
+        boolean isClient = new LoaderManager().getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT;
         boolean isHeadless = GraphicsEnvironment.isHeadless();
 
         if (isClient) {

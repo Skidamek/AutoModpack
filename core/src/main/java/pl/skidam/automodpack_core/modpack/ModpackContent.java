@@ -2,7 +2,7 @@ package pl.skidam.automodpack_core.modpack;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.*;
 
 import java.nio.file.Files;
@@ -288,9 +288,9 @@ public class ModpackContent {
 
     }
 
-    private boolean isServerMod(Collection<LoaderService.Mod> modList, Path path) {
+    private boolean isServerMod(Collection<LoaderManagerService.Mod> modList, Path path) {
         if (modList == null) {
-            return Objects.equals(FileInspection.getModEnvironment(path), LoaderService.EnvironmentType.SERVER);
+            return Objects.equals(FileInspection.getModEnvironment(path), LoaderManagerService.EnvironmentType.SERVER);
         }
 
         for (var mod : modList) {
@@ -298,7 +298,7 @@ public class ModpackContent {
                 continue;
             }
 
-            if (mod.environmentType() == LoaderService.EnvironmentType.SERVER) {
+            if (mod.environmentType() == LoaderManagerService.EnvironmentType.SERVER) {
                 return true;
             }
         }

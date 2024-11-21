@@ -5,7 +5,7 @@ import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -23,7 +23,7 @@ public class FabricInit {
 
         Common.init();
 
-        if (LOADER_MANAGER.getEnvironmentType() == LoaderService.EnvironmentType.SERVER) {
+        if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
             Common.serverInit();
         } else {
             ModPackets.registerC2SPackets();

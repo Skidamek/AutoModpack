@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.loader;
 import java.nio.file.Path;
 import java.util.Collection;
 
-public class NullLoaderManager implements LoaderService {
+public class NullLoaderManager implements LoaderManagerService {
     @Override
     public ModPlatform getPlatformType() {
         return null;

@@ -1,13 +1,15 @@
 package pl.skidam.automodpack_loader_core_fabric.mods;
 
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_loader_core.mods.ModpackLoaderService;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_loader_core.utils.VersionParser;
 import pl.skidam.automodpack_loader_core_fabric_15.mods.ModpackLoader15;
 import pl.skidam.automodpack_loader_core_fabric_16.mods.ModpackLoader16;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 @SuppressWarnings("unused")
 public class ModpackLoader implements ModpackLoaderService {
@@ -20,5 +22,10 @@ public class ModpackLoader implements ModpackLoaderService {
     @Override
     public void loadModpack(List<Path> modpackMods) {
         INSTANCE.loadModpack(modpackMods);
+    }
+
+    @Override
+    public boolean prepareModpack(Path modpackDir, Set<String> workaroundMods) throws IOException {
+        return INSTANCE.prepareModpack(modpackDir, workaroundMods);
     }
 }
