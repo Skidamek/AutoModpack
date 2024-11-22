@@ -36,7 +36,7 @@ public class SpeedMeter {
 
 		List<Long> keys = new ArrayList<>(bytesDownloadedPerSec.keySet());
 		Collections.sort(keys);
-		long lastSecondKey = keys.get(keys.size() - 2);
+		long lastSecondKey = keys.get(keys.size() - 1);
 
 		return bytesDownloadedPerSec.get(lastSecondKey);
 	}
