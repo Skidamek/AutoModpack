@@ -102,6 +102,18 @@ public class ModpackLoader16 implements ModpackLoaderService {
         // Remove older versions of the same mods
         conflictingNestedModsImpl = getOnlyNewestMods(conflictingNestedModsImpl);
 
+        // Add nested dependencies
+        for (ModCandidateImpl modCandidate : conflictingNestedModsImpl) {
+            List<ModCandidateImpl> nestedDeps = getNestedDeps(modCandidate);
+            for (ModCandidateImpl nestedDep : nestedDeps) {
+                if (conflictingNestedModsImpl.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) {
+                    continue;
+                }
+
+                conflictingNestedModsImpl.add(nestedDep);
+            }
+        }
+
         List<LoaderManagerService.Mod> conflictingNestedMods = new ArrayList<>();
 
         for (ModCandidateImpl mod : conflictingNestedModsImpl) {
@@ -133,6 +145,26 @@ public class ModpackLoader16 implements ModpackLoaderService {
         }
 
         return mods;
+    }
+
+    // Needed for e.g. fabric api
+    private List<ModCandidateImpl> getNestedDeps(ModCandidateImpl originMod) {
+        List<ModCandidateImpl> deps = new ArrayList<>();
+
+        if (originMod.isRoot()) {
+            return deps;
+        }
+
+        for (ModDependency nested : originMod.getDependencies()) {
+            ModCandidateImpl candidate = originMod.getNestedMods().stream().filter(it -> it.getId().equals(nested.getModId())).findFirst().orElse(null);
+            if (candidate == null) {
+                continue;
+            }
+
+            deps.add(candidate);
+        }
+
+        return deps;
     }
 
     private List<ModCandidateImpl> getOnlyNewestMods(List<ModCandidateImpl> allMods) {

@@ -135,7 +135,7 @@ public class LoaderManager implements LoaderManagerService {
             }
         } catch (Exception ignored) {}
 
-        LOGGER.error("Could not find jar file for " + modId);
+        LOGGER.error("Could not find jar file for {}", modId);
         return null;
     }
 
@@ -150,7 +150,7 @@ public class LoaderManager implements LoaderManagerService {
 
     @Override
     public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
-        if (!Files.isRegularFile(file)) return null;
+        if (!Files.exists(file)) return null;
         if (!file.getFileName().toString().endsWith(".jar")) return null;
 
         try {
@@ -184,8 +184,7 @@ public class LoaderManager implements LoaderManagerService {
             }
         } catch (ZipException ignored) {
         } catch (IOException e) {
-            LOGGER.error("Failed to get mod env from file: " + file.getFileName());
-            e.printStackTrace();
+            LOGGER.error("Failed to get mod env from file: {} {}", file.getFileName(), e);
         }
 
         return EnvironmentType.UNIVERSAL;
@@ -223,8 +222,7 @@ public class LoaderManager implements LoaderManagerService {
         } catch (ZipException ignored) {
             return "UNKNOWN";
         } catch (IOException | JsonSyntaxException e) {
-            LOGGER.error("Failed to get mod version from file: " + file.getFileName());
-            e.printStackTrace();
+            LOGGER.error("Failed to get mod version from file: {} {}", file.getFileName(), e);
         }
 
         return "UNKNOWN";
@@ -298,9 +296,7 @@ public class LoaderManager implements LoaderManagerService {
         } catch (ZipException ignored) {
             return null;
         } catch (IOException e) {
-            LOGGER.error("Failed to get mod id from file: " + file.getFileName());
-            e.printStackTrace();
-            return null;
+            LOGGER.error("Failed to get mod id from file: {} {}", file.getFileName(), e);
         }
 
         return null;

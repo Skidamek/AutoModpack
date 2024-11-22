@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -87,6 +88,10 @@ public class FileInspection {
 
     public static String getModID(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
+            return null;
+        }
+
+        if (!Files.exists(file)) {
             return null;
         }
 

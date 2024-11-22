@@ -142,6 +142,9 @@ public class ModpackUpdater {
 
             // CLEAN UP THE LIST
 
+            int skippedDownloadedFiles = 0;
+            int skippedEditableFiles = 0;
+
             while (iterator.hasNext()) {
                 Jsons.ModpackContentFields.ModpackContentItem modpackContentField = iterator.next();
                 String file = modpackContentField.file;
@@ -151,6 +154,7 @@ public class ModpackUpdater {
                 Path path = Path.of(modpackDir + file);
 
                 if (Files.exists(path) && modpackContentField.editable) {
+                    skippedEditableFiles++;
                     LOGGER.info("Skipping editable file: {}", file);
                     iterator.remove();
                     continue;
@@ -166,9 +170,17 @@ public class ModpackUpdater {
                 }
 
                 if (Objects.equals(serverSHA1, CustomFileUtils.getHash(path, "sha1").orElse(null))) {
-                    LOGGER.info("Skipping already downloaded file: {}", file);
+                    skippedDownloadedFiles++;
                     iterator.remove();
                 }
+            }
+
+            if (skippedEditableFiles > 0) {
+                LOGGER.info("Skipped {} editable files", skippedEditableFiles);
+            }
+
+            if (skippedDownloadedFiles > 0) {
+                LOGGER.info("Skipped {} already downloaded files", skippedDownloadedFiles);
             }
 
             // FETCH
