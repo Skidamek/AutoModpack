@@ -68,7 +68,13 @@ public class ModpackLoader16 implements ModpackLoaderService {
             candidates.forEach(it -> applyPaths(it, false));
 
             for (ModCandidateImpl candidate : candidates) {
-                List<ModCandidateImpl> nestedMods = getNestedMods(candidate, new ArrayList<>());
+                if (!candidate.isRoot()) {
+                    continue;
+                }
+
+                List<ModCandidateImpl> nestedMods = getNestedMods(candidate);
+                nestedMods = getOnlyNewestMods(nestedMods);
+
                 boolean isStandard = !candidate.getPaths().get(0).toAbsolutePath().toString().contains(modpackModsDir.toAbsolutePath().toString());
                 if (isStandard) {
                     standardNestedMods.addAll(nestedMods);
@@ -107,9 +113,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
         // Add nested dependencies
         for (ModCandidateImpl modCandidate : conflictingNestedModsImpl) {
             List<ModCandidateImpl> nestedDeps = getNestedDeps(modCandidate);
-            LOGGER.info("Checking nested deps for origin mod: {} nested deps: {}", modCandidate.getId(), nestedDeps);
             for (ModCandidateImpl nestedDep : nestedDeps) {
-                LOGGER.info("Checking nested dep: {} for origin nested mod: {}", nestedDep.getId(), modCandidate.getId());
                 if (conflictingNestedModsImpl.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) {
                     continue;
                 }
@@ -121,8 +125,6 @@ public class ModpackLoader16 implements ModpackLoaderService {
                 modsNestedDeps.add(nestedDep);
             }
         }
-
-        LOGGER.warn("Found {} conflicting nested mods' dependencies: {}", modsNestedDeps.size(), modsNestedDeps);
 
         conflictingNestedModsImpl.addAll(modsNestedDeps);
 
@@ -145,10 +147,11 @@ public class ModpackLoader16 implements ModpackLoaderService {
         return conflictingNestedMods;
     }
 
-    private List<ModCandidateImpl> getNestedMods(ModCandidateImpl originMod, List<ModCandidateImpl> mods) {
+    private List<ModCandidateImpl> getNestedMods(ModCandidateImpl originMod) {
+        List<ModCandidateImpl> mods = new ArrayList<>();
         for (ModCandidateImpl nested : originMod.getNestedMods()) {
             mods.add(nested);
-            mods.addAll(getNestedMods(nested, new ArrayList<>()));
+            mods.addAll(getNestedMods(nested));
         }
 
         return mods;
@@ -159,7 +162,6 @@ public class ModpackLoader16 implements ModpackLoaderService {
         List<ModCandidateImpl> deps = new ArrayList<>();
 
         ModCandidateImpl originMod;
-
         if (!nestedMod.isRoot()) {
             originMod = nestedMod.getParentMods().stream().toList().get(0);
         } else {

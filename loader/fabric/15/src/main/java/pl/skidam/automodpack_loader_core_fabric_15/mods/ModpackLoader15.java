@@ -54,6 +54,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
             FabricGuiEntry.displayCriticalError(e, true);
         }
     }
+
     @Override
     public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
         Path modpackModsDir = modpackDir.resolve("mods");
@@ -67,7 +68,13 @@ public class ModpackLoader15 implements ModpackLoaderService {
             candidates.forEach(it -> applyPaths(it, false));
 
             for (ModCandidate candidate : candidates) {
+                if (!candidate.isRoot()) {
+                    continue;
+                }
+
                 List<ModCandidate> nestedMods = getNestedMods(candidate);
+                nestedMods = getOnlyNewestMods(nestedMods);
+
                 boolean isStandard = !candidate.getPaths().get(0).toAbsolutePath().toString().contains(modpackModsDir.toAbsolutePath().toString());
                 if (isStandard) {
                     standardNestedMods.addAll(nestedMods);
@@ -101,6 +108,26 @@ public class ModpackLoader15 implements ModpackLoaderService {
         // Remove older versions of the same mods
         conflictingNestedModsImpl = getOnlyNewestMods(conflictingNestedModsImpl);
 
+        List<ModCandidate> modsNestedDeps = new ArrayList<>();
+
+        // Add nested dependencies
+        for (ModCandidate modCandidate : conflictingNestedModsImpl) {
+            List<ModCandidate> nestedDeps = getNestedDeps(modCandidate);
+            for (ModCandidate nestedDep : nestedDeps) {
+                if (conflictingNestedModsImpl.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) {
+                    continue;
+                }
+
+                if (modsNestedDeps.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) {
+                    continue;
+                }
+
+                modsNestedDeps.add(nestedDep);
+            }
+        }
+
+        conflictingNestedModsImpl.addAll(modsNestedDeps);
+
         List<LoaderManagerService.Mod> conflictingNestedMods = new ArrayList<>();
 
         for (ModCandidate mod : conflictingNestedModsImpl) {
@@ -122,16 +149,36 @@ public class ModpackLoader15 implements ModpackLoaderService {
 
     private List<ModCandidate> getNestedMods(ModCandidate originMod) {
         List<ModCandidate> mods = new ArrayList<>();
-
         for (ModCandidate nested : originMod.getNestedMods()) {
-            try {
-                mods.add(nested);
-                List<ModCandidate> recursiveNested = getNestedMods(nested);
-                mods.addAll(recursiveNested);
-            } catch (Exception ignored) {}
+            mods.add(nested);
+            mods.addAll(getNestedMods(nested));
         }
 
         return mods;
+    }
+
+    // Needed for e.g. fabric api
+    private List<ModCandidate> getNestedDeps(ModCandidate nestedMod) {
+        List<ModCandidate> deps = new ArrayList<>();
+
+        ModCandidate originMod;
+
+        if (!nestedMod.isRoot()) {
+            originMod = nestedMod.getParentMods().stream().toList().get(0);
+        } else {
+            originMod = nestedMod;
+        }
+
+        for (ModDependency dep : nestedMod.getDependencies()) {
+            ModCandidate candidate = originMod.getNestedMods().stream().filter(it -> it.getId().equals(dep.getModId())).findFirst().orElse(null);
+            if (candidate == null) {
+                continue;
+            }
+
+            deps.add(candidate);
+        }
+
+        return deps;
     }
 
     private List<ModCandidate> getOnlyNewestMods(List<ModCandidate> allMods) {
