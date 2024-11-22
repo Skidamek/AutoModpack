@@ -142,7 +142,9 @@ public class DownloadManager {
             Files.createDirectories(outFile.getParent());
         }
 
-        Files.createFile(outFile);
+        if (!Files.exists(outFile)) {
+            Files.createFile(outFile);
+        }
 
         URL url = new URL(urlString);
         URLConnection connection = url.openConnection();
