@@ -10,6 +10,7 @@ import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -103,31 +104,40 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
         Path path = optionalPath.get();
 
-        try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r")) {
-            long fileLength = raf.length();
+        try {
+            RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
+            try {
+                long fileLength = raf.length();
 
-            HttpResponse response = new HttpResponse(200);
-            response.addHeader("Content-Type", "application/octet-stream");
-            response.addHeader("Content-Length", String.valueOf(fileLength));
+                HttpResponse response = new HttpResponse(200);
+                response.addHeader("Content-Type", "application/octet-stream");
+                response.addHeader("Content-Length", String.valueOf(fileLength));
 
-            // Those ByteBuf's are necessary!
-            ByteBuf responseHeadersBuf = Unpooled.copiedBuffer(response.getResponseMessage(), StandardCharsets.UTF_8);
-            context.pipeline().write(responseHeadersBuf);
+                // Necessary ByteBuf for response headers
+                ByteBuf responseHeadersBuf = Unpooled.copiedBuffer(response.getResponseMessage(), StandardCharsets.UTF_8);
+                context.pipeline().write(responseHeadersBuf);
 
-            // Write a file
-            DefaultFileRegion fileRegion = new DefaultFileRegion(raf.getChannel(), 0, fileLength);
-            context.pipeline().writeAndFlush(fileRegion, context.newProgressivePromise()).addListener(future -> {
-                if (!future.isSuccess()) {
-                    LOGGER.error("Writing to channel error! {} - {} - {}", path, future.cause(), future.cause().getStackTrace());
-                }
-                context.pipeline().channel().close();
-            });
+                // Write file using DefaultFileRegion
+                DefaultFileRegion fileRegion = new DefaultFileRegion(raf.getChannel(), 0, fileLength);
+                context.pipeline().writeAndFlush(fileRegion, context.newProgressivePromise()).addListener(future -> {
+                    try {
+                        if (!future.isSuccess()) {
+                            LOGGER.error("Writing to channel error! {} - {} - {}", path, future.cause(), future.cause().getStackTrace());
+                        }
+                    } finally {
+                        context.pipeline().channel().close();
+                        raf.close(); // Ensure raf is closed in all cases
+                    }
+                });
+            } catch (Exception e) {
+                raf.close(); // Explicit close if an exception occurs during processing
+                throw e; // Re-throw to allow outer catch blocks to handle it
+            }
         } catch (FileNotFoundException e) {
             sendError(context, 404);
             LOGGER.error("Requested file not found! {} - {} - {}", path, e, e.getStackTrace());
         } catch (Exception e) {
             sendError(context, 418);
-            // give most information about the error
             LOGGER.error("Failed to open the file {} - {} - {}", path, e, e.getStackTrace());
         }
     }
