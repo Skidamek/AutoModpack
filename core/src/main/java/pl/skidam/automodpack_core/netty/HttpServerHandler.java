@@ -103,20 +103,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
         Path path = optionalPath.get();
 
-        RandomAccessFile raf;
-        try {
-            raf = new RandomAccessFile(path.toFile(), "r");
-        } catch (FileNotFoundException e) {
-            sendError(context, 404);
-            LOGGER.error("Requested file not found!", e.getCause());
-            return;
-        } catch (Exception e) {
-            sendError(context, 418);
-            LOGGER.error("Failed to open the file {}", path, e);
-            return;
-        }
-
-        try {
+        try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r")) {
             long fileLength = raf.length();
 
             HttpResponse response = new HttpResponse(200);
@@ -125,25 +112,29 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
             // Those ByteBuf's are necessary!
             ByteBuf responseHeadersBuf = Unpooled.copiedBuffer(response.getResponseMessage(), StandardCharsets.UTF_8);
-            context.pipeline().firstContext().write(responseHeadersBuf);
+            context.pipeline().write(responseHeadersBuf);
 
             // Write a file
             DefaultFileRegion fileRegion = new DefaultFileRegion(raf.getChannel(), 0, fileLength);
-            context.pipeline().firstContext().writeAndFlush(fileRegion, context.newProgressivePromise()).addListener(future -> {
+            context.pipeline().writeAndFlush(fileRegion, context.newProgressivePromise()).addListener(future -> {
                 if (!future.isSuccess()) {
-                    LOGGER.error("Writing to channel error! " + future.cause() + " " + future.cause().getMessage());
+                    LOGGER.error("Writing to channel error! {} - {} - {}", path, future.cause(), future.cause().getStackTrace());
                 }
-                raf.close();
-                context.pipeline().firstContext().channel().close();
+                context.pipeline().channel().close();
             });
+        } catch (FileNotFoundException e) {
+            sendError(context, 404);
+            LOGGER.error("Requested file not found! {} - {} - {}", path, e, e.getStackTrace());
         } catch (Exception e) {
-            LOGGER.error("Couldn't read channel!", e);
+            sendError(context, 418);
+            // give most information about the error
+            LOGGER.error("Failed to open the file {} - {} - {}", path, e, e.getStackTrace());
         }
     }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext context, Throwable cause) {
-        LOGGER.error("Couldn't handle HTTP request!" + cause);
+        LOGGER.error("Couldn't handle HTTP request!{}", String.valueOf(cause));
     }
 
     private void sendError(ChannelHandlerContext context, int status) {
@@ -151,7 +142,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         response.addHeader("Content-Length", String.valueOf(0));
 
         ByteBuf responseBuf = Unpooled.copiedBuffer(response.getResponseMessage(), StandardCharsets.UTF_8);
-        context.pipeline().firstContext().writeAndFlush(responseBuf).addListener(ChannelFutureListener.CLOSE);
+        context.pipeline().writeAndFlush(responseBuf).addListener(ChannelFutureListener.CLOSE);
     }
 
     public Optional<Path> resolvePath(final String sha1) {
@@ -175,7 +166,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             equals = Arrays.equals(data1, HttpServer.HTTP_REQUEST_GET_BASE_BYTES) || Arrays.equals(data2, HttpServer.HTTP_REQUEST_REFRESH_BYTES);
         } catch (IndexOutOfBoundsException ignored) {
         } catch (Exception e) {
-            LOGGER.error("Couldn't read channel!", e);
+            LOGGER.error("Couldn't read channel!", e.getCause());
         }
 
         return equals;
@@ -205,7 +196,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 stringList.add(jsonArray.get(i).getAsString());
             }
         } catch (JsonSyntaxException e) {
-            e.printStackTrace();
+            LOGGER.error("Couldn't parse JSON from request body!", e.getCause());
         }
 
         return stringList;

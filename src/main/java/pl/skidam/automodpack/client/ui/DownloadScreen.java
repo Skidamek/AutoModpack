@@ -68,7 +68,7 @@ public class DownloadScreen extends VersionedScreen {
                 lastPercentage = (int) downloadManager.getTotalPercentageOfFileSizeDownloaded();
                 lastDownloadedScale = (float) (downloadManager.getTotalPercentageOfFileSizeDownloaded() * 0.01);
 
-                lastSpeed = SpeedMeter.formatDownloadSpeedToMbps(downloadManager.getSpeedMeter().getSpeedInBytes());
+                lastSpeed = SpeedMeter.formatDownloadSpeedToMbps(downloadManager.getSpeedMeter().getCurrentSpeedInBytes());
                 lastETA = SpeedMeter.formatETAToSeconds(downloadManager.getSpeedMeter().getETAInSeconds());
             }
         });

@@ -59,10 +59,10 @@ public class DownloadManager {
             interrupted = true;
         } catch (SocketTimeoutException e) {
             CustomFileUtils.forceDelete(queuedDownload.file);
-            LOGGER.warn("Timeout - {} - {}", queuedDownload.file, e);
+            LOGGER.warn("Timeout - {} - {} - {}", queuedDownload.file, e, e.getStackTrace());
         } catch (Exception e) {
             CustomFileUtils.forceDelete(queuedDownload.file);
-            LOGGER.warn("Error while downloading file - {} - {}", queuedDownload.file, e);
+            LOGGER.warn("Error while downloading file - {} - {} - {}", queuedDownload.file, e, e.getStackTrace());
         } finally {
             synchronized (downloadsInProgress) {
                 downloadsInProgress.remove(hashAndPath);
