@@ -10,7 +10,6 @@ import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.Url;
-import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 
 import java.io.*;
 import java.net.*;
@@ -20,14 +19,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModpackUtils {
-
-    public static List<String> possibleLoaderIDs = List.of("fabricloader", "neoforge", "forge", "quiltloader");  // tier list lmao
 
     public static boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         if (serverModpackContent == null || serverModpackContent.list == null) {
@@ -137,6 +133,35 @@ public class ModpackUtils {
         }
 
         return needsRestart;
+    }
+
+    // Copies necessary nested mods from modpack mods to standard mods folder
+    // Returns true if requires client restart
+    public static boolean fixNestedMods(List<LoaderManagerService.Mod> conflictingNestedMods) throws IOException {
+        boolean needsRestart = false;
+
+        for (LoaderManagerService.Mod mod : conflictingNestedMods) {
+            Path modPath = mod.modPath();
+            Path newModPath = MODS_DIR.resolve(modPath.getFileName());
+            if (!CustomFileUtils.compareFileHashes(modPath, newModPath, "SHA-1")) {
+                needsRestart = true;
+                LOGGER.info("Copying nested mod {} to standard mods folder", newModPath.getFileName());
+                CustomFileUtils.copyFile(modPath, newModPath);
+            }
+        }
+
+        return needsRestart;
+    }
+
+    // Returns new ignored files list, accounting for conflicting nested mods
+    public static Set<String> getIgnoredWithNested(List<LoaderManagerService.Mod> conflictingNestedMods, Set<String> ignoredFiles) {
+        Set<String> newIgnoredFiles = new HashSet<>(ignoredFiles);
+
+        for (LoaderManagerService.Mod mod : conflictingNestedMods) {
+            newIgnoredFiles.add(CustomFileUtils.formatPath(mod.modPath(), modpacksDir));
+        }
+
+        return newIgnoredFiles;
     }
 
     // Checks if in standard mods folder are any mods that are in modpack

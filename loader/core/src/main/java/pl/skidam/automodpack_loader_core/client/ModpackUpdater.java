@@ -2,6 +2,7 @@ package pl.skidam.automodpack_loader_core.client;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.MmcPackMagic;
 import pl.skidam.automodpack_core.utils.WorkaroundUtil;
@@ -335,7 +336,7 @@ public class ModpackUpdater {
                         failedFiles.append(item.file);
                     }
 
-                    new ScreenManager().error("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");;
+                    new ScreenManager().error("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");
 
                     LOGGER.warn("Update *completed* with ERRORS! Took: {}ms", System.currentTimeMillis() - start);
 
@@ -359,9 +360,7 @@ public class ModpackUpdater {
 
     // returns true if restart is required
     private boolean applyModpack(Path modpackDir, Path modpackContentFile, String link) throws Exception {
-
         ModpackUtils.selectModpack(modpackDir, link);
-
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
@@ -390,16 +389,28 @@ public class ModpackUpdater {
         }
 
         // Make a list of ignored files to ignore them while copying
-        Set<String> workaroundMods = deleteNonModpackFiles(modpackDir, modpackContentFile, modpackContent, workaroundUtil);
-        workaroundUtil.saveWorkaroundList(workaroundMods);
+        Set<String> ignoredFiles = deleteNonModpackFiles(modpackDir, modpackContentFile, modpackContent, workaroundUtil);
+        workaroundUtil.saveWorkaroundList(ignoredFiles);
 
         // Copy files to running directory
-        Set<String> ignoredFiles = getIgnoredFiles(modpackContent.list, workaroundMods);
+        ignoredFiles = getIgnoredFiles(modpackContent.list, ignoredFiles);
         boolean needsRestart0 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, ignoredFiles);
 
-        boolean needsRestart1 = MODPACK_LOADER.prepareModpack(modpackDir, workaroundMods);
+        // Prepare modpack, analyze nested mods, copy necessary nested mods over to standard mods directory
+        List<LoaderManagerService.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir, ignoredFiles);
 
-        return needsRestart0 || needsRestart1;
+        if (!conflictingNestedMods.isEmpty()) {
+            LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
+        }
+
+        boolean needsRestart1 = ModpackUtils.fixNestedMods(conflictingNestedMods);
+        Set<String> newIgnoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, ignoredFiles);
+
+        // Remove duplicate mods
+        var dupeMods = ModpackUtils.getDupeMods(modpackDir, newIgnoredFiles);
+        boolean needsRestart2 = ModpackUtils.removeDupeMods(dupeMods);
+
+        return needsRestart0 || needsRestart1 || needsRestart2;
     }
 
     private Set<String> getIgnoredFiles(Set<Jsons. ModpackContentFields. ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {

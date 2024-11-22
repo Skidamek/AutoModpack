@@ -1,12 +1,12 @@
 package pl.skidam.automodpack_loader_core_fabric.mods;
 
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_loader_core.utils.VersionParser;
 import pl.skidam.automodpack_loader_core_fabric_15.mods.ModpackLoader15;
 import pl.skidam.automodpack_loader_core_fabric_16.mods.ModpackLoader16;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -25,7 +25,7 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public boolean prepareModpack(Path modpackDir, Set<String> workaroundMods) throws IOException {
-        return INSTANCE.prepareModpack(modpackDir, workaroundMods);
+    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
+        return INSTANCE.getModpackNestedConflicts(modpackDir, ignoredMods);
     }
 }

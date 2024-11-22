@@ -1,8 +1,8 @@
 package pl.skidam.automodpack_loader_core_neoforge.mods;
 
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +29,7 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public boolean prepareModpack(Path modpackDir, Set<String> ignoredMods) throws IOException {
-        return false;
+    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
+        return new ArrayList<>();
     }
 }

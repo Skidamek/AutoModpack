@@ -12,7 +12,7 @@ public class NullModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public boolean prepareModpack(Path modpackDir, Set<String> workaroundMods) {
+    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
         throw new AssertionError("Loader class not found");
     }
 }

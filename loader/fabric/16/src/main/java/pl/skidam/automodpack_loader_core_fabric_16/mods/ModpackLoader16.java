@@ -12,26 +12,19 @@ import net.fabricmc.loader.impl.metadata.DependencyOverrides;
 import net.fabricmc.loader.impl.metadata.VersionOverrides;
 import net.fabricmc.loader.impl.util.SystemProperties;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
-import pl.skidam.automodpack_loader_core.client.ModpackUtils;
-import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_loader_core.utils.VersionParser;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_loader_core_fabric.FabricLoaderImplAccessor.*;
 
-// suppress warnings for method invocation will produce 'NullPointerException'
 @SuppressWarnings({"unchecked", "unused"})
 public class ModpackLoader16 implements ModpackLoaderService {
     private final Map<String, Set<ModCandidateImpl>> envDisabledMods = new HashMap<>();
-
-
+    
     @Override
     public void loadModpack(List<Path> modpackMods) {
 
@@ -63,125 +56,78 @@ public class ModpackLoader16 implements ModpackLoaderService {
     }
 
     @Override
-    public boolean prepareModpack(Path modpackDir, Set<String> ignoredMods) throws IOException {
+    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
         Path modpackModsDir = modpackDir.resolve("mods");
         Path standardModsDir = MODS_DIR;
 
-        List<LoaderManagerService.Mod> modpackNestedMods = new ArrayList<>();
-        List<LoaderManagerService.Mod> standardNestedMods = new ArrayList<>();
-        List<LoaderManagerService.Mod> originMods = new ArrayList<>();
+        List<ModCandidateImpl> modpackNestedMods = new ArrayList<>();
+        List<ModCandidateImpl> standardNestedMods = new ArrayList<>();
 
         try {
             List<ModCandidateImpl> candidates = (List<ModCandidateImpl>) discoverMods(modpackModsDir);
             candidates.forEach(it -> applyPaths(it, false));
 
             for (ModCandidateImpl candidate : candidates) {
-                originMods.add(new LoaderManagerService.Mod(candidate.getId(), new HashSet<>(candidate.getMetadata().getProvides()), candidate.getMetadata().getVersion().getFriendlyString(), candidate.getPaths().get(0), LoaderManagerService.EnvironmentType.UNIVERSAL, candidate.getMetadata().getDependencies().stream().filter(d -> d.getKind().equals(ModDependency.Kind.DEPENDS)).map(ModDependency::getModId).toList()));
-                List<LoaderManagerService.Mod> thizNestedMods = getNestedMods(candidate);
-                LOGGER.info("Nested mods for {}: {}", candidate.getId(), thizNestedMods.stream().map(LoaderManagerService.Mod::modID).toList());
+                List<ModCandidateImpl> nestedMods = getNestedMods(candidate);
                 boolean isStandard = !candidate.getPaths().get(0).toAbsolutePath().toString().contains(modpackModsDir.toAbsolutePath().toString());
                 if (isStandard) {
-                    standardNestedMods.addAll(thizNestedMods);
+                    standardNestedMods.addAll(nestedMods);
                 } else {
-                    modpackNestedMods.addAll(thizNestedMods);
+                    modpackNestedMods.addAll(nestedMods);
                 }
             }
         } catch (Exception e) {
             e.printStackTrace();
-            return true;
         }
 
-        LOGGER.warn("Standard nested mods: {}", standardNestedMods.stream().map(LoaderManagerService.Mod::modID).toList());
-        LOGGER.warn("Modpack nested mods: {}", modpackNestedMods.stream().map(LoaderManagerService.Mod::modID).toList());
-
+        // Remove older versions of the same mods
+        modpackNestedMods = getOnlyNewestMods(modpackNestedMods);
+        standardNestedMods = getOnlyNewestMods(standardNestedMods);
 
         // mod from standard mods dir - mod from modpack mods dir
-        Map<LoaderManagerService.Mod, LoaderManagerService.Mod> conflictingNestedMods = new HashMap<>();
+        List<ModCandidateImpl> conflictingNestedModsImpl = new ArrayList<>();
 
-        for (LoaderManagerService.Mod standardNestedMod : standardNestedMods) {
-            for (LoaderManagerService.Mod modpackNestedMod : modpackNestedMods) {
-                if (standardNestedMod.modID().equals(modpackNestedMod.modID())) {
+        for (ModCandidateImpl standardNestedMod : standardNestedMods) {
+            for (ModCandidateImpl modpackNestedMod : modpackNestedMods) {
+                if (!standardNestedMod.getId().equals(modpackNestedMod.getId())) {
+                    continue;
+                }
 
-                    LOGGER.info("Found potentially conflicting nested mods: {} - {}", standardNestedMod.modID(), modpackNestedMod.modID());
-
-                    Integer[] standardModVersion = VersionParser.parseVersion(standardNestedMod.modVersion());
-                    Integer[] modpackModVersion = VersionParser.parseVersion(modpackNestedMod.modVersion());
-                    if (VersionParser.isGreaterOrEqual(standardModVersion, modpackModVersion)) {
-                        continue;
-                    }
-
-                    LOGGER.warn("It is indeed conflicting mod versions: {} - {}", standardNestedMod.modVersion(), modpackNestedMod.modVersion());
-
-                    conflictingNestedMods.put(standardNestedMod, modpackNestedMod);
+                if (modpackNestedMod.getVersion().compareTo(standardNestedMod.getVersion()) > 0) {
+                    conflictingNestedModsImpl.add(modpackNestedMod);
                 }
             }
         }
 
-        boolean needsRestart1 = false;
+        // Remove older versions of the same mods
+        conflictingNestedModsImpl = getOnlyNewestMods(conflictingNestedModsImpl);
 
-        // create new ignored mods set and place all origin mods of confilcting nested mods
-        // entry.modPath returns origin mod path
-        Set<String> newIgnoredMods = new HashSet<>(ignoredMods);
-        for (LoaderManagerService.Mod entry : conflictingNestedMods.values()) {
-            String formattedFile = CustomFileUtils.formatPath(entry.modPath(), modpackDir);
-            newIgnoredMods.add(formattedFile);
+        List<LoaderManagerService.Mod> conflictingNestedMods = new ArrayList<>();
 
-            Path modPath = entry.modPath();
-            Path newModPath = MODS_DIR.resolve(modPath.getFileName());
-            if (!CustomFileUtils.compareFileHashes(modPath, newModPath, "SHA-1")) {
-                needsRestart1 = true;
-                CustomFileUtils.copyFile(modPath, newModPath);
+        for (ModCandidateImpl mod : conflictingNestedModsImpl) {
+            LoaderManagerService.Mod conflictingMod = new LoaderManagerService.Mod(
+                    mod.getId(),
+                    mod.getProvides(),
+                    mod.getVersion().getFriendlyString(),
+                    mod.getPaths().get(0),
+                    LoaderManagerService.EnvironmentType.UNIVERSAL,
+                    mod.getDependencies().stream().map(ModDependency::getModId).toList()
+            );
 
-                // find origin mod by path
-                LoaderManagerService.Mod originMod = originMods.stream().filter(it -> it.modPath().equals(modPath)).findFirst().orElseThrow();
-
-                // check deps, find dep in modpack mods
-                for (String dep : originMod.dependencies()) {
-                    LoaderManagerService.Mod depMod = originMods.stream().filter(it -> it.modID().equals(dep)).findFirst().orElse(null);
-                    if (depMod == null) {
-                        continue;
-                    }
-
-                    Path depModPath = depMod.modPath();
-                    Path newDepModPath = MODS_DIR.resolve(depModPath.getFileName());
-                    if (!CustomFileUtils.compareFileHashes(depModPath, newDepModPath, "SHA-1")) {
-                        CustomFileUtils.copyFile(depModPath, newDepModPath);
-                    }
-                }
-            }
+            conflictingNestedMods.add(conflictingMod);
         }
 
 
-        var dupeMods = ModpackUtils.getDupeMods(modpackDir, newIgnoredMods);
-        boolean needsRestart2 = ModpackUtils.removeDupeMods(dupeMods);
-
-        return needsRestart1 || needsRestart2;
+        return conflictingNestedMods;
     }
 
-    public List<LoaderManagerService.Mod> getNestedMods(ModCandidateImpl originMod) {
-        List<LoaderManagerService.Mod> mods = new ArrayList<>();
+    private List<ModCandidateImpl> getNestedMods(ModCandidateImpl originMod) {
+        List<ModCandidateImpl> mods = new ArrayList<>();
 
         for (ModCandidateImpl nested : originMod.getNestedMods()) {
-
-            LoaderManager loaderManager = new LoaderManager();
-            loaderManager.getMod(nested.getId());
             try {
-                String modID = nested.getMetadata().getId();
-                Set<String> providesIDs = new HashSet<>(nested.getMetadata().getProvides());
-                List<String> dependencies = nested.getMetadata().getDependencies().stream().filter(d -> d.getKind().equals(ModDependency.Kind.DEPENDS)).map(ModDependency::getModId).toList();
-                Path originModPath = originMod.getPaths().get(0);
-
-                // replace to universal values we dont need
-                LoaderManagerService.Mod mod = new LoaderManagerService.Mod(modID,
-                        providesIDs,
-                        nested.getMetadata().getVersion().getFriendlyString(),
-                        originModPath,
-                        LoaderManagerService.EnvironmentType.UNIVERSAL,
-                        dependencies
-                );
-
-                mods.add(mod);
-                List<LoaderManagerService.Mod> recursiveNested = getNestedMods(nested);
+                mods.add(nested);
+                List<ModCandidateImpl> recursiveNested = getNestedMods(nested);
                 mods.addAll(recursiveNested);
             } catch (Exception ignored) {}
         }
@@ -189,7 +135,31 @@ public class ModpackLoader16 implements ModpackLoaderService {
         return mods;
     }
 
-    private Collection<ModCandidateImpl> discoverMods(Path modpackModsDir) throws ModResolutionException, IllegalAccessException, IOException {
+    private List<ModCandidateImpl> getOnlyNewestMods(List<ModCandidateImpl> allMods) {
+        List<ModCandidateImpl> latestMods = new ArrayList<>();
+
+        for (ModCandidateImpl standardNestedMod : allMods) {
+            // add mod to the standardLatestNestedMods if its id doesnt already exist or if it has a greater version then also delete the lower version
+            boolean alreadyExists = latestMods.stream().anyMatch(existingMod -> {
+                boolean hasSameId = existingMod.getId().equals(standardNestedMod.getId());
+                boolean hasGreaterOrEqualVersion = existingMod.getVersion().compareTo(standardNestedMod.getVersion()) >= 0;
+
+                return hasSameId && hasGreaterOrEqualVersion;
+            });
+
+            if (alreadyExists) {
+                continue;
+            }
+
+            latestMods.removeIf(existingMod -> existingMod.getId().equals(standardNestedMod.getId()));
+
+            latestMods.add(standardNestedMod);
+        }
+
+        return latestMods;
+    }
+
+    private Collection<ModCandidateImpl> discoverMods(Path modpackModsDir) throws ModResolutionException, IllegalAccessException {
         ModDiscoverer discoverer = new ModDiscoverer(new VersionOverrides(), new DependencyOverrides(FabricLoaderImpl.INSTANCE.getConfigDir()));
 
         List<?> candidateFinders = List.of(
@@ -210,7 +180,6 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
         var candidates = ModResolver.resolve(modCandidates, FabricLoaderImpl.INSTANCE.getEnvironmentType(), envDisabledMods);
         candidates.removeIf(it -> modIds.contains(it.getId()));
-
         candidates.forEach(it -> applyPaths(it, true));
 
         return candidates;

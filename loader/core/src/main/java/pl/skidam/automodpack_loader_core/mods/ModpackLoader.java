@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core.mods;
 
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 
 import java.nio.file.Path;
@@ -13,7 +14,7 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public boolean prepareModpack(Path modpackDir, Set<String> workaroundMods) {
+    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
         throw new AssertionError("Loader class not found");
     }
 }
