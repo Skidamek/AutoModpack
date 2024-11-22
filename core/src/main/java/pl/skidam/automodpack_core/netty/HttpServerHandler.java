@@ -10,7 +10,6 @@ import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 
 import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
