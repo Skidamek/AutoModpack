@@ -102,17 +102,28 @@ public class ModpackLoader16 implements ModpackLoaderService {
         // Remove older versions of the same mods
         conflictingNestedModsImpl = getOnlyNewestMods(conflictingNestedModsImpl);
 
+        List<ModCandidateImpl> modsNestedDeps = new ArrayList<>();
+
         // Add nested dependencies
         for (ModCandidateImpl modCandidate : conflictingNestedModsImpl) {
             List<ModCandidateImpl> nestedDeps = getNestedDeps(modCandidate);
             for (ModCandidateImpl nestedDep : nestedDeps) {
+                LOGGER.info("Checking nested dep: {} for origin nested mod: {}", nestedDep.getId(), modCandidate.getId());
                 if (conflictingNestedModsImpl.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) {
                     continue;
                 }
 
-                conflictingNestedModsImpl.add(nestedDep);
+                if (modsNestedDeps.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) {
+                    continue;
+                }
+
+                modsNestedDeps.add(nestedDep);
             }
         }
+
+        LOGGER.warn("Found {} conflicting nested mods' dependencies: {}", modsNestedDeps.size(), modpackNestedMods);
+
+        conflictingNestedModsImpl.addAll(modsNestedDeps);
 
         List<LoaderManagerService.Mod> conflictingNestedMods = new ArrayList<>();
 
@@ -151,7 +162,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
     private List<ModCandidateImpl> getNestedDeps(ModCandidateImpl originMod) {
         List<ModCandidateImpl> deps = new ArrayList<>();
 
-        if (originMod.isRoot()) {
+        if (!originMod.isRoot()) {
             return deps;
         }
 
