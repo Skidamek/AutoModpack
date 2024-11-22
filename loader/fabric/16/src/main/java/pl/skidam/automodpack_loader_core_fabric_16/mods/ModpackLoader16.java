@@ -107,6 +107,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
         // Add nested dependencies
         for (ModCandidateImpl modCandidate : conflictingNestedModsImpl) {
             List<ModCandidateImpl> nestedDeps = getNestedDeps(modCandidate);
+            LOGGER.info("Checking nested deps for origin mod: {} nested deps: {}", modCandidate.getId(), nestedDeps);
             for (ModCandidateImpl nestedDep : nestedDeps) {
                 LOGGER.info("Checking nested dep: {} for origin nested mod: {}", nestedDep.getId(), modCandidate.getId());
                 if (conflictingNestedModsImpl.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) {
@@ -121,7 +122,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
             }
         }
 
-        LOGGER.warn("Found {} conflicting nested mods' dependencies: {}", modsNestedDeps.size(), modpackNestedMods);
+        LOGGER.warn("Found {} conflicting nested mods' dependencies: {}", modsNestedDeps.size(), modsNestedDeps);
 
         conflictingNestedModsImpl.addAll(modsNestedDeps);
 
@@ -159,15 +160,19 @@ public class ModpackLoader16 implements ModpackLoaderService {
     }
 
     // Needed for e.g. fabric api
-    private List<ModCandidateImpl> getNestedDeps(ModCandidateImpl originMod) {
+    private List<ModCandidateImpl> getNestedDeps(ModCandidateImpl nestedMod) {
         List<ModCandidateImpl> deps = new ArrayList<>();
 
-        if (!originMod.isRoot()) {
-            return deps;
+        ModCandidateImpl originMod;
+
+        if (!nestedMod.isRoot()) {
+            originMod = nestedMod.getParentMods().stream().toList().get(0);
+        } else {
+            originMod = nestedMod;
         }
 
-        for (ModDependency nested : originMod.getDependencies()) {
-            ModCandidateImpl candidate = originMod.getNestedMods().stream().filter(it -> it.getId().equals(nested.getModId())).findFirst().orElse(null);
+        for (ModDependency dep : nestedMod.getDependencies()) {
+            ModCandidateImpl candidate = originMod.getNestedMods().stream().filter(it -> it.getId().equals(dep.getModId())).findFirst().orElse(null);
             if (candidate == null) {
                 continue;
             }
