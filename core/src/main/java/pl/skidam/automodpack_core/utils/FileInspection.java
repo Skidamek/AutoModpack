@@ -69,6 +69,10 @@ public class FileInspection {
             return false;
         }
 
+        if (!Files.exists(file)) {
+            return false;
+        }
+
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
             ZipEntry forgeIModLocator = zipFile.getEntry("META-INF/services/net.minecraftforge.forgespi.locating.IModLocator");
@@ -168,6 +172,10 @@ public class FileInspection {
             return Set.of();
         }
 
+        if (!Files.exists(file)) {
+            return Set.of();
+        }
+
         Set<String> dependencies = new HashSet<>();
 
         try {
@@ -236,7 +244,6 @@ public class FileInspection {
             zipFile.close();
 
         } catch (ZipException ignored) {
-
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -247,6 +254,10 @@ public class FileInspection {
 
     public static String getModVersion(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
+            return null;
+        }
+
+        if (!Files.exists(file)) {
             return null;
         }
 
@@ -334,6 +345,10 @@ public class FileInspection {
 
     public static Set<String> getAllProvidedIDs(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
+            return null;
+        }
+
+        if (!Files.exists(file)) {
             return null;
         }
 
@@ -425,6 +440,10 @@ public class FileInspection {
         }
 
         LoaderManagerService.EnvironmentType environmentType = LoaderManagerService.EnvironmentType.UNIVERSAL;
+
+        if (!Files.exists(file)) {
+            return environmentType;
+        }
 
         try {
             ZipFile zipFile = new ZipFile(file.toFile());

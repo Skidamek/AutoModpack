@@ -68,7 +68,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
             candidates.forEach(it -> applyPaths(it, false));
 
             for (ModCandidateImpl candidate : candidates) {
-                List<ModCandidateImpl> nestedMods = getNestedMods(candidate);
+                List<ModCandidateImpl> nestedMods = getNestedMods(candidate, new ArrayList<>());
                 boolean isStandard = !candidate.getPaths().get(0).toAbsolutePath().toString().contains(modpackModsDir.toAbsolutePath().toString());
                 if (isStandard) {
                     standardNestedMods.addAll(nestedMods);
@@ -145,15 +145,10 @@ public class ModpackLoader16 implements ModpackLoaderService {
         return conflictingNestedMods;
     }
 
-    private List<ModCandidateImpl> getNestedMods(ModCandidateImpl originMod) {
-        List<ModCandidateImpl> mods = new ArrayList<>();
-
+    private List<ModCandidateImpl> getNestedMods(ModCandidateImpl originMod, List<ModCandidateImpl> mods) {
         for (ModCandidateImpl nested : originMod.getNestedMods()) {
-            try {
-                mods.add(nested);
-                List<ModCandidateImpl> recursiveNested = getNestedMods(nested);
-                mods.addAll(recursiveNested);
-            } catch (Exception ignored) {}
+            mods.add(nested);
+            mods.addAll(getNestedMods(nested, new ArrayList<>()));
         }
 
         return mods;
