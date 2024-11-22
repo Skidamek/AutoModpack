@@ -76,7 +76,7 @@ public class HttpServer {
                                 }
 
                                 shouldHost = true;
-                                channel.pipeline().addLast("automodpack_http", new HttpServerHandler());
+                                channel.pipeline().addLast(MOD_ID, new HttpServerHandler());
                             }
                         }
                 )
