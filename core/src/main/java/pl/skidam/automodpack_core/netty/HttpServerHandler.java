@@ -12,6 +12,7 @@ import pl.skidam.automodpack_core.modpack.ModpackContent;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.*;
@@ -133,14 +134,21 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             context.pipeline().firstContext().writeAndFlush(fileRegion, context.newProgressivePromise())
                     .addListener(future -> {
                         try {
-                            if (!future.isSuccess()) {
-                                LOGGER.error("Error writing to channel: {} path: {} {}", future.cause().getMessage(), path, future.cause());
+                            Throwable cause = future.cause();
+                            if (cause != null && !(cause instanceof ClosedChannelException)) {
+                                LOGGER.error("Error writing to channel: {} path: {}", cause, path);
                             }
-                            raf.close(); // Ensure RandomAccessFile is closed
-                        } catch (IOException e) {
-                            LOGGER.error("Failed to close RandomAccessFile: {} of path: {} {}", e.getMessage(), path, e);
+                        } catch (Exception e) {
+                            LOGGER.error("Unexpected error: {}", e.getMessage(), e);
                         } finally {
-                            context.pipeline().firstContext().channel().close(); // Close channel if necessary
+                            try {
+                                raf.close(); // Ensure RandomAccessFile is closed
+                            } catch (IOException e) {
+                                LOGGER.error("Failed to close RandomAccessFile: {} of path: {}", e, path);
+                            }
+
+                            // Finally close channel
+                            context.pipeline().firstContext().channel().close();
                         }
                     });
         } catch (Exception e) {
@@ -148,7 +156,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             try {
                 raf.close(); // Ensure RandomAccessFile is closed in case of exceptions
             } catch (IOException closeEx) {
-                LOGGER.error("Failed to close RandomAccessFile: {} of path: {} {}", closeEx.getMessage(), path, closeEx);
+                LOGGER.error("Failed to close RandomAccessFile: {} of path: {}", closeEx, path);
             }
         }
     }
