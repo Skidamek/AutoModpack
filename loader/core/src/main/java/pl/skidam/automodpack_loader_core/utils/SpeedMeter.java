@@ -29,19 +29,17 @@ public class SpeedMeter {
 	 * Get the download speed in bytes per second.
 	 */
 	public long getCurrentSpeedInBytes() {
-		if (bytesDownloadedPerSec.isEmpty()) {
-			return -1;
-		}
-
 		long lastTimeBucket = System.currentTimeMillis() / 1000 * 1000 - 1000;
 
+		Long value = -1L;
+
 		if (bytesDownloadedPerSec.containsKey(lastTimeBucket)) {
-			return bytesDownloadedPerSec.get(lastTimeBucket);
+			value = bytesDownloadedPerSec.get(lastTimeBucket);
 		} else if (bytesDownloadedPerSec.containsKey(lastTimeBucket - 1000)) {
-			return bytesDownloadedPerSec.get(lastTimeBucket - 1000);
+			value = bytesDownloadedPerSec.get(lastTimeBucket - 1000);
 		}
 
-		return -1;
+		return value != null ? value : -1;
 	}
 
 	/**
