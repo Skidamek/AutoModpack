@@ -49,7 +49,9 @@ public class CustomFileUtils {
             if (!Files.exists(destination.getParent())) {
                 Files.createDirectories(destination.getParent());
             }
-            Files.createFile(destination);
+            // Windows? #302
+//            Files.createFile(destination);
+            destination.toFile().createNewFile();
         }
 
         try (RandomAccessFile sourceFile = new RandomAccessFile(source.toFile(), "r");

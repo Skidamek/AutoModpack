@@ -143,7 +143,9 @@ public class DownloadManager {
         }
 
         if (!Files.exists(outFile)) {
-            Files.createFile(outFile);
+            // Windows? #302
+            outFile.toFile().createNewFile();
+//            Files.createFile(outFile);
         }
 
         URL url = new URL(urlString);
