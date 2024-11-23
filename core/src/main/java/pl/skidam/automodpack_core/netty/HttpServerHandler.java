@@ -10,6 +10,7 @@ import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -49,6 +50,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         buf.release();
+        context.pipeline().firstContext().channel().close();
     }
 
     private void dropConnection(ChannelHandlerContext ctx, Object request) {
@@ -103,41 +105,50 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
         Path path = optionalPath.get();
 
+        RandomAccessFile raf;
         try {
-            RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
-            try {
-                long fileLength = raf.length();
-
-                HttpResponse response = new HttpResponse(200);
-                response.addHeader("Content-Type", "application/octet-stream");
-                response.addHeader("Content-Length", String.valueOf(fileLength));
-
-                // Necessary ByteBuf for response headers
-                ByteBuf responseHeadersBuf = Unpooled.copiedBuffer(response.getResponseMessage(), StandardCharsets.UTF_8);
-                context.pipeline().write(responseHeadersBuf);
-
-                // Write file using DefaultFileRegion
-                DefaultFileRegion fileRegion = new DefaultFileRegion(raf.getChannel(), 0, fileLength);
-                context.pipeline().writeAndFlush(fileRegion, context.newProgressivePromise()).addListener(future -> {
-                    try {
-                        if (!future.isSuccess()) {
-                            LOGGER.error("Writing to channel error! {} - {} - {}", path, future.cause(), future.cause().getStackTrace());
-                        }
-                    } finally {
-                        context.pipeline().channel().close();
-                        raf.close(); // Ensure raf is closed in all cases
-                    }
-                });
-            } catch (Exception e) {
-                raf.close(); // Explicit close if an exception occurs during processing
-                throw e; // Re-throw to allow outer catch blocks to handle it
-            }
+            raf = new RandomAccessFile(path.toFile(), "r");
         } catch (FileNotFoundException e) {
             sendError(context, 404);
-            LOGGER.error("Requested file not found! {} - {} - {}", path, e, e.getStackTrace());
+            LOGGER.error("Requested file not found!", e);
+            return;
         } catch (Exception e) {
             sendError(context, 418);
-            LOGGER.error("Failed to open the file {} - {} - {}", path, e, e.getStackTrace());
+            LOGGER.error("Failed to open the file {}", path, e);
+            return;
+        }
+
+        try {
+            long fileLength = raf.length();
+
+            HttpResponse response = new HttpResponse(200);
+            response.addHeader("Content-Type", "application/octet-stream");
+            response.addHeader("Content-Length", String.valueOf(fileLength));
+
+            // Response headers
+            ByteBuf responseHeadersBuf = Unpooled.copiedBuffer(response.getResponseMessage(), StandardCharsets.UTF_8);
+            context.pipeline().firstContext().write(responseHeadersBuf);
+
+            // Write the file
+            DefaultFileRegion fileRegion = new DefaultFileRegion(raf.getChannel(), 0, fileLength);
+            context.pipeline().firstContext().writeAndFlush(fileRegion, context.newProgressivePromise())
+                    .addListener(future -> {
+                        try {
+                            raf.close(); // Ensure RandomAccessFile is closed
+                            if (!future.isSuccess()) {
+                                LOGGER.error("Error writing to channel: {}", future.cause().getMessage(), future.cause());
+                            }
+                        } catch (IOException e) {
+                            LOGGER.error("Failed to close RandomAccessFile: {}", e.getMessage(), e);
+                        }
+                    });
+        } catch (Exception e) {
+            LOGGER.error("Error during file handling", e);
+            try {
+                raf.close(); // Ensure RandomAccessFile is closed in case of exceptions
+            } catch (IOException closeEx) {
+                LOGGER.error("Failed to close RandomAccessFile: {}", closeEx.getMessage(), closeEx);
+            }
         }
     }
 
