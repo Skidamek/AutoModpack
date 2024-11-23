@@ -63,6 +63,7 @@ fun getProperty(key: String): String? {
 }
 
 // TODO find better way to do it
+// If you get Array Exception, run "clean" task
 tasks.register("mergeJars") {
     coreModules.forEach { module ->
         dependsOn(":loader-$module:build")
@@ -81,7 +82,7 @@ tasks.register("mergeJars") {
         val tasks = mutableListOf<CompletableFuture<Void>>()
         val time = System.currentTimeMillis()
         val size = jarsToMerge.size
-        var current = 0;
+        var current = 0
 
         for (jarToMerge in jarsToMerge) {
             val task = CompletableFuture.runAsync {
