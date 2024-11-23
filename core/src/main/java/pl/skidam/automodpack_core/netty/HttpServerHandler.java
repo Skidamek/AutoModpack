@@ -50,7 +50,6 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
 
         buf.release();
-        context.pipeline().firstContext().channel().close();
     }
 
     private void dropConnection(ChannelHandlerContext ctx, Object request) {
@@ -134,12 +133,14 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             context.pipeline().firstContext().writeAndFlush(fileRegion, context.newProgressivePromise())
                     .addListener(future -> {
                         try {
-                            raf.close(); // Ensure RandomAccessFile is closed
                             if (!future.isSuccess()) {
                                 LOGGER.error("Error writing to channel: {} path: {} {}", future.cause().getMessage(), path, future.cause());
                             }
+                            raf.close(); // Ensure RandomAccessFile is closed
                         } catch (IOException e) {
                             LOGGER.error("Failed to close RandomAccessFile: {} of path: {} {}", e.getMessage(), path, e);
+                        } finally {
+                            context.pipeline().firstContext().channel().close(); // Close channel if necessary
                         }
                     });
         } catch (Exception e) {
