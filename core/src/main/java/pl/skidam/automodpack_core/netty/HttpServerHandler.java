@@ -136,18 +136,18 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                         try {
                             raf.close(); // Ensure RandomAccessFile is closed
                             if (!future.isSuccess()) {
-                                LOGGER.error("Error writing to channel: {}", future.cause().getMessage(), future.cause());
+                                LOGGER.error("Error writing to channel: {} path: {} {}", future.cause().getMessage(), path, future.cause());
                             }
                         } catch (IOException e) {
-                            LOGGER.error("Failed to close RandomAccessFile: {}", e.getMessage(), e);
+                            LOGGER.error("Failed to close RandomAccessFile: {} of path: {} {}", e.getMessage(), path, e);
                         }
                     });
         } catch (Exception e) {
-            LOGGER.error("Error during file handling", e);
+            LOGGER.error("Error during file: {} handling {}", path, e);
             try {
                 raf.close(); // Ensure RandomAccessFile is closed in case of exceptions
             } catch (IOException closeEx) {
-                LOGGER.error("Failed to close RandomAccessFile: {}", closeEx.getMessage(), closeEx);
+                LOGGER.error("Failed to close RandomAccessFile: {} of path: {} {}", closeEx.getMessage(), path, closeEx);
             }
         }
     }
