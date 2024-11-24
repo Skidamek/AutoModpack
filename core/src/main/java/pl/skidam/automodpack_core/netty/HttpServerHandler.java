@@ -163,7 +163,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext context, Throwable cause) {
-        LOGGER.error("Couldn't handle HTTP request!{}", String.valueOf(cause));
+        LOGGER.error("Couldn't handle HTTP request!", cause.getCause());
     }
 
     private void sendError(ChannelHandlerContext context, int status) {
