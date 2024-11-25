@@ -83,13 +83,13 @@ public class Preload {
     private void initializeGlobalVariables() {
         // Initialize global variables
         preload = true;
-        LOADER_MANAGER = new LoaderManager();
+//        LOADER_MANAGER = new LoaderManager();
         MODPACK_LOADER = new ModpackLoader();
-        MC_VERSION = LOADER_MANAGER.getModVersion("minecraft");
+//        MC_VERSION = LOADER_MANAGER.getModVersion("minecraft"); // TODO: reenable it
         // Can't get via automodpack version though loader methods since this mod isn't loaded yet... At least on forge...
         AM_VERSION = ManifestReader.getAutoModpackVersion();
-        LOADER_VERSION = LOADER_MANAGER.getLoaderVersion();
-        LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
+//        LOADER_VERSION = LOADER_MANAGER.getLoaderVersion(); // TODO: reenable it
+//        LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase(); // TODO: reenable it
         AUTOMODPACK_JAR = FileInspection.getAutoModpackJar();
         MODS_DIR = AUTOMODPACK_JAR.getParent();
 
@@ -177,7 +177,7 @@ public class Preload {
             Files.createDirectories(AMDir);
         }
 
-        if (new LoaderManager().getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
+        if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
             Path modpacks = Paths.get("./automodpack/modpacks/");
             if (!Files.exists(modpacks)) {
                 Files.createDirectories(modpacks);
