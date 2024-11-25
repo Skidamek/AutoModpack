@@ -6,9 +6,11 @@ import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandMeta;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;
 import org.slf4j.Logger;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.netty.HttpServer;
 import pl.skidam.automodpack_loader_core.Preload;
@@ -17,19 +19,31 @@ import pl.skidam.automodpack_loader_velocity.loader.VelocityLoaderManager;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 @Plugin(id = "automodpack", name = "AutoModpack", version = "4.0.0", authors = {"Skidam"})
-public class HelloVelo {
+public class Initializer {
 
     private final ProxyServer proxy;
     private final Logger logger;
 
     @Inject
-    public HelloVelo(ProxyServer proxy, Logger logger) {
+    public Initializer(ProxyServer proxy, Logger logger) {
         this.proxy = proxy;
         this.logger = logger;
 
         LOADER_MANAGER = new VelocityLoaderManager();
 
+        // Set those variables for the time being
+        MC_VERSION = "1.21.3";
+        LOADER = "velocity";
+        LOADER_VERSION = "3.4.0";
+
         new Preload();
+
+        // Set port to 30037 for time being
+        serverConfig.hostPort = 30037;
+        // Currently not supported
+        serverConfig.hostModpackOnMinecraftPort = false;
+        // save config
+        ConfigTools.save(serverConfigFile, serverConfig);
     }
 
     @Subscribe
@@ -85,5 +99,13 @@ public class HelloVelo {
 
         LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
 
+        httpServer.start();
+    }
+
+    // on server shutdown
+    @Subscribe
+    public void onProxyShutdown(ProxyShutdownEvent event) {
+        httpServer.stop();
+        modpack.shutdownExecutor();
     }
 }
