@@ -50,11 +50,11 @@ public class HandshakeS2CPacket {
             }
         } else {
             Common.players.put(playerName, true);
-            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, buf, sender)));
+            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, server.getServerPort(), buf, sender)));
         }
     }
 
-    public static void handleHandshake(ClientConnection connection, String playerName, PacketByteBuf buf, PacketSender packetSender) {
+    public static void handleHandshake(ClientConnection connection, String playerName, int minecraftServerPort, PacketByteBuf buf, PacketSender packetSender) {
         LOGGER.info("{} has installed AutoModpack.", playerName);
 
         String clientResponse = buf.readString(Short.MAX_VALUE);
@@ -115,7 +115,13 @@ public class HandshakeS2CPacket {
 
             if (!serverConfig.reverseProxy) {
                 // add port to link
-                linkToSend += ":" + serverConfig.hostPort;
+                if (serverConfig.hostPort != -1) {
+                    linkToSend += ":" + serverConfig.hostPort;
+                } else if (serverConfig.hostModpackOnMinecraftPort) {
+                    linkToSend += ":" + minecraftServerPort;
+                }
+            } else if (serverConfig.hostPort == -1) {
+                LOGGER.error("Reverse proxy is enabled but host port is not set in config! Please set it manually.");
             }
 
             LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
