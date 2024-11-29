@@ -77,14 +77,15 @@ public class ModpackUpdater {
                 if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     LOGGER.info("Modpack is up to date");
                     CheckAndLoadModpack(modpackDir, modpackContentFile, modpackLink);
+                    return;
                 }
             } else if (!preload) {
                 fullDownload = true;
                 new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
-            } else {
-                LOGGER.warn("Modpack update found");
-                startUpdate();
             }
+
+            LOGGER.warn("Modpack update found");
+            startUpdate();
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
         }
