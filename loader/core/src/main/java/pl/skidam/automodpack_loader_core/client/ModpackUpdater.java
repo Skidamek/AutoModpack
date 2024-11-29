@@ -23,38 +23,46 @@ import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
 public class ModpackUpdater {
     public Changelogs changelogs = new Changelogs();
-    public static DownloadManager downloadManager;
-    public static FetchManager fetchManager;
-    public static long totalBytesToDownload = 0;
-    public static boolean fullDownload = false;
-    private static Jsons.ModpackContentFields serverModpackContent;
-    private static String unModifiedSMC;
-    private static WorkaroundUtil workaroundUtil;
+    public DownloadManager downloadManager;
+    public FetchManager fetchManager;
+    public long totalBytesToDownload = 0;
+    public boolean fullDownload = false;
+    private Jsons.ModpackContentFields serverModpackContent;
+    private String unModifiedSMC;
+    private WorkaroundUtil workaroundUtil;
     public Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.Urls> failedDownloads = new HashMap<>();
-    private static final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
+    private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
 
-    public static String getModpackName() {
+    private String modpackLink;
+    private Path modpackDir;
+    private Path modpackContentFile;
+
+
+    public String getModpackName() {
         return serverModpackContent.modpackName;
     }
 
-    public void startModpackUpdate(Jsons.ModpackContentFields serverModpackContent, String link, Path modpackDir) {
-        if (link == null || link.isEmpty() || modpackDir.toString().isEmpty()) {
-            throw new IllegalArgumentException("Link or modpackDir is null or empty");
+    public void prepareUpdate(Jsons.ModpackContentFields serverModpackContent, String link, Path modpackPath) {
+        modpackLink = link;
+        modpackDir = modpackPath;
+
+        if (modpackLink == null || modpackLink.isEmpty() || modpackPath.toString().isEmpty()) {
+            throw new IllegalArgumentException("Link or modpackPath is null or empty");
         }
 
         try {
-            Path modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
+            modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
             workaroundUtil = new WorkaroundUtil(modpackDir);
 
             // Handle the case where serverModpackContent is null
             if (serverModpackContent == null) {
-                handleOfflineMode(modpackDir, modpackContentFile, link);
+                handleOfflineMode(modpackDir, modpackContentFile, modpackLink);
                 return;
             }
 
             // Prepare for modpack update
-            ModpackUpdater.serverModpackContent = serverModpackContent;
-            ModpackUpdater.unModifiedSMC = GSON.toJson(serverModpackContent);
+            this.serverModpackContent = serverModpackContent;
+            this.unModifiedSMC = GSON.toJson(serverModpackContent);
 
             // Create directories if they don't exist
             if (!Files.exists(modpackDir)) {
@@ -69,21 +77,17 @@ public class ModpackUpdater {
                 // Check if an update is needed
                 if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     LOGGER.info("Modpack is up to date");
-                    CheckAndLoadModpack(modpackDir, modpackContentFile, link);
+                    CheckAndLoadModpack(modpackDir, modpackContentFile, modpackLink);
                     return;
                 }
             } else if (!preload) {
                 fullDownload = true;
-                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), link, modpackDir, modpackContentFile);
+                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
                 return;
             }
 
             LOGGER.warn("Modpack update found");
-
-            // Start the update process
-            new ScreenManager().download(downloadManager, ModpackUpdater.getModpackName());
-            ModpackUpdaterMain(link, modpackDir, modpackContentFile);
-
+            startUpdate();
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
         }
@@ -129,8 +133,9 @@ public class ModpackUpdater {
     }
 
     // TODO split it into different methods, its too long
-    public void ModpackUpdaterMain(String link, Path modpackDir, Path modpackContentFile) {
+    public void startUpdate() {
 
+        new ScreenManager().download(downloadManager, getModpackName());
         long start = System.currentTimeMillis();
 
         try {
@@ -214,7 +219,7 @@ public class ModpackUpdater {
             LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
 
             downloadManager = new DownloadManager(totalBytesToDownload);
-            new ScreenManager().download(downloadManager, ModpackUpdater.getModpackName());
+            new ScreenManager().download(downloadManager, getModpackName());
 
             if (wholeQueue > 0) {
                 var randomizedList = new LinkedList<>(serverModpackContent.list);
@@ -232,7 +237,7 @@ public class ModpackUpdater {
 
                     DownloadManager.Urls urls = new DownloadManager.Urls();
 
-                    urls.addUrl(new DownloadManager.Url().getUrl(link + serverSHA1));
+                    urls.addUrl(new DownloadManager.Url().getUrl(modpackLink + serverSHA1));
 
                     if (fetchManager.getFetchDatas().containsKey(item.sha1)) {
                         urls.addAllUrls(new DownloadManager.Url().getUrls(fetchManager.getFetchDatas().get(item.sha1).fetchedData().urls()));
@@ -280,7 +285,7 @@ public class ModpackUpdater {
                 // TODO set client to a waiting for the server to respond screen
                 LOGGER.warn("Trying to refresh the modpack content");
                 LOGGER.info("Sending hashes to refresh: {}", hashesJson);
-                var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(link, hashesJson);
+                var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackLink, hashesJson);
                 if (refreshedContentOptional.isEmpty()) {
                     LOGGER.error("Failed to refresh the modpack content");
                 } else {
@@ -290,10 +295,10 @@ public class ModpackUpdater {
                     // or fail and then show the error
 
                     downloadManager = new DownloadManager(totalBytesToDownload);
-                    new ScreenManager().download(downloadManager, ModpackUpdater.getModpackName());
+                    new ScreenManager().download(downloadManager, getModpackName());
 
                     var refreshedContent = refreshedContentOptional.get();
-                    ModpackUpdater.unModifiedSMC = GSON.toJson(refreshedContent);
+                    this.unModifiedSMC = GSON.toJson(refreshedContent);
 
                     // filter list to only the failed downloads
                     var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
@@ -308,7 +313,7 @@ public class ModpackUpdater {
 
                         Path downloadFile = Paths.get(modpackDir + fileName);
                         DownloadManager.Urls urls = new DownloadManager.Urls();
-                        urls.addUrl(new DownloadManager.Url().getUrl(link + serverSHA1));
+                        urls.addUrl(new DownloadManager.Url().getUrl(modpackLink + serverSHA1));
 
                         LOGGER.info("Retrying to download {} from {}", fileName, urls);
 
@@ -340,9 +345,9 @@ public class ModpackUpdater {
 
             if (preload) {
                 LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
-                CheckAndLoadModpack(modpackDir, modpackContentFile, link);
+                CheckAndLoadModpack(modpackDir, modpackContentFile, modpackLink);
             } else {
-                applyModpack(modpackDir, modpackContentFile, link);
+                applyModpack(modpackDir, modpackContentFile, modpackLink);
                 if (!failedDownloads.isEmpty()) {
                     StringBuilder failedFiles = new StringBuilder();
                     for (var download : failedDownloads.entrySet()) {
@@ -365,7 +370,7 @@ public class ModpackUpdater {
                 new ReLauncher(modpackDir, updateType, changelogs).restart(false);
             }
         } catch (SocketTimeoutException | ConnectException e) {
-            LOGGER.error("Modpack host of " + link + " is not responding", e);
+            LOGGER.error("Modpack host of " + modpackLink + " is not responding", e);
         } catch (InterruptedException e) {
             LOGGER.info("Interrupted the download");
         } catch (Exception e) {

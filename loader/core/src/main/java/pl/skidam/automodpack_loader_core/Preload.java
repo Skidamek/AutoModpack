@@ -76,7 +76,7 @@ public class Preload {
         }
 
         // Update modpack
-        new ModpackUpdater().startModpackUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
+        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
     }
 
 
