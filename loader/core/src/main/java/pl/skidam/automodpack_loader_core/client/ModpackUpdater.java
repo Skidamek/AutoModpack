@@ -217,7 +217,9 @@ public class ModpackUpdater {
             new ScreenManager().download(downloadManager, ModpackUpdater.getModpackName());
 
             if (wholeQueue > 0) {
-                for (var item : serverModpackContent.list) {
+                var randomizedList = new LinkedList<>(serverModpackContent.list);
+                Collections.shuffle(randomizedList);
+                for (var item : randomizedList) {
 
                     String fileName = item.file;
                     String serverSHA1 = item.sha1;
@@ -298,7 +300,9 @@ public class ModpackUpdater {
 
                     // TODO try to fetch again from modrinth and curseforge
 
-                    for (var item : refreshedFilteredList) {
+                    var randomizedList = new LinkedList<>(refreshedFilteredList);
+                    Collections.shuffle(randomizedList);
+                    for (var item : randomizedList) {
                         String fileName = item.file;
                         String serverSHA1 = item.sha1;
 
