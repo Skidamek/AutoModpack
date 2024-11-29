@@ -44,7 +44,7 @@ public class HandshakeS2CPacket {
             Common.players.put(playerName, false);
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
             if (serverConfig.requireAutoModpackOnClient) {
-                Text reason = VersionedText.literal("AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
+                Text reason = VersionedText.literal("AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
             }
@@ -69,7 +69,7 @@ public class HandshakeS2CPacket {
         }
 
         if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
-            Text reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " to play on this server!");
+            Text reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " to play on this server!");
             if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
                 reason = VersionedText.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
             }

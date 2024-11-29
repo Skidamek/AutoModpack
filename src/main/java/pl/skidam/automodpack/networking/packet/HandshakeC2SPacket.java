@@ -8,7 +8,6 @@ import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack_loader_core.SelfUpdater;
-import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 
 import java.util.List;
@@ -23,7 +22,7 @@ public class HandshakeC2SPacket {
 
         HandshakePacket serverHandshakePacket = HandshakePacket.fromJson(serverResponse);
 
-        String loader = new LoaderManager().getPlatformType().toString().toLowerCase();
+        String loader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
 
         PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
         HandshakePacket clientHandshakePacket = new HandshakePacket(List.of(loader), AM_VERSION, MC_VERSION);

@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_loader_core_fabric.mods;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_loader_core.utils.VersionParser;
 import pl.skidam.automodpack_loader_core_fabric_15.mods.ModpackLoader15;
@@ -11,10 +10,12 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
+import static pl.skidam.automodpack_core.GlobalVariables.LOADER_MANAGER;
+
 @SuppressWarnings("unused")
 public class ModpackLoader implements ModpackLoaderService {
 
-    public static final Integer[] FABRIC_VERSION = VersionParser.parseVersion(new LoaderManager().getLoaderVersion());
+    public static final Integer[] FABRIC_VERSION = VersionParser.parseVersion(LOADER_MANAGER.getLoaderVersion());
     public static final ModpackLoaderService INSTANCE =
             VersionParser.isGreaterOrEqual(FABRIC_VERSION, VersionParser.parseVersion("0.16.1")) ? new ModpackLoader16() :
             new ModpackLoader15();

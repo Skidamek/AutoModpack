@@ -42,7 +42,8 @@ public class ModpackUpdater {
         return serverModpackContent.modpackName;
     }
 
-    public void prepareUpdate(Jsons.ModpackContentFields serverModpackContent, String link, Path modpackPath) {
+    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, String link, Path modpackPath) {
+        serverModpackContent = modpackContent;
         modpackLink = link;
         modpackDir = modpackPath;
 
@@ -61,7 +62,6 @@ public class ModpackUpdater {
             }
 
             // Prepare for modpack update
-            this.serverModpackContent = serverModpackContent;
             this.unModifiedSMC = GSON.toJson(serverModpackContent);
 
             // Create directories if they don't exist
@@ -78,16 +78,14 @@ public class ModpackUpdater {
                 if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     LOGGER.info("Modpack is up to date");
                     CheckAndLoadModpack(modpackDir, modpackContentFile, modpackLink);
-                    return;
                 }
             } else if (!preload) {
                 fullDownload = true;
                 new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
-                return;
+            } else {
+                LOGGER.warn("Modpack update found");
+                startUpdate();
             }
-
-            LOGGER.warn("Modpack update found");
-            startUpdate();
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
         }
@@ -125,7 +123,7 @@ public class ModpackUpdater {
             Set<String> standardModsHashes = standardMods.stream().map(path -> CustomFileUtils.getHash(path, "SHA-1").orElse(null)).filter(Objects::nonNull).collect(Collectors.toSet());
             List<Path> modsToLoad = modpackMods.stream().filter(mod -> !standardModsHashes.contains(CustomFileUtils.getHash(mod, "sha1").orElse("null"))).toList();
 
-            new ModpackLoader().loadModpack(modsToLoad);
+            MODPACK_LOADER.loadModpack(modsToLoad);
             return;
         }
 
