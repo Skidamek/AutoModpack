@@ -1,11 +1,11 @@
 package pl.skidam.automodpack_loader_core.utils;
 
-import java.util.*;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 public class SpeedMeter {
 
 	private final DownloadManager downloadManager;
-	private final TreeMap<Long, Long> bytesDownloadedPerSec = new TreeMap<>();
+	private final ConcurrentSkipListMap<Long, Long> bytesDownloadedPerSec = new ConcurrentSkipListMap<>();
 	private static final int MAX_ENTRIES = 5;
 
 	public SpeedMeter(DownloadManager downloadManager) {
@@ -15,7 +15,7 @@ public class SpeedMeter {
 	/**
 	 * Add new bytes to the current download tally.
 	 */
-	public void addDownloadedBytes(long newBytes) {
+	public synchronized void addDownloadedBytes(long newBytes) {
 		long bucketedTime = System.currentTimeMillis() / 1000 * 1000;
 
 		bytesDownloadedPerSec.merge(bucketedTime, newBytes, Long::sum);
@@ -28,7 +28,7 @@ public class SpeedMeter {
 	/**
 	 * Get the download speed in bytes per second.
 	 */
-	public long getCurrentSpeedInBytes() {
+	public synchronized long getCurrentSpeedInBytes() {
 		long lastTimeBucket = System.currentTimeMillis() / 1000 * 1000 - 1000;
 
 		Long value = -1L;

@@ -44,17 +44,17 @@ public class HandshakeS2CPacket {
             Common.players.put(playerName, false);
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
             if (serverConfig.requireAutoModpackOnClient) {
-                Text reason = VersionedText.literal("AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
+                Text reason = VersionedText.literal("AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
             }
         } else {
             Common.players.put(playerName, true);
-            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, buf, sender)));
+            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, server.getServerPort(), buf, sender)));
         }
     }
 
-    public static void handleHandshake(ClientConnection connection, String playerName, PacketByteBuf buf, PacketSender packetSender) {
+    public static void handleHandshake(ClientConnection connection, String playerName, int minecraftServerPort, PacketByteBuf buf, PacketSender packetSender) {
         LOGGER.info("{} has installed AutoModpack.", playerName);
 
         String clientResponse = buf.readString(Short.MAX_VALUE);
@@ -69,7 +69,7 @@ public class HandshakeS2CPacket {
         }
 
         if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
-            Text reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + new LoaderManager().getPlatformType().toString().toLowerCase() + " to play on this server!");
+            Text reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " to play on this server!");
             if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
                 reason = VersionedText.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
             }
@@ -94,18 +94,15 @@ public class HandshakeS2CPacket {
         String linkToSend;
 
         // If the player is connecting locally or their IP matches a specified IP, use the local host IP and port
-        String formattedPlayerIp = Ip.refactorToTrueIp(playerIp);
+        String formattedPlayerIp = Ip.normalizeIp(playerIp);
 
-//        LOGGER.info("Player IP: {}", formattedPlayerIp);
-
-        if (Ip.isLocal(formattedPlayerIp, serverConfig.hostLocalIp)) { // local
+        if (Ip.isLocal(formattedPlayerIp)) { // local
             linkToSend = serverConfig.hostLocalIp;
         } else { // Otherwise, use the public host IP and port
             linkToSend = serverConfig.hostIp;
         }
 
-//        LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
-
+        // We send empty string if hostIp/hostLocalIp is not specified in server config. Client will use ip by which it connected to the server in first place.
         DataPacket dataPacket = new DataPacket("", serverConfig.modpackName, serverConfig.requireAutoModpackOnClient);
 
         if (linkToSend != null && !linkToSend.isBlank()) {
@@ -113,9 +110,22 @@ public class HandshakeS2CPacket {
                 linkToSend = "http://" + linkToSend;
             }
 
-            if (!serverConfig.reverseProxy) {
-                // add port to link
-                linkToSend += ":" + serverConfig.hostPort;
+            if (serverConfig.reverseProxy) {
+                // With reverse proxy we dont append port to the link, it should be already included in the link
+                // But we need to check if the port is set in the config, since that's where modpack is actually hosted
+                if (serverConfig.hostPort == -1) {
+                    LOGGER.error("Reverse proxy is enabled but host port is not set in config! Please set it manually.");
+                }
+            } else { // Append server port
+                if (serverConfig.hostModpackOnMinecraftPort) {
+                    linkToSend += ":" + minecraftServerPort;
+                } else  {
+                    linkToSend += ":" + serverConfig.hostPort;
+
+                    if (serverConfig.hostPort == -1) {
+                        LOGGER.error("Host port is not set in config! Please set it manually.");
+                    }
+                }
             }
 
             LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);

@@ -48,7 +48,7 @@ public class ReLauncher {
     public void restart(boolean restartInPreload, Callback... callbacks) {
         if (preload && !restartInPreload) return;
 
-        boolean isClient = new LoaderManager().getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT;
+        boolean isClient = LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT;
         boolean isHeadless = GraphicsEnvironment.isHeadless();
 
         if (isClient) {

@@ -6,24 +6,18 @@ import net.minecraft.util.Util;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
-import java.nio.file.Path;
-
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 public class DangerScreen extends VersionedScreen {
     private final Screen parent;
-    private final String link;
-    private final Path modpackDir;
-    private final Path modpackContentFile;
+    private final ModpackUpdater modpackUpdaterInstance;
 
-    public DangerScreen(Screen parent, String link, Path modpackDir, Path modpackContentFile) {
+    public DangerScreen(Screen parent, ModpackUpdater modpackUpdaterInstance) {
         super(VersionedText.literal("DangerScreen"));
         this.parent = parent;
-        this.link = link;
-        this.modpackDir = modpackDir;
-        this.modpackContentFile = modpackContentFile;
+        this.modpackUpdaterInstance = modpackUpdaterInstance;
 
         if (AudioManager.isMusicPlaying()) {
             AudioManager.stopMusic();
@@ -40,9 +34,7 @@ public class DangerScreen extends VersionedScreen {
         }));
 
         this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").formatted(Formatting.BOLD), button -> {
-            Util.getMainWorkerExecutor().execute(() -> {
-                new ModpackUpdater().ModpackUpdaterMain(link, modpackDir, modpackContentFile);
-            });
+            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
         }));
     }
 

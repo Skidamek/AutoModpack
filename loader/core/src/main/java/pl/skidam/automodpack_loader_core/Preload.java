@@ -29,7 +29,6 @@ public class Preload {
             LOGGER.info("Prelaunching AutoModpack...");
             initializeGlobalVariables();
             loadConfigs();
-            createPaths();
             updateAll();
             LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
         } catch (Exception e) {
@@ -76,7 +75,7 @@ public class Preload {
         }
 
         // Update modpack
-        new ModpackUpdater().startModpackUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
+        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
     }
 
 
@@ -168,20 +167,5 @@ public class Preload {
         }
 
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
-    }
-
-    private void createPaths() throws IOException {
-        Path AMDir = Paths.get("./automodpack/");
-        // Check if AutoModpack path exists
-        if (!Files.exists(AMDir)) {
-            Files.createDirectories(AMDir);
-        }
-
-        if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
-            Path modpacks = Paths.get("./automodpack/modpacks/");
-            if (!Files.exists(modpacks)) {
-                Files.createDirectories(modpacks);
-            }
-        }
     }
 }

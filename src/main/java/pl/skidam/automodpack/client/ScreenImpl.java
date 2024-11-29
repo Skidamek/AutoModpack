@@ -6,6 +6,7 @@ import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.FetchManager;
@@ -39,7 +40,7 @@ public class ScreenImpl implements ScreenService {
 
     @Override
     public void danger(Object... args) {
-        Screens.danger(args[0], args[1], args[2], args[3]);
+        Screens.danger(args[0], args[1]);
     }
 
     @Override
@@ -92,8 +93,8 @@ public class ScreenImpl implements ScreenService {
             Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
         }
 
-        public static void danger(Object parent, Object link, Object modpackDir, Object modpackContentFile) {
-            Screens.setScreen(new DangerScreen((Screen) parent, (String) link, (Path) modpackDir, (Path) modpackContentFile));
+        public static void danger(Object parent, Object modpackUpdaterInstance) {
+            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
         }
 
         public static void error(String... error) {
