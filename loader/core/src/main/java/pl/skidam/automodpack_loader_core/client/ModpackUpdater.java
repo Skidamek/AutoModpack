@@ -454,6 +454,7 @@ public class ModpackUpdater {
     }
 
     // returns changed workaroundMods list
+    // TODO debug strange chars issue like § #297
     private Set<String> deleteNonModpackFiles(Path modpackDir, Path modpackContentFile, Jsons.ModpackContentFields modpackContent, WorkaroundUtil workaroundUtil) throws IOException {
         List<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).toList();
         List<Path> pathList = Files.walk(modpackDir).toList();
@@ -479,12 +480,17 @@ public class ModpackUpdater {
                 }
             } else {
                 LOGGER.info("Deleting {}", path);
+//                LOGGER.warn("Formatted file: {}", formattedFile);
             }
 
             parentPaths.add(path.getParent());
             CustomFileUtils.forceDelete(path);
             changelogs.changesDeletedList.put(path.getFileName().toString(), null);
         }
+
+//        if (!parentPaths.isEmpty()) {
+//            LOGGER.error(modpackFiles);
+//        }
 
         // recursively delete empty directories
         for (Path parentPath : parentPaths) {
