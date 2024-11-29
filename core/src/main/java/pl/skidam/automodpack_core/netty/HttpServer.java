@@ -140,7 +140,7 @@ public class HttpServer {
         }
 
         if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostIp == null || serverConfig.hostIp.isEmpty())) {
-            String publicIp = Ip.getPublic();
+            String publicIp = Ip.getPublicIp();
             if (publicIp != null) {
                 serverConfig.hostIp = publicIp;
                 ConfigTools.save(serverConfigFile, serverConfig);
@@ -153,7 +153,7 @@ public class HttpServer {
 
         if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostLocalIp == null || serverConfig.hostLocalIp.isEmpty())) {
             try {
-                serverConfig.hostLocalIp = Ip.getLocal();
+                serverConfig.hostLocalIp = Ip.getLocalIp();
                 ConfigTools.save(serverConfigFile, serverConfig);
                 LOGGER.warn("Setting Host local IP to {}", serverConfig.hostLocalIp);
             } catch (Exception e) {
@@ -161,6 +161,7 @@ public class HttpServer {
             }
         }
 
+        LOGGER.info("Starting modpack host server on port {}", serverConfig.hostPort);
         return true;
     }
 }
