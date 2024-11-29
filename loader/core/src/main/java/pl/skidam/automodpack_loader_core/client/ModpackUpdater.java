@@ -7,7 +7,6 @@ import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.MmcPackMagic;
 import pl.skidam.automodpack_core.utils.WorkaroundUtil;
 import pl.skidam.automodpack_loader_core.ReLauncher;
-import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.*;
 
