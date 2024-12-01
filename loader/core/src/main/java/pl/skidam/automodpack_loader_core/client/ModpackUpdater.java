@@ -118,12 +118,27 @@ public class ModpackUpdater {
 
         // Load the modpack excluding mods from standard mods directory
         if (preload) {
-            List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
-            List<Path> standardMods = Files.list(MODS_DIR).toList();
-            Set<String> standardModsHashes = standardMods.stream().map(path -> CustomFileUtils.getHash(path, "SHA-1").orElse(null)).filter(Objects::nonNull).collect(Collectors.toSet());
-            List<Path> modsToLoad = modpackMods.stream().filter(mod -> !standardModsHashes.contains(CustomFileUtils.getHash(mod, "sha1").orElse("null"))).toList();
+            List<Path> modpackMods = Files.list(modpackDir.resolve("mods"))
+                .filter(mod -> {
+                    try {
+                        String modHash = CustomFileUtils.getHash(mod, "SHA-1").orElse(null);
 
-            MODPACK_LOADER.loadModpack(modsToLoad);
+                        // if its in standard mods directory, we dont want to load it again
+                        boolean isUnique = Files.list(MODS_DIR)
+                                .map(path -> CustomFileUtils.getHash(path, "SHA-1").orElse(null))
+                                .filter(Objects::nonNull)
+                                .noneMatch(hash -> hash.equals(modHash));
+
+                        boolean endsWithJar = mod.toString().endsWith(".jar");
+                        boolean isFile = mod.toFile().isFile();
+
+                        return isUnique && endsWithJar && isFile;
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).toList();
+
+            MODPACK_LOADER.loadModpack(modpackMods);
             return;
         }
 
