@@ -15,7 +15,6 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
@@ -56,7 +55,7 @@ public class ModpackUpdater {
 
             // Handle the case where serverModpackContent is null
             if (serverModpackContent == null) {
-                handleOfflineMode(modpackDir, modpackContentFile, modpackLink);
+                handleOfflineMode();
                 return;
             }
 
@@ -76,7 +75,7 @@ public class ModpackUpdater {
                 // Check if an update is needed
                 if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     LOGGER.info("Modpack is up to date");
-                    CheckAndLoadModpack(modpackDir, modpackContentFile, modpackLink);
+                    CheckAndLoadModpack();
                     return;
                 }
             } else if (!preload) {
@@ -92,7 +91,7 @@ public class ModpackUpdater {
         }
     }
 
-    private void handleOfflineMode(Path modpackDir, Path modpackContentFile, String link) throws Exception {
+    private void handleOfflineMode() throws Exception {
         if (!Files.exists(modpackContentFile)) {
             return;
         }
@@ -103,13 +102,13 @@ public class ModpackUpdater {
         }
 
         LOGGER.warn("Server is down, or you don't have access to internet, but we still want to load selected modpack");
-        CheckAndLoadModpack(modpackDir, modpackContentFile, link);
+        CheckAndLoadModpack();
     }
 
 
-    public void CheckAndLoadModpack(Path modpackDir, Path modpackContentFile, String link) throws Exception {
+    public void CheckAndLoadModpack() throws Exception {
 
-        boolean requiresRestart = applyModpack(modpackDir, modpackContentFile, link);
+        boolean requiresRestart = applyModpack();
 
         if (requiresRestart) {
             LOGGER.info("Modpack is not loaded");
@@ -359,9 +358,9 @@ public class ModpackUpdater {
 
             if (preload) {
                 LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
-                CheckAndLoadModpack(modpackDir, modpackContentFile, modpackLink);
+                CheckAndLoadModpack();
             } else {
-                applyModpack(modpackDir, modpackContentFile, modpackLink);
+                applyModpack();
                 if (!failedDownloads.isEmpty()) {
                     StringBuilder failedFiles = new StringBuilder();
                     for (var download : failedDownloads.entrySet()) {
@@ -394,8 +393,8 @@ public class ModpackUpdater {
     }
 
     // returns true if restart is required
-    private boolean applyModpack(Path modpackDir, Path modpackContentFile, String link) throws Exception {
-        ModpackUtils.selectModpack(modpackDir, link);
+    private boolean applyModpack() throws Exception {
+        ModpackUtils.selectModpack(modpackDir, modpackLink);
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
@@ -424,7 +423,7 @@ public class ModpackUpdater {
         }
 
         // Make a list of ignored files to ignore them while copying
-        Set<String> ignoredFiles = deleteNonModpackFiles(modpackDir, modpackContentFile, modpackContent, workaroundUtil);
+        Set<String> ignoredFiles = deleteNonModpackFiles(modpackContent);
         workaroundUtil.saveWorkaroundList(ignoredFiles);
 
         // Copy files to running directory
@@ -471,7 +470,7 @@ public class ModpackUpdater {
 
     // returns changed workaroundMods list
     // TODO debug strange chars issue like § #297
-    private Set<String> deleteNonModpackFiles(Path modpackDir, Path modpackContentFile, Jsons.ModpackContentFields modpackContent, WorkaroundUtil workaroundUtil) throws IOException {
+    private Set<String> deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent) throws IOException {
         List<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).toList();
         List<Path> pathList = Files.walk(modpackDir).toList();
         Set<String> workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
