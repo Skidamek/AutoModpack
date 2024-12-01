@@ -9,12 +9,13 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Locale;
 
 // I use arch btw
 public class Windows {
 
     // Dont use awt on mac
-    public static boolean isMac = System.getProperty("os.name").toLowerCase().contains("mac");
+    public static boolean isMac = System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("mac");
 
     public void restartWindow(String text, Callback... callbacks) {
         JFrame frame = new JFrame();
@@ -23,35 +24,27 @@ public class Windows {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(400, 150);
         frame.setResizable(false);
-        if (!isMac) {
-            Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
-            frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
-        }
+        Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
+        frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
         frame.getContentPane().setBackground(new ColorUIResource(22, 27, 34));
 
         JLabel RestartText = new JLabel("Restart your game!");
         RestartText.setBounds(0, 10, 400, 32);
-        if (!isMac) {
-            RestartText.setFont(new Font("Segoe UI", Font.PLAIN, 24));
-            RestartText.setForeground(Color.green);
-        }
+        RestartText.setFont(new Font("Segoe UI", Font.PLAIN, 24));
+        RestartText.setForeground(Color.green);
         RestartText.setHorizontalAlignment(JLabel.CENTER); // center the text
 
         JLabel CustomText = new JLabel(text);
         CustomText.setBounds(0, 54, 400, 36);
-        if (!isMac) {
-            CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 18));
-            CustomText.setForeground(Color.white);
-        }
+        CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 18));
+        CustomText.setForeground(Color.white);
         CustomText.setHorizontalAlignment(JLabel.CENTER); // center the text
 
         JButton OKButton = new JButton("OK");
         OKButton.setBounds(160, 100, 60, 25);
-        if (!isMac) {
-            OKButton.setBackground(new Color(0, 153, 51)); // set background color
-            OKButton.setForeground(Color.white); // set text color
-            OKButton.setFont(new Font("Segoe UI", Font.BOLD, 14)); // set font style and size
-        }
+        OKButton.setBackground(new Color(0, 153, 51)); // set background color
+        OKButton.setForeground(Color.white); // set text color
+        OKButton.setFont(new Font("Segoe UI", Font.BOLD, 14)); // set font style and size
         OKButton.setFocusPainted(false);
         OKButton.addActionListener(e -> {
             frame.dispose();
