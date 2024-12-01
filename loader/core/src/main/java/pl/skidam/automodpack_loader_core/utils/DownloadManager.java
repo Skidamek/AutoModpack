@@ -55,26 +55,22 @@ public class DownloadManager {
         try {
             downloadFile(url, hashAndPath, queuedDownload);
         } catch (InterruptedException e) {
-            CustomFileUtils.forceDelete(queuedDownload.file);
             interrupted = true;
         } catch (SocketTimeoutException e) {
-            CustomFileUtils.forceDelete(queuedDownload.file);
             LOGGER.warn("Timeout - {} - {} - {}", queuedDownload.file, e, e.getStackTrace());
         } catch (Exception e) {
-            CustomFileUtils.forceDelete(queuedDownload.file);
             LOGGER.warn("Error while downloading file - {} - {} - {}", queuedDownload.file, e, e.getStackTrace());
         } finally {
             synchronized (downloadsInProgress) {
                 downloadsInProgress.remove(hashAndPath);
             }
+
             boolean failed = true;
 
             if (Files.exists(queuedDownload.file)) {
                 String hash = CustomFileUtils.getHash(queuedDownload.file, "SHA-1").orElse(null);
 
-                if (!Objects.equals(hash, hashAndPath.hash)) {
-                    bytesDownloaded -= queuedDownload.file.toFile().length();
-                } else {
+                if (Objects.equals(hash, hashAndPath.hash)) {
                     // Runs on success
                     failed = false;
                     downloaded++;
@@ -85,27 +81,27 @@ public class DownloadManager {
             }
 
             if (failed) {
-
+                bytesToDownload += queuedDownload.file.toFile().length(); // Add size of the whole file again because we will try to download it again
                 CustomFileUtils.forceDelete(queuedDownload.file);
 
-                if (interrupted) {
-                    return;
-                }
-
-                if (queuedDownload.attempts < queuedDownload.urls.numberOfUrls * MAX_DOWNLOAD_ATTEMPTS) {
-                    LOGGER.warn("Download of {} failed, retrying!", queuedDownload.file.getFileName());
-                    queuedDownload.attempts++;
-                    synchronized (queuedDownloads) {
-                        queuedDownloads.put(hashAndPath, queuedDownload);
+                if (!interrupted) {
+                    if (queuedDownload.attempts < queuedDownload.urls.numberOfUrls * MAX_DOWNLOAD_ATTEMPTS) {
+                        LOGGER.warn("Download of {} failed, retrying!", queuedDownload.file.getFileName());
+                        queuedDownload.attempts++;
+                        synchronized (queuedDownloads) {
+                            queuedDownloads.put(hashAndPath, queuedDownload);
+                        }
+                    } else {
+                        LOGGER.error("Download of {} failed!", queuedDownload.file.getFileName());
+                        queuedDownload.failureCallback.run();
+                        semaphore.release();
                     }
-                } else {
-                    LOGGER.error("Download of {} failed!", queuedDownload.file.getFileName());
-                    queuedDownload.failureCallback.run();
-                    semaphore.release();
                 }
             }
 
-            downloadNext();
+            if (!interrupted) {
+                downloadNext();
+            }
         }
     }
 
