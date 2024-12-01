@@ -12,6 +12,10 @@ import java.io.InputStream;
 
 // I use arch btw
 public class Windows {
+
+    // Dont use awt on mac
+    public static boolean isMac = System.getProperty("os.name").toLowerCase().contains("mac");
+
     public void restartWindow(String text, Callback... callbacks) {
         JFrame frame = new JFrame();
         frame.setUndecorated(true);
@@ -19,27 +23,35 @@ public class Windows {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(400, 150);
         frame.setResizable(false);
-        Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
-        frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
+        if (!isMac) {
+            Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
+            frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
+        }
         frame.getContentPane().setBackground(new ColorUIResource(22, 27, 34));
 
         JLabel RestartText = new JLabel("Restart your game!");
         RestartText.setBounds(0, 10, 400, 32);
-        RestartText.setFont(new Font("Segoe UI", Font.PLAIN, 24));
-        RestartText.setForeground(Color.green);
+        if (!isMac) {
+            RestartText.setFont(new Font("Segoe UI", Font.PLAIN, 24));
+            RestartText.setForeground(Color.green);
+        }
         RestartText.setHorizontalAlignment(JLabel.CENTER); // center the text
 
         JLabel CustomText = new JLabel(text);
         CustomText.setBounds(0, 54, 400, 36);
-        CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 18));
-        CustomText.setForeground(Color.white);
+        if (!isMac) {
+            CustomText.setFont(new Font("Segoe UI", Font.PLAIN, 18));
+            CustomText.setForeground(Color.white);
+        }
         CustomText.setHorizontalAlignment(JLabel.CENTER); // center the text
 
         JButton OKButton = new JButton("OK");
         OKButton.setBounds(160, 100, 60, 25);
-        OKButton.setBackground(new Color(0, 153, 51)); // set background color
-        OKButton.setForeground(Color.white); // set text color
-        OKButton.setFont(new Font("Segoe UI", Font.BOLD, 14)); // set font style and size
+        if (!isMac) {
+            OKButton.setBackground(new Color(0, 153, 51)); // set background color
+            OKButton.setForeground(Color.white); // set text color
+            OKButton.setFont(new Font("Segoe UI", Font.BOLD, 14)); // set font style and size
+        }
         OKButton.setFocusPainted(false);
         OKButton.addActionListener(e -> {
             frame.dispose();
