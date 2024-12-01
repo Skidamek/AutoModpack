@@ -18,9 +18,19 @@ public class ModpackLoader implements ModpackLoaderService {
     @Override
     public void loadModpack(List<Path> modpackMods) {
         try {
-            modsToAdd.addAll(modpackMods);
+            List<Path> onlyMods = new ArrayList<>();
+            modpackMods.stream().filter(p -> {
+                        boolean ends = p.toString().endsWith(".jar");
+                        boolean parentMods = p.getParent().toString().equals("mods");
+                        boolean isFile = p.toFile().isFile();
+
+                        return ends && parentMods && isFile;
+                    }
+            ).forEach(onlyMods::add);
+
+            modsToAdd.addAll(onlyMods);
             // set for connector
-            String paths = modpackMods.stream().map(Path::toString).collect(Collectors.joining(","));
+            String paths = onlyMods.stream().map(Path::toString).collect(Collectors.joining(","));
             String finalMods = paths + "," + System.getProperty(CONNECTOR_MODS_PROPERTY, "");
             System.setProperty(CONNECTOR_MODS_PROPERTY, finalMods);
         } catch (Exception e) {
