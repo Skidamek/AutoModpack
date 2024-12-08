@@ -162,6 +162,7 @@ public class HttpServer {
         }
 
         LOGGER.info("Starting modpack host server on port {}", serverConfig.hostPort);
+
         return true;
     }
 }

@@ -71,6 +71,14 @@ tasks.register("mergeJars") {
 
     doLast {
         mergedDir.mkdirs()
+
+        // Check if velocity is present, if so copy build to merged
+        val velocityJar = File("${rootProject.projectDir}/loader/velocity/build/libs").listFiles()
+            ?.single { it.isFile && !it.name.endsWith("-sources.jar") && it.name.endsWith(".jar") }
+
+        velocityJar?.copyTo(File("$mergedDir/${velocityJar.name}"), overwrite = true)
+
+        // Scan all minecraft versions and match them with the loaders
         val jarsToMerge = File("$rootDir/versions").listFiles()
             ?.flatMap {
                 File("$it/build/libs").listFiles()
