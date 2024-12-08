@@ -86,8 +86,7 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
 		return mainPageUrl;
 	}
 
-	@Override
-	public boolean mouseClicked(double mouseX, double mouseY, int delta) {
+	public boolean normalFont() {
 		return !bigFont;
 	}
 
