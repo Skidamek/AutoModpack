@@ -96,7 +96,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
 		} else {
 			ListEntry entry = this.getEntryAtPos(mouseX, mouseY);
 			if (entry != null) {
-				if (entry.normalFont()) {
+				if (entry.mouseClicked(mouseX, mouseY, button)) {
 					this.setFocused(entry);
 					this.setSelected(entry);
 					this.setDragging(true);
