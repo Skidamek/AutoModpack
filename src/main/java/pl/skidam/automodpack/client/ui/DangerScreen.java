@@ -33,8 +33,16 @@ public class DangerScreen extends VersionedScreen {
             this.client.setScreen(parent);
         }));
 
-        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").formatted(Formatting.BOLD), button -> {
-            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
+        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.highendconfirm").formatted(Formatting.BOLD), button -> {
+            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startHighUpdate);
+        }));
+
+        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.lowendconfirm").formatted(Formatting.BOLD), button -> {
+            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startLowUpdate);
+        }));
+        
+        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.completeconfirm").formatted(Formatting.BOLD), button -> {
+            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startServerUpdate);
         }));
     }
 
