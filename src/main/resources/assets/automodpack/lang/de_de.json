@@ -17,6 +17,9 @@
   "automodpack.danger.description": "Möchtest du es herunterladen?",
   "automodpack.danger.secDescription": "Es könnte riskant sein! Lade es NICHT herunter, wenn du den Server-Betreibern nicht vertraust!",
   "automodpack.danger.confirm": "Herunterladen",
+  "automodpack.danger.highendconfirm": "Lade das Pack für High End PC's",
+  "automodpack.danger.lowendconfirm": "Lade das Pack für High End PC's",
+  "automodpack.danger.completeconfirm": "Lade das komplette Server Pack",
   "automodpack.danger.cancel": "Nicht herunterladen",
 
   "automodpack.changelog.view": "Änderungen anzeigen",
