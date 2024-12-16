@@ -19,6 +19,9 @@
     "automodpack.danger.description": "Do you want to download it?",
     "automodpack.danger.secDescription": "It might be risky! Do NOT download if don't trust the server owners!",
     "automodpack.danger.confirm": "Download",
+    "automodpack.danger.highendconfirm": "Download for High End PC's",
+    "automodpack.danger.lowendconfirm": "Download for Low End PC's",
+    "automodpack.danger.completeconfirm": "Download Full Server Pack",
     "automodpack.danger.cancel": "Don't download",
 
     "automodpack.changelog.view": "View changelogs",
