@@ -86,6 +86,9 @@ public class ModpackUpdater {
 
             LOGGER.warn("Modpack update found");
             startUpdate();
+            startHighUpdate();
+            startLowUpdate();
+            startServerUpdate();
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
         }
@@ -146,6 +149,9 @@ public class ModpackUpdater {
     }
 
     // TODO split it into different methods, its too long
+    public void startHighUpdate() {}
+    public void startLowUpdate() {}
+    public void startServerUpdate() {}
     public void startUpdate() {
 
         new ScreenManager().download(downloadManager, getModpackName());
