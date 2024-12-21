@@ -7,6 +7,10 @@ public class ScreenManager implements ScreenService {
     public static ScreenService INSTANCE = new PreloadScreenImpl();
 
     @Override
+    public void downloadselection(Object... args) {
+        INSTANCE.downloadselection(args);
+    }
+    @Override
     public void download(Object... args) {
         INSTANCE.download(args);
     }
@@ -30,12 +34,6 @@ public class ScreenManager implements ScreenService {
     public void danger(Object... args) {
         INSTANCE.danger(args);
     }
-
-    @Override
-    public void downloadselection(Object... args) {
-        INSTANCE.downloadselection(args);
-    }
-
     @Override
     public void error(String... args) {
         INSTANCE.error(args);
