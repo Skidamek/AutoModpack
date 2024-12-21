@@ -19,6 +19,11 @@ import java.util.Optional;
 public class ScreenImpl implements ScreenService {
 
     @Override
+    public void downloadselection(Object... args) {
+        Screens.downloadselection(args[0], args[1]);
+    }
+
+    @Override
     public void download(Object... args) {
         Screens.download(args[0], args[1]);
     }
@@ -79,6 +84,12 @@ public class ScreenImpl implements ScreenService {
             Util.getMainWorkerExecutor().execute(() -> MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen)));
         }
 
+        public static void danger(Object parent, Object modpackUpdaterInstance) {
+            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
+        }
+        public static void downloadselection(Object parent, Object modpackUpdaterInstance) {
+            Screens.setScreen(new DownloadSelectionScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
+        }
         public static void download(Object downloadManager, Object header) {
             Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
         }
@@ -88,15 +99,9 @@ public class ScreenImpl implements ScreenService {
         public static void changelog(Object parent, Object modpackDir, Object changelog) {
             Screens.setScreen(new ChangelogScreen((Screen) parent, (Path) modpackDir, (Changelogs) changelog));
         }
-
         public static void restart(Object modpackDir, Object updateType, Object changelogs) {
             Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
         }
-
-        public static void danger(Object parent, Object modpackUpdaterInstance) {
-            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
-        }
-
         public static void error(String... error) {
             Screens.setScreen(new ErrorScreen(Arrays.toString(error)));
         }

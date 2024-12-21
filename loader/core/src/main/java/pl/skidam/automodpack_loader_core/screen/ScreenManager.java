@@ -32,6 +32,11 @@ public class ScreenManager implements ScreenService {
     }
 
     @Override
+    public void downloadselection(Object... args) {
+        INSTANCE.downloadselection(args);
+    }
+
+    @Override
     public void error(String... args) {
         INSTANCE.error(args);
     }

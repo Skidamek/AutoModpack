@@ -24,6 +24,16 @@
     "automodpack.danger.completeconfirm": "Download Full Server Pack",
     "automodpack.danger.cancel": "Don't download",
 
+    "automodpack.ds": "This server provides an external modpack!",
+    "automodpack.ds.description": "Do you want to download it?",
+    "automodpack.ds.secDescription": "It might be risky! Do NOT download if don't trust the server owners!",
+    "automodpack.ds.confirm": "Download",
+    "automodpack.ds.highendconfirm": "Download for High End PC's",
+    "automodpack.ds.lowendconfirm": "Download for Low End PC's",
+    "automodpack.ds.completeconfirm": "Download Full Server Pack",
+    "automodpack.ds.cancel": "Exit",
+
+
     "automodpack.changelog.view": "View changelogs",
     "automodpack.changelog.noChanges": "No changes found.",
     "automodpack.changelog.openPage": "Open project page",
