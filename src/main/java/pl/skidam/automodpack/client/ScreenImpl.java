@@ -10,6 +10,7 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.FetchManager;
+import pl.skidam.automodpack_loader_core.utils.SelectionManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;
@@ -45,7 +46,7 @@ public class ScreenImpl implements ScreenService {
 
     @Override
     public void danger(Object... args) {
-        Screens.danger(args[0], args[1]);
+        Screens.danger(args[0], args[1], args[2]);
     }
 
     @Override
@@ -84,8 +85,8 @@ public class ScreenImpl implements ScreenService {
             Util.getMainWorkerExecutor().execute(() -> MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen)));
         }
 
-        public static void danger(Object parent, Object modpackUpdaterInstance) {
-            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
+        public static void danger(Object parent, Object modpackUpdaterInstance, Object selectionManagerInstance) {
+            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance, (SelectionManager) selectionManagerInstance));
         }
         public static void downloadselection(Object parent, Object modpackUpdaterInstance) {
             Screens.setScreen(new DownloadSelectionScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));

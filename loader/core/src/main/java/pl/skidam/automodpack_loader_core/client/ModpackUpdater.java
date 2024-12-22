@@ -82,7 +82,7 @@ public class ModpackUpdater {
                 }
             } else if (!preload) {
                 fullDownload = true;
-                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
+                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this, null);
                 return;
             }
 

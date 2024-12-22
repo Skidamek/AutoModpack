@@ -9,6 +9,7 @@ import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_loader_core.utils.SelectionManager;
 
 public class DangerScreen extends VersionedScreen {
     private final Screen parent;
@@ -36,16 +37,13 @@ public class DangerScreen extends VersionedScreen {
         }));
 
         if (selectionManagerInstance != null) {
-
-        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.selection").formatted(Formatting.BOLD), button -> {
-            Util.getMainWorkerExecutor().execute(selectionManagerInstance::startSelection);
-        }));
-
+            this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.selection").formatted(Formatting.BOLD), button -> {
+                this.client.setScreen(new DownloadSelectionScreen(parent, modpackUpdaterInstance));
+            }));
         } else {
-
-        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").formatted(Formatting.BOLD), button -> {
-            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
-        }));
+            this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").formatted(Formatting.BOLD), button -> {
+                Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
+            }));
         }
     }
 
