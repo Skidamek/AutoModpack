@@ -21,6 +21,7 @@ import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
 public class ModpackUpdater {
     public Changelogs changelogs = new Changelogs();
+    public SelectionManager selectionManager;
     public DownloadManager downloadManager;
     public FetchManager fetchManager;
     public long totalBytesToDownload = 0;
@@ -35,10 +36,11 @@ public class ModpackUpdater {
     private Path modpackDir;
     private Path modpackContentFile;
 
-
     public String getModpackName() {
         return serverModpackContent.modpackName;
     }
+
+    public void prepareSelection() {}
 
     public void prepareUpdate(Jsons.ModpackContentFields modpackContent, String link, Path modpackPath) {
         serverModpackContent = modpackContent;

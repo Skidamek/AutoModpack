@@ -13,11 +13,13 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 public class DangerScreen extends VersionedScreen {
     private final Screen parent;
     private final ModpackUpdater modpackUpdaterInstance;
+    private final SelectionManager selectionManagerInstance;
 
-    public DangerScreen(Screen parent, ModpackUpdater modpackUpdaterInstance) {
+    public DangerScreen(Screen parent, ModpackUpdater modpackUpdaterInstance, SelectionManager selectionManagerInstance) {
         super(VersionedText.literal("DangerScreen"));
         this.parent = parent;
         this.modpackUpdaterInstance = modpackUpdaterInstance;
+        this.selectionManagerInstance = selectionManagerInstance;
 
         if (AudioManager.isMusicPlaying()) {
             AudioManager.stopMusic();
@@ -33,9 +35,18 @@ public class DangerScreen extends VersionedScreen {
             this.client.setScreen(parent);
         }));
 
+        if (selectionManagerInstance != null) {
+
+        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.selection").formatted(Formatting.BOLD), button -> {
+            Util.getMainWorkerExecutor().execute(selectionManagerInstance::startSelection);
+        }));
+
+        } else {
+
         this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").formatted(Formatting.BOLD), button -> {
             Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
         }));
+        }
     }
 
     @Override
