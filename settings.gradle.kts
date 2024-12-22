@@ -6,7 +6,6 @@ pluginManagement {
         maven { url = uri("https://maven.fabricmc.net/") }
         maven { url = uri("https://maven.neoforged.net/releases") }
         maven { url = uri("https://files.minecraftforge.net/maven/") }
-        maven { url = uri("https://maven.kikugie.dev/releases") }
         mavenLocal()
     }
 }
@@ -14,7 +13,7 @@ pluginManagement {
 plugins {
     id("com.github.johnrengelman.shadow") version "8.1.1" apply false
     id("dev.architectury.loom") version "1.7-SNAPSHOT" apply false
-    id("dev.kikugie.stonecutter") version "0.4.+"
+    id("dev.kikugie.stonecutter") version "0.5"
 }
 
 include(":core")
