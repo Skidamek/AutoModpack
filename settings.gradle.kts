@@ -31,6 +31,7 @@ coreModules.forEach { module ->
         "fabric-core" -> project.buildFileName = "../../loader-fabric-core.gradle.kts"
         "fabric-15", "fabric-16" -> project.buildFileName = "../../loader-fabric.gradle.kts"
         "forge-fml40", "forge-fml47", "neoforge-fml2", "neoforge-fml4" -> project.buildFileName = "../../loader-forge.gradle.kts"
+        "velocity" -> project.buildFileName = "../loader-velocity.gradle.kts"
     }
 }
 
