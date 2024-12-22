@@ -17,8 +17,8 @@ stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chisele
     finalizedBy("mergeJars")
 }
 
-stonecutter configureEach {
-    val current = project.property("loom.platform")
+stonecutter parameters {
+    val current = node!!.property("loom.platform").toString()
     val platforms = listOf("fabric", "forge", "neoforge").map { it to (it == current) }
     consts(platforms)
 }
@@ -28,19 +28,19 @@ val mergedDir = File("${rootProject.projectDir}/merged")
 
 class MinecraftVersionData(private val name: String) {
     fun greaterThan(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) > 0
+        return stonecutter.eval(name, ">" + other.lowercase())
     }
 
     fun lessThan(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) < 0
+        return stonecutter.eval(name, "<" + other.lowercase())
     }
 
     fun greaterOrEqual(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) >= 0
+        return stonecutter.eval(name, ">=" + other.lowercase())
     }
 
     fun lessOrEqual(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) <= 0
+        return stonecutter.eval(name, "<=" + other.lowercase())
     }
 
     override fun equals(other: Any?) : Boolean {
