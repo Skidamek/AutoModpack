@@ -1,6 +1,8 @@
 {
   "automodpack.restart.full": "Das Modpack wurde heruntergeladen!",
   "automodpack.restart.update": "Es wurde ein Update für das Modpack heruntergeladen!",
+  "automodpack.restart.select": "Modpack required by server got selected!",
+  "automodpack.restart.automodpack": "Updated version of AutoModpack mod to the one required by server!",
   "automodpack.restart.description": "Um den Vorgang abzuschließen, musst du das Spiel neu starten.",
   "automodpack.restart.secDescription": "Möchtest du jetzt neu starten?",
   "automodpack.restart.confirm": "Ja, Spiel schließen",
@@ -16,14 +18,19 @@
   "automodpack.danger": "Dieser Server bietet ein externes Modpack an!",
   "automodpack.danger.description": "Möchtest du es herunterladen?",
   "automodpack.danger.secDescription": "Es könnte riskant sein! Lade es NICHT herunter, wenn du den Server-Betreibern nicht vertraust!",
+  "automodpack.danger.selection": "Version wählen",
   "automodpack.danger.confirm": "Herunterladen",
-  "automodpack.danger.highendconfirm": "Lade das Pack für High End PC's",
-  "automodpack.danger.lowendconfirm": "Lade das Pack für High End PC's",
-  "automodpack.danger.completeconfirm": "Lade das komplette Server Pack",
   "automodpack.danger.cancel": "Nicht herunterladen",
+
+  "automodpack.ds": "Dieser Server stellt verschiedene Versionen bereit!",
+  "automodpack.ds.description": "Du kannst für dich die benötigte Version auswählen. Welche benötigst du?",
+  "automodpack.ds.secDescription": "Verschiedenen Versionen benötigen andere PC Systeme!",
+  "automodpack.ds.confirm": "Download",
+  "automodpack.ds.cancel": "Abbrechen",
 
   "automodpack.changelog.view": "Änderungen anzeigen",
   "automodpack.changelog.noChanges": "Keine Änderungen gefunden.",
+  "automodpack.changelog.openPage": "Open project page",
 
   "automodpack.download.calculating": "Berechnung läuft...",
   "automodpack.download.eta": "Verbleibende Zeit: %s",
