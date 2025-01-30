@@ -3,13 +3,11 @@ package pl.skidam.automodpack_loader_core.platforms;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.utils.Json;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -20,7 +18,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 
     public static List<ModrinthAPI> getModInfosFromID(String modrinthID) {
 
-        String modLoader = new LoaderManager().getPlatformType().toString().toLowerCase();
+        String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
 
         String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + MC_VERSION + "\"]";
 
@@ -63,7 +61,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 
     public static ModrinthAPI getModSpecificVersion(String modrinthID, String modVersion, String mcVersion) {
 
-        String modLoader = new LoaderManager().getPlatformType().toString().toLowerCase();
+        String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
 
         String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + mcVersion + "\"]";
 

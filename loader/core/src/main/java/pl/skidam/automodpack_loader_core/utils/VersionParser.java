@@ -1,15 +1,20 @@
 package pl.skidam.automodpack_loader_core.utils;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @SuppressWarnings("unused")
 public class VersionParser {
 
 	public static Integer[] parseVersion(String version) {
 		String[] parts = version.split("\\.");
-		Integer[] result = new Integer[parts.length];
-		for (int i = 0; i < parts.length; i++) {
-			result[i] = Integer.parseInt(parts[i]);
+		List<Integer> result = new ArrayList<>();
+		for (String part : parts) {
+			if (part.matches("\\d+")) {
+				result.add(Integer.parseInt(part));
+			}
 		}
-		return result;
+		return result.toArray(new Integer[0]);
 	}
 
 	public static boolean isGreater(Integer[] v1, Integer[] v2) {

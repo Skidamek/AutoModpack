@@ -8,13 +8,14 @@ import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 import pl.skidam.automodpack_core.GlobalVariables;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -68,6 +69,10 @@ public class FileInspection {
             return false;
         }
 
+        if (!Files.exists(file)) {
+            return false;
+        }
+
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
             ZipEntry forgeIModLocator = zipFile.getEntry("META-INF/services/net.minecraftforge.forgespi.locating.IModLocator");
@@ -87,6 +92,10 @@ public class FileInspection {
 
     public static String getModID(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
+            return null;
+        }
+
+        if (!Files.exists(file)) {
             return null;
         }
 
@@ -163,6 +172,10 @@ public class FileInspection {
             return Set.of();
         }
 
+        if (!Files.exists(file)) {
+            return Set.of();
+        }
+
         Set<String> dependencies = new HashSet<>();
 
         try {
@@ -231,7 +244,6 @@ public class FileInspection {
             zipFile.close();
 
         } catch (ZipException ignored) {
-
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -242,6 +254,10 @@ public class FileInspection {
 
     public static String getModVersion(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
+            return null;
+        }
+
+        if (!Files.exists(file)) {
             return null;
         }
 
@@ -332,6 +348,10 @@ public class FileInspection {
             return null;
         }
 
+        if (!Files.exists(file)) {
+            return null;
+        }
+
         Set<String> providedIDs = new HashSet<>();
 
         try {
@@ -414,12 +434,16 @@ public class FileInspection {
         return providedIDs;
     }
 
-    public static LoaderService.EnvironmentType getModEnvironment(Path file) {
+    public static LoaderManagerService.EnvironmentType getModEnvironment(Path file) {
         if (!file.getFileName().toString().endsWith(".jar")) {
             return null;
         }
 
-        LoaderService.EnvironmentType environmentType = LoaderService.EnvironmentType.UNIVERSAL;
+        LoaderManagerService.EnvironmentType environmentType = LoaderManagerService.EnvironmentType.UNIVERSAL;
+
+        if (!Files.exists(file)) {
+            return environmentType;
+        }
 
         try {
             ZipFile zipFile = new ZipFile(file.toFile());
@@ -454,8 +478,8 @@ public class FileInspection {
                         String environment = json.get("environment").getAsString();
                         // switch (environment) set environmentType
                         environmentType = switch (environment) {
-                            case "client" -> LoaderService.EnvironmentType.CLIENT;
-                            case "server" -> LoaderService.EnvironmentType.SERVER;
+                            case "client" -> LoaderManagerService.EnvironmentType.CLIENT;
+                            case "server" -> LoaderManagerService.EnvironmentType.SERVER;
                             default -> environmentType;
                         };
                     }
@@ -465,8 +489,8 @@ public class FileInspection {
                         String environment = quiltLoader.get("environment").getAsString();
 
                         environmentType = switch (environment) {
-                            case "client" -> LoaderService.EnvironmentType.CLIENT;
-                            case "dedicated_server" -> LoaderService.EnvironmentType.SERVER;
+                            case "client" -> LoaderManagerService.EnvironmentType.CLIENT;
+                            case "dedicated_server" -> LoaderManagerService.EnvironmentType.SERVER;
                             default -> environmentType;
                         };
                     }

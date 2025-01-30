@@ -10,8 +10,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
+
+import static pl.skidam.automodpack_core.GlobalVariables.LOADER_MANAGER;
 
 @Mixin(TitleScreen.class)
 public class TestButton extends Screen {
@@ -27,7 +28,7 @@ public class TestButton extends Screen {
     private void init(CallbackInfo ci) {
 
         // check if we are in dev environment
-        if (!new LoaderManager().isDevelopmentEnvironment()) {
+        if (!LOADER_MANAGER.isDevelopmentEnvironment()) {
             return;
         }
 

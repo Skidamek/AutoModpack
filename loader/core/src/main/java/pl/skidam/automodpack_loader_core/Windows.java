@@ -9,9 +9,14 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Locale;
 
 // I use arch btw
 public class Windows {
+
+    // Dont use awt on mac
+    public static boolean isMac = System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("mac");
+
     public void restartWindow(String text, Callback... callbacks) {
         JFrame frame = new JFrame();
         frame.setUndecorated(true);

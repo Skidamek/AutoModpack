@@ -7,7 +7,7 @@ import net.neoforged.fml.loading.moddiscovery.ModFileInfo;
 import net.neoforged.fml.loading.moddiscovery.ModInfo;
 import net.neoforged.neoforgespi.language.IModInfo;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core_neoforge.mods.LoadedMods;
 
 import java.nio.file.Files;
@@ -20,7 +20,7 @@ import java.util.Set;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 @SuppressWarnings("unused")
-public class LoaderManager implements LoaderService {
+public class LoaderManager implements LoaderManagerService {
 
     @Override
     public ModPlatform getPlatformType() {
@@ -107,6 +107,13 @@ public class LoaderManager implements LoaderService {
 
         return null;
     }
+
+//    public void test() {
+//        List<ModFile> loadedFiles = new ArrayList<>();
+//        List<ModLoadingIssue> discoveryIssues = new ArrayList<>();
+//        var defaultAttributes = ModFileDiscoveryAttributes.DEFAULT;
+//        var pipeline = new DiscoveryPipeline(defaultAttributes, loadedFiles, discoveryIssues);
+//    }
 
     @Override
     public Mod getMod(Path file) {

@@ -5,7 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -19,14 +19,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModpackUtils {
-
-    public static List<String> possibleLoaderIDs = List.of("fabricloader", "neoforge", "forge", "quiltloader");  // tier list lmao
 
     public static boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         if (serverModpackContent == null || serverModpackContent.list == null) {
@@ -138,67 +135,55 @@ public class ModpackUtils {
         return needsRestart;
     }
 
-    // Check if modpack mods are dependent on any mod in the default mods folder and if so, then check if the that dependency version is lower than required/provided by modpack mod.
-    // if so then force move that modpack mod to the default mods folder and delete the old one from the default mods folder.
-    public static boolean correctModpackDepsOnDefaultDir(Path modpackDir) throws IOException {
-        AtomicBoolean needsRestart = new AtomicBoolean(false);
-        final List<Path> standardMods = Files.list(MODS_DIR).toList();
-        final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
-        final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-        final Collection<LoaderService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-        final Collection<String> loaderModsIDs = possibleLoaderIDs.stream().map(modID -> LOADER_MANAGER.getMod(modID)).filter(Objects::nonNull).flatMap(mod -> mod.providesIDs().stream()).filter(Objects::nonNull).toList();
-        final Collection<LoaderService.Mod> loaderMods = loaderModsIDs.stream().map(LOADER_MANAGER::getMod).filter(Objects::nonNull).toList();
+    // Copies necessary nested mods from modpack mods to standard mods folder
+    // Returns true if requires client restart
+    public static boolean fixNestedMods(List<LoaderManagerService.Mod> conflictingNestedMods) throws IOException {
+        boolean needsRestart = false;
 
-        // standardModList + loaderMods
-        List<LoaderService.Mod> nonModpackModList = new ArrayList<>(standardModList);
-        // add loader mod to the nonModpackModList if theres no other mod with the same id or lower version
-        loaderMods.forEach(loaderMod -> {
-            if (nonModpackModList.stream().noneMatch(mod -> mod.modID().equals(loaderMod.modID()) && mod.modVersion().compareTo(loaderMod.modVersion()) < 0)) {
-                nonModpackModList.add(loaderMod);
-            }
-        });
-
-        for (LoaderService.Mod modpackMod : modpackModList) {
-            for (String depId : modpackMod.dependencies()) {
-                nonModpackModList.stream()
-                        .filter(nonModpackMod -> nonModpackMod.modID().equals(depId) || nonModpackMod.providesIDs().contains(depId))
-                        .filter(nonModpackMod -> nonModpackMod.modVersion().compareTo(modpackMod.modVersion()) < 0)
-                        .forEach(nonModpackMod -> {
-                            LOGGER.info("Moving {} mod to the default mods folder because it is dependent on {} mod and the version is lower", modpackMod.modID(), nonModpackMod.modID());
-                            try {
-                                CustomFileUtils.copyFile(modpackMod.modPath(), MODS_DIR.resolve(modpackMod.modPath().getFileName()));
-                                if (!possibleLoaderIDs.contains(nonModpackMod.modID())) {
-                                    CustomFileUtils.forceDelete(nonModpackMod.modPath());
-                                }
-                                needsRestart.set(true);
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        });
+        for (LoaderManagerService.Mod mod : conflictingNestedMods) {
+            Path modPath = mod.modPath();
+            Path newModPath = MODS_DIR.resolve(modPath.getFileName());
+            if (!CustomFileUtils.compareFileHashes(modPath, newModPath, "SHA-1")) {
+                needsRestart = true;
+                LOGGER.info("Copying nested mod {} to standard mods folder", newModPath.getFileName());
+                CustomFileUtils.copyFile(modPath, newModPath);
             }
         }
 
-        return needsRestart.get();
+        return needsRestart;
+    }
+
+    // Returns new ignored files list, accounting for conflicting nested mods
+    public static Set<String> getIgnoredWithNested(List<LoaderManagerService.Mod> conflictingNestedMods, Set<String> ignoredFiles) {
+        Set<String> newIgnoredFiles = new HashSet<>(ignoredFiles);
+
+        for (LoaderManagerService.Mod mod : conflictingNestedMods) {
+            newIgnoredFiles.add(CustomFileUtils.formatPath(mod.modPath(), modpacksDir));
+        }
+
+        return newIgnoredFiles;
     }
 
     // Checks if in standard mods folder are any mods that are in modpack
     // Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
-    public static Map<LoaderService.Mod, LoaderService.Mod> getDupeMods(Path modpackDir, Set<String> workaroundMods) throws IOException {
+    public static Map<LoaderManagerService.Mod, LoaderManagerService.Mod> getDupeMods(Path modpackDir, Set<String> ignoredMods) throws IOException {
         // maybe also check subfolders...
         final List<Path> standardMods = Files.list(MODS_DIR).toList();
         final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
-        final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-        final Collection<LoaderService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+        final Collection<LoaderManagerService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+        final Collection<LoaderManagerService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
 
         if (standardModList.isEmpty() || modpackModList.isEmpty()) return Map.of();
 
-        final Map<LoaderService.Mod, LoaderService.Mod> duplicates = new HashMap<>();
+        final Map<LoaderManagerService.Mod, LoaderManagerService.Mod> duplicates = new HashMap<>();
 
-        for (LoaderService.Mod modpackMod : modpackModList) {
-            LoaderService.Mod standardMod = standardModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
+        for (LoaderManagerService.Mod modpackMod : modpackModList) {
+            LoaderManagerService.Mod standardMod = standardModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
             if (standardMod != null) {
                 String formattedFile = CustomFileUtils.formatPath(modpackMod.modPath(), modpackDir);
-                if (workaroundMods.contains(formattedFile)) continue;
+                if (ignoredMods.contains(formattedFile)) {
+                    continue;
+                }
                 duplicates.put(modpackMod, standardMod);
             }
         }
@@ -209,30 +194,19 @@ public class ModpackUtils {
     // Returns true if removed any mod from standard mods folder
     // If the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // If you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
-    public static boolean removeDupeMods(Map<LoaderService.Mod, LoaderService.Mod> dupeMods) throws IOException {
-        final List<Path> standardMods = Files.list(MODS_DIR).toList();
-        final Collection<LoaderService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-        final Collection<String> loaderModsIDs = possibleLoaderIDs.stream().map(modID -> LOADER_MANAGER.getMod(modID)).filter(Objects::nonNull).flatMap(mod -> mod.providesIDs().stream()).filter(Objects::nonNull).toList();
-        final Collection<LoaderService.Mod> loaderMods = loaderModsIDs.stream().map(LOADER_MANAGER::getMod).filter(Objects::nonNull).toList();
-
-        // standardModList + loaderMods
-        List<LoaderService.Mod> nonModpackModList = new ArrayList<>(standardModList);
-        // add loader mod to the nonModpackModList if theres no other mod with the same id or lower version
-        loaderMods.forEach(loaderMod -> {
-            if (nonModpackModList.stream().noneMatch(mod -> mod.modID().equals(loaderMod.modID()) && mod.modVersion().compareTo(loaderMod.modVersion()) < 0)) {
-                nonModpackModList.add(loaderMod);
-            }
-        });
+    public static boolean removeDupeMods(Map<LoaderManagerService.Mod, LoaderManagerService.Mod> dupeMods) throws IOException {
+        List<Path> standardMods = Files.list(MODS_DIR).toList();
+        Collection<LoaderManagerService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
 
         if (standardModList.isEmpty()) return false;
 
-        Set<LoaderService.Mod> modsToKeep = new HashSet<>();
+        Set<LoaderManagerService.Mod> modsToKeep = new HashSet<>();
 
         // Fill out the sets with mods that are not duplicates and their dependencies
-        for (LoaderService.Mod nonModpackMod : nonModpackModList) {
-            if (!dupeMods.containsValue(nonModpackMod)) {
-                modsToKeep.add(nonModpackMod);
-                addDependenciesRecursively(nonModpackMod, nonModpackModList, modsToKeep);
+        for (LoaderManagerService.Mod standardMod : standardModList) {
+            if (!dupeMods.containsValue(standardMod)) {
+                modsToKeep.add(standardMod);
+                addDependenciesRecursively(standardMod, standardModList, modsToKeep);
             }
         }
 
@@ -247,8 +221,8 @@ public class ModpackUtils {
 
         // Remove dupe mods
         for (var dupeMod : dupeMods.entrySet()) {
-            LoaderService.Mod modpackMod = dupeMod.getKey();
-            LoaderService.Mod standardMod = dupeMod.getValue();
+            LoaderManagerService.Mod modpackMod = dupeMod.getKey();
+            LoaderManagerService.Mod standardMod = dupeMod.getValue();
             Path modpackModPath = modpackMod.modPath();
             Path standardModPath = standardMod.modPath();
             String modId = modpackMod.modID();
@@ -279,9 +253,9 @@ public class ModpackUtils {
         return !deletedMods.isEmpty();
     }
 
-    private static void addDependenciesRecursively(LoaderService.Mod mod, Collection<LoaderService.Mod> modList, Set<LoaderService.Mod> modsToKeep) {
+    private static void addDependenciesRecursively(LoaderManagerService.Mod mod, Collection<LoaderManagerService.Mod> modList, Set<LoaderManagerService.Mod> modsToKeep) {
         for (String depId : mod.dependencies()) {
-            for (LoaderService.Mod modItem : modList) {
+            for (LoaderManagerService.Mod modItem : modList) {
                 if ((modItem.modID().equals(depId) || modItem.providesIDs().contains(depId)) && modsToKeep.add(modItem)) {
                     addDependenciesRecursively(modItem, modList, modsToKeep);
                 }

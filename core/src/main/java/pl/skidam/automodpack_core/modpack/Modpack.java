@@ -55,31 +55,6 @@ public class Modpack {
         return generated;
     }
 
-    public boolean generate(String modpackName) {
-        if (isGenerating()) {
-            LOGGER.error("Called generate() twice!");
-            return false;
-        }
-
-        try {
-            if (!Files.exists(hostContentModpackDir)) {
-                Files.createDirectories(hostContentModpackDir);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        var content = modpacks.get(modpackName);
-        if (content == null) {
-            LOGGER.error("Modpack with name " + modpackName + " does not exist!");
-            return false;
-        }
-
-        boolean generated = content.create();
-        modpacks.put(content.getModpackName(), content);
-        return generated;
-    }
-
     public boolean isGenerating() {
         int activeCount = CREATION_EXECUTOR.getActiveCount();
         int queueSize = CREATION_EXECUTOR.getQueue().size();

@@ -8,8 +8,9 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_core.loader.LoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.ManifestReader;
+import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -28,7 +29,6 @@ public class Preload {
             LOGGER.info("Prelaunching AutoModpack...");
             initializeGlobalVariables();
             loadConfigs();
-            createPaths();
             updateAll();
             LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
         } catch (Exception e) {
@@ -41,7 +41,7 @@ public class Preload {
 
         var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(clientConfig.selectedModpack);
 
-        if (LOADER_MANAGER.getEnvironmentType() == LoaderService.EnvironmentType.SERVER || optionalSelectedModpackDir.isEmpty()) {
+        if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER || optionalSelectedModpackDir.isEmpty()) {
             SelfUpdater.update();
             return;
         }
@@ -75,7 +75,7 @@ public class Preload {
         }
 
         // Update modpack
-        new ModpackUpdater().startModpackUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
+        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
     }
 
 
@@ -83,6 +83,7 @@ public class Preload {
         // Initialize global variables
         preload = true;
         LOADER_MANAGER = new LoaderManager();
+        MODPACK_LOADER = new ModpackLoader();
         MC_VERSION = LOADER_MANAGER.getModVersion("minecraft");
         // Can't get via automodpack version though loader methods since this mod isn't loaded yet... At least on forge...
         AM_VERSION = ManifestReader.getAutoModpackVersion();
@@ -166,20 +167,5 @@ public class Preload {
         }
 
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
-    }
-
-    private void createPaths() throws IOException {
-        Path AMDir = Paths.get("./automodpack/");
-        // Check if AutoModpack path exists
-        if (!Files.exists(AMDir)) {
-            Files.createDirectories(AMDir);
-        }
-
-        if (new LoaderManager().getEnvironmentType() == LoaderService.EnvironmentType.CLIENT) {
-            Path modpacks = Paths.get("./automodpack/modpacks/");
-            if (!Files.exists(modpacks)) {
-                Files.createDirectories(modpacks);
-            }
-        }
     }
 }

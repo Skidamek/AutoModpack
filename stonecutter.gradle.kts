@@ -9,7 +9,7 @@ plugins {
     id("dev.kikugie.stonecutter")
 }
 
-stonecutter active "1.21.1-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "1.21.4-fabric" /* [SC] DO NOT EDIT */
 
 stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chiseled) { 
     group = "project"
@@ -17,8 +17,8 @@ stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chisele
     finalizedBy("mergeJars")
 }
 
-stonecutter configureEach {
-    val current = project.property("loom.platform")
+stonecutter parameters {
+    val current = node!!.property("loom.platform").toString()
     val platforms = listOf("fabric", "forge", "neoforge").map { it to (it == current) }
     consts(platforms)
 }
@@ -28,19 +28,19 @@ val mergedDir = File("${rootProject.projectDir}/merged")
 
 class MinecraftVersionData(private val name: String) {
     fun greaterThan(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) > 0
+        return stonecutter.eval(name, ">" + other.lowercase())
     }
 
     fun lessThan(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) < 0
+        return stonecutter.eval(name, "<" + other.lowercase())
     }
 
     fun greaterOrEqual(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) >= 0
+        return stonecutter.eval(name, ">=" + other.lowercase())
     }
 
     fun lessOrEqual(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) <= 0
+        return stonecutter.eval(name, "<=" + other.lowercase())
     }
 
     override fun equals(other: Any?) : Boolean {
@@ -63,6 +63,7 @@ fun getProperty(key: String): String? {
 }
 
 // TODO find better way to do it
+// If you get Array Exception, run "clean" task
 tasks.register("mergeJars") {
     coreModules.forEach { module ->
         dependsOn(":loader-$module:build")
@@ -81,7 +82,7 @@ tasks.register("mergeJars") {
         val tasks = mutableListOf<CompletableFuture<Void>>()
         val time = System.currentTimeMillis()
         val size = jarsToMerge.size
-        var current = 0;
+        var current = 0
 
         for (jarToMerge in jarsToMerge) {
             val task = CompletableFuture.runAsync {

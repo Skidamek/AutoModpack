@@ -49,7 +49,9 @@ public class CustomFileUtils {
             if (!Files.exists(destination.getParent())) {
                 Files.createDirectories(destination.getParent());
             }
-            Files.createFile(destination);
+            // Windows? #302
+//            Files.createFile(destination);
+            destination.toFile().createNewFile();
         }
 
         try (RandomAccessFile sourceFile = new RandomAccessFile(source.toFile(), "r");
@@ -101,28 +103,26 @@ public class CustomFileUtils {
     }
 
     // Formats path to be relative to the modpack directory - modpack-content format
-    // modpackFile can not be null
-    // modpackPath can be null
+    // arguments can not be null
     public static String formatPath(final Path modpackFile, final Path modpackPath) {
-        final String modpackFileStr = modpackFile.normalize().toString();
-        final String modpackFileStrAbs = modpackFile.toAbsolutePath().normalize().toString();
-
-        String modpackPathStrAbs = null;
-        if (modpackPath != null) {
-            modpackPathStrAbs = modpackPath.toAbsolutePath().normalize().toString();
+        if (modpackPath == null || modpackFile == null) {
+            throw new IllegalArgumentException("Arguments are null - modpackPath: " + modpackPath + ", modpackFile: " + modpackFile);
         }
 
+        final String modpackFileStr = modpackFile.normalize().toString();
+        final String modpackFileStrAbs = modpackFile.toAbsolutePath().normalize().toString();
+        final String modpackPathStrAbs = modpackPath.toAbsolutePath().normalize().toString();
         final String cwdStrAbs = Path.of(System.getProperty("user.dir")).toAbsolutePath().normalize().toString();
 
         String formattedFile = modpackFileStr;
 
         // Checks if in file parents paths (absolute path) there is modpack directory (absolute path)
-        if (modpackPathStrAbs != null && modpackFileStrAbs.contains(modpackPathStrAbs)) {
+        if (modpackFileStrAbs.contains(modpackPathStrAbs)) {
             formattedFile = modpackFileStrAbs.replace(modpackPathStrAbs, "");
         } else if (modpackFileStrAbs.contains(cwdStrAbs)) {
             formattedFile = modpackFileStrAbs.replace(cwdStrAbs, "");
-        } else {
-            LOGGER.error("File: " + modpackFileStr + " is not in modpack directory: " + modpackPathStrAbs + " or current working directory: " + cwdStrAbs);
+        } else if (!modpackFileStrAbs.equals(modpackFileStr)) { // possible in e.g. docker
+            LOGGER.error("File: {} ({}) is not in modpack directory: {} ({}) or current working directory: {}", modpackFileStr, modpackFileStrAbs, modpackPath, modpackPathStrAbs, cwdStrAbs);
         }
 
         formattedFile =  formattedFile.replace(File.separator, "/");

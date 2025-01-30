@@ -10,7 +10,9 @@ import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.*;
@@ -108,7 +110,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             raf = new RandomAccessFile(path.toFile(), "r");
         } catch (FileNotFoundException e) {
             sendError(context, 404);
-            LOGGER.error("Requested file not found!", e.getCause());
+            LOGGER.error("Requested file not found!", e);
             return;
         } catch (Exception e) {
             sendError(context, 418);
@@ -123,27 +125,45 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             response.addHeader("Content-Type", "application/octet-stream");
             response.addHeader("Content-Length", String.valueOf(fileLength));
 
-            // Those ByteBuf's are necessary!
+            // Response headers
             ByteBuf responseHeadersBuf = Unpooled.copiedBuffer(response.getResponseMessage(), StandardCharsets.UTF_8);
             context.pipeline().firstContext().write(responseHeadersBuf);
 
-            // Write a file
+            // Write the file
             DefaultFileRegion fileRegion = new DefaultFileRegion(raf.getChannel(), 0, fileLength);
-            context.pipeline().firstContext().writeAndFlush(fileRegion, context.newProgressivePromise()).addListener(future -> {
-                if (!future.isSuccess()) {
-                    LOGGER.error("Writing to channel error! " + future.cause() + " " + future.cause().getMessage());
-                }
-                raf.close();
-                context.pipeline().firstContext().channel().close();
-            });
+            context.pipeline().firstContext().writeAndFlush(fileRegion, context.newProgressivePromise())
+                    .addListener(future -> {
+                        try {
+                            Throwable cause = future.cause();
+                            if (cause != null && !(cause instanceof ClosedChannelException)) {
+                                LOGGER.error("Error writing to channel: {} path: {}", cause, path);
+                            }
+                        } catch (Exception e) {
+                            LOGGER.error("Unexpected error: {}", e.getMessage(), e);
+                        } finally {
+                            try {
+                                raf.close(); // Ensure RandomAccessFile is closed
+                            } catch (IOException e) {
+                                LOGGER.error("Failed to close RandomAccessFile: {} of path: {}", e, path);
+                            }
+
+                            // Finally close channel
+                            context.pipeline().firstContext().channel().close();
+                        }
+                    });
         } catch (Exception e) {
-            LOGGER.error("Couldn't read channel!", e);
+            LOGGER.error("Error during file: {} handling {}", path, e);
+            try {
+                raf.close(); // Ensure RandomAccessFile is closed in case of exceptions
+            } catch (IOException closeEx) {
+                LOGGER.error("Failed to close RandomAccessFile: {} of path: {}", closeEx, path);
+            }
         }
     }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext context, Throwable cause) {
-        LOGGER.error("Couldn't handle HTTP request!" + cause);
+        LOGGER.error("Couldn't handle HTTP request!", cause.getCause());
     }
 
     private void sendError(ChannelHandlerContext context, int status) {
@@ -151,7 +171,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         response.addHeader("Content-Length", String.valueOf(0));
 
         ByteBuf responseBuf = Unpooled.copiedBuffer(response.getResponseMessage(), StandardCharsets.UTF_8);
-        context.pipeline().firstContext().writeAndFlush(responseBuf).addListener(ChannelFutureListener.CLOSE);
+        context.pipeline().writeAndFlush(responseBuf).addListener(ChannelFutureListener.CLOSE);
     }
 
     public Optional<Path> resolvePath(final String sha1) {
@@ -175,7 +195,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             equals = Arrays.equals(data1, HttpServer.HTTP_REQUEST_GET_BASE_BYTES) || Arrays.equals(data2, HttpServer.HTTP_REQUEST_REFRESH_BYTES);
         } catch (IndexOutOfBoundsException ignored) {
         } catch (Exception e) {
-            LOGGER.error("Couldn't read channel!", e);
+            LOGGER.error("Couldn't read channel!", e.getCause());
         }
 
         return equals;
@@ -205,7 +225,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 stringList.add(jsonArray.get(i).getAsString());
             }
         } catch (JsonSyntaxException e) {
-            e.printStackTrace();
+            LOGGER.error("Couldn't parse JSON from request body!", e.getCause());
         }
 
         return stringList;

@@ -1,10 +1,12 @@
 package pl.skidam.automodpack_loader_core_forge.mods;
 
-import pl.skidam.automodpack_loader_core.mods.ModpackLoaderService;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
@@ -24,5 +26,10 @@ public class ModpackLoader implements ModpackLoaderService {
         } catch (Exception e) {
             LOGGER.error("Error while loading modpack", e);
         }
+    }
+
+    @Override
+    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
+        return new ArrayList<>();
     }
 }
