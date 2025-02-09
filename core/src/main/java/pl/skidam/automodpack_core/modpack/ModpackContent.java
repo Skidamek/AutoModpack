@@ -70,6 +70,11 @@ public class ModpackContent {
                 LOGGER.warn("Modpack is empty!");
                 return false;
             }
+
+            // Remove duplicates
+            Set<String> sha1Set = new HashSet<>();
+            list.removeIf(item -> !sha1Set.add(item.sha1));
+
         } catch (Exception e) {
             LOGGER.error("Error while generating modpack!", e);
             return false;
