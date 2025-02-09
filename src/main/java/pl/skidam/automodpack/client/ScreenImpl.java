@@ -10,6 +10,7 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.FetchManager;
+import pl.skidam.automodpack_loader_core.utils.SelectionManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;
@@ -17,6 +18,11 @@ import java.util.Arrays;
 import java.util.Optional;
 
 public class ScreenImpl implements ScreenService {
+
+    @Override
+    public void downloadselection(Object... args) {
+        Screens.downloadselection(args[0], args[1]);
+    }
 
     @Override
     public void download(Object... args) {
@@ -40,7 +46,7 @@ public class ScreenImpl implements ScreenService {
 
     @Override
     public void danger(Object... args) {
-        Screens.danger(args[0], args[1]);
+        Screens.danger(args[0], args[1], args[2]);
     }
 
     @Override
@@ -79,6 +85,12 @@ public class ScreenImpl implements ScreenService {
             Util.getMainWorkerExecutor().execute(() -> MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen)));
         }
 
+        public static void danger(Object parent, Object modpackUpdaterInstance, Object selectionManagerInstance) {
+            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance, (SelectionManager) selectionManagerInstance));
+        }
+        public static void downloadselection(Object parent, Object modpackUpdaterInstance) {
+            Screens.setScreen(new DownloadSelectionScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
+        }
         public static void download(Object downloadManager, Object header) {
             Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
         }
@@ -88,15 +100,9 @@ public class ScreenImpl implements ScreenService {
         public static void changelog(Object parent, Object modpackDir, Object changelog) {
             Screens.setScreen(new ChangelogScreen((Screen) parent, (Path) modpackDir, (Changelogs) changelog));
         }
-
         public static void restart(Object modpackDir, Object updateType, Object changelogs) {
             Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
         }
-
-        public static void danger(Object parent, Object modpackUpdaterInstance) {
-            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
-        }
-
         public static void error(String... error) {
             Screens.setScreen(new ErrorScreen(Arrays.toString(error)));
         }
