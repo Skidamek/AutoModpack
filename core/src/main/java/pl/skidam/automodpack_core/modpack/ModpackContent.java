@@ -72,8 +72,8 @@ public class ModpackContent {
             }
 
             // Remove duplicates
-            Set<String> sha1Set = new HashSet<>();
-            list.removeIf(item -> !sha1Set.add(item.sha1));
+            Set<String> dupeSet = new HashSet<>();
+            list.removeIf(item -> !dupeSet.add(item.file));
 
         } catch (Exception e) {
             LOGGER.error("Error while generating modpack!", e);
