@@ -194,7 +194,7 @@ public class ModpackUtils {
     // Returns true if removed any mod from standard mods folder
     // If the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // If you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
-    public static boolean removeDupeMods(Map<LoaderManagerService.Mod, LoaderManagerService.Mod> dupeMods) throws IOException {
+    public static boolean removeDupeMods(Map<LoaderManagerService.Mod, LoaderManagerService.Mod> dupeMods, Set<String> workaroundMods) throws IOException {
         List<Path> standardMods = Files.list(MODS_DIR).toList();
         Collection<LoaderManagerService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
 
@@ -231,6 +231,7 @@ public class ModpackUtils {
             IDs.add(modId);
 
             boolean isDependent = IDs.stream().anyMatch(idsToKeep::contains);
+            boolean isWorkaround = workaroundMods.contains(CustomFileUtils.formatPath(standardModPath, MODS_DIR.getParent()));
 
             if (isDependent) {
                 // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
@@ -243,7 +244,7 @@ public class ModpackUtils {
                     CustomFileUtils.copyFile(modpackModPath, standardModPath.getParent().resolve(modpackModPath.getFileName()));
                     deletedMods.add(standardModPath);
                 }
-            } else {
+            } else if (!isWorkaround) {
                 LOGGER.warn("Removing {} mod. It is duplicated modpack mod and no other mods are dependent on it!", modId);
                 CustomFileUtils.forceDelete(standardModPath);
                 deletedMods.add(standardModPath);

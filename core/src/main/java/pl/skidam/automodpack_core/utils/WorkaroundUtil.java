@@ -27,7 +27,7 @@ public class WorkaroundUtil {
     public Set<String> getWorkaroundMods(Jsons.ModpackContentFields modpackContentFields) {
         Set<String> workaroundMods = new HashSet<>();
 
-        // this workaround is not needed for neo/forge
+        // this workaround is needed only for neo/forge
         if (GlobalVariables.LOADER == null || !GlobalVariables.LOADER.contains("forge")) {
             return workaroundMods;
         }
@@ -58,7 +58,9 @@ public class WorkaroundUtil {
     // get workaround list from the file using gson from ConfigTools and WorkaroundFields class from Jsons
     public Set<String> getWorkaroundList() {
         Jsons.WorkaroundFields workaroundFields = ConfigTools.load(workaroundFile, Jsons.WorkaroundFields.class);
-        if (workaroundFields == null || workaroundFields.workaroundMods == null) return new HashSet<>();
+        if (workaroundFields == null || workaroundFields.workaroundMods == null) {
+            return new HashSet<>();
+        }
 
         int previousWorkaroundVersion = workaroundFields.DO_NOT_CHANGE_IT;
         workaroundFields.DO_NOT_CHANGE_IT = new Jsons.WorkaroundFields().DO_NOT_CHANGE_IT;

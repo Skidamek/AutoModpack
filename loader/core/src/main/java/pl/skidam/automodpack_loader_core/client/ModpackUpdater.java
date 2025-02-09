@@ -442,7 +442,8 @@ public class ModpackUpdater {
 
         // Remove duplicate mods
         var dupeMods = ModpackUtils.getDupeMods(modpackDir, newIgnoredFiles);
-        boolean needsRestart2 = ModpackUtils.removeDupeMods(dupeMods);
+        var workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
+        boolean needsRestart2 = ModpackUtils.removeDupeMods(dupeMods, workaroundMods);
 
         return needsRestart0 || needsRestart1 || needsRestart2;
     }
