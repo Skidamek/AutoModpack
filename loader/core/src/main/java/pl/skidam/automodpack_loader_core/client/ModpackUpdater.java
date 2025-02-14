@@ -421,12 +421,12 @@ public class ModpackUpdater {
         }
 
         // Make a list of ignored files to ignore them while copying
-        Set<String> ignoredFiles = deleteNonModpackFiles(modpackContent);
-        workaroundUtil.saveWorkaroundList(ignoredFiles);
+        boolean needsRestart0 = deleteNonModpackFiles(modpackContent);
+        Set<String> ignoredFiles =  workaroundUtil.getWorkaroundMods(modpackContent);
+        ignoredFiles = getIgnoredFiles(modpackContent.list, ignoredFiles); // TODO: move check of new editable files somewhere else and get rid of this method
 
         // Copy files to running directory
-        ignoredFiles = getIgnoredFiles(modpackContent.list, ignoredFiles);
-        boolean needsRestart0 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, ignoredFiles);
+        boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, ignoredFiles);
 
         // Prepare modpack, analyze nested mods, copy necessary nested mods over to standard mods directory
         List<LoaderManagerService.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir, ignoredFiles);
@@ -435,15 +435,16 @@ public class ModpackUpdater {
             LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
         }
 
-        boolean needsRestart1 = ModpackUtils.fixNestedMods(conflictingNestedMods);
+        boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods);
         Set<String> newIgnoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, ignoredFiles);
 
         // Remove duplicate mods
         var dupeMods = ModpackUtils.getDupeMods(modpackDir, newIgnoredFiles);
         var workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
-        boolean needsRestart2 = ModpackUtils.removeDupeMods(dupeMods, workaroundMods);
 
-        return needsRestart0 || needsRestart1 || needsRestart2;
+        boolean needsRestart3 = ModpackUtils.removeDupeMods(dupeMods, workaroundMods);
+
+        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3;
     }
 
     private Set<String> getIgnoredFiles(Set<Jsons. ModpackContentFields. ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
@@ -468,27 +469,31 @@ public class ModpackUpdater {
     }
 
     // returns changed workaroundMods list
-    // TODO debug strange chars issue like § #297
-    private Set<String> deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent) throws IOException {
+    private boolean deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent) throws IOException {
         List<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).toList();
         List<Path> pathList = Files.walk(modpackDir).toList();
         Set<String> workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
-        List<Path> parentPaths = new ArrayList<>();
+        Set<Path> parentPaths = new HashSet<>();
+        boolean needsRestart = false;
 
         for (Path path : pathList) {
-            if (Files.isDirectory(path)) continue;
-            if (path.equals(modpackContentFile)) continue;
-            if (path.equals(workaroundUtil.getWorkaroundFile())) continue;
+            if (Files.isDirectory(path) || path.equals(modpackContentFile) || path.equals(workaroundUtil.getWorkaroundFile())) {
+                continue;
+            }
 
-            String formattedFile = CustomFileUtils.formatPath(path, modpackDir); // format path to modpack content file
-            if (modpackFiles.contains(formattedFile)) continue;
+            String formattedFile = CustomFileUtils.formatPath(path, modpackDir);
+            if (modpackFiles.contains(formattedFile)) {
+                continue;
+            }
 
             Path runPath = CustomFileUtils.getPathFromCWD(formattedFile);
             if (Files.exists(runPath) && CustomFileUtils.compareFileHashes(path, runPath, "SHA-1")) {
-                // we generally dont delete mods, as we dont ever add mods there. However, we do delete mods which need that since they need a workaround
                 if (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile)) {
                     LOGGER.info("Deleting {} and {}", path, runPath);
-                    workaroundMods.remove(formattedFile);
+                    if (workaroundMods.contains(formattedFile)) {
+                        needsRestart = true;
+                        workaroundMods.remove(formattedFile);
+                    }
                     parentPaths.add(runPath.getParent());
                     CustomFileUtils.forceDelete(runPath);
                 }
@@ -506,7 +511,9 @@ public class ModpackUpdater {
             deleteEmptyParentDirectoriesRecursively(parentPath);
         }
 
-        return workaroundMods;
+        workaroundUtil.saveWorkaroundList(workaroundMods);
+
+        return needsRestart;
     }
 
     private void deleteEmptyParentDirectoriesRecursively(Path directory) throws IOException {

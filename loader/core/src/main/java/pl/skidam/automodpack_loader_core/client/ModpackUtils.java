@@ -91,14 +91,14 @@ public class ModpackUtils {
         for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
             String formattedFile = contentItem.file;
 
-            if (ignoreFiles.contains(formattedFile)) continue;
+            if (ignoreFiles.contains(formattedFile)) continue; // FIXME: breaks new downloaded editable files?
 
             Path modpackFile = CustomFileUtils.getPath(modpackDir, formattedFile);
             Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
 
             if (contentItem.type.equals("mod")) {
                 // Make it into standardized mods directory, for support custom launchers
-                runFile = MODS_DIR.resolve(formattedFile.replaceFirst("/mods/", ""));
+                runFile = CustomFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
             }
 
             boolean modpackFileExists = Files.exists(modpackFile);
