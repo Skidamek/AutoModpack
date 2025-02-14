@@ -12,8 +12,6 @@ import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.Ip;
 import pl.skidam.automodpack_core.utils.ObservableMap;
 
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.*;
@@ -51,7 +49,6 @@ public class HttpServer {
         }
 
         int port = serverConfig.hostPort;
-        InetAddress address = new InetSocketAddress(port).getAddress();
 
         MultithreadEventLoopGroup eventLoopGroup;
         Class<? extends ServerChannel> socketChannelClass;
@@ -81,7 +78,7 @@ public class HttpServer {
                         }
                 )
                 .group(eventLoopGroup)
-                .localAddress(address, port)
+                .localAddress("127.0.0.1", port)
                 .bind()
                 .syncUninterruptibly();
 
