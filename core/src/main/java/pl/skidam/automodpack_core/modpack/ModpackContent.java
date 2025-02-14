@@ -20,17 +20,15 @@ public class ModpackContent {
     private final String MODPACK_NAME;
     private final WildCards SYNCED_FILES_CARDS;
     private final WildCards EDITABLE_CARDS;
-    private final Path CWD;
     private final Path MODPACK_DIR;
     private final ThreadPoolExecutor CREATION_EXECUTOR;
     private final Map<String, String> sha1MurmurMapPreviousContent = new HashMap<>();
 
     public ModpackContent(String modpackName, Path cwd, Path modpackDir, List<String> syncedFiles, List<String> allowEditsInFiles, ThreadPoolExecutor CREATION_EXECUTOR) {
         this.MODPACK_NAME = modpackName;
-        this.CWD = cwd;
         this.MODPACK_DIR = modpackDir;
         Set<Path> directoriesToSearch = new HashSet<>(2);
-        if (CWD != null) directoriesToSearch.add(CWD);
+        if (cwd != null) directoriesToSearch.add(cwd);
         if (MODPACK_DIR != null) directoriesToSearch.add(MODPACK_DIR);
         this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, directoriesToSearch);
         this.EDITABLE_CARDS = new WildCards(allowEditsInFiles, directoriesToSearch);
@@ -103,8 +101,8 @@ public class ModpackContent {
             list.addAll(modpackContent.list);
 
             for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : list) {
-                Path file = Path.of(MODPACK_DIR + modpackContentItem.file);
-                if (!Files.exists(file)) file = Path.of(CWD + modpackContentItem.file);
+                Path file = CustomFileUtils.getPath(MODPACK_DIR, modpackContentItem.file);
+                if (!Files.exists(file)) file = CustomFileUtils.getPathFromCWD(modpackContentItem.file);
                 if (!Files.exists(file)) {
                     LOGGER.warn("File {} does not exist!", file);
                     continue;

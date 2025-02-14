@@ -14,10 +14,7 @@ import pl.skidam.automodpack_core.utils.Url;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryNotEmptyException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.util.*;
 
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
@@ -45,12 +42,12 @@ public class ModpackUtils {
                 String file = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
-                Path path = Path.of(modpackDir + file);
+                Path path = CustomFileUtils.getPath(modpackDir, file);
 
                 if (Files.exists(path)) {
                     if (modpackContentField.editable) continue;
                 } else {
-                    Path standardPath = Path.of("." + file);
+                    Path standardPath = CustomFileUtils.getPathFromCWD(file);
                     if (Files.exists(standardPath) && Objects.equals(serverSHA1, CustomFileUtils.getHash(standardPath, "sha1").orElse(null))) {
                         LOGGER.info("File {} already exists on client, coping to modpack", standardPath.getFileName());
                         try { CustomFileUtils.copyFile(standardPath, path); } catch (IOException e) { e.printStackTrace(); }
@@ -96,8 +93,8 @@ public class ModpackUtils {
 
             if (ignoreFiles.contains(formattedFile)) continue;
 
-            Path modpackFile = Path.of(modpackDir + formattedFile).toAbsolutePath().normalize();
-            Path runFile = Path.of("." + formattedFile).toAbsolutePath().normalize();
+            Path modpackFile = CustomFileUtils.getPath(modpackDir, formattedFile);
+            Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
 
             if (contentItem.type.equals("mod")) {
                 // Make it into standardized mods directory, for support custom launchers
@@ -360,7 +357,7 @@ public class ModpackUtils {
             nameFromUrl = FileInspection.fixFileName(nameFromUrl);
         }
 
-        Path modpackDir = Path.of(modpacksDir + File.separator + nameFromUrl);
+        Path modpackDir = CustomFileUtils.getPath(modpacksDir, nameFromUrl);
 
         if (!modpackName.isEmpty()) {
             // Check if we don't have already installed modpack via this link
@@ -374,7 +371,7 @@ public class ModpackUtils {
                 nameFromName = FileInspection.fixFileName(modpackName);
             }
 
-            modpackDir = Path.of(modpacksDir + File.separator + nameFromName);
+            modpackDir = CustomFileUtils.getPath(modpacksDir, nameFromName);
         }
 
         return modpackDir;
@@ -527,10 +524,10 @@ public class ModpackUtils {
 
     public static void preserveEditableFiles(Path modpackDir, Set<String> editableFiles) {
         for (String file : editableFiles) {
-            Path path = Path.of("." + file);
+            Path path = CustomFileUtils.getPathFromCWD(file);
             if (Files.exists(path)) {
                 try {
-                    CustomFileUtils.copyFile(path, Path.of(modpackDir + file));
+                    CustomFileUtils.copyFile(path, CustomFileUtils.getPath(modpackDir, file));
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -540,10 +537,10 @@ public class ModpackUtils {
 
     public static void copyPreviousEditableFiles(Path modpackDir, Set<String> editableFiles) {
         for (String file : editableFiles) {
-            Path path = Path.of(modpackDir + file);
+            Path path = CustomFileUtils.getPath(modpackDir, file);
             if (Files.exists(path)) {
                 try {
-                    CustomFileUtils.copyFile(path, Path.of("." + file));
+                    CustomFileUtils.copyFile(path, CustomFileUtils.getPathFromCWD(file));
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

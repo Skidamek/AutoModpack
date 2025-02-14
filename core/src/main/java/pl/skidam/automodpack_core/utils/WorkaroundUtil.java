@@ -34,7 +34,7 @@ public class WorkaroundUtil {
 
         for (Jsons.ModpackContentFields.ModpackContentItem mod : modpackContentFields.list) {
             if (mod.type.equals("mod")) {
-                Path modPath = Path.of(modpackPath + mod.file);
+                Path modPath = CustomFileUtils.getPath(modpackPath, mod.file);
                 if (FileInspection.hasSpecificServices(modPath)) {
                     workaroundMods.add(mod.file);
                 }
@@ -46,7 +46,7 @@ public class WorkaroundUtil {
         workaroundMods.addAll(savedWorkaroundMods);
 
         return workaroundMods;
-    };
+    }
 
     // save workaround list to the file using gson from ConfigTools and WorkaroundFields class from Jsons
     public void saveWorkaroundList(Set<String> workaroundMods) {

@@ -168,8 +168,7 @@ public class ModpackUpdater {
                 String file = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
-                // Dont use resolve, it wont work because of the leading slash in file
-                Path path = Path.of(modpackDir + file);
+                Path path = CustomFileUtils.getPath(modpackDir, file);
 
                 if (Files.exists(path) && modpackContentField.editable) {
                     skippedEditableFiles++;
@@ -179,8 +178,7 @@ public class ModpackUpdater {
                 }
 
                 if (!Files.exists(path)) {
-                    // Dont use resolve, it wont work because of the leading slash in file
-                    path = Path.of(System.getProperty("user.dir") + file);
+                    path = CustomFileUtils.getPathFromCWD(file);
                 }
 
                 if (!Files.exists(path)) {
@@ -242,7 +240,7 @@ public class ModpackUpdater {
                     String fileName = item.file;
                     String serverSHA1 = item.sha1;
 
-                    Path downloadFile = Paths.get(modpackDir + fileName);
+                    Path downloadFile = CustomFileUtils.getPath(modpackDir, fileName);
 
                     if (!Files.exists(downloadFile)) {
                         newDownloadedFiles.add(fileName);
@@ -324,7 +322,7 @@ public class ModpackUpdater {
                         String fileName = item.file;
                         String serverSHA1 = item.sha1;
 
-                        Path downloadFile = Paths.get(modpackDir + fileName);
+                        Path downloadFile = CustomFileUtils.getPath(modpackDir, fileName);
                         DownloadManager.Urls urls = new DownloadManager.Urls();
                         urls.addUrl(new DownloadManager.Url().getUrl(modpackLink + serverSHA1));
 
@@ -485,7 +483,7 @@ public class ModpackUpdater {
             String formattedFile = CustomFileUtils.formatPath(path, modpackDir); // format path to modpack content file
             if (modpackFiles.contains(formattedFile)) continue;
 
-            Path runPath = Path.of("." + formattedFile);
+            Path runPath = CustomFileUtils.getPathFromCWD(formattedFile);
             if (Files.exists(runPath) && CustomFileUtils.compareFileHashes(path, runPath, "SHA-1")) {
                 // we generally dont delete mods, as we dont ever add mods there. However, we do delete mods which need that since they need a workaround
                 if (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile)) {
@@ -496,17 +494,12 @@ public class ModpackUpdater {
                 }
             } else {
                 LOGGER.info("Deleting {}", path);
-//                LOGGER.warn("Formatted file: {}", formattedFile);
             }
 
             parentPaths.add(path.getParent());
             CustomFileUtils.forceDelete(path);
             changelogs.changesDeletedList.put(path.getFileName().toString(), null);
         }
-
-//        if (!parentPaths.isEmpty()) {
-//            LOGGER.error(modpackFiles);
-//        }
 
         // recursively delete empty directories
         for (Path parentPath : parentPaths) {

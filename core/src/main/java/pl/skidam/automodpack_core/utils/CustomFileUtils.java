@@ -32,6 +32,8 @@ public class CustomFileUtils {
             1, 0, 70, 0, 0, 0, 97, 0, 0, 0, 0, 0,
     };
 
+    private static final Path CWD = Path.of(System.getProperty("user.dir"));
+
     public static void forceDelete(Path file) {
         try {
             Files.deleteIfExists(file);
@@ -41,6 +43,23 @@ public class CustomFileUtils {
         if (Files.exists(file)) {
             dummyIT(file);
         }
+    }
+
+    public static Path getPathFromCWD(String path) {
+        return getPath(CWD, path);
+    }
+
+    // Special for use instead of normal resolve, since it wont work because of the leading slash in file
+    public static Path getPath(Path origin, String path) {
+        if (path == null) {
+            return null;
+        }
+
+        if (path.startsWith("/")) {
+            return origin.resolve(path.substring(1));
+        }
+
+        return origin.resolve(path);
     }
 
     // our implementation of Files.copy, thanks to usage of RandomAccessFile we can copy files that are in use

@@ -2,10 +2,8 @@ package pl.skidam.automodpack_core.utils;
 
 import pl.skidam.automodpack_core.config.Jsons;
 
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Optional;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -27,7 +25,7 @@ public class ModpackContentTools {
 
         // eg. modpack = /automodpack/modpacks/TestPack `directory`
 
-        return Optional.of(Paths.get(modpacksDir + File.separator + modpack));
+        return Optional.of(modpacksDir.resolve(modpack));
     }
 
     public static Optional<Path> getModpackContentFile(Path modpackDir) {
