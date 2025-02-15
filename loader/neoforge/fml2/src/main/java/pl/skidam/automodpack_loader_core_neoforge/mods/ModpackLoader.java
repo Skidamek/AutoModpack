@@ -2,7 +2,6 @@ package pl.skidam.automodpack_loader_core_neoforge.mods;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -14,17 +13,12 @@ import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class ModpackLoader implements ModpackLoaderService {
     public static String CONNECTOR_MODS_PROPERTY = "connector.additionalModLocations";
-    public static List<Path> modsToLoad = new ArrayList<>();
+    public static List<Path> modsToAdd = new ArrayList<>();
 
     @Override
     public void loadModpack(List<Path> modpackMods) {
         try {
-            for (Path modpackMod : modpackMods) {
-                if (FileInspection.isModCompatible(modpackMod)) {
-                    modsToLoad.add(modpackMod);
-                }
-            }
-
+            modsToAdd.addAll(modpackMods);
             // set for connector
             String paths = modpackMods.stream().map(Path::toString).collect(Collectors.joining(","));
             String finalMods = paths + "," + System.getProperty(CONNECTOR_MODS_PROPERTY, "");

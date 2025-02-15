@@ -43,6 +43,6 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
         }
 
         new Preload();
-        return ModpackLoader.modsToLoad.stream();
+        return ModpackLoader.modsToAdd.stream();
     }
 }

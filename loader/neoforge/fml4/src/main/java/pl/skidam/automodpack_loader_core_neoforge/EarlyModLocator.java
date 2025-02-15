@@ -20,7 +20,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 
         new Preload();
 
-        for (Path path : ModpackLoader.modsToLoad) {
+        for (Path path : ModpackLoader.modsToAdd) {
             pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
             pipeline.readModFile(JarContents.of(path), ModFileDiscoveryAttributes.DEFAULT);
         }
