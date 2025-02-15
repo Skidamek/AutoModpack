@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,9 +35,18 @@ public class ConfigTools {
             if (Files.isRegularFile(configFile)) {
                 String json = Files.readString(configFile);
                 T obj = GSON.fromJson(json, configClass);
+                if (obj == null) {
+                    LOGGER.error("Parsed object is null. Possible JSON syntax error in file: " + configFile);
+                    return null;
+                }
+
                 save(configFile, obj);
                 return obj;
             }
+        } catch (JsonSyntaxException e) {
+            LOGGER.error("JSON syntax error while loading config! {} {}", configClass, e.getMessage());
+            LOGGER.error("This error most often happens when you e.g. forget to put a comma between fields in JSON file. Check the file: " + configFile.toAbsolutePath().normalize());
+            return null;
         } catch (Exception e) {
             LOGGER.error("Couldn't load config! " + configClass);
             e.printStackTrace();

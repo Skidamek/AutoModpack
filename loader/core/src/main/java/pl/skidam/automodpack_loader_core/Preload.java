@@ -166,6 +166,10 @@ public class Preload {
             ConfigTools.save(clientConfigFile, clientConfig);
         }
 
+        if (serverConfig == null || clientConfig == null) {
+            throw new RuntimeException("Failed to load config!");
+        }
+
         LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
     }
 }
