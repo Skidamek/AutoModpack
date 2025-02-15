@@ -487,16 +487,14 @@ public class ModpackUpdater {
             }
 
             Path runPath = CustomFileUtils.getPathFromCWD(formattedFile);
-            if (Files.exists(runPath) && CustomFileUtils.compareFileHashes(path, runPath, "SHA-1")) {
-                if (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile)) {
-                    LOGGER.info("Deleting {} and {}", path, runPath);
-                    if (workaroundMods.contains(formattedFile)) {
-                        needsRestart = true;
-                        workaroundMods.remove(formattedFile);
-                    }
-                    parentPaths.add(runPath.getParent());
-                    CustomFileUtils.forceDelete(runPath);
+            if ((Files.exists(runPath) && CustomFileUtils.compareFileHashes(path, runPath, "SHA-1")) && (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile))) {
+                LOGGER.info("Deleting {} and {}", path, runPath);
+                if (workaroundMods.contains(formattedFile)) { // We only delete workaround mods so only the mods that we have originally copied there
+                    needsRestart = true;
+                    workaroundMods.remove(formattedFile);
                 }
+                parentPaths.add(runPath.getParent());
+                CustomFileUtils.forceDelete(runPath);
             } else {
                 LOGGER.info("Deleting {}", path);
             }

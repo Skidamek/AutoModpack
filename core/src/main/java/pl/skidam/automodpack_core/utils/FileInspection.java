@@ -29,7 +29,15 @@ public class FileInspection {
             return false;
         }
 
-        return getModID(file) != null;
+        if (getModID(file) != null) {
+            return true;
+        }
+
+        if (hasSpecificServices(file)) {
+            return true;
+        }
+
+        return false;
     }
 
     public static Path getAutoModpackJar() {
