@@ -28,9 +28,13 @@ public class ModpackContent {
         this.MODPACK_NAME = modpackName;
         this.MODPACK_DIR = modpackDir;
         Set<Path> directoriesToSearch = new HashSet<>(2);
-        if (cwd != null) directoriesToSearch.add(cwd);
         if (MODPACK_DIR != null) directoriesToSearch.add(MODPACK_DIR);
-        this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, directoriesToSearch);
+        if (cwd != null) {
+            directoriesToSearch.add(cwd);
+            this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, Set.of(cwd)); // Synced files should search only in cwd
+        } else {
+            this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, Collections.emptySet());
+        }
         this.EDITABLE_CARDS = new WildCards(allowEditsInFiles, directoriesToSearch);
         this.CREATION_EXECUTOR = CREATION_EXECUTOR;
     }
@@ -69,9 +73,9 @@ public class ModpackContent {
                 return false;
             }
 
-            // Remove duplicates
-            Set<String> dupeSet = new HashSet<>();
-            list.removeIf(item -> !dupeSet.add(item.file));
+//            // Remove duplicates - this should never happen
+//            Set<String> dupeSet = new HashSet<>();
+//            list.removeIf(item -> !dupeSet.add(item.file));
 
         } catch (Exception e) {
             LOGGER.error("Error while generating modpack!", e);

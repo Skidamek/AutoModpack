@@ -17,6 +17,8 @@ public class WildCards {
 
     public WildCards(List<String> wildcardsList, Set<Path> directoriesToSearch) {
 
+        if (directoriesToSearch.isEmpty()) return;
+
         wildcardsList = new ArrayList<>(wildcardsList);
 
         // sort the files, that files starting with `!` are last to then exclude them
