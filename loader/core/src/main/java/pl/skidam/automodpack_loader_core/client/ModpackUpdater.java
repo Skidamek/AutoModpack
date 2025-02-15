@@ -392,7 +392,7 @@ public class ModpackUpdater {
 
     // returns true if restart is required
     private boolean applyModpack() throws Exception {
-        ModpackUtils.selectModpack(modpackDir, modpackLink);
+        ModpackUtils.selectModpack(modpackDir, modpackLink, newDownloadedFiles);
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
@@ -422,50 +422,50 @@ public class ModpackUpdater {
 
         // Make a list of ignored files to ignore them while copying
         boolean needsRestart0 = deleteNonModpackFiles(modpackContent);
-        Set<String> ignoredFiles =  workaroundUtil.getWorkaroundMods(modpackContent);
-        ignoredFiles = getIgnoredFiles(modpackContent.list, ignoredFiles); // TODO: move check of new editable files somewhere else and get rid of this method
+        Set<String> workaroundMods =  workaroundUtil.getWorkaroundMods(modpackContent);
+        Set<String> filesNotToCopy = getIgnoredFiles(modpackContent.list, workaroundMods);
 
         // Copy files to running directory
-        boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, ignoredFiles);
+        boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
 
         // Prepare modpack, analyze nested mods, copy necessary nested mods over to standard mods directory
-        List<LoaderManagerService.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir, ignoredFiles);
+        List<LoaderManagerService.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir, filesNotToCopy);
 
         if (!conflictingNestedMods.isEmpty()) {
             LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
         }
 
         boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods);
-        Set<String> newIgnoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, ignoredFiles);
+        Set<String> newIgnoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, filesNotToCopy);
 
         // Remove duplicate mods
         var dupeMods = ModpackUtils.getDupeMods(modpackDir, newIgnoredFiles);
-        var workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
+        workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
 
         boolean needsRestart3 = ModpackUtils.removeDupeMods(dupeMods, workaroundMods);
 
         return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3;
     }
 
+    // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory
     private Set<String> getIgnoredFiles(Set<Jsons. ModpackContentFields. ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
-        Set<String> ignoredFiles = new HashSet<>();
-
+        Set<String> filesNotToCopy = new HashSet<>();
 
         // Make list of files which we do not copy to the running directory
         for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : modpackContentItems) {
             // We only want to copy editable file if its downloaded first time
             // So we add to ignored any other editable file
             if (modpackContentItem.editable && !newDownloadedFiles.contains(modpackContentItem.file)) {
-                ignoredFiles.add(modpackContentItem.file);
+                filesNotToCopy.add(modpackContentItem.file);
             }
 
             // We only want to copy mods which need a workaround
             if (modpackContentItem.type.equals("mod") && !workaroundMods.contains(modpackContentItem.file)) {
-                ignoredFiles.add(modpackContentItem.file);
+                filesNotToCopy.add(modpackContentItem.file);
             }
         }
 
-        return ignoredFiles;
+        return filesNotToCopy;
     }
 
     // returns changed workaroundMods list

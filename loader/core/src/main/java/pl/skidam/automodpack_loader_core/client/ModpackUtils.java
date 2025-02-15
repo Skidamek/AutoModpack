@@ -79,7 +79,7 @@ public class ModpackUtils {
         }
     }
 
-    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> ignoreFiles) throws IOException {
+    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             LOGGER.error("Server modpack content list is null");
             return false;
@@ -91,7 +91,7 @@ public class ModpackUtils {
         for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
             String formattedFile = contentItem.file;
 
-            if (ignoreFiles.contains(formattedFile)) continue; // FIXME: breaks new downloaded editable files?
+            if (filesNotToCopy.contains(formattedFile)) continue;
 
             Path modpackFile = CustomFileUtils.getPath(modpackDir, formattedFile);
             Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
@@ -216,7 +216,7 @@ public class ModpackUtils {
 
         List<Path> deletedMods = new ArrayList<>();
 
-        // Remove dupe mods
+        // Remove dupe mods unless they need to stay - workaround mods
         for (var dupeMod : dupeMods.entrySet()) {
             LoaderManagerService.Mod modpackMod = dupeMod.getKey();
             LoaderManagerService.Mod standardMod = dupeMod.getValue();
@@ -285,7 +285,7 @@ public class ModpackUtils {
                 e.printStackTrace();
             }
 
-            selectModpack(newModpackDir, installedModpackLink);
+            selectModpack(newModpackDir, installedModpackLink, Set.of());
 
             return newModpackDir;
         }
@@ -294,7 +294,7 @@ public class ModpackUtils {
     }
 
     // Returns true if value changed
-    public static boolean selectModpack(Path modpackDirToSelect, String modpackLinkToSelect) {
+    public static boolean selectModpack(Path modpackDirToSelect, String modpackLinkToSelect, Set<String> newDownloadedFiles) {
         final String modpackToSelect = modpackDirToSelect.getFileName().toString();
 
         String selectedModpack = clientConfig.selectedModpack;
@@ -306,7 +306,7 @@ public class ModpackUtils {
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(selectedModpackContentFile);
         if (modpackContent != null) {
             Set<String> editableFiles = getEditableFiles(modpackContent.list);
-            ModpackUtils.preserveEditableFiles(selectedModpackDir, editableFiles);
+            ModpackUtils.preserveEditableFiles(selectedModpackDir, editableFiles, newDownloadedFiles);
         }
 
         // Copy editable files from modpack to select
@@ -314,7 +314,7 @@ public class ModpackUtils {
         Jsons.ModpackContentFields modpackContentToSelect = ConfigTools.loadModpackContent(modpackContentFile);
         if (modpackContentToSelect != null) {
             Set<String> editableFiles = getEditableFiles(modpackContentToSelect.list);
-            ModpackUtils.copyPreviousEditableFiles(modpackDirToSelect, editableFiles);
+            ModpackUtils.copyPreviousEditableFiles(modpackDirToSelect, editableFiles, newDownloadedFiles);
         }
 
         clientConfig.selectedModpack = modpackToSelect;
@@ -522,8 +522,12 @@ public class ModpackUtils {
         return false;
     }
 
-    public static void preserveEditableFiles(Path modpackDir, Set<String> editableFiles) {
+    public static void preserveEditableFiles(Path modpackDir, Set<String> editableFiles, Set<String> newDownloadedFiles) {
         for (String file : editableFiles) {
+            if (newDownloadedFiles.contains(file)) { // Don't mess with new downloaded files here
+                continue;
+            }
+
             Path path = CustomFileUtils.getPathFromCWD(file);
             if (Files.exists(path)) {
                 try {
@@ -535,8 +539,12 @@ public class ModpackUtils {
         }
     }
 
-    public static void copyPreviousEditableFiles(Path modpackDir, Set<String> editableFiles) {
+    public static void copyPreviousEditableFiles(Path modpackDir, Set<String> editableFiles, Set<String> newDownloadedFiles) {
         for (String file : editableFiles) {
+            if (newDownloadedFiles.contains(file)) { // Don't mess with new downloaded files here
+                continue;
+            }
+
             Path path = CustomFileUtils.getPath(modpackDir, file);
             if (Files.exists(path)) {
                 try {
