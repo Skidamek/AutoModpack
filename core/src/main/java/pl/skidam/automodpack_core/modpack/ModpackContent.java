@@ -73,9 +73,9 @@ public class ModpackContent {
                 return false;
             }
 
-//            // Remove duplicates - this should never happen
-//            Set<String> dupeSet = new HashSet<>();
-//            list.removeIf(item -> !dupeSet.add(item.file));
+            // Remove duplicates - this could happen only if user would have some really weird `syncedFiles` configuration
+            Set<String> dupeSet = new HashSet<>();
+            list.removeIf(item -> !dupeSet.add(item.file));
 
         } catch (Exception e) {
             LOGGER.error("Error while generating modpack!", e);
