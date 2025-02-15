@@ -66,7 +66,8 @@ public class ModpackUtils {
 
             // Server also might have deleted some files
             for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : clientModpackContent.list) {
-                if (serverModpackContent.list.stream().noneMatch(serverModpackContentItem -> serverModpackContentItem.sha1.equals(modpackContentField.sha1))) {
+                var serverItemOpt = serverModpackContent.list.stream().filter(item -> item.file.equals(modpackContentField.file)).findFirst();
+                if (serverItemOpt.isEmpty()) {
                     LOGGER.info("File does not exist on server {}", modpackContentField.file);
                     return true;
                 }
