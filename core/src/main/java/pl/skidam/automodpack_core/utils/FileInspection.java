@@ -171,8 +171,57 @@ public class FileInspection {
             e.printStackTrace();
         }
 
-
         return modID;
+    }
+
+    public static boolean isModCompatible(Path file) {
+        if (!file.getFileName().toString().endsWith(".jar")) {
+            return false;
+        }
+
+        if (!Files.exists(file)) {
+            return false;
+        }
+
+        var ourLoader = GlobalVariables.LOADER;
+
+        try {
+            ZipFile zipFile = new ZipFile(file.toFile());
+
+            switch (ourLoader) {
+                case "fabric":
+                    if (zipFile.getEntry("fabric.mod.json") != null) {
+                        return true;
+                    }
+                    break;
+                case "quilt":
+                    if (zipFile.getEntry("quilt.mod.json") != null) {
+                        return true;
+                    }
+                    break;
+                case "forge":
+                    if (zipFile.getEntry("META-INF/mods.toml") != null) {
+                        return true;
+                    }
+                    if (hasSpecificServices(file)) {
+                        return true;
+                    }
+                    break;
+                case "neoforge":
+                    if (zipFile.getEntry("META-INF/neoforge.mods.toml") != null) {
+                        return true;
+                    }
+                    if (hasSpecificServices(file)) {
+                        return true;
+                    }
+                    break;
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return false;
     }
 
     public static Set<String> getModDependencies(Path file) {

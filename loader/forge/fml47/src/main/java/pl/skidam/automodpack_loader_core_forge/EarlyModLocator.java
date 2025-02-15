@@ -47,7 +47,7 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
 
         new Preload();
 
-        ModpackLoader.modsToAdd.forEach(path -> LOGGER.info("Adding mod: {}", path.getFileName()));
+        ModpackLoader.modsToLoad.forEach(path -> LOGGER.info("Adding mod: {}", path.getFileName()));
 
         // we would need to force load there e.g. connector mod and its locators to loader
         // and in the lazy mod locator load its dependency locator
@@ -78,7 +78,7 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
         }
 
 
-        return ModpackLoader.modsToAdd.stream();
+        return ModpackLoader.modsToLoad.stream();
     }
 
     private boolean loadNewModLocators() throws MalformedURLException {
@@ -92,7 +92,7 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
         HashMap<String, IModLocator> newModLocators = new HashMap<>();
         HashMap<String, IDependencyLocator> newDependencyLocators = new HashMap<>();
 
-        for (Path jarPath : ModpackLoader.modsToAdd) {
+        for (Path jarPath : ModpackLoader.modsToLoad) {
             URL newJarUrl = jarPath.toUri().toURL();
             URLClassLoader newClassLoader = new URLClassLoader(new URL[]{newJarUrl}, LazyModLocator.class.getClassLoader());
 
