@@ -536,9 +536,10 @@ public class ModpackUtils {
 
     public static void preserveEditableFiles(Path modpackDir, Set<String> editableFiles, Set<String> newDownloadedFiles) {
         for (String file : editableFiles) {
-            if (newDownloadedFiles.contains(file)) { // Don't mess with new downloaded files here
+            if (newDownloadedFiles.contains(file)) // Don't mess with new downloaded files here
                 continue;
-            }
+
+            // Here, mods can be copied, no problem
 
             Path path = CustomFileUtils.getPathFromCWD(file);
             if (Files.exists(path)) {
@@ -553,9 +554,11 @@ public class ModpackUtils {
 
     public static void copyPreviousEditableFiles(Path modpackDir, Set<String> editableFiles, Set<String> newDownloadedFiles) {
         for (String file : editableFiles) {
-            if (newDownloadedFiles.contains(file)) { // Don't mess with new downloaded files here
+            if (newDownloadedFiles.contains(file)) // Don't mess with new downloaded files here
                 continue;
-            }
+
+            if (file.contains("/mods/") && file.endsWith(".jar")) // Don't mess with mods here, it will cause issues
+                continue;
 
             Path path = CustomFileUtils.getPath(modpackDir, file);
             if (Files.exists(path)) {
