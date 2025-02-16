@@ -7,7 +7,6 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
@@ -35,7 +34,7 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
+    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir) {
         return new ArrayList<>();
     }
 }

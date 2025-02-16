@@ -8,7 +8,6 @@ import pl.skidam.automodpack_loader_core_fabric_16.mods.ModpackLoader16;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Set;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOADER_MANAGER;
 
@@ -26,7 +25,7 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
-        return INSTANCE.getModpackNestedConflicts(modpackDir, ignoredMods);
+    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir) {
+        return INSTANCE.getModpackNestedConflicts(modpackDir);
     }
 }

@@ -56,7 +56,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
     }
 
     @Override
-    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
+    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir) {
         Path modpackModsDir = modpackDir.resolve("mods");
         Path standardModsDir = MODS_DIR;
 
@@ -128,9 +128,25 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
         conflictingNestedModsImpl.addAll(modsNestedDeps);
 
+        List<String> originModIds = new ArrayList<>();
+
+        for (ModCandidateImpl mod : conflictingNestedModsImpl) {
+            String originModId = mod.getParentMods().stream().filter(ModCandidateImpl::isRoot).findFirst().map(ModCandidateImpl::getId).orElse(null);
+            if (originModId == null) {
+                LOGGER.error("Why would it be null? {} - {}", mod, mod.getOriginPaths());
+            } else {
+                originModIds.add(originModId);
+            }
+        }
+
+        // These are nested mods which we need to force load from standard mods dir
         List<LoaderManagerService.Mod> conflictingNestedMods = new ArrayList<>();
 
         for (ModCandidateImpl mod : conflictingNestedModsImpl) {
+            // Check mods provides, if theres some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as well, otherwise loader will crash
+            if (originModIds.stream().anyMatch(mod.getProvides()::contains))
+                continue;
+
             LoaderManagerService.Mod conflictingMod = new LoaderManagerService.Mod(
                     mod.getId(),
                     mod.getProvides(),
@@ -142,7 +158,6 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
             conflictingNestedMods.add(conflictingMod);
         }
-
 
         return conflictingNestedMods;
     }

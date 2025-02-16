@@ -429,7 +429,7 @@ public class ModpackUpdater {
         boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
 
         // Prepare modpack, analyze nested mods, copy necessary nested mods over to standard mods directory
-        List<LoaderManagerService.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir, filesNotToCopy);
+        List<LoaderManagerService.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir);
 
         if (!conflictingNestedMods.isEmpty()) {
             LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);

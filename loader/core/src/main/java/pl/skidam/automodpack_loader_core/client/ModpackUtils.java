@@ -136,15 +136,26 @@ public class ModpackUtils {
     // Copies necessary nested mods from modpack mods to standard mods folder
     // Returns true if requires client restart
     public static boolean fixNestedMods(List<LoaderManagerService.Mod> conflictingNestedMods) throws IOException {
+        if (conflictingNestedMods.isEmpty())
+            return false;
+
+        final List<Path> standardMods = Files.list(MODS_DIR).toList();
+        final Collection<LoaderManagerService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+        final List<String> standardModIDs = standardModList.stream().map(LoaderManagerService.Mod::modID).toList();
+
         boolean needsRestart = false;
 
         for (LoaderManagerService.Mod mod : conflictingNestedMods) {
             Path modPath = mod.modPath();
-            Path newModPath = MODS_DIR.resolve(modPath.getFileName());
-            if (!CustomFileUtils.compareFileHashes(modPath, newModPath, "SHA-1")) {
+            Path standardModPath = MODS_DIR.resolve(modPath.getFileName());
+            if (!CustomFileUtils.compareFileHashes(modPath, standardModPath, "SHA-1")) {
+                // Check mods provides, if theres some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as well, otherwise loader will crash
+                if (standardModIDs.stream().anyMatch(mod.providesIDs()::contains))
+                    continue;
+
                 needsRestart = true;
-                LOGGER.info("Copying nested mod {} to standard mods folder", newModPath.getFileName());
-                CustomFileUtils.copyFile(modPath, newModPath);
+                LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
+                CustomFileUtils.copyFile(modPath, standardModPath);
             }
         }
 
