@@ -135,14 +135,11 @@ public class ModpackUtils {
 
     // Copies necessary nested mods from modpack mods to standard mods folder
     // Returns true if requires client restart
-    public static boolean fixNestedMods(List<LoaderManagerService.Mod> conflictingNestedMods) throws IOException {
+    public static boolean fixNestedMods(List<LoaderManagerService.Mod> conflictingNestedMods, Collection<LoaderManagerService.Mod> standardModList) throws IOException {
         if (conflictingNestedMods.isEmpty())
             return false;
 
-        final List<Path> standardMods = Files.list(MODS_DIR).toList();
-        final Collection<LoaderManagerService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
         final List<String> standardModIDs = standardModList.stream().map(LoaderManagerService.Mod::modID).toList();
-
         boolean needsRestart = false;
 
         for (LoaderManagerService.Mod mod : conflictingNestedMods) {
@@ -156,6 +153,7 @@ public class ModpackUtils {
                 needsRestart = true;
                 LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
                 CustomFileUtils.copyFile(modPath, standardModPath);
+                standardModList.add(LOADER_MANAGER.getMod(standardModPath)); // important
             }
         }
 
@@ -175,13 +173,7 @@ public class ModpackUtils {
 
     // Checks if in standard mods folder are any mods that are in modpack
     // Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
-    public static Map<LoaderManagerService.Mod, LoaderManagerService.Mod> getDupeMods(Path modpackDir, Set<String> ignoredMods) throws IOException {
-        // maybe also check subfolders...
-        final List<Path> standardMods = Files.list(MODS_DIR).toList();
-        final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
-        final Collection<LoaderManagerService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-        final Collection<LoaderManagerService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
-
+    public static Map<LoaderManagerService.Mod, LoaderManagerService.Mod> getDupeMods(Path modpackDir, Set<String> ignoredMods, Collection<LoaderManagerService.Mod> standardModList, Collection<LoaderManagerService.Mod> modpackModList) throws IOException {
         if (standardModList.isEmpty() || modpackModList.isEmpty()) return Map.of();
 
         final Map<LoaderManagerService.Mod, LoaderManagerService.Mod> duplicates = new HashMap<>();
@@ -190,9 +182,9 @@ public class ModpackUtils {
             LoaderManagerService.Mod standardMod = standardModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
             if (standardMod != null) {
                 String formattedFile = CustomFileUtils.formatPath(modpackMod.modPath(), modpackDir);
-                if (ignoredMods.contains(formattedFile)) {
+                if (ignoredMods.contains(formattedFile))
                     continue;
-                }
+
                 duplicates.put(modpackMod, standardMod);
             }
         }
@@ -203,11 +195,11 @@ public class ModpackUtils {
     // Returns true if removed any mod from standard mods folder
     // If the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // If you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
-    public static boolean removeDupeMods(Map<LoaderManagerService.Mod, LoaderManagerService.Mod> dupeMods, Set<String> workaroundMods) throws IOException {
-        List<Path> standardMods = Files.list(MODS_DIR).toList();
-        Collection<LoaderManagerService.Mod> standardModList = standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+    public static boolean removeDupeMods(Path modpackDir, Collection<LoaderManagerService.Mod> standardModList, Collection<LoaderManagerService.Mod> modpackModList, Set<String> ignoredMods, Set<String> workaroundMods) throws IOException {
 
-        if (standardModList.isEmpty()) return false;
+        var dupeMods = ModpackUtils.getDupeMods(modpackDir, ignoredMods, standardModList, modpackModList);
+
+        if (dupeMods.isEmpty()) return false;
 
         Set<LoaderManagerService.Mod> modsToKeep = new HashSet<>();
 

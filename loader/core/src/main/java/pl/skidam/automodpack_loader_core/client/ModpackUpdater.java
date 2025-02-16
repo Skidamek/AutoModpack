@@ -435,14 +435,16 @@ public class ModpackUpdater {
             LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
         }
 
-        boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods);
-        Set<String> newIgnoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, filesNotToCopy);
+        final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
+        final Collection<LoaderManagerService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+        final List<Path> standardMods = Files.list(MODS_DIR).toList();
+        final Collection<LoaderManagerService.Mod> standardModList = new ArrayList<>(standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList());
+
+        boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods, standardModList);
+        Set<String> ignoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, filesNotToCopy);
 
         // Remove duplicate mods
-        var dupeMods = ModpackUtils.getDupeMods(modpackDir, newIgnoredFiles);
-        workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
-
-        boolean needsRestart3 = ModpackUtils.removeDupeMods(dupeMods, workaroundMods);
+        boolean needsRestart3 = ModpackUtils.removeDupeMods(modpackDir, standardModList, modpackModList, ignoredFiles, workaroundMods);
 
         return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3;
     }
