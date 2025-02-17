@@ -29,7 +29,8 @@ public class FileInspection {
     }
 
     public record Mod(String modID, String hash, Collection<String> providesIDs, String modVersion, Path modPath, LoaderManagerService.EnvironmentType environmentType, Collection<String> dependencies) {}
-    private static final Map<String, Mod> modCache = new HashMap<>();
+    public record HashPathPair(String hash, Path path) { }
+    private static final Map<HashPathPair, Mod> modCache = new HashMap<>();
 
     public static Mod getMod(Path file) {
         if (!Files.isRegularFile(file)) return null;
@@ -41,12 +42,13 @@ public class FileInspection {
             return null;
         }
 
-        if (modCache.containsKey(hash))
-            return modCache.get(hash);
+        HashPathPair hashPathPair = new HashPathPair(hash, file);
+        if (modCache.containsKey(hashPathPair))
+            return modCache.get(hashPathPair);
 
         for (Mod mod : GlobalVariables.LOADER_MANAGER.getModList()) {
             if (hash.equals(mod.hash)) {
-                return modCache.put(hash, mod);
+                return modCache.put(hashPathPair, mod);
             }
         }
 
@@ -58,7 +60,7 @@ public class FileInspection {
 
         if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
             var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
-            return modCache.put(hash, mod);
+            return modCache.put(hashPathPair, mod);
         }
 
         return null;

@@ -2,6 +2,7 @@ package pl.skidam.automodpack_loader_core.utils;
 
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
+import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.io.*;
 import java.net.*;
@@ -19,8 +20,8 @@ public class DownloadManager {
     private static final int MAX_DOWNLOAD_ATTEMPTS = 2; // its actually 3, but we start from 0
     private static final int BUFFER_SIZE = 128 * 1024;
     private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
-    private final Map<HashAndPath, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
-    public final Map<HashAndPath, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
+    private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
+    public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
     private long bytesDownloaded = 0;
     private long bytesToDownload = 0;
     private int addedToQueue = 0;
@@ -31,18 +32,17 @@ public class DownloadManager {
     public DownloadManager(long bytesToDownload) {
         this.bytesToDownload = bytesToDownload;
     }
-    public record HashAndPath(String hash, Path path) { } // Required for cases where there are more files which have the same hash (are the same) but are in different directories/have different names
-    // TODO: preferably just download one file and copy it to the other locations
+    // TODO: make caching system which detects if the same file was downloaded before and if so copy it instead of downloading again
 
     public void download(Path file, String sha1, Urls urls, Runnable successCallback, Runnable failureCallback) {
-        HashAndPath hashAndPath = new HashAndPath(sha1, file);
-        if (queuedDownloads.containsKey(hashAndPath))  return;
-        queuedDownloads.put(hashAndPath, new QueuedDownload(file, urls, 0, successCallback, failureCallback));
+        FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
+        if (queuedDownloads.containsKey(hashPathPair))  return;
+        queuedDownloads.put(hashPathPair, new QueuedDownload(file, urls, 0, successCallback, failureCallback));
         addedToQueue++;
         downloadNext();
     }
 
-    private void downloadTask(HashAndPath hashAndPath, QueuedDownload queuedDownload) {
+    private void downloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) {
         LOGGER.info("Downloading {} - {}", queuedDownload.file.getFileName(), queuedDownload.urls.toString());
 
         int numberOfIndexes = queuedDownload.urls.numberOfUrls - 1;
@@ -53,7 +53,7 @@ public class DownloadManager {
         boolean interrupted = false;
 
         try {
-            downloadFile(url, hashAndPath, queuedDownload);
+            downloadFile(url, hashPathPair, queuedDownload);
         } catch (InterruptedException e) {
             interrupted = true;
         } catch (SocketTimeoutException e) {
@@ -62,7 +62,7 @@ public class DownloadManager {
             LOGGER.warn("Error while downloading file - {} - {} - {}", queuedDownload.file, e, e.getStackTrace());
         } finally {
             synchronized (downloadsInProgress) {
-                downloadsInProgress.remove(hashAndPath);
+                downloadsInProgress.remove(hashPathPair);
             }
 
             boolean failed = true;
@@ -70,7 +70,7 @@ public class DownloadManager {
             if (Files.exists(queuedDownload.file)) {
                 String hash = CustomFileUtils.getHash(queuedDownload.file);
 
-                if (Objects.equals(hash, hashAndPath.hash)) {
+                if (Objects.equals(hash, hashPathPair.hash())) {
                     // Runs on success
                     failed = false;
                     downloaded++;
@@ -89,7 +89,7 @@ public class DownloadManager {
                         LOGGER.warn("Download of {} failed, retrying!", queuedDownload.file.getFileName());
                         queuedDownload.attempts++;
                         synchronized (queuedDownloads) {
-                            queuedDownloads.put(hashAndPath, queuedDownload);
+                            queuedDownloads.put(hashPathPair, queuedDownload);
                         }
                     } else {
                         LOGGER.error("Download of {} failed!", queuedDownload.file.getFileName());
@@ -107,7 +107,7 @@ public class DownloadManager {
 
     private synchronized void downloadNext() {
         if (downloadsInProgress.size() < MAX_DOWNLOADS_IN_PROGRESS && !queuedDownloads.isEmpty()) {
-            HashAndPath hashAndPath = queuedDownloads.keySet().stream().findFirst().get();
+            FileInspection.HashPathPair hashAndPath = queuedDownloads.keySet().stream().findFirst().get();
             QueuedDownload queuedDownload = queuedDownloads.remove(hashAndPath);
 
             if (queuedDownload == null) {
@@ -122,12 +122,12 @@ public class DownloadManager {
         }
     }
 
-    private void downloadFile(String urlString, HashAndPath hashAndPath, QueuedDownload queuedDownload) throws IOException, InterruptedException {
+    private void downloadFile(String urlString, FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) throws IOException, InterruptedException {
 
         Path outFile = queuedDownload.file;
 
         if (Files.exists(outFile)) {
-            if (Objects.equals(hashAndPath.hash, CustomFileUtils.getHash(outFile))) {
+            if (Objects.equals(hashPathPair.hash(), CustomFileUtils.getHash(outFile))) {
                 return;
             } else {
                 CustomFileUtils.forceDelete(outFile);
