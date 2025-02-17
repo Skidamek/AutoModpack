@@ -21,6 +21,7 @@ import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
 public class ModpackUpdater {
     public Changelogs changelogs = new Changelogs();
+    public SelectionManager selectionManager;
     public DownloadManager downloadManager;
     public FetchManager fetchManager;
     public long totalBytesToDownload = 0;
@@ -35,10 +36,11 @@ public class ModpackUpdater {
     private Path modpackDir;
     private Path modpackContentFile;
 
-
     public String getModpackName() {
         return serverModpackContent.modpackName;
     }
+
+    public void prepareSelection() {}
 
     public void prepareUpdate(Jsons.ModpackContentFields modpackContent, String link, Path modpackPath) {
         serverModpackContent = modpackContent;
@@ -80,12 +82,15 @@ public class ModpackUpdater {
                 }
             } else if (!preload) {
                 fullDownload = true;
-                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
+                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this, null);
                 return;
             }
 
             LOGGER.warn("Modpack update found");
             startUpdate();
+            startHighUpdate();
+            startLowUpdate();
+            startServerUpdate();
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
         }
@@ -142,7 +147,14 @@ public class ModpackUpdater {
         LOGGER.info("Modpack is already loaded");
     }
 
+
     // TODO split it into different methods, its too long
+    // Todo HighUpdate main folder rename in high end folder for Client (complete Folder from Automodpack folders (main))
+    public void startHighUpdate() {}
+    // Todo LowUpdate low folder adding and only Download low client folder
+    public void startLowUpdate() {}
+    // TODO Download all files, also the files whats declared in automodpack-server and server sided files.
+    public void startServerUpdate() {}
     public void startUpdate() {
 
         new ScreenManager().download(downloadManager, getModpackName());
