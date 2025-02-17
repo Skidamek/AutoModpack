@@ -6,16 +6,15 @@ import net.minecraftforge.fml.loading.moddiscovery.ModFile;
 import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
 import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 import net.minecraftforge.forgespi.language.IModInfo;
-import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_forge.mods.LoadedMods;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 
 import static pl.skidam.automodpack_core.GlobalVariables.preload;
 
@@ -32,11 +31,11 @@ public class LoaderManager implements LoaderManagerService {
         return FMLLoader.getLoadingModList().getModFileById(modId) != null;
     }
 
-    private Collection<Mod> modList = new ArrayList<>();
+    private Collection<FileInspection.Mod> modList = new ArrayList<>();
     private int lastLoadingModListSize = -1;
 
     @Override
-    public Collection<Mod> getModList() {
+    public Collection<FileInspection.Mod> getModList() {
 
         if (preload) {
             return modList;
@@ -50,24 +49,28 @@ public class LoaderManager implements LoaderManagerService {
         }
 
         lastLoadingModListSize = modInfo.size();
-        Collection<Mod> modList = new ArrayList<>();
+        Collection<FileInspection.Mod> modList = new ArrayList<>();
 
         for (ModInfo info: modInfo) {
             try {
                 String modID = info.getModId();
                 Path path = getModPath(modID);
-                // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
-                if (path == null || path.toString().isEmpty()) {
+                if (path == null || path.toString().isEmpty()) // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
                     continue;
-                }
+
+                String hash = CustomFileUtils.getHash(path);
+                if (hash == null)
+                    continue;
+
                 List<String> dependencies = info.getDependencies().stream().filter(IModInfo.ModVersion::isMandatory).map(IModInfo.ModVersion::getModId).toList();
-                Mod mod = new Mod(modID,
+                FileInspection.Mod mod = new FileInspection.Mod(
+                        modID,
+                        hash,
                         List.of(),
                         info.getOwningFile().versionString(),
                         path,
-                        getModEnvironment(modID),
-                        dependencies
-                );
+                        EnvironmentType.UNIVERSAL,
+                        dependencies);
 
                 modList.add(mod);
             } catch (Exception ignored) {}
@@ -77,69 +80,11 @@ public class LoaderManager implements LoaderManagerService {
     }
 
     @Override
-    public Mod getMod(String modId) {
-        Collection<Mod> modList = getModList();
-
-        if (!modList.isEmpty()) {
-            for (Mod mod : getModList()) {
-                if (!mod.modID().equals(modId)) {
-                    continue;
-                }
-
-                return mod;
-            }
-        }
-
-        Collection<ModFile> modFiles = LoadedMods.INSTANCE.candidateMods;
-
-        for (ModFile mod : modFiles) {
-            if (mod.getModFileInfo() == null || mod.getModInfos().isEmpty()) {
-                continue;
-            }
-
-            if (!mod.getModInfos().get(0).getModId().equals(modId)) {
-                continue;
-            }
-
-            Path modPath = mod.getModFileInfo().getFile().getFilePath();
-            return getMod(modPath);
-        }
-
-        return null;
-    }
-
-    @Override
-    public Mod getMod(Path file) {
-        if (!Files.isRegularFile(file)) return null;
-        if (!file.getFileName().toString().endsWith(".jar")) return null;
-
-        for (Mod mod : getModList()) {
-            if (mod.modPath().toAbsolutePath().equals(file.toAbsolutePath())) {
-                return mod;
-            }
-        }
-
-        // check also out of container
-        String modId = getModId(file, true);
-        String modVersion = FileInspection.getModVersion(file);
-        EnvironmentType environmentType = getModEnvironmentFromNotLoadedJar(file);
-        Set<String> dependencies = FileInspection.getModDependencies(file);
-        Set<String> providesIDs = FileInspection.getAllProvidedIDs(file);
-
-        if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
-            return new Mod(modId, providesIDs, modVersion, file, environmentType, dependencies);
-        }
-
-        return null;
-    }
-
-    @Override
     public String getLoaderVersion() {
         return FMLLoader.versionInfo().forgeVersion();
     }
 
-    @Override
-    public Path getModPath(String modId) {
+    private Path getModPath(String modId) {
         if (isDevelopmentEnvironment()) {
             return null;
         }
@@ -155,7 +100,6 @@ public class LoaderManager implements LoaderManagerService {
                         return modFile.getModInfos().get(0).getOwningFile().getFile().getFilePath().toAbsolutePath();
                     }
                 }
-
             } else if (isModLoaded(modId)) {
                 ModFileInfo modInfo = FMLLoader.getLoadingModList().getModFileById(modId);
 
@@ -176,12 +120,6 @@ public class LoaderManager implements LoaderManagerService {
         } else {
             return EnvironmentType.SERVER;
         }
-    }
-
-    @Override
-    public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
-        // Forge doesnt seem to have a way to get mod environment from jar file
-        return EnvironmentType.UNIVERSAL;
     }
 
     @Override
@@ -215,41 +153,7 @@ public class LoaderManager implements LoaderManagerService {
     }
 
     @Override
-    public String getModVersion(Path file) {
-        return FileInspection.getModVersion(file);
-    }
-
-    @Override
     public boolean isDevelopmentEnvironment() {
         return !FMLLoader.isProduction();
-    }
-
-    @Override
-    public EnvironmentType getModEnvironment(String modId) {
-        return getModEnvironmentFromNotLoadedJar(getModPath(modId));
-    }
-
-    public String getModId(Path file, boolean checkAlsoOutOfContainer) {
-        try {
-            if (FMLLoader.getLoadingModList() != null) {
-                List<ModInfo> modInfos = FMLLoader.getLoadingModList().getMods();
-                for (ModInfo modInfo : modInfos) {
-                    if (modInfo.getOwningFile().getFile().getFilePath().toAbsolutePath().normalize().equals(file.toAbsolutePath().normalize())) {
-                        return modInfo.getModId();
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
-
-        if (checkAlsoOutOfContainer) {
-            return getModIdFromNotLoadedJar(file);
-        }
-
-        return null;
-    }
-
-    @Override
-    public String getModIdFromNotLoadedJar(Path file) {
-        return FileInspection.getModID(file);
     }
 }

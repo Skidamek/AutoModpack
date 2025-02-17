@@ -68,7 +68,7 @@ public class DownloadManager {
             boolean failed = true;
 
             if (Files.exists(queuedDownload.file)) {
-                String hash = CustomFileUtils.getHash(queuedDownload.file, "SHA-1").orElse(null);
+                String hash = CustomFileUtils.getHash(queuedDownload.file);
 
                 if (Objects.equals(hash, hashAndPath.hash)) {
                     // Runs on success
@@ -127,7 +127,7 @@ public class DownloadManager {
         Path outFile = queuedDownload.file;
 
         if (Files.exists(outFile)) {
-            if (Objects.equals(hashAndPath.hash, CustomFileUtils.getHash(outFile, "SHA-1").orElse(null))) {
+            if (Objects.equals(hashAndPath.hash, CustomFileUtils.getHash(outFile))) {
                 return;
             } else {
                 CustomFileUtils.forceDelete(outFile);

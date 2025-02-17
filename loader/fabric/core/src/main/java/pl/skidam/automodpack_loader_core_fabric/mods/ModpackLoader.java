@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_loader_core_fabric.mods;
 
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core.utils.VersionParser;
 import pl.skidam.automodpack_loader_core_fabric_15.mods.ModpackLoader15;
 import pl.skidam.automodpack_loader_core_fabric_16.mods.ModpackLoader16;
@@ -25,7 +25,7 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir) {
+    public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir) {
         return INSTANCE.getModpackNestedConflicts(modpackDir);
     }
 }

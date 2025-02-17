@@ -6,7 +6,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -198,18 +197,9 @@ public class CustomFileUtils {
         }
     }
 
-    public static Optional<String> getHash(Path file, String algorithm) {
-
+    public static String getHash(Path file) {
         try {
-            if (!Files.isRegularFile(file)) {
-                return Optional.empty();
-            }
-
-            if (algorithm.equalsIgnoreCase("murmur")) {
-                return getCurseforgeMurmurHash(file);
-            }
-
-            MessageDigest digest = MessageDigest.getInstance(algorithm);
+            MessageDigest digest = MessageDigest.getInstance("SHA-1");
             try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
                 byte[] buffer = new byte[8192];
                 int bytesRead;
@@ -218,12 +208,11 @@ public class CustomFileUtils {
                 }
             }
             byte[] hashBytes = digest.digest();
-            return Optional.of(convertBytesToHex(hashBytes));
+            return convertBytesToHex(hashBytes);
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-        return Optional.empty();
+        return null;
     }
 
     private static String convertBytesToHex(byte[] bytes) {
@@ -239,9 +228,9 @@ public class CustomFileUtils {
     }
 
 
-    private static Optional<String> getCurseforgeMurmurHash(Path file) throws IOException {
+    public static String getCurseforgeMurmurHash(Path file) throws IOException {
         if (!Files.exists(file)) {
-            return Optional.empty();
+            return null;
         }
 
         final int m = 0x5bd1e995;
@@ -337,41 +326,19 @@ public class CustomFileUtils {
         h = h ^ (h >> 15);
         h = 0x00000000FFFFFFFFL & h;
 
-        return Optional.of(String.valueOf(h));
+        return String.valueOf(h);
     }
 
 
-    public static boolean compareFileHashes(Path file1, Path file2, String algorithm) {
+    public static boolean hashCompare(Path file1, Path file2) {
         if (!Files.exists(file1) || !Files.exists(file2)) return false;
 
-        String hash1 = getHash(file1, algorithm).orElse(null);
-        String hash2 = getHash(file2, algorithm).orElse(null);
+        String hash1 = getHash(file1);
+        String hash2 = getHash(file2);
 
         if (hash1 == null || hash2 == null) return false;
 
         return hash1.equals(hash2);
-    }
-
-    public static List<Path> mapAllFiles(Path directory, List<Path> files) throws IOException {
-        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(directory)) {
-            for (Path path : directoryStream) {
-                if (Files.isDirectory(path)) {
-                    mapAllFiles(path, files);
-                } else {
-                    files.add(path);
-                }
-            }
-        }
-
-        return files;
-    }
-
-    public static List byteArrayToArrayList(byte[] byteArray) {
-        ArrayList<Object> byteList = new ArrayList<>();
-        for (byte b : byteArray) {
-            byteList.add(b);
-        }
-        return byteList;
     }
 
     public static boolean isEmptyDirectory(Path parentPath) throws IOException {

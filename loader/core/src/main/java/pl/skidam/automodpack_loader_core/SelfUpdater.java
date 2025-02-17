@@ -123,7 +123,7 @@ public class SelfUpdater {
             }
 
             // Compare sha1 hash
-            if (automodpack.SHA1Hash().equals(CustomFileUtils.getHash(AUTOMODPACK_JAR, "SHA-1").orElse("null"))) {
+            if (automodpack.SHA1Hash().equals(CustomFileUtils.getHash(AUTOMODPACK_JAR))) {
                 message = "Didn't find any updates for AutoModpack! You are on the latest version: " + AM_VERSION;
                 break; // Break, we are using the latest version, all previous if's get us to this point meaning otherwise we would update to this version, but we are already using it.
             }

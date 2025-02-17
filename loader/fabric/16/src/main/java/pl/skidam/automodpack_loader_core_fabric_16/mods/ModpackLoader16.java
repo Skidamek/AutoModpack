@@ -13,6 +13,8 @@ import net.fabricmc.loader.impl.metadata.VersionOverrides;
 import net.fabricmc.loader.impl.util.SystemProperties;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
 import java.nio.file.Path;
@@ -56,7 +58,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
     }
 
     @Override
-    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir) {
+    public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir) {
         Path modpackModsDir = modpackDir.resolve("mods");
         Path standardModsDir = MODS_DIR;
 
@@ -95,9 +97,8 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
         for (ModCandidateImpl standardNestedMod : standardNestedMods) {
             for (ModCandidateImpl modpackNestedMod : modpackNestedMods) {
-                if (!standardNestedMod.getId().equals(modpackNestedMod.getId())) {
+                if (!standardNestedMod.getId().equals(modpackNestedMod.getId()))
                     continue;
-                }
 
                 if (modpackNestedMod.getVersion().compareTo(standardNestedMod.getVersion()) > 0) {
                     conflictingNestedModsImpl.add(modpackNestedMod);
@@ -114,13 +115,11 @@ public class ModpackLoader16 implements ModpackLoaderService {
         for (ModCandidateImpl modCandidate : conflictingNestedModsImpl) {
             List<ModCandidateImpl> nestedDeps = getNestedDeps(modCandidate);
             for (ModCandidateImpl nestedDep : nestedDeps) {
-                if (conflictingNestedModsImpl.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) {
+                if (conflictingNestedModsImpl.stream().anyMatch(it -> it.getId().equals(nestedDep.getId())))
                     continue;
-                }
 
-                if (modsNestedDeps.stream().anyMatch(it -> it.getId().equals(nestedDep.getId()))) {
+                if (modsNestedDeps.stream().anyMatch(it -> it.getId().equals(nestedDep.getId())))
                     continue;
-                }
 
                 modsNestedDeps.add(nestedDep);
             }
@@ -140,21 +139,29 @@ public class ModpackLoader16 implements ModpackLoaderService {
         }
 
         // These are nested mods which we need to force load from standard mods dir
-        List<LoaderManagerService.Mod> conflictingNestedMods = new ArrayList<>();
+        List<FileInspection.Mod> conflictingNestedMods = new ArrayList<>();
 
         for (ModCandidateImpl mod : conflictingNestedModsImpl) {
             // Check mods provides, if theres some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as well, otherwise loader will crash
             if (originModIds.stream().anyMatch(mod.getProvides()::contains))
                 continue;
 
-            LoaderManagerService.Mod conflictingMod = new LoaderManagerService.Mod(
+            Path path = mod.getPaths().get(0);
+            if (path == null || path.toString().isEmpty())
+                continue;
+
+            String hash = CustomFileUtils.getHash(path);
+            if (hash == null)
+                continue;
+
+            FileInspection.Mod conflictingMod = new FileInspection.Mod(
                     mod.getId(),
+                    hash,
                     mod.getProvides(),
                     mod.getVersion().getFriendlyString(),
-                    mod.getPaths().get(0),
+                    path,
                     LoaderManagerService.EnvironmentType.UNIVERSAL,
-                    mod.getDependencies().stream().map(ModDependency::getModId).toList()
-            );
+                    mod.getDependencies().stream().map(ModDependency::getModId).toList());
 
             conflictingNestedMods.add(conflictingMod);
         }

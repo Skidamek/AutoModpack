@@ -28,6 +28,42 @@ public class FileInspection {
         return getModID(file) != null || hasSpecificServices(file);
     }
 
+    public record Mod(String modID, String hash, Collection<String> providesIDs, String modVersion, Path modPath, LoaderManagerService.EnvironmentType environmentType, Collection<String> dependencies) {}
+    private static final Map<String, Mod> modCache = new HashMap<>();
+
+    public static Mod getMod(Path file) {
+        if (!Files.isRegularFile(file)) return null;
+        if (!file.getFileName().toString().endsWith(".jar")) return null;
+
+        String hash = CustomFileUtils.getHash(file);
+        if (hash == null) {
+            GlobalVariables.LOGGER.error("Failed to get hash for file: {}", file);
+            return null;
+        }
+
+        if (modCache.containsKey(hash))
+            return modCache.get(hash);
+
+        for (Mod mod : GlobalVariables.LOADER_MANAGER.getModList()) {
+            if (hash.equals(mod.hash)) {
+                return modCache.put(hash, mod);
+            }
+        }
+
+        String modId = FileInspection.getModID(file);
+        String modVersion = FileInspection.getModVersion(file);
+        LoaderManagerService.EnvironmentType environmentType = FileInspection.getModEnvironment(file);
+        Set<String> dependencies = FileInspection.getModDependencies(file);
+        Set<String> providesIDs = FileInspection.getAllProvidedIDs(file);
+
+        if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
+            var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
+            return modCache.put(hash, mod);
+        }
+
+        return null;
+    }
+
     public static Path getAutoModpackJar() {
         try {
             // TODO find better way to parse that path

@@ -2,8 +2,8 @@ package pl.skidam.automodpack_loader_core.client;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.MmcPackMagic;
 import pl.skidam.automodpack_core.utils.WorkaroundUtil;
 import pl.skidam.automodpack_loader_core.ReLauncher;
@@ -114,28 +114,25 @@ public class ModpackUpdater {
             LOGGER.info("Modpack is not loaded");
             UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
             new ReLauncher(modpackDir, updateType, changelogs).restart(true);
+            return;
         }
 
-        // Load the modpack excluding mods from standard mods directory
+        // Load the modpack excluding mods from standard mods directory without need to restart the game
         if (preload) {
+            List<String> standardModsHashes = Files.list(MODS_DIR)
+                .map(CustomFileUtils::getHash)
+                .filter(Objects::nonNull)
+                .toList();
             List<Path> modpackMods = Files.list(modpackDir.resolve("mods"))
                 .filter(mod -> {
-                    try {
-                        String modHash = CustomFileUtils.getHash(mod, "SHA-1").orElse(null);
+                    String modHash = CustomFileUtils.getHash(mod);
 
-                        // if its in standard mods directory, we dont want to load it again
-                        boolean isUnique = Files.list(MODS_DIR)
-                                .map(path -> CustomFileUtils.getHash(path, "SHA-1").orElse(null))
-                                .filter(Objects::nonNull)
-                                .noneMatch(hash -> hash.equals(modHash));
+                    // if its in standard mods directory, we dont want to load it again
+                    boolean isUnique = standardModsHashes.stream().noneMatch(hash -> hash.equals(modHash));
+                    boolean endsWithJar = mod.toString().endsWith(".jar");
+                    boolean isFile = mod.toFile().isFile();
 
-                        boolean endsWithJar = mod.toString().endsWith(".jar");
-                        boolean isFile = mod.toFile().isFile();
-
-                        return isUnique && endsWithJar && isFile;
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+                    return isUnique && endsWithJar && isFile;
                 }).toList();
 
             MODPACK_LOADER.loadModpack(modpackMods);
@@ -185,7 +182,7 @@ public class ModpackUpdater {
                     continue;
                 }
 
-                if (Objects.equals(serverSHA1, CustomFileUtils.getHash(path, "sha1").orElse(null))) {
+                if (Objects.equals(serverSHA1, CustomFileUtils.getHash(path))) {
                     skippedDownloadedFiles++;
                     iterator.remove();
                 }
@@ -420,7 +417,6 @@ public class ModpackUpdater {
             }
         }
 
-        // Make a list of ignored files to ignore them while copying
         boolean needsRestart0 = deleteNonModpackFiles(modpackContent);
         Set<String> workaroundMods =  workaroundUtil.getWorkaroundMods(modpackContent);
         Set<String> filesNotToCopy = getIgnoredFiles(modpackContent.list, workaroundMods);
@@ -429,16 +425,16 @@ public class ModpackUpdater {
         boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
 
         // Prepare modpack, analyze nested mods, copy necessary nested mods over to standard mods directory
-        List<LoaderManagerService.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir);
+        List<FileInspection.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir);
 
         if (!conflictingNestedMods.isEmpty()) {
             LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
         }
 
         final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
-        final Collection<LoaderManagerService.Mod> modpackModList = modpackMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList();
+        final Collection<FileInspection.Mod> modpackModList = modpackMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList();
         final List<Path> standardMods = Files.list(MODS_DIR).toList();
-        final Collection<LoaderManagerService.Mod> standardModList = new ArrayList<>(standardMods.stream().map(modPath -> LOADER_MANAGER.getMod(modPath)).filter(Objects::nonNull).toList());
+        final Collection<FileInspection.Mod> standardModList = new ArrayList<>(standardMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList());
 
         boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods, standardModList);
         Set<String> ignoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, filesNotToCopy);
@@ -489,7 +485,7 @@ public class ModpackUpdater {
             }
 
             Path runPath = CustomFileUtils.getPathFromCWD(formattedFile);
-            if ((Files.exists(runPath) && CustomFileUtils.compareFileHashes(path, runPath, "SHA-1")) && (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile))) {
+            if ((Files.exists(runPath) && CustomFileUtils.hashCompare(path, runPath)) && (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile))) {
                 LOGGER.info("Deleting {} and {}", path, runPath);
                 if (workaroundMods.contains(formattedFile)) { // We only delete workaround mods so only the mods that we have originally copied there
                     needsRestart = true;

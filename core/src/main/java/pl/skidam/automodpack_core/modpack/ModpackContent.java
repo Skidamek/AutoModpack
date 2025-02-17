@@ -252,7 +252,7 @@ public class ModpackContent {
 
         if (FileInspection.isMod(file)) {
             type = "mod";
-            if (serverConfig.autoExcludeServerSideMods && isServerMod(LOADER_MANAGER.getModList(), file)) {
+            if (serverConfig.autoExcludeServerSideMods && Objects.equals(FileInspection.getModEnvironment(file), LoaderManagerService.EnvironmentType.SERVER)) {
                 LOGGER.info("File {} is server mod! Skipping...", formattedFile);
                 return null;
             }
@@ -273,7 +273,7 @@ public class ModpackContent {
             return null;
         }
 
-        String sha1 = CustomFileUtils.getHash(file, "SHA-1").orElseThrow();
+        String sha1 = CustomFileUtils.getHash(file);
 
         // For CF API
         String murmur = null;
@@ -281,7 +281,7 @@ public class ModpackContent {
             // get murmur hash from previousContent.list of item with same sha1
             murmur = sha1MurmurMapPreviousContent.get(sha1);
             if (murmur == null) {
-                murmur = CustomFileUtils.getHash(file, "murmur").orElseThrow();
+                murmur = CustomFileUtils.getCurseforgeMurmurHash(file);
             }
         }
 
@@ -293,23 +293,5 @@ public class ModpackContent {
 
         return new Jsons.ModpackContentFields.ModpackContentItem(formattedFile, size, type, isEditable, sha1, murmur);
 
-    }
-
-    private boolean isServerMod(Collection<LoaderManagerService.Mod> modList, Path path) {
-        if (modList == null) {
-            return Objects.equals(FileInspection.getModEnvironment(path), LoaderManagerService.EnvironmentType.SERVER);
-        }
-
-        for (var mod : modList) {
-            if (!mod.modPath().toAbsolutePath().normalize().equals(path.toAbsolutePath().normalize())) {
-                continue;
-            }
-
-            if (mod.environmentType() == LoaderManagerService.EnvironmentType.SERVER) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

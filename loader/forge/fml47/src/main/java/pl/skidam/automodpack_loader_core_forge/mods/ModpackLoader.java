@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_loader_core_forge.mods;
 
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
@@ -34,7 +33,7 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir) {
+    public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir) {
         return new ArrayList<>();
     }
 }
