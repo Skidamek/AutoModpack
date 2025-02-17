@@ -16,6 +16,7 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -54,7 +55,7 @@ public class DataC2SPacket {
         link = link + "/automodpack/";
 
         Path modpackDir = ModpackUtils.getModpackPath(link, dataPacket.modpackName);
-        boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, link);
+        boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, link, Set.of());
 
         Boolean needsDisconnecting = null;
 

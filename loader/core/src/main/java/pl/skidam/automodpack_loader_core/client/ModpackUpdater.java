@@ -2,8 +2,8 @@ package pl.skidam.automodpack_loader_core.client;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.MmcPackMagic;
 import pl.skidam.automodpack_core.utils.WorkaroundUtil;
 import pl.skidam.automodpack_loader_core.ReLauncher;
@@ -119,28 +119,25 @@ public class ModpackUpdater {
             LOGGER.info("Modpack is not loaded");
             UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
             new ReLauncher(modpackDir, updateType, changelogs).restart(true);
+            return;
         }
 
-        // Load the modpack excluding mods from standard mods directory
+        // Load the modpack excluding mods from standard mods directory without need to restart the game
         if (preload) {
+            List<String> standardModsHashes = Files.list(MODS_DIR)
+                .map(CustomFileUtils::getHash)
+                .filter(Objects::nonNull)
+                .toList();
             List<Path> modpackMods = Files.list(modpackDir.resolve("mods"))
                 .filter(mod -> {
-                    try {
-                        String modHash = CustomFileUtils.getHash(mod, "SHA-1").orElse(null);
+                    String modHash = CustomFileUtils.getHash(mod);
 
-                        // if its in standard mods directory, we dont want to load it again
-                        boolean isUnique = Files.list(MODS_DIR)
-                                .map(path -> CustomFileUtils.getHash(path, "SHA-1").orElse(null))
-                                .filter(Objects::nonNull)
-                                .noneMatch(hash -> hash.equals(modHash));
+                    // if its in standard mods directory, we dont want to load it again
+                    boolean isUnique = standardModsHashes.stream().noneMatch(hash -> hash.equals(modHash));
+                    boolean endsWithJar = mod.toString().endsWith(".jar");
+                    boolean isFile = mod.toFile().isFile();
 
-                        boolean endsWithJar = mod.toString().endsWith(".jar");
-                        boolean isFile = mod.toFile().isFile();
-
-                        return isUnique && endsWithJar && isFile;
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    }
+                    return isUnique && endsWithJar && isFile;
                 }).toList();
 
             MODPACK_LOADER.loadModpack(modpackMods);
@@ -180,8 +177,7 @@ public class ModpackUpdater {
                 String file = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
-                // Dont use resolve, it wont work because of the leading slash in file
-                Path path = Path.of(modpackDir + file);
+                Path path = CustomFileUtils.getPath(modpackDir, file);
 
                 if (Files.exists(path) && modpackContentField.editable) {
                     skippedEditableFiles++;
@@ -191,15 +187,14 @@ public class ModpackUpdater {
                 }
 
                 if (!Files.exists(path)) {
-                    // Dont use resolve, it wont work because of the leading slash in file
-                    path = Path.of(System.getProperty("user.dir") + file);
+                    path = CustomFileUtils.getPathFromCWD(file);
                 }
 
                 if (!Files.exists(path)) {
                     continue;
                 }
 
-                if (Objects.equals(serverSHA1, CustomFileUtils.getHash(path, "sha1").orElse(null))) {
+                if (Objects.equals(serverSHA1, CustomFileUtils.getHash(path))) {
                     skippedDownloadedFiles++;
                     iterator.remove();
                 }
@@ -254,7 +249,7 @@ public class ModpackUpdater {
                     String fileName = item.file;
                     String serverSHA1 = item.sha1;
 
-                    Path downloadFile = Paths.get(modpackDir + fileName);
+                    Path downloadFile = CustomFileUtils.getPath(modpackDir, fileName);
 
                     if (!Files.exists(downloadFile)) {
                         newDownloadedFiles.add(fileName);
@@ -336,7 +331,7 @@ public class ModpackUpdater {
                         String fileName = item.file;
                         String serverSHA1 = item.sha1;
 
-                        Path downloadFile = Paths.get(modpackDir + fileName);
+                        Path downloadFile = CustomFileUtils.getPath(modpackDir, fileName);
                         DownloadManager.Urls urls = new DownloadManager.Urls();
                         urls.addUrl(new DownloadManager.Url().getUrl(modpackLink + serverSHA1));
 
@@ -406,7 +401,7 @@ public class ModpackUpdater {
 
     // returns true if restart is required
     private boolean applyModpack() throws Exception {
-        ModpackUtils.selectModpack(modpackDir, modpackLink);
+        ModpackUtils.selectModpack(modpackDir, modpackLink, newDownloadedFiles);
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
@@ -434,80 +429,84 @@ public class ModpackUpdater {
             }
         }
 
-        // Make a list of ignored files to ignore them while copying
-        Set<String> ignoredFiles = deleteNonModpackFiles(modpackContent);
-        workaroundUtil.saveWorkaroundList(ignoredFiles);
+        boolean needsRestart0 = deleteNonModpackFiles(modpackContent);
+        Set<String> workaroundMods =  workaroundUtil.getWorkaroundMods(modpackContent);
+        Set<String> filesNotToCopy = getIgnoredFiles(modpackContent.list, workaroundMods);
 
         // Copy files to running directory
-        ignoredFiles = getIgnoredFiles(modpackContent.list, ignoredFiles);
-        boolean needsRestart0 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, ignoredFiles);
+        boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
 
         // Prepare modpack, analyze nested mods, copy necessary nested mods over to standard mods directory
-        List<LoaderManagerService.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir, ignoredFiles);
+        List<FileInspection.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir);
 
         if (!conflictingNestedMods.isEmpty()) {
             LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
         }
 
-        boolean needsRestart1 = ModpackUtils.fixNestedMods(conflictingNestedMods);
-        Set<String> newIgnoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, ignoredFiles);
+        final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
+        final Collection<FileInspection.Mod> modpackModList = modpackMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList();
+        final List<Path> standardMods = Files.list(MODS_DIR).toList();
+        final Collection<FileInspection.Mod> standardModList = new ArrayList<>(standardMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList());
+
+        boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods, standardModList);
+        Set<String> ignoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, filesNotToCopy);
 
         // Remove duplicate mods
-        var dupeMods = ModpackUtils.getDupeMods(modpackDir, newIgnoredFiles);
-        boolean needsRestart2 = ModpackUtils.removeDupeMods(dupeMods);
+        boolean needsRestart3 = ModpackUtils.removeDupeMods(modpackDir, standardModList, modpackModList, ignoredFiles, workaroundMods);
 
-        return needsRestart0 || needsRestart1 || needsRestart2;
+        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3;
     }
 
+    // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory
     private Set<String> getIgnoredFiles(Set<Jsons. ModpackContentFields. ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
-        Set<String> ignoredFiles = new HashSet<>();
-
+        Set<String> filesNotToCopy = new HashSet<>();
 
         // Make list of files which we do not copy to the running directory
         for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : modpackContentItems) {
             // We only want to copy editable file if its downloaded first time
             // So we add to ignored any other editable file
             if (modpackContentItem.editable && !newDownloadedFiles.contains(modpackContentItem.file)) {
-                ignoredFiles.add(modpackContentItem.file);
+                filesNotToCopy.add(modpackContentItem.file);
             }
 
             // We only want to copy mods which need a workaround
             if (modpackContentItem.type.equals("mod") && !workaroundMods.contains(modpackContentItem.file)) {
-                ignoredFiles.add(modpackContentItem.file);
+                filesNotToCopy.add(modpackContentItem.file);
             }
         }
 
-        return ignoredFiles;
+        return filesNotToCopy;
     }
 
     // returns changed workaroundMods list
-    // TODO debug strange chars issue like § #297
-    private Set<String> deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent) throws IOException {
+    private boolean deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent) throws IOException {
         List<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).toList();
         List<Path> pathList = Files.walk(modpackDir).toList();
         Set<String> workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
-        List<Path> parentPaths = new ArrayList<>();
+        Set<Path> parentPaths = new HashSet<>();
+        boolean needsRestart = false;
 
         for (Path path : pathList) {
-            if (Files.isDirectory(path)) continue;
-            if (path.equals(modpackContentFile)) continue;
-            if (path.equals(workaroundUtil.getWorkaroundFile())) continue;
+            if (Files.isDirectory(path) || path.equals(modpackContentFile) || path.equals(workaroundUtil.getWorkaroundFile())) {
+                continue;
+            }
 
-            String formattedFile = CustomFileUtils.formatPath(path, modpackDir); // format path to modpack content file
-            if (modpackFiles.contains(formattedFile)) continue;
+            String formattedFile = CustomFileUtils.formatPath(path, modpackDir);
+            if (modpackFiles.contains(formattedFile)) {
+                continue;
+            }
 
-            Path runPath = Path.of("." + formattedFile);
-            if (Files.exists(runPath) && CustomFileUtils.compareFileHashes(path, runPath, "SHA-1")) {
-                // we generally dont delete mods, as we dont ever add mods there. However, we do delete mods which need that since they need a workaround
-                if (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile)) {
-                    LOGGER.info("Deleting {} and {}", path, runPath);
+            Path runPath = CustomFileUtils.getPathFromCWD(formattedFile);
+            if ((Files.exists(runPath) && CustomFileUtils.hashCompare(path, runPath)) && (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile))) {
+                LOGGER.info("Deleting {} and {}", path, runPath);
+                if (workaroundMods.contains(formattedFile)) { // We only delete workaround mods so only the mods that we have originally copied there
+                    needsRestart = true;
                     workaroundMods.remove(formattedFile);
-                    parentPaths.add(runPath.getParent());
-                    CustomFileUtils.forceDelete(runPath);
                 }
+                parentPaths.add(runPath.getParent());
+                CustomFileUtils.forceDelete(runPath);
             } else {
                 LOGGER.info("Deleting {}", path);
-//                LOGGER.warn("Formatted file: {}", formattedFile);
             }
 
             parentPaths.add(path.getParent());
@@ -515,16 +514,14 @@ public class ModpackUpdater {
             changelogs.changesDeletedList.put(path.getFileName().toString(), null);
         }
 
-//        if (!parentPaths.isEmpty()) {
-//            LOGGER.error(modpackFiles);
-//        }
-
         // recursively delete empty directories
         for (Path parentPath : parentPaths) {
             deleteEmptyParentDirectoriesRecursively(parentPath);
         }
 
-        return workaroundMods;
+        workaroundUtil.saveWorkaroundList(workaroundMods);
+
+        return needsRestart;
     }
 
     private void deleteEmptyParentDirectoriesRecursively(Path directory) throws IOException {

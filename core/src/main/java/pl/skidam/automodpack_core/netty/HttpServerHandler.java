@@ -148,7 +148,12 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                             }
 
                             // Finally close channel
-                            context.pipeline().firstContext().channel().close();
+                            var firstContext = context.pipeline().firstContext();
+                            if (firstContext != null) {
+                                firstContext.channel().close();
+                            } else if (context.channel() != null) {
+                                context.channel().close();
+                            }
                         }
                     });
         } catch (Exception e) {

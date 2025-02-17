@@ -1,24 +1,28 @@
 package pl.skidam.automodpack_loader_core_neoforge.mods;
 
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class ModpackLoader implements ModpackLoaderService {
     public static String CONNECTOR_MODS_PROPERTY = "connector.additionalModLocations";
-    public static List<Path> modsToAdd = new ArrayList<>();
+    public static List<Path> modsToLoad = new ArrayList<>();
 
     @Override
     public void loadModpack(List<Path> modpackMods) {
         try {
-            modsToAdd.addAll(modpackMods);
+            for (Path modpackMod : modpackMods) {
+                if (FileInspection.isModCompatible(modpackMod)) {
+                    modsToLoad.add(modpackMod);
+                }
+            }
+
             // set for connector
             String paths = modpackMods.stream().map(Path::toString).collect(Collectors.joining(","));
             String finalMods = paths + "," + System.getProperty(CONNECTOR_MODS_PROPERTY, "");
@@ -29,7 +33,7 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public List<LoaderManagerService.Mod> getModpackNestedConflicts(Path modpackDir, Set<String> ignoredMods) {
+    public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir) {
         return new ArrayList<>();
     }
 }

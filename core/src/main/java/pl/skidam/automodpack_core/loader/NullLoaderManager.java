@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.loader;
 
-import java.nio.file.Path;
+import pl.skidam.automodpack_core.utils.FileInspection;
+
 import java.util.Collection;
 
 public class NullLoaderManager implements LoaderManagerService {
@@ -15,17 +16,7 @@ public class NullLoaderManager implements LoaderManagerService {
     }
 
     @Override
-    public Collection<Mod> getModList() {
-        return null;
-    }
-
-    @Override
-    public Mod getMod(String modId) {
-        return null;
-    }
-
-    @Override
-    public Mod getMod(Path file) {
+    public Collection<FileInspection.Mod> getModList() {
         return null;
     }
 
@@ -35,17 +26,7 @@ public class NullLoaderManager implements LoaderManagerService {
     }
 
     @Override
-    public Path getModPath(String modId) {
-        return null;
-    }
-
-    @Override
     public EnvironmentType getEnvironmentType() {
-        return null;
-    }
-
-    @Override
-    public EnvironmentType getModEnvironmentFromNotLoadedJar(Path file) {
         return null;
     }
 
@@ -55,22 +36,7 @@ public class NullLoaderManager implements LoaderManagerService {
     }
 
     @Override
-    public String getModVersion(Path file) {
-        return null;
-    }
-
-    @Override
     public boolean isDevelopmentEnvironment() {
         return false;
-    }
-
-    @Override
-    public EnvironmentType getModEnvironment(String modId) {
-        return null;
-    }
-
-    @Override
-    public String getModIdFromNotLoadedJar(Path file) {
-        return null;
     }
 }
