@@ -1,9 +1,10 @@
 package pl.skidam.automodpack_core.auth;
 
-import pl.skidam.automodpack_core.GlobalVariables;
-
+import java.net.SocketAddress;
 import java.security.SecureRandom;
 import java.util.Base64;
+
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class Secrets {
     public record Secret(String secret, Long timestamp) { }
@@ -18,14 +19,27 @@ public class Secrets {
         return new Secret(secret, timestamp);
     }
 
-    public static boolean isSecretValid(String secretStr) {
-        Secret secret = SecretsStore.getHostSecret(secretStr);
+    public static boolean isSecretValid(String secretStr, SocketAddress address) {
+        var playerSecretPair = SecretsStore.getHostSecret(secretStr);
+        if (playerSecretPair == null)
+            return false;
+
+        Secret secret = playerSecretPair.getValue();
         if (secret == null)
             return false;
 
-        long secretLifetime = GlobalVariables.serverConfig.secretLifetime * 3600; // in seconds
+        String playerUuid = playerSecretPair.getKey();
+        if (!GAME_CALL.canPlayerJoin(address, playerUuid)) // check if associated player is still whitelisted
+            return false;
+
+        long secretLifetime = serverConfig.secretLifetime * 3600; // in seconds
         long currentTime = System.currentTimeMillis() / 1000;
 
-        return currentTime - secret.timestamp() < secretLifetime;
+        boolean valid = secret.timestamp() + secretLifetime > currentTime;
+
+        if (!valid)
+            return false;
+
+        return true;
     }
 }

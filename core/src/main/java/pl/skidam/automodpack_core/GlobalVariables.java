@@ -3,10 +3,7 @@ package pl.skidam.automodpack_core;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.loader.NullLoaderManager;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.loader.NullModpackLoader;
+import pl.skidam.automodpack_core.loader.*;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.netty.HttpServer;
 
@@ -24,6 +21,7 @@ public class GlobalVariables {
     public static String LOADER;
     public static LoaderManagerService LOADER_MANAGER = new NullLoaderManager();
     public static ModpackLoaderService MODPACK_LOADER = new NullModpackLoader();
+    public static GameCallService GAME_CALL = new NullGameCall();
     public static Path AUTOMODPACK_JAR;
     public static Path MODS_DIR;
     public static Modpack modpack;

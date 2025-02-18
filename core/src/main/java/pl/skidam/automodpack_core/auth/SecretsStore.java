@@ -5,6 +5,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -54,12 +55,12 @@ public class SecretsStore {
     private static final SecretsCache hostSecrets = new SecretsCache(GlobalVariables.hostSecretsFile);
     private static final SecretsCache clientSecrets = new SecretsCache(GlobalVariables.clientSecretsFile);
 
-    public static Secrets.Secret getHostSecret(String secret) {
+    public static Map.Entry<String, Secrets.Secret>  getHostSecret(String secret) {
         hostSecrets.load();
         for (var entry : hostSecrets.cache.entrySet()) {
             var thisSecret = entry.getValue().secret();
             if (Objects.equals(thisSecret, secret)) {
-                return entry.getValue();
+                return entry;
             }
         }
 

@@ -1,6 +1,8 @@
 package pl.skidam.automodpack.init;
 
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.Identifier;
+import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.netty.HttpServer;
@@ -13,8 +15,8 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class Common {
 
-    // True if has AutoModpack installed
     public static Map<String, Boolean> players = new HashMap<>();
+    public static MinecraftServer server = null;
 
     public static void serverInit() {
         if (serverConfig.generateModpackOnStart) {
@@ -39,6 +41,7 @@ public class Common {
     }
 
     public static void init() {
+        GAME_CALL = new GameCall();
         httpServer = new HttpServer();
         modpack = new Modpack();
     }

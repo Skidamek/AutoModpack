@@ -13,6 +13,7 @@ import pl.skidam.automodpack_core.modpack.ModpackContent;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -42,7 +43,9 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             return;
         }
 
-        if (!Secrets.isSecretValid(secret)) {
+        SocketAddress address = context.channel().remoteAddress();
+
+        if (!Secrets.isSecretValid(secret, address)) {
             dropConnection(context, msg);
             return;
         }
