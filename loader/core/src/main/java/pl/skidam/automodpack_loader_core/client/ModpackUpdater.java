@@ -58,12 +58,12 @@ public class ModpackUpdater {
 
             // Handle the case where serverModpackContent is null
             if (serverModpackContent == null) {
-                handleOfflineMode();
+                CheckAndLoadModpack();
                 return;
             }
 
             // Prepare for modpack update
-            this.unModifiedSMC = GSON.toJson(serverModpackContent);
+            unModifiedSMC = GSON.toJson(serverModpackContent);
 
             // Create directories if they don't exist
             if (!Files.exists(modpackDir)) {
@@ -78,6 +78,7 @@ public class ModpackUpdater {
                 // Check if an update is needed
                 if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     LOGGER.info("Modpack is up to date");
+                    Files.write(modpackContentFile, unModifiedSMC.getBytes());
                     CheckAndLoadModpack();
                     return;
                 }
@@ -93,21 +94,6 @@ public class ModpackUpdater {
             LOGGER.error("Error while initializing modpack updater", e);
         }
     }
-
-    private void handleOfflineMode() throws Exception {
-        if (!Files.exists(modpackContentFile)) {
-            return;
-        }
-
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
-        if (modpackContent == null) {
-            return;
-        }
-
-        LOGGER.warn("Server is down, or you don't have access to internet, but we still want to load selected modpack");
-        CheckAndLoadModpack();
-    }
-
 
     public void CheckAndLoadModpack() throws Exception {
 
