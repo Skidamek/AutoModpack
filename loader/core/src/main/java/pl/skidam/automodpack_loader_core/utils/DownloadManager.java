@@ -73,7 +73,7 @@ public class DownloadManager {
                     // Runs on success
                     failed = false;
                     downloaded++;
-                    LOGGER.info("Successfully downloaded {} from {}", queuedDownload.file.getFileName(), url);
+                    LOGGER.info("Successfully downloaded {} from {}", queuedDownload.file.getFileName(), url.url);
                     queuedDownload.successCallback.run();
                     semaphore.release();
                 }
