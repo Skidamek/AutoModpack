@@ -75,7 +75,7 @@ tasks.register("mergeJars") {
             ?.flatMap {
                 File("$it/build/libs").listFiles()
                     ?.filter { file -> file.isFile && !file.name.endsWith("-sources.jar") && file.name.endsWith(".jar") }
-                    ?: error("Couldn't find any mod jar!")
+                    ?: emptyList()
             }
             ?: emptyList()
 
