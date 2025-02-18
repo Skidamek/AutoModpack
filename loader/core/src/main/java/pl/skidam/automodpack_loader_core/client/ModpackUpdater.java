@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core.client;
 
+import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
@@ -32,6 +33,7 @@ public class ModpackUpdater {
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
 
     private String modpackLink;
+    private Secrets.Secret modpackSecret;
     private Path modpackDir;
     private Path modpackContentFile;
 
@@ -40,9 +42,10 @@ public class ModpackUpdater {
         return serverModpackContent.modpackName;
     }
 
-    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, String link, Path modpackPath) {
+    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, String link, Secrets.Secret secret, Path modpackPath) {
         serverModpackContent = modpackContent;
         modpackLink = link;
+        modpackSecret = secret;
         modpackDir = modpackPath;
 
         if (modpackLink == null || modpackLink.isEmpty() || modpackPath.toString().isEmpty()) {
@@ -145,6 +148,11 @@ public class ModpackUpdater {
     // TODO split it into different methods, its too long
     public void startUpdate() {
 
+        if (modpackSecret == null) {
+            LOGGER.error("Cannot update modpack, secret is null");
+            return;
+        }
+
         new ScreenManager().download(downloadManager, getModpackName());
         long start = System.currentTimeMillis();
 
@@ -245,7 +253,7 @@ public class ModpackUpdater {
 
                     DownloadManager.Urls urls = new DownloadManager.Urls();
 
-                    urls.addUrl(new DownloadManager.Url().getUrl(modpackLink + serverSHA1));
+                    urls.addUrl(new DownloadManager.Url().getUrl(modpackLink + serverSHA1).addHeader(SECRET_REQUEST_HEADER, modpackSecret.secret()));
 
                     if (fetchManager.getFetchDatas().containsKey(item.sha1)) {
                         urls.addAllUrls(new DownloadManager.Url().getUrls(fetchManager.getFetchDatas().get(item.sha1).fetchedData().urls()));
@@ -293,7 +301,7 @@ public class ModpackUpdater {
                 // TODO set client to a waiting for the server to respond screen
                 LOGGER.warn("Trying to refresh the modpack content");
                 LOGGER.info("Sending hashes to refresh: {}", hashesJson);
-                var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackLink, hashesJson);
+                var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackLink, modpackSecret, hashesJson);
                 if (refreshedContentOptional.isEmpty()) {
                     LOGGER.error("Failed to refresh the modpack content");
                 } else {
@@ -321,7 +329,7 @@ public class ModpackUpdater {
 
                         Path downloadFile = CustomFileUtils.getPath(modpackDir, fileName);
                         DownloadManager.Urls urls = new DownloadManager.Urls();
-                        urls.addUrl(new DownloadManager.Url().getUrl(modpackLink + serverSHA1));
+                        urls.addUrl(new DownloadManager.Url().getUrl(modpackLink + serverSHA1).addHeader(SECRET_REQUEST_HEADER, modpackSecret.secret()));
 
                         LOGGER.info("Retrying to download {} from {}", fileName, urls);
 

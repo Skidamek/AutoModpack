@@ -15,7 +15,8 @@ import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
-import pl.skidam.automodpack_loader_core.loader.LoaderManager;
+import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.utils.Ip;
 
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
@@ -28,6 +29,14 @@ public class HandshakeS2CPacket {
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         String playerName = profile.getName();
+
+        if (profile.getId() == null){
+            LOGGER.error("Player {} doesn't have UUID: {}", playerName, profile.getId());
+        }
+
+        if (server.getPlayerManager().checkCanJoin(connection.getAddress(), profile) != null) {
+            return; // ignore it
+        }
 
 // TODO: send this packet only if player can join (isnt banned, is whitelisted, etc.)
 //  at the moment it's not possible because of
@@ -50,12 +59,12 @@ public class HandshakeS2CPacket {
             }
         } else {
             Common.players.put(playerName, true);
-            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, playerName, server.getServerPort(), buf, sender)));
+            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, profile, server.getServerPort(), buf, sender)));
         }
     }
 
-    public static void handleHandshake(ClientConnection connection, String playerName, int minecraftServerPort, PacketByteBuf buf, PacketSender packetSender) {
-        LOGGER.info("{} has installed AutoModpack.", playerName);
+    public static void handleHandshake(ClientConnection connection, GameProfile profile, int minecraftServerPort, PacketByteBuf buf, PacketSender packetSender) {
+        LOGGER.info("{} has installed AutoModpack.", profile.getName());
 
         String clientResponse = buf.readString(Short.MAX_VALUE);
         HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
@@ -102,8 +111,13 @@ public class HandshakeS2CPacket {
             linkToSend = serverConfig.hostIp;
         }
 
+        // now we know player is authenticated, packets are encrypted and player is whitelisted
+        // regenerate unique secret
+        Secrets.Secret secret = Secrets.generateSecret();
+        SecretsStore.saveHostSecret(profile.getId().toString(), secret);
+
         // We send empty string if hostIp/hostLocalIp is not specified in server config. Client will use ip by which it connected to the server in first place.
-        DataPacket dataPacket = new DataPacket("", serverConfig.modpackName, serverConfig.requireAutoModpackOnClient);
+        DataPacket dataPacket = new DataPacket("", serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
 
         if (linkToSend != null && !linkToSend.isBlank()) {
             if (!linkToSend.startsWith("http://") && !linkToSend.startsWith("https://")) {
@@ -128,8 +142,8 @@ public class HandshakeS2CPacket {
                 }
             }
 
-            LOGGER.info("Sending {} modpack link: {}", playerName, linkToSend);
-            dataPacket = new DataPacket(linkToSend, serverConfig.modpackName, serverConfig.requireAutoModpackOnClient);
+            LOGGER.info("Sending {} modpack link: {}", profile.getName(), linkToSend);
+            dataPacket = new DataPacket(linkToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
         }
 
         String packetContentJson = dataPacket.toJson();

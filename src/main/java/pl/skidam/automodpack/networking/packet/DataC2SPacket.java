@@ -7,6 +7,8 @@ import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.DataPacket;
+import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -57,16 +59,20 @@ public class DataC2SPacket {
         Path modpackDir = ModpackUtils.getModpackPath(link, dataPacket.modpackName);
         boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, link, Set.of());
 
+        // save secret
+        Secrets.Secret secret = dataPacket.secret;
+        SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
+
         Boolean needsDisconnecting = null;
 
-        var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(link);
+        var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(link, secret);
 
         if (optionalServerModpackContent.isPresent()) {
             boolean update = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
             if (update) {
                 disconnectImmediately(handler);
-                new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), link, modpackDir);
+                new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), link, secret, modpackDir);
                 needsDisconnecting = true;
             } else if (selectedModpackChanged) {
                 disconnectImmediately(handler);

@@ -15,6 +15,7 @@ import java.nio.file.Path;
 public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
+    public static final String SECRET_REQUEST_HEADER = "AutoModpack-Secret";
     public static Boolean DEBUG = false;
     public static Boolean preload;
     public static String MC_VERSION;
@@ -37,17 +38,17 @@ public class GlobalVariables {
     // Switches - optional or required packs, chosen by the player, only one can be installed at a time
     public final static Path hostContentModpackDir = hostModpackDir.resolve("main");
     public static Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
+    public static Path hostSecretsFile = hostModpackDir.resolve("automodpack-secrets.json");
     public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
     public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
 
     // Client
-
     public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
+    public static final Path clientSecretsFile = automodpackDir.resolve("automodpack-secrets.json");
     public static final Path modpacksDir = automodpackDir.resolve("modpacks");
 
     public static final String clientConfigFileOverrideResource = "overrides-automodpack-client.json";
     public static String clientConfigOverride; // read from inside a jar file on preload, used instead of clientConfigFile if exists
 
     public static Path selectedModpackDir;
-    public static String selectedModpackLink;
 }

@@ -3,6 +3,7 @@ package pl.skidam.automodpack_loader_core.client;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
@@ -378,7 +379,11 @@ public class ModpackUtils {
         return modpackDir;
     }
 
-    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(String link) {
+    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(String link, Secrets.Secret secret) {
+
+        if (secret == null)
+            return Optional.empty();
+
         if (link == null) {
             throw new IllegalArgumentException("Link is null");
         }
@@ -388,6 +393,7 @@ public class ModpackUtils {
         try {
             connection = (HttpURLConnection) new URL(link).openConnection();
             connection.setRequestMethod("GET");
+            connection.setRequestProperty(SECRET_REQUEST_HEADER, secret.secret());
 
             return connectionToModpack(connection);
         } catch (Exception e) {
@@ -402,7 +408,7 @@ public class ModpackUtils {
     }
 
 
-    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(String link, String body) {
+    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(String link, Secrets.Secret secret, String body) {
         // send custom http body request to get modpack content, rest the same as getServerModpackContent
         if (link == null || body == null) {
             throw new IllegalArgumentException("Link or body is null");
@@ -413,6 +419,7 @@ public class ModpackUtils {
         try {
             connection = (HttpURLConnection) new URL(link + "refresh").openConnection();
             connection.setRequestMethod("POST");
+            connection.setRequestProperty(SECRET_REQUEST_HEADER, secret.secret());
 
             return connectionToModpack(connection, body);
         } catch (Exception e) {

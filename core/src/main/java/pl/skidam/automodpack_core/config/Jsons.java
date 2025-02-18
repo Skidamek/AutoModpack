@@ -1,10 +1,12 @@
 
 package pl.skidam.automodpack_core.config;
 
+import pl.skidam.automodpack_core.auth.Secrets;
+
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
 
 public class Jsons {
 
@@ -39,6 +41,7 @@ public class Jsons {
         public boolean updateIpsOnEveryStart = false;
         public int hostPort = -1;
         public boolean reverseProxy = false;
+        public long secretLifetime = 336; // 336 hours = 14 days
         public boolean selfUpdater = false;
         public List<String> acceptedLoaders;
     }
@@ -53,6 +56,11 @@ public class Jsons {
     public static class WorkaroundFields {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public Set<String> workaroundMods;
+    }
+
+
+    public static class SecretsFields {
+        public Map<String, Secrets.Secret> secrets = new HashMap<>();
     }
 
     public static class ModpackContentFields {

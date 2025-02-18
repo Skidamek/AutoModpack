@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_loader_core;
 
+import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
@@ -58,7 +60,9 @@ public class Preload {
             return;
         }
 
-        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackLink);
+        Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
+
+        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackLink, secret);
         var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
         // Use the latest modpack content if available
@@ -75,7 +79,7 @@ public class Preload {
         }
 
         // Update modpack
-        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
+        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackLink, secret, selectedModpackDir);
     }
 
 

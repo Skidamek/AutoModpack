@@ -8,7 +8,6 @@ import java.io.*;
 import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.zip.GZIPInputStream;
@@ -48,7 +47,7 @@ public class DownloadManager {
         int numberOfIndexes = queuedDownload.urls.numberOfUrls - 1;
         int urlIndex = Math.min(queuedDownload.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
 
-        String url = queuedDownload.urls.URLs.get(numberOfIndexes - urlIndex).url;
+        Url url = queuedDownload.urls.URLs.get(numberOfIndexes - urlIndex);
 
         boolean interrupted = false;
 
@@ -122,7 +121,7 @@ public class DownloadManager {
         }
     }
 
-    private void downloadFile(String urlString, FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) throws IOException, InterruptedException {
+    private void downloadFile(Url url, FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) throws IOException, InterruptedException {
 
         Path outFile = queuedDownload.file;
 
@@ -144,12 +143,7 @@ public class DownloadManager {
 //            Files.createFile(outFile);
         }
 
-        URL url = new URL(urlString);
-        URLConnection connection = url.openConnection();
-        connection.addRequestProperty("Accept-Encoding", "gzip");
-        connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-        connection.setConnectTimeout(10000);
-        connection.setReadTimeout(10000);
+        URLConnection connection = getUrlConnection(url);
 
         try (OutputStream outputStream = new FileOutputStream(outFile.toFile());
              InputStream rawInputStream = new BufferedInputStream(connection.getInputStream(), BUFFER_SIZE);
@@ -168,6 +162,19 @@ public class DownloadManager {
                 }
             }
         }
+    }
+
+    private URLConnection getUrlConnection(Url url) throws IOException {
+        URL connectionUrl = new URL(url.url);
+        URLConnection connection = connectionUrl.openConnection();
+        for (Map.Entry<String, String> header : url.headers.entrySet()) {
+            connection.addRequestProperty(header.getKey(), header.getValue());
+        }
+        connection.addRequestProperty("Accept-Encoding", "gzip");
+        connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
+        connection.setConnectTimeout(10000);
+        connection.setReadTimeout(10000);
+        return connection;
     }
 
 
@@ -248,8 +255,9 @@ public class DownloadManager {
             return urlList;
         }
 
-        public void addHeader(String headerName, String header) {
+        public Url addHeader(String headerName, String header) {
             headers.put(headerName, header);
+            return this;
         }
     }
 
@@ -299,7 +307,6 @@ public class DownloadManager {
     public static class DownloadData {
         public CompletableFuture<Void> future;
         public Path file;
-        public final Instant startTime = Instant.now();
 
         DownloadData(CompletableFuture<Void> future, Path file) {
             this.future = future;

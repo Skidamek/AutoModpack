@@ -7,6 +7,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
 import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 
 import java.io.FileNotFoundException;
@@ -31,6 +32,17 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     public void channelRead(ChannelHandlerContext context, ByteBuf buf, Object msg) {
         final String request = getRequest(buf);
         if (request == null) {
+            dropConnection(context, msg);
+            return;
+        }
+
+        final String secret = parseSecret(request);
+        if (secret == null || secret.isBlank()) {
+            dropConnection(context, msg);
+            return;
+        }
+
+        if (!Secrets.isSecretValid(secret)) {
             dropConnection(context, msg);
             return;
         }
@@ -216,6 +228,17 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         } else {
             return null;
         }
+    }
+
+    private String parseSecret(String request) {
+        final String[] requestLines = request.split("\r\n");
+        for (String line : requestLines) {
+            if (line.contains(SECRET_REQUEST_HEADER)) {
+                return line.replace(SECRET_REQUEST_HEADER + ": ", "").trim();
+            }
+        }
+
+        return null;
     }
 
     public List<String> parseBodyStrings(String requestPacket) {
