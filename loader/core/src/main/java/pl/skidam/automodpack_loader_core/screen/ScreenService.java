@@ -4,6 +4,7 @@ import java.util.Optional;
 
 public interface ScreenService {
 
+    void downloadselection(Object... args);
     void download(Object... args);
     void fetch(Object... args);
     void changelog(Object... args);
