@@ -139,16 +139,17 @@ public class ModpackUtils {
             return false;
 
         final List<String> standardModIDs = standardModList.stream().map(FileInspection.Mod::modID).toList();
+//        LOGGER.info("standardModIDs: {}", standardModIDs);
         boolean needsRestart = false;
 
         for (FileInspection.Mod mod : conflictingNestedMods) {
+            // Check mods provides, if theres some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as well, otherwise loader will crash
+            if (standardModIDs.stream().anyMatch(mod.providesIDs()::contains))
+                continue;
+
             Path modPath = mod.modPath();
             Path standardModPath = MODS_DIR.resolve(modPath.getFileName());
-            if (!CustomFileUtils.hashCompare(modPath, standardModPath)) {
-                // Check mods provides, if theres some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as well, otherwise loader will crash
-                if (standardModIDs.stream().anyMatch(mod.providesIDs()::contains))
-                    continue;
-
+            if (!Objects.equals(CustomFileUtils.getHash(standardModPath), mod.hash())) {
                 needsRestart = true;
                 LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
                 CustomFileUtils.copyFile(modPath, standardModPath);

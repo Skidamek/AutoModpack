@@ -198,6 +198,10 @@ public class CustomFileUtils {
     }
 
     public static String getHash(Path file) {
+        if (!Files.exists(file)) {
+            return null;
+        }
+
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {

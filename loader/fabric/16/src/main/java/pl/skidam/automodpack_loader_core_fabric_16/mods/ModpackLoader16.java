@@ -132,7 +132,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
         for (ModCandidateImpl mod : conflictingNestedModsImpl) {
             String originModId = mod.getParentMods().stream().filter(ModCandidateImpl::isRoot).findFirst().map(ModCandidateImpl::getId).orElse(null);
             if (originModId == null) {
-                LOGGER.error("Why would it be null? {} - {}", mod, mod.getOriginPaths());
+                LOGGER.error("Why would it be null? {} - {}, parent mods: {}", mod, mod.getOriginPaths(), mod.getParentMods());
             } else {
                 originModIds.add(originModId);
             }
