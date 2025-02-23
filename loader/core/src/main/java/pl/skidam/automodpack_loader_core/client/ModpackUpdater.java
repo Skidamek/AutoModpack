@@ -241,10 +241,9 @@ public class ModpackUpdater {
                     }
 
                     List<String> urls = new ArrayList<>();
-
-//                    if (fetchManager.getFetchDatas().containsKey(item.sha1)) {
-//                        urls.addAll(fetchManager.getFetchDatas().get(item.sha1).fetchedData().urls());
-//                    }
+                    if (fetchManager.getFetchDatas().containsKey(item.sha1)) {
+                        urls.addAll(fetchManager.getFetchDatas().get(item.sha1).fetchedData().urls());
+                    }
 
                     Runnable failureCallback = () -> {
                         failedDownloads.put(item, urls);

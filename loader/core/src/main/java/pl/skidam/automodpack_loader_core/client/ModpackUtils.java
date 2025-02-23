@@ -302,7 +302,7 @@ public class ModpackUtils {
 
         String selectedModpack = clientConfig.selectedModpack;
         String selectedModpackLink = clientConfig.installedModpacks.get(selectedModpack);
-        LOGGER.info("Selected modpack link: {}", selectedModpackLink);
+//        LOGGER.info("Selected modpack link: {}", selectedModpackLink);
 
         InetSocketAddress selectedModpackAddress = null;
         try {
@@ -335,8 +335,8 @@ public class ModpackUtils {
         ConfigTools.save(clientConfigFile, clientConfig);
         ModpackUtils.addModpackToList(modpackToSelect, modpackAddressToSelect);
 
-        LOGGER.warn("modpackToSelect: {}, selectedModpack: {}", modpackToSelect, modpackToSelect);
-        LOGGER.warn("modpackAddressToSelect: {}, selectedModpackAddress: {}", modpackAddressToSelect, selectedModpackAddress);
+//        LOGGER.warn("modpackToSelect: {}, selectedModpack: {}", modpackToSelect, modpackToSelect);
+//        LOGGER.warn("modpackAddressToSelect: {}, selectedModpackAddress: {}", modpackAddressToSelect, selectedModpackAddress);
 
         return !Objects.equals(modpackToSelect, selectedModpack) || !Objects.equals(modpackAddressToSelect, selectedModpackAddress);
     }
