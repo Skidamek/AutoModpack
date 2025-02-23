@@ -5,8 +5,8 @@ import net.minecraft.util.Identifier;
 import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.Modpack;
-import pl.skidam.automodpack_core.netty.HttpServer;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.netty.NettyServer;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -42,7 +42,7 @@ public class Common {
 
     public static void init() {
         GAME_CALL = new GameCall();
-        httpServer = new HttpServer();
+        hostServer = new NettyServer();
         modpack = new Modpack();
     }
 
@@ -51,7 +51,7 @@ public class Common {
             return;
         }
 
-        httpServer.start();
+        hostServer.start();
     }
 
     public static void beforeShutdownServer() {
@@ -59,7 +59,7 @@ public class Common {
             return;
         }
 
-        httpServer.stop();
+        hostServer.stop();
         modpack.shutdownExecutor();
     }
 

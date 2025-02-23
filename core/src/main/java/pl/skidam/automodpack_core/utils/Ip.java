@@ -75,8 +75,9 @@ public class Ip {
             ip = ip.substring(1);
         }
 
-        if (ip.contains(":")) { // Handle port or IPv6 scope
-            ip = ip.split(":", 2)[0];
+        if (ip.contains(":")) {
+            int portIndex = ip.lastIndexOf(":");
+            ip = ip.substring(0, portIndex);
         }
 
         if (ip.startsWith("[") && ip.endsWith("]")) {

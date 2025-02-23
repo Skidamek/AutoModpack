@@ -52,7 +52,7 @@ public class SecretsStore {
         }
     }
 
-    private static final SecretsCache hostSecrets = new SecretsCache(GlobalVariables.hostSecretsFile);
+    private static final SecretsCache hostSecrets = new SecretsCache(GlobalVariables.serverSecretsFile);
     private static final SecretsCache clientSecrets = new SecretsCache(GlobalVariables.clientSecretsFile);
 
     public static Map.Entry<String, Secrets.Secret>  getHostSecret(String secret) {

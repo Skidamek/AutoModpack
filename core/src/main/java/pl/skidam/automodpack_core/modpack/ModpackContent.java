@@ -83,8 +83,8 @@ public class ModpackContent {
         }
 
         saveModpackContent();
-        if (httpServer != null) {
-            httpServer.addPaths(pathsMap);
+        if (hostServer != null) {
+            hostServer.addPaths(pathsMap);
         }
 
         return true;
@@ -116,8 +116,8 @@ public class ModpackContent {
             }
         }
 
-        if (httpServer != null) {
-            httpServer.addPaths(pathsMap);
+        if (hostServer != null) {
+            hostServer.addPaths(pathsMap);
         }
 
         // set all new variables

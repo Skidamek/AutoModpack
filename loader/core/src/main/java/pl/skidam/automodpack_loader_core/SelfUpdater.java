@@ -3,6 +3,7 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
@@ -155,7 +156,7 @@ public class SelfUpdater {
             downloadManager.download(
                     automodpackUpdateJar,
                     automodpack.SHA1Hash(),
-                    new DownloadManager.Urls().addUrl(new DownloadManager.Url().getUrl(automodpack.downloadUrl())),
+                    List.of(automodpack.downloadUrl()),
                     () -> LOGGER.info("Downloaded update for AutoModpack."),
                     () -> LOGGER.error("Failed to download update for AutoModpack.")
             );

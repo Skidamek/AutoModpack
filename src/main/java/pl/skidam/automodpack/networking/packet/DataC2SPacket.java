@@ -14,8 +14,6 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
-import java.net.Inet6Address;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.Set;
@@ -28,7 +26,8 @@ public class DataC2SPacket {
         String serverResponse = buf.readString(Short.MAX_VALUE);
 
         DataPacket dataPacket = DataPacket.fromJson(serverResponse);
-        String link = dataPacket.link;
+        String packetAddress = dataPacket.address;
+        Integer packetPort = dataPacket.port;
         boolean modRequired = dataPacket.modRequired;
 
         if (modRequired) {
@@ -37,27 +36,23 @@ public class DataC2SPacket {
             // 2. Dont disconnect and join server
         }
 
-        if (link.isBlank()) {
-            InetSocketAddress socketAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
-            InetAddress inetAddress = socketAddress.getAddress();
-            String ipAddress = inetAddress.getHostAddress();
-            int port = socketAddress.getPort();
+        InetSocketAddress address = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
 
-            if (inetAddress instanceof Inet6Address) {
-                ipAddress = "[" + ipAddress + "]";
-            }
-
-            link = "http://" + ipAddress + ":" + port;
-            LOGGER.info("Http url from connected server: {}", link);
+        if (packetAddress.isBlank()) {
+            LOGGER.info("Address from connected server: {}:{}", address.getAddress().getHostName(), address.getPort());
+        } else if (packetPort != null) {
+            address = new InetSocketAddress(packetAddress, packetPort);
+            LOGGER.info("Received address packet from server! {}:{}", packetAddress, packetPort);
         } else {
-            LOGGER.info("Received link packet from server! {}", link);
+            var portIndex = packetAddress.lastIndexOf(':');
+            var port = portIndex == -1 ? 0 : Integer.parseInt(packetAddress.substring(portIndex + 1));
+            var addressString = portIndex == -1 ? packetAddress : packetAddress.substring(0, portIndex);
+            address = new InetSocketAddress(addressString, port);
+            LOGGER.info("Received address packet from server! {} Attached port: {}", addressString, port);
         }
 
-        // TODO: dont require/hardcode this
-        link = link + "/automodpack/";
-
-        Path modpackDir = ModpackUtils.getModpackPath(link, dataPacket.modpackName);
-        boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, link, Set.of());
+        Path modpackDir = ModpackUtils.getModpackPath(address, dataPacket.modpackName);
+        boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, address, Set.of());
 
         // save secret
         Secrets.Secret secret = dataPacket.secret;
@@ -65,14 +60,14 @@ public class DataC2SPacket {
 
         Boolean needsDisconnecting = null;
 
-        var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(link, secret);
+        var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(address, secret);
 
         if (optionalServerModpackContent.isPresent()) {
             boolean update = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
             if (update) {
                 disconnectImmediately(handler);
-                new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), link, secret, modpackDir);
+                new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), address, secret, modpackDir);
                 needsDisconnecting = true;
             } else if (selectedModpackChanged) {
                 disconnectImmediately(handler);

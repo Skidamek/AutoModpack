@@ -25,9 +25,9 @@ import pl.skidam.automodpack.mixin.core.DrawContextAccessor;
 /*?}*/
 
 /*? if >=1.21.2 {*/
-import net.minecraft.client.render.RenderLayer;
+/*import net.minecraft.client.render.RenderLayer;
 import java.util.function.Function;
-/*?}*/
+*//*?}*/
 
 public class VersionedScreen extends Screen {
 
@@ -108,11 +108,11 @@ public class VersionedScreen extends Screen {
 	*//*?} else {*/
 	public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/*? if >=1.21.2 {*/
-		Function<Identifier, RenderLayer> renderLayers = RenderLayer::getGuiTextured;
+		/*Function<Identifier, RenderLayer> renderLayers = RenderLayer::getGuiTextured;
 		matrices.drawTexture(renderLayers, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
-		/*?} else {*/
-		/*matrices.drawTexture(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
-		*//*?}*/
+		*//*?} else {*/
+		matrices.drawTexture(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		/*?}*/
 	}
 	/*?}*/
 }

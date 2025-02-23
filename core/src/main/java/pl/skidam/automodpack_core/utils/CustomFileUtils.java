@@ -63,14 +63,7 @@ public class CustomFileUtils {
 
     // our implementation of Files.copy, thanks to usage of RandomAccessFile we can copy files that are in use
     public static void copyFile(Path source, Path destination) throws IOException {
-        if (!Files.exists(destination)) {
-            if (!Files.exists(destination.getParent())) {
-                Files.createDirectories(destination.getParent());
-            }
-            // Windows? #302
-//            Files.createFile(destination);
-            destination.toFile().createNewFile();
-        }
+        setupFilePaths(destination);
 
         try (RandomAccessFile sourceFile = new RandomAccessFile(source.toFile(), "r");
              FileOutputStream destinationFile = new FileOutputStream(destination.toFile())) {
@@ -85,6 +78,17 @@ public class CustomFileUtils {
         } catch (IOException e) {
             e.printStackTrace();
 //            throw new IOException("Failed to copy file: " + source + " to: " + destination, e);
+        }
+    }
+
+    public static void setupFilePaths(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            if (!Files.exists(file.getParent())) {
+                Files.createDirectories(file.getParent());
+            }
+            // Windows? #302
+//            Files.createFile(destination);
+            file.toFile().createNewFile();
         }
     }
 
@@ -199,6 +203,9 @@ public class CustomFileUtils {
 
     public static String getHash(Path file) {
         try {
+            if (!Files.exists(file))
+                return null;
+
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
                 byte[] buffer = new byte[8192];
@@ -210,7 +217,7 @@ public class CustomFileUtils {
             byte[] hashBytes = digest.digest();
             return convertBytesToHex(hashBytes);
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.error("Failed to get hash of file: {}", file, e);
         }
         return null;
     }

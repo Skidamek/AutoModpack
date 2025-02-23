@@ -6,30 +6,36 @@ import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.SslProvider;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.Ip;
 import pl.skidam.automodpack_core.utils.ObservableMap;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.cert.X509Certificate;
 import java.util.*;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
-public class HttpServer {
-    public static final String HTTP_REQUEST_BASE = "/automodpack/";
-    public static final String HTTP_REQUEST_GET = "GET " + HTTP_REQUEST_BASE;
-    public static final String HTTP_REQUEST_REFRESH = "POST " + HTTP_REQUEST_BASE + "refresh";
-    public static final byte[] HTTP_REQUEST_GET_BASE_BYTES = HTTP_REQUEST_GET.getBytes(StandardCharsets.UTF_8);
-    public static final byte[] HTTP_REQUEST_REFRESH_BYTES = HTTP_REQUEST_REFRESH.getBytes(StandardCharsets.UTF_8);
+// TODO: clean up this class
+public class NettyServer {
 
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
+    private X509Certificate certificate;
+    private SslContext sslCtx;
 
     public void addPaths(ObservableMap<String, Path> paths) {
         this.paths.putAll(paths.getMap());
@@ -46,46 +52,82 @@ public class HttpServer {
     }
 
     public Optional<ChannelFuture> start() {
-        if (!canStart()) {
+        try {
+            X509Certificate cert;
+            PrivateKey key;
+
+            if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
+                // Create a self-signed certificate
+                KeyPair keyPair = NetUtils.generateKeyPair();
+                cert = NetUtils.selfSign(keyPair);
+                key = keyPair.getPrivate();
+
+                // save it to the file
+                NetUtils.saveCertificate(cert, serverCertFile);
+                NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+            } else {
+                cert = NetUtils.loadCertificate(serverCertFile);
+                key = NetUtils.loadPrivateKey(serverPrivateKeyFile);
+            }
+
+            if (cert == null || key == null) {
+                throw new IllegalStateException("Failed to load certificate or private key");
+            }
+
+            // Shiny TLS 1.3
+            certificate = cert;
+            sslCtx = SslContextBuilder.forServer(key, cert)
+                    .sslProvider(SslProvider.JDK)
+                    .protocols("TLSv1.3")
+                    .ciphers(Arrays.asList(
+                            "TLS_AES_128_GCM_SHA256",
+                            "TLS_AES_256_GCM_SHA384",
+                            "TLS_CHACHA20_POLY1305_SHA256"))
+                    .build();
+
+            if (!canStart()) {
+                return Optional.empty();
+            }
+
+            int port = serverConfig.hostPort;
+            InetAddress address = new InetSocketAddress(port).getAddress();
+
+            Class<? extends ServerChannel> socketChannelClass;
+            MultithreadEventLoopGroup eventLoopGroup;
+            if (Epoll.isAvailable()) {
+                socketChannelClass = EpollServerSocketChannel.class;
+                eventLoopGroup = new EpollEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
+            } else {
+                socketChannelClass = NioServerSocketChannel.class;
+                eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
+            }
+
+            serverChannel = new ServerBootstrap()
+                    .channel(socketChannelClass)
+                    .childOption(ChannelOption.SO_KEEPALIVE, true)
+                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel ch) throws Exception {
+                            ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(sslCtx));
+                            shouldHost = true;
+                        }
+                    })
+                    .group(eventLoopGroup)
+                    .localAddress(address, port)
+                    .bind()
+                    .syncUninterruptibly();
+
+            System.out.println("Netty file server started on port " + port);
+        } catch (Exception e) {
+            LOGGER.error("Failed to start Netty server", e);
             return Optional.empty();
         }
 
-        int port = serverConfig.hostPort;
-        InetAddress address = new InetSocketAddress(port).getAddress();
-
-        MultithreadEventLoopGroup eventLoopGroup;
-        Class<? extends ServerChannel> socketChannelClass;
-        if (Epoll.isAvailable()) {
-            socketChannelClass = EpollServerSocketChannel.class;
-            eventLoopGroup = new EpollEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
-        } else {
-            socketChannelClass = NioServerSocketChannel.class;
-            eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
-        }
-
-        serverChannel = new ServerBootstrap()
-                .channel(socketChannelClass)
-                .childHandler(
-                        new ChannelInitializer<>() {
-                            @Override
-                            protected void initChannel(Channel channel) {
-                                try {
-                                    channel.config().setOption(ChannelOption.TCP_NODELAY, true);
-                                } catch (Exception ignored) {
-                                    // ignore it
-                                }
-
-                                shouldHost = true;
-                                channel.pipeline().addLast(MOD_ID, new HttpServerHandler());
-                            }
-                        }
-                )
-                .group(eventLoopGroup)
-                .localAddress(address, port)
-                .bind()
-                .syncUninterruptibly();
-
         return Optional.ofNullable(serverChannel);
+    }
+
+    public boolean shouldHost() {
+        return shouldHost;
     }
 
     // Returns true if stopped successfully
@@ -116,6 +158,14 @@ public class HttpServer {
         }
 
         return serverChannel.channel().isOpen();
+    }
+
+    public X509Certificate getCert() {
+        return certificate;
+    }
+
+    public SslContext getSslCtx() {
+        return sslCtx;
     }
 
     private boolean canStart() {

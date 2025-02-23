@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.utils.ManifestReader;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.file.*;
 import java.util.HashMap;
 import java.util.List;
@@ -60,9 +61,18 @@ public class Preload {
             return;
         }
 
+        InetSocketAddress selectedModpackAddress;
+
+        try {
+            int portIndex = selectedModpackLink.lastIndexOf(":");
+            selectedModpackAddress = new InetSocketAddress(selectedModpackLink.substring(0, portIndex), Integer.parseInt(selectedModpackLink.substring(portIndex + 1)));
+        } catch (Exception e) {
+            return;
+        }
+
         Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
-        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackLink, secret);
+        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackAddress, secret);
         var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
         // Use the latest modpack content if available
@@ -79,7 +89,7 @@ public class Preload {
         }
 
         // Update modpack
-        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackLink, secret, selectedModpackDir);
+        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackAddress, secret, selectedModpackDir);
     }
 
 
