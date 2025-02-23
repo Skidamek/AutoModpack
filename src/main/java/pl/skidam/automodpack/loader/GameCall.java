@@ -7,6 +7,7 @@ import pl.skidam.automodpack_core.loader.GameCallService;
 
 import java.net.SocketAddress;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -28,8 +29,10 @@ public class GameCall implements GameCallService {
             return true;
         }
 
-        boolean valid = Common.server.getPlayerManager().checkCanJoin(address, profile) == null;
+        AtomicBoolean canJoin = new AtomicBoolean(false);
+        GameProfile finalProfile = profile;
+        Common.server.submitAndJoin(() -> canJoin.set(Common.server.getPlayerManager().checkCanJoin(address, finalProfile) == null));
 
-        return valid;
+        return canJoin.get();
     }
 }

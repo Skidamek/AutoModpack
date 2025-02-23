@@ -19,6 +19,8 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.utils.Ip;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -38,20 +40,12 @@ public class HandshakeS2CPacket {
             LOGGER.warn("Connection is not encrypted for player: {}", playerName);
         }
 
-        if (server.getPlayerManager().checkCanJoin(connection.getAddress(), profile) != null) {
-            return; // ignore it
-        }
+        AtomicBoolean canJoin = new AtomicBoolean(false);
+        server.submitAndJoin(() -> canJoin.set(server.getPlayerManager().checkCanJoin(connection.getAddress(), profile) == null));
 
-// TODO: send this packet only if player can join (isnt banned, is whitelisted, etc.)
-//  at the moment it's not possible because of
-//  'Cannot invoke "java.util.UUID.toString()" because the return value of "com.mojang.authlib.GameProfile.getId()" is null'
-//
-//        SocketAddress playerIp = connection.getAddress();
-//
-//        if (server.getPlayerManager().checkCanJoin(playerIp, profile) != null) {
-//            LOGGER.info("Not providing modpack for {}", playerName);
-//            return;
-//        }
+        if (!canJoin.get()) {
+            return;
+        }
 
         if (!understood) {
             Common.players.put(playerName, false);
