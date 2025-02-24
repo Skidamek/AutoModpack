@@ -306,8 +306,10 @@ public class ModpackUtils {
 
         InetSocketAddress selectedModpackAddress = null;
         try {
-            int portIndex = selectedModpackLink.lastIndexOf(":");
-            if (portIndex != -1) selectedModpackAddress = new InetSocketAddress(selectedModpackLink.substring(0, portIndex), Integer.parseInt(selectedModpackLink.substring(portIndex + 1)));
+            String[] parts = selectedModpackLink.split(":");
+            if (parts.length == 2 && parts[1].matches("\\d+")) {
+                selectedModpackAddress = new InetSocketAddress(parts[0], Integer.parseInt(parts[1]));
+            }
         } catch (Exception e) {
             if (selectedModpackLink != null && !selectedModpackLink.isBlank()) {
                 LOGGER.error("Error while parsing selected modpack address", e);
