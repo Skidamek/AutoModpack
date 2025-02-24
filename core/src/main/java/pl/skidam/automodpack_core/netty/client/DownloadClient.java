@@ -18,24 +18,17 @@ import pl.skidam.automodpack_core.netty.message.RefreshRequestMessage;
 import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 import static pl.skidam.automodpack_core.netty.NetUtils.MAGIC_AMMC;
 
 public class DownloadClient extends NettyClient {
-    private final List<Channel> channels = new ArrayList<>();
-    private final AtomicInteger roundRobinIndex = new AtomicInteger(0);
+    private final Map<Channel, AtomicBoolean> channels = new HashMap<>(); // channel, isBusy
     private final EventLoopGroup group;
-    private final Bootstrap bootstrap;
-    private final int poolSize;
-    private final InetSocketAddress remoteAddress;
     private final SslContext sslCtx;
     private final Secrets.Secret secret;
     private final DownloadClient downloadClient;
@@ -43,9 +36,7 @@ public class DownloadClient extends NettyClient {
 
     public DownloadClient(InetSocketAddress remoteAddress, Secrets.Secret secret, int poolSize) throws InterruptedException, SSLException {
         this.downloadClient = this;
-        this.remoteAddress = remoteAddress;
         this.secret = secret;
-        this.poolSize = poolSize;
 
         // Yes, we use the insecure because server uses self-signed cert and we have different way to verify the authenticity
         // Via secret and fingerprint, so the encryption strength should be the same, correct me if I'm wrong, thanks
@@ -60,7 +51,7 @@ public class DownloadClient extends NettyClient {
                 .build();
 
         group = new NioEventLoopGroup();
-        bootstrap = new Bootstrap();
+        Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(group)
                 .channel(NioSocketChannel.class)
                 .option(ChannelOption.SO_KEEPALIVE, true)
@@ -92,7 +83,12 @@ public class DownloadClient extends NettyClient {
 
     @Override
     public void addChannel(Channel channel) {
-        channels.add(channel);
+        channels.put(channel, new AtomicBoolean(false));
+    }
+
+    @Override
+    public void removeChannel(Channel channel) {
+        channels.remove(channel);
     }
 
     @Override
@@ -110,14 +106,19 @@ public class DownloadClient extends NettyClient {
      * Returns a CompletableFuture that completes when the download finishes.
      */
     public CompletableFuture<Object> downloadFile(byte[] fileHash, Path destination) {
+        // Select first not busy channel
+        Channel channel = channels.entrySet().stream()
+                .filter(entry -> !entry.getValue().get())
+                .findFirst()
+                .map(Map.Entry::getKey)
+                .orElseThrow(() -> new IllegalStateException("No available channels"));
 
-        // Select a channel via round-robin.
-        int index = roundRobinIndex.getAndIncrement();
-        Channel channel = channels.get(index % channels.size());
+        // Mark channel as busy
+        channels.get(channel).set(true);
 
         // Add a new FileDownloadHandler to process this download.
         FileDownloadHandler downloadHandler = new FileDownloadHandler(destination);
-        channel.pipeline().addLast("downloadHandler-" + index, downloadHandler);
+        channel.pipeline().addLast("download-handler", downloadHandler);
 
         byte[] bsecret = Base64.getUrlDecoder().decode(secret.secret());
 
@@ -126,7 +127,10 @@ public class DownloadClient extends NettyClient {
         channel.writeAndFlush(request);
 
         // Return the future that will complete when the download finishes.
-        return downloadHandler.getDownloadFuture();
+        return downloadHandler.getDownloadFuture().whenComplete((result, throwable) -> {
+            // Mark channel as not busy
+            channels.get(channel).set(false);
+        });
     }
 
     /**
@@ -134,13 +138,19 @@ public class DownloadClient extends NettyClient {
      * Returns a CompletableFuture that completes when the download finishes.
      */
     public CompletableFuture<Object> requestRefresh(byte[][] fileHashes) {
-        // Select a channel via round-robin.
-        int index = roundRobinIndex.getAndIncrement();
-        Channel channel = channels.get(index % channels.size());
+        // Select first not busy channel
+        Channel channel = channels.entrySet().stream()
+                .filter(entry -> !entry.getValue().get())
+                .findFirst()
+                .map(Map.Entry::getKey)
+                .orElseThrow(() -> new IllegalStateException("No available channels"));
+
+        // Mark channel as busy
+        channels.get(channel).set(true);
 
         // Add a new FileDownloadHandler to process this download.
         FileDownloadHandler downloadHandler = new FileDownloadHandler(null);
-        channel.pipeline().addLast("downloadHandler-" + index, downloadHandler);
+        channel.pipeline().addLast("download-handler", downloadHandler);
 
         byte[] bsecret = Base64.getUrlDecoder().decode(secret.secret());
 
@@ -149,14 +159,17 @@ public class DownloadClient extends NettyClient {
         channel.writeAndFlush(request);
 
         // Return the future that will complete when the download finishes.
-        return downloadHandler.getDownloadFuture();
+        return downloadHandler.getDownloadFuture().whenComplete((result, throwable) -> {
+            // Mark channel as not busy
+            channels.get(channel).set(false);
+        });
     }
 
     /**
      * Closes all channels in the pool and shuts down the event loop.
      */
     public void close() {
-        for (Channel channel : channels) {
+        for (Channel channel : channels.keySet()) {
             if (channel.isOpen()) {
                 channel.close();
             }

@@ -9,6 +9,7 @@ public abstract class NettyClient {
     public abstract SslContext getSslCtx();
     public abstract void secureInit(ChannelHandlerContext ctx);
     public abstract void addChannel(Channel channel);
+    public abstract void removeChannel(Channel channel);
     public abstract void releaseChannel();
     public abstract Secrets.Secret getSecret();
 }

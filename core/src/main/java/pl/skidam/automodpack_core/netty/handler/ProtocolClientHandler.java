@@ -83,6 +83,12 @@ public class ProtocolClientHandler extends ByteToMessageDecoder {
     }
 
     @Override
+    public void channelInactive(ChannelHandlerContext ctx) {
+        client.removeChannel(ctx.channel());
+        client.releaseChannel();
+    }
+
+    @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         cause.printStackTrace();
         ctx.close();
