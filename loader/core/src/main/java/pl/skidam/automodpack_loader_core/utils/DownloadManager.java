@@ -162,7 +162,10 @@ public class DownloadManager {
 //            Files.createFile(outFile);
         }
 
-        var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), outFile);
+        var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), outFile, (bytes) -> {
+            bytesDownloaded += bytes;
+            speedMeter.addDownloadedBytes(bytes);
+        });
         future.join();
     }
 

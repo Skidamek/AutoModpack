@@ -306,9 +306,15 @@ public class ModpackUtils {
 
         InetSocketAddress selectedModpackAddress = null;
         try {
-            String[] parts = selectedModpackLink.split(":");
-            if (parts.length == 2 && parts[1].matches("\\d+")) {
-                selectedModpackAddress = new InetSocketAddress(parts[0], Integer.parseInt(parts[1]));
+            int portIndex = selectedModpackLink.lastIndexOf(':');
+            if (portIndex != -1) {
+                String host = selectedModpackLink.substring(0, portIndex);
+                String port = selectedModpackLink.substring(portIndex + 1);
+                if (port.matches("\\d+")) {
+                    selectedModpackAddress = new InetSocketAddress(host, Integer.parseInt(port));
+                }
+            } else {
+                selectedModpackAddress = new InetSocketAddress(selectedModpackLink, 0);
             }
         } catch (Exception e) {
             if (selectedModpackLink != null && !selectedModpackLink.isBlank()) {
@@ -411,7 +417,7 @@ public class ModpackUtils {
         DownloadClient client = null;
         try {
             client = new DownloadClient(address, secret, 1);
-            var future = client.downloadFile(new byte[0], null);
+            var future = client.downloadFile(new byte[0], null, null);
             var result = future.get();
             if (result instanceof List<?> list) {
                 return parseStreamToModpack((List<byte[]>) list);

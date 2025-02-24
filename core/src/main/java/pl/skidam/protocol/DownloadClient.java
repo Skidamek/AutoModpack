@@ -2,6 +2,7 @@ package pl.skidam.protocol;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import com.github.luben.zstd.Zstd;
+import pl.skidam.automodpack_core.callbacks.IntCallback;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -49,9 +50,9 @@ public class DownloadClient {
      * Downloads a file identified by its SHA-1 hash to the given destination.
      * Returns a CompletableFuture that completes when the download finishes.
      */
-    public CompletableFuture<Object> downloadFile(byte[] fileHash, Path destination) {
+    public CompletableFuture<Object> downloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
         Connection conn = getFreeConnection();
-        return conn.sendDownloadFile(fileHash, destination);
+        return conn.sendDownloadFile(fileHash, destination, chunkCallback);
     }
 
     /**
@@ -158,7 +159,7 @@ class Connection {
     /**
      * Sends a file request over this connection.
      */
-    public CompletableFuture<Object> sendDownloadFile(byte[] fileHash, Path destination) {
+    public CompletableFuture<Object> sendDownloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 // Build File Request message:
@@ -174,7 +175,7 @@ class Connection {
                 byte[] payload = baos.toByteArray();
 
                 writeProtocolMessage(payload);
-                return readFileResponse(destination);
+                return readFileResponse(destination, chunkCallback);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -208,7 +209,7 @@ class Connection {
                 byte[] payload = baos.toByteArray();
 
                 writeProtocolMessage(payload);
-                return readFileResponse(null);
+                return readFileResponse(null, null);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -247,7 +248,7 @@ class Connection {
      *   - One or more data frames containing file data until the total file size is reached.
      *   - A final frame: [protocolVersion][END_OF_TRANSMISSION]
      */
-    private Object readFileResponse(Path destination) throws IOException {
+    private Object readFileResponse(Path destination, IntCallback chunkCallback) throws IOException {
         // Header frame
         byte[] headerFrame = readProtocolMessageFrame();
         DataInputStream headerIn = new DataInputStream(new ByteArrayInputStream(headerFrame));
@@ -288,6 +289,10 @@ class Connection {
                 rawData.add(chunk);
             }
             receivedBytes += toWrite;
+
+            if (chunkCallback != null) {
+                chunkCallback.run(toWrite);
+            }
         }
 
         // Read EOT frame
