@@ -11,6 +11,7 @@ import net.minecraft.text.Text;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.PacketSender;
@@ -18,8 +19,6 @@ import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.utils.Ip;
-
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -40,10 +39,7 @@ public class HandshakeS2CPacket {
             LOGGER.warn("Connection is not encrypted for player: {}", playerName);
         }
 
-        AtomicBoolean canJoin = new AtomicBoolean(false);
-        server.submitAndJoin(() -> canJoin.set(server.getPlayerManager().checkCanJoin(connection.getAddress(), profile) == null));
-
-        if (!canJoin.get()) {
+        if (!GameHelpers.isPlayerAuthorized(connection.getAddress(), profile)) {
             return;
         }
 
