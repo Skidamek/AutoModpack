@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.netty.client;
+package pl.skidam.protocol.netty.client;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;

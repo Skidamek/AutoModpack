@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.netty.message;
+package pl.skidam.protocol.netty.message;
 
 public abstract class ProtocolMessage {
     private final byte version; // 1 byte

@@ -3,7 +3,7 @@ package pl.skidam.automodpack_loader_core.client;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.netty.client.DownloadClient;
+import pl.skidam.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;

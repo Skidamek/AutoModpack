@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.netty.handler;
+package pl.skidam.protocol.netty.handler;
 
 import com.github.luben.zstd.Zstd;
 import io.netty.buffer.ByteBuf;
@@ -6,8 +6,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 
 import java.util.List;
-
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class ZstdDecoder extends ByteToMessageDecoder {
 
@@ -28,7 +26,7 @@ public class ZstdDecoder extends ByteToMessageDecoder {
         byte[] compressed = new byte[length];
         in.readBytes(compressed);
 
-        var time = System.currentTimeMillis();
+//        var time = System.currentTimeMillis();
         byte[] decompressed = Zstd.decompress(compressed, originalLength);
 //        LOGGER.info("Decompression time: {}ms. Saved {} bytes", System.currentTimeMillis() - time, originalLength - length);
 

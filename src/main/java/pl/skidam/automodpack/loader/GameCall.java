@@ -2,13 +2,13 @@ package pl.skidam.automodpack.loader;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.util.UserCache;
-import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack_core.loader.GameCallService;
 
 import java.net.SocketAddress;
 import java.util.UUID;
 
+import static pl.skidam.automodpack.init.Common.server;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class GameCall implements GameCallService {
@@ -19,12 +19,12 @@ public class GameCall implements GameCallService {
         String playerName = "Player"; // mock name, name matters less than UUID anyway
         GameProfile profile = new GameProfile(uuid, playerName);
 
-        UserCache userCache = Common.server.getUserCache();
+        UserCache userCache = server.getUserCache();
         if (userCache != null) {
             profile = userCache.getByUuid(uuid).orElse(profile);
         }
 
-        if (Common.server == null) {
+        if (server == null) {
             LOGGER.error("Server is null?");
             return true;
         }

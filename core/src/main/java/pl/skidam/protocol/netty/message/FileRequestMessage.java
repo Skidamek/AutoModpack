@@ -1,6 +1,6 @@
-package pl.skidam.automodpack_core.netty.message;
+package pl.skidam.protocol.netty.message;
 
-import static pl.skidam.automodpack_core.netty.NetUtils.FILE_REQUEST_TYPE;
+import static pl.skidam.protocol.NetUtils.FILE_REQUEST_TYPE;
 
 public class FileRequestMessage extends ProtocolMessage {
     private final int fileHashLength;

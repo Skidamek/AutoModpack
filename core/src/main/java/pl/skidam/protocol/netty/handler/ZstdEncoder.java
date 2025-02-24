@@ -1,11 +1,9 @@
-package pl.skidam.automodpack_core.netty.handler;
+package pl.skidam.protocol.netty.handler;
 
 import com.github.luben.zstd.Zstd;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
-
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class ZstdEncoder extends MessageToByteEncoder<ByteBuf> {
 
@@ -14,7 +12,7 @@ public class ZstdEncoder extends MessageToByteEncoder<ByteBuf> {
         byte[] input = new byte[msg.readableBytes()];
         msg.readBytes(input);
 
-        var time = System.currentTimeMillis();
+//        var time = System.currentTimeMillis();
         byte[] compressed = Zstd.compress(input);
 //        LOGGER.info("Compression time: {}ms. Saved {} bytes", System.currentTimeMillis() - time, input.length - compressed.length);
 

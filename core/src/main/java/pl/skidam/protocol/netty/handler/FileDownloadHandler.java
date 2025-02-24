@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.netty.handler;
+package pl.skidam.protocol.netty.handler;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.netty.NetUtils.*;
+import static pl.skidam.protocol.NetUtils.*;
 
 public class FileDownloadHandler extends ChannelInboundHandlerAdapter {
 

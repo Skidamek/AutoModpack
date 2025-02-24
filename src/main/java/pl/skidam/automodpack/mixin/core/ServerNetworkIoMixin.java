@@ -6,7 +6,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack_core.GlobalVariables;
-import pl.skidam.automodpack_core.netty.handler.ProtocolServerHandler;
+import pl.skidam.protocol.netty.handler.ProtocolServerHandler;
 
 import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 import static pl.skidam.automodpack_core.GlobalVariables.hostServer;

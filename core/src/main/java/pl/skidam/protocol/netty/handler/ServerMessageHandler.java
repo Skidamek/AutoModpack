@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.netty.handler;
+package pl.skidam.protocol.netty.handler;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -10,10 +10,10 @@ import io.netty.util.CharsetUtil;
 import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
-import pl.skidam.automodpack_core.netty.message.EchoMessage;
-import pl.skidam.automodpack_core.netty.message.FileRequestMessage;
-import pl.skidam.automodpack_core.netty.message.ProtocolMessage;
-import pl.skidam.automodpack_core.netty.message.RefreshRequestMessage;
+import pl.skidam.protocol.netty.message.EchoMessage;
+import pl.skidam.protocol.netty.message.FileRequestMessage;
+import pl.skidam.protocol.netty.message.ProtocolMessage;
+import pl.skidam.protocol.netty.message.RefreshRequestMessage;
 
 import java.io.File;
 import java.io.IOException;
@@ -25,7 +25,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
-import static pl.skidam.automodpack_core.netty.NetUtils.*;
+import static pl.skidam.protocol.NetUtils.*;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
@@ -136,10 +136,10 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         responseHeader.writeLong(file.length());
         ctx.writeAndFlush(responseHeader);
 
-        // Stream the file using ChunkedFile (chunk size set to 8192 bytes)
+        // Stream the file using ChunkedFile (chunk size set to 131072 bytes = 128 KB) - suitable value for zstd
         try {
             RandomAccessFile raf = new RandomAccessFile(file, "r");
-            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), 8192);
+            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), 131072);
             ctx.writeAndFlush(chunkedFile).addListener((ChannelFutureListener) future -> {
                 // After the file is sent, send an End-of-Transmission message.
                 ByteBuf eot = Unpooled.buffer(2);

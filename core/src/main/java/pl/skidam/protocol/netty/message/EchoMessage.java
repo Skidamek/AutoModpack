@@ -1,6 +1,6 @@
-package pl.skidam.automodpack_core.netty.message;
+package pl.skidam.protocol.netty.message;
 
-import static pl.skidam.automodpack_core.netty.NetUtils.ECHO_TYPE;
+import static pl.skidam.protocol.NetUtils.ECHO_TYPE;
 
 public class EchoMessage extends ProtocolMessage {
     private final int dataLength;

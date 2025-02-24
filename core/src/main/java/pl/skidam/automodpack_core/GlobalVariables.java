@@ -5,7 +5,7 @@ import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.*;
 import pl.skidam.automodpack_core.modpack.Modpack;
-import pl.skidam.automodpack_core.netty.NettyServer;
+import pl.skidam.protocol.netty.NettyServer;
 
 import java.nio.file.Path;
 

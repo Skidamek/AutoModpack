@@ -39,7 +39,7 @@ public class CustomFileUtils {
         } catch (IOException ignored) {
         }
 
-        if (Files.exists(file)) {
+        if (Files.isRegularFile(file)) {
             dummyIT(file);
         }
     }
@@ -203,7 +203,7 @@ public class CustomFileUtils {
 
     public static String getHash(Path file) {
         try {
-            if (!Files.exists(file))
+            if (!Files.isRegularFile(file))
                 return null;
 
             MessageDigest digest = MessageDigest.getInstance("SHA-1");

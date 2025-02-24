@@ -1,6 +1,6 @@
-package pl.skidam.automodpack_core.netty.message;
+package pl.skidam.protocol.netty.message;
 
-import static pl.skidam.automodpack_core.netty.NetUtils.FILE_RESPONSE_TYPE;
+import static pl.skidam.protocol.NetUtils.FILE_RESPONSE_TYPE;
 
 public class FileResponseMessage extends ProtocolMessage {
     private final int dataLength;

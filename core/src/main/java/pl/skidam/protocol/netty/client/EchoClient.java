@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.netty.client;
+package pl.skidam.protocol.netty.client;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
@@ -10,9 +10,9 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.netty.handler.ProtocolClientHandler;
-import pl.skidam.automodpack_core.netty.handler.ProtocolMessageEncoder;
-import pl.skidam.automodpack_core.netty.message.EchoMessage;
+import pl.skidam.protocol.netty.handler.ProtocolClientHandler;
+import pl.skidam.protocol.netty.handler.ProtocolMessageEncoder;
+import pl.skidam.protocol.netty.message.EchoMessage;
 
 import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 
-import static pl.skidam.automodpack_core.netty.NetUtils.MAGIC_AMMC;
+import static pl.skidam.protocol.NetUtils.MAGIC_AMMC;
 
 public class EchoClient extends NettyClient {
     private final List<Channel> channels = new ArrayList<>();

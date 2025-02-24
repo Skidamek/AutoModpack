@@ -1,17 +1,17 @@
-package pl.skidam.automodpack_core.netty.handler;
+package pl.skidam.protocol.netty.handler;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
-import pl.skidam.automodpack_core.netty.NetUtils;
-import pl.skidam.automodpack_core.netty.message.EchoMessage;
-import pl.skidam.automodpack_core.netty.message.FileRequestMessage;
-import pl.skidam.automodpack_core.netty.message.FileResponseMessage;
-import pl.skidam.automodpack_core.netty.message.RefreshRequestMessage;
+import pl.skidam.protocol.NetUtils;
+import pl.skidam.protocol.netty.message.EchoMessage;
+import pl.skidam.protocol.netty.message.FileRequestMessage;
+import pl.skidam.protocol.netty.message.FileResponseMessage;
+import pl.skidam.protocol.netty.message.RefreshRequestMessage;
 
 import java.util.List;
 
-import static pl.skidam.automodpack_core.netty.NetUtils.*;
+import static pl.skidam.protocol.NetUtils.*;
 
 public class ProtocolMessageDecoder extends ByteToMessageDecoder {
     @Override

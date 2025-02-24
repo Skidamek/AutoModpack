@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.auth;
 
-import pl.skidam.automodpack_core.netty.NetUtils;
+import pl.skidam.protocol.NetUtils;
 
 import java.net.SocketAddress;
 import java.security.SecureRandom;

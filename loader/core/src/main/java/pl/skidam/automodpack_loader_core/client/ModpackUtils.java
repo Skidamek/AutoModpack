@@ -6,7 +6,7 @@ import com.google.gson.JsonParser;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.netty.client.DownloadClient;
+import pl.skidam.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -307,7 +307,7 @@ public class ModpackUtils {
         InetSocketAddress selectedModpackAddress = null;
         try {
             int portIndex = selectedModpackLink.lastIndexOf(":");
-            selectedModpackAddress = new InetSocketAddress(selectedModpackLink.substring(0, portIndex), Integer.parseInt(selectedModpackLink.substring(portIndex + 1)));
+            if (portIndex != -1) selectedModpackAddress = new InetSocketAddress(selectedModpackLink.substring(0, portIndex), Integer.parseInt(selectedModpackLink.substring(portIndex + 1)));
         } catch (Exception e) {
             if (selectedModpackLink != null && !selectedModpackLink.isBlank()) {
                 LOGGER.error("Error while parsing selected modpack address", e);
@@ -528,7 +528,7 @@ public class ModpackUtils {
         }
 
         try (InputStreamReader isr = new InputStreamReader(new ByteArrayInputStream(bytes))) {
-            JsonElement element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
+            JsonElement element = JsonParser.parseReader(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
             if (element != null && !element.isJsonArray()) {
                 JsonObject obj = element.getAsJsonObject();
                 response = obj.toString();
@@ -566,7 +566,7 @@ public class ModpackUtils {
         String response = null;
 
         try (InputStreamReader isr = new InputStreamReader(stream)) {
-            JsonElement element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
+            JsonElement element = JsonParser.parseReader(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
             if (element != null && !element.isJsonArray()) {
                 JsonObject obj = element.getAsJsonObject();
                 response = obj.toString();

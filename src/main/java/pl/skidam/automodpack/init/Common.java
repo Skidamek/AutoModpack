@@ -6,7 +6,7 @@ import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.netty.NettyServer;
+import pl.skidam.protocol.netty.NettyServer;
 
 import java.util.HashMap;
 import java.util.Map;

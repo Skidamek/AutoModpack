@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.netty.client;
+package pl.skidam.protocol.netty.client;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
@@ -11,9 +11,9 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.netty.handler.*;
-import pl.skidam.automodpack_core.netty.message.FileRequestMessage;
-import pl.skidam.automodpack_core.netty.message.RefreshRequestMessage;
+import pl.skidam.protocol.netty.handler.*;
+import pl.skidam.protocol.netty.message.FileRequestMessage;
+import pl.skidam.protocol.netty.message.RefreshRequestMessage;
 
 import javax.net.ssl.SSLException;
 import java.net.InetSocketAddress;
@@ -24,7 +24,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
-import static pl.skidam.automodpack_core.netty.NetUtils.MAGIC_AMMC;
+import static pl.skidam.protocol.NetUtils.MAGIC_AMMC;
 
 public class DownloadClient extends NettyClient {
     private final Map<Channel, AtomicBoolean> channels = new HashMap<>(); // channel, isBusy

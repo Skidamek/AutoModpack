@@ -1,17 +1,17 @@
-package pl.skidam.automodpack_core.netty.handler;
+package pl.skidam.protocol.netty.handler;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.ssl.SslHandler;
-import pl.skidam.automodpack_core.netty.NetUtils;
-import pl.skidam.automodpack_core.netty.client.NettyClient;
+import pl.skidam.protocol.NetUtils;
+import pl.skidam.protocol.netty.client.NettyClient;
 
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.List;
 
-import static pl.skidam.automodpack_core.netty.NetUtils.MAGIC_AMOK;
+import static pl.skidam.protocol.NetUtils.MAGIC_AMOK;
 
 public class ProtocolClientHandler extends ByteToMessageDecoder {
 

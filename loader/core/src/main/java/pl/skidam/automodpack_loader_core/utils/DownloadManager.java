@@ -1,9 +1,9 @@
 package pl.skidam.automodpack_loader_core.utils;
 
-import pl.skidam.automodpack_core.netty.client.DownloadClient;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.protocol.DownloadClient;
 
 import java.io.*;
 import java.net.*;
@@ -53,14 +53,14 @@ public class DownloadManager {
 
         int numberOfIndexes = queuedDownload.urls.size();
         int urlIndex = Math.min(queuedDownload.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
-        String url = null;
+        String url = "host";
         if (queuedDownload.urls.size() > urlIndex) { // avoids IndexOutOfBoundsException
             url = queuedDownload.urls.get(urlIndex);
         }
         boolean interrupted = false;
 
         try {
-            if (url != null && queuedDownload.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
+            if (url != null && !Objects.equals(url, "host") && queuedDownload.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
                 httpDownloadFile(url, hashPathPair, queuedDownload);
             } else if (downloadClient != null) {
                 hostDownloadFile(hashPathPair, queuedDownload);
