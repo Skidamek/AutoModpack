@@ -13,9 +13,11 @@ public class GameHelpers {
         var playerManager = server.getPlayerManager();
         if (playerManager.getUserBanList().contains(profile)) {
             return false;
-        } else if (!playerManager.isWhitelisted(profile)) {
+        }
+        if (!playerManager.isWhitelisted(profile)) {
             return false;
-        } else if (playerManager.getIpBanList().isBanned(address)) {
+        }
+        if (playerManager.getIpBanList().isBanned(address)) {
             return false;
         }
 
