@@ -300,15 +300,16 @@ public class ModpackUpdater {
                     // success
                     // or fail and then show the error
 
-                    downloadManager = new DownloadManager(totalBytesToDownload);
-                    new ScreenManager().download(downloadManager, getModpackName());
-                    downloadManager.attachDownloadClient(downloadClient);
-
                     var refreshedContent = refreshedContentOptional.get();
                     this.unModifiedSMC = GSON.toJson(refreshedContent);
 
                     // filter list to only the failed downloads
                     var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
+
+                    downloadManager = new DownloadManager(totalBytesToDownload);
+                    new ScreenManager().download(downloadManager, getModpackName());
+                    downloadClient = new DownloadClient(modpackAddress, modpackSecret, Math.min(refreshedFilteredList.size(), 5));
+                    downloadManager.attachDownloadClient(downloadClient);
 
                     // TODO try to fetch again from modrinth and curseforge
 
@@ -339,8 +340,6 @@ public class ModpackUpdater {
                     LOGGER.info("Finished refreshed downloading files in {}ms", System.currentTimeMillis() - startFetching);
                 }
             }
-
-            downloadClient.close();
 
             LOGGER.info("Done, saving {}", modpackContentFile.getFileName().toString());
 
