@@ -51,15 +51,13 @@ public class DataC2SPacket {
             LOGGER.info("Received address packet from server! {} Attached port: {}", addressString, port);
         }
 
-        Path modpackDir = ModpackUtils.getModpackPath(address, dataPacket.modpackName);
-        boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, address, Set.of());
-
         // save secret
         Secrets.Secret secret = dataPacket.secret;
         SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
 
         Boolean needsDisconnecting = null;
 
+        Path modpackDir = ModpackUtils.getModpackPath(address, dataPacket.modpackName);
         var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(address, secret);
 
         if (optionalServerModpackContent.isPresent()) {
@@ -69,13 +67,16 @@ public class DataC2SPacket {
                 disconnectImmediately(handler);
                 new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), address, secret, modpackDir);
                 needsDisconnecting = true;
-            } else if (selectedModpackChanged) {
-                disconnectImmediately(handler);
-                // Its needed since newly selected modpack may not be loaded
-                new ReLauncher(modpackDir, UpdateType.SELECT).restart(false);
-                needsDisconnecting = true;
             } else {
-                needsDisconnecting = false;
+                boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, address, Set.of());
+                if (selectedModpackChanged) {
+                    disconnectImmediately(handler);
+                    // Its needed since newly selected modpack may not be loaded
+                    new ReLauncher(modpackDir, UpdateType.SELECT).restart(false);
+                    needsDisconnecting = true;
+                } else {
+                    needsDisconnecting = false;
+                }
             }
         }
 
