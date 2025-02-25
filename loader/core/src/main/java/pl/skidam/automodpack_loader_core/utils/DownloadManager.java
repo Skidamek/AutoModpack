@@ -3,7 +3,7 @@ package pl.skidam.automodpack_loader_core.utils;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 
 import java.io.*;
 import java.net.*;
@@ -70,9 +70,9 @@ public class DownloadManager {
         } catch (InterruptedException e) {
             interrupted = true;
         } catch (SocketTimeoutException e) {
-            LOGGER.warn("Timeout - {} - {} - {}", queuedDownload.file, e, e.getStackTrace());
+            LOGGER.warn("Timeout - {} - {} - {}", queuedDownload.file, e, e.fillInStackTrace());
         } catch (Exception e) {
-            LOGGER.warn("Error while downloading file - {} - {} - {}", queuedDownload.file, e, e.getStackTrace());
+            LOGGER.warn("Error while downloading file - {} - {} - {}", queuedDownload.file, e, e.fillInStackTrace());
         } finally {
             synchronized (downloadsInProgress) {
                 downloadsInProgress.remove(hashPathPair);
@@ -141,7 +141,7 @@ public class DownloadManager {
         }
     }
 
-    private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) throws IOException, InterruptedException, ExecutionException {
+    private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) throws IOException, InterruptedException {
         Path outFile = queuedDownload.file;
 
         if (Files.exists(outFile)) {
@@ -152,15 +152,7 @@ public class DownloadManager {
             }
         }
 
-        if (outFile.getParent() != null) {
-            Files.createDirectories(outFile.getParent());
-        }
-
-        if (!Files.exists(outFile)) {
-            // Windows? #302
-            outFile.toFile().createNewFile();
-//            Files.createFile(outFile);
-        }
+        CustomFileUtils.setupFilePaths(outFile);
 
         var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), outFile, (bytes) -> {
             bytesDownloaded += bytes;
@@ -181,15 +173,7 @@ public class DownloadManager {
             }
         }
 
-        if (outFile.getParent() != null) {
-            Files.createDirectories(outFile.getParent());
-        }
-
-        if (!Files.exists(outFile)) {
-            // Windows? #302
-            outFile.toFile().createNewFile();
-//            Files.createFile(outFile);
-        }
+        CustomFileUtils.setupFilePaths(outFile);
 
         URLConnection connection = getHttpConnection(url);
 

@@ -1,4 +1,4 @@
-package pl.skidam.protocol.netty.handler;
+package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -10,12 +10,11 @@ import io.netty.util.CharsetUtil;
 import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
-import pl.skidam.protocol.netty.message.EchoMessage;
-import pl.skidam.protocol.netty.message.FileRequestMessage;
-import pl.skidam.protocol.netty.message.ProtocolMessage;
-import pl.skidam.protocol.netty.message.RefreshRequestMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.EchoMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.FileRequestMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.RefreshRequestMessage;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.SocketAddress;
@@ -25,7 +24,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
-import static pl.skidam.protocol.NetUtils.*;
+import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
@@ -72,7 +71,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         ctx.close();
     }
 
-    private void refreshModpackFiles(ChannelHandlerContext context, byte[][] FileHashesList) {
+    private void refreshModpackFiles(ChannelHandlerContext context, byte[][] FileHashesList) throws IOException {
         List<String> hashes = new ArrayList<>();
         for (byte[] hash : FileHashesList) {
             hashes.add(new String(hash));
@@ -118,7 +117,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         return Secrets.isSecretValid(decodedSecret, address);
     }
 
-    private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) {
+    private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) throws IOException {
         final String sha1 = new String(bsha1, CharsetUtil.UTF_8);
         final Optional<Path> optionalPath = resolvePath(sha1);
 
@@ -127,26 +126,26 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
             return;
         }
 
-        final File file = optionalPath.get().toFile();
+        final Path path = optionalPath.get();
+        final long fileSize = Files.size(path);
 
         // Send file response header: version, FILE_RESPONSE type, then file size (8 bytes)
         ByteBuf responseHeader = Unpooled.buffer(1 + 1 + 8);
         responseHeader.writeByte(clientProtocolVersion);
         responseHeader.writeByte(FILE_RESPONSE_TYPE);
-        responseHeader.writeLong(file.length());
+        responseHeader.writeLong(fileSize);
         ctx.writeAndFlush(responseHeader);
+
+        if (fileSize == 0) {
+            sendEOT(ctx);
+            return;
+        }
 
         // Stream the file using ChunkedFile (chunk size set to 131072 bytes = 128 KB) - suitable value for zstd
         try {
-            RandomAccessFile raf = new RandomAccessFile(file, "r");
+            RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
             ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), 131072);
-            ctx.writeAndFlush(chunkedFile).addListener((ChannelFutureListener) future -> {
-                // After the file is sent, send an End-of-Transmission message.
-                ByteBuf eot = Unpooled.buffer(2);
-                eot.writeByte((byte) 1);
-                eot.writeByte(END_OF_TRANSMISSION);
-                ctx.writeAndFlush(eot);
-            });
+            ctx.writeAndFlush(chunkedFile).addListener((ChannelFutureListener) future -> sendEOT(ctx));
         } catch (IOException e) {
             sendError(ctx, (byte) 1, "File transfer error: " + e.getMessage());
         }
@@ -169,5 +168,12 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         errorBuf.writeBytes(errMsgBytes);
         ctx.writeAndFlush(errorBuf);
         ctx.channel().close();
+    }
+
+    private void sendEOT(ChannelHandlerContext ctx) {
+        ByteBuf eot = Unpooled.buffer(2);
+        eot.writeByte((byte) 1);
+        eot.writeByte(END_OF_TRANSMISSION);
+        ctx.writeAndFlush(eot);
     }
 }

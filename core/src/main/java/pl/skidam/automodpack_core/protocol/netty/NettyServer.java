@@ -1,4 +1,4 @@
-package pl.skidam.protocol.netty;
+package pl.skidam.automodpack_core.protocol.netty;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -12,8 +12,8 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.protocol.NetUtils;
-import pl.skidam.protocol.netty.handler.ProtocolServerHandler;
+import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.Ip;
 import pl.skidam.automodpack_core.utils.ObservableMap;

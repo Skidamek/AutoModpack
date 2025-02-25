@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.auth;
 
-import pl.skidam.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.NetUtils;
 
 import java.net.SocketAddress;
 import java.security.SecureRandom;
@@ -51,7 +51,7 @@ public class Secrets {
             return false;
 
         String playerUuid = playerSecretPair.getKey();
-        if (!GAME_CALL.canPlayerJoin(address, playerUuid)) // check if associated player is still whitelisted
+        if (!GAME_CALL.isPlayerAuthorized(address, playerUuid)) // check if associated player is still whitelisted
             return false;
 
         long secretLifetime = serverConfig.secretLifetime * 3600; // in seconds

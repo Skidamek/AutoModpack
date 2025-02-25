@@ -3,7 +3,7 @@ package pl.skidam.automodpack_loader_core.client;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -219,7 +219,7 @@ public class ModpackUpdater {
 
             newDownloadedFiles.clear();
             int wholeQueue = serverModpackContent.list.size();
-            LOGGER.info("In queue left {} files to download ({}kb)", wholeQueue, totalBytesToDownload / 1024);
+            LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
             downloadManager = new DownloadManager(totalBytesToDownload);
             new ScreenManager().download(downloadManager, getModpackName());

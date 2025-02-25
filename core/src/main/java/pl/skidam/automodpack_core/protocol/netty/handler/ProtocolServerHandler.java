@@ -1,4 +1,4 @@
-package pl.skidam.protocol.netty.handler;
+package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
@@ -8,7 +8,7 @@ import io.netty.handler.stream.ChunkedWriteHandler;
 
 import java.util.List;
 
-import static pl.skidam.protocol.NetUtils.*;
+import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 public class ProtocolServerHandler extends ByteToMessageDecoder {
 

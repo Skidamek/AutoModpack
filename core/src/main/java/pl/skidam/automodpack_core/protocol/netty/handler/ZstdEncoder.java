@@ -1,4 +1,4 @@
-package pl.skidam.protocol.netty.handler;
+package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import com.github.luben.zstd.Zstd;
 import io.netty.buffer.ByteBuf;

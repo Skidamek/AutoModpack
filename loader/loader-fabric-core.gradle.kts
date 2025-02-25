@@ -25,7 +25,7 @@ dependencies {
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
     implementation("org.tomlj:tomlj:1.1.1")
-    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
+//    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
     implementation("com.github.luben:zstd-jni:1.5.7-1")
 
@@ -42,7 +42,6 @@ configurations {
 // TODO: make it less messy
 tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
-    mergeServiceFiles()
 
     from(project(":core").sourceSets.main.get().output)
     from(project(":loader-core").sourceSets.main.get().output)
@@ -53,9 +52,12 @@ tasks.named<ShadowJar>("shadowJar") {
     // Include the tomlj dependency in the shadow jar
     configurations = listOf(project.configurations.getByName("shadowImplementation"))
 
-    relocate("org.antlr.v4", "reloc.org.antlr.v4")
-    relocate("org.tomlj", "reloc.org.tomlj")
-    relocate("org.checkerframework", "reloc.org.checkerframework")
+    val reloc = "am_libs"
+    relocate("org.antlr", "${reloc}.org.antlr")
+    relocate("org.tomlj", "${reloc}.org.tomlj")
+    relocate("org.checkerframework", "${reloc}.org.checkerframework")
+    relocate("com.github.luben", "${reloc}.com.github.luben")
+    relocate("org.bouncycastle", "${reloc}.org.bouncycastle")
 
     relocate("pl.skidam.automodpack_loader_core_fabric", "pl.skidam.automodpack_loader_core")
     relocate("pl.skidam.automodpack_loader_master_core_fabric", "pl.skidam.automodpack_loader_core")
@@ -70,6 +72,8 @@ tasks.named<ShadowJar>("shadowJar") {
     manifest {
         attributes["AutoModpack-Version"] = version
     }
+
+    mergeServiceFiles()
 }
 
 java {

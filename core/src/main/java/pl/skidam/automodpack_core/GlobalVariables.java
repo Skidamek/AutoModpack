@@ -5,14 +5,13 @@ import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.*;
 import pl.skidam.automodpack_core.modpack.Modpack;
-import pl.skidam.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.nio.file.Path;
 
 public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack";
-    public static final String SECRET_REQUEST_HEADER = "AutoModpack-Secret";
     public static Boolean DEBUG = false;
     public static Boolean preload;
     public static String MC_VERSION;

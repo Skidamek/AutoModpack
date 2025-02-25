@@ -1,4 +1,4 @@
-package pl.skidam.protocol;
+package pl.skidam.automodpack_core.protocol;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import com.github.luben.zstd.Zstd;
@@ -12,14 +12,11 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static pl.skidam.protocol.NetUtils.*;
+import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 /**
  * A DownloadClient that creates a pool of connections.
@@ -124,6 +121,7 @@ class Connection {
             sslSocket.close();
             throw new IOException("Invalid server certificate chain");
         }
+
         boolean validated = false;
         for (Certificate cert : certs) {
             if (cert instanceof X509Certificate x509Cert) {
@@ -161,6 +159,7 @@ class Connection {
      */
     public CompletableFuture<Object> sendDownloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
         return CompletableFuture.supplyAsync(() -> {
+            Exception exception = null;
             try {
                 // Build File Request message:
                 // [protocolVersion][FILE_REQUEST_TYPE][secret][int: fileHash.length][fileHash]
@@ -177,9 +176,10 @@ class Connection {
                 writeProtocolMessage(payload);
                 return readFileResponse(destination, chunkCallback);
             } catch (Exception e) {
+                exception = e;
                 throw new CompletionException(e);
             } finally {
-                setBusy(false);
+                finalBlock(exception);
             }
         }, executor);
     }
@@ -189,6 +189,7 @@ class Connection {
      */
     public CompletableFuture<Object> sendRefreshRequest(byte[][] fileHashes) {
         return CompletableFuture.supplyAsync(() -> {
+            Exception exception = null;
             try {
                 // Build Refresh Request message:
                 // [protocolVersion][REFRESH_REQUEST_TYPE][secret][int: fileHashesCount]
@@ -211,11 +212,30 @@ class Connection {
                 writeProtocolMessage(payload);
                 return readFileResponse(null, null);
             } catch (Exception e) {
+                exception = e;
                 throw new CompletionException(e);
             } finally {
-                setBusy(false);
+                finalBlock(exception);
             }
         }, executor);
+    }
+
+    private void finalBlock(Exception exception) {
+        // skip any remaining data
+        try {
+            while (in.available() > 0) {
+                in.skipBytes(in.available());
+            }
+        } catch (IOException e) {
+            if (exception == null) {
+                exception = e;
+                throw new CompletionException(e);
+            }
+        } finally {
+            if (exception == null) {
+                setBusy(false);
+            }
+        }
     }
 
     /**
@@ -251,65 +271,66 @@ class Connection {
     private Object readFileResponse(Path destination, IntCallback chunkCallback) throws IOException {
         // Header frame
         byte[] headerFrame = readProtocolMessageFrame();
-        DataInputStream headerIn = new DataInputStream(new ByteArrayInputStream(headerFrame));
-        byte version = headerIn.readByte();
-        byte messageType = headerIn.readByte();
-        if (messageType == ERROR) {
-            int errLen = headerIn.readInt();
-            byte[] errBytes = new byte[errLen];
-            headerIn.readFully(errBytes);
-            throw new IOException("Server error: " + new String(errBytes));
-        }
-        if (messageType != FILE_RESPONSE_TYPE) {
-            throw new IOException("Unexpected message type: " + messageType);
-        }
-        long expectedFileSize = headerIn.readLong();
+        try (DataInputStream headerIn = new DataInputStream(new ByteArrayInputStream(headerFrame))) {
+            byte version = headerIn.readByte();
+            byte messageType = headerIn.readByte();
 
-        long receivedBytes = 0;
-        OutputStream fos = null;
-        List<byte[]> rawData = null;
-        if (destination != null) {
-            fos = new FileOutputStream(destination.toFile());
-        } else {
-            rawData = new LinkedList<>();
-        }
-
-        // Read data frames until the expected file size is received.
-        while (receivedBytes < expectedFileSize) {
-            byte[] dataFrame = readProtocolMessageFrame();
-            int toWrite = dataFrame.length;
-            if (receivedBytes + toWrite > expectedFileSize) {
-                toWrite = (int)(expectedFileSize - receivedBytes);
+            if (messageType == ERROR) {
+                int errLen = headerIn.readInt();
+                byte[] errBytes = new byte[errLen];
+                headerIn.readFully(errBytes);
+                throw new IOException("Server error: " + new String(errBytes));
             }
-            if (fos != null) {
-                fos.write(dataFrame, 0, toWrite);
-            } else {
-                byte[] chunk = new byte[toWrite];
-                System.arraycopy(dataFrame, 0, chunk, 0, toWrite);
-                rawData.add(chunk);
+
+            long receivedBytes = 0;
+            OutputStream fos = (destination != null) ? new FileOutputStream(destination.toFile()) : null;
+            List<byte[]> rawData = (fos == null) ? new LinkedList<>() : null;
+
+            if (messageType == END_OF_TRANSMISSION) {
+                if (fos != null) fos.close();
+                return (rawData != null) ? rawData : destination;
             }
-            receivedBytes += toWrite;
 
-            if (chunkCallback != null) {
-                chunkCallback.run(toWrite);
+            if (messageType != FILE_RESPONSE_TYPE) {
+                if (fos != null) fos.close();
+                throw new IOException("Unexpected message type: " + messageType);
             }
-        }
 
-        // Read EOT frame
-        byte[] eotFrame = readProtocolMessageFrame();
-        DataInputStream eotIn = new DataInputStream(new ByteArrayInputStream(eotFrame));
-        byte ver = eotIn.readByte();
-        byte eotType = eotIn.readByte();
-        if (ver != version || eotType != END_OF_TRANSMISSION) {
-            throw new IOException("Invalid end-of-transmission marker. Expected version " + version +
-                    " and type " + END_OF_TRANSMISSION + ", got version " + ver + " and type " + eotType);
-        }
+            long expectedFileSize = headerIn.readLong();
 
-        if (fos != null) {
-            fos.close();
-            return destination;
-        } else {
-            return rawData;
+            // Read data frames until the expected file size is received.
+            while (receivedBytes < expectedFileSize) {
+                byte[] dataFrame = readProtocolMessageFrame();
+                int toWrite = Math.min(dataFrame.length, (int)(expectedFileSize - receivedBytes));
+
+                if (fos != null) {
+                    fos.write(dataFrame, 0, toWrite);
+                } else {
+                    byte[] chunk = Arrays.copyOfRange(dataFrame, 0, toWrite);
+                    rawData.add(chunk);
+                }
+                receivedBytes += toWrite;
+
+                if (chunkCallback != null) {
+                    chunkCallback.run(toWrite);
+                }
+            }
+
+            if (fos != null) fos.close();
+
+            // Read EOT frame
+            byte[] eotFrame = readProtocolMessageFrame();
+            try (DataInputStream eotIn = new DataInputStream(new ByteArrayInputStream(eotFrame))) {
+                byte ver = eotIn.readByte();
+                byte eotType = eotIn.readByte();
+
+                if (ver != version || eotType != END_OF_TRANSMISSION) {
+                    throw new IOException("Invalid end-of-transmission marker. Expected version " + version +
+                            " and type " + END_OF_TRANSMISSION + ", got version " + ver + " and type " + eotType);
+                }
+            }
+
+            return (rawData != null) ? rawData : destination;
         }
     }
 

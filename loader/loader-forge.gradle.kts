@@ -37,7 +37,7 @@ dependencies {
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
     implementation("org.tomlj:tomlj:1.1.1")
-    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
+//    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
     implementation("com.github.luben:zstd-jni:1.5.7-1")
 
@@ -65,9 +65,12 @@ tasks.named<ShadowJar>("shadowJar") {
     // Include the tomlj dependency in the shadow jar
     configurations = listOf(project.configurations.getByName("shadowImplementation"))
 
-    relocate("org.antlr.v4", "reloc.org.antlr.v4")
-    relocate("org.tomlj", "reloc.org.tomlj")
-    relocate("org.checkerframework", "reloc.org.checkerframework")
+    val reloc = "am_libs"
+    relocate("org.antlr", "${reloc}.org.antlr")
+    relocate("org.tomlj", "${reloc}.org.tomlj")
+    relocate("org.checkerframework", "${reloc}.org.checkerframework")
+    relocate("com.github.luben", "${reloc}.com.github.luben")
+    relocate("org.bouncycastle", "${reloc}.org.bouncycastle")
 
     if (project.name.contains("neoforge")) {
         relocate("pl.skidam.automodpack_loader_core_neoforge", "pl.skidam.automodpack_loader_core")

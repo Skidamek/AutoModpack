@@ -6,14 +6,13 @@ import com.google.gson.JsonParser;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 import java.io.*;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
@@ -462,66 +461,6 @@ public class ModpackUtils {
         return Optional.empty();
     }
 
-
-    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(String link, Secrets.Secret secret, String body) {
-        // send custom http body request to get modpack content, rest the same as getServerModpackContent
-        if (link == null || body == null) {
-            throw new IllegalArgumentException("Link or body is null");
-        }
-
-        HttpURLConnection connection = null;
-
-        try {
-            connection = (HttpURLConnection) new URL(link + "refresh").openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty(SECRET_REQUEST_HEADER, secret.secret());
-
-            return connectionToModpack(connection, body);
-        } catch (Exception e) {
-            LOGGER.error("Error while getting server modpack content", e);
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
-        }
-
-        return Optional.empty();
-    }
-
-    public static Optional<Jsons.ModpackContentFields> connectionToModpack(HttpURLConnection connection) {
-        return connectionToModpack(connection, null);
-    }
-
-    public static Optional<Jsons.ModpackContentFields> connectionToModpack(HttpURLConnection connection, String body) {
-        int responseCode = -1;
-        try {
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-            if (body != null) {
-                connection.setDoOutput(true);
-                connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
-            }
-            connection.connect();
-
-            responseCode = connection.getResponseCode();
-
-            if (responseCode == 200) {
-                return parseStreamToModpack(connection.getInputStream());
-            } else {
-                LOGGER.error("Couldn't connect to modpack server: {} Response Code: {}", connection.getURL(), responseCode);
-            }
-
-        } catch (SocketException | SocketTimeoutException e) {
-            LOGGER.error("Couldn't connect to modpack server: {} Response Code: {} Error: {}", connection.getURL(), responseCode, e.getCause());
-        } catch (Exception e) {
-            LOGGER.error("Error while getting server modpack content", e);
-        }
-
-        return Optional.empty();
-    }
-
     public static Optional<Jsons.ModpackContentFields> parseStreamToModpack(List<byte[]> rawBytes) {
 
         String response = null;
@@ -536,44 +475,6 @@ public class ModpackUtils {
         }
 
         try (InputStreamReader isr = new InputStreamReader(new ByteArrayInputStream(bytes))) {
-            JsonElement element = JsonParser.parseReader(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
-            if (element != null && !element.isJsonArray()) {
-                JsonObject obj = element.getAsJsonObject();
-                response = obj.toString();
-            }
-        } catch (Exception e) {
-            LOGGER.error("Couldn't parse modpack content", e);
-        }
-
-        if (response == null) {
-            LOGGER.error("Couldn't parse modpack content");
-            return Optional.empty();
-        }
-
-        Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(response, Jsons.ModpackContentFields.class);
-
-        if (serverModpackContent == null) {
-            LOGGER.error("Couldn't parse modpack content");
-            return Optional.empty();
-        }
-
-        if (serverModpackContent.list.isEmpty()) {
-            LOGGER.error("Modpack content is empty!");
-            return Optional.empty();
-        }
-
-        if (potentiallyMalicious(serverModpackContent)) {
-            return Optional.empty();
-        }
-
-        return Optional.of(serverModpackContent);
-    }
-
-    public static Optional<Jsons.ModpackContentFields> parseStreamToModpack(InputStream stream) {
-
-        String response = null;
-
-        try (InputStreamReader isr = new InputStreamReader(stream)) {
             JsonElement element = JsonParser.parseReader(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
             if (element != null && !element.isJsonArray()) {
                 JsonObject obj = element.getAsJsonObject();

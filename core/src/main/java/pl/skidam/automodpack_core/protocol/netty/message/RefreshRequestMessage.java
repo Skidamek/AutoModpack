@@ -1,6 +1,6 @@
-package pl.skidam.protocol.netty.message;
+package pl.skidam.automodpack_core.protocol.netty.message;
 
-import static pl.skidam.protocol.NetUtils.REFRESH_REQUEST_TYPE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.REFRESH_REQUEST_TYPE;
 
 public class RefreshRequestMessage extends ProtocolMessage {
     private final int fileHashesCount;

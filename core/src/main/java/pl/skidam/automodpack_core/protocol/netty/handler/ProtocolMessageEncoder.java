@@ -1,11 +1,11 @@
-package pl.skidam.protocol.netty.handler;
+package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
-import pl.skidam.protocol.netty.message.*;
+import pl.skidam.automodpack_core.protocol.netty.message.*;
 
-import static pl.skidam.protocol.NetUtils.*;
+import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 public class ProtocolMessageEncoder extends MessageToByteEncoder<ProtocolMessage> {
     @Override

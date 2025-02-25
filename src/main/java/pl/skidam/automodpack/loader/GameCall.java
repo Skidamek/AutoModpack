@@ -14,7 +14,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class GameCall implements GameCallService {
 
     @Override
-    public boolean canPlayerJoin(SocketAddress address, String id) {
+    public boolean isPlayerAuthorized(SocketAddress address, String id) {
         UUID uuid = UUID.fromString(id);
         String playerName = "Player"; // mock name, name matters less than UUID anyway
         GameProfile profile = new GameProfile(uuid, playerName);
