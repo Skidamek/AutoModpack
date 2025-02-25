@@ -139,7 +139,6 @@ public class ModpackUtils {
             return false;
 
         final List<String> standardModIDs = standardModList.stream().map(FileInspection.Mod::modID).toList();
-//        LOGGER.info("standardModIDs: {}", standardModIDs);
         boolean needsRestart = false;
 
         for (FileInspection.Mod mod : conflictingNestedMods) {

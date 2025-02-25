@@ -43,12 +43,14 @@ public class FileInspection {
         }
 
         HashPathPair hashPathPair = new HashPathPair(hash, file);
-        if (modCache.containsKey(hashPathPair))
+        if (modCache.containsKey(hashPathPair)) {
             return modCache.get(hashPathPair);
+        }
 
         for (Mod mod : GlobalVariables.LOADER_MANAGER.getModList()) {
             if (hash.equals(mod.hash)) {
-                return modCache.put(hashPathPair, mod);
+                modCache.put(hashPathPair, mod);
+                return mod;
             }
         }
 
@@ -60,9 +62,11 @@ public class FileInspection {
 
         if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
             var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
-            return modCache.put(hashPathPair, mod);
+            modCache.put(hashPathPair, mod);
+            return mod;
         }
 
+        GlobalVariables.LOGGER.error("Failed to get mod info for file: {}", file);
         return null;
     }
 
