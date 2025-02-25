@@ -255,6 +255,9 @@ public class DownloadManager {
         downloaded = 0;
         addedToQueue = 0;
 
+        if (downloadClient != null) {
+            downloadClient.close();
+        }
 
         DOWNLOAD_EXECUTOR.shutdownNow();
         try {

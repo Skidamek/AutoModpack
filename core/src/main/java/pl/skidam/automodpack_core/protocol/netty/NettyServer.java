@@ -15,7 +15,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
-import pl.skidam.automodpack_core.utils.Ip;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.ObservableMap;
 
 import java.net.InetAddress;
@@ -31,12 +31,28 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 // TODO: clean up this class
 public class NettyServer {
-
+    private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
     private X509Certificate certificate;
     private SslContext sslCtx;
+
+    public void addConnection(Channel channel, String secret) {
+        synchronized (connections) {
+            connections.put(channel, secret);
+        }
+    }
+
+    public void removeConnection(Channel channel) {
+        synchronized (connections) {
+            connections.remove(channel);
+        }
+    }
+
+    public Map<Channel, String> getConnections() {
+        return connections;
+    }
 
     public void addPaths(ObservableMap<String, Path> paths) {
         this.paths.putAll(paths.getMap());
@@ -191,7 +207,7 @@ public class NettyServer {
         }
 
         if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostIp == null || serverConfig.hostIp.isEmpty())) {
-            String publicIp = Ip.getPublicIp();
+            String publicIp = AddressHelpers.getPublicIp();
             if (publicIp != null) {
                 serverConfig.hostIp = publicIp;
                 ConfigTools.save(serverConfigFile, serverConfig);
@@ -204,7 +220,7 @@ public class NettyServer {
 
         if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostLocalIp == null || serverConfig.hostLocalIp.isEmpty())) {
             try {
-                serverConfig.hostLocalIp = Ip.getLocalIp();
+                serverConfig.hostLocalIp = AddressHelpers.getLocalIp();
                 ConfigTools.save(serverConfigFile, serverConfig);
                 LOGGER.warn("Setting Host local IP to {}", serverConfig.hostLocalIp);
             } catch (Exception e) {

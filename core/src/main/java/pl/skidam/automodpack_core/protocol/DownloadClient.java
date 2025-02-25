@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol;
 import pl.skidam.automodpack_core.auth.Secrets;
 import com.github.luben.zstd.Zstd;
 import pl.skidam.automodpack_core.callbacks.IntCallback;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -67,6 +68,8 @@ public class DownloadClient {
         for (Connection conn : connections) {
             conn.close();
         }
+
+        connections.clear();
     }
 }
 
@@ -78,6 +81,7 @@ public class DownloadClient {
 class Connection {
     private static final byte PROTOCOL_VERSION = 1;
 
+    private final boolean isLocalConnection; // Don't compress local connections
     private final byte[] secretBytes;
     private final SSLSocket socket;
     private final DataInputStream in;
@@ -137,6 +141,9 @@ class Connection {
             sslSocket.close();
             throw new IOException("Server certificate validation failed");
         }
+
+        String address = remoteAddress.getAddress().toString();
+        isLocalConnection = AddressHelpers.isLocal(address);
 
         secretBytes = Base64.getUrlDecoder().decode(secret.secret());
 
@@ -243,10 +250,13 @@ class Connection {
      * Message framing: [int: compressedLength][int: originalLength][compressed payload].
      */
     private void writeProtocolMessage(byte[] payload) throws IOException {
-        byte[] compressed = Zstd.compress(payload);
-        out.writeInt(compressed.length);
-        out.writeInt(payload.length);
-        out.write(compressed);
+        if (isLocalConnection) {
+            out.write(payload);
+        } else {
+            byte[] compressed = Zstd.compress(payload);
+            out.writeInt(payload.length);
+            out.write(compressed);
+        }
         out.flush();
     }
 
@@ -254,11 +264,13 @@ class Connection {
      * Reads one framed protocol message, decompressing it.
      */
     private byte[] readProtocolMessageFrame() throws IOException {
-        int compLength = in.readInt();
-        int origLength = in.readInt();
-        byte[] compData = new byte[compLength];
-        in.readFully(compData);
-        return Zstd.decompress(compData, origLength);
+        if (isLocalConnection) {
+            return in.readAllBytes();
+        } else {
+            int origLength = in.readInt();
+            byte[] compData = in.readAllBytes();
+            return Zstd.decompress(compData, origLength);
+        }
     }
 
     /**

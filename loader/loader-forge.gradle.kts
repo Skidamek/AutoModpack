@@ -57,7 +57,6 @@ configurations {
 
 tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
-    mergeServiceFiles()
 
     from(project(":core").sourceSets.main.get().output)
     from(project(":loader-core").sourceSets.main.get().output)
@@ -85,6 +84,8 @@ tasks.named<ShadowJar>("shadowJar") {
     manifest {
         attributes["AutoModpack-Version"] = version
     }
+
+    mergeServiceFiles()
 }
 
 java {

@@ -6,7 +6,7 @@ import java.util.Objects;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
-public class Ip {
+public class AddressHelpers {
 
     public static String getPublicIp() {
         String[] services = {

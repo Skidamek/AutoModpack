@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.modpack;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
@@ -8,8 +9,11 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+
+import java.util.Set;
 
 import static net.minecraft.server.command.CommandManager.literal;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -39,6 +43,10 @@ public class Commands {
                                         .requires((source) -> source.hasPermissionLevel(3))
                                         .executes(Commands::restartModpackHost)
                                 )
+                                .then(literal("connections")
+                                        .requires((source) -> source.hasPermissionLevel(3))
+                                        .executes(Commands::connections)
+                                )
                         )
                         .then(literal("config")
                                 .requires((source) -> source.hasPermissionLevel(3))
@@ -48,6 +56,29 @@ public class Commands {
                                 )
                         )
         );
+    }
+
+    private static int connections(CommandContext<ServerCommandSource> serverCommandSourceCommandContext) {
+        Util.getMainWorkerExecutor().execute(() -> {
+            var connections = hostServer.getConnections();
+            var secrets = Set.copyOf(connections.values());
+
+            send(serverCommandSourceCommandContext, String.format("Active connections: %d Unique connections: %d ", connections.size(), secrets.size()), Formatting.YELLOW, false);
+
+            for (String secret : secrets) {
+                var playerSecretPair = SecretsStore.getHostSecret(secret);
+                if (playerSecretPair == null) continue;
+
+                String playerId = playerSecretPair.getKey();
+                GameProfile profile = GameHelpers.getPlayerProfile(playerId);
+
+                long connNum = connections.values().stream().filter(secret::equals).count();
+
+                send(serverCommandSourceCommandContext, String.format("Player: %s (%s) is downloading modpack using %d connections", profile.getName(), playerId, connNum), Formatting.GREEN, false);
+            }
+        });
+
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int reload(CommandContext<ServerCommandSource> context) {
@@ -134,7 +165,7 @@ public class Commands {
     private static int about(CommandContext<ServerCommandSource> context) {
         send(context, "AutoModpack", Formatting.GREEN, AM_VERSION, Formatting.WHITE, false);
         send(context, "/automodpack generate", Formatting.YELLOW, false);
-        send(context, "/automodpack host start/stop/restart", Formatting.YELLOW, false);
+        send(context, "/automodpack host start/stop/restart/connections", Formatting.YELLOW, false);
         send(context, "/automodpack config reload", Formatting.YELLOW, false);
         return Command.SINGLE_SUCCESS;
     }

@@ -18,7 +18,7 @@ import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.utils.Ip;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -96,7 +96,7 @@ public class HandshakeS2CPacket {
         String addressToSend;
 
         // If the player is connecting locally, use the local host IP
-        if (Ip.isLocal(playerIp)) {
+        if (AddressHelpers.isLocal(playerIp)) {
             addressToSend = serverConfig.hostLocalIp;
         } else {
             addressToSend = serverConfig.hostIp;

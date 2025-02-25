@@ -28,7 +28,13 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
-    private static byte clientProtocolVersion = 0;
+    private final Map<byte[], String> secretLookup = new HashMap<>();
+    private byte clientProtocolVersion = 0;
+
+    @Override
+    public void handlerRemoved(ChannelHandlerContext ctx) {
+        hostServer.removeConnection(ctx.channel());
+    }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ProtocolMessage msg) throws Exception {
@@ -36,7 +42,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         SocketAddress address = ctx.channel().remoteAddress();
 
         // Validate the secret
-        if (!validateSecret(address, msg.getSecret())) {
+        if (!validateSecret(ctx, address, msg.getSecret())) {
             sendError(ctx, clientProtocolVersion, "Authentication failed");
             return;
         }
@@ -112,9 +118,22 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
     }
 
 
-    private boolean validateSecret(SocketAddress address, byte[] secret) {
-        String decodedSecret = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
-        return Secrets.isSecretValid(decodedSecret, address);
+    private boolean validateSecret(ChannelHandlerContext ctx, SocketAddress address, byte[] secret) {
+        String decodedSecret = secretLookup.get(secret);
+        boolean addConnection = false;
+        if (decodedSecret == null) {
+            decodedSecret = Base64.getUrlEncoder().withoutPadding().encodeToString(secret);
+            addConnection = true;
+            secretLookup.put(secret, decodedSecret);
+        }
+
+        boolean valid = Secrets.isSecretValid(decodedSecret, address);
+
+        if (addConnection && valid) {
+            hostServer.addConnection(ctx.channel(), decodedSecret);
+        }
+
+        return valid;
     }
 
     private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) throws IOException {

@@ -12,11 +12,8 @@ public class ZstdEncoder extends MessageToByteEncoder<ByteBuf> {
         byte[] input = new byte[msg.readableBytes()];
         msg.readBytes(input);
 
-//        var time = System.currentTimeMillis();
         byte[] compressed = Zstd.compress(input);
-//        LOGGER.info("Compression time: {}ms. Saved {} bytes", System.currentTimeMillis() - time, input.length - compressed.length);
 
-        out.writeInt(compressed.length);
         out.writeInt(input.length);
         out.writeBytes(compressed);
     }
