@@ -56,7 +56,7 @@ tasks.named<ShadowJar>("shadowJar") {
     relocate("org.antlr", "${reloc}.org.antlr")
     relocate("org.tomlj", "${reloc}.org.tomlj")
     relocate("org.checkerframework", "${reloc}.org.checkerframework")
-    relocate("com.github.luben", "${reloc}.com.github.luben")
+//    relocate("com.github.luben", "${reloc}.com.github.luben") // cant relocate - natives
     relocate("org.bouncycastle", "${reloc}.org.bouncycastle")
 
     relocate("pl.skidam.automodpack_loader_core_fabric", "pl.skidam.automodpack_loader_core")
