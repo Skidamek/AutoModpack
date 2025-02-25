@@ -20,6 +20,8 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
+import java.net.InetSocketAddress;
+
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -92,11 +94,11 @@ public class HandshakeS2CPacket {
             return;
         }
 
-        String playerIp = connection.getAddress().toString();
+        InetSocketAddress playerAddress = (InetSocketAddress) connection.getAddress();
         String addressToSend;
 
         // If the player is connecting locally, use the local host IP
-        if (AddressHelpers.isLocal(playerIp)) {
+        if (AddressHelpers.isLocal(playerAddress)) {
             addressToSend = serverConfig.hostLocalIp;
         } else {
             addressToSend = serverConfig.hostIp;

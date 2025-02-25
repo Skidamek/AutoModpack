@@ -5,8 +5,10 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
+import java.net.InetSocketAddress;
 import java.util.List;
 
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
@@ -40,15 +42,16 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                 var handlers = ctx.pipeline().toMap();
                 handlers.forEach((name, handler) -> ctx.pipeline().remove(handler));
 
-                String address = ctx.channel().remoteAddress().toString();
+                InetSocketAddress address = (InetSocketAddress) ctx.channel().remoteAddress();
                 boolean isLocalConnection = AddressHelpers.isLocal(address);
+
+                // Use compression only for non-local connections
+                ctx.pipeline().channel().attr(NetUtils.USE_COMPRESSION).set(!isLocalConnection);
 
                 // Set up the pipeline for our protocol
                 ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
-                if (!isLocalConnection) {
-                    ctx.pipeline().addLast("zstd-encoder", new ZstdEncoder());
-                    ctx.pipeline().addLast("zstd-decoder", new ZstdDecoder());
-                }
+                ctx.pipeline().addLast("zstd-encoder", new ZstdEncoder());
+                ctx.pipeline().addLast("zstd-decoder", new ZstdDecoder());
                 ctx.pipeline().addLast("chunked-write", new ChunkedWriteHandler());
                 ctx.pipeline().addLast("protocol-msg-decoder", new ProtocolMessageDecoder());
                 ctx.pipeline().addLast("msg-handler", new ServerMessageHandler());

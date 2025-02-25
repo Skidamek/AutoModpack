@@ -61,11 +61,11 @@ public class Commands {
     private static int connections(CommandContext<ServerCommandSource> serverCommandSourceCommandContext) {
         Util.getMainWorkerExecutor().execute(() -> {
             var connections = hostServer.getConnections();
-            var secrets = Set.copyOf(connections.values());
+            var uniqueSecrets = Set.copyOf(connections.values());
 
-            send(serverCommandSourceCommandContext, String.format("Active connections: %d Unique connections: %d ", connections.size(), secrets.size()), Formatting.YELLOW, false);
+            send(serverCommandSourceCommandContext, String.format("Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), Formatting.YELLOW, false);
 
-            for (String secret : secrets) {
+            for (String secret : uniqueSecrets) {
                 var playerSecretPair = SecretsStore.getHostSecret(secret);
                 if (playerSecretPair == null) continue;
 

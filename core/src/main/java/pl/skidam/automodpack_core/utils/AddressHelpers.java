@@ -87,10 +87,16 @@ public class AddressHelpers {
         return ip;
     }
 
-    public static boolean isLocal(String ip) {
-        if (ip == null) {
+    public static boolean isLocal(InetSocketAddress address) {
+        if (address == null) {
             return true;
         }
+
+        if (address.getAddress().isAnyLocalAddress()) {
+            return true;
+        }
+
+        String ip = address.getAddress().getHostAddress();
 
         ip = normalizeIp(ip);
         String localIp = getLocalIp();

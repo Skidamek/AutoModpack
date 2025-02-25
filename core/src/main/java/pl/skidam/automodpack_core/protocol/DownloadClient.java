@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.protocol;
 
+import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.auth.Secrets;
 import com.github.luben.zstd.Zstd;
 import pl.skidam.automodpack_core.callbacks.IntCallback;
@@ -35,8 +36,14 @@ public class DownloadClient {
     }
 
     private synchronized Connection getFreeConnection() {
-        for (Connection conn : connections) {
+        Iterator<Connection> iterator = connections.iterator();
+        while (iterator.hasNext()) {
+            Connection conn = iterator.next();
             if (!conn.isBusy()) {
+                if (!conn.isActive()) {
+                    iterator.remove();
+                    return getFreeConnection();
+                }
                 conn.setBusy(true);
                 return conn;
             }
@@ -81,13 +88,17 @@ public class DownloadClient {
 class Connection {
     private static final byte PROTOCOL_VERSION = 1;
 
-    private final boolean isLocalConnection; // Don't compress local connections
+    private final boolean useCompression; // Don't compress local connections
     private final byte[] secretBytes;
     private final SSLSocket socket;
     private final DataInputStream in;
     private final DataOutputStream out;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean busy = new AtomicBoolean(false);
+
+    public boolean isActive() {
+        return !socket.isClosed();
+    }
 
     /**
      * Creates a new connection by first opening a plain TCP socket,
@@ -142,9 +153,7 @@ class Connection {
             throw new IOException("Server certificate validation failed");
         }
 
-        String address = remoteAddress.getAddress().toString();
-        isLocalConnection = AddressHelpers.isLocal(address);
-
+        useCompression = !AddressHelpers.isLocal(remoteAddress);
         secretBytes = Base64.getUrlDecoder().decode(secret.secret());
 
         // Now use the SSL socket for further communication.
@@ -250,10 +259,12 @@ class Connection {
      * Message framing: [int: compressedLength][int: originalLength][compressed payload].
      */
     private void writeProtocolMessage(byte[] payload) throws IOException {
-        if (isLocalConnection) {
+        if (!useCompression) {
+            out.writeInt(payload.length);
             out.write(payload);
         } else {
             byte[] compressed = Zstd.compress(payload);
+            out.writeInt(compressed.length);
             out.writeInt(payload.length);
             out.write(compressed);
         }
@@ -264,12 +275,23 @@ class Connection {
      * Reads one framed protocol message, decompressing it.
      */
     private byte[] readProtocolMessageFrame() throws IOException {
-        if (isLocalConnection) {
-            return in.readAllBytes();
-        } else {
+        if (!useCompression) {
             int origLength = in.readInt();
-            byte[] compData = in.readAllBytes();
-            return Zstd.decompress(compData, origLength);
+            byte[] data = new byte[origLength];
+            in.readFully(data);
+            return data;
+        } else {
+            int compLength = in.readInt();
+            int origLength = in.readInt();
+            byte[] compData = new byte[compLength];
+            in.readFully(compData);
+            byte[] decompressed = Zstd.decompress(compData, origLength);
+
+            if (decompressed.length != origLength) {
+                throw new IOException("Decompressed length does not match original length");
+            }
+
+            return decompressed;
         }
     }
 
