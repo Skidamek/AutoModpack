@@ -28,8 +28,8 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
+    private static final byte PROTOCOL_VERSION = 1;
     private final Map<byte[], String> secretLookup = new HashMap<>();
-    private byte clientProtocolVersion = 0;
 
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) {
@@ -38,7 +38,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ProtocolMessage msg) throws Exception {
-        clientProtocolVersion = msg.getVersion();
+        byte clientProtocolVersion = msg.getVersion();
         SocketAddress address = ctx.channel().remoteAddress();
 
         // Validate the secret
@@ -150,7 +150,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
         // Send file response header: version, FILE_RESPONSE type, then file size (8 bytes)
         ByteBuf responseHeader = Unpooled.buffer(1 + 1 + 8);
-        responseHeader.writeByte(clientProtocolVersion);
+        responseHeader.writeByte(PROTOCOL_VERSION);
         responseHeader.writeByte(FILE_RESPONSE_TYPE);
         responseHeader.writeLong(fileSize);
         ctx.writeAndFlush(responseHeader);
@@ -191,7 +191,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
     private void sendEOT(ChannelHandlerContext ctx) {
         ByteBuf eot = Unpooled.buffer(2);
-        eot.writeByte((byte) 1);
+        eot.writeByte(PROTOCOL_VERSION);
         eot.writeByte(END_OF_TRANSMISSION);
         ctx.writeAndFlush(eot);
     }

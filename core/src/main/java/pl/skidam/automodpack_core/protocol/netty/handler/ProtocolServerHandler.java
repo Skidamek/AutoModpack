@@ -6,9 +6,7 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 
-import java.net.InetSocketAddress;
 import java.util.List;
 
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
@@ -42,11 +40,13 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                 var handlers = ctx.pipeline().toMap();
                 handlers.forEach((name, handler) -> ctx.pipeline().remove(handler));
 
-                InetSocketAddress address = (InetSocketAddress) ctx.channel().remoteAddress();
-                boolean isLocalConnection = AddressHelpers.isLocal(address);
+//                InetSocketAddress address = (InetSocketAddress) ctx.channel().remoteAddress();
+//                boolean isLocalConnection = AddressHelpers.isLocal(address);
+//
+//                // Use compression only for non-local connections
+//                ctx.pipeline().channel().attr(NetUtils.USE_COMPRESSION).set(!isLocalConnection);
 
-                // Use compression only for non-local connections
-                ctx.pipeline().channel().attr(NetUtils.USE_COMPRESSION).set(!isLocalConnection);
+                ctx.pipeline().channel().attr(NetUtils.USE_COMPRESSION).set(true);
 
                 // Set up the pipeline for our protocol
                 ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));

@@ -1,10 +1,8 @@
 package pl.skidam.automodpack_core.protocol;
 
-import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.auth.Secrets;
 import com.github.luben.zstd.Zstd;
 import pl.skidam.automodpack_core.callbacks.IntCallback;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -88,7 +86,7 @@ public class DownloadClient {
 class Connection {
     private static final byte PROTOCOL_VERSION = 1;
 
-    private final boolean useCompression; // Don't compress local connections
+    private final boolean useCompression;
     private final byte[] secretBytes;
     private final SSLSocket socket;
     private final DataInputStream in;
@@ -153,7 +151,8 @@ class Connection {
             throw new IOException("Server certificate validation failed");
         }
 
-        useCompression = !AddressHelpers.isLocal(remoteAddress);
+//        useCompression = !AddressHelpers.isLocal(remoteAddress);
+        useCompression = true;
         secretBytes = Base64.getUrlDecoder().decode(secret.secret());
 
         // Now use the SSL socket for further communication.

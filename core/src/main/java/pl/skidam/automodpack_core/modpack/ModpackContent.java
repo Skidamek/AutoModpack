@@ -192,12 +192,16 @@ public class ModpackContent {
         }
     }
 
-    // check if file is hostModpackContentFile, serverConfigFile or serverCoreConfigFile
+    // check if file is inside automodpack Dir or its sub-dirs, unless it's inside hostModpackDir with exception of hostModpackContentFile
     private boolean isInnerFile(Path file) {
         Path normalizedFilePath = file.toAbsolutePath().normalize();
-        return normalizedFilePath.equals(hostModpackContentFile.toAbsolutePath().normalize()) ||
-                normalizedFilePath.equals(serverConfigFile.toAbsolutePath().normalize()) ||
-                normalizedFilePath.equals(serverCoreConfigFile.toAbsolutePath().normalize());
+        boolean isInner = normalizedFilePath.startsWith(automodpackDir.toAbsolutePath().normalize()) &&
+                !normalizedFilePath.startsWith(hostModpackDir.toAbsolutePath().normalize());
+        if (!isInner && normalizedFilePath.equals(hostModpackContentFile.toAbsolutePath().normalize())) {
+            return true;
+        }
+
+        return isInner;
     }
 
     private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file) throws Exception {
