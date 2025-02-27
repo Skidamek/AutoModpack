@@ -215,13 +215,8 @@ public class CustomFileUtils {
     }
 
     public static String getHash(Path file) {
-        if (!Files.exists(file)) {
-            return null;
-        }
-
         try {
-            if (!Files.isRegularFile(file))
-                return null;
+            if (!Files.isRegularFile(file)) return null;
 
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
@@ -233,6 +228,23 @@ public class CustomFileUtils {
             }
             byte[] hashBytes = digest.digest();
             return convertBytesToHex(hashBytes);
+        } catch (UnsupportedOperationException e) {
+            try { // yes... its awful
+                MessageDigest digest = MessageDigest.getInstance("SHA-1");
+                try (var is = Files.newInputStream(file)) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        digest.update(buffer, 0, bytesRead);
+                    }
+                }
+
+                byte[] hashBytes = digest.digest();
+                return convertBytesToHex(hashBytes);
+            } catch (Exception ex) {
+                e.printStackTrace();
+                ex.printStackTrace();
+            }
         } catch (Exception e) {
             LOGGER.error("Failed to get hash of file: {}", file, e);
         }

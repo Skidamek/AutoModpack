@@ -160,13 +160,27 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
             return;
         }
 
-        // Stream the file using ChunkedFile (chunk size set to 131072 bytes = 128 KB) - suitable value for zstd
         try {
             RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
-            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), 131072);
-            ctx.writeAndFlush(chunkedFile).addListener((ChannelFutureListener) future -> sendEOT(ctx));
+            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), 131072); // 128 KB chunk size - good for zstd
+            ctx.writeAndFlush(chunkedFile).addListener((ChannelFutureListener) future -> {
+                try {
+                    if (future.isSuccess()) {
+                        sendEOT(ctx);
+                    } else {
+                        sendError(ctx, PROTOCOL_VERSION, "File transfer error: " + future.cause().getMessage());
+                    }
+                } finally { // Always close resources
+                    try {
+                        chunkedFile.close();
+                        raf.close();
+                    } catch (IOException e) {
+                        LOGGER.error("Error closing file resources", e);
+                    }
+                }
+            });
         } catch (IOException e) {
-            sendError(ctx, (byte) 1, "File transfer error: " + e.getMessage());
+            sendError(ctx, PROTOCOL_VERSION, "File transfer error: " + e.getMessage());
         }
     }
 
