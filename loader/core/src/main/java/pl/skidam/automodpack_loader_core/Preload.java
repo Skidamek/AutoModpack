@@ -1,18 +1,18 @@
 package pl.skidam.automodpack_loader_core;
 
+import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
-import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
+import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.utils.ManifestReader;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.file.*;
 import java.util.HashMap;
 import java.util.List;
@@ -58,7 +58,10 @@ public class Preload {
             return;
         }
 
-        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackLink);
+        InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
+        Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
+
+        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackAddress, secret);
         var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
         // Use the latest modpack content if available
@@ -75,7 +78,7 @@ public class Preload {
         }
 
         // Update modpack
-        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
+        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackAddress, secret, selectedModpackDir);
     }
 
 

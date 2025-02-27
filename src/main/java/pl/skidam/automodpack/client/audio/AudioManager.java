@@ -16,11 +16,11 @@ import net.minecraft.registry.Registries;
 *//*?}*/
 
 /*? if neoforge {*/
-/*import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
-*//*?} elif forge {*/
+/*?} elif forge {*/
 /*import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -51,19 +51,19 @@ public class AudioManager {
 *//*?}*/
 
 /*? if neoforge {*/
-    /*public AudioManager(IEventBus eventBus) {
+    public AudioManager(IEventBus eventBus) {
         DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(Registries.SOUND_EVENT, MOD_ID);
         SOUND_REGISTER.register(eventBus);
         WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
     }
-*//*?}*/
+/*?}*/
 
 /*? if fabric {*/
-    public AudioManager() {
+    /*public AudioManager() {
         SoundEvent waiting_music = register();
         WAITING_MUSIC = () -> waiting_music;
     }
-/*?}*/
+*//*?}*/
 
     private SoundEvent register() {
         Identifier id = Common.id("waiting_music");

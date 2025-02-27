@@ -3,12 +3,13 @@ package pl.skidam.automodpack_loader_core.utils;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.zip.GZIPInputStream;
@@ -20,6 +21,7 @@ public class DownloadManager {
     private static final int MAX_DOWNLOAD_ATTEMPTS = 2; // its actually 3, but we start from 0
     private static final int BUFFER_SIZE = 128 * 1024;
     private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
+    private DownloadClient downloadClient = null;
     private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
     public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
     private long bytesDownloaded = 0;
@@ -34,32 +36,43 @@ public class DownloadManager {
     }
     // TODO: make caching system which detects if the same file was downloaded before and if so copy it instead of downloading again
 
-    public void download(Path file, String sha1, Urls urls, Runnable successCallback, Runnable failureCallback) {
+    public void attachDownloadClient(DownloadClient downloadClient) {
+         this.downloadClient = downloadClient;
+    }
+
+    public void download(Path file, String sha1, List<String> urls, Runnable successCallback, Runnable failureCallback) {
         FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
-        if (queuedDownloads.containsKey(hashPathPair))  return;
+        if (queuedDownloads.containsKey(hashPathPair)) return;
         queuedDownloads.put(hashPathPair, new QueuedDownload(file, urls, 0, successCallback, failureCallback));
         addedToQueue++;
         downloadNext();
     }
 
-    private void downloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) {
-        LOGGER.info("Downloading {} - {}", queuedDownload.file.getFileName(), queuedDownload.urls.toString());
+    private void downloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) throws Exception {
+        LOGGER.info("Downloading {} - {}", queuedDownload.file.getFileName(), queuedDownload.urls);
 
-        int numberOfIndexes = queuedDownload.urls.numberOfUrls - 1;
+        int numberOfIndexes = queuedDownload.urls.size();
         int urlIndex = Math.min(queuedDownload.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
-
-        String url = queuedDownload.urls.URLs.get(numberOfIndexes - urlIndex).url;
-
+        String url = "host";
+        if (queuedDownload.urls.size() > urlIndex) { // avoids IndexOutOfBoundsException
+            url = queuedDownload.urls.get(urlIndex);
+        }
         boolean interrupted = false;
 
         try {
-            downloadFile(url, hashPathPair, queuedDownload);
+            if (url != null && !Objects.equals(url, "host") && queuedDownload.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
+                httpDownloadFile(url, hashPathPair, queuedDownload);
+            } else if (downloadClient != null) {
+                hostDownloadFile(hashPathPair, queuedDownload);
+            } else {
+                LOGGER.error("No download client attached, can't download file - {}", queuedDownload.file.getFileName());
+            }
         } catch (InterruptedException e) {
             interrupted = true;
         } catch (SocketTimeoutException e) {
-            LOGGER.warn("Timeout - {} - {} - {}", queuedDownload.file, e, e.getStackTrace());
+            LOGGER.warn("Timeout - {} - {} - {}", queuedDownload.file, e, e.fillInStackTrace());
         } catch (Exception e) {
-            LOGGER.warn("Error while downloading file - {} - {} - {}", queuedDownload.file, e, e.getStackTrace());
+            LOGGER.warn("Error while downloading file - {} - {} - {}", queuedDownload.file, e, e.fillInStackTrace());
         } finally {
             synchronized (downloadsInProgress) {
                 downloadsInProgress.remove(hashPathPair);
@@ -85,7 +98,7 @@ public class DownloadManager {
                 CustomFileUtils.forceDelete(queuedDownload.file);
 
                 if (!interrupted) {
-                    if (queuedDownload.attempts < queuedDownload.urls.numberOfUrls * MAX_DOWNLOAD_ATTEMPTS) {
+                    if (queuedDownload.attempts < (numberOfIndexes + 1) * MAX_DOWNLOAD_ATTEMPTS) {
                         LOGGER.warn("Download of {} failed, retrying!", queuedDownload.file.getFileName());
                         queuedDownload.attempts++;
                         synchronized (queuedDownloads) {
@@ -114,7 +127,13 @@ public class DownloadManager {
                 return;
             }
 
-            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> downloadTask(hashAndPath, queuedDownload), DOWNLOAD_EXECUTOR);
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                try {
+                    downloadTask(hashAndPath, queuedDownload);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }, DOWNLOAD_EXECUTOR);
 
             synchronized (downloadsInProgress) {
                 downloadsInProgress.put(hashAndPath, new DownloadData(future, queuedDownload.file));
@@ -122,7 +141,27 @@ public class DownloadManager {
         }
     }
 
-    private void downloadFile(String urlString, FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) throws IOException, InterruptedException {
+    private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) throws IOException, InterruptedException {
+        Path outFile = queuedDownload.file;
+
+        if (Files.exists(outFile)) {
+            if (Objects.equals(hashPathPair.hash(), CustomFileUtils.getHash(outFile))) {
+                return;
+            } else {
+                CustomFileUtils.forceDelete(outFile);
+            }
+        }
+
+        CustomFileUtils.setupFilePaths(outFile);
+
+        var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), outFile, (bytes) -> {
+            bytesDownloaded += bytes;
+            speedMeter.addDownloadedBytes(bytes);
+        });
+        future.join();
+    }
+
+    private void httpDownloadFile(String url, FileInspection.HashPathPair hashPathPair, QueuedDownload queuedDownload) throws IOException, InterruptedException {
 
         Path outFile = queuedDownload.file;
 
@@ -134,22 +173,9 @@ public class DownloadManager {
             }
         }
 
-        if (outFile.getParent() != null) {
-            Files.createDirectories(outFile.getParent());
-        }
+        CustomFileUtils.setupFilePaths(outFile);
 
-        if (!Files.exists(outFile)) {
-            // Windows? #302
-            outFile.toFile().createNewFile();
-//            Files.createFile(outFile);
-        }
-
-        URL url = new URL(urlString);
-        URLConnection connection = url.openConnection();
-        connection.addRequestProperty("Accept-Encoding", "gzip");
-        connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-        connection.setConnectTimeout(10000);
-        connection.setReadTimeout(10000);
+        URLConnection connection = getHttpConnection(url);
 
         try (OutputStream outputStream = new FileOutputStream(outFile.toFile());
              InputStream rawInputStream = new BufferedInputStream(connection.getInputStream(), BUFFER_SIZE);
@@ -168,6 +194,19 @@ public class DownloadManager {
                 }
             }
         }
+    }
+
+    private URLConnection getHttpConnection(String url) throws IOException {
+
+        LOGGER.info("Downloading from {}", url);
+
+        URL connectionUrl = new URL(url);
+        URLConnection connection = connectionUrl.openConnection();
+        connection.addRequestProperty("Accept-Encoding", "gzip");
+        connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
+        connection.setConnectTimeout(10000);
+        connection.setReadTimeout(10000);
+        return connection;
     }
 
 
@@ -216,6 +255,9 @@ public class DownloadManager {
         downloaded = 0;
         addedToQueue = 0;
 
+        if (downloadClient != null) {
+            downloadClient.close();
+        }
 
         DOWNLOAD_EXECUTOR.shutdownNow();
         try {
@@ -230,64 +272,14 @@ public class DownloadManager {
         }
     }
 
-    // TODO re-write it as this consumes too much code lol
-    public static class Url {
-        private final Map<String, String> headers = new HashMap<>();
-        private String url;
-
-        public Url getUrl(String url) {
-            this.url = url;
-            return this;
-        }
-
-        public List<Url> getUrls(List<String> urls) {
-            List<Url> urlList = new ArrayList<>();
-            urls.forEach((url) -> {
-                urlList.add(new Url().getUrl(url));
-            });
-            return urlList;
-        }
-
-        public void addHeader(String headerName, String header) {
-            headers.put(headerName, header);
-        }
-    }
-
-    public static class Urls {
-        private final List<Url> URLs = new ArrayList<>(3);
-        private int numberOfUrls;
-
-        public Urls addUrl(Url url) {
-            URLs.add(url);
-            numberOfUrls = URLs.size();
-            return this;
-        }
-
-        public Urls addAllUrls(List<Url> urls) {
-            URLs.addAll(urls);
-            numberOfUrls = URLs.size();
-            return this;
-        }
-
-        @Override
-        public String toString() {
-            StringBuilder sb = new StringBuilder();
-            URLs.forEach((url) -> {
-                sb.append(url.url).append(", ");
-            });
-            sb.delete(sb.length() - 2, sb.length());
-            String str = sb.toString();
-            return "[" + str + "]";
-        }
-    }
 
     public static class QueuedDownload {
         private final Path file;
-        private final Urls urls;
+        private final List<String> urls;
         private int attempts;
         private final Runnable successCallback;
         private final Runnable failureCallback;
-        public QueuedDownload(Path file, Urls urls, int attempts, Runnable successCallback, Runnable failureCallback) {
+        public QueuedDownload(Path file, List<String> urls, int attempts, Runnable successCallback, Runnable failureCallback) {
             this.file = file;
             this.urls = urls;
             this.attempts = attempts;
@@ -299,7 +291,6 @@ public class DownloadManager {
     public static class DownloadData {
         public CompletableFuture<Void> future;
         public Path file;
-        public final Instant startTime = Instant.now();
 
         DownloadData(CompletableFuture<Void> future, Path file) {
             this.future = future;

@@ -3,16 +3,17 @@ package pl.skidam.automodpack_loader_core.client;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
-import pl.skidam.automodpack_core.utils.Url;
 
 import java.io.*;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
@@ -48,17 +49,17 @@ public class ModpackUtils {
                 } else {
                     Path standardPath = CustomFileUtils.getPathFromCWD(file);
                     if (Files.exists(standardPath) && Objects.equals(serverSHA1, CustomFileUtils.getHash(standardPath))) {
-                        LOGGER.info("File {} already exists on client, coping to modpack", standardPath.getFileName());
+                        LOGGER.info("File {} already exists on client, coping to modpack", file);
                         try { CustomFileUtils.copyFile(standardPath, path); } catch (IOException e) { e.printStackTrace(); }
                         continue;
                     } else {
-                        LOGGER.info("File does not exists {}", standardPath);
+                        LOGGER.info("File does not exists {} - {}", standardPath, file);
                         return true;
                     }
                 }
 
                 if (!Objects.equals(serverSHA1, CustomFileUtils.getHash(path))) {
-                    LOGGER.info("File does not match hash {}", path);
+                    LOGGER.info("File does not match hash {} - {}", path, file);
                     return true;
                 }
             }
@@ -269,6 +270,7 @@ public class ModpackUtils {
 
         String installedModpackName = clientConfig.selectedModpack;
         String installedModpackLink = clientConfig.installedModpacks.get(installedModpackName);
+        InetSocketAddress installedModpackAddress = AddressHelpers.parse(installedModpackLink);
         String serverModpackName = serverModpackContent.modpackName;
 
         if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
@@ -286,7 +288,7 @@ public class ModpackUtils {
                 e.printStackTrace();
             }
 
-            selectModpack(newModpackDir, installedModpackLink, Set.of());
+            selectModpack(newModpackDir, installedModpackAddress, Set.of());
 
             return newModpackDir;
         }
@@ -295,11 +297,14 @@ public class ModpackUtils {
     }
 
     // Returns true if value changed
-    public static boolean selectModpack(Path modpackDirToSelect, String modpackLinkToSelect, Set<String> newDownloadedFiles) {
+    public static boolean selectModpack(Path modpackDirToSelect, InetSocketAddress modpackAddressToSelect, Set<String> newDownloadedFiles) {
         final String modpackToSelect = modpackDirToSelect.getFileName().toString();
 
         String selectedModpack = clientConfig.selectedModpack;
         String selectedModpackLink = clientConfig.installedModpacks.get(selectedModpack);
+//        LOGGER.info("Selected modpack link: {}", selectedModpackLink);
+
+        InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
 
         // Save current editable files
         Path selectedModpackDir = modpacksDir.resolve(selectedModpack);
@@ -320,8 +325,12 @@ public class ModpackUtils {
 
         clientConfig.selectedModpack = modpackToSelect;
         ConfigTools.save(clientConfigFile, clientConfig);
-        ModpackUtils.addModpackToList(modpackToSelect, modpackLinkToSelect);
-        return !Objects.equals(modpackToSelect, selectedModpack) || !Objects.equals(modpackLinkToSelect, selectedModpackLink);
+        ModpackUtils.addModpackToList(modpackToSelect, modpackAddressToSelect);
+
+//        LOGGER.warn("modpackToSelect: {}, selectedModpack: {}", modpackToSelect, modpackToSelect);
+//        LOGGER.warn("modpackAddressToSelect: {}, selectedModpackAddress: {}", modpackAddressToSelect, selectedModpackAddress);
+
+        return !Objects.equals(modpackToSelect, selectedModpack) || !Objects.equals(modpackAddressToSelect, selectedModpackAddress);
     }
 
     public static void removeModpackFromList(String modpackName) {
@@ -337,32 +346,34 @@ public class ModpackUtils {
         }
     }
 
-    public static void addModpackToList(String modpackName, String link) {
-        if (modpackName == null || modpackName.isEmpty() || link == null || link.isEmpty()) {
+    public static void addModpackToList(String modpackName, InetSocketAddress address) {
+        if (modpackName == null || modpackName.isEmpty() || address == null) {
             return;
         }
 
         Map<String, String> modpacks = new HashMap<>(clientConfig.installedModpacks);
-        modpacks.put(modpackName, link);
+        String addressString = address.getAddress().getHostAddress() + ":" + address.getPort();
+        modpacks.put(modpackName, addressString);
         clientConfig.installedModpacks = modpacks;
 
         ConfigTools.save(clientConfigFile, clientConfig);
     }
 
     // Returns modpack name formatted for path or url if server doesn't provide modpack name
-    public static Path getModpackPath(String url, String modpackName) {
+    public static Path getModpackPath(InetSocketAddress address, String modpackName) {
 
-        String nameFromUrl = Url.removeHttpPrefix(url);
+        String strAddress = address.getAddress().getHostAddress() + ":" + address.getPort();
+        String correctedName = strAddress;
 
-        if (FileInspection.isInValidFileName(nameFromUrl)) {
-            nameFromUrl = FileInspection.fixFileName(nameFromUrl);
+        if (FileInspection.isInValidFileName(strAddress)) {
+            correctedName = FileInspection.fixFileName(strAddress);
         }
 
-        Path modpackDir = CustomFileUtils.getPath(modpacksDir, nameFromUrl);
+        Path modpackDir = CustomFileUtils.getPath(modpacksDir, correctedName);
 
         if (!modpackName.isEmpty()) {
             // Check if we don't have already installed modpack via this link
-            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.containsValue(nameFromUrl)) {
+            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.containsValue(correctedName)) {
                 return modpackDir;
             }
 
@@ -378,94 +389,78 @@ public class ModpackUtils {
         return modpackDir;
     }
 
-    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(String link) {
-        if (link == null) {
-            throw new IllegalArgumentException("Link is null");
-        }
+    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(InetSocketAddress address, Secrets.Secret secret) {
 
-        HttpURLConnection connection = null;
+        if (secret == null)
+            return Optional.empty();
 
+        if (address == null)
+            throw new IllegalArgumentException("Address is null");
+
+
+        DownloadClient client = null;
         try {
-            connection = (HttpURLConnection) new URL(link).openConnection();
-            connection.setRequestMethod("GET");
+            client = new DownloadClient(address, secret, 1);
+            var future = client.downloadFile(new byte[0], null, null);
+            var result = future.get();
+            if (result instanceof List<?> list) {
+                return parseStreamToModpack((List<byte[]>) list);
+            }
 
-            return connectionToModpack(connection);
+            return Optional.empty();
         } catch (Exception e) {
             LOGGER.error("Error while getting server modpack content", e);
         } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
+            if (client != null)
+                client.close();
         }
 
         return Optional.empty();
     }
 
+    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(InetSocketAddress address, Secrets.Secret secret, byte[][] fileHashes) {
+        if (secret == null)
+            return Optional.empty();
 
-    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(String link, String body) {
-        // send custom http body request to get modpack content, rest the same as getServerModpackContent
-        if (link == null || body == null) {
-            throw new IllegalArgumentException("Link or body is null");
-        }
+        if (address == null)
+            throw new IllegalArgumentException("Address is null");
 
-        HttpURLConnection connection = null;
 
+        DownloadClient client = null;
         try {
-            connection = (HttpURLConnection) new URL(link + "refresh").openConnection();
-            connection.setRequestMethod("POST");
+            client = new DownloadClient(address, secret, 1);
+            var future = client.requestRefresh(fileHashes);
+            var result = future.get();
+            if (result instanceof List<?> list) {
+                return parseStreamToModpack((List<byte[]>) list);
+            }
 
-            return connectionToModpack(connection, body);
+            return Optional.empty();
         } catch (Exception e) {
             LOGGER.error("Error while getting server modpack content", e);
         } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
+            if (client != null)
+                client.close();
         }
 
         return Optional.empty();
     }
 
-    public static Optional<Jsons.ModpackContentFields> connectionToModpack(HttpURLConnection connection) {
-        return connectionToModpack(connection, null);
-    }
-
-    public static Optional<Jsons.ModpackContentFields> connectionToModpack(HttpURLConnection connection, String body) {
-        int responseCode = -1;
-        try {
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(10000);
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-            if (body != null) {
-                connection.setDoOutput(true);
-                connection.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
-            }
-            connection.connect();
-
-            responseCode = connection.getResponseCode();
-
-            if (responseCode == 200) {
-                return parseStreamToModpack(connection.getInputStream());
-            } else {
-                LOGGER.error("Couldn't connect to modpack server: {} Response Code: {}", connection.getURL(), responseCode);
-            }
-
-        } catch (SocketException | SocketTimeoutException e) {
-            LOGGER.error("Couldn't connect to modpack server: {} Response Code: {} Error: {}", connection.getURL(), responseCode, e.getCause());
-        } catch (Exception e) {
-            LOGGER.error("Error while getting server modpack content", e);
-        }
-
-        return Optional.empty();
-    }
-
-    public static Optional<Jsons.ModpackContentFields> parseStreamToModpack(InputStream stream) {
+    public static Optional<Jsons.ModpackContentFields> parseStreamToModpack(List<byte[]> rawBytes) {
 
         String response = null;
 
-        try (InputStreamReader isr = new InputStreamReader(stream)) {
-            JsonElement element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
+        // get list of bytes[] to one byte[] object
+        long len = rawBytes.stream().mapToLong(b -> b.length).sum();
+        byte[] bytes = new byte[(int) len];
+        int pos = 0;
+        for (byte[] b : rawBytes) {
+            System.arraycopy(b, 0, bytes, pos, b.length);
+            pos += b.length;
+        }
+
+        try (InputStreamReader isr = new InputStreamReader(new ByteArrayInputStream(bytes))) {
+            JsonElement element = JsonParser.parseReader(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
             if (element != null && !element.isJsonArray()) {
                 JsonObject obj = element.getAsJsonObject();
                 response = obj.toString();
