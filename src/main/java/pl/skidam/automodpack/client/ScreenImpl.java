@@ -13,7 +13,6 @@ import pl.skidam.automodpack_loader_core.utils.FetchManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.Optional;
 
 public class ScreenImpl implements ScreenService {
@@ -97,8 +96,8 @@ public class ScreenImpl implements ScreenService {
             Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
         }
 
-        public static void error(String... error) {
-            Screens.setScreen(new ErrorScreen(Arrays.toString(error)));
+        public static void error(String... errors) {
+            Screens.setScreen(new ErrorScreen(errors));
         }
 
         public static void title() {
