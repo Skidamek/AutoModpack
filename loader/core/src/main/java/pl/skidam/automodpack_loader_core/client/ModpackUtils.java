@@ -299,11 +299,7 @@ public class ModpackUtils {
     // Returns true if value changed
     public static boolean selectModpack(Path modpackDirToSelect, InetSocketAddress modpackAddressToSelect, Set<String> newDownloadedFiles) {
         final String modpackToSelect = modpackDirToSelect.getFileName().toString();
-
         String selectedModpack = clientConfig.selectedModpack;
-        String selectedModpackLink = clientConfig.installedModpacks.get(selectedModpack);
-
-        InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
 
         // Save current editable files
         Path selectedModpackDir = modpacksDir.resolve(selectedModpack);
@@ -326,7 +322,7 @@ public class ModpackUtils {
         ConfigTools.save(clientConfigFile, clientConfig);
         ModpackUtils.addModpackToList(modpackToSelect, modpackAddressToSelect);
 
-        return !Objects.equals(modpackToSelect, selectedModpack) || !Objects.equals(modpackAddressToSelect, selectedModpackAddress);
+        return !Objects.equals(modpackToSelect, selectedModpack);
     }
 
     public static void removeModpackFromList(String modpackName) {
