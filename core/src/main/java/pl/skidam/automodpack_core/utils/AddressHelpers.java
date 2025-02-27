@@ -87,25 +87,39 @@ public class AddressHelpers {
         return ip;
     }
 
-    public static boolean isLocal(InetSocketAddress address) {
+    public static InetSocketAddress parse(String address) {
+       InetSocketAddress socketAddress = null;
+        try {
+            int portIndex = address.lastIndexOf(':');
+            if (portIndex != -1) {
+                String host = address.substring(0, portIndex);
+                String port = address.substring(portIndex + 1);
+                if (port.matches("\\d+")) {
+                    socketAddress = new InetSocketAddress(host, Integer.parseInt(port));
+                }
+            }
+            if (socketAddress == null) {
+                socketAddress = new InetSocketAddress(address, 0);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error while parsing address", e);
+        }
+
+        return socketAddress;
+    }
+
+    public static boolean isLocal(String address) {
         if (address == null) {
             return true;
         }
 
-        if (address.getAddress().isAnyLocalAddress()) {
+        address = normalizeIp(address);
+        if (address.startsWith("192.168.") || address.startsWith("127.") || address.startsWith("::1") || address.startsWith("0:0:0:0:")) {
             return true;
         }
 
-        String ip = address.getAddress().getHostAddress();
-
-        ip = normalizeIp(ip);
         String localIp = getLocalIp();
         String localIpv6 = getLocalIpv6();
-
-        if (ip.startsWith("192.168.") || ip.startsWith("127.") || ip.startsWith("::1") || ip.startsWith("0:0:0:0:")) {
-            return true;
-        }
-
-        return areIpsEqual(ip, localIp) || areIpsEqual(ip, localIpv6);
+        return areIpsEqual(address, localIp) || areIpsEqual(address, localIpv6);
     }
 }

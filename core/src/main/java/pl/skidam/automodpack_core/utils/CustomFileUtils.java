@@ -6,6 +6,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -50,15 +52,26 @@ public class CustomFileUtils {
 
     // Special for use instead of normal resolve, since it wont work because of the leading slash in file
     public static Path getPath(Path origin, String path) {
-        if (path == null) {
-            return null;
+        if (origin == null) {
+            throw new IllegalArgumentException("Origin path must not be null");
+        }
+        if (path == null || path.isBlank()) {
+            return origin;
+        }
+
+        path = path.replace('\\', '/');
+
+        // windows... should fix issues with encoding
+        if (System.getProperty("os.name").toLowerCase().contains("windows")) {
+            Charset win1252 = Charset.forName("windows-1252");
+            path = new String(path.getBytes(win1252), StandardCharsets.UTF_8);
         }
 
         if (path.startsWith("/")) {
-            return origin.resolve(path.substring(1));
+            path = path.substring(1);
         }
 
-        return origin.resolve(path);
+        return origin.resolve(path).normalize();
     }
 
     // our implementation of Files.copy, thanks to usage of RandomAccessFile we can copy files that are in use
@@ -350,7 +363,8 @@ public class CustomFileUtils {
 
     public static boolean isEmptyDirectory(Path parentPath) throws IOException {
         if (!Files.isDirectory(parentPath)) return false;
-        List<Path> files = Files.list(parentPath).toList();
-        return files.isEmpty();
+        try (Stream<Path> pathStream = Files.list(parentPath)) {
+            return pathStream.findAny().isEmpty();
+        }
     }
 }

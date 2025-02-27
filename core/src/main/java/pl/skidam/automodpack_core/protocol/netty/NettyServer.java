@@ -29,7 +29,6 @@ import java.util.*;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
-// TODO: clean up this class
 public class NettyServer {
     private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
@@ -126,7 +125,6 @@ public class NettyServer {
                         @Override
                         protected void initChannel(SocketChannel ch) throws Exception {
                             ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(sslCtx));
-                            shouldHost = true;
                         }
                     })
                     .group(eventLoopGroup)
@@ -167,9 +165,7 @@ public class NettyServer {
         return true;
     }
 
-    // TODO: investigate what this method really means xd
-    // ... why do we rely on it in commands?
-    public boolean shouldRunInternally() {
+    public boolean isRunning() {
         if (serverChannel == null) {
             return shouldHost;
         }
@@ -186,7 +182,7 @@ public class NettyServer {
     }
 
     private boolean canStart() {
-        if (shouldRunInternally()) {
+        if (isRunning()) {
             return false;
         }
 
@@ -228,6 +224,7 @@ public class NettyServer {
             }
         }
 
+        shouldHost = true;
         LOGGER.info("Starting modpack host server on port {}", serverConfig.hostPort);
         return true;
     }

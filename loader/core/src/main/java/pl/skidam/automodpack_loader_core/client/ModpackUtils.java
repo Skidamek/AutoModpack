@@ -7,6 +7,7 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -48,17 +49,17 @@ public class ModpackUtils {
                 } else {
                     Path standardPath = CustomFileUtils.getPathFromCWD(file);
                     if (Files.exists(standardPath) && Objects.equals(serverSHA1, CustomFileUtils.getHash(standardPath))) {
-                        LOGGER.info("File {} already exists on client, coping to modpack", standardPath.getFileName());
+                        LOGGER.info("File {} already exists on client, coping to modpack", file);
                         try { CustomFileUtils.copyFile(standardPath, path); } catch (IOException e) { e.printStackTrace(); }
                         continue;
                     } else {
-                        LOGGER.info("File does not exists {}", standardPath);
+                        LOGGER.info("File does not exists {} - {}", standardPath, file);
                         return true;
                     }
                 }
 
                 if (!Objects.equals(serverSHA1, CustomFileUtils.getHash(path))) {
-                    LOGGER.info("File does not match hash {}", path);
+                    LOGGER.info("File does not match hash {} - {}", path, file);
                     return true;
                 }
             }
@@ -269,7 +270,7 @@ public class ModpackUtils {
 
         String installedModpackName = clientConfig.selectedModpack;
         String installedModpackLink = clientConfig.installedModpacks.get(installedModpackName);
-        InetSocketAddress installedModpackAddress = new InetSocketAddress(installedModpackLink.split(":")[0], Integer.parseInt(installedModpackLink.split(":")[1]));
+        InetSocketAddress installedModpackAddress = AddressHelpers.parse(installedModpackLink);
         String serverModpackName = serverModpackContent.modpackName;
 
         if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
@@ -303,23 +304,7 @@ public class ModpackUtils {
         String selectedModpackLink = clientConfig.installedModpacks.get(selectedModpack);
 //        LOGGER.info("Selected modpack link: {}", selectedModpackLink);
 
-        InetSocketAddress selectedModpackAddress = null;
-        try {
-            int portIndex = selectedModpackLink.lastIndexOf(':');
-            if (portIndex != -1) {
-                String host = selectedModpackLink.substring(0, portIndex);
-                String port = selectedModpackLink.substring(portIndex + 1);
-                if (port.matches("\\d+")) {
-                    selectedModpackAddress = new InetSocketAddress(host, Integer.parseInt(port));
-                }
-            } else {
-                selectedModpackAddress = new InetSocketAddress(selectedModpackLink, 0);
-            }
-        } catch (Exception e) {
-            if (selectedModpackLink != null && !selectedModpackLink.isBlank()) {
-                LOGGER.error("Error while parsing selected modpack address", e);
-            }
-        }
+        InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
 
         // Save current editable files
         Path selectedModpackDir = modpacksDir.resolve(selectedModpack);

@@ -18,25 +18,30 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class HandshakeC2SPacket {
 
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf) {
-        String serverResponse = buf.readString(Short.MAX_VALUE);
+        try {
+            String serverResponse = buf.readString(Short.MAX_VALUE);
 
-        HandshakePacket serverHandshakePacket = HandshakePacket.fromJson(serverResponse);
+            HandshakePacket serverHandshakePacket = HandshakePacket.fromJson(serverResponse);
 
-        String loader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
+            String loader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
 
-        PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
-        HandshakePacket clientHandshakePacket = new HandshakePacket(List.of(loader), AM_VERSION, MC_VERSION);
-        outBuf.writeString(clientHandshakePacket.toJson(), Short.MAX_VALUE);
+            PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
+            HandshakePacket clientHandshakePacket = new HandshakePacket(List.of(loader), AM_VERSION, MC_VERSION);
+            outBuf.writeString(clientHandshakePacket.toJson(), Short.MAX_VALUE);
 
-        if (serverHandshakePacket.equals(clientHandshakePacket) || (serverHandshakePacket.loaders.contains(loader) && serverHandshakePacket.amVersion.equals(AM_VERSION))) {
-            LOGGER.info("Versions match " + serverHandshakePacket.amVersion);
-        } else {
-            LOGGER.warn("Versions mismatch " + serverHandshakePacket.amVersion);
-            LOGGER.info("Trying to change automodpack version to the version required by server...");
-            updateMod(handler, serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
+            if (serverHandshakePacket.equals(clientHandshakePacket) || (serverHandshakePacket.loaders.contains(loader) && serverHandshakePacket.amVersion.equals(AM_VERSION))) {
+                LOGGER.info("Versions match " + serverHandshakePacket.amVersion);
+            } else {
+                LOGGER.warn("Versions mismatch " + serverHandshakePacket.amVersion);
+                LOGGER.info("Trying to change automodpack version to the version required by server...");
+                updateMod(handler, serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
+            }
+
+            return CompletableFuture.completedFuture(outBuf);
+        } catch (Exception e) {
+            LOGGER.error("Error while handling HandshakeC2SPacket", e);
+            return CompletableFuture.completedFuture(new PacketByteBuf(Unpooled.buffer()));
         }
-
-        return CompletableFuture.completedFuture(outBuf);
     }
 
     private static void updateMod(ClientLoginNetworkHandler handler, String serverAMVersion, String serverMCVersion) {

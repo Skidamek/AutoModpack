@@ -54,11 +54,13 @@ public class ModpackContent {
             // host-modpack generation
             if (MODPACK_DIR != null) {
                 LOGGER.info("Syncing {}...", MODPACK_DIR.getFileName());
-                creationFutures.addAll(generateAsync(Files.walk(MODPACK_DIR).toList()));
+                try (var pathStream = Files.walk(MODPACK_DIR)) {
+                    creationFutures.addAll(generateAsync(pathStream.toList()));
 
-                // Wait till finish
-                creationFutures.forEach((CompletableFuture::join));
-                creationFutures.clear();
+                    // Wait till finish
+                    creationFutures.forEach((CompletableFuture::join));
+                    creationFutures.clear();
+                }
             }
 
             // synced files generation
@@ -193,7 +195,7 @@ public class ModpackContent {
     }
 
     // check if file is inside automodpack Dir or its sub-dirs, unless it's inside hostModpackDir with exception of hostModpackContentFile
-    private boolean isInnerFile(Path file) {
+    public static boolean isInnerFile(Path file) {
         Path normalizedFilePath = file.toAbsolutePath().normalize();
         boolean isInner = normalizedFilePath.startsWith(automodpackDir.toAbsolutePath().normalize()) &&
                 !normalizedFilePath.startsWith(hostModpackDir.toAbsolutePath().normalize());

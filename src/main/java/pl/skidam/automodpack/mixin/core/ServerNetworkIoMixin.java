@@ -8,8 +8,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 
-import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
-import static pl.skidam.automodpack_core.GlobalVariables.hostServer;
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 @Mixin(targets = "net/minecraft/server/ServerNetworkIo$1", priority = 2137)
 public abstract class ServerNetworkIoMixin {
@@ -19,11 +18,11 @@ public abstract class ServerNetworkIoMixin {
             at = @At("TAIL")
     )
     private void injectAutoModpackHost(Channel channel, CallbackInfo ci) {
-        if (!GlobalVariables.serverConfig.hostModpackOnMinecraftPort) {
+        if (!serverConfig.hostModpackOnMinecraftPort) {
             return;
         }
 
-        if (!GlobalVariables.serverConfig.modpackHost) {
+        if (!serverConfig.modpackHost) {
             return;
         }
 

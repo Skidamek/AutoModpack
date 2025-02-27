@@ -15,6 +15,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
 import java.util.*;
+import java.util.stream.Stream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
@@ -109,21 +110,29 @@ public class ModpackUpdater {
 
         // Load the modpack excluding mods from standard mods directory without need to restart the game
         if (preload) {
-            List<String> standardModsHashes = Files.list(MODS_DIR)
-                .map(CustomFileUtils::getHash)
-                .filter(Objects::nonNull)
-                .toList();
-            List<Path> modpackMods = Files.list(modpackDir.resolve("mods"))
-                .filter(mod -> {
-                    String modHash = CustomFileUtils.getHash(mod);
+            List<String> standardModsHashes;
+            List<Path> modpackMods;
 
-                    // if its in standard mods directory, we dont want to load it again
-                    boolean isUnique = standardModsHashes.stream().noneMatch(hash -> hash.equals(modHash));
-                    boolean endsWithJar = mod.toString().endsWith(".jar");
-                    boolean isFile = mod.toFile().isFile();
+            try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
+                standardModsHashes = standardModsStream
+                        .map(CustomFileUtils::getHash)
+                        .filter(Objects::nonNull)
+                        .toList();
+            }
 
-                    return isUnique && endsWithJar && isFile;
-                }).toList();
+            try (Stream<Path> modpackModsStream = Files.list(modpackDir.resolve("mods"))) {
+                modpackMods = modpackModsStream
+                        .filter(mod -> {
+                            String modHash = CustomFileUtils.getHash(mod);
+
+                            // if its in standard mods directory, we dont want to load it again
+                            boolean isUnique = standardModsHashes.stream().noneMatch(hash -> hash.equals(modHash));
+                            boolean endsWithJar = mod.toString().endsWith(".jar");
+                            boolean isFile = mod.toFile().isFile();
+
+                            return isUnique && endsWithJar && isFile;
+                        }).toList();
+            }
 
             MODPACK_LOADER.loadModpack(modpackMods);
             return;
@@ -359,7 +368,7 @@ public class ModpackUpdater {
                     for (var download : failedDownloads.entrySet()) {
                         var item = download.getKey();
                         var urls = download.getValue();
-                        LOGGER.error("Failed to download: " + item.file + " from " + urls);
+                        LOGGER.error("{}{}", "Failed to download: " + item.file + " from ", urls);
                         failedFiles.append(item.file);
                     }
 
@@ -376,7 +385,7 @@ public class ModpackUpdater {
                 new ReLauncher(modpackDir, updateType, changelogs).restart(false);
             }
         } catch (SocketTimeoutException | ConnectException e) {
-            LOGGER.error("Modpack host of " + modpackAddress + " is not responding", e);
+            LOGGER.error("{} is not responding", "Modpack host of " + modpackAddress, e);
         } catch (InterruptedException e) {
             LOGGER.info("Interrupted the download");
         } catch (Exception e) {
@@ -429,10 +438,29 @@ public class ModpackUpdater {
             LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
         }
 
-        final List<Path> modpackMods = Files.list(modpackDir.resolve("mods")).toList();
-        final Collection<FileInspection.Mod> modpackModList = modpackMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList();
-        final List<Path> standardMods = Files.list(MODS_DIR).toList();
-        final Collection<FileInspection.Mod> standardModList = new ArrayList<>(standardMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList());
+        final List<Path> modpackMods;
+        final Collection<FileInspection.Mod> modpackModList;
+        final List<Path> standardMods;
+        final Collection<FileInspection.Mod> standardModList;
+
+        Path modpackModsDir = modpackDir.resolve("mods");
+        if (Files.exists(modpackModsDir)) {
+            try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
+                modpackMods = modpackModsStream.toList();
+                modpackModList = modpackMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList();
+            }
+        } else {
+            modpackModList = List.of();
+        }
+
+        if (Files.exists(MODS_DIR)) {
+            try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
+                standardMods = standardModsStream.toList();
+                standardModList = new ArrayList<>(standardMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList());
+            }
+        } else {
+            standardModList = new ArrayList<>();
+        }
 
         boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods, standardModList);
         Set<String> ignoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, filesNotToCopy);
@@ -467,7 +495,10 @@ public class ModpackUpdater {
     // returns changed workaroundMods list
     private boolean deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent) throws IOException {
         List<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).toList();
-        List<Path> pathList = Files.walk(modpackDir).toList();
+        List<Path> pathList;
+        try (Stream<Path> pathStream = Files.walk(modpackDir)) {
+            pathList = pathStream.toList();
+        }
         Set<String> workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
         Set<Path> parentPaths = new HashSet<>();
         boolean needsRestart = false;

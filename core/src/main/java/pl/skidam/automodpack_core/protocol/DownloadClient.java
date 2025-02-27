@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 /**
@@ -27,9 +28,9 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 public class DownloadClient {
     private final List<Connection> connections = new ArrayList<>();
 
-    public DownloadClient(InetSocketAddress remoteAddress, Secrets.Secret secret, int poolSize) throws Exception {
+    public DownloadClient(InetSocketAddress address, Secrets.Secret secret, int poolSize) throws Exception {
         for (int i = 0; i < poolSize; i++) {
-            connections.add(new Connection(remoteAddress, secret));
+            connections.add(new Connection(address, secret));
         }
     }
 
@@ -102,63 +103,71 @@ class Connection {
      * Creates a new connection by first opening a plain TCP socket,
      * sending the AMMC magic, waiting for the AMOK reply, and then upgrading to TLS.
      */
-    public Connection(InetSocketAddress remoteAddress, Secrets.Secret secret) throws Exception {
-        // Step 1. Create a plain TCP connection.
-        Socket plainSocket = new Socket(remoteAddress.getHostName(), remoteAddress.getPort());
-        DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
-        DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
+    public Connection(InetSocketAddress address, Secrets.Secret secret) throws Exception {
+        try {
+            // Step 1. Create a plain TCP connection.
+            LOGGER.info("Initializing connection to: {}", address);
+            Socket plainSocket = new Socket();
+            plainSocket.connect(address, 15000);
+            plainSocket.setSoTimeout(15000);
+            DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
+            DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
 
-        // Step 2. Send the handshake (AMMC magic) over the plain socket.
-        plainOut.writeInt(MAGIC_AMMC);
-        plainOut.flush();
+            // Step 2. Send the handshake (AMMC magic) over the plain socket.
+            plainOut.writeInt(MAGIC_AMMC);
+            plainOut.flush();
 
-        // Step 3. Wait for the server’s reply (AMOK magic).
-        int handshakeResponse = plainIn.readInt();
-        if (handshakeResponse != MAGIC_AMOK) {
-            plainSocket.close();
-            throw new IOException("Invalid handshake response from server: " + handshakeResponse);
-        }
+            // Step 3. Wait for the server’s reply (AMOK magic).
+            int handshakeResponse = plainIn.readInt();
+            if (handshakeResponse != MAGIC_AMOK) {
+                plainSocket.close();
+                throw new IOException("Invalid handshake response from server: " + handshakeResponse);
+            }
 
-        // Step 4. Upgrade the plain socket to TLS using the same underlying connection.
-        SSLContext context = createSSLContext();
-        SSLSocketFactory factory = context.getSocketFactory();
-        // The createSocket(Socket, host, port, autoClose) wraps the existing plain socket.
-        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, remoteAddress.getHostName(), remoteAddress.getPort(), true);
-        sslSocket.setEnabledProtocols(new String[] {"TLSv1.3"});
-        sslSocket.setEnabledCipherSuites(new String[] {"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
-        sslSocket.startHandshake();
+            // Step 4. Upgrade the plain socket to TLS using the same underlying connection.
+            SSLContext context = createSSLContext();
+            SSLSocketFactory factory = context.getSocketFactory();
+            // The createSocket(Socket, host, port, autoClose) wraps the existing plain socket.
+            SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, address.getHostName(), address.getPort(), true);
+            sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
+            sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
+            sslSocket.startHandshake();
 
-        // Step 5. Perform custom TLS certificate validation.
-        Certificate[] certs = sslSocket.getSession().getPeerCertificates();
-        if (certs == null || certs.length == 0 || certs.length > 3) {
-            sslSocket.close();
-            throw new IOException("Invalid server certificate chain");
-        }
+            // Step 5. Perform custom TLS certificate validation.
+            Certificate[] certs = sslSocket.getSession().getPeerCertificates();
+            if (certs == null || certs.length == 0 || certs.length > 3) {
+                sslSocket.close();
+                throw new IOException("Invalid server certificate chain");
+            }
 
-        boolean validated = false;
-        for (Certificate cert : certs) {
-            if (cert instanceof X509Certificate x509Cert) {
-                String fingerprint = NetUtils.getFingerprint(x509Cert, secret.secret());
-                if (fingerprint.equals(secret.fingerprint())) {
-                    validated = true;
-                    break;
+            boolean validated = false;
+            for (Certificate cert : certs) {
+                if (cert instanceof X509Certificate x509Cert) {
+                    String fingerprint = NetUtils.getFingerprint(x509Cert, secret.secret());
+                    if (fingerprint.equals(secret.fingerprint())) {
+                        validated = true;
+                        break;
+                    }
                 }
             }
+
+            if (!validated) {
+                sslSocket.close();
+                throw new IOException("Server certificate validation failed");
+            }
+
+//        useCompression = !AddressHelpers.isLocal(address);
+            useCompression = true;
+            secretBytes = Base64.getUrlDecoder().decode(secret.secret());
+
+            // Now use the SSL socket for further communication.
+            this.socket = sslSocket;
+            this.in = new DataInputStream(sslSocket.getInputStream());
+            this.out = new DataOutputStream(sslSocket.getOutputStream());
+            LOGGER.info("Connection established with: {}", address);
+        } catch (Exception e) {
+            throw new IOException("Failed to establish connection", e);
         }
-
-        if (!validated) {
-            sslSocket.close();
-            throw new IOException("Server certificate validation failed");
-        }
-
-//        useCompression = !AddressHelpers.isLocal(remoteAddress);
-        useCompression = true;
-        secretBytes = Base64.getUrlDecoder().decode(secret.secret());
-
-        // Now use the SSL socket for further communication.
-        this.socket = sslSocket;
-        this.in = new DataInputStream(sslSocket.getInputStream());
-        this.out = new DataOutputStream(sslSocket.getOutputStream());
     }
 
     public boolean isBusy() {

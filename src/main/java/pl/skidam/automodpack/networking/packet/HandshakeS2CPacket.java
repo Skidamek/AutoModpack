@@ -20,8 +20,6 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
-import java.net.InetSocketAddress;
-
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -60,87 +58,95 @@ public class HandshakeS2CPacket {
     }
 
     public static void handleHandshake(ClientConnection connection, GameProfile profile, int minecraftServerPort, PacketByteBuf buf, PacketSender packetSender) {
-        LOGGER.info("{} has installed AutoModpack.", profile.getName());
+        try {
+            LOGGER.info("{} has installed AutoModpack.", profile.getName());
 
-        String clientResponse = buf.readString(Short.MAX_VALUE);
-        HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
+            String clientResponse = buf.readString(Short.MAX_VALUE);
+            HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
 
-        boolean isAcceptedLoader = false;
-        for (String loader : serverConfig.acceptedLoaders) {
-            if (clientHandshakePacket.loaders.contains(loader)) {
-                isAcceptedLoader = true;
-                break;
-            }
-        }
-
-        if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
-            Text reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " to play on this server!");
-            if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
-                reason = VersionedText.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
-            }
-            connection.send(new LoginDisconnectS2CPacket(reason));
-            connection.disconnect(reason);
-            return;
-        }
-
-        if (!hostServer.shouldRunInternally()) {
-            return;
-        }
-
-        if (modpack.isGenerating()) {
-            Text reason = VersionedText.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
-            connection.send(new LoginDisconnectS2CPacket(reason));
-            connection.disconnect(reason);
-            return;
-        }
-
-        InetSocketAddress playerAddress = (InetSocketAddress) connection.getAddress();
-        String addressToSend;
-
-        // If the player is connecting locally, use the local host IP
-        if (AddressHelpers.isLocal(playerAddress)) {
-            addressToSend = serverConfig.hostLocalIp;
-        } else {
-            addressToSend = serverConfig.hostIp;
-        }
-
-        // now we know player is authenticated, packets are encrypted and player is whitelisted
-        // regenerate unique secret
-        Secrets.Secret secret = Secrets.generateSecret();
-        SecretsStore.saveHostSecret(profile.getId().toString(), secret);
-
-        // We send empty string if hostIp/hostLocalIp is not specified in server config. Client will use ip by which it connected to the server in first place.
-        DataPacket dataPacket = new DataPacket(addressToSend, null, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
-
-        if (serverConfig.reverseProxy) {
-            // With reverse proxy we dont append port to the link, it should be already included in the link
-            // But we need to check if the port is set in the config, since that's where modpack is actually hosted
-            if (serverConfig.hostPort == -1 && !serverConfig.hostModpackOnMinecraftPort) {
-                LOGGER.error("Reverse proxy is enabled but host port is not set in config! Please set it manually.");
-            }
-
-            LOGGER.info("Sending {} modpack url: {}", profile.getName(), addressToSend);
-        } else { // Append server port
-            int portToSend;
-            if (serverConfig.hostModpackOnMinecraftPort) {
-                portToSend = minecraftServerPort;
-            } else  {
-                portToSend = serverConfig.hostPort;
-
-                if (serverConfig.hostPort == -1) {
-                    LOGGER.error("Host port is not set in config! Please set it manually.");
+            boolean isAcceptedLoader = false;
+            for (String loader : serverConfig.acceptedLoaders) {
+                if (clientHandshakePacket.loaders.contains(loader)) {
+                    isAcceptedLoader = true;
+                    break;
                 }
             }
 
-            LOGGER.info("Sending {} modpack url: {}:{}", profile.getName(), addressToSend, portToSend);
-            dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
+            if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
+                Text reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
+                    reason = VersionedText.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
+                }
+                connection.send(new LoginDisconnectS2CPacket(reason));
+                connection.disconnect(reason);
+                return;
+            }
+
+            if (!hostServer.isRunning()) {
+                LOGGER.info("Host server is not running. Modpack will not be sent to {}", profile.getName());
+                return;
+            }
+
+            if (modpack.isGenerating()) {
+                Text reason = VersionedText.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
+                connection.send(new LoginDisconnectS2CPacket(reason));
+                connection.disconnect(reason);
+                return;
+            }
+
+            String playerAddress = connection.getAddress().toString();
+            String addressToSend;
+
+            // If the player is connecting locally, use the local host IP
+            if (AddressHelpers.isLocal(playerAddress)) {
+                addressToSend = serverConfig.hostLocalIp;
+            } else {
+                addressToSend = serverConfig.hostIp;
+            }
+
+            // now we know player is authenticated, packets are encrypted and player is whitelisted
+            // regenerate unique secret
+            Secrets.Secret secret = Secrets.generateSecret();
+            SecretsStore.saveHostSecret(profile.getId().toString(), secret);
+
+            // We send empty string if hostIp/hostLocalIp is not specified in server config. Client will use ip by which it connected to the server in first place.
+            DataPacket dataPacket = new DataPacket(addressToSend, null, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
+
+            if (serverConfig.reverseProxy) {
+                // With reverse proxy we dont append port to the link, it should be already included in the link
+                // But we need to check if the port is set in the config, since that's where modpack is actually hosted
+                if (serverConfig.hostPort == -1 && !serverConfig.hostModpackOnMinecraftPort) {
+                    LOGGER.error("Reverse proxy is enabled but host port is not set in config! Please set it manually.");
+                }
+
+                LOGGER.info("Sending {} modpack url: {}", profile.getName(), addressToSend);
+            } else { // Append server port
+                int portToSend;
+                if (serverConfig.hostModpackOnMinecraftPort) {
+                    portToSend = minecraftServerPort;
+                } else {
+                    portToSend = serverConfig.hostPort;
+
+                    if (serverConfig.hostPort == -1) {
+                        LOGGER.error("Host port is not set in config! Please set it manually.");
+                    }
+                }
+
+                if (!addressToSend.isBlank()) {
+                    LOGGER.info("Sending {} modpack url: {}:{}", profile.getName(), addressToSend, portToSend);
+                }
+                dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
+            }
+
+            String packetContentJson = dataPacket.toJson();
+
+            PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
+            outBuf.writeString(packetContentJson, Short.MAX_VALUE);
+            packetSender.sendPacket(DATA, outBuf);
+            LOGGER.info("Sent data packet to {} {}", profile.getName(), dataPacket);
+        } catch (Exception e) {
+            LOGGER.error("Error while handling handshake for {}", profile.getName(), e);
         }
-
-        String packetContentJson = dataPacket.toJson();
-
-        PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
-        outBuf.writeString(packetContentJson, Short.MAX_VALUE);
-        packetSender.sendPacket(DATA, outBuf);
     }
 
 

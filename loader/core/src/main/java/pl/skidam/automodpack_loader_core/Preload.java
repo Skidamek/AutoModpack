@@ -4,14 +4,11 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
-import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
+import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.utils.ManifestReader;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 
 import java.io.IOException;
@@ -61,15 +58,7 @@ public class Preload {
             return;
         }
 
-        InetSocketAddress selectedModpackAddress;
-
-        try {
-            int portIndex = selectedModpackLink.lastIndexOf(":");
-            selectedModpackAddress = new InetSocketAddress(selectedModpackLink.substring(0, portIndex), Integer.parseInt(selectedModpackLink.substring(portIndex + 1)));
-        } catch (Exception e) {
-            return;
-        }
-
+        InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
         Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
         var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackAddress, secret);

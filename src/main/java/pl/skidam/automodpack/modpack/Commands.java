@@ -97,10 +97,10 @@ public class Commands {
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            if (!hostServer.shouldRunInternally()) {
+            if (!hostServer.isRunning()) {
                 send(context, "Starting modpack hosting...", Formatting.YELLOW, true);
                 hostServer.start();
-                if (hostServer.shouldRunInternally()) {
+                if (hostServer.isRunning()) {
                     send(context, "Modpack hosting started!", Formatting.GREEN, true);
                 } else {
                     send(context, "Couldn't start server!", Formatting.RED, true);
@@ -115,7 +115,7 @@ public class Commands {
 
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            if (hostServer.shouldRunInternally()) {
+            if (hostServer.isRunning()) {
                 send(context, "Stopping modpack hosting...", Formatting.RED, true);
                 if (hostServer.stop()) {
                     send(context, "Modpack hosting stopped!", Formatting.RED, true);
@@ -133,7 +133,7 @@ public class Commands {
     private static int restartModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
             send(context, "Restarting modpack hosting...", Formatting.YELLOW, true);
-            boolean needStop = hostServer.shouldRunInternally();
+            boolean needStop = hostServer.isRunning();
             boolean stopped = false;
             if (needStop) {
                 stopped = hostServer.stop();
@@ -143,7 +143,7 @@ public class Commands {
                 send(context, "Couldn't restart server!", Formatting.RED, true);
             } else {
                 hostServer.start();
-                if (hostServer.shouldRunInternally()) {
+                if (hostServer.isRunning()) {
                     send(context, "Modpack hosting restarted!", Formatting.GREEN, true);
                 } else {
                     send(context, "Couldn't restart server!", Formatting.RED, true);
@@ -156,8 +156,8 @@ public class Commands {
 
 
     private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
-        Formatting statusColor = hostServer.shouldRunInternally() ? Formatting.GREEN : Formatting.RED;
-        String status = hostServer.shouldRunInternally() ? "running" : "not running";
+        Formatting statusColor = hostServer.isRunning() ? Formatting.GREEN : Formatting.RED;
+        String status = hostServer.isRunning() ? "running" : "not running";
         send(context, "Modpack hosting status", Formatting.GREEN, status, statusColor, false);
         return Command.SINGLE_SUCCESS;
     }
