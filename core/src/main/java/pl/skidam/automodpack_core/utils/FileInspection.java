@@ -22,6 +22,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+
 public class FileInspection {
 
     public static boolean isMod(Path file) {
@@ -38,7 +40,7 @@ public class FileInspection {
 
         String hash = CustomFileUtils.getHash(file);
         if (hash == null) {
-            GlobalVariables.LOGGER.error("Failed to get hash for file: {}", file);
+            LOGGER.error("Failed to get hash for file: {}", file);
             return null;
         }
 
@@ -66,7 +68,7 @@ public class FileInspection {
             return mod;
         }
 
-        GlobalVariables.LOGGER.error("Failed to get mod info for file: {}", file);
+        LOGGER.debug("Failed to get mod info for file: {}", file);
         return null;
     }
 
@@ -245,7 +247,7 @@ public class FileInspection {
     private static Object getModInfoFromToml(BufferedReader reader, String infoType, Path file) {
         try {
             TomlParseResult result = Toml.parse(reader);
-            result.errors().forEach(error -> GlobalVariables.LOGGER.error(error.toString()));
+            result.errors().forEach(error -> LOGGER.error(error.toString()));
 
             TomlArray modsArray = result.getArray("mods");
             if (modsArray == null) {
@@ -389,12 +391,18 @@ public class FileInspection {
         return infoType.equals("version") || infoType.equals("modId") || infoType.equals("environment") ? null : Set.of();
     }
 
-    private static final String forbiddenChars = "\\/:*\"<>|!?.";
+    private static final String forbiddenChars = "\\/:*\"<>|!?&%$;=+";
 
     public static boolean isInValidFileName(String fileName) {
         // Check for each forbidden character in the file name
         for (char c : forbiddenChars.toCharArray()) {
             if (fileName.indexOf(c) != -1) {
+                return true;
+            }
+        }
+
+        for (char c : fileName.toCharArray()) {
+            if (c < 32 || c == 127) {
                 return true;
             }
         }
@@ -405,8 +413,14 @@ public class FileInspection {
 
     public static String fixFileName(String fileName) {
         // Replace forbidden characters with underscores
-        for (char c : forbiddenChars.toCharArray()) {
-            fileName = fileName.replace(c, '-');
+        for (char c : fileName.toCharArray()) {
+            if (c < 32 || c == 127) {
+                fileName = fileName.replace(c, '-');
+            }
+
+            if (forbiddenChars.indexOf(c) != -1) {
+                fileName = fileName.replace(c, '-');
+            }
         }
 
         // Remove leading and trailing whitespace

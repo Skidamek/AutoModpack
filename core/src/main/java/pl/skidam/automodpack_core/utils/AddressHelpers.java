@@ -88,6 +88,7 @@ public class AddressHelpers {
     }
 
     public static InetSocketAddress parse(String address) {
+        if (address == null) return null;
        InetSocketAddress socketAddress = null;
         try {
             int portIndex = address.lastIndexOf(':');

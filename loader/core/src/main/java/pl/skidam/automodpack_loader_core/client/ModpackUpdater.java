@@ -111,7 +111,7 @@ public class ModpackUpdater {
         // Load the modpack excluding mods from standard mods directory without need to restart the game
         if (preload) {
             List<String> standardModsHashes;
-            List<Path> modpackMods;
+            List<Path> modpackMods = List.of();
 
             try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
                 standardModsHashes = standardModsStream
@@ -120,18 +120,21 @@ public class ModpackUpdater {
                         .toList();
             }
 
-            try (Stream<Path> modpackModsStream = Files.list(modpackDir.resolve("mods"))) {
-                modpackMods = modpackModsStream
-                        .filter(mod -> {
-                            String modHash = CustomFileUtils.getHash(mod);
+            Path modpackModsDir = modpackDir.resolve("mods");
+            if (Files.exists(modpackModsDir)) {
+                try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
+                    modpackMods = modpackModsStream
+                            .filter(mod -> {
+                                String modHash = CustomFileUtils.getHash(mod);
 
-                            // if its in standard mods directory, we dont want to load it again
-                            boolean isUnique = standardModsHashes.stream().noneMatch(hash -> hash.equals(modHash));
-                            boolean endsWithJar = mod.toString().endsWith(".jar");
-                            boolean isFile = mod.toFile().isFile();
+                                // if its in standard mods directory, we dont want to load it again
+                                boolean isUnique = standardModsHashes.stream().noneMatch(hash -> hash.equals(modHash));
+                                boolean endsWithJar = mod.toString().endsWith(".jar");
+                                boolean isFile = mod.toFile().isFile();
 
-                            return isUnique && endsWithJar && isFile;
-                        }).toList();
+                                return isUnique && endsWithJar && isFile;
+                            }).toList();
+                }
             }
 
             MODPACK_LOADER.loadModpack(modpackMods);

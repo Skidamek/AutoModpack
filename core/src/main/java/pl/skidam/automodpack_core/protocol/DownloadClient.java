@@ -106,7 +106,7 @@ class Connection {
     public Connection(InetSocketAddress address, Secrets.Secret secret) throws Exception {
         try {
             // Step 1. Create a plain TCP connection.
-            LOGGER.info("Initializing connection to: {}", address);
+            LOGGER.debug("Initializing connection to: {}", address.getHostString());
             Socket plainSocket = new Socket();
             plainSocket.connect(address, 15000);
             plainSocket.setSoTimeout(15000);
@@ -164,7 +164,7 @@ class Connection {
             this.socket = sslSocket;
             this.in = new DataInputStream(sslSocket.getInputStream());
             this.out = new DataOutputStream(sslSocket.getOutputStream());
-            LOGGER.info("Connection established with: {}", address);
+            LOGGER.debug("Connection established with: {}", address.getHostString());
         } catch (Exception e) {
             throw new IOException("Failed to establish connection", e);
         }

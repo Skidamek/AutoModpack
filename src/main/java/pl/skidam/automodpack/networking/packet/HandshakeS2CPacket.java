@@ -143,7 +143,6 @@ public class HandshakeS2CPacket {
             PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
             outBuf.writeString(packetContentJson, Short.MAX_VALUE);
             packetSender.sendPacket(DATA, outBuf);
-            LOGGER.info("Sent data packet to {} {}", profile.getName(), dataPacket);
         } catch (Exception e) {
             LOGGER.error("Error while handling handshake for {}", profile.getName(), e);
         }

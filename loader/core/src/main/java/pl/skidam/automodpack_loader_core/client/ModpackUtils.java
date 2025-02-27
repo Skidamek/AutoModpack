@@ -302,7 +302,6 @@ public class ModpackUtils {
 
         String selectedModpack = clientConfig.selectedModpack;
         String selectedModpackLink = clientConfig.installedModpacks.get(selectedModpack);
-//        LOGGER.info("Selected modpack link: {}", selectedModpackLink);
 
         InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
 
@@ -327,9 +326,6 @@ public class ModpackUtils {
         ConfigTools.save(clientConfigFile, clientConfig);
         ModpackUtils.addModpackToList(modpackToSelect, modpackAddressToSelect);
 
-//        LOGGER.warn("modpackToSelect: {}, selectedModpack: {}", modpackToSelect, modpackToSelect);
-//        LOGGER.warn("modpackAddressToSelect: {}, selectedModpackAddress: {}", modpackAddressToSelect, selectedModpackAddress);
-
         return !Objects.equals(modpackToSelect, selectedModpack) || !Objects.equals(modpackAddressToSelect, selectedModpackAddress);
     }
 
@@ -352,7 +348,7 @@ public class ModpackUtils {
         }
 
         Map<String, String> modpacks = new HashMap<>(clientConfig.installedModpacks);
-        String addressString = address.getAddress().getHostAddress() + ":" + address.getPort();
+        String addressString = address.getHostString() + ":" + address.getPort();
         modpacks.put(modpackName, addressString);
         clientConfig.installedModpacks = modpacks;
 
@@ -362,7 +358,7 @@ public class ModpackUtils {
     // Returns modpack name formatted for path or url if server doesn't provide modpack name
     public static Path getModpackPath(InetSocketAddress address, String modpackName) {
 
-        String strAddress = address.getAddress().getHostAddress() + ":" + address.getPort();
+        String strAddress = address.getHostString() + ":" + address.getPort();
         String correctedName = strAddress;
 
         if (FileInspection.isInValidFileName(strAddress)) {
