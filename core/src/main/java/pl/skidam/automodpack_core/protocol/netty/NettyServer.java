@@ -131,8 +131,6 @@ public class NettyServer {
                     .localAddress(address, port)
                     .bind()
                     .syncUninterruptibly();
-
-            System.out.println("Netty file server started on port " + port);
         } catch (Exception e) {
             LOGGER.error("Failed to start Netty server", e);
             return Optional.empty();
