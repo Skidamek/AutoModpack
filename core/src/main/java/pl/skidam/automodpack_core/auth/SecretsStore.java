@@ -40,8 +40,8 @@ public class SecretsStore {
         }
 
         public void save(String key, Secrets.Secret secret) {
-            if (key == null || key.isBlank() || secret == null)
-                throw new IllegalArgumentException("Key cannot be null or blank");
+            if (key == null || key.isBlank() || secret == null || secret.secret().isBlank())
+                throw new IllegalArgumentException("Key or secret cannot be null or blank");
             load();
             cache.put(key, secret);
             if (db == null) {

@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import io.netty.util.AttributeKey;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
@@ -35,8 +34,6 @@ public class NetUtils {
     public static final byte REFRESH_REQUEST_TYPE = 0x03;
     public static final byte END_OF_TRANSMISSION = 0x04;
     public static final byte ERROR = 0x05;
-
-    public static final AttributeKey<Boolean> USE_COMPRESSION = AttributeKey.valueOf("useCompression");
 
     public static String getFingerprint(X509Certificate cert, String secret) throws CertificateEncodingException {
         byte[] sharedSecret = secret.getBytes();

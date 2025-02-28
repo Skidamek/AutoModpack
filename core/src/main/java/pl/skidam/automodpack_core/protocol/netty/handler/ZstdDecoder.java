@@ -4,7 +4,7 @@ import com.github.luben.zstd.Zstd;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
-import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.util.List;
 
@@ -12,7 +12,7 @@ public class ZstdDecoder extends ByteToMessageDecoder {
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-        if (!ctx.pipeline().channel().attr(NetUtils.USE_COMPRESSION).get()) {
+        if (!ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).get()) {
             if (in.readableBytes() < 4) {
                 return;
             }

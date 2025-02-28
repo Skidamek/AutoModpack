@@ -29,6 +29,8 @@ public class DataC2SPacket {
             DataPacket dataPacket = DataPacket.fromJson(serverResponse);
             String packetAddress = dataPacket.address;
             Integer packetPort = dataPacket.port;
+            String modpackName = dataPacket.modpackName;
+            Secrets.Secret secret = dataPacket.secret;
             boolean modRequired = dataPacket.modRequired;
 
             if (modRequired) {
@@ -52,17 +54,15 @@ public class DataC2SPacket {
                 LOGGER.info("Received address packet from server! {} Attached port: {}", addressString, port);
             }
 
-            Secrets.Secret secret = dataPacket.secret;
             Boolean needsDisconnecting = null;
 
-            Path modpackDir = ModpackUtils.getModpackPath(address, dataPacket.modpackName);
+            Path modpackDir = ModpackUtils.getModpackPath(address, modpackName);
             var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(address, secret);
 
             if (optionalServerModpackContent.isPresent()) {
                 boolean update = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
                 if (update) {
-                    SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
                     disconnectImmediately(handler);
                     new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), address, secret, modpackDir);
                     needsDisconnecting = true;
@@ -79,7 +79,9 @@ public class DataC2SPacket {
                 }
             }
 
-            SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
+            if (clientConfig.selectedModpack != null && !clientConfig.selectedModpack.isBlank()) {
+                SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
+            }
 
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
             response.writeString(String.valueOf(needsDisconnecting), Short.MAX_VALUE);
@@ -87,6 +89,8 @@ public class DataC2SPacket {
             return CompletableFuture.completedFuture(response);
         } catch (Exception e) {
             LOGGER.error("Error while handling data packet", e);
+            PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
+            response.writeString("null", Short.MAX_VALUE);
             return CompletableFuture.completedFuture(new PacketByteBuf(Unpooled.buffer()));
         }
     }

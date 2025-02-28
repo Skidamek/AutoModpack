@@ -5,7 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
-import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.util.List;
 
@@ -46,7 +46,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 //                // Use compression only for non-local connections
 //                ctx.pipeline().channel().attr(NetUtils.USE_COMPRESSION).set(!isLocalConnection);
 
-                ctx.pipeline().channel().attr(NetUtils.USE_COMPRESSION).set(true);
+                ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
 
                 // Set up the pipeline for our protocol
                 ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));

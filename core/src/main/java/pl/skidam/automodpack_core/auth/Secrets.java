@@ -10,7 +10,38 @@ import java.util.Base64;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class Secrets {
-    public record Secret(String secret, String fingerprint, Long timestamp) { }
+    public static class Secret { // unfortunately has to be a class instead of record because of older gson version in 1.18 mc
+        private String secret; // and these also can't be final
+        private String fingerprint;
+        private Long timestamp;
+
+        public Secret(String secret, String fingerprint, Long timestamp) {
+            this.secret = secret;
+            this.fingerprint = fingerprint;
+            this.timestamp = timestamp;
+        }
+
+        public String secret() {
+            return secret;
+        }
+
+        public String fingerprint() {
+            return fingerprint;
+        }
+
+        public Long timestamp() {
+            return timestamp;
+        }
+
+        @Override
+        public String toString() {
+            return "Secret{" +
+                    "secret='" + secret + '\'' +
+                    ", fingerprint='" + fingerprint + '\'' +
+                    ", timestamp=" + timestamp +
+                    '}';
+        }
+    }
 
     public static Secret generateSecret() {
         SecureRandom random = new SecureRandom();

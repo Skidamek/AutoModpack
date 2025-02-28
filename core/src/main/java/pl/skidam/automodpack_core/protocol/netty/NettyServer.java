@@ -11,6 +11,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
+import io.netty.util.AttributeKey;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
@@ -30,6 +31,7 @@ import java.util.*;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class NettyServer {
+    public static final AttributeKey<Boolean> USE_COMPRESSION = AttributeKey.valueOf("useCompression");
     private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
     private ChannelFuture serverChannel;

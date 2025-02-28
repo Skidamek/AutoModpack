@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -400,6 +401,7 @@ public class ModpackUpdater {
     // returns true if restart is required
     private boolean applyModpack() throws Exception {
         ModpackUtils.selectModpack(modpackDir, modpackAddress, newDownloadedFiles);
+        SecretsStore.saveClientSecret(clientConfig.selectedModpack, modpackSecret);
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
