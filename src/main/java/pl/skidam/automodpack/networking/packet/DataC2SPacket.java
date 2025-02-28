@@ -52,10 +52,7 @@ public class DataC2SPacket {
                 LOGGER.info("Received address packet from server! {} Attached port: {}", addressString, port);
             }
 
-            // save secret
             Secrets.Secret secret = dataPacket.secret;
-            SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
-
             Boolean needsDisconnecting = null;
 
             Path modpackDir = ModpackUtils.getModpackPath(address, dataPacket.modpackName);
@@ -65,14 +62,15 @@ public class DataC2SPacket {
                 boolean update = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
                 if (update) {
+                    SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
                     disconnectImmediately(handler);
                     new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), address, secret, modpackDir);
                     needsDisconnecting = true;
                 } else {
                     boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, address, Set.of());
                     if (selectedModpackChanged) {
+                        SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
                         disconnectImmediately(handler);
-                        // Its needed since newly selected modpack may not be loaded
                         new ReLauncher(modpackDir, UpdateType.SELECT).restart(false);
                         needsDisconnecting = true;
                     } else {
@@ -80,6 +78,8 @@ public class DataC2SPacket {
                     }
                 }
             }
+
+            SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
 
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
             response.writeString(String.valueOf(needsDisconnecting), Short.MAX_VALUE);
