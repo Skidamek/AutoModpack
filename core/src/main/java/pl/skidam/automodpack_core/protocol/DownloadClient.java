@@ -17,6 +17,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.GlobalVariables.modpackContentTempFile;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 /**
@@ -234,7 +235,7 @@ class Connection {
                 byte[] payload = baos.toByteArray();
 
                 writeProtocolMessage(payload);
-                return readFileResponse(null, null);
+                return readFileResponse(modpackContentTempFile, null);
             } catch (Exception e) {
                 exception = e;
                 throw new CompletionException(e);

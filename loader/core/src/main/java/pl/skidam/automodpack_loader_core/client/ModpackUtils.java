@@ -394,10 +394,14 @@ public class ModpackUtils {
         DownloadClient client = null;
         try {
             client = new DownloadClient(address, secret, 1);
-            var future = client.downloadFile(new byte[0], null, null);
+            var future = client.downloadFile(new byte[0], modpackContentTempFile, null);
             var result = future.get();
             if (result instanceof List<?> list) {
                 return parseStreamToModpack((List<byte[]>) list);
+            } else if (result instanceof Path path) {
+                var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
+                Files.deleteIfExists(path);
+                return content;
             }
 
             return Optional.empty();
@@ -426,6 +430,10 @@ public class ModpackUtils {
             var result = future.get();
             if (result instanceof List<?> list) {
                 return parseStreamToModpack((List<byte[]>) list);
+            } else if (result instanceof Path path) {
+                var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
+                Files.deleteIfExists(path);
+                return content;
             }
 
             return Optional.empty();

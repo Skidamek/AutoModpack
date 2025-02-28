@@ -44,6 +44,7 @@ public class GlobalVariables {
 
 
     // Client
+    public static final Path modpackContentTempFile = automodpackDir.resolve("automodpack-content.json.temp");
     public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
     public static final Path clientSecretsFile = privateDir.resolve("automodpack-client-secrets.json");
     public static final Path modpacksDir = automodpackDir.resolve("modpacks");
