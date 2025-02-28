@@ -14,6 +14,7 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
@@ -439,7 +440,6 @@ public class ModpackUtils {
     }
 
     public static Optional<Jsons.ModpackContentFields> parseStreamToModpack(List<byte[]> rawBytes) {
-
         String response = null;
 
         // get list of bytes[] to one byte[] object
@@ -451,7 +451,7 @@ public class ModpackUtils {
             pos += b.length;
         }
 
-        try (InputStreamReader isr = new InputStreamReader(new ByteArrayInputStream(bytes))) {
+        try (InputStreamReader isr = new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)) {
             JsonElement element = JsonParser.parseReader(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
             if (element != null && !element.isJsonArray()) {
                 JsonObject obj = element.getAsJsonObject();

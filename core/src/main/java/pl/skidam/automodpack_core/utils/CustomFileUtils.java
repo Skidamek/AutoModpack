@@ -6,8 +6,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -60,12 +58,6 @@ public class CustomFileUtils {
         }
 
         path = path.replace('\\', '/');
-
-        // windows... should fix issues with encoding
-        if (System.getProperty("os.name").toLowerCase().contains("windows")) {
-            Charset win1252 = Charset.forName("windows-1252");
-            path = new String(path.getBytes(win1252), StandardCharsets.UTF_8);
-        }
 
         if (path.startsWith("/")) {
             path = path.substring(1);
