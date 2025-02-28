@@ -27,7 +27,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 public class FileInspection {
 
     public static boolean isMod(Path file) {
-        return getModID(file) != null || hasSpecificServices(file);
+        return getModID(file) != null || hasSpecificServices(file) || isFMLMod(file);
     }
 
     public record Mod(String modID, String hash, Collection<String> providesIDs, String modVersion, Path modPath, LoaderManagerService.EnvironmentType environmentType, Collection<String> dependencies) {}
@@ -126,6 +126,29 @@ public class FileInspection {
             }
         } catch (IOException e) {
             e.printStackTrace();
+        }
+
+        return false;
+    }
+
+    // Check for /META-INF/MANIFEST.MF, if FMLModType entry exists
+    public static boolean isFMLMod(Path file) {
+        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
+            return false;
+        }
+
+        try (ZipFile zipFile = new ZipFile(file.toFile())) {
+            ZipEntry entry = zipFile.getEntry("META-INF/MANIFEST.MF");
+            if (entry == null) {
+                return false;
+            }
+
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(zipFile.getInputStream(entry)))) {
+                return reader.lines().anyMatch(line -> line.startsWith("FMLModType:"));
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error reading manifest for {}: {}", file, e.getMessage());
         }
 
         return false;
