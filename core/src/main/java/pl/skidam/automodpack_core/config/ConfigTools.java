@@ -99,11 +99,11 @@ public class ConfigTools {
         try {
             if (Files.isRegularFile(modpackContentFile)) {
                 String json = Files.readString(modpackContentFile);
+                LOGGER.warn("Reading modpack content from file: {} - len: {}, Json: {}", modpackContentFile.toAbsolutePath().normalize(), Files.size(modpackContentFile), json);
                 return GSON.fromJson(json, Jsons.ModpackContentFields.class);
             }
         } catch (Exception e) {
-            LOGGER.error("Couldn't load modpack content!");
-            e.printStackTrace();
+            LOGGER.error("Couldn't load modpack content! {}", modpackContentFile.toAbsolutePath().normalize(), e);
         }
         return null;
     }

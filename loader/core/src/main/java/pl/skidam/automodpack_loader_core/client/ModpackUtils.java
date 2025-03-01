@@ -1,8 +1,5 @@
 package pl.skidam.automodpack_loader_core.client;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -14,11 +11,11 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 import java.io.*;
 import java.net.*;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.Future;
+import java.util.function.Function;
 
-import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModpackUtils {
@@ -383,60 +380,41 @@ public class ModpackUtils {
     }
 
     public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(InetSocketAddress address, Secrets.Secret secret) {
-
-        if (secret == null)
-            return Optional.empty();
-
-        if (address == null)
-            throw new IllegalArgumentException("Address is null");
-
-
-        DownloadClient client = null;
-        try {
-            client = new DownloadClient(address, secret, 1);
-            var future = client.downloadFile(new byte[0], modpackContentTempFile, null);
-            var result = future.get();
-            if (result instanceof List<?> list) {
-                return parseStreamToModpack((List<byte[]>) list);
-            } else if (result instanceof Path path) {
-                var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
-                Files.deleteIfExists(path);
-                return content;
-            }
-
-            return Optional.empty();
-        } catch (Exception e) {
-            LOGGER.error("Error while getting server modpack content", e);
-        } finally {
-            if (client != null)
-                client.close();
-        }
-
-        return Optional.empty();
+        return fetchModpackContent(address, secret,
+                (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
+                "Fetched");
     }
 
     public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(InetSocketAddress address, Secrets.Secret secret, byte[][] fileHashes) {
+        return fetchModpackContent(address, secret,
+                (client) -> client.requestRefresh(fileHashes, modpackContentTempFile),
+                "Re-fetched");
+    }
+
+    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(InetSocketAddress address, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType) {
         if (secret == null)
             return Optional.empty();
-
         if (address == null)
             throw new IllegalArgumentException("Address is null");
-
 
         DownloadClient client = null;
         try {
             client = new DownloadClient(address, secret, 1);
-            var future = client.requestRefresh(fileHashes);
-            var result = future.get();
-            if (result instanceof List<?> list) {
-                return parseStreamToModpack((List<byte[]>) list);
-            } else if (result instanceof Path path) {
-                var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
-                Files.deleteIfExists(path);
-                return content;
+            var future = operation.apply(client);
+            Path path = future.get();
+            var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
+            LOGGER.info("{} the modpack content: {} - {}", fetchType, path.toAbsolutePath().normalize(), content);
+            if (path.toAbsolutePath().normalize().equals(modpackContentTempFile.toAbsolutePath().normalize())) {
+                if (Files.deleteIfExists(path)) {
+                    LOGGER.info("Deleted temporary modpack content file: {}", path);
+                }
             }
 
-            return Optional.empty();
+            if (content.isPresent() && potentiallyMalicious(content.get())) {
+                return Optional.empty();
+            }
+
+            return content;
         } catch (Exception e) {
             LOGGER.error("Error while getting server modpack content", e);
         } finally {
@@ -445,52 +423,6 @@ public class ModpackUtils {
         }
 
         return Optional.empty();
-    }
-
-    public static Optional<Jsons.ModpackContentFields> parseStreamToModpack(List<byte[]> rawBytes) {
-        String response = null;
-
-        // get list of bytes[] to one byte[] object
-        long len = rawBytes.stream().mapToLong(b -> b.length).sum();
-        byte[] bytes = new byte[(int) len];
-        int pos = 0;
-        for (byte[] b : rawBytes) {
-            System.arraycopy(b, 0, bytes, pos, b.length);
-            pos += b.length;
-        }
-
-        try (InputStreamReader isr = new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8)) {
-            JsonElement element = JsonParser.parseReader(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
-            if (element != null && !element.isJsonArray()) {
-                JsonObject obj = element.getAsJsonObject();
-                response = obj.toString();
-            }
-        } catch (Exception e) {
-            LOGGER.error("Couldn't parse modpack content", e);
-        }
-
-        if (response == null) {
-            LOGGER.error("Couldn't parse modpack content");
-            return Optional.empty();
-        }
-
-        Jsons.ModpackContentFields serverModpackContent = GSON.fromJson(response, Jsons.ModpackContentFields.class);
-
-        if (serverModpackContent == null) {
-            LOGGER.error("Couldn't parse modpack content");
-            return Optional.empty();
-        }
-
-        if (serverModpackContent.list.isEmpty()) {
-            LOGGER.error("Modpack content is empty!");
-            return Optional.empty();
-        }
-
-        if (potentiallyMalicious(serverModpackContent)) {
-            return Optional.empty();
-        }
-
-        return Optional.of(serverModpackContent);
     }
 
     // check if modpackContent is valid/isn't malicious

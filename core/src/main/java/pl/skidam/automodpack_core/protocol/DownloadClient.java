@@ -17,7 +17,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.GlobalVariables.modpackContentTempFile;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 /**
@@ -55,7 +54,7 @@ public class DownloadClient {
      * Downloads a file identified by its SHA-1 hash to the given destination.
      * Returns a CompletableFuture that completes when the download finishes.
      */
-    public CompletableFuture<Object> downloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
+    public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
         Connection conn = getFreeConnection();
         return conn.sendDownloadFile(fileHash, destination, chunkCallback);
     }
@@ -63,9 +62,9 @@ public class DownloadClient {
     /**
      * Sends a refresh request with the given file hashes.
      */
-    public CompletableFuture<Object> requestRefresh(byte[][] fileHashes) {
+    public CompletableFuture<Path> requestRefresh(byte[][] fileHashes, Path destination) {
         Connection conn = getFreeConnection();
-        return conn.sendRefreshRequest(fileHashes);
+        return conn.sendRefreshRequest(fileHashes, destination);
     }
 
     /**
@@ -182,7 +181,11 @@ class Connection {
     /**
      * Sends a file request over this connection.
      */
-    public CompletableFuture<Object> sendDownloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
+    public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
+        if (destination == null) {
+            throw new IllegalArgumentException("Destination cannot be null");
+        }
+
         return CompletableFuture.supplyAsync(() -> {
             Exception exception = null;
             try {
@@ -212,7 +215,7 @@ class Connection {
     /**
      * Sends a refresh request over this connection.
      */
-    public CompletableFuture<Object> sendRefreshRequest(byte[][] fileHashes) {
+    public CompletableFuture<Path> sendRefreshRequest(byte[][] fileHashes, Path destination) {
         return CompletableFuture.supplyAsync(() -> {
             Exception exception = null;
             try {
@@ -235,7 +238,7 @@ class Connection {
                 byte[] payload = baos.toByteArray();
 
                 writeProtocolMessage(payload);
-                return readFileResponse(modpackContentTempFile, null);
+                return readFileResponse(destination, null);
             } catch (Exception e) {
                 exception = e;
                 throw new CompletionException(e);
@@ -311,7 +314,7 @@ class Connection {
      *   - One or more data frames containing file data until the total file size is reached.
      *   - A final frame: [protocolVersion][END_OF_TRANSMISSION]
      */
-    private Object readFileResponse(Path destination, IntCallback chunkCallback) throws IOException {
+    private Path readFileResponse(Path destination, IntCallback chunkCallback) throws IOException {
         // Header frame
         byte[] headerFrame = readProtocolMessageFrame();
         try (DataInputStream headerIn = new DataInputStream(new ByteArrayInputStream(headerFrame))) {
@@ -326,16 +329,15 @@ class Connection {
             }
 
             long receivedBytes = 0;
-            OutputStream fos = (destination != null) ? new FileOutputStream(destination.toFile()) : null;
-            List<byte[]> rawData = (fos == null) ? new LinkedList<>() : null;
+            OutputStream fos = new FileOutputStream(destination.toFile()) ;
 
             if (messageType == END_OF_TRANSMISSION) {
-                if (fos != null) fos.close();
-                return (rawData != null) ? rawData : destination;
+                fos.close();
+                return destination;
             }
 
             if (messageType != FILE_RESPONSE_TYPE) {
-                if (fos != null) fos.close();
+                fos.close();
                 throw new IOException("Unexpected message type: " + messageType);
             }
 
@@ -346,12 +348,7 @@ class Connection {
                 byte[] dataFrame = readProtocolMessageFrame();
                 int toWrite = Math.min(dataFrame.length, (int)(expectedFileSize - receivedBytes));
 
-                if (fos != null) {
-                    fos.write(dataFrame, 0, toWrite);
-                } else {
-                    byte[] chunk = Arrays.copyOfRange(dataFrame, 0, toWrite);
-                    rawData.add(chunk);
-                }
+                fos.write(dataFrame, 0, toWrite);
                 receivedBytes += toWrite;
 
                 if (chunkCallback != null) {
@@ -359,7 +356,7 @@ class Connection {
                 }
             }
 
-            if (fos != null) fos.close();
+            fos.close();
 
             // Read EOT frame
             byte[] eotFrame = readProtocolMessageFrame();
@@ -373,7 +370,7 @@ class Connection {
                 }
             }
 
-            return (rawData != null) ? rawData : destination;
+            return destination;
         }
     }
 

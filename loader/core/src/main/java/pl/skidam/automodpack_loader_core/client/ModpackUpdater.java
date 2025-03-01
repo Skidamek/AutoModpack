@@ -405,8 +405,7 @@ public class ModpackUpdater {
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
-            LOGGER.error("Modpack content is null");
-            return false;
+            throw new IllegalStateException("Failed to load modpack content"); // Something gone very wrong...
         }
 
         if (serverModpackContent != null) {

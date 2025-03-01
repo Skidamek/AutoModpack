@@ -131,7 +131,7 @@ public class DownloadManager {
                 try {
                     downloadTask(hashAndPath, queuedDownload);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    LOGGER.error("Error while downloading file - {}", queuedDownload.file.getFileName(), e);
                 }
             }, DOWNLOAD_EXECUTOR);
 
