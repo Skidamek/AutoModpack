@@ -405,12 +405,7 @@ public class ModpackUtils {
             var future = operation.apply(client);
             Path path = future.get();
             var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
-            LOGGER.info("{} the modpack content: {} - {}", fetchType, path.toAbsolutePath().normalize(), content);
-            if (path.toAbsolutePath().normalize().equals(modpackContentTempFile.toAbsolutePath().normalize())) {
-                if (Files.deleteIfExists(path)) {
-                    LOGGER.info("Deleted temporary modpack content file: {}", path);
-                }
-            }
+            Files.deleteIfExists(modpackContentTempFile);
 
             if (content.isPresent() && potentiallyMalicious(content.get())) {
                 return Optional.empty();

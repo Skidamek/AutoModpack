@@ -21,6 +21,7 @@ import java.util.stream.Stream;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
+// TODO: clean up this mess
 public class ModpackUpdater {
     public Changelogs changelogs = new Changelogs();
     public DownloadManager downloadManager;
@@ -280,8 +281,12 @@ public class ModpackUpdater {
                 LOGGER.info("Finished downloading files in {}ms", System.currentTimeMillis() - startFetching);
             }
 
-            downloadManager.cancelAllAndShutdown();
+            if (downloadManager.isCanceled()) {
+                LOGGER.warn("Download canceled");
+                return;
+            }
 
+            downloadManager.cancelAllAndShutdown();
             totalBytesToDownload = 0;
 
             Map<String, String> hashesToRefresh = new HashMap<>(); // File name, hash
@@ -348,13 +353,19 @@ public class ModpackUpdater {
                     }
 
                     downloadManager.joinAll();
+
+                    if (downloadManager.isCanceled()) {
+                        LOGGER.warn("Download canceled");
+                        return;
+                    }
+
                     downloadManager.cancelAllAndShutdown();
 
                     LOGGER.info("Finished refreshed downloading files in {}ms", System.currentTimeMillis() - startFetching);
                 }
             }
 
-            LOGGER.info("Done, saving {}, Json: {}", modpackContentFile.toAbsolutePath().normalize(), modpackContentJson);
+            LOGGER.info("Done, saving {}", modpackContentFile);
 
             // Downloads completed
             Files.writeString(modpackContentFile, modpackContentJson);

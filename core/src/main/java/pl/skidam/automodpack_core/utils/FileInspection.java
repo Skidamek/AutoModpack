@@ -21,13 +21,14 @@ import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class FileInspection {
 
     public static boolean isMod(Path file) {
-        return getModID(file) != null || hasSpecificServices(file) || isFMLMod(file);
+        return getModID(file) != null || hasSpecificServices(file);
     }
 
     public record Mod(String modID, String hash, Collection<String> providesIDs, String modVersion, Path modPath, LoaderManagerService.EnvironmentType environmentType, Collection<String> dependencies) {}
@@ -103,52 +104,59 @@ public class FileInspection {
         }
     }
 
+    private static final Set<String> services = Set.of(
+            "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
+            "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
+            "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
+            "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
+    );
+
     // Checks for neo/forge mod locators
+    // TODO: check nested jars recursively if needed
     public static boolean hasSpecificServices(Path file) {
         if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
             return false;
         }
 
-        String[] services = {
-                "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
-                "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
-                "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
-                "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
-                "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
-                "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
-        };
-
         try (ZipFile zipFile = new ZipFile(file.toFile())) {
+            // Direct lookup for known service entries
             for (String service : services) {
-                if (zipFile.getEntry(service) != null) {
+                ZipEntry entry = zipFile.getEntry(service);
+                if (entry != null) {
                     return true;
                 }
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
 
-        return false;
-    }
-
-    // Check for /META-INF/MANIFEST.MF, if FMLModType entry exists
-    public static boolean isFMLMod(Path file) {
-        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
-            return false;
-        }
-
-        try (ZipFile zipFile = new ZipFile(file.toFile())) {
-            ZipEntry entry = zipFile.getEntry("META-INF/MANIFEST.MF");
-            if (entry == null) {
+            String jarjarPrefix = "META-INF/jarjar/";
+            ZipEntry jarjarEntry = zipFile.getEntry(jarjarPrefix);
+            if (jarjarEntry == null) {
                 return false;
             }
 
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(zipFile.getInputStream(entry)))) {
-                return reader.lines().anyMatch(line -> line.startsWith("FMLModType:"));
+            // Check nested JARs in META-INF/jarjar/
+            for (ZipEntry entry : Collections.list(zipFile.entries())) {
+                String entryName = entry.getName();
+
+                if (!entry.isDirectory() && entryName.startsWith(jarjarPrefix) && entryName.endsWith(".jar")) {
+                    try (InputStream inputStream = zipFile.getInputStream(entry);
+                         ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+
+                        ZipEntry nestedEntry;
+                        while ((nestedEntry = zipInputStream.getNextEntry()) != null) {
+                            if (services.contains(nestedEntry.getName())) {
+                                return true;
+                            }
+                        }
+                    } catch (IOException e) {
+                        LOGGER.error("Error reading nested JAR in {}: {}", file, e.getMessage());
+                    }
+                }
             }
         } catch (IOException e) {
-            LOGGER.error("Error reading manifest for {}: {}", file, e.getMessage());
+            LOGGER.error("Error examining JAR file {}: {}", file, e.getMessage());
         }
 
         return false;

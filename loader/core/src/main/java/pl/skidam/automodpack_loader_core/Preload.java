@@ -169,10 +169,20 @@ public class Preload {
             ConfigTools.save(clientConfigFile, clientConfig);
         }
 
+        try {
+            Files.createDirectories(privateDir);
+            if (Files.exists(privateDir) && System.getProperty("os.name").toLowerCase().contains("win")) {
+                Files.setAttribute(privateDir, "dos:hidden", true);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to create private directory", e);
+        }
+
+
         if (serverConfig == null || clientConfig == null) {
             throw new RuntimeException("Failed to load config!");
         }
 
-        LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
+        LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
     }
 }

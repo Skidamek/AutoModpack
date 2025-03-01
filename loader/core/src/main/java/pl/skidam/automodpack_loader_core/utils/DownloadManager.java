@@ -22,6 +22,7 @@ public class DownloadManager {
     private static final int BUFFER_SIZE = 128 * 1024;
     private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
     private DownloadClient downloadClient = null;
+    private boolean cancelled = false;
     private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
     public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
     private long bytesDownloaded = 0;
@@ -242,7 +243,12 @@ public class DownloadManager {
         return !DOWNLOAD_EXECUTOR.isShutdown();
     }
 
+    public boolean isCanceled() {
+        return cancelled;
+    }
+
     public void cancelAllAndShutdown() {
+        cancelled = true;
         queuedDownloads.clear();
         downloadsInProgress.forEach((url, downloadData) -> {
             downloadData.future.cancel(true);

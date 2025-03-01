@@ -99,7 +99,6 @@ public class ConfigTools {
         try {
             if (Files.isRegularFile(modpackContentFile)) {
                 String json = Files.readString(modpackContentFile);
-                LOGGER.warn("Reading modpack content from file: {} - len: {}, Json: {}", modpackContentFile.toAbsolutePath().normalize(), Files.size(modpackContentFile), json);
                 return GSON.fromJson(json, Jsons.ModpackContentFields.class);
             }
         } catch (Exception e) {
