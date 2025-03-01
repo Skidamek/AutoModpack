@@ -299,13 +299,15 @@ public class ModpackUtils {
         final String modpackToSelect = modpackDirToSelect.getFileName().toString();
         String selectedModpack = clientConfig.selectedModpack;
 
-        // Save current editable files
-        Path selectedModpackDir = modpacksDir.resolve(selectedModpack);
-        Path selectedModpackContentFile = selectedModpackDir.resolve(hostModpackContentFile.getFileName());
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(selectedModpackContentFile);
-        if (modpackContent != null) {
-            Set<String> editableFiles = getEditableFiles(modpackContent.list);
-            ModpackUtils.preserveEditableFiles(selectedModpackDir, editableFiles, newDownloadedFiles);
+        if (selectedModpack != null && !selectedModpack.isBlank()) {
+            // Save current editable files
+            Path selectedModpackDir = modpacksDir.resolve(selectedModpack);
+            Path selectedModpackContentFile = selectedModpackDir.resolve(hostModpackContentFile.getFileName());
+            Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(selectedModpackContentFile);
+            if (modpackContent != null) {
+                Set<String> editableFiles = getEditableFiles(modpackContent.list);
+                ModpackUtils.preserveEditableFiles(selectedModpackDir, editableFiles, newDownloadedFiles);
+            }
         }
 
         // Copy editable files from modpack to select
