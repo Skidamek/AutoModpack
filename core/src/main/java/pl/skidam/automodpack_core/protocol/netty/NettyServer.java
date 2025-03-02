@@ -19,7 +19,6 @@ import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.ObservableMap;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -108,8 +107,9 @@ public class NettyServer {
             }
 
             int port = serverConfig.hostPort;
-            InetAddress address = new InetSocketAddress(port).getAddress();
-            LOGGER.info("Starting modpack host server on {}:{}", address, port);
+            String localIp = serverConfig.hostLocalIp;
+            InetSocketAddress bindAddress = new InetSocketAddress(localIp, port);
+            LOGGER.info("Starting modpack host server on {}:{}", bindAddress, port);
 
             Class<? extends ServerChannel> socketChannelClass;
             MultithreadEventLoopGroup eventLoopGroup;
@@ -132,7 +132,7 @@ public class NettyServer {
                         }
                     })
                     .group(eventLoopGroup)
-                    .localAddress(address, port)
+                    .localAddress(bindAddress)
                     .bind()
                     .syncUninterruptibly();
         } catch (Exception e) {
