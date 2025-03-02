@@ -39,7 +39,7 @@ public class SecretsStore {
             return cache.get(key);
         }
 
-        public void save(String key, Secrets.Secret secret) {
+        public void save(String key, Secrets.Secret secret) throws IllegalArgumentException {
             if (key == null || key.isBlank() || secret == null || secret.secret().isBlank())
                 throw new IllegalArgumentException("Key or secret cannot be null or blank");
             load();
@@ -75,7 +75,7 @@ public class SecretsStore {
         return clientSecrets.get(modpack);
     }
 
-    public static void saveClientSecret(String modpack, Secrets.Secret secret) {
+    public static void saveClientSecret(String modpack, Secrets.Secret secret) throws IllegalArgumentException {
         clientSecrets.save(modpack, secret);
     }
 }

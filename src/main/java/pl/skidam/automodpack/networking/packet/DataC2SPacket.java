@@ -15,11 +15,13 @@ import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.net.InetSocketAddress;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
 public class DataC2SPacket {
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient minecraftClient, ClientLoginNetworkHandler handler, PacketByteBuf buf) {
@@ -68,6 +70,13 @@ public class DataC2SPacket {
                     needsDisconnecting = true;
                 } else {
                     boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, address, Set.of());
+
+                    // save latest modpack content
+                    var modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
+                    if (Files.exists(modpackContentFile)) {
+                        Files.writeString(modpackContentFile, GSON.toJson(optionalServerModpackContent.get()));
+                    }
+
                     if (selectedModpackChanged) {
                         SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
                         disconnectImmediately(handler);

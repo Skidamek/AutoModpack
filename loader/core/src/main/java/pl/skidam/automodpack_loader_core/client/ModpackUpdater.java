@@ -412,7 +412,11 @@ public class ModpackUpdater {
     // returns true if restart is required
     private boolean applyModpack() throws Exception {
         ModpackUtils.selectModpack(modpackDir, modpackAddress, newDownloadedFiles);
-        SecretsStore.saveClientSecret(clientConfig.selectedModpack, modpackSecret);
+        try { // try catch this error there because we don't want to stop the whole method just because of that
+            SecretsStore.saveClientSecret(clientConfig.selectedModpack, modpackSecret);
+        } catch (IllegalArgumentException e) {
+            LOGGER.error("Failed to save client secret", e);
+        }
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {

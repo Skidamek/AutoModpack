@@ -3,7 +3,6 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
@@ -168,13 +167,12 @@ public class SelfUpdater {
 
             newAutomodpackJar = AUTOMODPACK_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
 
-            // preload classes
-            new ReLauncher();
             var updateType = UpdateType.AUTOMODPACK;
+            var relauncher = new ReLauncher(updateType);
 
             CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
             CustomFileUtils.forceDelete(automodpackUpdateJar);
-            new ReLauncher(updateType).restart(true, () -> {
+            relauncher.restart(true, () -> {
                 CustomFileUtils.forceDelete(AUTOMODPACK_JAR);
                 LOGGER.info("Successfully updated AutoModpack!");
             });

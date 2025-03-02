@@ -2,7 +2,6 @@ package pl.skidam.automodpack_loader_core;
 
 import pl.skidam.automodpack_core.callbacks.Callback;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
-import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -46,28 +45,42 @@ public class ReLauncher {
     }
 
     public void restart(boolean restartInPreload, Callback... callbacks) {
-        if (preload && !restartInPreload) return;
+        if (preload && !restartInPreload) {
+            runCallbacks(callbacks);
+            return;
+        }
 
         boolean isClient = LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT;
         boolean isHeadless = GraphicsEnvironment.isHeadless();
 
         if (isClient) {
-            if (updateType != null && new ScreenManager().getScreenString().isPresent() && !new ScreenManager().getScreenString().get().toLowerCase().contains("restartscreen")) {
-                new ScreenManager().restart(modpackDir, updateType, changelogs);
-                return;
-            }
-
-            if (preload) {
-                if (isHeadless) {
-                    LOGGER.info("Please restart the game to apply updates!");
-                } else {
-                    new Windows().restartWindow(updateMessage, callbacks);
-                }
-            }
+            handleClientRestart(callbacks, isHeadless);
         } else {
-            LOGGER.info("Please restart the server to apply updates!");
+            handleServerRestart(callbacks);
+        }
+    }
+
+    private void handleClientRestart(Callback[] callbacks, boolean isHeadless) {
+        if (updateType != null && new ScreenManager().getScreenString().isPresent()) {
+            new ScreenManager().restart(modpackDir, updateType, changelogs);
+        } else if (preload) {
+            if (isHeadless) {
+                LOGGER.info("Please restart the game to apply updates!");
+            } else {
+                new Windows().restartWindow(updateMessage, callbacks);
+            }
         }
 
+        runCallbacks(callbacks);
+    }
+
+    private void handleServerRestart(Callback[] callbacks) {
+        LOGGER.info("Please restart the server to apply updates!");
+        runCallbacks(callbacks);
+        System.exit(0);
+    }
+
+    private void runCallbacks(Callback[] callbacks) {
         for (Callback callback : callbacks) {
             try {
                 callback.run();
@@ -75,7 +88,5 @@ public class ReLauncher {
                 e.printStackTrace();
             }
         }
-
-        System.exit(0);
     }
 }

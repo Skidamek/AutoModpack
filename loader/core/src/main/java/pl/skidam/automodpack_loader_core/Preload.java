@@ -58,6 +58,21 @@ public class Preload {
             return;
         }
 
+        // Check if link is old http link, and parse it to new format (beta 24 -> beta 25)
+        if (selectedModpackLink.startsWith("http") && selectedModpackLink.contains("/automodpack")) {
+            var newSelectedModpackLink = selectedModpackLink;
+            newSelectedModpackLink = newSelectedModpackLink.replace("http://", "");
+            newSelectedModpackLink = newSelectedModpackLink.replace("https://", "");
+            String[] split = newSelectedModpackLink.split("/automodpack");
+            newSelectedModpackLink = split[0];
+            if (newSelectedModpackLink != null && !newSelectedModpackLink.isBlank()) {
+                LOGGER.info("Updated modpack link to new format: {} -> {}", selectedModpackLink, newSelectedModpackLink);
+                clientConfig.installedModpacks.put(clientConfig.selectedModpack, newSelectedModpackLink);
+                ConfigTools.save(clientConfigFile, clientConfig);
+                selectedModpackLink = newSelectedModpackLink;
+            }
+        }
+
         InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
         Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
@@ -67,15 +82,15 @@ public class Preload {
         // Use the latest modpack content if available
         if (optionalLatestModpackContent.isPresent()) {
             latestModpackContent = optionalLatestModpackContent.get();
+
+            // Update AutoModpack to server version only if we can get newest modpack content
+            if (SelfUpdater.update(latestModpackContent)) {
+                return;
+            }
         }
 
         // Delete dummy files
         CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
-
-        // Update AutoModpack
-        if (SelfUpdater.update(latestModpackContent)) {
-            return;
-        }
 
         // Update modpack
         new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackAddress, secret, selectedModpackDir);
