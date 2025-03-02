@@ -107,16 +107,14 @@ public class NettyServer {
             }
 
             int port = serverConfig.hostPort;
-            String localIp = serverConfig.hostLocalIp;
-            InetSocketAddress bindAddress = new InetSocketAddress(localIp, port);
-            LOGGER.info("Starting modpack host server on {}:{}", bindAddress, port);
+            InetSocketAddress bindAddress = new InetSocketAddress("0.0.0.0", port);
+            LOGGER.info("Starting modpack host server on {}", bindAddress);
 
             Class<? extends ServerChannel> socketChannelClass;
             MultithreadEventLoopGroup eventLoopGroup;
             if (Epoll.isAvailable()) {
                 socketChannelClass = EpollServerSocketChannel.class;
                 eventLoopGroup = new EpollEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
-                LOGGER.info("epoll is available");
             } else {
                 socketChannelClass = NioServerSocketChannel.class;
                 eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
@@ -137,7 +135,6 @@ public class NettyServer {
                     .syncUninterruptibly();
         } catch (Exception e) {
             LOGGER.error("Failed to start Netty server", e);
-            e.printStackTrace();
             return Optional.empty();
         }
 
