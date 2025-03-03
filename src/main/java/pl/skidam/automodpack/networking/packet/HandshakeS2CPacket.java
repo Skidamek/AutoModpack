@@ -20,6 +20,9 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
+
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -31,8 +34,18 @@ public class HandshakeS2CPacket {
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         String playerName = profile.getName();
 
-        if (profile.getId() == null){
-            LOGGER.error("Player {} doesn't have UUID: {}", playerName, profile.getId());
+        if (playerName == null) {
+            throw new IllegalStateException("Player name is null");
+        }
+
+        if (profile.getId() == null) {
+            if (server.isOnlineMode()) {
+                throw new IllegalStateException("Player: " + playerName + " doesn't have UUID");
+            }
+
+            // Generate profile with offline uuid
+            UUID offlineUUID = UUID.nameUUIDFromBytes(("OfflinePlayer:" + playerName).getBytes(StandardCharsets.UTF_8));
+            profile = new GameProfile(offlineUUID, playerName);
         }
 
         if (!connection.isEncrypted()) {
@@ -53,7 +66,8 @@ public class HandshakeS2CPacket {
             }
         } else {
             Common.players.put(playerName, true);
-            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, profile, server.getServerPort(), buf, sender)));
+            GameProfile finalProfile = profile;
+            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, finalProfile, server.getServerPort(), buf, sender)));
         }
     }
 
