@@ -2,7 +2,6 @@ package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.util.Formatting;
-import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 import java.nio.file.Path;
@@ -55,7 +54,7 @@ public class RestartScreen extends VersionedScreen {
         });
 
         restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").formatted(Formatting.BOLD), button -> {
-            new ReLauncher().restart(false);
+            System.exit(0);
         });
 
         changelogsButton = buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.translatable("automodpack.changelog.view"), button -> {
