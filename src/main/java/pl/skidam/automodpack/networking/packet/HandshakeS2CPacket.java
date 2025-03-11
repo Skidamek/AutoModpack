@@ -39,9 +39,9 @@ public class HandshakeS2CPacket {
         }
 
         if (profile.getId() == null) {
-            if (server.isOnlineMode()) {
-                throw new IllegalStateException("Player: " + playerName + " doesn't have UUID");
-            }
+//            if (server.isOnlineMode()) { This may happen with mods like 'easyauth', its possible to have an offline mode player join an online server
+//                throw new IllegalStateException("Player: " + playerName + " doesn't have UUID");
+//            }
 
             // Generate profile with offline uuid
             UUID offlineUUID = UUID.nameUUIDFromBytes(("OfflinePlayer:" + playerName).getBytes(StandardCharsets.UTF_8));
