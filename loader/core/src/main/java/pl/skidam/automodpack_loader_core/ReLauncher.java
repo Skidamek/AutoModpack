@@ -13,18 +13,11 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ReLauncher {
 
-    // TODO clean up this class
     private static final String updateMessage = "Successfully updated AutoModpack!";
 
     private final Path modpackDir;
     private final UpdateType updateType;
     private final Changelogs changelogs;
-
-    public ReLauncher() {
-        modpackDir = null;
-        updateType = null;
-        changelogs = null;
-    }
 
     public ReLauncher(UpdateType updateType) {
         this.modpackDir = null;
