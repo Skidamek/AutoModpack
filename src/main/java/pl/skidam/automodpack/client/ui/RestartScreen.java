@@ -32,10 +32,6 @@ public class RestartScreen extends VersionedScreen {
         }
     }
 
-    private static void onPress(ButtonWidget button) {
-        System.exit(0);
-    }
-
     @Override
     protected void init() {
         super.init();
@@ -45,7 +41,6 @@ public class RestartScreen extends VersionedScreen {
         this.addDrawableChild(cancelButton);
         this.addDrawableChild(restartButton);
         this.addDrawableChild(changelogsButton);
-
 
         if (changelogs == null || changelogs.changesAddedList.isEmpty() && changelogs.changesDeletedList.isEmpty()) {
             changelogsButton.active = false;
@@ -58,14 +53,14 @@ public class RestartScreen extends VersionedScreen {
             this.client.setScreen(null);
         });
 
-        restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").formatted(Formatting.BOLD), RestartScreen::onPress);
+        restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").formatted(Formatting.BOLD), button -> {
+            System.exit(0);
+        });
 
         changelogsButton = buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.translatable("automodpack.changelog.view"), button -> {
             new ScreenManager().changelog(this, modpackDir, changelogs);
         });
     }
-    
-    
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
