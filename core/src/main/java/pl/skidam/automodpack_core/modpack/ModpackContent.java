@@ -54,11 +54,13 @@ public class ModpackContent {
             // host-modpack generation
             if (MODPACK_DIR != null) {
                 LOGGER.info("Syncing {}...", MODPACK_DIR.getFileName());
-                creationFutures.addAll(generateAsync(Files.walk(MODPACK_DIR).toList()));
+                try (var pathStream = Files.walk(MODPACK_DIR)) {
+                    creationFutures.addAll(generateAsync(pathStream.toList()));
 
-                // Wait till finish
-                creationFutures.forEach((CompletableFuture::join));
-                creationFutures.clear();
+                    // Wait till finish
+                    creationFutures.forEach((CompletableFuture::join));
+                    creationFutures.clear();
+                }
             }
 
             // synced files generation
@@ -83,8 +85,8 @@ public class ModpackContent {
         }
 
         saveModpackContent();
-        if (httpServer != null) {
-            httpServer.addPaths(pathsMap);
+        if (hostServer != null) {
+            hostServer.addPaths(pathsMap);
         }
 
         return true;
@@ -116,8 +118,8 @@ public class ModpackContent {
             }
         }
 
-        if (httpServer != null) {
-            httpServer.addPaths(pathsMap);
+        if (hostServer != null) {
+            hostServer.addPaths(pathsMap);
         }
 
         // set all new variables
@@ -192,12 +194,16 @@ public class ModpackContent {
         }
     }
 
-    // check if file is hostModpackContentFile, serverConfigFile or serverCoreConfigFile
-    private boolean isInnerFile(Path file) {
+    // check if file is inside automodpack Dir or its sub-dirs, unless it's inside hostModpackDir with exception of hostModpackContentFile
+    public static boolean isInnerFile(Path file) {
         Path normalizedFilePath = file.toAbsolutePath().normalize();
-        return normalizedFilePath.equals(hostModpackContentFile.toAbsolutePath().normalize()) ||
-                normalizedFilePath.equals(serverConfigFile.toAbsolutePath().normalize()) ||
-                normalizedFilePath.equals(serverCoreConfigFile.toAbsolutePath().normalize());
+        boolean isInner = normalizedFilePath.startsWith(automodpackDir.toAbsolutePath().normalize()) &&
+                !normalizedFilePath.startsWith(hostModpackDir.toAbsolutePath().normalize());
+        if (!isInner && normalizedFilePath.equals(hostModpackContentFile.toAbsolutePath().normalize())) {
+            return true;
+        }
+
+        return isInner;
     }
 
     private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file) throws Exception {

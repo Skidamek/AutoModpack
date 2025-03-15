@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.modpack;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
@@ -8,8 +9,11 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+
+import java.util.Set;
 
 import static net.minecraft.server.command.CommandManager.literal;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -39,6 +43,10 @@ public class Commands {
                                         .requires((source) -> source.hasPermissionLevel(3))
                                         .executes(Commands::restartModpackHost)
                                 )
+                                .then(literal("connections")
+                                        .requires((source) -> source.hasPermissionLevel(3))
+                                        .executes(Commands::connections)
+                                )
                         )
                         .then(literal("config")
                                 .requires((source) -> source.hasPermissionLevel(3))
@@ -48,6 +56,29 @@ public class Commands {
                                 )
                         )
         );
+    }
+
+    private static int connections(CommandContext<ServerCommandSource> serverCommandSourceCommandContext) {
+        Util.getMainWorkerExecutor().execute(() -> {
+            var connections = hostServer.getConnections();
+            var uniqueSecrets = Set.copyOf(connections.values());
+
+            send(serverCommandSourceCommandContext, String.format("Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), Formatting.YELLOW, false);
+
+            for (String secret : uniqueSecrets) {
+                var playerSecretPair = SecretsStore.getHostSecret(secret);
+                if (playerSecretPair == null) continue;
+
+                String playerId = playerSecretPair.getKey();
+                GameProfile profile = GameHelpers.getPlayerProfile(playerId);
+
+                long connNum = connections.values().stream().filter(secret::equals).count();
+
+                send(serverCommandSourceCommandContext, String.format("Player: %s (%s) is downloading modpack using %d connections", profile.getName(), playerId, connNum), Formatting.GREEN, false);
+            }
+        });
+
+        return Command.SINGLE_SUCCESS;
     }
 
     private static int reload(CommandContext<ServerCommandSource> context) {
@@ -66,10 +97,10 @@ public class Commands {
 
     private static int startModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            if (!httpServer.shouldRunInternally()) {
+            if (!hostServer.isRunning()) {
                 send(context, "Starting modpack hosting...", Formatting.YELLOW, true);
-                httpServer.start();
-                if (httpServer.shouldRunInternally()) {
+                hostServer.start();
+                if (hostServer.isRunning()) {
                     send(context, "Modpack hosting started!", Formatting.GREEN, true);
                 } else {
                     send(context, "Couldn't start server!", Formatting.RED, true);
@@ -84,9 +115,9 @@ public class Commands {
 
     private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            if (httpServer.shouldRunInternally()) {
+            if (hostServer.isRunning()) {
                 send(context, "Stopping modpack hosting...", Formatting.RED, true);
-                if (httpServer.stop()) {
+                if (hostServer.stop()) {
                     send(context, "Modpack hosting stopped!", Formatting.RED, true);
                 } else {
                     send(context, "Couldn't stop server!", Formatting.RED, true);
@@ -102,17 +133,17 @@ public class Commands {
     private static int restartModpackHost(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
             send(context, "Restarting modpack hosting...", Formatting.YELLOW, true);
-            boolean needStop = httpServer.shouldRunInternally();
+            boolean needStop = hostServer.isRunning();
             boolean stopped = false;
             if (needStop) {
-                stopped = httpServer.stop();
+                stopped = hostServer.stop();
             }
 
             if (needStop && !stopped) {
                 send(context, "Couldn't restart server!", Formatting.RED, true);
             } else {
-                httpServer.start();
-                if (httpServer.shouldRunInternally()) {
+                hostServer.start();
+                if (hostServer.isRunning()) {
                     send(context, "Modpack hosting restarted!", Formatting.GREEN, true);
                 } else {
                     send(context, "Couldn't restart server!", Formatting.RED, true);
@@ -125,8 +156,8 @@ public class Commands {
 
 
     private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
-        Formatting statusColor = httpServer.shouldRunInternally() ? Formatting.GREEN : Formatting.RED;
-        String status = httpServer.shouldRunInternally() ? "running" : "not running";
+        Formatting statusColor = hostServer.isRunning() ? Formatting.GREEN : Formatting.RED;
+        String status = hostServer.isRunning() ? "running" : "not running";
         send(context, "Modpack hosting status", Formatting.GREEN, status, statusColor, false);
         return Command.SINGLE_SUCCESS;
     }
@@ -134,7 +165,7 @@ public class Commands {
     private static int about(CommandContext<ServerCommandSource> context) {
         send(context, "AutoModpack", Formatting.GREEN, AM_VERSION, Formatting.WHITE, false);
         send(context, "/automodpack generate", Formatting.YELLOW, false);
-        send(context, "/automodpack host start/stop/restart", Formatting.YELLOW, false);
+        send(context, "/automodpack host start/stop/restart/connections", Formatting.YELLOW, false);
         send(context, "/automodpack config reload", Formatting.YELLOW, false);
         return Command.SINGLE_SUCCESS;
     }

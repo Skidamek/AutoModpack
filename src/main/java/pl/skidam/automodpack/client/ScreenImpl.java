@@ -14,7 +14,6 @@ import pl.skidam.automodpack_loader_core.utils.SelectionManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.Optional;
 
 public class ScreenImpl implements ScreenService {
@@ -85,8 +84,6 @@ public class ScreenImpl implements ScreenService {
             Util.getMainWorkerExecutor().execute(() -> MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen)));
         }
 
-        public static void danger(Object parent, Object modpackUpdaterInstance, Object selectionManagerInstance) {
-            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance, (SelectionManager) selectionManagerInstance));
         }
         public static void downloadselection(Object parent, Object modpackUpdaterInstance) {
             Screens.setScreen(new DownloadSelectionScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
@@ -103,14 +100,17 @@ public class ScreenImpl implements ScreenService {
         public static void restart(Object modpackDir, Object updateType, Object changelogs) {
             Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
         }
-        public static void error(String... error) {
-            Screens.setScreen(new ErrorScreen(Arrays.toString(error)));
+        //only updated danger screen for selection Manager 
+        public static void danger(Object parent, Object modpackUpdaterInstance, Object selectionManagerInstance) {
+            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance, (SelectionManager) selectionManagerInstance));
         }
-
+        // changed error Screen to ne Errors
+        public static void error(String... errors) {
+            Screens.setScreen(new ErrorScreen(errors));
+        }
         public static void title() {
             Screens.setScreen(new TitleScreen());
         }
-
         public static void menu() {
 //            Screens.setScreen(new MenuScreen());
         }

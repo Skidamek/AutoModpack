@@ -20,7 +20,6 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
         return "automodpack_bootstrap";
     }
 
-
     @Override
     public Stream<Path> scanCandidates() {
 

@@ -6,7 +6,7 @@ import java.util.Objects;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
-public class Ip {
+public class AddressHelpers {
 
     public static String getPublicIp() {
         String[] services = {
@@ -75,8 +75,9 @@ public class Ip {
             ip = ip.substring(1);
         }
 
-        if (ip.contains(":")) { // Handle port or IPv6 scope
-            ip = ip.split(":", 2)[0];
+        if (ip.contains(":")) {
+            int portIndex = ip.lastIndexOf(":");
+            ip = ip.substring(0, portIndex);
         }
 
         if (ip.startsWith("[") && ip.endsWith("]")) {
@@ -86,19 +87,40 @@ public class Ip {
         return ip;
     }
 
-    public static boolean isLocal(String ip) {
-        if (ip == null) {
+    public static InetSocketAddress parse(String address) {
+        if (address == null) return null;
+       InetSocketAddress socketAddress = null;
+        try {
+            int portIndex = address.lastIndexOf(':');
+            if (portIndex != -1) {
+                String host = address.substring(0, portIndex);
+                String port = address.substring(portIndex + 1);
+                if (port.matches("\\d+")) {
+                    socketAddress = new InetSocketAddress(host, Integer.parseInt(port));
+                }
+            }
+            if (socketAddress == null) {
+                socketAddress = new InetSocketAddress(address, 0);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error while parsing address", e);
+        }
+
+        return socketAddress;
+    }
+
+    public static boolean isLocal(String address) {
+        if (address == null) {
             return true;
         }
 
-        ip = normalizeIp(ip);
+        address = normalizeIp(address);
+        if (address.startsWith("192.168.") || address.startsWith("127.") || address.startsWith("::1") || address.startsWith("0:0:0:0:")) {
+            return true;
+        }
+
         String localIp = getLocalIp();
         String localIpv6 = getLocalIpv6();
-
-        if (ip.startsWith("192.168.") || ip.startsWith("127.") || ip.startsWith("::1") || ip.startsWith("0:0:0:0:")) {
-            return true;
-        }
-
-        return areIpsEqual(ip, localIp) || areIpsEqual(ip, localIpv6);
+        return areIpsEqual(address, localIp) || areIpsEqual(address, localIpv6);
     }
 }

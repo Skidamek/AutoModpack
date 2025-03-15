@@ -39,7 +39,7 @@ public class CustomFileUtils {
         } catch (IOException ignored) {
         }
 
-        if (Files.exists(file)) {
+        if (Files.isRegularFile(file)) {
             dummyIT(file);
         }
     }
@@ -50,27 +50,25 @@ public class CustomFileUtils {
 
     // Special for use instead of normal resolve, since it wont work because of the leading slash in file
     public static Path getPath(Path origin, String path) {
-        if (path == null) {
-            return null;
+        if (origin == null) {
+            throw new IllegalArgumentException("Origin path must not be null");
         }
+        if (path == null || path.isBlank()) {
+            return origin;
+        }
+
+        path = path.replace('\\', '/');
 
         if (path.startsWith("/")) {
-            return origin.resolve(path.substring(1));
+            path = path.substring(1);
         }
 
-        return origin.resolve(path);
+        return origin.resolve(path).normalize();
     }
 
     // our implementation of Files.copy, thanks to usage of RandomAccessFile we can copy files that are in use
     public static void copyFile(Path source, Path destination) throws IOException {
-        if (!Files.exists(destination)) {
-            if (!Files.exists(destination.getParent())) {
-                Files.createDirectories(destination.getParent());
-            }
-            // Windows? #302
-//            Files.createFile(destination);
-            destination.toFile().createNewFile();
-        }
+        setupFilePaths(destination);
 
         try (RandomAccessFile sourceFile = new RandomAccessFile(source.toFile(), "r");
              FileOutputStream destinationFile = new FileOutputStream(destination.toFile())) {
@@ -85,6 +83,17 @@ public class CustomFileUtils {
         } catch (IOException e) {
             e.printStackTrace();
 //            throw new IOException("Failed to copy file: " + source + " to: " + destination, e);
+        }
+    }
+
+    public static void setupFilePaths(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            if (!Files.exists(file.getParent())) {
+                Files.createDirectories(file.getParent());
+            }
+            // Windows? #302
+//            Files.createFile(destination);
+            file.toFile().createNewFile();
         }
     }
 
@@ -199,6 +208,8 @@ public class CustomFileUtils {
 
     public static String getHash(Path file) {
         try {
+            if (!Files.isRegularFile(file)) return null;
+
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
                 byte[] buffer = new byte[8192];
@@ -209,8 +220,25 @@ public class CustomFileUtils {
             }
             byte[] hashBytes = digest.digest();
             return convertBytesToHex(hashBytes);
+        } catch (UnsupportedOperationException e) {
+            try { // yes... its awful
+                MessageDigest digest = MessageDigest.getInstance("SHA-1");
+                try (var is = Files.newInputStream(file)) {
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = is.read(buffer)) != -1) {
+                        digest.update(buffer, 0, bytesRead);
+                    }
+                }
+
+                byte[] hashBytes = digest.digest();
+                return convertBytesToHex(hashBytes);
+            } catch (Exception ex) {
+                e.printStackTrace();
+                ex.printStackTrace();
+            }
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.error("Failed to get hash of file: {}", file, e);
         }
         return null;
     }
@@ -343,7 +371,8 @@ public class CustomFileUtils {
 
     public static boolean isEmptyDirectory(Path parentPath) throws IOException {
         if (!Files.isDirectory(parentPath)) return false;
-        List<Path> files = Files.list(parentPath).toList();
-        return files.isEmpty();
+        try (Stream<Path> pathStream = Files.list(parentPath)) {
+            return pathStream.findAny().isEmpty();
+        }
     }
 }

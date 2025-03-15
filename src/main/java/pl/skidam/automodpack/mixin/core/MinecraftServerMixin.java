@@ -16,6 +16,7 @@ public class MinecraftServerMixin {
 	/*@Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;setFavicon(Lnet/minecraft/server/ServerMetadata;)V", ordinal = 0), method = "runServer")
 *//*?}*/
 	private void afterSetupServer(CallbackInfo info) {
+        Common.server = (MinecraftServer) (Object) this;
 		Common.afterSetupServer();
 	}
 

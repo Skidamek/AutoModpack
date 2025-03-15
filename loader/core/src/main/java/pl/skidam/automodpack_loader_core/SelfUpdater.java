@@ -155,7 +155,7 @@ public class SelfUpdater {
             downloadManager.download(
                     automodpackUpdateJar,
                     automodpack.SHA1Hash(),
-                    new DownloadManager.Urls().addUrl(new DownloadManager.Url().getUrl(automodpack.downloadUrl())),
+                    List.of(automodpack.downloadUrl()),
                     () -> LOGGER.info("Downloaded update for AutoModpack."),
                     () -> LOGGER.error("Failed to download update for AutoModpack.")
             );
@@ -167,13 +167,12 @@ public class SelfUpdater {
 
             newAutomodpackJar = AUTOMODPACK_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
 
-            // preload classes
-            new ReLauncher();
             var updateType = UpdateType.AUTOMODPACK;
+            var relauncher = new ReLauncher(updateType);
 
             CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
             CustomFileUtils.forceDelete(automodpackUpdateJar);
-            new ReLauncher(updateType).restart(true, () -> {
+            relauncher.restart(true, () -> {
                 CustomFileUtils.forceDelete(AUTOMODPACK_JAR);
                 LOGGER.info("Successfully updated AutoModpack!");
             });

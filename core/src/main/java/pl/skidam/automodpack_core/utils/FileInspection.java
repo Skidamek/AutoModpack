@@ -21,6 +21,9 @@ import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
+
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class FileInspection {
 
@@ -38,17 +41,19 @@ public class FileInspection {
 
         String hash = CustomFileUtils.getHash(file);
         if (hash == null) {
-            GlobalVariables.LOGGER.error("Failed to get hash for file: {}", file);
+            LOGGER.error("Failed to get hash for file: {}", file);
             return null;
         }
 
         HashPathPair hashPathPair = new HashPathPair(hash, file);
-        if (modCache.containsKey(hashPathPair))
+        if (modCache.containsKey(hashPathPair)) {
             return modCache.get(hashPathPair);
+        }
 
         for (Mod mod : GlobalVariables.LOADER_MANAGER.getModList()) {
             if (hash.equals(mod.hash)) {
-                return modCache.put(hashPathPair, mod);
+                modCache.put(hashPathPair, mod);
+                return mod;
             }
         }
 
@@ -60,9 +65,11 @@ public class FileInspection {
 
         if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
             var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
-            return modCache.put(hashPathPair, mod);
+            modCache.put(hashPathPair, mod);
+            return mod;
         }
 
+        LOGGER.debug("Failed to get mod info for file: {}", file);
         return null;
     }
 
@@ -97,29 +104,59 @@ public class FileInspection {
         }
     }
 
+    private static final Set<String> services = Set.of(
+            "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
+            "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
+            "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
+            "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
+    );
+
     // Checks for neo/forge mod locators
+    // TODO: check nested jars recursively if needed
     public static boolean hasSpecificServices(Path file) {
         if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
             return false;
         }
 
-        String[] services = {
-                "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
-                "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
-                "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
-                "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
-                "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
-                "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
-        };
-
         try (ZipFile zipFile = new ZipFile(file.toFile())) {
+            // Direct lookup for known service entries
             for (String service : services) {
-                if (zipFile.getEntry(service) != null) {
+                ZipEntry entry = zipFile.getEntry(service);
+                if (entry != null) {
                     return true;
                 }
             }
+
+            String jarjarPrefix = "META-INF/jarjar/";
+            ZipEntry jarjarEntry = zipFile.getEntry(jarjarPrefix);
+            if (jarjarEntry == null) {
+                return false;
+            }
+
+            // Check nested JARs in META-INF/jarjar/
+            for (ZipEntry entry : Collections.list(zipFile.entries())) {
+                String entryName = entry.getName();
+
+                if (!entry.isDirectory() && entryName.startsWith(jarjarPrefix) && entryName.endsWith(".jar")) {
+                    try (InputStream inputStream = zipFile.getInputStream(entry);
+                         ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+
+                        ZipEntry nestedEntry;
+                        while ((nestedEntry = zipInputStream.getNextEntry()) != null) {
+                            if (services.contains(nestedEntry.getName())) {
+                                return true;
+                            }
+                        }
+                    } catch (IOException e) {
+                        LOGGER.error("Error reading nested JAR in {}: {}", file, e.getMessage());
+                    }
+                }
+            }
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.error("Error examining JAR file {}: {}", file, e.getMessage());
         }
 
         return false;
@@ -241,7 +278,7 @@ public class FileInspection {
     private static Object getModInfoFromToml(BufferedReader reader, String infoType, Path file) {
         try {
             TomlParseResult result = Toml.parse(reader);
-            result.errors().forEach(error -> GlobalVariables.LOGGER.error(error.toString()));
+            result.errors().forEach(error -> LOGGER.error(error.toString()));
 
             TomlArray modsArray = result.getArray("mods");
             if (modsArray == null) {
@@ -385,12 +422,18 @@ public class FileInspection {
         return infoType.equals("version") || infoType.equals("modId") || infoType.equals("environment") ? null : Set.of();
     }
 
-    private static final String forbiddenChars = "\\/:*\"<>|!?.";
+    private static final String forbiddenChars = "\\/:*\"<>|!?&%$;=+";
 
     public static boolean isInValidFileName(String fileName) {
         // Check for each forbidden character in the file name
         for (char c : forbiddenChars.toCharArray()) {
             if (fileName.indexOf(c) != -1) {
+                return true;
+            }
+        }
+
+        for (char c : fileName.toCharArray()) {
+            if (c < 32 || c == 127) {
                 return true;
             }
         }
@@ -401,8 +444,14 @@ public class FileInspection {
 
     public static String fixFileName(String fileName) {
         // Replace forbidden characters with underscores
-        for (char c : forbiddenChars.toCharArray()) {
-            fileName = fileName.replace(c, '-');
+        for (char c : fileName.toCharArray()) {
+            if (c < 32 || c == 127) {
+                fileName = fileName.replace(c, '-');
+            }
+
+            if (forbiddenChars.indexOf(c) != -1) {
+                fileName = fileName.replace(c, '-');
+            }
         }
 
         // Remove leading and trailing whitespace

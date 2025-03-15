@@ -102,8 +102,7 @@ public class ConfigTools {
                 return GSON.fromJson(json, Jsons.ModpackContentFields.class);
             }
         } catch (Exception e) {
-            LOGGER.error("Couldn't load modpack content!");
-            e.printStackTrace();
+            LOGGER.error("Couldn't load modpack content! {}", modpackContentFile.toAbsolutePath().normalize(), e);
         }
         return null;
     }

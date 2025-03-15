@@ -9,7 +9,7 @@ plugins {
     id("dev.kikugie.stonecutter")
 }
 
-stonecutter active "1.21.4-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "1.21.1-neoforge" /* [SC] DO NOT EDIT */
 
 stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chiseled) { 
     group = "project"
@@ -75,7 +75,7 @@ tasks.register("mergeJars") {
             ?.flatMap {
                 File("$it/build/libs").listFiles()
                     ?.filter { file -> file.isFile && !file.name.endsWith("-sources.jar") && file.name.endsWith(".jar") }
-                    ?: error("Couldn't find any mod jar!")
+                    ?: emptyList()
             }
             ?: emptyList()
 

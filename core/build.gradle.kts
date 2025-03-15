@@ -18,7 +18,9 @@ repositories {
 dependencies {
     implementation("org.apache.logging.log4j:log4j-core:2.20.0")
     implementation("com.google.code.gson:gson:2.10.1")
-    implementation("io.netty:netty-all:4.1.111.Final")
+    implementation("io.netty:netty-all:4.1.118.Final")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
+    implementation("com.github.luben:zstd-jni:1.5.7-1")
     implementation("org.tomlj:tomlj:1.1.1")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
     testImplementation("org.junit.jupiter:junit-jupiter-engine:5.9.2")

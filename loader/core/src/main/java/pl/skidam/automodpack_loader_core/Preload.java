@@ -1,18 +1,18 @@
 package pl.skidam.automodpack_loader_core;
 
+import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
-import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
+import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.utils.ManifestReader;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.file.*;
 import java.util.HashMap;
 import java.util.List;
@@ -58,24 +58,42 @@ public class Preload {
             return;
         }
 
-        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackLink);
+        // Check if link is old http link, and parse it to new format (beta 24 -> beta 25)
+        if (selectedModpackLink.startsWith("http") && selectedModpackLink.contains("/automodpack")) {
+            var newSelectedModpackLink = selectedModpackLink;
+            newSelectedModpackLink = newSelectedModpackLink.replace("http://", "");
+            newSelectedModpackLink = newSelectedModpackLink.replace("https://", "");
+            String[] split = newSelectedModpackLink.split("/automodpack");
+            newSelectedModpackLink = split[0];
+            if (newSelectedModpackLink != null && !newSelectedModpackLink.isBlank()) {
+                LOGGER.info("Updated modpack link to new format: {} -> {}", selectedModpackLink, newSelectedModpackLink);
+                clientConfig.installedModpacks.put(clientConfig.selectedModpack, newSelectedModpackLink);
+                ConfigTools.save(clientConfigFile, clientConfig);
+                selectedModpackLink = newSelectedModpackLink;
+            }
+        }
+
+        InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
+        Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
+
+        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackAddress, secret);
         var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
         // Use the latest modpack content if available
         if (optionalLatestModpackContent.isPresent()) {
             latestModpackContent = optionalLatestModpackContent.get();
+
+            // Update AutoModpack to server version only if we can get newest modpack content
+            if (SelfUpdater.update(latestModpackContent)) {
+                return;
+            }
         }
 
         // Delete dummy files
         CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
 
-        // Update AutoModpack
-        if (SelfUpdater.update(latestModpackContent)) {
-            return;
-        }
-
         // Update modpack
-        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackLink, selectedModpackDir);
+        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackAddress, secret, selectedModpackDir);
     }
 
 
@@ -166,10 +184,20 @@ public class Preload {
             ConfigTools.save(clientConfigFile, clientConfig);
         }
 
+        try {
+            Files.createDirectories(privateDir);
+            if (Files.exists(privateDir) && System.getProperty("os.name").toLowerCase().contains("win")) {
+                Files.setAttribute(privateDir, "dos:hidden", true);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to create private directory", e);
+        }
+
+
         if (serverConfig == null || clientConfig == null) {
             throw new RuntimeException("Failed to load config!");
         }
 
-        LOGGER.info("Loaded config! took " + (System.currentTimeMillis() - startTime) + "ms");
+        LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
     }
 }

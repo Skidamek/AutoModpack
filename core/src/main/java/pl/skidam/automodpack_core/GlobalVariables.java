@@ -3,12 +3,9 @@ package pl.skidam.automodpack_core;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.loader.NullLoaderManager;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.loader.NullModpackLoader;
+import pl.skidam.automodpack_core.loader.*;
 import pl.skidam.automodpack_core.modpack.Modpack;
-import pl.skidam.automodpack_core.netty.HttpServer;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.nio.file.Path;
 
@@ -23,31 +20,37 @@ public class GlobalVariables {
     public static String LOADER;
     public static LoaderManagerService LOADER_MANAGER = new NullLoaderManager();
     public static ModpackLoaderService MODPACK_LOADER = new NullModpackLoader();
+    public static GameCallService GAME_CALL = new NullGameCall();
     public static Path AUTOMODPACK_JAR;
     public static Path MODS_DIR;
     public static Modpack modpack;
-    public static HttpServer httpServer;
+    public static NettyServer hostServer;
     public static Jsons.ServerConfigFields serverConfig;
     public static Jsons.ClientConfigFields clientConfig;
     public static final Path automodpackDir = Path.of("automodpack");
-    public final static Path hostModpackDir = automodpackDir.resolve("host-modpack");
+    public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
     // TODO More server modpacks
     // Main - required
     // Addons - optional addon packs
     // Switches - optional or required packs, chosen by the player, only one can be installed at a time
-    public final static Path hostContentModpackDir = hostModpackDir.resolve("main");
+    public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
     public static Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
     public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
     public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
+    public static final Path privateDir = automodpackDir.resolve(".private");
+    public static final Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");
+    public static final Path serverCertFile = privateDir.resolve("cert.crt");
+    public static final Path serverPrivateKeyFile = privateDir.resolve("key.pem");
+
 
     // Client
-
+    public static final Path modpackContentTempFile = automodpackDir.resolve("automodpack-content.json.temp");
     public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
+    public static final Path clientSecretsFile = privateDir.resolve("automodpack-client-secrets.json");
     public static final Path modpacksDir = automodpackDir.resolve("modpacks");
 
     public static final String clientConfigFileOverrideResource = "overrides-automodpack-client.json";
     public static String clientConfigOverride; // read from inside a jar file on preload, used instead of clientConfigFile if exists
 
     public static Path selectedModpackDir;
-    public static String selectedModpackLink;
 }

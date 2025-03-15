@@ -130,12 +130,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
         List<String> originModIds = new ArrayList<>();
 
         for (ModCandidate mod : conflictingNestedModsImpl) {
-            String originModId = mod.getParentMods().stream().filter(ModCandidate::isRoot).findFirst().map(ModCandidate::getId).orElse(null);
-            if (originModId == null) {
-                LOGGER.error("Why would it be null? {} - {}", mod, mod.getOriginPaths());
-            } else {
-                originModIds.add(originModId);
-            }
+            mod.getParentMods().stream().filter(ModCandidate::isRoot).findFirst().map(ModCandidate::getId).ifPresent(originModIds::add);
         }
 
         // These are nested mods which we need to force load from standard mods dir

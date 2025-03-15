@@ -99,13 +99,15 @@ public class ChangelogScreen extends VersionedScreen {
         drawSummaryOfChanges(matrices);
     }
 
+    private Jsons.ModpackContentFields modpackContent = null;
+
     private void drawSummaryOfChanges(VersionedMatrices matrices) {
 
-        var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
-
-        if (optionalModpackContentFile.isEmpty()) return;
-
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(optionalModpackContentFile.get());
+        if (modpackContent == null) {
+            var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
+            if (optionalModpackContentFile.isEmpty()) return;
+            modpackContent = ConfigTools.loadModpackContent(optionalModpackContentFile.get());
+        }
 
         int modsAdded = 0;
         int modsRemoved = 0;

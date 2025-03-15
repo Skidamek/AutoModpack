@@ -15,8 +15,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.utils.SpeedMeter;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-
 public class DownloadScreen extends VersionedScreen {
 
     private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = Common.id("gui/progress-bar-empty.png");
@@ -208,8 +206,6 @@ public class DownloadScreen extends VersionedScreen {
             if (downloadManager != null) {
                 downloadManager.cancelAllAndShutdown();
             }
-
-            LOGGER.warn("Download canceled");
 
             // TODO delete files that were downloaded
             // we will use the same method as to modpacks manager

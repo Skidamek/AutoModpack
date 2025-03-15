@@ -191,6 +191,7 @@ if (stonecutter.current.isActive) {
     rootProject.tasks.register("buildActive") {
         group = "project"
         dependsOn(tasks.named("build"))
+        finalizedBy("mergeJars")
     }
 }
 

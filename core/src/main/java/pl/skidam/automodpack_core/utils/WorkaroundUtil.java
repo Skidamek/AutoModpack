@@ -8,9 +8,7 @@ import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.GlobalVariables.clientConfig;
-
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class WorkaroundUtil {
 
