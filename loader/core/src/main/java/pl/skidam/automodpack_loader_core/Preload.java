@@ -107,11 +107,11 @@ public class Preload {
         AM_VERSION = ManifestReader.getAutoModpackVersion();
         LOADER_VERSION = LOADER_MANAGER.getLoaderVersion();
         LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
-        AUTOMODPACK_JAR = FileInspection.getAutoModpackJar();
-        MODS_DIR = AUTOMODPACK_JAR.getParent();
+        THIZ_JAR = FileInspection.getThizJar();
+        MODS_DIR = THIZ_JAR.getParent();
 
         // Get "overrides-automodpack-client.json" zipfile from the AUTOMODPACK_JAR
-        try (ZipFile zipFile = new ZipFile(AUTOMODPACK_JAR.toFile())) {
+        try (ZipFile zipFile = new ZipFile(THIZ_JAR.toFile())) {
             ZipEntry entry = zipFile.getEntry(clientConfigFileOverrideResource);
             if (entry != null) {
                 clientConfigOverride = new String(zipFile.getInputStream(entry).readAllBytes());
