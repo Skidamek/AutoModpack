@@ -14,11 +14,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.URISyntaxException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.security.CodeSource;
 import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -75,17 +73,35 @@ public class FileInspection {
         return null;
     }
 
-    public static Path getThizJar() {
-        CodeSource cs = FileInspection.class.getProtectionDomain().getCodeSource();
-        if (cs != null) {
-            try {
-                return Paths.get(cs.getLocation().toURI());
-            } catch (URISyntaxException e) {
-                e.printStackTrace();
-            }
-        }
+    public static Path getThizJar() { // CodeSource class not wonky on forge...
+        try {
+            // TODO find better way to parse that path
+            URI uri = FileInspection.class.getProtectionDomain().getCodeSource().getLocation().toURI();
+            // Example: union:/home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar%2354!/
+            // Format it into proper path like: /home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar
 
-        throw new RuntimeException("Cannot get thiz AutoModpack jar");
+            String path = uri.getPath();
+            int index = path.indexOf('!');
+            if (index != -1) {
+                path = path.substring(0, index);
+            }
+
+            index = path.indexOf('#');
+            if (index != -1) {
+                path = path.substring(0, index);
+            }
+
+            // check for windows
+            if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                if (path.startsWith("/")) {
+                    path = path.substring(1);
+                }
+            }
+
+            return Path.of(path).toAbsolutePath().normalize();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static final Set<String> services = Set.of(
