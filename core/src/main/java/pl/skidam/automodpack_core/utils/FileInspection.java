@@ -69,7 +69,7 @@ public class FileInspection {
             return mod;
         }
 
-        LOGGER.debug("Failed to get mod info for file: {}", file);
+        LOGGER.error("Failed to get mod info for file: {}", file);
         return null;
     }
 
