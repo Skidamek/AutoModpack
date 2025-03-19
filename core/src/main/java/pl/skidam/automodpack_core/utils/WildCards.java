@@ -7,7 +7,6 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Matcher;
 
-import static pl.skidam.automodpack_core.GlobalVariables.DEBUG;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class WildCards {
@@ -18,6 +17,10 @@ public class WildCards {
     public WildCards(List<String> wildcardsList, Set<Path> directoriesToSearch) {
 
         if (directoriesToSearch.isEmpty()) return;
+
+        for (String wildcard : wildcardsList) {
+            LOGGER.debug("Searching wildcard: {}", wildcard);
+        }
 
         wildcardsList = new ArrayList<>(wildcardsList);
 
@@ -67,7 +70,7 @@ public class WildCards {
 
                 wildcardPathStr = wildcardPathStr.replace(File.separator, "/");
 
-                if (DEBUG) System.out.println("Path: " + path + " wildcard: " + wildcard + " startsWithSlash: " + startsWithSlash + " blackListed: " + blackListed);
+                LOGGER.debug("{}{}", "Path: " + path + " wildcard: " + wildcard + " startsWithSlash: " + startsWithSlash + " blackListed: ", blackListed);
 
                 if (Files.isDirectory(path)) {
                     try (var files = Files.list(path)) {
@@ -116,20 +119,20 @@ public class WildCards {
             if (blackListed) {
                 wildcardMatches.remove(formattedPath, path);
                 wildcardBlackListed.put(formattedPath, path);
-                if (DEBUG) System.out.println("File " + formattedPath + " is excluded! Skipping...");
+                LOGGER.debug("{} is excluded! Skipping...", "File " + formattedPath);
             } else if (!wildcardMatches.containsKey(formattedPath)) {
                 wildcardMatches.put(formattedPath, path);
-                if (DEBUG) System.out.println("File " + formattedPath + " matches!");
+                LOGGER.debug("{} matches!", "File " + formattedPath);
             }
         }
     }
 
     private boolean fileMatches(String file, String wildCardString) {
         if (!wildCardString.contains("*")) {
-            if (DEBUG) System.out.println("* NOT found in wildcard: " + wildCardString + " file: " + file);
+            LOGGER.debug("{}{}", "* NOT found in wildcard: " + wildCardString + " file: ", file);
             return file.endsWith(wildCardString);
         } else if (wildCardString.contains("**")) {
-            if (DEBUG) System.out.println("** found in wildcard: " + wildCardString + " file: " + file);
+            LOGGER.debug("{}{}", "** found in wildcard: " + wildCardString + " file: ", file);
             String[] parts = wildCardString.split("\\*\\*");
             if (parts.length == 0) return true;
             int startIndex = 0;
@@ -142,7 +145,7 @@ public class WildCards {
             }
             return true;
         } else {
-            if (DEBUG) System.out.println("* found in wildcard: " + wildCardString + " file: " + file);
+            LOGGER.debug("{}{}", "* found in wildcard: " + wildCardString + " file: ", file);
         }
 
         // Wild card magic
