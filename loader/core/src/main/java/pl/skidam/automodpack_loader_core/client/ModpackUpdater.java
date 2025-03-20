@@ -152,7 +152,7 @@ public class ModpackUpdater {
         LOGGER.info("Modpack is already loaded");
     }
 
-
+    /* Delete soon this one
     // TODO split it into different methods, its too long
     // Todo HighUpdate main folder rename in high end folder for Client (complete Folder from Automodpack folders (main))
     public void startHighUpdate() {}
@@ -160,7 +160,11 @@ public class ModpackUpdater {
     public void startLowUpdate() {}
     // TODO Download all files, also the files whats declared in automodpack-server and server sided files.
     public void startServerUpdate() {}
+    */
     public void startUpdate() {
+        //checkout for selected modpack
+        String checkoutpack = SelectionManager.getSelectedPack();
+        File modpackFolder = new File(FabricLoader.getInstance().getGameDir().toFile(), "automodpack/host-modpack/" + checkoutpack);
 
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");

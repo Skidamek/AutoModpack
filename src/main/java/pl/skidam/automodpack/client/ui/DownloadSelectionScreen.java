@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -9,6 +10,7 @@ import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_loader_core.utils.SelectionManager;
 
 public class DownloadSelectionScreen extends VersionedScreen {
     private final Screen parent;
@@ -32,6 +34,27 @@ public class DownloadSelectionScreen extends VersionedScreen {
             this.client.setScreen(parent);
         }));
 
+        //buttons from Selectionmanager
+
+        List<String> modpacks = SelectionManager.getModpackFolders();
+
+        //dynamisch wieviele buttons vorhanden sind
+        int dynamicY = this.height / 2 - (modpacks.size() * 15);
+        int i=0;
+
+        for (String modpack : modpacks) {
+            // abstand einfügen
+            int y = dynamicY + (i * 25);
+
+            this.addDrawableChild(buttonWidget(this.width / 2, y, 140, 20, Text.literal(modpack).formatted(Formatting.BOLD), button -> {
+                //Auswählen und dann starten
+                SelectionManager.setSelectedPack(modpack);
+                Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate());
+            }));
+            i++;
+        }
+
+        /* Old Buttons
         this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.ds.standard").formatted(Formatting.BOLD), button -> {
             Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
         }));
@@ -47,6 +70,7 @@ public class DownloadSelectionScreen extends VersionedScreen {
         this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 125, 120, 20, VersionedText.translatable("automodpack.ds.completeconfirm").formatted(Formatting.BOLD), button -> {
             Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startServerUpdate);
         }));
+         */
     }
 
     @Override

@@ -14,14 +14,42 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.zip.GZIPInputStream;
 
+import net.fabricmc.loader.api.FabricLoader;
+
 import static pl.skidam.automodpack_core.GlobalVariables.AM_VERSION;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class SelectionManager {
-    public SelectionManager() {
+
+    //select folders from host-modpack for difference client packs
+    public static List<String> getModpackFolders() {
+        List<String> modpacks = new ArrayList<>();
+
+        File modpackfolders = new File(FabricLoader.getInstance().getGameDir().toFile(), "automodpack/host-modpack/");
+        File[] folders = modpackfolders.listFiles(File::isDirectory);
+
+        if (folders != null) {
+            for (File dir : folders) {
+                if (!dir.getName().equalsIgnoreCase("main")) { // "main" überspringen
+                    modpacks.add(dir.getName());
+                }
+            }
+        }
+        return modpacks;
     }
 
-    // TODO
+    //give only main Pack
+    private static String selectedPack ="main";
 
+    //give modpack from selected modpack and save to config
+    public static void setSelectedPack(String modpack) {
+        selectedPack = modpack;
+            //TO DO Adding in Config... but how xD
+    }
+
+    //fetch modpack from config
+    public static String getSelectedPack() {
+        return selectedPack;
+    }
 
 }
