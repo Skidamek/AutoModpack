@@ -151,7 +151,8 @@ public class ModpackUtils {
                 needsRestart = true;
                 LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
                 CustomFileUtils.copyFile(modPath, standardModPath);
-                standardModList.add(FileInspection.getMod(standardModPath)); // important
+                var newMod = FileInspection.getMod(standardModPath);
+                if (newMod != null) standardModList.add(newMod); // important
             }
         }
 

@@ -69,11 +69,11 @@ public class FileInspection {
             return mod;
         }
 
-        LOGGER.debug("Failed to get mod info for file: {}", file);
+        LOGGER.error("Failed to get mod info for file: {}", file);
         return null;
     }
 
-    public static Path getAutoModpackJar() {
+    public static Path getThizJar() { // CodeSource class not wonky on forge...
         try {
             // TODO find better way to parse that path
             URI uri = FileInspection.class.getProtectionDomain().getCodeSource().getLocation().toURI();
