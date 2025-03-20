@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core;
 
+import pl.skidam.automodpack_core.callbacks.Callback;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -123,7 +124,7 @@ public class SelfUpdater {
             }
 
             // Compare sha1 hash
-            if (automodpack.SHA1Hash().equals(CustomFileUtils.getHash(AUTOMODPACK_JAR))) {
+            if (automodpack.SHA1Hash().equals(CustomFileUtils.getHash(THIZ_JAR))) {
                 message = "Didn't find any updates for AutoModpack! You are on the latest version: " + AM_VERSION;
                 break; // Break, we are using the latest version, all previous if's get us to this point meaning otherwise we would update to this version, but we are already using it.
             }
@@ -165,17 +166,18 @@ public class SelfUpdater {
 
             addOverridesToJar(automodpackUpdateJar);
 
-            newAutomodpackJar = AUTOMODPACK_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
+            newAutomodpackJar = THIZ_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
 
             var updateType = UpdateType.AUTOMODPACK;
             var relauncher = new ReLauncher(updateType);
+            Callback callback = () -> {
+                CustomFileUtils.forceDelete(THIZ_JAR);
+                LOGGER.info("Successfully updated AutoModpack!");
+            };
 
             CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
             CustomFileUtils.forceDelete(automodpackUpdateJar);
-            relauncher.restart(true, () -> {
-                CustomFileUtils.forceDelete(AUTOMODPACK_JAR);
-                LOGGER.info("Successfully updated AutoModpack!");
-            });
+            relauncher.restart(true, callback);
         } catch (Exception e) {
             LOGGER.error("Failed to update! " + e);
         }
@@ -227,7 +229,7 @@ public class SelfUpdater {
             return;
         }
 
-        if (!Files.isRegularFile(jarFilePath) || !Files.isRegularFile(AUTOMODPACK_JAR)) {
+        if (!Files.isRegularFile(jarFilePath) || !Files.isRegularFile(THIZ_JAR)) {
             LOGGER.error("Jar file of updated AutoModpack not found!");
             return;
         }
@@ -253,7 +255,7 @@ public class SelfUpdater {
             });
 
             // Add the new file as a new entry in the JAR root
-            Optional<InputStream> txtInputStreamOpt = getJarEntryInputStream(AUTOMODPACK_JAR, clientConfigFileOverrideResource);
+            Optional<InputStream> txtInputStreamOpt = getJarEntryInputStream(THIZ_JAR, clientConfigFileOverrideResource);
             if (txtInputStreamOpt.isPresent()) {
                 JarEntry newTxtEntry = new JarEntry(clientConfigFileOverrideResource);
                 tempJarOutputStream.putNextEntry(newTxtEntry);

@@ -80,7 +80,7 @@ public class DataC2SPacket {
                     if (selectedModpackChanged) {
                         SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
                         disconnectImmediately(handler);
-                        new ReLauncher(modpackDir, UpdateType.SELECT).restart(false);
+                        new ReLauncher(modpackDir, UpdateType.SELECT, null).restart(false);
                         needsDisconnecting = true;
                     } else {
                         needsDisconnecting = false;
