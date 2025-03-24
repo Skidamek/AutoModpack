@@ -82,7 +82,6 @@ public class ScreenImpl implements ScreenService {
         public static void setScreen(Screen screen) {
             // required for forge to handle it properly
             Util.getMainWorkerExecutor().execute(() -> MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen)));
-        }
 
         }
         public static void downloadselection(Object parent, Object modpackUpdaterInstance) {
