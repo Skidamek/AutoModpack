@@ -18,6 +18,7 @@ import java.util.function.Function;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
+
 public class ModpackUtils {
 
     public static boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
@@ -518,33 +519,32 @@ public class ModpackUtils {
 
         for (Path file : filesToInclude) {
             try {
-                Jsons.ModpackContentFields.ModpackContentItem item = new Jsons.ModpackContentFields.ModpackContentItem();
+
+                String sha1 = CustomFileUtils.getHash(file);
+                String murmur = CustomFileUtils.getCurseforgeMurmurHash(file);
+                String size = String.valueOf(Files.size(file));
 
                 // path for linux or windows
                 String formattedPath = "/" + ModpackUtils.getMinecraftPath().relativize(file).toString().replace("\\", "/");
-                item.file = formattedPath;
 
-                // hash for files like content
-                item.sha1 = CustomFileUtils.getHash(file);
-
-                // file
-                item.size = String.valueOf(Files.size(file));
-
-                // Editable = false (später optional über JSON steuerbar)
-                item.editable = false;
-
-                // Typ bestimmen
+                // what type is folder
+                String type;
                 if (formattedPath.startsWith("/mods/")) {
-                    item.type = "mod";
+                    type = "mod";
                 } else if (formattedPath.startsWith("/shaderpacks/")) {
-                    item.type = "shader";
+                    type = "shader";
                 } else if (formattedPath.startsWith("/resourcepacks/")) {
-                    item.type = "resourcepack";
+                    type = "resourcepack";
                 } else if (formattedPath.startsWith("/config/")) {
-                    item.type = "config";
+                    type = "config";
                 } else {
-                    item.type = "file";
+                    type = "file";
                 }
+                // filling with content
+                Jsons.ModpackContentFields.ModpackContentItem item =
+                        new Jsons.ModpackContentFields.ModpackContentItem(
+                                formattedPath, sha1, murmur, false, size, type
+                        );
 
                 content.list.add(item);
             } catch (IOException e) {
