@@ -179,7 +179,7 @@ public class ModpackUpdater {
 
         if ("fullserver".equalsIgnoreCase(checkoutpack)) {
 
-            // Sammle Pfade aus den Standardordnern
+            // look for paths on default folders
             List<Path> includeDirs = List.of(
                     ModpackUtils.getMinecraftPath().resolve("mods"),
                     ModpackUtils.getMinecraftPath().resolve("config"),
@@ -189,26 +189,26 @@ public class ModpackUpdater {
 
             LOGGER.info("Full pack selected. Lade alle Dateien aus Standardordnern + wende ServerPackExcluded an");
 
-            // Pfad zur Server-Konfig
+            // path to automodpack config
             Path automodpackserverConfig = ModpackUtils.getMinecraftPath().resolve("mods/automodpack/automodpack-server.json");
 
-            // Lade Exclude-Liste aus JSON
+            // load exclude files from config tools
             Set<String> excludedFiles = ConfigTools.loadFullServerPackExclude(automodpackserverConfig);
 
-            // Liste, in die alle gültigen Dateien aufgenommen werden
+            // list all files to include
             List<Path> filesToInclude = new ArrayList<>();
 
-            // Durchlaufe alle Standardverzeichnisse
+            // search default folders
             for (Path dir : includeDirs) {
                 if (!Files.exists(dir)) continue;
 
                 try (Stream<Path> files = Files.walk(dir)) {
                     files.filter(Files::isRegularFile).forEach(path -> {
-                        // Rechne relativen Pfad
+                        // path for windows and linux
                         String relative = ModpackUtils.getMinecraftPath().relativize(path).toString().replace("\\", "/");
                         String formatted = "/" + relative;
 
-                        // Prüfe, ob excluded
+                        // check if excluded
                         boolean isExcluded = excludedFiles.stream().anyMatch(rule -> {
                             if (rule.startsWith("!")) rule = rule.substring(1);
                             return rule.equalsIgnoreCase(formatted);
@@ -231,6 +231,19 @@ public class ModpackUpdater {
             if (Files.exists(automodpackserverConfig)) {
                 LOGGER.info("automodpack server config import: {}", automodpackserverConfig);
                 filesToInclude.add(automodpackserverConfig);
+            }
+
+            try {
+                Jsons.ModpackContentFields fullServerContent = ModpackUtils.buildFullServerPackContent(filesToInclude);
+
+                Path outputPath = ModpackUtils.getMinecraftPath()
+                        .resolve("automodpack/host-modpack/fullserver/fullserverpack-content.json");
+
+                ConfigTools.saveModpackContent(outputPath, fullServerContent);
+
+                LOGGER.info("servermodpack content file saved under: {}", outputPath);
+            } catch (Exception e) {
+                LOGGER.error("error on creation from fullserverpack-content-content.json", e);
             }
 
             return;

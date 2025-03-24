@@ -509,4 +509,49 @@ public class ModpackUtils {
 
         return editableFiles;
     }
+
+    //Build from other content file
+    public static Jsons.ModpackContentFields buildFullServerPackContent(List<Path> filesToInclude) {
+        Jsons.ModpackContentFields content = new Jsons.ModpackContentFields();
+        content.modpackName = "FullServerPack";
+        content.list = new HashSet<>();
+
+        for (Path file : filesToInclude) {
+            try {
+                Jsons.ModpackContentFields.ModpackContentItem item = new Jsons.ModpackContentFields.ModpackContentItem();
+
+                // path for linux or windows
+                String formattedPath = "/" + ModpackUtils.getMinecraftPath().relativize(file).toString().replace("\\", "/");
+                item.file = formattedPath;
+
+                // hash for files like content
+                item.sha1 = CustomFileUtils.getHash(file);
+
+                // file
+                item.size = String.valueOf(Files.size(file));
+
+                // Editable = false (später optional über JSON steuerbar)
+                item.editable = false;
+
+                // Typ bestimmen
+                if (formattedPath.startsWith("/mods/")) {
+                    item.type = "mod";
+                } else if (formattedPath.startsWith("/shaderpacks/")) {
+                    item.type = "shader";
+                } else if (formattedPath.startsWith("/resourcepacks/")) {
+                    item.type = "resourcepack";
+                } else if (formattedPath.startsWith("/config/")) {
+                    item.type = "config";
+                } else {
+                    item.type = "file";
+                }
+
+                content.list.add(item);
+            } catch (IOException e) {
+                LOGGER.error("there is an error on the full server content: {}", file, e);
+            }
+        }
+
+        return content;
+    }
 }
