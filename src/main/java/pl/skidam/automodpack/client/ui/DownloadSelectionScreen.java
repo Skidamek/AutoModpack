@@ -48,7 +48,7 @@ public class DownloadSelectionScreen extends VersionedScreen {
             // abstand einfügen
             int y = dynamicY + (i * 25);
 
-            this.addDrawableChild(buttonWidget(this.width / 2, y, 140, 20, Text.literal(modpack).formatted(Formatting.BOLD), button -> {
+            this.addDrawableChild(buttonWidget(this.width / 2, y, 140, 20, VersionedText.literal(modpack).formatted(Formatting.BOLD), button -> {
                 //Auswählen und dann starten
                 SelectionManager.setSelectedPack(modpack);
                 Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
@@ -57,7 +57,7 @@ public class DownloadSelectionScreen extends VersionedScreen {
         }
 
         //Full Serverpack Button
-        this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, Text.literal("Full Server Pack").formatted(Formatting.RED), button -> {
+        this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, VersionedText.translatable("automodpack.ds.fullserverpack").formatted(Formatting.RED), button -> {
             SelectionManager.setSelectedPack("fullserver");
             Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
         }));

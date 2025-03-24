@@ -25,6 +25,7 @@
   "automodpack.ds": "Dieser Server stellt verschiedene Versionen bereit!",
   "automodpack.ds.description": "Du kannst für dich die benötigte Version auswählen. Welche benötigst du?",
   "automodpack.ds.secDescription": "Verschiedenen Versionen benötigen andere PC Systeme!",
+  "automodpack.ds.fullserverpack": "Server Package",
   "automodpack.ds.confirm": "Download",
   "automodpack.ds.cancel": "Abbrechen",
 

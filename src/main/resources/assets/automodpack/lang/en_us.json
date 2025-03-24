@@ -25,6 +25,7 @@
     "automodpack.ds": "The Server Admin provides different versions!",
     "automodpack.ds.description": "You could chose, what version do you need? Chose the right one for you!",
     "automodpack.ds.secDescription": "The difference of the versions are dependent on your PC System!",
+    "automodpack.ds.fullserverpack": "Full Server Pack",
     "automodpack.ds.confirm": "Download",
     "automodpack.ds.cancel": "Exit",
 
