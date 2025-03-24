@@ -294,6 +294,19 @@ public class ModpackUtils {
 
         return modpackDir;
     }
+    //get minecraft path....
+    public static Path getMinecraftPath() {
+        return Path.of(System.getProperty("user.dir"));
+    }
+
+    //try to get modpacks about minecraft path for utils
+    public static Path getModpackPathFolder(String modpackpackage) {
+        return getMinecraftPath().resolve("automodpack/host-modpack/").resolve(modpackpackage);
+    }
+    // get all client Packages and paths from host-modpack util test
+    public static Path getClientPackage() {
+        return getMinecraftPath().resolve("automodpack/host-modpack");
+    }
 
     // Returns true if value changed
     public static boolean selectModpack(Path modpackDirToSelect, InetSocketAddress modpackAddressToSelect, Set<String> newDownloadedFiles) {

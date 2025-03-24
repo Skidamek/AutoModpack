@@ -4,10 +4,20 @@ package pl.skidam.automodpack_core.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
+import java.io.Reader;
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -62,6 +72,7 @@ public class ConfigTools {
             return null;
         }
     }
+
 
     public static <T> T load(String json, Class<T> configClass) {
         try {
@@ -118,5 +129,25 @@ public class ConfigTools {
             LOGGER.error("Couldn't save modpack content! " + configObject.getClass());
             e.printStackTrace();
         }
+    }
+
+    public static Set<String> loadFullServerPackExclude(Path serverConfigPath) {
+        Set<String> excludedFiles = new HashSet<>();
+
+        if (!Files.exists(serverConfigPath)) return excludedFiles;
+
+        try (Reader reader = Files.newBufferedReader(serverConfigPath)) {
+            JsonObject json = JsonParser.parseReader(reader).getAsJsonObject();
+            JsonArray excluded = json.getAsJsonArray("ServerPackExcluded");
+            if (excluded != null) {
+                for (JsonElement e : excluded) {
+                    excludedFiles.add(e.getAsString());
+                }
+            }
+        } catch (IOException | JsonParseException e) {
+            LOGGER.error("Error in automodpack-server.json with FullServerPack exclude", e);
+        }
+
+        return excludedFiles;
     }
 }

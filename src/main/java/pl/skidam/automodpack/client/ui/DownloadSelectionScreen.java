@@ -1,5 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.List;
+
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -49,10 +51,16 @@ public class DownloadSelectionScreen extends VersionedScreen {
             this.addDrawableChild(buttonWidget(this.width / 2, y, 140, 20, Text.literal(modpack).formatted(Formatting.BOLD), button -> {
                 //Auswählen und dann starten
                 SelectionManager.setSelectedPack(modpack);
-                Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate());
+                Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
             }));
             i++;
         }
+
+        //Full Serverpack Button
+        this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, Text.literal("Full Server Pack").formatted(Formatting.RED), button -> {
+            SelectionManager.setSelectedPack("fullserver");
+            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
+        }));
 
         /* Old Buttons
         this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.ds.standard").formatted(Formatting.BOLD), button -> {

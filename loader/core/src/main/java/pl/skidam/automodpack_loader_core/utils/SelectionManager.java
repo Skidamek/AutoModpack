@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core.utils;
 
+import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 
@@ -14,7 +15,6 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.zip.GZIPInputStream;
 
-import net.fabricmc.loader.api.FabricLoader;
 
 import static pl.skidam.automodpack_core.GlobalVariables.AM_VERSION;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
@@ -25,7 +25,7 @@ public class SelectionManager {
     public static List<String> getModpackFolders() {
         List<String> modpacks = new ArrayList<>();
 
-        File modpackfolders = new File(FabricLoader.getInstance().getGameDir().toFile(), "automodpack/host-modpack/");
+        File modpackfolders = ModpackUtils.getClientPackage().toFile();
         File[] folders = modpackfolders.listFiles(File::isDirectory);
 
         if (folders != null) {

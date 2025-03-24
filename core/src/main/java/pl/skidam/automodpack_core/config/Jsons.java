@@ -3,10 +3,7 @@ package pl.skidam.automodpack_core.config;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class Jsons {
 
@@ -24,6 +21,7 @@ public class Jsons {
         public boolean generateModpackOnStart = true;
         public List<String> syncedFiles = List.of("/mods/*.jar", "!/mods/iDontWantThisModInModpack.jar", "!/config/andThisConfigToo.json", "!/mods/andAllTheseMods-*.jar", "!/mods/server-*.jar");
         public List<String> allowEditsInFiles = List.of("/options.txt", "/config/*", "!/config/excludeThisFile");
+        public List<String> ServerPackExcluded = List.of("!/config/bottokens.toml", "!/config/ipadresses.json");
         public boolean autoExcludeUnnecessaryFiles = true;
 //        public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
 //        public List<List<String>> forceLoad = new ArrayList<>();

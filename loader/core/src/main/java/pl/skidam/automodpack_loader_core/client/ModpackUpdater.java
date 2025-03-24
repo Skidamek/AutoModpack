@@ -39,7 +39,12 @@ public class ModpackUpdater {
     private Path modpackDir;
     private Path modpackContentFile;
 
+    //if name is null... i hope it is right
     public String getModpackName() {
+        if (serverModpackContent == null) {
+            LOGGER.warn("name was initialized before server modpack content.");
+            return "unknown Modpack";
+        }
         return serverModpackContent.modpackName;
     }
 
@@ -95,9 +100,12 @@ public class ModpackUpdater {
 
             LOGGER.warn("Modpack update found");
             startUpdate();
+            /* should be cleaned after update
             startHighUpdate();
             startLowUpdate();
             startServerUpdate();
+
+             */
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
         }
@@ -164,7 +172,70 @@ public class ModpackUpdater {
     public void startUpdate() {
         //checkout for selected modpack
         String checkoutpack = SelectionManager.getSelectedPack();
-        File modpackFolder = new File(FabricLoader.getInstance().getGameDir().toFile(), "automodpack/host-modpack/" + checkoutpack);
+
+        //should be path one or two? bruhhh, not know yet, trying both
+        Path modpackFolder = ModpackUtils.getModpackPathFolder(checkoutpack);
+        Path modpackPathFolder = ModpackUtils.getModpackPathFolder(SelectionManager.getSelectedPack());
+
+        if ("fullserver".equalsIgnoreCase(checkoutpack)) {
+
+            // Sammle Pfade aus den Standardordnern
+            List<Path> includeDirs = List.of(
+                    ModpackUtils.getMinecraftPath().resolve("mods"),
+                    ModpackUtils.getMinecraftPath().resolve("config"),
+                    ModpackUtils.getMinecraftPath().resolve("resourcepacks"),
+                    ModpackUtils.getMinecraftPath().resolve("shaderpacks")
+            );
+
+            LOGGER.info("Full pack selected. Lade alle Dateien aus Standardordnern + wende ServerPackExcluded an");
+
+            // Pfad zur Server-Konfig
+            Path automodpackserverConfig = ModpackUtils.getMinecraftPath().resolve("mods/automodpack/automodpack-server.json");
+
+            // Lade Exclude-Liste aus JSON
+            Set<String> excludedFiles = ConfigTools.loadFullServerPackExclude(automodpackserverConfig);
+
+            // Liste, in die alle gültigen Dateien aufgenommen werden
+            List<Path> filesToInclude = new ArrayList<>();
+
+            // Durchlaufe alle Standardverzeichnisse
+            for (Path dir : includeDirs) {
+                if (!Files.exists(dir)) continue;
+
+                try (Stream<Path> files = Files.walk(dir)) {
+                    files.filter(Files::isRegularFile).forEach(path -> {
+                        // Rechne relativen Pfad
+                        String relative = ModpackUtils.getMinecraftPath().relativize(path).toString().replace("\\", "/");
+                        String formatted = "/" + relative;
+
+                        // Prüfe, ob excluded
+                        boolean isExcluded = excludedFiles.stream().anyMatch(rule -> {
+                            if (rule.startsWith("!")) rule = rule.substring(1);
+                            return rule.equalsIgnoreCase(formatted);
+                        });
+
+                        if (isExcluded) {
+                            LOGGER.info("files excluded: {}", formatted);
+                            return;
+                        }
+
+                        LOGGER.info("files included: {}", formatted);
+                        filesToInclude.add(path);
+                    });
+                } catch (IOException e) {
+                    LOGGER.error("error on folder search  {}", dir, e);
+                }
+            }
+
+            // automodpack server config import
+            if (Files.exists(automodpackserverConfig)) {
+                LOGGER.info("automodpack server config import: {}", automodpackserverConfig);
+                filesToInclude.add(automodpackserverConfig);
+            }
+
+            return;
+        }
+
 
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");
