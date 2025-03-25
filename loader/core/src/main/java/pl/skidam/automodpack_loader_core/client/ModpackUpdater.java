@@ -170,6 +170,22 @@ public class ModpackUpdater {
     public void startServerUpdate() {}
     */
     public void startUpdate() {
+        Path automodpackserverConfig = ModpackUtils.getMinecraftPath().resolve("mods/automodpack/automodpack-server.json");
+        //if file is deleted from user, stop
+        if (!Files.exists(automodpackserverConfig)) {
+            LOGGER.info("automodpack-server.json is missing? did you delete the file?");
+            return;
+        }
+
+        //load config
+        Jsons.ServerConfigFields serverConfig = ConfigTools.load(automodpackserverConfig, Jsons.ServerConfigFields.class);
+
+        //if config null or false, stop
+        if (serverConfig == null || !serverConfig.enableFullServerPack) {
+            LOGGER.info("Fullserverack creation on default disabled.");
+            return;
+        }
+
         //checkout for selected modpack
         String checkoutpack = SelectionManager.getSelectedPack();
 
@@ -190,7 +206,7 @@ public class ModpackUpdater {
             LOGGER.info("Full pack selected. Lade alle Dateien aus Standardordnern + wende ServerPackExcluded an");
 
             // path to automodpack config
-            Path automodpackserverConfig = ModpackUtils.getMinecraftPath().resolve("mods/automodpack/automodpack-server.json");
+            automodpackserverConfig = ModpackUtils.getMinecraftPath().resolve("mods/automodpack/automodpack-server.json");
 
             // load exclude files from config tools
             Set<String> excludedFiles = ConfigTools.loadFullServerPackExclude(automodpackserverConfig);

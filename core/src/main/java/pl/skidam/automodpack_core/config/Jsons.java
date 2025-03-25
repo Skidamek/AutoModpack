@@ -21,6 +21,7 @@ public class Jsons {
         public boolean generateModpackOnStart = true;
         public List<String> syncedFiles = List.of("/mods/*.jar", "!/mods/iDontWantThisModInModpack.jar", "!/config/andThisConfigToo.json", "!/mods/andAllTheseMods-*.jar", "!/mods/server-*.jar");
         public List<String> allowEditsInFiles = List.of("/options.txt", "/config/*", "!/config/excludeThisFile");
+        public boolean enableFullServerPack = false;
         public List<String> ServerPackExcluded = List.of("!/config/bottokens.toml", "!/config/ipadresses.json");
         public boolean autoExcludeUnnecessaryFiles = true;
 //        public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");

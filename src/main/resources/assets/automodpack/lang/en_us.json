@@ -19,6 +19,7 @@
     "automodpack.danger.description": "Do you want to download it?",
     "automodpack.danger.secDescription": "It might be risky! Do NOT download if don't trust the server owners!",
     "automodpack.danger.selection": "Chose Version",
+    "automodpack.danger.fullserverpack": "Full Server Pack",
     "automodpack.danger.confirm": "Download",
     "automodpack.danger.cancel": "Don't download",
 

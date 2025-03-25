@@ -19,6 +19,7 @@
   "automodpack.danger.description": "Möchtest du es herunterladen?",
   "automodpack.danger.secDescription": "Es könnte riskant sein! Lade es NICHT herunter, wenn du den Server-Betreibern nicht vertraust!",
   "automodpack.danger.selection": "Version wählen",
+  "automodpack.danger.fullserverpack": "Server Package",
   "automodpack.danger.confirm": "Herunterladen",
   "automodpack.danger.cancel": "Nicht herunterladen",
 

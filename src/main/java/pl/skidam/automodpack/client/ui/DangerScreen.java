@@ -5,10 +5,16 @@ import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack.client.audio.AudioManager;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_loader_core.client.ModpackUtils;
+
 import pl.skidam.automodpack_loader_core.utils.SelectionManager;
 
 public class DangerScreen extends VersionedScreen {
@@ -44,6 +50,17 @@ public class DangerScreen extends VersionedScreen {
             this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").formatted(Formatting.BOLD), button -> {
                 Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
             }));
+        }
+        Path serverConfigPath = ModpackUtils.getMinecraftPath().resolve("mods/automodpack/automodpack-server.json");
+        if (Files.exists(serverConfigPath)) {
+            Jsons.ServerConfigFields serverConfig = ConfigTools.load(serverConfigPath, Jsons.ServerConfigFields.class);
+
+            if (serverConfig != null && serverConfig.enableFullServerPack) {
+                this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 100, 160, 20, VersionedText.literal("automodpack.danger.fullserverpack").formatted(Formatting.RED), button -> {
+                            SelectionManager.setSelectedPack("fullserver");
+                            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
+                        }));
+            }
         }
     }
 
