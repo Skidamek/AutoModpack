@@ -67,7 +67,9 @@ public class Server {
 
         if (modpackgenerated) {
             LOGGER.info("Modpack generated!");
+            LOGGER.info("start generateFromServerConfig()...");
             FullServerPackContent.generateFromServerConfig();
+            LOGGER.info("log generateFromServerConfig() finished");
         } else {
             LOGGER.error("Failed to generate modpack!");
         }
