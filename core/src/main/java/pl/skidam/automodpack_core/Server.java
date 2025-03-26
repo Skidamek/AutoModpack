@@ -4,6 +4,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
+import pl.skidam.automodpack_core.modpack.FullServerPackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.nio.file.Path;
@@ -62,10 +63,11 @@ public class Server {
 
         Modpack modpack = new Modpack();
         ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, modpack.CREATION_EXECUTOR);
-        boolean generated = modpack.generateNew(modpackContent);
+        boolean modpackgenerated = modpack.generateNew(modpackContent);
 
-        if (generated) {
+        if (modpackgenerated) {
             LOGGER.info("Modpack generated!");
+            FullServerPackContent.generateFromServerConfig();
         } else {
             LOGGER.error("Failed to generate modpack!");
         }
