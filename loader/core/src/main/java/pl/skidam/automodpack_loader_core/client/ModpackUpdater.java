@@ -170,100 +170,12 @@ public class ModpackUpdater {
     public void startServerUpdate() {}
     */
     public void startUpdate() {
-        Path automodpackserverConfig = ModpackUtils.getMinecraftPath().resolve("mods/automodpack/automodpack-server.json");
-        //if file is deleted from user, stop
-        if (!Files.exists(automodpackserverConfig)) {
-            LOGGER.info("automodpack-server.json is missing? did you delete the file?");
-            return;
-        }
-
-        //load config
-        Jsons.ServerConfigFields serverConfig = ConfigTools.load(automodpackserverConfig, Jsons.ServerConfigFields.class);
-
-        //if config null or false, stop
-        if (serverConfig == null || !serverConfig.enableFullServerPack) {
-            LOGGER.info("Fullserverack creation on default disabled.");
-            return;
-        }
-
-        //checkout for selected modpack
         String checkoutpack = SelectionManager.getSelectedPack();
 
         //should be path one or two? bruhhh, not know yet, trying both
         Path modpackFolder = ModpackUtils.getModpackPathFolder(checkoutpack);
         Path modpackPathFolder = ModpackUtils.getModpackPathFolder(SelectionManager.getSelectedPack());
 
-        if ("fullserver".equalsIgnoreCase(checkoutpack)) {
-
-            // look for paths on default folders
-            List<Path> includeDirs = List.of(
-                    ModpackUtils.getMinecraftPath().resolve("mods"),
-                    ModpackUtils.getMinecraftPath().resolve("config"),
-                    ModpackUtils.getMinecraftPath().resolve("resourcepacks"),
-                    ModpackUtils.getMinecraftPath().resolve("shaderpacks")
-            );
-
-            LOGGER.info("Full pack selected. Lade alle Dateien aus Standardordnern + wende ServerPackExcluded an");
-
-            // path to automodpack config
-            automodpackserverConfig = ModpackUtils.getMinecraftPath().resolve("mods/automodpack/automodpack-server.json");
-
-            // load exclude files from config tools
-            Set<String> excludedFiles = ConfigTools.loadFullServerPackExclude(automodpackserverConfig);
-
-            // list all files to include
-            List<Path> filesToInclude = new ArrayList<>();
-
-            // search default folders
-            for (Path dir : includeDirs) {
-                if (!Files.exists(dir)) continue;
-
-                try (Stream<Path> files = Files.walk(dir)) {
-                    files.filter(Files::isRegularFile).forEach(path -> {
-                        // path for windows and linux
-                        String relative = ModpackUtils.getMinecraftPath().relativize(path).toString().replace("\\", "/");
-                        String formatted = "/" + relative;
-
-                        // check if excluded
-                        boolean isExcluded = excludedFiles.stream().anyMatch(rule -> {
-                            if (rule.startsWith("!")) rule = rule.substring(1);
-                            return rule.equalsIgnoreCase(formatted);
-                        });
-
-                        if (isExcluded) {
-                            LOGGER.info("files excluded: {}", formatted);
-                            return;
-                        }
-
-                        LOGGER.info("files included: {}", formatted);
-                        filesToInclude.add(path);
-                    });
-                } catch (IOException e) {
-                    LOGGER.error("error on folder search  {}", dir, e);
-                }
-            }
-
-            // automodpack server config import
-            if (Files.exists(automodpackserverConfig)) {
-                LOGGER.info("automodpack server config import: {}", automodpackserverConfig);
-                filesToInclude.add(automodpackserverConfig);
-            }
-
-            try {
-                Jsons.ModpackContentFields fullServerContent = ModpackUtils.buildFullServerPackContent(filesToInclude);
-
-                Path outputPath = ModpackUtils.getMinecraftPath()
-                        .resolve("automodpack/host-modpack/fullserver/fullserverpack-content.json");
-
-                ConfigTools.saveModpackContent(outputPath, fullServerContent);
-
-                LOGGER.info("servermodpack content file saved under: {}", outputPath);
-            } catch (Exception e) {
-                LOGGER.error("error on creation from fullserverpack-content-content.json", e);
-            }
-
-            return;
-        }
 
 
         if (modpackSecret == null) {

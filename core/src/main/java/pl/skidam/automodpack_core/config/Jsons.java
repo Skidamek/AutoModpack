@@ -102,4 +102,36 @@ public class Jsons {
             }
         }
     }
+    public static class FullServerPackContentFields {
+        public Set<FullServerPackContentItem> list;
+
+        public FullServerPackContentFields(Set<FullServerPackContentItem> list) {
+            this.list = list;
+        }
+
+        public FullServerPackContentFields() {
+            this.list = Set.of();
+        }
+
+        public static class FullServerPackContentItem {
+            public String file;
+            public String size;
+            public String type;
+            public String sha1;
+            public String murmur;
+
+            public FullServerPackContentItem(String file, String size, String type, String sha1, String murmur) {
+                this.file = file;
+                this.size = size;
+                this.type = type;
+                this.sha1 = sha1;
+                this.murmur = murmur;
+            }
+
+            @Override
+            public String toString() {
+                return String.format("FullServerPackContentItem(file=%s, size=%s, type=%s, sha1=%s, murmur=%s)", file, size, type, sha1, murmur);
+            }
+        }
+    }
 }

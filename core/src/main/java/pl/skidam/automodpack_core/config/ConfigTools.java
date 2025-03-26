@@ -131,6 +131,19 @@ public class ConfigTools {
         }
     }
 
+    public static void saveFullServerPackContent(Path modpackContentFile, Jsons.FullServerPackContentFields configObject) {
+        try {
+            if (!Files.isDirectory(modpackContentFile.getParent())) {
+                Files.createDirectories(modpackContentFile.getParent());
+            }
+
+            Files.writeString(modpackContentFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (Exception e) {
+            LOGGER.error("Couldn't save full server pack content! " + configObject.getClass());
+            e.printStackTrace();
+        }
+    }
+
     public static Set<String> loadFullServerPackExclude(Path serverConfigPath) {
         Set<String> excludedFiles = new HashSet<>();
 
