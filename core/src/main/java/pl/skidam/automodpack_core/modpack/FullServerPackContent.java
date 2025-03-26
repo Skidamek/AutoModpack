@@ -81,7 +81,7 @@ public class FullServerPackContent {
     public static void generateFromServerConfig() {
         LOGGER.info("start generating server pack content file");
 
-        Path automodpackserverConfig = CustomFileUtils.getPathFromCWD("mods/automodpack/automodpack-server.json");
+        Path automodpackserverConfig = CustomFileUtils.getPathFromCWD("automodpack/automodpack-server.json");
 
         //if file is deleted from user, stop
         if (!Files.exists(automodpackserverConfig)) {
@@ -164,7 +164,7 @@ public class FullServerPackContent {
         }
 
         // adding client mod folders from automodpack host
-        Path automodpackHostDir = CustomFileUtils.getPathFromCWD("mods/automodpack-host");
+        Path automodpackHostDir = CustomFileUtils.getPathFromCWD("automodpack/automodpack-host");
         if (Files.exists(automodpackHostDir) && Files.isDirectory(automodpackHostDir)) {
             try (Stream<Path> files = Files.walk(automodpackHostDir)) {
                 files.filter(Files::isRegularFile).forEach(path -> {
@@ -188,7 +188,7 @@ public class FullServerPackContent {
         try {
             Jsons.FullServerPackContentFields fullServerContent = FullServerPackContent.buildFullServerPackContent(filesToInclude);
 
-            Path outputPath = CustomFileUtils.getPathFromCWD("mods/automodpack-host/fullserverpack-content.json");
+            Path outputPath = CustomFileUtils.getPathFromCWD("automodpack/automodpack-host/fullserverpack-content.json");
             ConfigTools.saveFullServerPackContent(outputPath, fullServerContent);
 
             LOGGER.info("servermodpack content file saved under: {}", outputPath);
