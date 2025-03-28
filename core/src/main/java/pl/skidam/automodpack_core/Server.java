@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.modpack.FullServerPackContent;
@@ -63,19 +64,25 @@ public class Server {
 
         Modpack modpack = new Modpack();
         ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, modpack.CREATION_EXECUTOR);
-        boolean modpackgenerated = modpack.generateNew(modpackContent);
+        boolean generated = modpack.generateNew(modpackContent);
 
-        if (modpackgenerated) {
+        if (generated) {
             LOGGER.info("Modpack generated!");
-            LOGGER.info("start generateFromServerConfig()...");
-            FullServerPackContent.generateFromServerConfig();
-            LOGGER.info("log generateFromServerConfig() finished");
         } else {
             LOGGER.error("Failed to generate modpack!");
         }
+        FullServerPack fullserverpack = new FullServerPack();
+        FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, mainModpackDir, fullserverpack.CREATION_EXECUTOR);
+        boolean fullpackgenerated = fullserverpack.generateNew(fullServerPackContent);
 
-        modpack.CREATION_EXECUTOR.shutdownNow();
+        if (fullpackgenerated) {
+            LOGGER.info("FullServerPack generated!");
+        } else {
+            LOGGER.error("Failed to generate serverpack!");
+        }
 
+        modpack.shutdownExecutor();
+        fullserverpack.shutdownExecutor();
         LOGGER.info("Starting server on port {}", serverConfig.hostPort);
         server.start();
         // wait for server to stop
