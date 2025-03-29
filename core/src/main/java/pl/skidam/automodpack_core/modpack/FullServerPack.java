@@ -4,6 +4,9 @@ import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -11,7 +14,10 @@ import java.util.concurrent.TimeUnit;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class FullServerPack {
-    public final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
+    public final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("FullServerPackCreation-%d").build());
+    public final Map<String, FullServerPackContent> fullpacks = Collections.synchronizedMap(new HashMap<>());
+
+
 
     private FullServerPackContent init() {
         LOGGER.info("init() von FullServerPack wurde aufgerufen");
@@ -35,13 +41,17 @@ public class FullServerPack {
 
     public boolean generateNew(FullServerPackContent content) {
         if (content == null) return false;
-        return content.create();
+        boolean generated = content.create();
+        fullpacks.put(content.getModpackName(), content);
+        return generated;
     }
 
     public boolean generateNew() {
         FullServerPackContent content = init();
         if (content == null) return false;
-        return content.create();
+        boolean generated = content.create();
+        fullpacks.put(content.getModpackName(), content);
+        return generated;
     }
 
     public boolean isGenerating() {

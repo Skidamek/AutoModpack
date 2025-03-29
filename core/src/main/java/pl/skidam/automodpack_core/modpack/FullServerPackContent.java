@@ -29,6 +29,10 @@ public class FullServerPackContent {
         this.CREATION_EXECUTOR = executor;
     }
 
+    public String getModpackName() {
+        return MODPACK_NAME;
+    }
+
     public boolean create() {
         LOGGER.info("FullServerPackContent.create() is called");
         try {

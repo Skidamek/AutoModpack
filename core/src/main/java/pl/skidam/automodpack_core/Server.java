@@ -72,9 +72,10 @@ public class Server {
             LOGGER.error("Failed to generate modpack!");
         }
         LOGGER.info("Start FullServerPack generation!");
+
         FullServerPack fullserverpack = new FullServerPack();
-        FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, mainModpackDir, fullserverpack.CREATION_EXECUTOR);
-        boolean fullpackgenerated = fullserverpack.generateNew(fullServerPackContent);
+        //FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, mainModpackDir, fullserverpack.CREATION_EXECUTOR);
+        boolean fullpackgenerated = fullserverpack.generateNew();
 
         if (fullpackgenerated) {
             LOGGER.info("FullServerPack generated!");
