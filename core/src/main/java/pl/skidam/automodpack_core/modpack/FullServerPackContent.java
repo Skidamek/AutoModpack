@@ -90,10 +90,11 @@ public class FullServerPackContent {
                 }
             }
             // automodpack-host folders and files adding
-            Path automodpackHostFolder = CustomFileUtils.getPathFromCWD("automodpack/automodpack-host");
+            Path automodpackHostFolder = CustomFileUtils.getPathFromCWD("automodpack/host-modpack");
             if (Files.exists(automodpackHostFolder) && Files.isDirectory(automodpackHostFolder)) {
                 try (Stream<Path> files = Files.walk(automodpackHostFolder)) {
                     files.filter(Files::isRegularFile).forEach(path -> {
+                        LOGGER.info("Gefundene Datei: {}", path.toAbsolutePath());
                         String fileName = path.getFileName().toString().toLowerCase();
                         if (fileName.equals("fullserverpack-content.json") || fileName.equals("automodpack-content.json")) {
                             LOGGER.info("skipped content files from automodpack-host: {}", fileName);
@@ -292,7 +293,7 @@ public class FullServerPackContent {
             }
 
             // adding client mod folders from automodpack host
-            Path automodpackHostDir = CustomFileUtils.getPathFromCWD("automodpack/automodpack-host");
+            Path automodpackHostDir = CustomFileUtils.getPathFromCWD("automodpack/host-modpack");
             if (Files.exists(automodpackHostDir) && Files.isDirectory(automodpackHostDir)) {
                 try (Stream<Path> files = Files.walk(automodpackHostDir)) {
                     files.filter(Files::isRegularFile).forEach(path -> {
