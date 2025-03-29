@@ -75,7 +75,7 @@ public class DownloadSelectionScreen extends VersionedScreen {
             Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startLowUpdate);
         }));
 
-        this.addDrawableChild(buttonWidgSset(this.width / 2, this.height / 2 + 125, 120, 20, VersionedText.translatable("automodpack.ds.completeconfirm").formatted(Formatting.BOLD), button -> {
+        this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 125, 120, 20, VersionedText.translatable("automodpack.ds.completeconfirm").formatted(Formatting.BOLD), button -> {
             Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startServerUpdate);
         }));
          */
