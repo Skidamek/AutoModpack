@@ -74,7 +74,7 @@ public class Server {
         LOGGER.info("Start FullServerPack generation!");
 
         FullServerPack fullserverpack = new FullServerPack();
-        FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, mainModpackDir, fullserverpack.CREATION_EXECUTOR);
+        FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, hostContentModpackDir, fullserverpack.CREATION_EXECUTOR);
         boolean fullpackgenerated = fullserverpack.generateNew(fullServerPackContent);
 
         if (fullpackgenerated) {

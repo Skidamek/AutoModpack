@@ -41,9 +41,9 @@ public class Common {
             LOGGER.info("Generating FullServerModpack...");
             long genStart = System.currentTimeMillis();
             if (fullpacks.generateNew()) {
-                LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+                LOGGER.info("FullServerModpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
             } else {
-                LOGGER.error("Failed to generate modpack!");
+                LOGGER.error("Failed to generate fullservermodpack!");
             }
         }
 
