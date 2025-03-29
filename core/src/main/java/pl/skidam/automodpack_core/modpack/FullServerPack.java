@@ -14,6 +14,7 @@ public class FullServerPack {
     public final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
 
     private FullServerPackContent init() {
+        LOGGER.info("init() von FullServerPack wurde aufgerufen");
         if (isGenerating()) {
             LOGGER.error("Called generate() twice!");
             return null;

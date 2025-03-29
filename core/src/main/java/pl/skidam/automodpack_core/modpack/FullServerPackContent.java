@@ -30,6 +30,7 @@ public class FullServerPackContent {
     }
 
     public boolean create() {
+        LOGGER.info("FullServerPackContent.create() is called");
         try {
             LOGGER.info("Creating Full Server Pack for: {}", MODPACK_NAME);
 
