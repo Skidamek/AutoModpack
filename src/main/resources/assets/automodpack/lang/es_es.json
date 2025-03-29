@@ -1,40 +1,51 @@
 {
+    "automodpack.restart.full": "¡Modpack descargado!",
+    "automodpack.restart.update": "¡Se ha descargado una actualización del Modpack!",
+    "automodpack.restart.select": "¡Se ha seleccionado el modpack requerido por el servidor!",
+    "automodpack.restart.automodpack": "¡Se ha actualizado el mod AutoModpack a la version requerida por el servidor!",
+    "automodpack.restart.description": "Para jugar, debes reiniciar el juego.",
+    "automodpack.restart.secDescription": "¿Quieres reiniciar el juego ahora?",
+    "automodpack.restart.confirm": "Sí, cerrar el juego",
+    "automodpack.restart.cancel": "No, volver al juego",
+  
+    "automodpack.delete": "Eliminar Modpack",
+    "automodpack.delete.description": "Perderás todo lo descargado por el modpack.",
+    "automodpack.delete.secDescription": "Necesitarás reiniciar el juego.",
+    "automodpack.delete.thiDescription": "¿Estás seguro de que quieres eliminarlo?",
+    "automodpack.delete.confirm": "Eliminar y salir",
+    "automodpack.delete.cancel": "Volver al juego",
+  
+    "automodpack.danger": "¡Este servidor proporciona un modpack externo!",
+    "automodpack.danger.description": "¿Deseas descargarlo?",
+    "automodpack.danger.secDescription": "¡Podría ser arriesgado! ¡NO lo descargues si no confías en los dueños del servidor!",
+    "automodpack.danger.confirm": "Descargar",
+    "automodpack.danger.cancel": "No descargar",
 
+    "automodpack.changelog.view": "Ver registros de cambios",
+    "automodpack.changelog.noChanges": "No se encontraron cambios.",
+    "automodpack.changelog.openPage": "Abrir página del proyecto",
 
-  "EVERYTHING HERE NEEDS TO BE RE-TRANSLATED": "TAKE A LOOK AT en_us.json FILE",
-  "THANK YOU": "SO MUCH!",
+    "automodpack.download.calculating": "Calculando...",
+    "automodpack.download.eta": "Tiempo restante: %s",
+    "automodpack.download.downloading": "Descargando:",
+    "automodpack.download.noFiles": "¡No quedan archivos por descargar!",
 
+    "automodpack.redownload": "Redescargar Modpack",
+    "automodpack.redownload.description": "Podría solucionar problemas con el modpack.",
 
-  "gui.automodpack.screen.restart.title.modpack": "¡Se ha descargado una actualización para tu Modpack!",
-  "gui.automodpack.screen.restart.description":  "Para completar la actualización es necesario reiniciar el juego",
-  "gui.automodpack.screen.restart.secDescription": "¿Desea reiniciar automáticamente ahora?",
-  "gui.automodpack.screen.restart.button.quit": "Sí (Reiniciar)",
-  "gui.automodpack.screen.restart.button.cancel": "No (Volver al juego)",
+    "automodpack.error": "¡Algo salió mal!",
+    "automodpack.error.files": "Hubo un problema al descargar algunos archivos.",
+    "automodpack.error.critical": "Error crítico mientras se descargaba el modpack.",
+    "automodpack.error.logs": "Revisa los logs para más detalles.",
 
-  "gui.automodpack.screen.confirm.title": "❌ Eliminar Modpack ❌",
-  "gui.automodpack.screen.confirm.description": "Perderás todas las cosas del modpack descargado.",
-  "gui.automodpack.screen.confirm.secDescription": "Tendrás que reiniciar el juego.",
-  "gui.automodpack.screen.confirm.thiDescription": "¿Estás seguro de que quieres borrarlo?",
-  "gui.automodpack.screen.confirm.button.sure": "Sí (Borrar y salir)",
-  "gui.automodpack.screen.confirm.button.cancel": "No (Volver al juego)",
+    "automodpack.fetch": "Obteniendo URLs directas desde Modrinth y CurseForge...",
+    "automodpack.fetch.found": "Encontradas %s urls directas.",
 
-  "gui.automodpack.screen.loading.title": "Descargando actualizaciones...",
-  "gui.automodpack.screen.loading.wait": "Por favor, espere...",
-  "gui.automodpack.screen.loading.download": "Descargando...",
-  "gui.automodpack.screen.loading.extract": "Extrayendo el modpack...",
-  "gui.automodpack.screen.loading.finish": "Terminando...",
+    "automodpack.select": "Seleccionar Modpack",
 
-  "gui.automodpack.screen.danger.title": "¡Atención! ¡Modpack encontrado!",
-  "gui.automodpack.screen.danger.description": "¿Desea descargar la actualización de la misma?",
-  "gui.automodpack.screen.danger.secDescription": "Puede ser arriesgado. ¡No lo descargue si no confía en los administradores del servidor!",
-  "gui.automodpack.screen.danger.button.accept": "Descargar",
-  "gui.automodpack.screen.danger.button.cancel": "No descargar",
-
-  "gui.automodpack.screen.restart.button.changelogs": "Ver los cambios",
-  "gui.automodpack.screen.changelog.no_changes": "No se han encontrado cambios",
-  "gui.automodpack.screen.download.button.cancel": "Cancelar",
-  "gui.automodpack.screen.download.text.calculating": "Calculando...",
-  "gui.automodpack.screen.download.text.downloading": "Descargando:",
-  "gui.automodpack.screen.download.text.no_files": "¡No hay archivos para descargar!",
-  "gui.automodpack.screen.changelog.button.back": "Atrás"
-}
+    "automodpack.yes": "Si",
+    "automodpack.no": "No",
+    "automodpack.cancel": "Cancelar",
+    "automodpack.back": "Atrás",
+    "automodpack.wait": "Por favor, espere..."
+  }
