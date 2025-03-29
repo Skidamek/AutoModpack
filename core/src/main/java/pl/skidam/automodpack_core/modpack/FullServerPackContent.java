@@ -315,10 +315,10 @@ public class FullServerPackContent {
             }
 
             try {
-                FullServerPackContent fullServerPack = new FullServerPackContent("FullServer", CustomFileUtils.getPathFromCWD("automodpack/automodpack-host"), (ThreadPoolExecutor) Executors.newFixedThreadPool(4));
+                FullServerPackContent fullServerPack = new FullServerPackContent("FullServer", CustomFileUtils.getPathFromCWD("automodpack/host-modpack"), (ThreadPoolExecutor) Executors.newFixedThreadPool(4));
                 Jsons.FullServerPackContentFields fullServerContent = fullServerPack.buildFullServerPackContent(filesToInclude);
 
-                Path outputPath = CustomFileUtils.getPathFromCWD("automodpack/automodpack-host/fullserverpack-content.json");
+                Path outputPath = CustomFileUtils.getPathFromCWD("automodpack/host-modpack/fullserverpack-content.json");
                 ConfigTools.saveFullServerPackContent(outputPath, fullServerContent);
 
                 LOGGER.info("servermodpack content file saved under: {}", outputPath);
