@@ -33,12 +33,6 @@ public class FullServerPackContent {
         try {
             LOGGER.info("Creating Full Server Pack for: {}", MODPACK_NAME);
 
-            Path serverConfigFile = CustomFileUtils.getPathFromCWD("automodpack/automodpack-server.json");
-            if (!Files.exists(serverConfigFile)) {
-                LOGGER.warn("Serverconfigfile is missing, did you delete it?: {}", serverConfigFile);
-                return false;
-            }
-
             Jsons.ServerConfigFields serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
             if (serverConfig == null || !serverConfig.enableFullServerPack) {
                 LOGGER.info("FullServerPack creation is disabled or config invalid.");
