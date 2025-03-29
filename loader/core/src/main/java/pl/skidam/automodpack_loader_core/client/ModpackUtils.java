@@ -18,6 +18,7 @@ import java.util.function.Function;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
+
 public class ModpackUtils {
 
     public static boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
@@ -294,6 +295,19 @@ public class ModpackUtils {
 
         return modpackDir;
     }
+    //get minecraft path....
+    public static Path getMinecraftPath() {
+        return Path.of(System.getProperty("user.dir"));
+    }
+
+    //try to get modpacks about minecraft path for utils
+    public static Path getModpackPathFolder(String modpackpackage) {
+        return getMinecraftPath().resolve("automodpack/host-modpack/").resolve(modpackpackage);
+    }
+    // get all client Packages and paths from host-modpack util test
+    public static Path getClientPackage() {
+        return getMinecraftPath().resolve("automodpack/host-modpack");
+    }
 
     // Returns true if value changed
     public static boolean selectModpack(Path modpackDirToSelect, InetSocketAddress modpackAddressToSelect, Set<String> newDownloadedFiles) {
@@ -495,5 +509,49 @@ public class ModpackUtils {
         }
 
         return editableFiles;
+    }
+
+    //Build from other content file
+    public static Jsons.ModpackContentFields buildFullServerPackContent(List<Path> filesToInclude) {
+        Jsons.ModpackContentFields content = new Jsons.ModpackContentFields();
+        content.modpackName = "FullServerPack";
+        content.list = new HashSet<>();
+
+        for (Path file : filesToInclude) {
+            try {
+
+                String sha1 = CustomFileUtils.getHash(file);
+                String murmur = CustomFileUtils.getCurseforgeMurmurHash(file);
+                String size = String.valueOf(Files.size(file));
+
+                // path for linux or windows
+                String formattedPath = "/" + ModpackUtils.getMinecraftPath().relativize(file).toString().replace("\\", "/");
+
+                // what type is folder
+                String type;
+                if (formattedPath.startsWith("/mods/")) {
+                    type = "mod";
+                } else if (formattedPath.startsWith("/shaderpacks/")) {
+                    type = "shader";
+                } else if (formattedPath.startsWith("/resourcepacks/")) {
+                    type = "resourcepack";
+                } else if (formattedPath.startsWith("/config/")) {
+                    type = "config";
+                } else {
+                    type = "file";
+                }
+                // filling with content
+                Jsons.ModpackContentFields.ModpackContentItem item =
+                        new Jsons.ModpackContentFields.ModpackContentItem(
+                                formattedPath, sha1, murmur, false, size, type
+                        );
+
+                content.list.add(item);
+            } catch (IOException e) {
+                LOGGER.error("there is an error on the full server content: {}", file, e);
+            }
+        }
+
+        return content;
     }
 }
