@@ -4,6 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.*;
+import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -24,6 +25,7 @@ public class GlobalVariables {
     public static Path THIZ_JAR;
     public static Path MODS_DIR;
     public static Modpack modpack;
+    public static FullServerPack fullpacks;
     public static NettyServer hostServer;
     public static Jsons.ServerConfigFields serverConfig;
     public static Jsons.ClientConfigFields clientConfig;
