@@ -48,10 +48,10 @@ public class Jsons {
     }
 
     public static class ServerCoreConfigFields {
-        public String automodpackVersion = "4.0.0-beta9";
+        public String automodpackVersion = "4.0.0-beta29"; // TODO: dont hardcode it
         public String loader = "fabric";
-        public String loaderVersion = "0.15.11";
-        public String mcVersion = "1.20.1";
+        public String loaderVersion = "0.16.10";
+        public String mcVersion = "1.21.1";
     }
 
     public static class WorkaroundFields {
