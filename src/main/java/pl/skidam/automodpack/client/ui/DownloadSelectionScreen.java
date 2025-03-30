@@ -3,10 +3,10 @@ package pl.skidam.automodpack.client.ui;
 import java.util.List;
 
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -37,30 +37,35 @@ public class DownloadSelectionScreen extends VersionedScreen {
         }));
 
         //buttons from Selectionmanager
-
+        String currentSelected = SelectionManager.getSelectedPack();
         List<String> modpacks = SelectionManager.getModpackFolders();
 
-        //dynamisch wieviele buttons vorhanden sind
+        //dynamical how much buttons there
         int dynamicY = this.height / 2 - (modpacks.size() * 15);
         int i=0;
 
         for (String modpack : modpacks) {
-            // abstand einfügen
+            // between buttons
             int y = dynamicY + (i * 25);
 
+            var displayText = VersionedText.literal(modpack).formatted(modpack.equalsIgnoreCase(currentSelected) ? Formatting.GREEN : Formatting.BOLD);
+
             this.addDrawableChild(buttonWidget(this.width / 2, y, 140, 20, VersionedText.literal(modpack).formatted(Formatting.BOLD), button -> {
-                //Auswählen und dann starten
+                //select and start
                 SelectionManager.setSelectedPack(modpack);
                 Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
             }));
             i++;
         }
 
-        //Full Serverpack Button
-        this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, VersionedText.translatable("automodpack.ds.fullserverpack").formatted(Formatting.RED), button -> {
-            SelectionManager.setSelectedPack("fullserver");
-            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
-        }));
+        //Full Serverpack Button if Modpack has permission from server
+        Jsons.ModpackContentFields servercontent = modpackUpdaterInstance.getServerModpackContent();
+        if (servercontent != null && servercontent.enableFullServerPack) {
+            this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, VersionedText.translatable("automodpack.ds.fullserverpack").formatted(Formatting.RED), button -> {
+                SelectionManager.setSelectedPack("fullserver");
+                Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
+            }));
+        }
 
         /* Old Buttons
         this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.ds.standard").formatted(Formatting.BOLD), button -> {
@@ -83,6 +88,8 @@ public class DownloadSelectionScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+        //ADDE
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.ds.selected", VersionedText.literal(SelectionManager.getSelectedPack()).formatted(Formatting.GREEN, Formatting.BOLD)),this.width / 2, this.height / 2 - 15, 0xAAAAAA);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.ds").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.ds.description"), this.width / 2, this.height / 2 - 35, 16777215);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.ds.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);

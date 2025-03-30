@@ -309,8 +309,18 @@ public class ModpackUtils {
         return getMinecraftPath().resolve("automodpack/host-modpack");
     }
 
+    //add FullserverPack to selecting packs and it is need to change save folder
+    //add corrected Modpackpath if fullserverpack is selected
+    public static Path getCorrectModpackDir(Path modpackDirToSelect) {
+        if (modpackDirToSelect.getFileName().toString().equalsIgnoreCase("fullserver")) {
+            return hostFullServerPackDir.resolve("fullserver");
+        }
+        return modpackDirToSelect;
+    }
+
     // Returns true if value changed
     public static boolean selectModpack(Path modpackDirToSelect, InetSocketAddress modpackAddressToSelect, Set<String> newDownloadedFiles) {
+        modpackDirToSelect = getCorrectModpackDir(modpackDirToSelect);
         final String modpackToSelect = modpackDirToSelect.getFileName().toString();
         String selectedModpack = clientConfig.selectedModpack;
 
@@ -368,6 +378,9 @@ public class ModpackUtils {
 
     // Returns modpack name formatted for path or url if server doesn't provide modpack name
     public static Path getModpackPath(InetSocketAddress address, String modpackName) {
+        if (modpackName.equalsIgnoreCase("fullserver")) {
+            return hostFullServerPackDir.resolve("fullserver");
+        }
 
         String strAddress = address.getHostString() + ":" + address.getPort();
         String correctedName = strAddress;
@@ -509,49 +522,5 @@ public class ModpackUtils {
         }
 
         return editableFiles;
-    }
-
-    //Build from other content file
-    public static Jsons.ModpackContentFields buildFullServerPackContent(List<Path> filesToInclude) {
-        Jsons.ModpackContentFields content = new Jsons.ModpackContentFields();
-        content.modpackName = "FullServerPack";
-        content.list = new HashSet<>();
-
-        for (Path file : filesToInclude) {
-            try {
-
-                String sha1 = CustomFileUtils.getHash(file);
-                String murmur = CustomFileUtils.getCurseforgeMurmurHash(file);
-                String size = String.valueOf(Files.size(file));
-
-                // path for linux or windows
-                String formattedPath = "/" + ModpackUtils.getMinecraftPath().relativize(file).toString().replace("\\", "/");
-
-                // what type is folder
-                String type;
-                if (formattedPath.startsWith("/mods/")) {
-                    type = "mod";
-                } else if (formattedPath.startsWith("/shaderpacks/")) {
-                    type = "shader";
-                } else if (formattedPath.startsWith("/resourcepacks/")) {
-                    type = "resourcepack";
-                } else if (formattedPath.startsWith("/config/")) {
-                    type = "config";
-                } else {
-                    type = "file";
-                }
-                // filling with content
-                Jsons.ModpackContentFields.ModpackContentItem item =
-                        new Jsons.ModpackContentFields.ModpackContentItem(
-                                formattedPath, sha1, murmur, false, size, type
-                        );
-
-                content.list.add(item);
-            } catch (IOException e) {
-                LOGGER.error("there is an error on the full server content: {}", file, e);
-            }
-        }
-
-        return content;
     }
 }

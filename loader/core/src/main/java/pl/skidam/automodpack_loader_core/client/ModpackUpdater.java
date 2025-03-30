@@ -48,17 +48,21 @@ public class ModpackUpdater {
         return serverModpackContent.modpackName;
     }
 
-    public void prepareSelection() {}
+    public Jsons.ModpackContentFields getServerModpackContent() {
+        return serverModpackContent;
+    }
 
-    // old one should be okey, with new prepare Update, will look later on it because of content for selection
     ////  public void prepareUpdate(Jsons.ModpackContentFields modpackContent, String link, Path modpackPath) {
-    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, InetSocketAddress address, Secrets.Secret secret, Path modpackPath) {
+    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, InetSocketAddress address, Secrets.Secret secret) {
         serverModpackContent = modpackContent;
         modpackAddress = address;
         modpackSecret = secret;
-        modpackDir = modpackPath;
+        modpackDir = ModpackUtils.getModpackPath(address, modpackContent.modpackName);
 
-        if (modpackAddress == null || modpackPath.toString().isEmpty()) {
+        //check out of selected Modpack
+        SelectionManager.setSelectedPack(serverModpackContent.modpackName);
+
+        if (modpackAddress == null || modpackDir.toString().isEmpty()) {
             throw new IllegalArgumentException("Address or modpackPath is null or empty");
         }
 
@@ -170,14 +174,8 @@ public class ModpackUpdater {
     public void startServerUpdate() {}
     */
     public void startUpdate() {
-        String checkoutpack = SelectionManager.getSelectedPack();
-
-        //should be path one or two? bruhhh, not know yet, trying both
-        Path modpackFolder = ModpackUtils.getModpackPathFolder(checkoutpack);
-        Path modpackPathFolder = ModpackUtils.getModpackPathFolder(SelectionManager.getSelectedPack());
-
-
-
+        modpackDir = ModpackUtils.getModpackPath(modpackAddress, serverModpackContent.modpackName);
+        LOGGER.info("Using modpack directory: {}", modpackDir);
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");
             return;

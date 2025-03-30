@@ -69,6 +69,7 @@ public class Jsons {
         public String loader = "";
         public String loaderVersion = "";
         public String mcVersion = "";
+        public boolean enableFullServerPack = false;
         public Set<ModpackContentItem> list;
 
         public ModpackContentFields(Set<ModpackContentItem> list) {

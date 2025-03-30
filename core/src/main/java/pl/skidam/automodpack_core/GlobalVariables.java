@@ -50,6 +50,7 @@ public class GlobalVariables {
     public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
     public static final Path clientSecretsFile = privateDir.resolve("automodpack-client-secrets.json");
     public static final Path modpacksDir = automodpackDir.resolve("modpacks");
+    public static final Path hostFullServerPackDir = automodpackDir.resolve("serverpack");
 
     public static final String clientConfigFileOverrideResource = "overrides-automodpack-client.json";
     public static String clientConfigOverride; // read from inside a jar file on preload, used instead of clientConfigFile if exists
