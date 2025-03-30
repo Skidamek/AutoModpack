@@ -33,6 +33,7 @@ public class FullServerPackContent {
         return MODPACK_NAME;
     }
 
+
     public boolean create() {
         LOGGER.info("FullServerPackContent.create() is called");
         try {
@@ -135,10 +136,10 @@ public class FullServerPackContent {
             // generate content and save it
             Jsons.FullServerPackContentFields fullServerContent = buildFullServerPackContent(filesToInclude);
 
-            Path outputPath = MODPACK_DIR.resolve("fullserverpack-content.json");
+            Path outputPath = hostModpackDir.resolve("fullserverpack-content.json");
             ConfigTools.saveFullServerPackContent(outputPath, fullServerContent);
 
-            LOGGER.info("FullServerPack content saved to: {}", outputPath);
+            LOGGER.info("FullServerPack content saved to: {}", outputPath.toAbsolutePath());
             return true;
 
         } catch (Exception e) {
