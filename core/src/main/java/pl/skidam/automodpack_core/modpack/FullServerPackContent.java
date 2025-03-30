@@ -176,7 +176,7 @@ public class FullServerPackContent {
 
         futures.forEach(CompletableFuture::join);
 
-        return new Jsons.FullServerPackContentFields(contentList);
+        return new Jsons.FullServerPackContentFields(MODPACK_NAME, MC_VERSION, LOADER, contentList);
     }
 
     private void generate(Path file, Set<Jsons.FullServerPackContentFields.FullServerPackContentItem> contentList) {
@@ -218,7 +218,8 @@ public class FullServerPackContent {
                 murmur = CustomFileUtils.getCurseforgeMurmurHash(file);
             }
 
-            var item = new Jsons.FullServerPackContentFields.FullServerPackContentItem("/" + formattedFile, size, type, sha1, murmur);
+            String cleanedFile = formattedFile.replaceAll("^/+", "/");
+            var item = new Jsons.FullServerPackContentFields.FullServerPackContentItem(cleanedFile, size, type, sha1, murmur);
             contentList.add(item);
 
         } catch (Exception e) {
@@ -278,7 +279,7 @@ public class FullServerPackContent {
                         if (filesToInclude.contains(path)) return;
 
                         String relative = CustomFileUtils.getPathFromCWD("").relativize(path).toString().replace("\\", "/");
-                        String formatted = "/" + relative;
+                        String formatted = ("/" + relative).replaceAll("^/+", "/");
 
                         LOGGER.info("included from defaultdir: {}", formatted);
                         filesToInclude.add(path);

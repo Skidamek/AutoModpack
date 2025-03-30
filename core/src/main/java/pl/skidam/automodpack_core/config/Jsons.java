@@ -103,9 +103,15 @@ public class Jsons {
         }
     }
     public static class FullServerPackContentFields {
+        public String modpackName = "";
+        public String mcVersion = "";
+        public String loader = "";
         public Set<FullServerPackContentItem> list;
 
-        public FullServerPackContentFields(Set<FullServerPackContentItem> list) {
+        public FullServerPackContentFields(String modpackName, String mcVersion, String loader, Set<FullServerPackContentItem> list) {
+            this.modpackName = modpackName;
+            this.mcVersion = mcVersion;
+            this.loader = loader;
             this.list = list;
         }
 
