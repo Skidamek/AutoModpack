@@ -66,7 +66,7 @@ public class DataC2SPacket {
 
                 if (update) {
                     disconnectImmediately(handler);
-                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), address, secret, modpackDir);
+                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), address, secret);
                     needsDisconnecting = true;
                 } else {
                     boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, address, Set.of());

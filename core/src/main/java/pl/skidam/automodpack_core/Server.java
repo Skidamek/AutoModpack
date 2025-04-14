@@ -2,8 +2,10 @@ package pl.skidam.automodpack_core;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
+import pl.skidam.automodpack_core.modpack.FullServerPackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.nio.file.Path;
@@ -69,9 +71,20 @@ public class Server {
         } else {
             LOGGER.error("Failed to generate modpack!");
         }
+        LOGGER.info("Start FullServerPack generation!");
 
-        modpack.CREATION_EXECUTOR.shutdownNow();
+        FullServerPack fullserverpack = new FullServerPack();
+        FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, hostContentModpackDir, fullserverpack.CREATION_EXECUTOR);
+        boolean fullpackgenerated = fullserverpack.generateNew(fullServerPackContent);
 
+        if (fullpackgenerated) {
+            LOGGER.info("FullServerPack generated!");
+        } else {
+            LOGGER.error("Failed to generate serverpack!");
+        }
+
+        modpack.shutdownExecutor();
+        fullserverpack.shutdownExecutor();
         LOGGER.info("Starting server on port {}", serverConfig.hostPort);
         server.start();
         // wait for server to stop
