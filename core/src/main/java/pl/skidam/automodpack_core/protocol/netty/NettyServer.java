@@ -31,6 +31,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class NettyServer {
     public static final AttributeKey<Boolean> USE_COMPRESSION = AttributeKey.valueOf("useCompression");
+    public static final int CHUNK_SIZE = 131072; // 128 KB - good for zstd
     private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
     private ChannelFuture serverChannel;

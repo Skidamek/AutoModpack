@@ -37,6 +37,14 @@ public class ZstdDecoder extends ByteToMessageDecoder {
         int compressedLength = in.readInt();
         int originalLength = in.readInt();
 
+        if (compressedLength < 0 || originalLength < 0) {
+            throw new IllegalArgumentException("Invalid compressed or original length");
+        }
+
+        if (originalLength > NettyServer.CHUNK_SIZE) {
+            throw new IllegalArgumentException("Original length exceeds maximum packet size");
+        }
+
         if (in.readableBytes() < compressedLength) {
             in.resetReaderIndex();
             return;

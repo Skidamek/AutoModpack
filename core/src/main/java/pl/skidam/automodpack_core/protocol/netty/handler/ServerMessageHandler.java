@@ -25,6 +25,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
+import static pl.skidam.automodpack_core.protocol.netty.NettyServer.CHUNK_SIZE;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
@@ -162,7 +163,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
         try {
             RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
-            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), 131072); // 128 KB chunk size - good for zstd
+            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), CHUNK_SIZE);
             ctx.writeAndFlush(chunkedFile).addListener((ChannelFutureListener) future -> {
                 try {
                     if (future.isSuccess()) {
