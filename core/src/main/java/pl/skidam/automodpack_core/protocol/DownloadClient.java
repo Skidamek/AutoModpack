@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol;
 import pl.skidam.automodpack_core.auth.Secrets;
 import com.github.luben.zstd.Zstd;
 import pl.skidam.automodpack_core.callbacks.IntCallback;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -267,18 +268,28 @@ class Connection {
     }
 
     /**
-     * Compresses and writes a protocol message using Zstd.
-     * Message framing: [int: compressedLength][int: originalLength][compressed payload].
+     * Compresses (if enabled) and writes a protocol message using Zstd in chunks.
+     * Each chunk is framed individually.
+     * Framing without compression: [int: chunkLength][chunk payload].
+     * Framing with compression: [int: compressedChunkLength][int: originalChunkLength][compressed chunk payload].
      */
     private void writeProtocolMessage(byte[] payload) throws IOException {
-        if (!useCompression) {
-            out.writeInt(payload.length);
-            out.write(payload);
-        } else {
-            byte[] compressed = Zstd.compress(payload);
-            out.writeInt(compressed.length);
-            out.writeInt(payload.length);
-            out.write(compressed);
+        int offset = 0;
+        while (offset < payload.length) {
+            int bytesToSend = Math.min(payload.length - offset, NettyServer.CHUNK_SIZE);
+            byte[] chunk = new byte[bytesToSend];
+            System.arraycopy(payload, offset, chunk, 0, bytesToSend);
+
+            if (!useCompression) {
+                out.writeInt(chunk.length);
+                out.write(chunk);
+            } else {
+                byte[] compressedChunk = Zstd.compress(chunk);
+                out.writeInt(compressedChunk.length);
+                out.writeInt(chunk.length);
+                out.write(compressedChunk);
+            }
+            offset += bytesToSend;
         }
         out.flush();
     }
@@ -288,18 +299,27 @@ class Connection {
      */
     private byte[] readProtocolMessageFrame() throws IOException {
         if (!useCompression) {
-            int origLength = in.readInt();
-            byte[] data = new byte[origLength];
+            int originalLength = in.readInt();
+            byte[] data = new byte[originalLength];
             in.readFully(data);
             return data;
         } else {
-            int compLength = in.readInt();
-            int origLength = in.readInt();
-            byte[] compData = new byte[compLength];
-            in.readFully(compData);
-            byte[] decompressed = Zstd.decompress(compData, origLength);
+            int compressedLength = in.readInt();
+            int originalLength = in.readInt();
 
-            if (decompressed.length != origLength) {
+            if (compressedLength < 0 || originalLength < 0) {
+                throw new IllegalArgumentException("Invalid compressed or original length");
+            }
+
+            if (originalLength > NettyServer.CHUNK_SIZE) {
+                throw new IllegalArgumentException("Original length exceeds maximum packet size");
+            }
+
+            byte[] compressed = new byte[compressedLength];
+            in.readFully(compressed);
+            byte[] decompressed = Zstd.decompress(compressed, originalLength);
+
+            if (decompressed.length != originalLength) {
                 throw new IOException("Decompressed length does not match original length");
             }
 
