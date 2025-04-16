@@ -121,6 +121,8 @@ public class NettyServer {
                 eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
             }
 
+            new TrafficShaper(eventLoopGroup);
+
             serverChannel = new ServerBootstrap()
                     .channel(socketChannelClass)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)

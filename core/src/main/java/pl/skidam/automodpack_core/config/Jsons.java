@@ -41,6 +41,7 @@ public class Jsons {
         public boolean updateIpsOnEveryStart = false;
         public int hostPort = -1;
         public boolean reverseProxy = false;
+        public int bandwidthLimit = 0;
         public long secretLifetime = 336; // 336 hours = 14 days
         public boolean validateSecrets = true;
         public boolean selfUpdater = false;

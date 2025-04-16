@@ -6,6 +6,7 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 
 import java.util.List;
 
@@ -49,6 +50,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                 ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
 
                 // Set up the pipeline for our protocol
+                ctx.pipeline().addLast("trafficShaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
                 ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
                 ctx.pipeline().addLast("zstd-encoder", new ZstdEncoder());
                 ctx.pipeline().addLast("zstd-decoder", new ZstdDecoder());
