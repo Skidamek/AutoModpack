@@ -1,10 +1,7 @@
 package pl.skidam.automodpack_core.auth;
 
-import pl.skidam.automodpack_core.protocol.NetUtils;
-
 import java.net.SocketAddress;
 import java.security.SecureRandom;
-import java.security.cert.X509Certificate;
 import java.util.Base64;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -12,7 +9,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class Secrets {
     public static class Secret { // unfortunately has to be a class instead of record because of older gson version in 1.18 mc
         private String secret; // and these also can't be final
-        private String fingerprint;
+        private String fingerprint; // TODO ditch fingerprint from there
         private Long timestamp;
 
         public Secret(String secret, String fingerprint, Long timestamp) {
@@ -48,25 +45,13 @@ public class Secrets {
         byte[] bytes = new byte[32]; // 32 bytes = 256 bits
         random.nextBytes(bytes);
         String secret = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        String fingerprint = generateFingerprint(secret);
+        String fingerprint = hostServer.getCertificateFingerprint();
         if (secret == null || fingerprint == null)
             return null;
 
         long timestamp = System.currentTimeMillis() / 1000;
 
         return new Secret(secret, fingerprint, timestamp);
-    }
-
-    private static String generateFingerprint(String secret) {
-        try {
-            X509Certificate cert = hostServer.getCert();
-            if (cert == null)
-                return null;
-            return NetUtils.getFingerprint(cert, secret);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
     }
 
     public static boolean isSecretValid(String secretStr, SocketAddress address) {

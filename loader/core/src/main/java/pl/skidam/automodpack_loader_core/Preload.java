@@ -180,6 +180,14 @@ public class Preload {
                 clientConfig.installedModpacks = new HashMap<>();
             }
 
+            if (clientConfig.knowHosts == null) {
+                clientConfig.knowHosts = new HashMap<>();
+            }
+
+            if (clientConfig.selectedModpack == null) {
+                clientConfig.selectedModpack = "";
+            }
+
             // Save changes
             ConfigTools.save(clientConfigFile, clientConfig);
         }

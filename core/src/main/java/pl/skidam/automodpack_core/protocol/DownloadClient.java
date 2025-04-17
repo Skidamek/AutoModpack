@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.protocol;
 import pl.skidam.automodpack_core.auth.Secrets;
 import com.github.luben.zstd.Zstd;
 import pl.skidam.automodpack_core.callbacks.IntCallback;
-import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -141,10 +140,11 @@ class Connection {
                 throw new IOException("Invalid server certificate chain");
             }
 
+            // TODO: do the verification from knowHosts instead of from secrets
             boolean validated = false;
             for (Certificate cert : certs) {
                 if (cert instanceof X509Certificate x509Cert) {
-                    String fingerprint = NetUtils.getFingerprint(x509Cert, secret.secret());
+                    String fingerprint = NetUtils.getFingerprint(x509Cert);
                     if (fingerprint.equals(secret.fingerprint())) {
                         validated = true;
                         break;
@@ -276,7 +276,7 @@ class Connection {
     private void writeProtocolMessage(byte[] payload) throws IOException {
         int offset = 0;
         while (offset < payload.length) {
-            int bytesToSend = Math.min(payload.length - offset, NettyServer.CHUNK_SIZE);
+            int bytesToSend = Math.min(payload.length - offset, CHUNK_SIZE);
             byte[] chunk = new byte[bytesToSend];
             System.arraycopy(payload, offset, chunk, 0, bytesToSend);
 
@@ -311,7 +311,7 @@ class Connection {
                 throw new IllegalArgumentException("Invalid compressed or original length");
             }
 
-            if (originalLength > NettyServer.CHUNK_SIZE) {
+            if (originalLength > CHUNK_SIZE) {
                 throw new IllegalArgumentException("Original length exceeds maximum packet size");
             }
 

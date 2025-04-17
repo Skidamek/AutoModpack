@@ -25,7 +25,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
-import static pl.skidam.automodpack_core.protocol.netty.NettyServer.CHUNK_SIZE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.CHUNK_SIZE;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 

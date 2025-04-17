@@ -14,6 +14,7 @@ public class Jsons {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public String selectedModpack = ""; // modpack name
         public Map<String, String> installedModpacks; // modpack name, link
+        public Map<String, String> knowHosts; // link, fingerprint
         public boolean selfUpdater = false;
     }
 
