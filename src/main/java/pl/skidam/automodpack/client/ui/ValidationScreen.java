@@ -3,6 +3,8 @@ package pl.skidam.automodpack.client.ui;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.toast.SystemToast;
+import net.minecraft.client.toast.Toast;
 import net.minecraft.util.Formatting;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -15,12 +17,13 @@ public class ValidationScreen extends VersionedScreen {
     private final Screen parent;
     private final String serverFingerprint;
     private final Callback validatedCallback;
+    private final Toast failedToast = new SystemToast(SystemToast.Type.PACK_LOAD_FAILURE, VersionedText.translatable("automodpack.validation.failed"), VersionedText.translatable("automodpack.retry"));
     private TextFieldWidget textField;
     private ButtonWidget backButton;
     private ButtonWidget validateButton;
 
     public ValidationScreen(Screen parent, String serverFingerprint, Callback validatedCallback) {
-        super(VersionedText.literal("RestartScreen"));
+        super(VersionedText.literal("ValidationScreen"));
         this.parent = parent;
         this.serverFingerprint = serverFingerprint;
         this.validatedCallback = validatedCallback;
@@ -40,14 +43,14 @@ public class ValidationScreen extends VersionedScreen {
 
     public void initWidgets() {
         assert this.client != null;
-        this.textField = new TextFieldWidget(this.textRenderer, this.width / 2 - 150, this.height / 2 - 30, 300, 20,
+        this.textField = new TextFieldWidget(this.textRenderer, this.width / 2 - 170, this.height / 2 - 20, 340, 20,
                 VersionedText.literal("")
         );
         this.textField.setMaxLength(64); // default is 30 which is too little
 
         this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20,
                 VersionedText.translatable("automodpack.back"),
-                button -> this.client.setScreen(null)
+                button -> this.client.setScreen(parent)
         );
 
         this.validateButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20,
@@ -67,6 +70,7 @@ public class ValidationScreen extends VersionedScreen {
             }
         } else {
             GlobalVariables.LOGGER.error("Server fingerprint validation failed, try again");
+            this.client.getToastManager().add(failedToast);
         }
     }
 
@@ -76,6 +80,10 @@ public class ValidationScreen extends VersionedScreen {
                 this.width / 2, this.height / 2 - 100, 16777215);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.description"),
                 this.width / 2, this.height / 2 - 75, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.secDescription"),
+                this.width / 2, this.height / 2 - 65, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.thiDescription"),
+                this.width / 2, this.height / 2 - 55, 16777215);
     }
 
     @Override

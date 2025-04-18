@@ -72,7 +72,7 @@ public class DataC2SPacket {
                     ConfigTools.save(clientConfigFile, clientConfig);
                     semaphore.release();
                 };
-                new ScreenManager().validation(new ScreenManager().getScreen().get(), certificateFingerprint, callback);
+                new ScreenManager().validation(null, certificateFingerprint, callback);
                 semaphore.acquire(); // wait for callback release call
             }
 
