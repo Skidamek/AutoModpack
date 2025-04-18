@@ -8,15 +8,13 @@ public class DataPacket {
     public Integer port;
     public String modpackName;
     public Secrets.Secret secret;
-    public String certificateFingerprint;
     public boolean modRequired;
 
-    public DataPacket(String address, Integer port, String modpackName, Secrets.Secret secret, String certificateFingerprint, boolean modRequired) {
+    public DataPacket(String address, Integer port, String modpackName, Secrets.Secret secret, boolean modRequired) {
         this.address = address;
         this.port = port;
         this.modpackName = modpackName;
         this.secret = secret;
-        this.certificateFingerprint = certificateFingerprint;
         this.modRequired = modRequired;
     }
 
