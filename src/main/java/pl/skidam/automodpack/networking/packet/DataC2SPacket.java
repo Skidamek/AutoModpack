@@ -9,11 +9,9 @@ import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.callbacks.Callback;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.net.InetSocketAddress;
@@ -21,7 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Semaphore;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
@@ -59,60 +56,41 @@ public class DataC2SPacket {
                 LOGGER.info("Received address packet from server! {} Attached port: {}", addressString, port);
             }
 
-            Semaphore semaphore = new Semaphore(0);
-
-            // validate server certificate
-            if (!clientConfig.knowHosts.containsKey(address.getHostString()) || !clientConfig.knowHosts.get(address.getHostString()).equals(secret.fingerprint())) {
-                LOGGER.warn("Received unknown certificate from server! {}", address.getHostString());
-                InetSocketAddress finalAddress = address;
-                Callback callback = () -> {
-                    clientConfig.knowHosts.put(finalAddress.getHostString(), secret.fingerprint());
-                    semaphore.release();
-                };
-                new ScreenManager().validation(new ScreenManager().getScreen().get(), secret.fingerprint(), callback);
-                semaphore.acquire();
-            }
-
             Boolean needsDisconnecting = null;
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
 
-            if (!clientConfig.knowHosts.getOrDefault(address.getHostString(), "").equals(secret.fingerprint())) {
-                LOGGER.error("Invalid server certificate {}", address.getHostString());
-                needsDisconnecting = true;
-            } else {
-                Path modpackDir = ModpackUtils.getModpackPath(address, modpackName);
-                var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(address, secret);
+            Path modpackDir = ModpackUtils.getModpackPath(address, modpackName);
+            var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(address, secret, true);
 
-                if (optionalServerModpackContent.isPresent()) {
-                    boolean update = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
+            if (optionalServerModpackContent.isPresent()) {
+                boolean update = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
-                    if (update) {
+                if (update) {
+                    disconnectImmediately(handler);
+                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), address, secret, modpackDir);
+                    needsDisconnecting = true;
+                } else {
+                    boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, address, Set.of());
+
+                    // save latest modpack content
+                    var modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
+                    if (Files.exists(modpackContentFile)) {
+                        Files.writeString(modpackContentFile, GSON.toJson(optionalServerModpackContent.get()));
+                    }
+
+                    if (selectedModpackChanged) {
+                        SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
                         disconnectImmediately(handler);
-                        new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), address, secret, modpackDir);
+                        new ReLauncher(modpackDir, UpdateType.SELECT, null).restart(false);
                         needsDisconnecting = true;
                     } else {
-                        boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, address, Set.of());
-
-                        // save latest modpack content
-                        var modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
-                        if (Files.exists(modpackContentFile)) {
-                            Files.writeString(modpackContentFile, GSON.toJson(optionalServerModpackContent.get()));
-                        }
-
-                        if (selectedModpackChanged) {
-                            SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
-                            disconnectImmediately(handler);
-                            new ReLauncher(modpackDir, UpdateType.SELECT, null).restart(false);
-                            needsDisconnecting = true;
-                        } else {
-                            needsDisconnecting = false;
-                        }
+                        needsDisconnecting = false;
                     }
                 }
+            }
 
-                if (clientConfig.selectedModpack != null && !clientConfig.selectedModpack.isBlank()) {
-                    SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
-                }
+            if (clientConfig.selectedModpack != null && !clientConfig.selectedModpack.isBlank()) {
+                SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
             }
 
             response.writeString(String.valueOf(needsDisconnecting), Short.MAX_VALUE);

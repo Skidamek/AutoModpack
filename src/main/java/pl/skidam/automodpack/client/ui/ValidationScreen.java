@@ -9,21 +9,24 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.GlobalVariables;
-import pl.skidam.automodpack_core.callbacks.Callback;
 
 public class ValidationScreen extends VersionedScreen {
     private final Screen parent;
     private final String serverFingerprint;
-    private final Callback validatedCallback;
+    private final Runnable validatedCallback;
+    private final Runnable canceledCallback;
+    private boolean validated = false;
     private TextFieldWidget textField;
     private ButtonWidget backButton;
     private ButtonWidget validateButton;
 
-    public ValidationScreen(Screen parent, String serverFingerprint, Callback validatedCallback) {
+    public ValidationScreen(Screen parent, String serverFingerprint, Runnable validatedCallback,
+                            Runnable canceledCallback) {
         super(VersionedText.literal("RestartScreen"));
         this.parent = parent;
         this.serverFingerprint = serverFingerprint;
         this.validatedCallback = validatedCallback;
+        this.canceledCallback = canceledCallback;
     }
 
     @Override
@@ -47,7 +50,12 @@ public class ValidationScreen extends VersionedScreen {
 
         this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20,
                 VersionedText.translatable("automodpack.back"),
-                button -> this.client.setScreen(null)
+                button -> {
+                    if (!this.validated) {
+                        this.canceledCallback.run();
+                    }
+                    this.client.setScreen(null);
+                }
         );
 
         this.validateButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20,
@@ -59,12 +67,8 @@ public class ValidationScreen extends VersionedScreen {
         input = input.strip();
         if (input.equals(serverFingerprint) || input.equals("I AM INCREDIBLY STUPID")) {
             validateButton.active = false;
-            try {
-                validatedCallback.run();
-            } catch (Exception e) {
-                GlobalVariables.LOGGER.error("Error while validating server fingerprint", e);
-                this.client.setScreen(new ErrorScreen("Error while validating server fingerprint"));
-            }
+            this.validated = true;
+            validatedCallback.run();
         } else {
             GlobalVariables.LOGGER.error("Server fingerprint validation failed, try again");
         }

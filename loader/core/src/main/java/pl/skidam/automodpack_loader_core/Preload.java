@@ -76,7 +76,7 @@ public class Preload {
         InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
         Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
-        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackAddress, secret);
+        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackAddress, secret, false);
         var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
         // Use the latest modpack content if available
