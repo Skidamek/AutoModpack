@@ -156,6 +156,7 @@ class PreValidationConnection {
         sslSocket.setSSLParameters(sslParameters);
 
         SSLSession session = sslSocket.getSession();
+        X509Certificate unvalidatedCertificate = null;
         if (!session.isValid()) {
             // Handshake failed
             sslSocket.close();
@@ -164,12 +165,9 @@ class PreValidationConnection {
             if (serverCertificateChain != null && serverCertificateChain.length > 0
                     && isSelfSigned(serverCertificateChain[0])) {
                 unvalidatedCertificate = serverCertificateChain[0];
-            } else {
-                unvalidatedCertificate = null;
             }
-        } else {
-            unvalidatedCertificate = null;
         }
+        this.unvalidatedCertificate = unvalidatedCertificate;
 
         socket = sslSocket;
     }
@@ -202,148 +200,9 @@ class PreValidationConnection {
     private SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating)
             throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
         SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
-        X509ExtendedTrustManager trustManager = createTrustManager(trustedCertificates, onValidating);
+        X509ExtendedTrustManager trustManager = new CustomizableTrustManager(trustedCertificates, onValidating);
         sslContext.init(null, new TrustManager[]{trustManager}, new SecureRandom());
         return sslContext;
-    }
-
-    private X509ExtendedTrustManager createTrustManager(KeyStore trustedCertificates,
-                                                        Consumer<X509Certificate[]> onValidating)
-            throws NoSuchAlgorithmException, KeyStoreException {
-        TrustManagerFactory trustManagerFactory = TrustManagerFactory
-                .getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trustManagerFactory.init((KeyStore) null);
-
-        X509ExtendedTrustManager defaultTrustManager = getX509ExtendedTrustManager(trustManagerFactory);
-
-        X509ExtendedTrustManager trustedCertificatesTrustManager = null;
-        if (trustedCertificates.size() > 0) {
-            trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            trustManagerFactory.init(trustedCertificates);
-
-            trustedCertificatesTrustManager = getX509ExtendedTrustManager(trustManagerFactory);
-        }
-
-        X509ExtendedTrustManager finalTrustedCertificatesTrustManager = trustedCertificatesTrustManager;
-        return new X509ExtendedTrustManager() {
-            private X509Certificate[] mergeCertificates() {
-                ArrayList<X509Certificate> resultingCerts
-                        = new ArrayList<>(Arrays.asList(defaultTrustManager.getAcceptedIssuers()));
-                if (finalTrustedCertificatesTrustManager != null) {
-                    resultingCerts.addAll(Arrays.asList(finalTrustedCertificatesTrustManager.getAcceptedIssuers()));
-                }
-                return resultingCerts.toArray(new X509Certificate[0]);
-            }
-
-            @Override
-            public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                onValidating.accept(chain);
-                try {
-                    defaultTrustManager.checkClientTrusted(chain, authType);
-                } catch (CertificateException e) {
-                    if (finalTrustedCertificatesTrustManager != null) {
-                        finalTrustedCertificatesTrustManager.checkClientTrusted(chain, authType);
-                    } else {
-                        throw e;
-                    }
-                }
-            }
-
-            @Override
-            public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                onValidating.accept(chain);
-                try {
-                    defaultTrustManager.checkServerTrusted(chain, authType);
-                } catch (CertificateException e) {
-                    if (finalTrustedCertificatesTrustManager != null) {
-                        finalTrustedCertificatesTrustManager.checkServerTrusted(chain, authType);
-                    } else {
-                        throw e;
-                    }
-                }
-            }
-
-            @Override
-            public X509Certificate[] getAcceptedIssuers() {
-                return mergeCertificates();
-            }
-
-            @Override
-            public void checkClientTrusted(X509Certificate[] chain, String authType, Socket checkedSocket)
-                    throws CertificateException {
-                try {
-                    defaultTrustManager.checkClientTrusted(chain, authType, checkedSocket);
-                } catch (CertificateException e) {
-                    if (finalTrustedCertificatesTrustManager != null) {
-                        // Skip address check if certificate is trusted
-                        finalTrustedCertificatesTrustManager.checkClientTrusted(chain, authType);
-                    } else {
-                        throw e;
-                    }
-                }
-            }
-
-            @Override
-            public void checkServerTrusted(X509Certificate[] chain, String authType, Socket checkedSocket)
-                    throws CertificateException {
-                onValidating.accept(chain);
-                try {
-                    defaultTrustManager.checkServerTrusted(chain, authType, checkedSocket);
-                } catch (CertificateException e) {
-                    if (finalTrustedCertificatesTrustManager != null) {
-                        // Skip address check if certificate is trusted
-                        finalTrustedCertificatesTrustManager.checkServerTrusted(chain, authType);
-                    } else {
-                        throw e;
-                    }
-                }
-            }
-
-            @Override
-            public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
-                    throws CertificateException {
-                try {
-                    defaultTrustManager.checkClientTrusted(chain, authType, sslEngine);
-                } catch (CertificateException e) {
-                    if (finalTrustedCertificatesTrustManager != null) {
-                        // Skip address check if certificate is trusted
-                        finalTrustedCertificatesTrustManager.checkClientTrusted(chain, authType);
-                    } else {
-                        throw e;
-                    }
-                }
-            }
-
-            @Override
-            public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
-                    throws CertificateException {
-                onValidating.accept(chain);
-                try {
-                    defaultTrustManager.checkServerTrusted(chain, authType, sslEngine);
-                } catch (CertificateException e) {
-                    if (finalTrustedCertificatesTrustManager != null) {
-                        // Skip address check if certificate is trusted
-                        finalTrustedCertificatesTrustManager.checkServerTrusted(chain, authType);
-                    } else {
-                        throw e;
-                    }
-                }
-            }
-        };
-    }
-
-    private static X509ExtendedTrustManager getX509ExtendedTrustManager(TrustManagerFactory trustManagerFactory) {
-        X509ExtendedTrustManager trustedCertificatesTrustManager = null;
-        for (TrustManager trustManager : trustManagerFactory.getTrustManagers()) {
-            if (trustManager instanceof X509ExtendedTrustManager) {
-                trustedCertificatesTrustManager = (X509ExtendedTrustManager) trustManager;
-                break;
-            }
-        }
-        if (trustedCertificatesTrustManager == null) {
-            throw new IllegalStateException("Failed to create extended trust manager");
-        }
-        return trustedCertificatesTrustManager;
     }
 }
 
