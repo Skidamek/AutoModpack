@@ -13,8 +13,7 @@ public class Jsons {
     public static class ClientConfigFields {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public String selectedModpack = ""; // modpack name
-        public Map<String, String> installedModpacks; // modpack name, link
-        public Map<String, String> knowHosts; // link, fingerprint
+        public Map<String, String> installedModpacks; // modpack name, host
         public boolean selfUpdater = false;
     }
 
@@ -64,6 +63,10 @@ public class Jsons {
 
     public static class SecretsFields {
         public Map<String, Secrets.Secret> secrets = new HashMap<>();
+    }
+
+    public static class KnownHostsFields {
+        public Map<String, String> hosts; // host, fingerprint
     }
 
     public static class ModpackContentFields {

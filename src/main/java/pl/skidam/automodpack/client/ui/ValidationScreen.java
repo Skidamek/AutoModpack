@@ -3,6 +3,8 @@ package pl.skidam.automodpack.client.ui;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.toast.SystemToast;
+import net.minecraft.client.toast.Toast;
 import net.minecraft.util.Formatting;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -16,13 +18,14 @@ public class ValidationScreen extends VersionedScreen {
     private final Runnable validatedCallback;
     private final Runnable canceledCallback;
     private boolean validated = false;
+    private final Toast failedToast = new SystemToast(SystemToast.Type.PACK_LOAD_FAILURE, VersionedText.translatable("automodpack.validation.failed"), VersionedText.translatable("automodpack.retry"));
     private TextFieldWidget textField;
     private ButtonWidget backButton;
     private ButtonWidget validateButton;
 
     public ValidationScreen(Screen parent, String serverFingerprint, Runnable validatedCallback,
                             Runnable canceledCallback) {
-        super(VersionedText.literal("RestartScreen"));
+        super(VersionedText.literal("ValidationScreen"));
         this.parent = parent;
         this.serverFingerprint = serverFingerprint;
         this.validatedCallback = validatedCallback;
@@ -43,7 +46,7 @@ public class ValidationScreen extends VersionedScreen {
 
     public void initWidgets() {
         assert this.client != null;
-        this.textField = new TextFieldWidget(this.textRenderer, this.width / 2 - 150, this.height / 2 - 30, 300, 20,
+        this.textField = new TextFieldWidget(this.textRenderer, this.width / 2 - 170, this.height / 2 - 20, 340, 20,
                 VersionedText.literal("")
         );
         this.textField.setMaxLength(64); // default is 30 which is too little
@@ -54,7 +57,7 @@ public class ValidationScreen extends VersionedScreen {
                     if (!this.validated) {
                         this.canceledCallback.run();
                     }
-                    this.client.setScreen(null);
+                    this.client.setScreen(parent);
                 }
         );
 
@@ -71,6 +74,7 @@ public class ValidationScreen extends VersionedScreen {
             validatedCallback.run();
         } else {
             GlobalVariables.LOGGER.error("Server fingerprint validation failed, try again");
+            this.client.getToastManager().add(failedToast);
         }
     }
 
@@ -80,6 +84,10 @@ public class ValidationScreen extends VersionedScreen {
                 this.width / 2, this.height / 2 - 100, 16777215);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.description"),
                 this.width / 2, this.height / 2 - 75, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.secDescription"),
+                this.width / 2, this.height / 2 - 65, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.thiDescription"),
+                this.width / 2, this.height / 2 - 55, 16777215);
     }
 
     @Override

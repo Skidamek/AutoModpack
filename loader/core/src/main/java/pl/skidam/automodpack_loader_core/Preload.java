@@ -14,8 +14,11 @@ import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -180,10 +183,6 @@ public class Preload {
                 clientConfig.installedModpacks = new HashMap<>();
             }
 
-            if (clientConfig.knowHosts == null) {
-                clientConfig.knowHosts = new HashMap<>();
-            }
-
             if (clientConfig.selectedModpack == null) {
                 clientConfig.selectedModpack = "";
             }
@@ -192,10 +191,25 @@ public class Preload {
             ConfigTools.save(clientConfigFile, clientConfig);
         }
 
+        knownHosts = ConfigTools.load(knownHostsFile, Jsons.KnownHostsFields.class);
+        if (knownHosts != null) {
+            if (knownHosts.hosts == null) {
+                knownHosts.hosts = new HashMap<>();
+            }
+        }
+
         try {
             Files.createDirectories(privateDir);
-            if (Files.exists(privateDir) && System.getProperty("os.name").toLowerCase().contains("win")) {
-                Files.setAttribute(privateDir, "dos:hidden", true);
+            String os = System.getProperty("os.name").toLowerCase();
+            try {
+                if (os.contains("win")) {
+                    Files.setAttribute(privateDir, "dos:hidden", true);
+                } else if (os.contains("nix") || os.contains("nux") || os.contains("aix") || os.contains("mac")) {
+                    Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------"); // Corresponds to 0700
+                    Files.setPosixFilePermissions(privateDir, perms);
+                }
+            } catch (UnsupportedOperationException e) {
+                LOGGER.warn("Failed to set private directory attributes for os: {}", os, e);
             }
         } catch (IOException e) {
             LOGGER.error("Failed to create private directory", e);
