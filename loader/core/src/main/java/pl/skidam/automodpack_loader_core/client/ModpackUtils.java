@@ -452,6 +452,7 @@ public class ModpackUtils {
                 boolean trusted = askUserAboutCertificate(address, fingerprint);
                 if (trusted) {
                     knownHosts.hosts.put(address.getHostString(), fingerprint);
+                    ConfigTools.save(knownHostsFile, knownHosts);
                 }
                 return trusted;
             }
