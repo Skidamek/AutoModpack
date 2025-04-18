@@ -16,8 +16,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.GlobalVariables.clientConfig;
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 /**
@@ -106,7 +105,7 @@ class Connection {
      */
     public Connection(InetSocketAddress address, Secrets.Secret secret) throws Exception {
         try {
-            if (address == null || !clientConfig.knowHosts.containsKey(address.getHostString())) {
+            if (address == null || !knownHosts.hosts.containsKey(address.getHostString())) {
                 throw new IllegalArgumentException("Invalid address or unknown host: " + address);
             }
 
@@ -145,7 +144,7 @@ class Connection {
                 throw new IOException("Invalid server certificate chain");
             }
 
-            String certificateFingerprint = clientConfig.knowHosts.get(address.getHostString());
+            String certificateFingerprint = knownHosts.hosts.get(address.getHostString());
             boolean validated = false;
             for (Certificate cert : certs) {
                 if (cert instanceof X509Certificate x509Cert) {

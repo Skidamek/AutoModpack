@@ -64,12 +64,12 @@ public class DataC2SPacket {
             Semaphore semaphore = new Semaphore(0);
 
             // validate server certificate
-            if (!clientConfig.knowHosts.containsKey(address.getHostString()) || !clientConfig.knowHosts.get(address.getHostString()).equals(certificateFingerprint)) {
+            if (!knownHosts.hosts.containsKey(address.getHostString()) || !knownHosts.hosts.get(address.getHostString()).equals(certificateFingerprint)) {
                 LOGGER.warn("Received unknown certificate from server! {}", address.getHostString());
                 InetSocketAddress finalAddress = address;
                 Callback callback = () -> {
-                    clientConfig.knowHosts.put(finalAddress.getHostString(), certificateFingerprint);
-                    ConfigTools.save(clientConfigFile, clientConfig);
+                    knownHosts.hosts.put(finalAddress.getHostString(), certificateFingerprint);
+                    ConfigTools.save(knownHostsFile, knownHosts);
                     semaphore.release();
                 };
                 new ScreenManager().validation(null, certificateFingerprint, callback);
@@ -79,7 +79,7 @@ public class DataC2SPacket {
             Boolean needsDisconnecting = null;
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
 
-            if (!clientConfig.knowHosts.getOrDefault(address.getHostString(), "").equals(certificateFingerprint)) {
+            if (!knownHosts.hosts.getOrDefault(address.getHostString(), "").equals(certificateFingerprint)) {
                 LOGGER.error("Invalid server certificate {}", address.getHostString());
                 needsDisconnecting = true;
             } else {
