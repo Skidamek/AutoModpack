@@ -17,6 +17,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.GlobalVariables.clientConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 /**
@@ -105,6 +106,10 @@ class Connection {
      */
     public Connection(InetSocketAddress address, Secrets.Secret secret) throws Exception {
         try {
+            if (address == null || !clientConfig.knowHosts.containsKey(address.getHostString())) {
+                throw new IllegalArgumentException("Invalid address or unknown host: " + address);
+            }
+
             // Step 1. Create a plain TCP connection.
             LOGGER.debug("Initializing connection to: {}", address.getHostString());
             Socket plainSocket = new Socket();
@@ -140,12 +145,12 @@ class Connection {
                 throw new IOException("Invalid server certificate chain");
             }
 
-            // TODO: do the verification from knowHosts instead of from secrets
+            String certificateFingerprint = clientConfig.knowHosts.get(address.getHostString());
             boolean validated = false;
             for (Certificate cert : certs) {
                 if (cert instanceof X509Certificate x509Cert) {
                     String fingerprint = NetUtils.getFingerprint(x509Cert);
-                    if (fingerprint.equals(secret.fingerprint())) {
+                    if (fingerprint.equals(certificateFingerprint)) {
                         validated = true;
                         break;
                     }

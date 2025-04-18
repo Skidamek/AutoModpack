@@ -10,6 +10,7 @@ import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.callbacks.Callback;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -36,6 +37,7 @@ public class DataC2SPacket {
             Integer packetPort = dataPacket.port;
             String modpackName = dataPacket.modpackName;
             Secrets.Secret secret = dataPacket.secret;
+            String certificateFingerprint = dataPacket.certificateFingerprint;
             boolean modRequired = dataPacket.modRequired;
 
             if (modRequired) {
@@ -62,21 +64,22 @@ public class DataC2SPacket {
             Semaphore semaphore = new Semaphore(0);
 
             // validate server certificate
-            if (!clientConfig.knowHosts.containsKey(address.getHostString()) || !clientConfig.knowHosts.get(address.getHostString()).equals(secret.fingerprint())) {
+            if (!clientConfig.knowHosts.containsKey(address.getHostString()) || !clientConfig.knowHosts.get(address.getHostString()).equals(certificateFingerprint)) {
                 LOGGER.warn("Received unknown certificate from server! {}", address.getHostString());
                 InetSocketAddress finalAddress = address;
                 Callback callback = () -> {
-                    clientConfig.knowHosts.put(finalAddress.getHostString(), secret.fingerprint());
+                    clientConfig.knowHosts.put(finalAddress.getHostString(), certificateFingerprint);
+                    ConfigTools.save(clientConfigFile, clientConfig);
                     semaphore.release();
                 };
-                new ScreenManager().validation(new ScreenManager().getScreen().get(), secret.fingerprint(), callback);
-                semaphore.acquire();
+                new ScreenManager().validation(new ScreenManager().getScreen().get(), certificateFingerprint, callback);
+                semaphore.acquire(); // wait for callback release call
             }
 
             Boolean needsDisconnecting = null;
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
 
-            if (!clientConfig.knowHosts.getOrDefault(address.getHostString(), "").equals(secret.fingerprint())) {
+            if (!clientConfig.knowHosts.getOrDefault(address.getHostString(), "").equals(certificateFingerprint)) {
                 LOGGER.error("Invalid server certificate {}", address.getHostString());
                 needsDisconnecting = true;
             } else {
