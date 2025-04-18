@@ -5,6 +5,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.callbacks.Callback;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
@@ -58,6 +59,11 @@ public class ScreenImpl implements ScreenService {
     }
 
     @Override
+    public void validation(Object... args) {
+        Screens.validation(args[0], args[1], args[2]);
+    }
+
+    @Override
     public Optional<String> getScreenString() {
         Screen screen = Screens.getScreen();
         return Optional.of(screen.getTitle().getString().toLowerCase());
@@ -106,6 +112,10 @@ public class ScreenImpl implements ScreenService {
 
         public static void menu() {
 //            Screens.setScreen(new MenuScreen());
+        }
+
+        public static void validation(Object parent, Object serverFingerprint, Object validatedCallback) {
+            Screens.setScreen(new ValidationScreen((Screen) parent, (String) serverFingerprint, (Callback) validatedCallback));
         }
     }
 }

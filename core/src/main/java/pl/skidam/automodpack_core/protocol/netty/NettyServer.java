@@ -31,12 +31,11 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class NettyServer {
     public static final AttributeKey<Boolean> USE_COMPRESSION = AttributeKey.valueOf("useCompression");
-    public static final int CHUNK_SIZE = 131072; // 128 KB - good for zstd
     private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
-    private X509Certificate certificate;
+    private String certificateFingerprint;
     private SslContext sslCtx;
 
     public void addConnection(Channel channel, String secret) {
@@ -53,6 +52,10 @@ public class NettyServer {
 
     public Map<Channel, String> getConnections() {
         return connections;
+    }
+
+    public String getCertificateFingerprint() {
+        return certificateFingerprint;
     }
 
     public void addPaths(ObservableMap<String, Path> paths) {
@@ -93,7 +96,6 @@ public class NettyServer {
             }
 
             // Shiny TLS 1.3
-            certificate = cert;
             sslCtx = SslContextBuilder.forServer(key, cert)
                     .sslProvider(SslProvider.JDK)
                     .protocols("TLSv1.3")
@@ -102,6 +104,10 @@ public class NettyServer {
                             "TLS_AES_256_GCM_SHA384",
                             "TLS_CHACHA20_POLY1305_SHA256"))
                     .build();
+
+            // generate sha256 from cert as a fingerprint
+            certificateFingerprint = NetUtils.getFingerprint(cert);
+            LOGGER.warn("Certificate fingerprint for client validation: {}", certificateFingerprint);
 
             if (!canStart()) {
                 return Optional.empty();
@@ -174,10 +180,6 @@ public class NettyServer {
         }
 
         return serverChannel.channel().isOpen();
-    }
-
-    public X509Certificate getCert() {
-        return certificate;
     }
 
     public SslContext getSslCtx() {

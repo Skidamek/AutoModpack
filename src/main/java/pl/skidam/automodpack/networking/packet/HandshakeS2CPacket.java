@@ -124,7 +124,7 @@ public class HandshakeS2CPacket {
             SecretsStore.saveHostSecret(profile.getId().toString(), secret);
 
             // We send empty string if hostIp/hostLocalIp is not specified in server config. Client will use ip by which it connected to the server in first place.
-            DataPacket dataPacket = new DataPacket(addressToSend, null, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
+            DataPacket dataPacket = new DataPacket(addressToSend, null, serverConfig.modpackName, secret, hostServer.getCertificateFingerprint(), serverConfig.requireAutoModpackOnClient);
 
             if (serverConfig.reverseProxy) {
                 // With reverse proxy we dont append port to the link, it should be already included in the link
@@ -149,7 +149,7 @@ public class HandshakeS2CPacket {
                 if (!addressToSend.isBlank()) {
                     LOGGER.info("Sending {} modpack url: {}:{}", profile.getName(), addressToSend, portToSend);
                 }
-                dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
+                dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, hostServer.getCertificateFingerprint(), serverConfig.requireAutoModpackOnClient);
             }
 
             String packetContentJson = dataPacket.toJson();

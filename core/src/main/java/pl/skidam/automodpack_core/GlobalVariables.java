@@ -27,6 +27,7 @@ public class GlobalVariables {
     public static NettyServer hostServer;
     public static Jsons.ServerConfigFields serverConfig;
     public static Jsons.ClientConfigFields clientConfig;
+    public static Jsons.KnownHostsFields knownHosts;
     public static final Path automodpackDir = Path.of("automodpack");
     public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
     // TODO More server modpacks
@@ -39,6 +40,7 @@ public class GlobalVariables {
     public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
     public static final Path privateDir = automodpackDir.resolve(".private");
     public static final Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");
+    public static final Path knownHostsFile = privateDir.resolve("automodpack-known-hosts.json");
     public static final Path serverCertFile = privateDir.resolve("cert.crt");
     public static final Path serverPrivateKeyFile = privateDir.resolve("key.pem");
 

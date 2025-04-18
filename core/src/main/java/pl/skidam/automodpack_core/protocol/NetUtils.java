@@ -8,8 +8,6 @@ import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -22,9 +20,11 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.HexFormat;
 
 public class NetUtils {
 
+    public static final int CHUNK_SIZE = 131072; // 128 KB - good for zstd
     public static final int MAGIC_AMMC = 0x414D4D43;
     public static final int MAGIC_AMOK = 0x414D4F4B;
 
@@ -35,30 +35,16 @@ public class NetUtils {
     public static final byte END_OF_TRANSMISSION = 0x04;
     public static final byte ERROR = 0x05;
 
-    public static String getFingerprint(X509Certificate cert, String secret) throws CertificateEncodingException {
-        byte[] sharedSecret = secret.getBytes();
+    public static String getFingerprint(X509Certificate cert) throws CertificateEncodingException {
         byte[] certificate = cert.getEncoded();
 
-        Mac hmac;
         try {
-            hmac = Mac.getInstance("HmacSHA256");
-            SecretKeySpec keySpec = new SecretKeySpec(sharedSecret, "HmacSHA256");
-            hmac.init(keySpec);
-        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] fingerprint = digest.digest(certificate);
+            return HexFormat.of().formatHex(fingerprint);
+        } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
-
-        byte[] fingerprint = hmac.doFinal(certificate);
-
-        return bytesToHex(fingerprint);
-    }
-
-    public static String bytesToHex(byte[] fingerprint) {
-        StringBuilder sb = new StringBuilder();
-        for (byte b : fingerprint) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
     }
 
     public static KeyPair generateKeyPair() throws Exception {

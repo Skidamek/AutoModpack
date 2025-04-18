@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.protocol;
 import pl.skidam.automodpack_core.auth.Secrets;
 import com.github.luben.zstd.Zstd;
 import pl.skidam.automodpack_core.callbacks.IntCallback;
-import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -17,7 +16,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 /**
@@ -106,6 +105,10 @@ class Connection {
      */
     public Connection(InetSocketAddress address, Secrets.Secret secret) throws Exception {
         try {
+            if (address == null || !knownHosts.hosts.containsKey(address.getHostString())) {
+                throw new IllegalArgumentException("Invalid address or unknown host: " + address);
+            }
+
             // Step 1. Create a plain TCP connection.
             LOGGER.debug("Initializing connection to: {}", address.getHostString());
             Socket plainSocket = new Socket();
@@ -141,11 +144,12 @@ class Connection {
                 throw new IOException("Invalid server certificate chain");
             }
 
+            String certificateFingerprint = knownHosts.hosts.get(address.getHostString());
             boolean validated = false;
             for (Certificate cert : certs) {
                 if (cert instanceof X509Certificate x509Cert) {
-                    String fingerprint = NetUtils.getFingerprint(x509Cert, secret.secret());
-                    if (fingerprint.equals(secret.fingerprint())) {
+                    String fingerprint = NetUtils.getFingerprint(x509Cert);
+                    if (fingerprint.equals(certificateFingerprint)) {
                         validated = true;
                         break;
                     }
@@ -276,7 +280,7 @@ class Connection {
     private void writeProtocolMessage(byte[] payload) throws IOException {
         int offset = 0;
         while (offset < payload.length) {
-            int bytesToSend = Math.min(payload.length - offset, NettyServer.CHUNK_SIZE);
+            int bytesToSend = Math.min(payload.length - offset, CHUNK_SIZE);
             byte[] chunk = new byte[bytesToSend];
             System.arraycopy(payload, offset, chunk, 0, bytesToSend);
 
@@ -311,7 +315,7 @@ class Connection {
                 throw new IllegalArgumentException("Invalid compressed or original length");
             }
 
-            if (originalLength > NettyServer.CHUNK_SIZE) {
+            if (originalLength > CHUNK_SIZE) {
                 throw new IllegalArgumentException("Original length exceeds maximum packet size");
             }
 
