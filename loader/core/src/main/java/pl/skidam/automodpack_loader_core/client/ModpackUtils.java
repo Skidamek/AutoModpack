@@ -445,13 +445,13 @@ public class ModpackUtils {
             } catch (CertificateEncodingException e) {
                 return false;
             }
-            if (Objects.equals(clientConfig.knowHosts.get(address.getHostString()), fingerprint))
+            if (Objects.equals(knownHosts.hosts.get(address.getHostString()), fingerprint))
                 return true;
             LOGGER.warn("Received untrusted certificate from server {}!", address.getHostString());
             if (allowAskingUser) {
                 boolean trusted = askUserAboutCertificate(address, fingerprint);
                 if (trusted) {
-                    clientConfig.knowHosts.put(address.getHostString(), fingerprint);
+                    knownHosts.hosts.put(address.getHostString(), fingerprint);
                 }
                 return trusted;
             }
@@ -472,7 +472,7 @@ public class ModpackUtils {
 
         AtomicBoolean accepted = new AtomicBoolean(false);
         Runnable trustCallback = () -> {
-            clientConfig.knowHosts.put(address.getHostString(), fingerprint);
+            knownHosts.hosts.put(address.getHostString(), fingerprint);
             accepted.set(true);
             latch.countDown();
         };
