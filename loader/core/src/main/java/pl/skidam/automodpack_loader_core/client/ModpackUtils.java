@@ -472,7 +472,6 @@ public class ModpackUtils {
 
         AtomicBoolean accepted = new AtomicBoolean(false);
         Runnable trustCallback = () -> {
-            knownHosts.hosts.put(address.getHostString(), fingerprint);
             accepted.set(true);
             latch.countDown();
         };
