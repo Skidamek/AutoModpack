@@ -462,6 +462,11 @@ public class ModpackUtils {
 
     private static Boolean askUserAboutCertificate(InetSocketAddress address, String fingerprint) {
         LOGGER.info("Asking user for {}", address.getHostString());
+        Optional<Object> screen = new ScreenManager().getScreen();
+        if (screen.isEmpty()) {
+            LOGGER.warn("No screen available, cannot ask user");
+            return false;
+        }
 
         CountDownLatch latch = new CountDownLatch(1);
 
@@ -472,7 +477,7 @@ public class ModpackUtils {
             latch.countDown();
         };
         Runnable cancelCallback = latch::countDown;
-        new ScreenManager().validation(new ScreenManager().getScreen().get(), fingerprint, trustCallback,
+        new ScreenManager().validation(screen.get(), fingerprint, trustCallback,
                 cancelCallback);
         try {
             latch.await();
