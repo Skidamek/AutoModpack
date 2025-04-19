@@ -11,7 +11,6 @@ import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 @Mixin(value = ServerLoginNetworkHandler.class, priority = 300)
 public abstract class ServerLoginNetworkHandlerMixin  {
 
-    @Shadow private int loginTicks;
     @Shadow private ServerLoginNetworkHandler.State state;
     @Unique private ServerLoginNetworkAddon automodpack$addon;
 
@@ -58,7 +57,6 @@ public abstract class ServerLoginNetworkHandlerMixin  {
         if (!this.automodpack$addon.queryTick()) {
             // We need more time to process packets
             ci.cancel();
-            this.loginTicks++;
             return;
         }
 
