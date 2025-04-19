@@ -235,8 +235,11 @@ public class ModpackUpdater {
             int wholeQueue = serverModpackContent.list.size();
             LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
-            DownloadClient downloadClient = new DownloadClient(modpackAddress, modpackSecret.secretBytes(),
+            DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddress, modpackSecret.secretBytes(),
                     Math.min(wholeQueue, 5), ModpackUtils.userValidationCallback(modpackAddress, false));
+            if (downloadClient == null) {
+                return;
+            }
 
             downloadManager = new DownloadManager(totalBytesToDownload);
             new ScreenManager().download(downloadManager, getModpackName());
@@ -326,10 +329,13 @@ public class ModpackUpdater {
                     // filter list to only the failed downloads
                     var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
 
+                    downloadClient = DownloadClient.tryCreate(modpackAddress, modpackSecret.secretBytes(),
+                            Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddress, false));
+                    if (downloadClient == null) {
+                        return;
+                    }
                     downloadManager = new DownloadManager(totalBytesToDownload);
                     new ScreenManager().download(downloadManager, getModpackName());
-                    downloadClient = new DownloadClient(modpackAddress, modpackSecret.secretBytes(),
-                            Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddress, false));
                     downloadManager.attachDownloadClient(downloadClient);
 
                     // TODO try to fetch again from modrinth and curseforge

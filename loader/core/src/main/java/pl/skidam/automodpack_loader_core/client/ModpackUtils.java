@@ -410,7 +410,8 @@ public class ModpackUtils {
         if (address == null)
             throw new IllegalArgumentException("Address is null");
 
-        try (DownloadClient client = new DownloadClient(address, secret.secretBytes(), 1, userValidationCallback(address, allowAskingUser))) {
+        try (DownloadClient client = DownloadClient.tryCreate(address, secret.secretBytes(), 1, userValidationCallback(address, allowAskingUser))) {
+            if (client == null) return Optional.empty();
             var future = operation.apply(client);
             Path path = future.get();
             var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));

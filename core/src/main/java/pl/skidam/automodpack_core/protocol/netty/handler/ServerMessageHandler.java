@@ -72,12 +72,6 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         }
     }
 
-    @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        cause.printStackTrace();
-        ctx.close();
-    }
-
     private void refreshModpackFiles(ChannelHandlerContext context, byte[][] FileHashesList) throws IOException {
         List<String> hashes = new ArrayList<>();
         for (byte[] hash : FileHashesList) {

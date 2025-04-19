@@ -40,26 +40,64 @@ public class DownloadClient implements AutoCloseable {
      * @param poolSize              the number of connections
      * @param trustedByUserCallback the callback to determine whether a certificate should be trusted
      */
-    public DownloadClient(InetSocketAddress address, byte[] secretBytes, int poolSize,
-                          Function<X509Certificate, Boolean> trustedByUserCallback)
-            throws KeyStoreException, CertificateException, IOException, NoSuchAlgorithmException,
-            KeyManagementException {
-        KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-        keyStore.load(null);
+    public DownloadClient(InetSocketAddress address, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
+        KeyStore keyStore;
+        try {
+            keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+        } catch (KeyStoreException e) {
+            throw new RuntimeException("Failed to create a KeyStore of the default type.", e);
+        }
+        try {
+            keyStore.load(null);
+        } catch (NoSuchAlgorithmException | CertificateException e) {
+            throw new RuntimeException("Failed to load empty KeyStore", e);
+        }
 
         for (int i = 0; i < poolSize; i++) {
-            PreValidationConnection preValidationConnection = new PreValidationConnection(address, keyStore);
+            PreValidationConnection preValidationConnection;
+            try {
+                preValidationConnection = new PreValidationConnection(address, keyStore);
+            } catch (KeyStoreException e) {
+                throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
+            }
 
             if (i == 0 && trustedByUserCallback != null
                     && preValidationConnection.getUnvalidatedCertificate() != null) {
                 if (trustedByUserCallback.apply(preValidationConnection.getUnvalidatedCertificate())) {
-                    keyStore.setCertificateEntry(address.getHostString(),
-                            preValidationConnection.getUnvalidatedCertificate());
-                    preValidationConnection = new PreValidationConnection(address, keyStore);
+                    try {
+                        keyStore.setCertificateEntry(address.getHostString(),
+                                preValidationConnection.getUnvalidatedCertificate());
+                    } catch (KeyStoreException e) {
+                        throw new RuntimeException("Could not add the trusted certificate to the KeyStore.", e);
+                    }
+                    try {
+                        preValidationConnection = new PreValidationConnection(address, keyStore);
+                    } catch (KeyStoreException e) {
+                        throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
+                    }
                 }
             }
 
             connections.add(new Connection(preValidationConnection, secretBytes));
+        }
+    }
+
+    /**
+     * Tries to create a new {@link DownloadClient}, logging an error if the operation fails.
+     *
+     * @param address               the server's address
+     * @param secretBytes           the secret bytes obtained from the server
+     * @param poolSize              the number of connections
+     * @param trustedByUserCallback the callback to determine whether a certificate should be trusted
+     * @return the {@link DownloadClient} on success or {@code null} on failure
+     * @see DownloadClient#DownloadClient(InetSocketAddress, byte[], int, Function) DownloadClient
+     */
+    public static DownloadClient tryCreate(InetSocketAddress address, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) {
+        try {
+            return new DownloadClient(address, secretBytes, poolSize, trustedByUserCallback);
+        } catch (IOException e) {
+            LOGGER.error("Failed to create a download client. Error: {}", e.getMessage());
+            return null;
         }
     }
 
@@ -122,7 +160,7 @@ class PreValidationConnection {
      * sending the AMMC magic, waiting for the AMOK reply, and then upgrading to TLS.
      */
     public PreValidationConnection(InetSocketAddress address, KeyStore keyStore) throws IOException,
-            NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
+            KeyStoreException {
         // Step 1. Create a plain TCP connection.
         Socket plainSocket = new Socket();
         plainSocket.connect(address, 15000);
@@ -198,10 +236,19 @@ class PreValidationConnection {
      * @param onValidating        a callback that is run for every certificate chain before verification
      */
     private SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating)
-            throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
-        SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
+            throws KeyStoreException {
+        SSLContext sslContext;
+        try {
+            sslContext = SSLContext.getInstance("TLSv1.3");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("TLS 1.3 is not supported", e);
+        }
         X509ExtendedTrustManager trustManager = new CustomizableTrustManager(trustedCertificates, onValidating);
-        sslContext.init(null, new TrustManager[]{trustManager}, new SecureRandom());
+        try {
+            sslContext.init(null, new TrustManager[]{trustManager}, new SecureRandom());
+        } catch (KeyManagementException e) {
+            throw new RuntimeException("Failed to initialize SSLContext", e);
+        }
         return sslContext;
     }
 }
