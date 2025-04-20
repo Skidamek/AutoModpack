@@ -42,6 +42,10 @@ public class DownloadClient implements AutoCloseable {
      */
     public DownloadClient(InetSocketAddress address, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
         KeyStore keyStore;
+        if (poolSize < 1) {
+            throw new IllegalArgumentException("Pool size must be greater than 0");
+        }
+
         try {
             keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
         } catch (KeyStoreException e) {
@@ -53,33 +57,33 @@ public class DownloadClient implements AutoCloseable {
             throw new RuntimeException("Failed to load empty KeyStore", e);
         }
 
-        for (int i = 0; i < poolSize; i++) {
-            PreValidationConnection preValidationConnection;
+        PreValidationConnection firstConnection = getPreValidationConnection(address, keyStore);
+        if (trustedByUserCallback != null && firstConnection.getUnvalidatedCertificate() != null && trustedByUserCallback.apply(firstConnection.getUnvalidatedCertificate())) {
             try {
-                preValidationConnection = new PreValidationConnection(address, keyStore);
+                keyStore.setCertificateEntry(address.getHostString(), firstConnection.getUnvalidatedCertificate());
             } catch (KeyStoreException e) {
-                throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
+                throw new RuntimeException("Could not add the trusted certificate to the KeyStore.", e);
             }
+            firstConnection = getPreValidationConnection(address, keyStore);
+        }
+        connections.add(new Connection(firstConnection, secretBytes));
 
-            if (i == 0 && trustedByUserCallback != null
-                    && preValidationConnection.getUnvalidatedCertificate() != null) {
-                if (trustedByUserCallback.apply(preValidationConnection.getUnvalidatedCertificate())) {
-                    try {
-                        keyStore.setCertificateEntry(address.getHostString(),
-                                preValidationConnection.getUnvalidatedCertificate());
-                    } catch (KeyStoreException e) {
-                        throw new RuntimeException("Could not add the trusted certificate to the KeyStore.", e);
-                    }
-                    try {
-                        preValidationConnection = new PreValidationConnection(address, keyStore);
-                    } catch (KeyStoreException e) {
-                        throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
-                    }
-                }
-            }
+        for (int i = 1; i < poolSize; i++) {
+            PreValidationConnection preValidationConnection;
+            preValidationConnection = getPreValidationConnection(address, keyStore);
 
             connections.add(new Connection(preValidationConnection, secretBytes));
         }
+    }
+
+    private static PreValidationConnection getPreValidationConnection(InetSocketAddress address, KeyStore keyStore) throws IOException {
+        PreValidationConnection preValidationConnection;
+        try {
+            preValidationConnection = new PreValidationConnection(address, keyStore);
+        } catch (KeyStoreException e) {
+            throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
+        }
+        return preValidationConnection;
     }
 
     /**
