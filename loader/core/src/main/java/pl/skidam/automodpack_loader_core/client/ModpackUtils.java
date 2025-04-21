@@ -4,16 +4,22 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 import java.io.*;
 import java.net.*;
 import java.nio.file.*;
+import java.security.cert.CertificateEncodingException;
+import java.security.cert.X509Certificate;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -48,7 +54,11 @@ public class ModpackUtils {
                     Path standardPath = CustomFileUtils.getPathFromCWD(file);
                     if (Files.exists(standardPath) && Objects.equals(serverSHA1, CustomFileUtils.getHash(standardPath))) {
                         LOGGER.info("File {} already exists on client, coping to modpack", file);
-                        try { CustomFileUtils.copyFile(standardPath, path); } catch (IOException e) { e.printStackTrace(); }
+                        try {
+                            CustomFileUtils.copyFile(standardPath, path);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
                         continue;
                     } else {
                         LOGGER.info("File does not exists {} - {}", standardPath, file);
@@ -382,27 +392,26 @@ public class ModpackUtils {
         return modpackDir;
     }
 
-    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(InetSocketAddress address, Secrets.Secret secret) {
+    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(InetSocketAddress address, Secrets.Secret secret, boolean allowAskingUser) {
         return fetchModpackContent(address, secret,
                 (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
-                "Fetched");
+                "Fetched", allowAskingUser);
     }
 
-    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(InetSocketAddress address, Secrets.Secret secret, byte[][] fileHashes) {
+    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(InetSocketAddress address, Secrets.Secret secret, byte[][] fileHashes, boolean allowAskingUser) {
         return fetchModpackContent(address, secret,
                 (client) -> client.requestRefresh(fileHashes, modpackContentTempFile),
-                "Re-fetched");
+                "Re-fetched", allowAskingUser);
     }
 
-    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(InetSocketAddress address, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType) {
+    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(InetSocketAddress address, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
         if (secret == null)
             return Optional.empty();
         if (address == null)
             throw new IllegalArgumentException("Address is null");
 
-        DownloadClient client = null;
-        try {
-            client = new DownloadClient(address, secret, 1);
+        try (DownloadClient client = DownloadClient.tryCreate(address, secret.secretBytes(), 1, userValidationCallback(address, allowAskingUser))) {
+            if (client == null) return Optional.empty();
             var future = operation.apply(client);
             Path path = future.get();
             var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
@@ -415,12 +424,69 @@ public class ModpackUtils {
             return content;
         } catch (Exception e) {
             LOGGER.error("Error while getting server modpack content", e);
-        } finally {
-            if (client != null)
-                client.close();
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Returns a callback for use with {@link DownloadClient} that checks for trusted fingerprints in the known hosts
+     * list of the client config.
+     *
+     * @param address         the address being connected to
+     * @param allowAskingUser whether the user should be prompted if a certificate is not trusted
+     * @return the callback
+     */
+    public static Function<X509Certificate, Boolean> userValidationCallback(InetSocketAddress address,
+                                                                            boolean allowAskingUser) {
+        return certificate -> {
+            String fingerprint;
+            try {
+                fingerprint = NetUtils.getFingerprint(certificate);
+            } catch (CertificateEncodingException e) {
+                return false;
+            }
+            if (Objects.equals(knownHosts.hosts.get(address.getHostString()), fingerprint))
+                return true;
+            LOGGER.warn("Received untrusted certificate from server {}!", address.getHostString());
+            if (allowAskingUser) {
+                boolean trusted = askUserAboutCertificate(address, fingerprint);
+                if (trusted) {
+                    knownHosts.hosts.put(address.getHostString(), fingerprint);
+                    ConfigTools.save(knownHostsFile, knownHosts);
+                }
+                return trusted;
+            }
+
+            return false;
+        };
+    }
+
+    private static Boolean askUserAboutCertificate(InetSocketAddress address, String fingerprint) {
+        LOGGER.info("Asking user for {}", address.getHostString());
+        Optional<Object> screen = new ScreenManager().getScreen();
+        if (screen.isEmpty()) {
+            LOGGER.warn("No screen available, cannot ask user");
+            return false;
+        }
+
+        CountDownLatch latch = new CountDownLatch(1);
+
+        AtomicBoolean accepted = new AtomicBoolean(false);
+        Runnable trustCallback = () -> {
+            accepted.set(true);
+            latch.countDown();
+        };
+        Runnable cancelCallback = latch::countDown;
+        new ScreenManager().validation(screen.get(), fingerprint, trustCallback,
+                cancelCallback);
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            return false;
+        }
+
+        return accepted.get();
     }
 
     // check if modpackContent is valid/isn't malicious
