@@ -123,17 +123,8 @@ public class HandshakeS2CPacket {
             Secrets.Secret secret = Secrets.generateSecret();
             SecretsStore.saveHostSecret(profile.getId().toString(), secret);
 
-            String fingerprint = serverConfig.fingerprint;
-            if (fingerprint != null && !fingerprint.isBlank()) {
-                fingerprint = hostServer.getCertificateFingerprint();
-            }
-
-            if (fingerprint == null || fingerprint.isBlank()) {
-                throw new IllegalStateException("Fingerprint is null or blank");
-            }
-
             // We send empty string if hostIp/hostLocalIp is not specified in server config. Client will use ip by which it connected to the server in first place.
-            DataPacket dataPacket = new DataPacket(addressToSend, null, serverConfig.modpackName, secret, fingerprint, serverConfig.requireAutoModpackOnClient);
+            DataPacket dataPacket = new DataPacket(addressToSend, null, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
 
             if (serverConfig.reverseProxy) {
                 // With reverse proxy we dont append port to the link, it should be already included in the link
@@ -158,7 +149,7 @@ public class HandshakeS2CPacket {
                 if (!addressToSend.isBlank()) {
                     LOGGER.info("Sending {} modpack url: {}:{}", profile.getName(), addressToSend, portToSend);
                 }
-                dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, fingerprint, serverConfig.requireAutoModpackOnClient);
+                dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
             }
 
             String packetContentJson = dataPacket.toJson();
