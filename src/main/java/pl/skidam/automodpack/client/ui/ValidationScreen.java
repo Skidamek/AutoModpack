@@ -54,10 +54,10 @@ public class ValidationScreen extends VersionedScreen {
         this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20,
                 VersionedText.translatable("automodpack.back"),
                 button -> {
+                    this.client.setScreen(parent);
                     if (!this.validated) {
                         this.canceledCallback.run();
                     }
-                    this.client.setScreen(parent);
                 }
         );
 
@@ -71,10 +71,15 @@ public class ValidationScreen extends VersionedScreen {
         if (input.equals(serverFingerprint) || input.equals("I AM INCREDIBLY STUPID")) {
             validateButton.active = false;
             this.validated = true;
+            if (this.client != null) {
+                this.client.setScreen(parent);
+            }
             validatedCallback.run();
         } else {
             GlobalVariables.LOGGER.error("Server fingerprint validation failed, try again");
-            this.client.getToastManager().add(failedToast);
+            if (this.client != null) {
+                this.client.getToastManager().add(failedToast);
+            }
         }
     }
 
