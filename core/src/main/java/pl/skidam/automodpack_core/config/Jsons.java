@@ -13,8 +13,22 @@ public class Jsons {
     public static class ClientConfigFields {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public String selectedModpack = ""; // modpack name
-        public Map<String, String> installedModpacks; // modpack name, host
+        public Map<String, ModpackEntry> installedModpacks; // modpack name, <modpack host address, minecraft server address>
         public boolean selfUpdater = false;
+    }
+
+    public static class ModpackEntry {
+        public String hostAddress; // modpack host address
+        public String serverAddress; // minecraft server address
+
+        public ModpackEntry() {
+            // Default constructor for Gson
+        }
+
+        public ModpackEntry(String hostAddress, String serverAddress) {
+            this.hostAddress = hostAddress;
+            this.serverAddress = serverAddress;
+        }
     }
 
     public static class ServerConfigFields {

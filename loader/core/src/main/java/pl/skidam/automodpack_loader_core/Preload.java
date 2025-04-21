@@ -50,36 +50,40 @@ public class Preload {
         }
 
         selectedModpackDir = optionalSelectedModpackDir.get();
-        String selectedModpackLink = "";
+        String selectedModpackAddress = "";
+        String selectedServerAddress = "";
         if (!clientConfig.selectedModpack.isBlank() && clientConfig.installedModpacks.containsKey(clientConfig.selectedModpack)) {
-            selectedModpackLink = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
+            var entry = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
+            selectedModpackAddress = entry.hostAddress;
+            selectedServerAddress = entry.serverAddress;
         }
 
         // Check if the modpack link is missing or blank
-        if (selectedModpackLink == null || selectedModpackLink.isBlank()) {
+        if (selectedModpackAddress == null || selectedModpackAddress.isBlank()) {
             SelfUpdater.update();
             return;
         }
 
         // Check if link is old http link, and parse it to new format (beta 24 -> beta 25)
-        if (selectedModpackLink.startsWith("http") && selectedModpackLink.contains("/automodpack")) {
-            var newSelectedModpackLink = selectedModpackLink;
-            newSelectedModpackLink = newSelectedModpackLink.replace("http://", "");
-            newSelectedModpackLink = newSelectedModpackLink.replace("https://", "");
-            String[] split = newSelectedModpackLink.split("/automodpack");
-            newSelectedModpackLink = split[0];
-            if (newSelectedModpackLink != null && !newSelectedModpackLink.isBlank()) {
-                LOGGER.info("Updated modpack link to new format: {} -> {}", selectedModpackLink, newSelectedModpackLink);
-                clientConfig.installedModpacks.put(clientConfig.selectedModpack, newSelectedModpackLink);
+        if (selectedModpackAddress.startsWith("http") && selectedModpackAddress.contains("/automodpack")) {
+            var newSelectedModpackAddress = selectedModpackAddress;
+            newSelectedModpackAddress = newSelectedModpackAddress.replace("http://", "");
+            newSelectedModpackAddress = newSelectedModpackAddress.replace("https://", "");
+            String[] split = newSelectedModpackAddress.split("/automodpack");
+            newSelectedModpackAddress = split[0];
+            if (newSelectedModpackAddress != null && !newSelectedModpackAddress.isBlank()) {
+                LOGGER.info("Updated modpack link to new format: {} -> {}", selectedModpackAddress, newSelectedModpackAddress);
+                clientConfig.installedModpacks.put(clientConfig.selectedModpack, new Jsons.ModpackEntry(newSelectedModpackAddress, selectedServerAddress));
                 ConfigTools.save(clientConfigFile, clientConfig);
-                selectedModpackLink = newSelectedModpackLink;
+                selectedModpackAddress = newSelectedModpackAddress;
             }
         }
 
-        InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
+        InetSocketAddress selectedModpackSocketAddress = AddressHelpers.parse(selectedModpackAddress);
+        InetSocketAddress selectedServerSocketAddress = AddressHelpers.parse(selectedServerAddress);
         Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
-        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackAddress, secret, false);
+        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackSocketAddress, selectedServerSocketAddress, secret, false);
         var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
         // Use the latest modpack content if available
@@ -96,7 +100,7 @@ public class Preload {
         CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
 
         // Update modpack
-        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackAddress, secret, selectedModpackDir);
+        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackSocketAddress, selectedServerSocketAddress, secret, selectedModpackDir);
     }
 
 

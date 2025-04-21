@@ -278,8 +278,9 @@ public class ModpackUtils {
         }
 
         String installedModpackName = clientConfig.selectedModpack;
-        String installedModpackLink = clientConfig.installedModpacks.get(installedModpackName);
-        InetSocketAddress installedModpackAddress = AddressHelpers.parse(installedModpackLink);
+        Jsons.ModpackEntry installedModpackEntry = clientConfig.installedModpacks.get(installedModpackName);
+        InetSocketAddress installedModpackAddress = AddressHelpers.parse(installedModpackEntry.hostAddress);
+        InetSocketAddress installedServerAddress = AddressHelpers.parse(installedModpackEntry.serverAddress);
         String serverModpackName = serverModpackContent.modpackName;
 
         if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
@@ -297,7 +298,7 @@ public class ModpackUtils {
                 e.printStackTrace();
             }
 
-            selectModpack(newModpackDir, installedModpackAddress, Set.of());
+            selectModpack(newModpackDir, installedModpackAddress, installedServerAddress, Set.of());
 
             return newModpackDir;
         }
@@ -306,7 +307,7 @@ public class ModpackUtils {
     }
 
     // Returns true if value changed
-    public static boolean selectModpack(Path modpackDirToSelect, InetSocketAddress modpackAddressToSelect, Set<String> newDownloadedFiles) {
+    public static boolean selectModpack(Path modpackDirToSelect, InetSocketAddress modpackAddressToSelect, InetSocketAddress serverAddress, Set<String> newDownloadedFiles) {
         final String modpackToSelect = modpackDirToSelect.getFileName().toString();
         String selectedModpack = clientConfig.selectedModpack;
 
@@ -331,7 +332,7 @@ public class ModpackUtils {
 
         clientConfig.selectedModpack = modpackToSelect;
         ConfigTools.save(clientConfigFile, clientConfig);
-        ModpackUtils.addModpackToList(modpackToSelect, modpackAddressToSelect);
+        ModpackUtils.addModpackToList(modpackToSelect, modpackAddressToSelect, serverAddress);
 
         return !Objects.equals(modpackToSelect, selectedModpack);
     }
@@ -342,21 +343,22 @@ public class ModpackUtils {
         }
 
         if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.containsKey(modpackName)) {
-            Map<String, String> modpacks = new HashMap<>(clientConfig.installedModpacks);
+            Map<String, Jsons.ModpackEntry> modpacks = new HashMap<>(clientConfig.installedModpacks);
             modpacks.remove(modpackName);
             clientConfig.installedModpacks = modpacks;
             ConfigTools.save(clientConfigFile, clientConfig);
         }
     }
 
-    public static void addModpackToList(String modpackName, InetSocketAddress address) {
-        if (modpackName == null || modpackName.isEmpty() || address == null) {
+    public static void addModpackToList(String modpackName, InetSocketAddress modpackAddress, InetSocketAddress serverAddress) {
+        if (modpackName == null || modpackName.isEmpty() || modpackAddress == null) {
             return;
         }
 
-        Map<String, String> modpacks = new HashMap<>(clientConfig.installedModpacks);
-        String addressString = address.getHostString() + ":" + address.getPort();
-        modpacks.put(modpackName, addressString);
+        Map<String, Jsons.ModpackEntry> modpacks = new HashMap<>(clientConfig.installedModpacks);
+        String addressString = modpackAddress.getHostString() + ":" + modpackAddress.getPort();
+        Jsons.ModpackEntry entry = new Jsons.ModpackEntry(addressString, serverAddress.getHostString());
+        modpacks.put(modpackName, entry);
         clientConfig.installedModpacks = modpacks;
 
         ConfigTools.save(clientConfigFile, clientConfig);
@@ -376,7 +378,8 @@ public class ModpackUtils {
 
         if (!modpackName.isEmpty()) {
             // Check if we don't have already installed modpack via this link
-            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.containsValue(correctedName)) {
+            final String finalCorrectedName = correctedName;
+            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.values().stream().anyMatch(entry -> entry.hostAddress.equals(finalCorrectedName))) {
                 return modpackDir;
             }
 
@@ -392,25 +395,25 @@ public class ModpackUtils {
         return modpackDir;
     }
 
-    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(InetSocketAddress address, Secrets.Secret secret, boolean allowAskingUser) {
-        return fetchModpackContent(address, secret,
+    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(InetSocketAddress address, InetSocketAddress serverAddress, Secrets.Secret secret, boolean allowAskingUser) {
+        return fetchModpackContent(address, serverAddress, secret,
                 (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
                 "Fetched", allowAskingUser);
     }
 
-    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(InetSocketAddress address, Secrets.Secret secret, byte[][] fileHashes, boolean allowAskingUser) {
-        return fetchModpackContent(address, secret,
+    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(InetSocketAddress address, InetSocketAddress serverAddress, Secrets.Secret secret, byte[][] fileHashes, boolean allowAskingUser) {
+        return fetchModpackContent(address, serverAddress, secret,
                 (client) -> client.requestRefresh(fileHashes, modpackContentTempFile),
                 "Re-fetched", allowAskingUser);
     }
 
-    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(InetSocketAddress address, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
+    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(InetSocketAddress address, InetSocketAddress serverAddress, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
         if (secret == null)
             return Optional.empty();
         if (address == null)
             throw new IllegalArgumentException("Address is null");
 
-        try (DownloadClient client = DownloadClient.tryCreate(address, secret.secretBytes(), 1, userValidationCallback(address, allowAskingUser))) {
+        try (DownloadClient client = DownloadClient.tryCreate(address, serverAddress, secret.secretBytes(), 1, userValidationCallback(address, allowAskingUser))) {
             if (client == null) return Optional.empty();
             var future = operation.apply(client);
             Path path = future.get();

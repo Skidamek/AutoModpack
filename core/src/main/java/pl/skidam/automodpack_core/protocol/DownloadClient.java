@@ -25,7 +25,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
  * A DownloadClient that creates a pool of connections.
  * Each connection performs an initial plain-text handshake by sending the AMMC magic,
  * waiting for the AMOK reply, and then upgrading the same socket to TLSv1.3.
- * Subsequent protocol messages are framed and compressed (using Zstd) to match your full protocol.
+ * Subsequent protocol messages are framed and compressed (using Zstd).
  */
 public class DownloadClient implements AutoCloseable {
     private final List<Connection> connections = new ArrayList<>();
@@ -35,12 +35,13 @@ public class DownloadClient implements AutoCloseable {
      * error on a self-signed certificate, {@code trustedByUserCallback} is executed to determine whether the
      * certificate should be trusted anyway.
      *
-     * @param address               the server's address
-     * @param secretBytes           the secret bytes obtained from the server
-     * @param poolSize              the number of connections
-     * @param trustedByUserCallback the callback to determine whether a certificate should be trusted
+     * @param modpackAddress         the modpack server's address
+     * @param minecraftServerAddress the server's minecraft address, used for certificate validation.'
+     * @param secretBytes            the secret bytes obtained from the server
+     * @param poolSize               the number of connections
+     * @param trustedByUserCallback  the callback to determine whether a certificate should be trusted
      */
-    public DownloadClient(InetSocketAddress address, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
+    public DownloadClient(InetSocketAddress modpackAddress, InetSocketAddress minecraftServerAddress, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
         KeyStore keyStore;
         if (poolSize < 1) {
             throw new IllegalArgumentException("Pool size must be greater than 0");
@@ -57,29 +58,27 @@ public class DownloadClient implements AutoCloseable {
             throw new RuntimeException("Failed to load empty KeyStore", e);
         }
 
-        PreValidationConnection firstConnection = getPreValidationConnection(address, keyStore);
+        PreValidationConnection firstConnection = getPreValidationConnection(modpackAddress, minecraftServerAddress, keyStore);
         if (trustedByUserCallback != null && firstConnection.getUnvalidatedCertificate() != null && trustedByUserCallback.apply(firstConnection.getUnvalidatedCertificate())) {
             try {
-                keyStore.setCertificateEntry(address.getHostString(), firstConnection.getUnvalidatedCertificate());
+                keyStore.setCertificateEntry(modpackAddress.getHostString(), firstConnection.getUnvalidatedCertificate());
             } catch (KeyStoreException e) {
                 throw new RuntimeException("Could not add the trusted certificate to the KeyStore.", e);
             }
-            firstConnection = getPreValidationConnection(address, keyStore);
         }
-        connections.add(new Connection(firstConnection, secretBytes));
 
-        for (int i = 1; i < poolSize; i++) {
+        for (int i = 0; i < poolSize; i++) {
             PreValidationConnection preValidationConnection;
-            preValidationConnection = getPreValidationConnection(address, keyStore);
+            preValidationConnection = getPreValidationConnection(modpackAddress, minecraftServerAddress, keyStore);
 
             connections.add(new Connection(preValidationConnection, secretBytes));
         }
     }
 
-    private static PreValidationConnection getPreValidationConnection(InetSocketAddress address, KeyStore keyStore) throws IOException {
+    private static PreValidationConnection getPreValidationConnection(InetSocketAddress address, InetSocketAddress minecraftServerAddress, KeyStore keyStore) throws IOException {
         PreValidationConnection preValidationConnection;
         try {
-            preValidationConnection = new PreValidationConnection(address, keyStore);
+            preValidationConnection = new PreValidationConnection(address, minecraftServerAddress, keyStore);
         } catch (KeyStoreException e) {
             throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
         }
@@ -89,16 +88,17 @@ public class DownloadClient implements AutoCloseable {
     /**
      * Tries to create a new {@link DownloadClient}, logging an error if the operation fails.
      *
-     * @param address               the server's address
-     * @param secretBytes           the secret bytes obtained from the server
-     * @param poolSize              the number of connections
-     * @param trustedByUserCallback the callback to determine whether a certificate should be trusted
+     * @param modpackAddress         the server's address
+     * @param minecraftServerAddress the server's minecraft address, used for certificate validation.'
+     * @param secretBytes            the secret bytes obtained from the server
+     * @param poolSize               the number of connections
+     * @param trustedByUserCallback  the callback to determine whether a certificate should be trusted
      * @return the {@link DownloadClient} on success or {@code null} on failure
-     * @see DownloadClient#DownloadClient(InetSocketAddress, byte[], int, Function) DownloadClient
+     * @see DownloadClient#DownloadClient(InetSocketAddress, InetSocketAddress, byte[], int, Function) DownloadClient
      */
-    public static DownloadClient tryCreate(InetSocketAddress address, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) {
+    public static DownloadClient tryCreate(InetSocketAddress modpackAddress, InetSocketAddress minecraftServerAddress, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) {
         try {
-            return new DownloadClient(address, secretBytes, poolSize, trustedByUserCallback);
+            return new DownloadClient(modpackAddress, minecraftServerAddress, secretBytes, poolSize, trustedByUserCallback);
         } catch (IOException e) {
             LOGGER.error("Failed to create a download client. Error: {}", e.getMessage());
             return null;
@@ -162,9 +162,12 @@ class PreValidationConnection {
     /**
      * Creates a new connection by first opening a plain TCP socket,
      * sending the AMMC magic, waiting for the AMOK reply, and then upgrading to TLS.
+     * 
+     * @param address the modpack server's address
+     * @param minecraftServerAddress the server's minecraft address, used for certificate validation
+     * @param keyStore the keystore containing trusted certificates
      */
-    public PreValidationConnection(InetSocketAddress address, KeyStore keyStore) throws IOException,
-            KeyStoreException {
+    public PreValidationConnection(InetSocketAddress address, InetSocketAddress minecraftServerAddress, KeyStore keyStore) throws IOException, KeyStoreException {
         // Step 1. Create a plain TCP connection.
         Socket plainSocket = new Socket();
         plainSocket.connect(address, 15000);
@@ -191,34 +194,54 @@ class PreValidationConnection {
         // The createSocket(Socket, host, port, autoClose) wraps the existing plain socket.
         SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, address.getHostName(), address.getPort(), true);
         sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
-        sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384",
-                "TLS_CHACHA20_POLY1305_SHA256"});
+        sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
         SSLParameters sslParameters = new SSLParameters();
         sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
         sslSocket.setSSLParameters(sslParameters);
 
         SSLSession session = sslSocket.getSession();
+        X509Certificate certificate = null;
         X509Certificate unvalidatedCertificate = null;
+        X509Certificate[] serverCertificateChain = interceptedCertificateChain.get();
+        if (serverCertificateChain != null && serverCertificateChain.length > 0) {
+            certificate = serverCertificateChain[0];
+        }
+
+        if (certificate == null) {
+            throw new IOException("No certificate found in server's response");
+        }
+
         if (!session.isValid()) {
             // Handshake failed
             sslSocket.close();
-            sslSocket = null;
-            X509Certificate[] serverCertificateChain = interceptedCertificateChain.get();
-            if (serverCertificateChain != null && serverCertificateChain.length > 0
-                    && isSelfSigned(serverCertificateChain[0])) {
-                unvalidatedCertificate = serverCertificateChain[0];
+            unvalidatedCertificate = certificate;
+        }
+
+        if (!isSelfSigned(certificate)) {
+            // Validate the certificate against the domains
+            // Extract hostnames from addresses
+            String modpackHostname = address.getHostString();
+            String serverHostname = minecraftServerAddress.getHostString();
+
+            // Validate certificate against both modpack address and minecraft server address
+            boolean isModpackAddressValid = CertificateDomainValidator.isDomainValidatedByCertificate(certificate, modpackHostname);
+            boolean isMinecraftServerAddressValid = CertificateDomainValidator.isDomainValidatedByCertificate(certificate, serverHostname);
+
+            if (!isModpackAddressValid || !isMinecraftServerAddressValid) {
+                LOGGER.error("Certificate validation failed: certificate doesn't match the required domains");
+                LOGGER.error("Modpack address validation: {}, Minecraft server address validation: {}", isModpackAddressValid, isMinecraftServerAddressValid);
+                sslSocket.close();
             }
         }
-        this.unvalidatedCertificate = unvalidatedCertificate;
 
-        socket = sslSocket;
+        this.unvalidatedCertificate = unvalidatedCertificate;
+        this.socket = sslSocket;
     }
 
     private static boolean isSelfSigned(X509Certificate certificate) {
         try {
             certificate.verify(certificate.getPublicKey());
-        } catch (CertificateException | NoSuchAlgorithmException | SignatureException | InvalidKeyException |
-                 NoSuchProviderException e) {
+        } catch (CertificateException | NoSuchAlgorithmException | SignatureException | InvalidKeyException | NoSuchProviderException e) {
             return false;
         }
         return true;
@@ -282,11 +305,11 @@ class Connection implements AutoCloseable {
      */
     public Connection(PreValidationConnection preValidationConnection, byte[] secretBytes) throws IOException {
 //        useCompression = !AddressHelpers.isLocal(address);
-        if (preValidationConnection.getSocket() == null) {
-            throw new SSLHandshakeException("Server certificate is not valid");
+        if (preValidationConnection.getSocket() == null || preValidationConnection.getSocket().isClosed()) {
+            throw new SSLHandshakeException("Server certificate is not valid, connection got closed");
         }
         this.socket = preValidationConnection.getSocket();
-        useCompression = true;
+        this.useCompression = true;
         this.secretBytes = secretBytes;
 
         try {
