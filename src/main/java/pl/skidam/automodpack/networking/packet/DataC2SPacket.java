@@ -34,6 +34,7 @@ public class DataC2SPacket {
             Integer packetPort = dataPacket.port;
             String modpackName = dataPacket.modpackName;
             Secrets.Secret secret = dataPacket.secret;
+            String fingerprint = dataPacket.fingerprint;
             boolean modRequired = dataPacket.modRequired;
 
             if (modRequired) {
