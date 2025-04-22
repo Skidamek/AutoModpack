@@ -5,7 +5,6 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -279,8 +278,8 @@ public class ModpackUtils {
 
         String installedModpackName = clientConfig.selectedModpack;
         Jsons.ModpackEntry installedModpackEntry = clientConfig.installedModpacks.get(installedModpackName);
-        InetSocketAddress installedModpackAddress = AddressHelpers.parse(installedModpackEntry.hostAddress);
-        InetSocketAddress installedServerAddress = AddressHelpers.parse(installedModpackEntry.serverAddress);
+        InetSocketAddress installedModpackAddress = installedModpackEntry.hostAddress;
+        InetSocketAddress installedServerAddress = installedModpackEntry.serverAddress;
         String serverModpackName = serverModpackContent.modpackName;
 
         if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
@@ -351,13 +350,12 @@ public class ModpackUtils {
     }
 
     public static void addModpackToList(String modpackName, InetSocketAddress modpackAddress, InetSocketAddress serverAddress) {
-        if (modpackName == null || modpackName.isEmpty() || modpackAddress == null) {
+        if (modpackName == null || modpackName.isEmpty() || modpackAddress == null || serverAddress == null) {
             return;
         }
 
         Map<String, Jsons.ModpackEntry> modpacks = new HashMap<>(clientConfig.installedModpacks);
-        String addressString = modpackAddress.getHostString() + ":" + modpackAddress.getPort();
-        Jsons.ModpackEntry entry = new Jsons.ModpackEntry(addressString, serverAddress.getHostString());
+        Jsons.ModpackEntry entry = new Jsons.ModpackEntry(modpackAddress, serverAddress);
         modpacks.put(modpackName, entry);
         clientConfig.installedModpacks = modpacks;
 
@@ -379,7 +377,8 @@ public class ModpackUtils {
         if (!modpackName.isEmpty()) {
             // Check if we don't have already installed modpack via this link
             final String finalCorrectedName = correctedName;
-            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.values().stream().anyMatch(entry -> entry.hostAddress.equals(finalCorrectedName))) {
+            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.values().stream().anyMatch(entry -> 
+                (entry.hostAddress.getHostString() + ":" + entry.hostAddress.getPort()).equals(finalCorrectedName))) {
                 return modpackDir;
             }
 

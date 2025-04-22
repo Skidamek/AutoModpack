@@ -23,7 +23,6 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
-import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.*;
 
@@ -74,29 +73,25 @@ public class NettyServer {
 
     public Optional<ChannelFuture> start() {
         try {
-            X509Certificate cert;
-            PrivateKey key;
 
             if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
                 // Create a self-signed certificate
                 KeyPair keyPair = NetUtils.generateKeyPair();
-                cert = NetUtils.selfSign(keyPair);
-                key = keyPair.getPrivate();
+                X509Certificate cert = NetUtils.selfSign(keyPair);
 
                 // save it to the file
                 NetUtils.saveCertificate(cert, serverCertFile);
                 NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
-            } else {
-                cert = NetUtils.loadCertificate(serverCertFile);
-                key = NetUtils.loadPrivateKey(serverPrivateKeyFile);
             }
 
-            if (cert == null || key == null) {
-                throw new IllegalStateException("Failed to load certificate or private key");
+            X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
+
+            if (cert == null) {
+                throw new IllegalStateException("Server certificate couldn't be loaded");
             }
 
             // Shiny TLS 1.3
-            sslCtx = SslContextBuilder.forServer(key, cert)
+            sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
                     .sslProvider(SslProvider.JDK)
                     .protocols("TLSv1.3")
                     .ciphers(Arrays.asList(

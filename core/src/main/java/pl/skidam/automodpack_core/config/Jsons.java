@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.config;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 
+import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,15 +18,23 @@ public class Jsons {
         public boolean selfUpdater = false;
     }
 
+
     public static class ModpackEntry {
-        public String hostAddress; // modpack host address
-        public String serverAddress; // minecraft server address
+        public InetSocketAddress hostAddress; // modpack host address
+        public InetSocketAddress serverAddress; // minecraft server address
 
         public ModpackEntry() {
             // Default constructor for Gson
         }
 
-        public ModpackEntry(String hostAddress, String serverAddress) {
+        /**
+         * ModpackEntry holds server connection details.
+         *
+         * @param hostAddress   modpack server address that COULD be manipulated by the server
+         * @param serverAddress minecraft server address that represents the target address
+         *                      which client uses to connect. This value CANNOT be manipulated by the server.
+         */
+        public ModpackEntry(InetSocketAddress hostAddress, InetSocketAddress serverAddress) {
             this.hostAddress = hostAddress;
             this.serverAddress = serverAddress;
         }

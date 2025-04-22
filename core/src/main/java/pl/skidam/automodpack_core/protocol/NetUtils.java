@@ -85,12 +85,15 @@ public class NetUtils {
 
     public static X509Certificate loadCertificate(Path path) throws Exception {
         if (!Files.exists(path)) return null;
-        String certPem = Files.readString(path);
-        certPem = certPem.replaceAll("-----BEGIN CERTIFICATE-----", "")
-                .replaceAll("-----END CERTIFICATE-----", "")
-                .replaceAll("\n", "");
+        String certPem = Files.readString(path).replaceAll("\n", "");
+        String beginMarker = "-----BEGIN CERTIFICATE-----";
+        String endMarker = "-----END CERTIFICATE-----";
+        int begin = certPem.indexOf(beginMarker);
+        int end = certPem.indexOf(endMarker);
+        if (begin == -1 || end == -1) return null;
+        String cert = certPem.substring(begin + beginMarker.length(), end).trim();
         CertificateFactory cf = CertificateFactory.getInstance("X.509");
-        return (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(Base64.getDecoder().decode(certPem)));
+        return (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(Base64.getDecoder().decode(cert)));
     }
 
     public static void savePrivateKey(PrivateKey key, Path path) throws Exception {
@@ -100,16 +103,6 @@ public class NetUtils {
                 + "-----END PRIVATE KEY-----";
         CustomFileUtils.setupFilePaths(path);
         Files.writeString(path, keyPem);
-    }
-
-    public static PrivateKey loadPrivateKey(Path path) throws Exception {
-        if (!Files.exists(path)) return null;
-        String keyPem = Files.readString(path);
-        keyPem = keyPem.replaceAll("-----BEGIN PRIVATE KEY-----", "")
-                .replaceAll("-----END PRIVATE KEY-----", "")
-                .replaceAll("\n", "");
-        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(Base64.getDecoder().decode(keyPem));
-        return KeyFactory.getInstance("RSA").generatePrivate(keySpec);
     }
 
     private static String formatBase64(String base64) {

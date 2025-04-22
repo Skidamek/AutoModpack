@@ -59,6 +59,10 @@ public class DownloadClient implements AutoCloseable {
         }
 
         PreValidationConnection firstConnection = getPreValidationConnection(modpackAddress, minecraftServerAddress, keyStore);
+        if (firstConnection.getSocket() != null) {
+            firstConnection.getSocket().close();
+        }
+
         if (trustedByUserCallback != null && firstConnection.getUnvalidatedCertificate() != null && trustedByUserCallback.apply(firstConnection.getUnvalidatedCertificate())) {
             try {
                 keyStore.setCertificateEntry(modpackAddress.getHostString(), firstConnection.getUnvalidatedCertificate());
@@ -68,9 +72,7 @@ public class DownloadClient implements AutoCloseable {
         }
 
         for (int i = 0; i < poolSize; i++) {
-            PreValidationConnection preValidationConnection;
-            preValidationConnection = getPreValidationConnection(modpackAddress, minecraftServerAddress, keyStore);
-
+            PreValidationConnection preValidationConnection = getPreValidationConnection(modpackAddress, minecraftServerAddress, keyStore);
             connections.add(new Connection(preValidationConnection, secretBytes));
         }
     }
