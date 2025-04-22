@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import com.github.luben.zstd.Zstd;
+import org.apache.http.conn.ssl.DefaultHostnameVerifier;
 import pl.skidam.automodpack_core.callbacks.IntCallback;
 
 import javax.net.ssl.*;
@@ -213,29 +214,23 @@ class PreValidationConnection {
             throw new IOException("No certificate found in server's response");
         }
 
-        if (!session.isValid()) {
-            // Handshake failed
+        if (!session.isValid()) { // Handshake failed
             sslSocket.close();
             unvalidatedCertificate = certificate;
         }
 
         if (!isSelfSigned(certificate)) {
-            // Validate the certificate against the domains
-            // Extract hostnames from addresses
-            String modpackHostname = address.getHostString();
-            String serverHostname = minecraftServerAddress.getHostString();
-
-            // Validate certificate against both modpack address and minecraft server address
-            boolean isModpackAddressValid = CertificateDomainValidator.isDomainValidatedByCertificate(certificate, modpackHostname);
-            boolean isMinecraftServerAddressValid = CertificateDomainValidator.isDomainValidatedByCertificate(certificate, serverHostname);
-
-            if (!isModpackAddressValid || !isMinecraftServerAddressValid) {
-                LOGGER.error("Certificate validation failed: certificate doesn't match the required domains");
-                LOGGER.error("Modpack address validation: {}, Minecraft server address validation: {}", isModpackAddressValid, isMinecraftServerAddressValid);
+            DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
+            // Verify if the certificate verifies against the required domains
+            if (!hostnameVerifier.verify(address.getHostString(), session) || !hostnameVerifier.verify(minecraftServerAddress.getHostString(), session)) {
                 sslSocket.close();
+                unvalidatedCertificate = certificate;
+                LOGGER.error("Certificate validation failed: certificate doesn't match the required domains {} and {}", address.getHostString(), minecraftServerAddress.getHostString());
             }
         }
 
+        // The unvalidatedCertificate will be non-null if the certificate failed automated validation and requires manual verification by the client.
+        // If null, the certificate was validated successfully.
         this.unvalidatedCertificate = unvalidatedCertificate;
         this.socket = sslSocket;
     }

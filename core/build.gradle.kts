@@ -22,6 +22,7 @@ dependencies {
     implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
     implementation("com.github.luben:zstd-jni:1.5.7-1")
     implementation("org.tomlj:tomlj:1.1.1")
+    implementation("org.apache.httpcomponents:httpclient:4.5.14") // minecraft uses this version so we dont need to bundle it
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
     testImplementation("org.junit.jupiter:junit-jupiter-engine:5.9.2")
 }

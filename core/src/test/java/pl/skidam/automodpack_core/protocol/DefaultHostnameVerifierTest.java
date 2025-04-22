@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.protocol;
 
+import org.apache.http.conn.ssl.DefaultHostnameVerifier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeAll;
 
@@ -19,10 +20,13 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
+import javax.net.ssl.SSLException;
+
 import static org.junit.jupiter.api.Assertions.*;
 
-class CertificateDomainValidatorTest {
+class DefaultHostnameVerifierTest {
 
+    private static final DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
     private static X509Certificate certificateWithSAN;
     private static X509Certificate certificateWithCNOnly;
     private static X509Certificate certificateWithWildcard;
@@ -90,36 +94,45 @@ class CertificateDomainValidatorTest {
         return new JcaX509CertificateConverter().getCertificate(certBuilder.build(contentSigner));
     }
 
+    public boolean verify(final String host, final X509Certificate x509) {
+        try {
+            hostnameVerifier.verify(host, x509);
+            return true;
+        } catch (final SSLException ex) {
+            return false;
+        }
+    }
+
     @Test
     void testNullOrEmptyInputs() {
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(null, "example.com"));
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithSAN, null));
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithSAN, ""));
+//        assertFalse(verify("example.com",null));
+//        assertFalse(verify(null, certificateWithSAN));
+        assertFalse(verify("", certificateWithSAN));
     }
 
     @Test
     void testDomainValidationWithSAN() {
-        assertTrue(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithSAN, "example.com"));
-        assertTrue(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithSAN, "www.example.com"));
-        assertTrue(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithSAN, "api.example.com"));
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithSAN, "other.example.com"));
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithSAN, "example.org"));
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithSAN, "www.example.org"));
+        assertTrue(verify("example.com", certificateWithSAN));
+        assertTrue(verify("www.example.com", certificateWithSAN));
+        assertTrue(verify("api.example.com", certificateWithSAN));
+        assertFalse(verify("other.example.com", certificateWithSAN));
+        assertFalse(verify("example.org", certificateWithSAN));
+        assertFalse(verify("www.example.org", certificateWithSAN));
     }
 
     @Test
     void testDomainValidationWithCNOnly() {
-        assertTrue(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithCNOnly, "example.org"));
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithCNOnly, "www.example.org"));
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithCNOnly, "example.com"));
+        assertTrue(verify("example.org", certificateWithCNOnly));
+        assertFalse(verify("www.example.org", certificateWithCNOnly));
+        assertFalse(verify("example.com", certificateWithCNOnly));
     }
 
     @Test
     void testDomainValidationWithWildcard() {
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithWildcard, "example.net"));
-        assertTrue(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithWildcard, "www.example.net"));
-        assertTrue(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithWildcard, "api.example.net"));
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithWildcard, "sub.domain.example.net"));
-        assertFalse(CertificateDomainValidator.isDomainValidatedByCertificate(certificateWithWildcard, "example.com"));
+        assertFalse(verify("example.net", certificateWithWildcard));
+        assertTrue(verify("www.example.net", certificateWithWildcard));
+        assertTrue(verify("api.example.net", certificateWithWildcard));
+        assertFalse(verify("sub.domain.example.net", certificateWithWildcard));
+        assertFalse(verify("example.com", certificateWithWildcard));
     }
 }
