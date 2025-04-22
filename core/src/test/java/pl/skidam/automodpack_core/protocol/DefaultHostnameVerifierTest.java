@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.protocol;
 
-import org.apache.http.conn.ssl.DefaultHostnameVerifier;
+import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeAll;
 

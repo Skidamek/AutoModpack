@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_core.protocol;
 
 import com.github.luben.zstd.Zstd;
-import org.apache.http.conn.ssl.DefaultHostnameVerifier;
+import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import javax.net.ssl.*;
 import java.io.*;
 import java.net.InetSocketAddress;
@@ -218,13 +218,15 @@ class PreValidationConnection {
             unvalidatedCertificate = certificate;
         }
 
-        if (!isSelfSigned(certificate)) {
+        if (!isSelfSigned(certificate) || session.isValid()) {
             DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
             // Verify if the certificate verifies against the required domains
             if (!hostnameVerifier.verify(address.getHostString(), session) || !hostnameVerifier.verify(minecraftServerAddress.getHostString(), session)) {
                 sslSocket.close();
                 unvalidatedCertificate = certificate;
                 LOGGER.error("Certificate validation failed: certificate doesn't match the required domains {} and {}", address.getHostString(), minecraftServerAddress.getHostString());
+            } else {
+                LOGGER.info("Signed certificate validation succeeded for {} and {}", address.getHostString(), minecraftServerAddress.getHostString());
             }
         }
 
