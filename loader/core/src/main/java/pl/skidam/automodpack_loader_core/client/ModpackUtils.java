@@ -351,7 +351,7 @@ public class ModpackUtils {
     }
 
     public static void addModpackToList(String modpackName, Jsons.ModpackAddresses modpackAddresses) {
-        if (modpackName == null || modpackName.isEmpty() || modpackAddresses == null || modpackAddresses.hostAddress == null || modpackAddresses.serverAddress == null) {
+        if (modpackName == null || modpackName.isEmpty() || modpackAddresses.isAnyEmpty()) {
             return;
         }
 
@@ -409,8 +409,8 @@ public class ModpackUtils {
     private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
         if (secret == null)
             return Optional.empty();
-        if (modpackAddresses == null || modpackAddresses.hostAddress == null)
-            throw new IllegalArgumentException("ModpackEntry or hostAddress is null");
+        if (modpackAddresses.isAnyEmpty())
+            throw new IllegalArgumentException("Modpack addresses are empty!");
 
         try (DownloadClient client = DownloadClient.tryCreate(modpackAddresses, secret.secretBytes(), 1, userValidationCallback(modpackAddresses.hostAddress, allowAskingUser))) {
             if (client == null) return Optional.empty();
