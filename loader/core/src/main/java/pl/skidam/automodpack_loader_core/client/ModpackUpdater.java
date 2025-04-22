@@ -12,7 +12,6 @@ import pl.skidam.automodpack_loader_core.utils.*;
 
 import java.io.IOException;
 import java.net.ConnectException;
-import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
 import java.util.*;
@@ -33,8 +32,7 @@ public class ModpackUpdater {
     private WorkaroundUtil workaroundUtil;
     public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
-    private InetSocketAddress modpackAddress;
-    private InetSocketAddress serverAddress;
+    private Jsons.ModpackAddresses modpackAddresses;
     private Secrets.Secret modpackSecret;
     private Path modpackDir;
     private Path modpackContentFile;
@@ -44,14 +42,13 @@ public class ModpackUpdater {
         return serverModpackContent.modpackName;
     }
 
-    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, InetSocketAddress modpackAddress, InetSocketAddress serverAddress, Secrets.Secret secret, Path modpackPath) {
+    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
         this.serverModpackContent = modpackContent;
-        this.modpackAddress = modpackAddress;
-        this.serverAddress = serverAddress;
+        this.modpackAddresses = modpackAddresses;
         this.modpackSecret = secret;
         this.modpackDir = modpackPath;
 
-        if (this.modpackAddress == null || modpackPath.toString().isEmpty()) {
+        if (this.modpackAddresses.isAnyEmpty() || modpackPath.toString().isEmpty()) {
             throw new IllegalArgumentException("Address or modpackPath is null or empty");
         }
 
@@ -237,8 +234,8 @@ public class ModpackUpdater {
             int wholeQueue = serverModpackContent.list.size();
             LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
-            DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddress, serverAddress, modpackSecret.secretBytes(),
-                    Math.min(wholeQueue, 5), ModpackUtils.userValidationCallback(modpackAddress, false));
+            DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(),
+                    Math.min(wholeQueue, 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
             if (downloadClient == null) {
                 return;
             }
@@ -316,7 +313,7 @@ public class ModpackUpdater {
                 // TODO set client to a waiting for the server to respond screen
                 LOGGER.warn("Trying to refresh the modpack content");
                 LOGGER.info("Sending hashes to refresh: {}", hashesToRefresh.values());
-                var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackAddress, serverAddress, modpackSecret, hashesArray, false);
+                var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackAddresses, modpackSecret, hashesArray, false);
                 if (refreshedContentOptional.isEmpty()) {
                     LOGGER.error("Failed to refresh the modpack content");
                 } else {
@@ -331,7 +328,7 @@ public class ModpackUpdater {
                     // filter list to only the failed downloads
                     var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
 
-                    downloadClient = DownloadClient.tryCreate(modpackAddress, serverAddress, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddress, false));
+                    downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
                     if (downloadClient == null) {
                         return;
                     }
@@ -349,7 +346,7 @@ public class ModpackUpdater {
 
                         Path downloadFile = CustomFileUtils.getPath(modpackDir, fileName);
 
-                        LOGGER.info("Retrying to download {} from {}", fileName, modpackAddress.getAddress().getHostName());
+                        LOGGER.info("Retrying to download {} from {}", fileName, modpackAddresses.hostAddress.getHostName());
 
                         Runnable failureCallback = () -> {
                             failedDownloads.put(item, List.of());
@@ -410,7 +407,7 @@ public class ModpackUpdater {
                 new ReLauncher(modpackDir, updateType, changelogs).restart(false);
             }
         } catch (SocketTimeoutException | ConnectException e) {
-            LOGGER.error("{} is not responding", "Modpack host of " + modpackAddress, e);
+            LOGGER.error("{} is not responding", "Modpack host of " + modpackAddresses.hostAddress, e);
         } catch (InterruptedException e) {
             LOGGER.info("Interrupted the download");
         } catch (Exception e) {
@@ -421,7 +418,7 @@ public class ModpackUpdater {
 
     // returns true if restart is required
     private boolean applyModpack() throws Exception {
-        ModpackUtils.selectModpack(modpackDir, modpackAddress, serverAddress, newDownloadedFiles);
+        ModpackUtils.selectModpack(modpackDir, modpackAddresses, newDownloadedFiles);
         try { // try catch this error there because we don't want to stop the whole method just because of that
             SecretsStore.saveClientSecret(clientConfig.selectedModpack, modpackSecret);
         } catch (IllegalArgumentException e) {

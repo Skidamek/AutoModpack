@@ -9,6 +9,7 @@ import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -61,17 +62,18 @@ public class DataC2SPacket {
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
 
             Path modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
-            var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(modpackAddress, serverAddress, secret, true);
+            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress);
+            var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, true);
 
             if (optionalServerModpackContent.isPresent()) {
                 boolean update = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
                 if (update) {
                     disconnectImmediately(handler);
-                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), modpackAddress, serverAddress, secret, modpackDir);
+                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), modpackAddresses, secret, modpackDir);
                     needsDisconnecting = true;
                 } else {
-                    boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, modpackAddress, serverAddress, Set.of());
+                    boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, modpackAddresses, Set.of());
 
                     // save latest modpack content
                     var modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());

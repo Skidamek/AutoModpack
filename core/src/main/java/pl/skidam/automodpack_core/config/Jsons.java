@@ -14,16 +14,16 @@ public class Jsons {
     public static class ClientConfigFields {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public String selectedModpack = ""; // modpack name
-        public Map<String, ModpackEntry> installedModpacks; // modpack name, <modpack host address, minecraft server address>
+        public Map<String, ModpackAddresses> installedModpacks; // modpack name, <modpack host address, minecraft server address>
         public boolean selfUpdater = false;
     }
 
 
-    public static class ModpackEntry {
+    public static class ModpackAddresses {
         public InetSocketAddress hostAddress; // modpack host address
         public InetSocketAddress serverAddress; // minecraft server address
 
-        public ModpackEntry() {
+        public ModpackAddresses() {
             // Default constructor for Gson
         }
 
@@ -34,9 +34,13 @@ public class Jsons {
          * @param serverAddress minecraft server address that represents the target address
          *                      which client uses to connect. This value CANNOT be manipulated by the server.
          */
-        public ModpackEntry(InetSocketAddress hostAddress, InetSocketAddress serverAddress) {
+        public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress) {
             this.hostAddress = hostAddress;
             this.serverAddress = serverAddress;
+        }
+
+        public boolean isAnyEmpty() {
+            return hostAddress == null || serverAddress == null || hostAddress.getHostString().isBlank() || serverAddress.getHostString().isBlank();
         }
     }
 

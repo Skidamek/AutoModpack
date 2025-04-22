@@ -66,7 +66,8 @@ public class Preload {
 
         Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
-        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackAddress, selectedServerAddress, secret, false);
+        Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress);
+        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
         var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
         // Use the latest modpack content if available
@@ -83,7 +84,7 @@ public class Preload {
         CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
 
         // Update modpack
-        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackAddress, selectedServerAddress, secret, selectedModpackDir);
+        new ModpackUpdater().prepareUpdate(latestModpackContent, modpackAddresses, secret, selectedModpackDir);
     }
 
 

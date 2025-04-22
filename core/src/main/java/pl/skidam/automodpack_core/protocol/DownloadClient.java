@@ -4,7 +4,6 @@ import com.github.luben.zstd.Zstd;
 import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import javax.net.ssl.*;
 import java.io.*;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.file.Path;
 import java.security.*;
@@ -17,6 +16,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
+
+import pl.skidam.automodpack_core.config.Jsons;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
@@ -35,13 +36,12 @@ public class DownloadClient implements AutoCloseable {
      * error on a self-signed certificate, {@code trustedByUserCallback} is executed to determine whether the
      * certificate should be trusted anyway.
      *
-     * @param modpackAddress         the modpack server's address
-     * @param minecraftServerAddress the server's minecraft address, used for certificate validation.'
-     * @param secretBytes            the secret bytes obtained from the server
-     * @param poolSize               the number of connections
-     * @param trustedByUserCallback  the callback to determine whether a certificate should be trusted
+     * @param modpackAddresses      the object containing host and server addresses
+     * @param secretBytes           the secret bytes obtained from the server
+     * @param poolSize              the number of connections
+     * @param trustedByUserCallback the callback to determine whether a certificate should be trusted
      */
-    public DownloadClient(InetSocketAddress modpackAddress, InetSocketAddress minecraftServerAddress, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
+    public DownloadClient(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
         KeyStore keyStore;
         if (poolSize < 1) {
             throw new IllegalArgumentException("Pool size must be greater than 0");
@@ -58,29 +58,29 @@ public class DownloadClient implements AutoCloseable {
             throw new RuntimeException("Failed to load empty KeyStore", e);
         }
 
-        PreValidationConnection firstConnection = getPreValidationConnection(modpackAddress, minecraftServerAddress, keyStore);
+        PreValidationConnection firstConnection = getPreValidationConnection(modpackAddresses, keyStore);
         if (firstConnection.getSocket() != null) {
             firstConnection.getSocket().close();
         }
 
         if (trustedByUserCallback != null && firstConnection.getUnvalidatedCertificate() != null && trustedByUserCallback.apply(firstConnection.getUnvalidatedCertificate())) {
             try {
-                keyStore.setCertificateEntry(modpackAddress.getHostString(), firstConnection.getUnvalidatedCertificate());
+                keyStore.setCertificateEntry(modpackAddresses.hostAddress.getHostString(), firstConnection.getUnvalidatedCertificate());
             } catch (KeyStoreException e) {
                 throw new RuntimeException("Could not add the trusted certificate to the KeyStore.", e);
             }
         }
 
         for (int i = 0; i < poolSize; i++) {
-            PreValidationConnection preValidationConnection = getPreValidationConnection(modpackAddress, minecraftServerAddress, keyStore);
+            PreValidationConnection preValidationConnection = getPreValidationConnection(modpackAddresses, keyStore);
             connections.add(new Connection(preValidationConnection, secretBytes));
         }
     }
 
-    private static PreValidationConnection getPreValidationConnection(InetSocketAddress address, InetSocketAddress minecraftServerAddress, KeyStore keyStore) throws IOException {
+    private static PreValidationConnection getPreValidationConnection(Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException {
         PreValidationConnection preValidationConnection;
         try {
-            preValidationConnection = new PreValidationConnection(address, minecraftServerAddress, keyStore);
+            preValidationConnection = new PreValidationConnection(modpackAddresses, keyStore);
         } catch (KeyStoreException e) {
             throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
         }
@@ -90,17 +90,16 @@ public class DownloadClient implements AutoCloseable {
     /**
      * Tries to create a new {@link DownloadClient}, logging an error if the operation fails.
      *
-     * @param modpackAddress         the server's address
-     * @param minecraftServerAddress the server's minecraft address, used for certificate validation.'
-     * @param secretBytes            the secret bytes obtained from the server
-     * @param poolSize               the number of connections
-     * @param trustedByUserCallback  the callback to determine whether a certificate should be trusted
+     * @param modpackAddresses      the object containing host and server addresses
+     * @param secretBytes           the secret bytes obtained from the server
+     * @param poolSize              the number of connections
+     * @param trustedByUserCallback the callback to determine whether a certificate should be trusted
      * @return the {@link DownloadClient} on success or {@code null} on failure
-     * @see DownloadClient#DownloadClient(InetSocketAddress, InetSocketAddress, byte[], int, Function) DownloadClient
+     * @see DownloadClient#DownloadClient(Jsons.ModpackAddresses, byte[], int, Function) DownloadClient
      */
-    public static DownloadClient tryCreate(InetSocketAddress modpackAddress, InetSocketAddress minecraftServerAddress, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) {
+    public static DownloadClient tryCreate(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) {
         try {
-            return new DownloadClient(modpackAddress, minecraftServerAddress, secretBytes, poolSize, trustedByUserCallback);
+            return new DownloadClient(modpackAddresses, secretBytes, poolSize, trustedByUserCallback);
         } catch (IOException e) {
             LOGGER.error("Failed to create a download client. Error: {}", e.getMessage());
             return null;
@@ -165,14 +164,13 @@ class PreValidationConnection {
      * Creates a new connection by first opening a plain TCP socket,
      * sending the AMMC magic, waiting for the AMOK reply, and then upgrading to TLS.
      * 
-     * @param address the modpack server's address
-     * @param minecraftServerAddress the server's minecraft address, used for certificate validation
-     * @param keyStore the keystore containing trusted certificates
+     * @param modpackAddresses the object containing host and server addresses
+     * @param keyStore         the keystore containing trusted certificates
      */
-    public PreValidationConnection(InetSocketAddress address, InetSocketAddress minecraftServerAddress, KeyStore keyStore) throws IOException, KeyStoreException {
+    public PreValidationConnection(Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
         // Step 1. Create a plain TCP connection.
         Socket plainSocket = new Socket();
-        plainSocket.connect(address, 15000);
+        plainSocket.connect(modpackAddresses.hostAddress, 15000);
         plainSocket.setSoTimeout(15000);
         DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
         DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
@@ -194,7 +192,7 @@ class PreValidationConnection {
         SSLContext context = createSSLContext(keyStore, interceptedCertificateChain::set);
         SSLSocketFactory factory = context.getSocketFactory();
         // The createSocket(Socket, host, port, autoClose) wraps the existing plain socket.
-        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, address.getHostName(), address.getPort(), true);
+        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, modpackAddresses.hostAddress.getHostName(), modpackAddresses.hostAddress.getPort(), true);
         sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
         sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
         SSLParameters sslParameters = new SSLParameters();
@@ -221,12 +219,12 @@ class PreValidationConnection {
         if (!isSelfSigned(certificate) || session.isValid()) {
             DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
             // Verify if the certificate verifies against the required domains
-            if (!hostnameVerifier.verify(address.getHostString(), session) || !hostnameVerifier.verify(minecraftServerAddress.getHostString(), session)) {
+            if (!hostnameVerifier.verify(modpackAddresses.hostAddress.getHostString(), session) || !hostnameVerifier.verify(modpackAddresses.serverAddress.getHostString(), session)) {
                 sslSocket.close();
                 unvalidatedCertificate = certificate;
-                LOGGER.error("Certificate validation failed: certificate doesn't match the required domains {} and {}", address.getHostString(), minecraftServerAddress.getHostString());
+                LOGGER.error("Certificate validation failed: certificate doesn't match the required domains {} and {}", modpackAddresses.hostAddress.getHostString(), modpackAddresses.serverAddress.getHostString());
             } else {
-                LOGGER.info("Signed certificate validation succeeded for {} and {}", address.getHostString(), minecraftServerAddress.getHostString());
+                LOGGER.info("Signed certificate validation succeeded for {} and {}", modpackAddresses.hostAddress.getHostString(), modpackAddresses.serverAddress.getHostString());
             }
         }
 
