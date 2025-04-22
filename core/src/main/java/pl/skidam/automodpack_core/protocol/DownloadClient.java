@@ -59,8 +59,8 @@ public class DownloadClient implements AutoCloseable {
         }
 
         PreValidationConnection firstConnection = getPreValidationConnection(modpackAddresses, keyStore);
-        if (firstConnection.getSocket() != null) {
-            firstConnection.getSocket().close();
+        if (firstConnection.getSocket() != null && firstConnection.getUnvalidatedCertificate() == null && !firstConnection.getSocket().isClosed()) {
+            connections.add(new Connection(firstConnection, secretBytes));
         }
 
         if (trustedByUserCallback != null && firstConnection.getUnvalidatedCertificate() != null && trustedByUserCallback.apply(firstConnection.getUnvalidatedCertificate())) {
@@ -71,7 +71,7 @@ public class DownloadClient implements AutoCloseable {
             }
         }
 
-        for (int i = 0; i < poolSize; i++) {
+        for (int i = connections.size(); i < poolSize; i++) {
             PreValidationConnection preValidationConnection = getPreValidationConnection(modpackAddresses, keyStore);
             connections.add(new Connection(preValidationConnection, secretBytes));
         }
