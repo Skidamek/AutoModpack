@@ -1,10 +1,11 @@
 
 package pl.skidam.automodpack_core.config;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.*;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 
+import java.lang.reflect.Type;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -17,19 +18,19 @@ public class ConfigTools {
             .serializeNulls()
             .disableHtmlEscaping()
             .setPrettyPrinting()
-            .registerTypeAdapter(java.net.InetSocketAddress.class, new InetSocketAddressTypeAdapter())
+            .registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())
             .create();
 
-    private static class InetSocketAddressTypeAdapter implements com.google.gson.JsonSerializer<java.net.InetSocketAddress>, com.google.gson.JsonDeserializer<java.net.InetSocketAddress> {
+    private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress>,JsonDeserializer<InetSocketAddress> {
         @Override
-        public com.google.gson.JsonElement serialize(java.net.InetSocketAddress src, java.lang.reflect.Type typeOfSrc, com.google.gson.JsonSerializationContext context) {
-            return new com.google.gson.JsonPrimitive(src.getHostString() + ":" + src.getPort());
+        public JsonElement serialize(InetSocketAddress src, Type typeOfSrc, JsonSerializationContext context) {
+            return new JsonPrimitive(src.getHostString() + ":" + src.getPort());
         }
 
         @Override
-        public java.net.InetSocketAddress deserialize(com.google.gson.JsonElement json, java.lang.reflect.Type typeOfT, com.google.gson.JsonDeserializationContext context) throws com.google.gson.JsonParseException {
+        public InetSocketAddress deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
             String address = json.getAsString();
-            return pl.skidam.automodpack_core.utils.AddressHelpers.parse(address);
+            return AddressHelpers.parse(address);
         }
     }
 
