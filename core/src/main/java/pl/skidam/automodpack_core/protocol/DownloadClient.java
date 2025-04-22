@@ -2,8 +2,6 @@ package pl.skidam.automodpack_core.protocol;
 
 import com.github.luben.zstd.Zstd;
 import org.apache.http.conn.ssl.DefaultHostnameVerifier;
-import pl.skidam.automodpack_core.callbacks.IntCallback;
-
 import javax.net.ssl.*;
 import java.io.*;
 import java.net.InetSocketAddress;
@@ -18,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntConsumer;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
@@ -128,7 +127,7 @@ public class DownloadClient implements AutoCloseable {
      * Downloads a file identified by its SHA-1 hash to the given destination.
      * Returns a CompletableFuture that completes when the download finishes.
      */
-    public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
+    public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
         Connection conn = getFreeConnection();
         return conn.sendDownloadFile(fileHash, destination, chunkCallback);
     }
@@ -330,7 +329,7 @@ class Connection implements AutoCloseable {
     /**
      * Sends a file request over this connection.
      */
-    public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
+    public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
         if (destination == null) {
             throw new IllegalArgumentException("Destination cannot be null");
         }
@@ -482,7 +481,7 @@ class Connection implements AutoCloseable {
      * - One or more data frames containing file data until the total file size is reached.
      * - A final frame: [protocolVersion][END_OF_TRANSMISSION]
      */
-    private Path readFileResponse(Path destination, IntCallback chunkCallback) throws IOException {
+    private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
         // Header frame
         byte[] headerFrame = readProtocolMessageFrame();
         try (DataInputStream headerIn = new DataInputStream(new ByteArrayInputStream(headerFrame))) {
@@ -520,7 +519,7 @@ class Connection implements AutoCloseable {
                 receivedBytes += toWrite;
 
                 if (chunkCallback != null) {
-                    chunkCallback.run(toWrite);
+                    chunkCallback.accept(toWrite);
                 }
             }
 
