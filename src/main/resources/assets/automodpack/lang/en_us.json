@@ -43,7 +43,7 @@
 
     "automodpack.validation.text": "You are connecting to an unknown AutoModpack host",
     "automodpack.validation.description": "Please verify the server's certificate fingerprint",
-    "automodpack.validation.secDescription": "Request the fingerprint from your server administrator if don't have it",
+    "automodpack.validation.secDescription": "Request the fingerprint from your server administrator if you don't have it",
     "automodpack.validation.thiDescription": "This security check helps protect §lyou§r from attackers trying to install malware.",
     "automodpack.validation.run": "Verify",
     "automodpack.validation.failed": "Verification failed",
