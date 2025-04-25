@@ -376,9 +376,8 @@ public class ModpackUtils {
 
         if (!modpackName.isEmpty()) {
             // Check if we don't have already installed modpack via this link
-            final String finalCorrectedName = correctedName;
-            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.values().stream().anyMatch(entry -> 
-                (entry.hostAddress.getHostString() + ":" + entry.hostAddress.getPort()).equals(finalCorrectedName))) {
+            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.values().stream().anyMatch(entry ->
+                (entry.hostAddress.getHostString() + ":" + entry.hostAddress.getPort()).equals(strAddress))) {
                 return modpackDir;
             }
 

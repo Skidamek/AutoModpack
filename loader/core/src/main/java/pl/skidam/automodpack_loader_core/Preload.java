@@ -58,33 +58,32 @@ public class Preload {
             selectedServerAddress = entry.serverAddress;
         }
 
-        // Check if the modpack link is missing or blank
+        // Only selfupdate if no modpack is selected
         if (selectedModpackAddress == null) {
             SelfUpdater.update();
-            return;
-        }
+        } else {
+            Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
-        Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
+            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress);
+            var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
+            var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
-        Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress);
-        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
-        var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+            // Use the latest modpack content if available
+            if (optionalLatestModpackContent.isPresent()) {
+                latestModpackContent = optionalLatestModpackContent.get();
 
-        // Use the latest modpack content if available
-        if (optionalLatestModpackContent.isPresent()) {
-            latestModpackContent = optionalLatestModpackContent.get();
-
-            // Update AutoModpack to server version only if we can get newest modpack content
-            if (SelfUpdater.update(latestModpackContent)) {
-                return;
+                // Update AutoModpack to server version only if we can get newest modpack content
+                if (SelfUpdater.update(latestModpackContent)) {
+                    return;
+                }
             }
+
+            // Delete dummy files
+            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
+
+            // Update modpack
+            new ModpackUpdater().prepareUpdate(latestModpackContent, modpackAddresses, secret, selectedModpackDir);
         }
-
-        // Delete dummy files
-        CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
-
-        // Update modpack
-        new ModpackUpdater().prepareUpdate(latestModpackContent, modpackAddresses, secret, selectedModpackDir);
     }
 
 
