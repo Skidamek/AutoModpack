@@ -32,6 +32,7 @@ public class NettyServer {
     public static final AttributeKey<Boolean> USE_COMPRESSION = AttributeKey.valueOf("useCompression");
     private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
+    private MultithreadEventLoopGroup eventLoopGroup;
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
     private String certificateFingerprint;
@@ -113,7 +114,6 @@ public class NettyServer {
             LOGGER.info("Starting modpack host server on {}", bindAddress);
 
             Class<? extends ServerChannel> socketChannelClass;
-            MultithreadEventLoopGroup eventLoopGroup;
             if (Epoll.isAvailable()) {
                 socketChannelClass = EpollServerSocketChannel.class;
                 eventLoopGroup = new EpollEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
@@ -161,6 +161,8 @@ public class NettyServer {
 
         try {
             serverChannel.channel().close().sync();
+            TrafficShaper.trafficShaper.getTrafficShapingHandler().release();
+            eventLoopGroup.shutdownGracefully().sync();
         } catch (InterruptedException e) {
             LOGGER.error("Interrupted server channel", e);
             return false;

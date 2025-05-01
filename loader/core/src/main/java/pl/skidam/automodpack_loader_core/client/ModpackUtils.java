@@ -30,12 +30,12 @@ public class ModpackUtils {
             throw new IllegalArgumentException("Server modpack content list is null");
         }
 
+
         // get client modpack content
         var optionalClientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
         if (optionalClientModpackContentFile.isPresent() && Files.exists(optionalClientModpackContentFile.get())) {
 
             Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
-
             if (clientModpackContent == null) {
                 return true;
             }
@@ -51,18 +51,8 @@ public class ModpackUtils {
                     if (modpackContentField.editable) continue;
                 } else {
                     Path standardPath = CustomFileUtils.getPathFromCWD(file);
-                    if (Files.exists(standardPath) && Objects.equals(serverSHA1, CustomFileUtils.getHash(standardPath))) {
-                        LOGGER.info("File {} already exists on client, coping to modpack", file);
-                        try {
-                            CustomFileUtils.copyFile(standardPath, path);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
-                        continue;
-                    } else {
-                        LOGGER.info("File does not exists {} - {}", standardPath, file);
-                        return true;
-                    }
+                    LOGGER.info("File does not exists {} - {}", standardPath, file);
+                    return true;
                 }
 
                 if (!Objects.equals(serverSHA1, CustomFileUtils.getHash(path))) {
@@ -98,40 +88,48 @@ public class ModpackUtils {
         // correct the files locations
         for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
             String formattedFile = contentItem.file;
-
-            if (filesNotToCopy.contains(formattedFile)) continue;
-
             Path modpackFile = CustomFileUtils.getPath(modpackDir, formattedFile);
             Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
+            boolean isMod = "mod".equals(contentItem.type);
 
-            if (contentItem.type.equals("mod")) {
-                // Make it into standardized mods directory, for support custom launchers
+            if (isMod) { // Make it into standardized mods directory, for support custom launchers
                 runFile = CustomFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
             }
 
             boolean modpackFileExists = Files.exists(modpackFile);
             boolean runFileExists = Files.exists(runFile);
+            boolean runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
 
-            boolean needsReCheck = true;
+            if (runFileHashMatch) {
+                if (!modpackFileExists) {
+                    LOGGER.info("Copying {} file to the modpack directory", formattedFile);
+                    CustomFileUtils.copyFile(runFile, modpackFile);
+                }
+
+                if (isMod && filesNotToCopy.contains(formattedFile)) {
+                    LOGGER.info("Deleting {} file from run directory", formattedFile);
+                    CustomFileUtils.forceDelete(runFile);
+                    needsRestart = true;
+                }
+            }
+
+            if (filesNotToCopy.contains(formattedFile)) {
+                continue;
+            }
 
             if (modpackFileExists && !runFileExists) {
-                // We only copy mods which are not ignored -- which need a workaround
-                if (contentItem.type.equals("mod")) {
+                // We only copy mods which are not ignored - which need a workaround, log it
+                CustomFileUtils.copyFile(modpackFile, runFile);
+
+                if (isMod) {
                     needsRestart = true;
                     LOGGER.info("Applying workaround for {} mod", formattedFile);
                 }
-
-                CustomFileUtils.copyFile(modpackFile, runFile);
-            } else if (!modpackFileExists && runFileExists) {
-                CustomFileUtils.copyFile(runFile, modpackFile);
-                needsReCheck = false;
             } else if (!modpackFileExists) {
                 LOGGER.error("File {} doesn't exist!? If you see this please report this to the automodpack repo and attach this log https://github.com/Skidamek/AutoModpack/issues", formattedFile);
                 Thread.dumpStack();
-            }
-
-            // we need to update run file and we assume that modpack file is up to date
-            if (needsReCheck && Files.exists(runFile) && !Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile))) {
+            } else if (!runFileHashMatch) {
+                // We need to update run file assuming that modpack file is up to date
                 LOGGER.info("Overwriting {} file to the modpack version", formattedFile);
                 CustomFileUtils.copyFile(modpackFile, runFile);
             }

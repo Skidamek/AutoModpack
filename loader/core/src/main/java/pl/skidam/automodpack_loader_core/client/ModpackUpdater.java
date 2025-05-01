@@ -301,7 +301,9 @@ public class ModpackUpdater {
                 totalBytesToDownload += Long.parseLong(k.size);
             });
 
-            LOGGER.warn("Failed to download {} files", hashesToRefresh.size());
+            if (!hashesToRefresh.isEmpty()) {
+                LOGGER.warn("Failed to download {} files", hashesToRefresh.size());
+            }
 
             if (!hashesToRefresh.isEmpty()) {
                 // make byte[][] from hashesToRefresh.values()
@@ -457,6 +459,11 @@ public class ModpackUpdater {
         // Copy files to running directory
         boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
 
+        // Early return otherwise `getModpackNestedConflicts()` method will throw exception due to mods not being there
+        if (needsRestart0 || needsRestart1) {
+            return true;
+        }
+
         // Prepare modpack, analyze nested mods, copy necessary nested mods over to standard mods directory
         List<FileInspection.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir);
 
@@ -494,7 +501,7 @@ public class ModpackUpdater {
         // Remove duplicate mods
         boolean needsRestart3 = ModpackUtils.removeDupeMods(modpackDir, standardModList, modpackModList, ignoredFiles, workaroundMods);
 
-        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3;
+        return needsRestart2 || needsRestart3;
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory
@@ -540,7 +547,7 @@ public class ModpackUpdater {
             }
 
             Path runPath = CustomFileUtils.getPathFromCWD(formattedFile);
-            if ((Files.exists(runPath) && CustomFileUtils.hashCompare(path, runPath)) && (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile))) {
+            if (CustomFileUtils.hashCompare(path, runPath)) {
                 LOGGER.info("Deleting {} and {}", path, runPath);
                 if (workaroundMods.contains(formattedFile)) { // We only delete workaround mods so only the mods that we have originally copied there
                     needsRestart = true;
