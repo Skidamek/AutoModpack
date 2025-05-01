@@ -18,9 +18,8 @@ stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chisele
 }
 
 stonecutter parameters {
-    val current = node!!.property("loom.platform").toString()
-    val platforms = listOf("fabric", "forge", "neoforge").map { it to (it == current) }
-    consts(platforms)
+    val loader = metadata.project.substringAfterLast("-")
+    consts(loader, "fabric", "forge", "neoforge")
 }
 
 // Non stonecutter stuff
