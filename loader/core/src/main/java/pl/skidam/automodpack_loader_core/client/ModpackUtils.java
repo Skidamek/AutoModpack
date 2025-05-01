@@ -103,26 +103,25 @@ public class ModpackUtils {
             boolean modpackFileExists = Files.exists(modpackFile);
             boolean runFileExists = Files.exists(runFile);
 
-            boolean needsReCheck = true;
-
             if (modpackFileExists && !runFileExists) {
-                // We only copy mods which are not ignored -- which need a workaround
+                CustomFileUtils.copyFile(modpackFile, runFile);
+
+                // We only copy mods which are not ignored - which need a workaround, log it
                 if (contentItem.type.equals("mod")) {
                     needsRestart = true;
                     LOGGER.info("Applying workaround for {} mod", formattedFile);
                 }
-
-                CustomFileUtils.copyFile(modpackFile, runFile);
             } else if (!modpackFileExists && runFileExists) {
                 CustomFileUtils.copyFile(runFile, modpackFile);
-                needsReCheck = false;
+
+                if (contentItem.type.equals("mod")) {
+                    CustomFileUtils.forceDelete(runFile);
+                }
             } else if (!modpackFileExists) {
                 LOGGER.error("File {} doesn't exist!? If you see this please report this to the automodpack repo and attach this log https://github.com/Skidamek/AutoModpack/issues", formattedFile);
                 Thread.dumpStack();
-            }
-
-            // we need to update run file and we assume that modpack file is up to date
-            if (needsReCheck && Files.exists(runFile) && !Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile))) {
+            } else if (!Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile))) {
+                // We need to update run file assuming that modpack file is up to date
                 LOGGER.info("Overwriting {} file to the modpack version", formattedFile);
                 CustomFileUtils.copyFile(modpackFile, runFile);
             }
