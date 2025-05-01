@@ -297,7 +297,9 @@ public class ModpackUpdater {
                 totalBytesToDownload += Long.parseLong(k.size);
             });
 
-            LOGGER.warn("Failed to download {} files", hashesToRefresh.size());
+            if (!hashesToRefresh.isEmpty()) {
+                LOGGER.warn("Failed to download {} files", hashesToRefresh.size());
+            }
 
             if (!hashesToRefresh.isEmpty()) {
                 // make byte[][] from hashesToRefresh.values()
@@ -533,7 +535,7 @@ public class ModpackUpdater {
             }
 
             Path runPath = CustomFileUtils.getPathFromCWD(formattedFile);
-            if ((Files.exists(runPath) && CustomFileUtils.hashCompare(path, runPath)) && (!formattedFile.startsWith("/mods/") || workaroundMods.contains(formattedFile))) {
+            if (CustomFileUtils.hashCompare(path, runPath)) {
                 LOGGER.info("Deleting {} and {}", path, runPath);
                 if (workaroundMods.contains(formattedFile)) { // We only delete workaround mods so only the mods that we have originally copied there
                     needsRestart = true;
