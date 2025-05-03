@@ -99,12 +99,15 @@ public class ModpackUtils {
                 if (!modpackFileExists) {
                     LOGGER.info("Copying {} file to the modpack directory", formattedFile);
                     CustomFileUtils.copyFile(runFile, modpackFile);
+                    modpackFileExists = true;
                 }
 
                 if (isMod && filesNotToCopy.contains(formattedFile)) {
                     LOGGER.info("Deleting {} file from run directory", formattedFile);
                     CustomFileUtils.forceDelete(runFile);
                     needsRestart = true;
+                    runFileExists = false;
+                    runFileHashMatch = false;
                 }
             }
 
