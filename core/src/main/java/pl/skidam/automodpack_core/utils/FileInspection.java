@@ -58,15 +58,17 @@ public class FileInspection {
         }
 
         String modId = FileInspection.getModID(file);
-        String modVersion = FileInspection.getModVersion(file);
-        LoaderManagerService.EnvironmentType environmentType = FileInspection.getModEnvironment(file);
-        Set<String> dependencies = FileInspection.getModDependencies(file);
-        Set<String> providesIDs = FileInspection.getAllProvidedIDs(file);
+        if (modId != null) { // If mod id is null dont need to check for other info
+            String modVersion = FileInspection.getModVersion(file);
+            LoaderManagerService.EnvironmentType environmentType = FileInspection.getModEnvironment(file);
+            Set<String> dependencies = FileInspection.getModDependencies(file);
+            Set<String> providesIDs = FileInspection.getAllProvidedIDs(file);
 
-        if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
-            var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
-            modCache.put(hashPathPair, mod);
-            return mod;
+            if (modVersion != null && dependencies != null) {
+                var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
+                modCache.put(hashPathPair, mod);
+                return mod;
+            }
         }
 
         LOGGER.error("Failed to get mod info for file: {}", file);
