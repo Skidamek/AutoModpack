@@ -7,5 +7,5 @@ import java.util.List;
 
 public interface ModpackLoaderService {
     void loadModpack(List<Path> modpackMods);
-    List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir);
+    List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir); // Returns list of mods from the modpack Dir that are conflicting with the mods from standard mods dir
 }
