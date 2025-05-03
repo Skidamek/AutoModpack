@@ -51,7 +51,7 @@ public class ModpackUtils {
                     if (modpackContentField.editable) continue;
                 } else {
                     Path standardPath = CustomFileUtils.getPathFromCWD(file);
-                    LOGGER.info("File does not exists {} - {}", standardPath, file);
+                    LOGGER.info("File does not exist {} - {}", standardPath, file);
                     return true;
                 }
 
