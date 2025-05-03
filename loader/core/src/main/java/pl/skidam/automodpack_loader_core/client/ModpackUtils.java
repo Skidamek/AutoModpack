@@ -161,9 +161,9 @@ public class ModpackUtils {
         return needsRestart;
     }
 
-    // Returns new ignored files list, accounting for conflicting nested mods
-    public static Set<String> getIgnoredWithNested(List<FileInspection.Mod> conflictingNestedMods, Set<String> ignoredFiles) {
-        Set<String> newIgnoredFiles = new HashSet<>(ignoredFiles);
+    // Returns ignored files list, which is workarounds set + conflicting nested mods
+    public static Set<String> getWorkaroundsWithNested(List<FileInspection.Mod> conflictingNestedMods, Set<String> workarounds) {
+        Set<String> newIgnoredFiles = new HashSet<>(workarounds);
 
         for (FileInspection.Mod mod : conflictingNestedMods) {
             newIgnoredFiles.add(CustomFileUtils.formatPath(mod.modPath(), modpacksDir));
@@ -200,7 +200,9 @@ public class ModpackUtils {
 
         var dupeMods = ModpackUtils.getDupeMods(modpackDir, ignoredMods, standardModList, modpackModList);
 
-        if (dupeMods.isEmpty()) return false;
+        if (dupeMods.isEmpty()) {
+            return false;
+        }
 
         Set<FileInspection.Mod> modsToKeep = new HashSet<>();
 

@@ -455,44 +455,45 @@ public class ModpackUpdater {
         // Copy files to running directory
         boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
 
+        Set<Path> modpackMods = new HashSet<>();
+        Collection<FileInspection.Mod> modpackModList = new ArrayList<>();
+        Path modpackModsDir = modpackDir.resolve("mods");
+        if (Files.exists(modpackModsDir)) {
+            try (Stream<Path> stream = Files.list(modpackModsDir)) {
+                stream.forEach(path -> {
+                    modpackMods.add(path);
+                    FileInspection.Mod mod = FileInspection.getMod(path);
+                    if (mod != null) {
+                        modpackModList.add(mod);
+                    }
+                });
+            }
+        }
+
+        Collection<FileInspection.Mod> standardModList = new ArrayList<>();
+        Path standardModsDir = MODS_DIR;
+        if (Files.exists(standardModsDir)) {
+            try (Stream<Path> stream = Files.list(standardModsDir)) {
+                stream.forEach(path -> {
+                    FileInspection.Mod mod = FileInspection.getMod(path);
+                    if (mod != null) {
+                        standardModList.add(mod);
+                    }
+                });
+            }
+        }
+
         // Check if the conflicting mods still exits, they might have been deleted by methods above
         conflictingNestedMods = conflictingNestedMods.stream()
-                .filter(conflictingMod -> {
-                    Path standardModsDir = MODS_DIR.resolve(conflictingMod.modPath().getFileName());
-                    return Files.exists(standardModsDir);
-                })
+                .filter(conflictingMod -> modpackMods.contains(conflictingMod.modPath()))
                 .toList();
 
         if (!conflictingNestedMods.isEmpty()) {
             LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
         }
 
-        final List<Path> modpackMods;
-        final Collection<FileInspection.Mod> modpackModList;
-        final List<Path> standardMods;
-        final Collection<FileInspection.Mod> standardModList;
-
-        Path modpackModsDir = modpackDir.resolve("mods");
-        if (Files.exists(modpackModsDir)) {
-            try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
-                modpackMods = modpackModsStream.toList();
-                modpackModList = modpackMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList();
-            }
-        } else {
-            modpackModList = List.of();
-        }
-
-        if (Files.exists(MODS_DIR)) {
-            try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
-                standardMods = standardModsStream.toList();
-                standardModList = new ArrayList<>(standardMods.stream().map(FileInspection::getMod).filter(Objects::nonNull).toList());
-            }
-        } else {
-            standardModList = new ArrayList<>();
-        }
-
         boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods, standardModList);
-        Set<String> ignoredFiles = ModpackUtils.getIgnoredWithNested(conflictingNestedMods, filesNotToCopy);
+        Set<String> ignoredFiles = ModpackUtils.getWorkaroundsWithNested(conflictingNestedMods, workaroundMods);
 
         // Remove duplicate mods
         boolean needsRestart3 = ModpackUtils.removeDupeMods(modpackDir, standardModList, modpackModList, ignoredFiles, workaroundMods);
