@@ -12,8 +12,8 @@ public interface ScreenService {
     void error(String... args);
     void menu(Object... args);
     void title(Object... args);
+    void validation(Object... args);
 
     Optional<String> getScreenString();
-
     Optional<Object> getScreen();
 }

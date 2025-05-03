@@ -25,7 +25,7 @@ import java.util.concurrent.CompletableFuture;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
-import static pl.skidam.automodpack_core.protocol.netty.NettyServer.CHUNK_SIZE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.CHUNK_SIZE;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
@@ -70,12 +70,6 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
             default:
                 sendError(ctx, clientProtocolVersion, "Unknown message type");
         }
-    }
-
-    @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        cause.printStackTrace();
-        ctx.close();
     }
 
     private void refreshModpackFiles(ChannelHandlerContext context, byte[][] FileHashesList) throws IOException {

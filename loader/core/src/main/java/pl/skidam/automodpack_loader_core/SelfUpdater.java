@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_loader_core;
 
-import pl.skidam.automodpack_core.callbacks.Callback;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
@@ -8,6 +7,7 @@ import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
+
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -170,7 +170,7 @@ public class SelfUpdater {
 
             var updateType = UpdateType.AUTOMODPACK;
             var relauncher = new ReLauncher(updateType);
-            Callback callback = () -> {
+            Runnable callback = () -> {
                 CustomFileUtils.forceDelete(THIZ_JAR);
                 LOGGER.info("Successfully updated AutoModpack!");
             };

@@ -27,6 +27,7 @@ dependencies {
     implementation("org.tomlj:tomlj:1.1.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
     implementation("com.github.luben:zstd-jni:1.5.7-1")
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.4.3")
 
     compileOnly("net.fabricmc:fabric-loader:${property("loader_fabric")}")
 }
@@ -54,6 +55,7 @@ tasks.named<ShadowJar>("shadowJar") {
     val reloc = "am_libs"
     relocate("org.antlr", "${reloc}.org.antlr")
     relocate("org.tomlj", "${reloc}.org.tomlj")
+    relocate("org.apache.hc", "${reloc}.org.apache.hc")
     relocate("org.checkerframework", "${reloc}.org.checkerframework")
 //    relocate("com.github.luben", "${reloc}.com.github.luben") // cant relocate - natives
     relocate("org.bouncycastle", "${reloc}.org.bouncycastle")

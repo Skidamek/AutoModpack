@@ -41,8 +41,15 @@
   "automodpack.fetch": "Pobieranie bezpośrednich adresów URL z Modrinth i CurseForge...",
   "automodpack.fetch.found": "Znaleziono %s bezpośrednich adresów URL.",
 
-  "automodpack.select": "Wybierz modpack",
+  "automodpack.validation.text": "Łączysz się z nieznanym hostem AutoModpack",
+  "automodpack.validation.description": "Zweryfikuj odcisk certyfikatu serwera",
+  "automodpack.validation.secDescription": "Poproś administratora serwera o odcisk, jeśli go nie posiadasz",
+  "automodpack.validation.thiDescription": "To zabezpieczenie zapobiega manipulowaniu połączeniem podczas pobierania modpacka.",
+  "automodpack.validation.run": "Zweryfikuj",
+  "automodpack.validation.failed": "Weryfikacja nie powiodła się",
 
+  "automodpack.retry": "Spróbuj ponownie",
+  "automodpack.select": "Wybierz modpack",
   "automodpack.yes": "Tak",
   "automodpack.no": "Nie",
   "automodpack.cancel": "Anuluj",

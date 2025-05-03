@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_loader_core;
 
-import pl.skidam.automodpack_core.callbacks.Callback;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -33,7 +32,7 @@ public class ReLauncher {
         this.updateMessage = "Successfully updated the modpack!";
     }
 
-    public void restart(boolean shutdownInPreload, Callback... callbacks) {
+    public final void restart(boolean shutdownInPreload, Runnable... callbacks) {
         if (preload && !shutdownInPreload) {
             runCallbacks(callbacks);
             return;
@@ -49,7 +48,7 @@ public class ReLauncher {
         }
     }
 
-    private void handleClientRestart(Callback[] callbacks, boolean isHeadless) {
+    private void handleClientRestart(Runnable[] callbacks, boolean isHeadless) {
         if (updateType != null && new ScreenManager().getScreenString().isPresent()) {
             new ScreenManager().restart(modpackDir, updateType, changelogs);
         } else if (preload) {
@@ -83,14 +82,14 @@ public class ReLauncher {
         }
     }
 
-    private void handleServerRestart(Callback[] callbacks) {
+    private void handleServerRestart(Runnable[] callbacks) {
         LOGGER.info("Please restart the server to apply updates!");
         runCallbacks(callbacks);
         System.exit(0);
     }
 
-    private void runCallbacks(Callback[] callbacks) {
-        for (Callback callback : callbacks) {
+    private void runCallbacks(Runnable[] callbacks) {
+        for (Runnable callback : callbacks) {
             try {
                 callback.run();
             } catch (Exception e) {

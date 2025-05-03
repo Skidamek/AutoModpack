@@ -1,10 +1,11 @@
 
 package pl.skidam.automodpack_core.config;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.*;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 
+import java.lang.reflect.Type;
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -13,7 +14,25 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ConfigTools {
 
-    public static Gson GSON = new GsonBuilder().serializeNulls().disableHtmlEscaping().setPrettyPrinting().create();
+    public static Gson GSON = new GsonBuilder()
+            .serializeNulls()
+            .disableHtmlEscaping()
+            .setPrettyPrinting()
+            .registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())
+            .create();
+
+    private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress>,JsonDeserializer<InetSocketAddress> {
+        @Override
+        public JsonElement serialize(InetSocketAddress src, Type typeOfSrc, JsonSerializationContext context) {
+            return new JsonPrimitive(src.getHostString() + ":" + src.getPort());
+        }
+
+        @Override
+        public InetSocketAddress deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+            String address = json.getAsString();
+            return AddressHelpers.parse(address);
+        }
+    }
 
     public static <T> T getConfigObject(Class<T> configClass) {
         T object = null;

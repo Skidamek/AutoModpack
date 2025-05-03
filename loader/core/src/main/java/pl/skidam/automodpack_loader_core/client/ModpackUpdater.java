@@ -12,7 +12,6 @@ import pl.skidam.automodpack_loader_core.utils.*;
 
 import java.io.IOException;
 import java.net.ConnectException;
-import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
 import java.util.*;
@@ -33,7 +32,7 @@ public class ModpackUpdater {
     private WorkaroundUtil workaroundUtil;
     public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
-    private InetSocketAddress modpackAddress;
+    private Jsons.ModpackAddresses modpackAddresses;
     private Secrets.Secret modpackSecret;
     private Path modpackDir;
     private Path modpackContentFile;
@@ -43,13 +42,13 @@ public class ModpackUpdater {
         return serverModpackContent.modpackName;
     }
 
-    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, InetSocketAddress address, Secrets.Secret secret, Path modpackPath) {
-        serverModpackContent = modpackContent;
-        modpackAddress = address;
-        modpackSecret = secret;
-        modpackDir = modpackPath;
+    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
+        this.serverModpackContent = modpackContent;
+        this.modpackAddresses = modpackAddresses;
+        this.modpackSecret = secret;
+        this.modpackDir = modpackPath;
 
-        if (modpackAddress == null || modpackPath.toString().isEmpty()) {
+        if (this.modpackAddresses.isAnyEmpty() || modpackPath.toString().isEmpty()) {
             throw new IllegalArgumentException("Address or modpackPath is null or empty");
         }
 
@@ -235,9 +234,14 @@ public class ModpackUpdater {
             int wholeQueue = serverModpackContent.list.size();
             LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
+            DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(),
+                    Math.min(wholeQueue, 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+            if (downloadClient == null) {
+                return;
+            }
+
             downloadManager = new DownloadManager(totalBytesToDownload);
             new ScreenManager().download(downloadManager, getModpackName());
-            DownloadClient downloadClient = new DownloadClient(modpackAddress, modpackSecret, Math.min(wholeQueue, 5));
             downloadManager.attachDownloadClient(downloadClient);
 
             if (wholeQueue > 0) {
@@ -311,7 +315,7 @@ public class ModpackUpdater {
                 // TODO set client to a waiting for the server to respond screen
                 LOGGER.warn("Trying to refresh the modpack content");
                 LOGGER.info("Sending hashes to refresh: {}", hashesToRefresh.values());
-                var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackAddress, modpackSecret, hashesArray);
+                var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackAddresses, modpackSecret, hashesArray, false);
                 if (refreshedContentOptional.isEmpty()) {
                     LOGGER.error("Failed to refresh the modpack content");
                 } else {
@@ -326,9 +330,12 @@ public class ModpackUpdater {
                     // filter list to only the failed downloads
                     var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
 
+                    downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+                    if (downloadClient == null) {
+                        return;
+                    }
                     downloadManager = new DownloadManager(totalBytesToDownload);
                     new ScreenManager().download(downloadManager, getModpackName());
-                    downloadClient = new DownloadClient(modpackAddress, modpackSecret, Math.min(refreshedFilteredList.size(), 5));
                     downloadManager.attachDownloadClient(downloadClient);
 
                     // TODO try to fetch again from modrinth and curseforge
@@ -341,7 +348,7 @@ public class ModpackUpdater {
 
                         Path downloadFile = CustomFileUtils.getPath(modpackDir, fileName);
 
-                        LOGGER.info("Retrying to download {} from {}", fileName, modpackAddress.getAddress().getHostName());
+                        LOGGER.info("Retrying to download {} from {}", fileName, modpackAddresses.hostAddress.getHostName());
 
                         Runnable failureCallback = () -> {
                             failedDownloads.put(item, List.of());
@@ -402,7 +409,7 @@ public class ModpackUpdater {
                 new ReLauncher(modpackDir, updateType, changelogs).restart(false);
             }
         } catch (SocketTimeoutException | ConnectException e) {
-            LOGGER.error("{} is not responding", "Modpack host of " + modpackAddress, e);
+            LOGGER.error("{} is not responding", "Modpack host of " + modpackAddresses.hostAddress, e);
         } catch (InterruptedException e) {
             LOGGER.info("Interrupted the download");
         } catch (Exception e) {
@@ -413,7 +420,7 @@ public class ModpackUpdater {
 
     // returns true if restart is required
     private boolean applyModpack() throws Exception {
-        ModpackUtils.selectModpack(modpackDir, modpackAddress, newDownloadedFiles);
+        ModpackUtils.selectModpack(modpackDir, modpackAddresses, newDownloadedFiles);
         try { // try catch this error there because we don't want to stop the whole method just because of that
             SecretsStore.saveClientSecret(clientConfig.selectedModpack, modpackSecret);
         } catch (IllegalArgumentException e) {
@@ -449,7 +456,7 @@ public class ModpackUpdater {
         List<FileInspection.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir);
 
         boolean needsRestart0 = deleteNonModpackFiles(modpackContent);
-        Set<String> workaroundMods =  workaroundUtil.getWorkaroundMods(modpackContent);
+        Set<String> workaroundMods = workaroundUtil.getWorkaroundMods(modpackContent);
         Set<String> filesNotToCopy = getIgnoredFiles(modpackContent.list, workaroundMods);
 
         // Copy files to running directory
@@ -502,7 +509,7 @@ public class ModpackUpdater {
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory
-    private Set<String> getIgnoredFiles(Set<Jsons. ModpackContentFields. ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
+    private Set<String> getIgnoredFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
         Set<String> filesNotToCopy = new HashSet<>();
 
         // Make list of files which we do not copy to the running directory

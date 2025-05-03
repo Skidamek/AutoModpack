@@ -4,6 +4,7 @@ import com.github.luben.zstd.Zstd;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
+import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.util.List;
@@ -41,7 +42,7 @@ public class ZstdDecoder extends ByteToMessageDecoder {
             throw new IllegalArgumentException("Invalid compressed or original length");
         }
 
-        if (originalLength > NettyServer.CHUNK_SIZE) {
+        if (originalLength > NetUtils.CHUNK_SIZE) {
             throw new IllegalArgumentException("Original length exceeds maximum packet size");
         }
 
