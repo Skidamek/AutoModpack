@@ -69,9 +69,11 @@ public class FileInspection {
                 modCache.put(hashPathPair, mod);
                 return mod;
             }
+
+            LOGGER.error("Not enough mod information for file: {} modId: {}, modVersion: {}, dependencies: {}", file, modId, modVersion, dependencies);
         }
 
-        LOGGER.error("Failed to get mod info for file: {}", file);
+        LOGGER.debug("Failed to get mod info for file: {}", file);
         return null;
     }
 
@@ -289,7 +291,7 @@ public class FileInspection {
 
             switch (infoType) {
                 case "version" -> {
-                    String modVersion = null;
+                    String modVersion = "1";
                     for (Object o : modsArray.toList()) {
                         TomlTable mod = (TomlTable) o;
                         if (mod != null) {
@@ -329,11 +331,11 @@ public class FileInspection {
                 case "dependencies" -> {
                     String modID = getModID(file);
                     TomlArray dependenciesArray = result.getArray("dependencies.\"" + modID + "\"");
+                    Set<String> dependencies = new HashSet<>();
                     if (dependenciesArray == null) {
-                        return Set.of();
+                        return dependencies;
                     }
 
-                    Set<String> dependencies = new HashSet<>();
                     for (Object o : dependenciesArray.toList()) {
                         TomlTable mod = (TomlTable) o;
                         if (mod != null) {
