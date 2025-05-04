@@ -10,12 +10,18 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.FetchManager;
+import pl.skidam.automodpack_loader_core.utils.SelectionManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;
 import java.util.Optional;
 
 public class ScreenImpl implements ScreenService {
+
+    @Override
+    public void downloadselection(Object... args) {
+        Screens.downloadselection(args[0], args[1]);
+    }
 
     @Override
     public void download(Object... args) {
@@ -39,7 +45,7 @@ public class ScreenImpl implements ScreenService {
 
     @Override
     public void danger(Object... args) {
-        Screens.danger(args[0], args[1]);
+        Screens.danger(args[0], args[1], args[2]);
     }
 
     @Override
@@ -81,8 +87,11 @@ public class ScreenImpl implements ScreenService {
         public static void setScreen(Screen screen) {
             // required for forge to handle it properly
             Util.getMainWorkerExecutor().execute(() -> MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen)));
-        }
 
+        }
+        public static void downloadselection(Object parent, Object modpackUpdaterInstance) {
+            Screens.setScreen(new DownloadSelectionScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
+        }
         public static void download(Object downloadManager, Object header) {
             Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
         }
@@ -94,23 +103,20 @@ public class ScreenImpl implements ScreenService {
         public static void changelog(Object parent, Object modpackDir, Object changelog) {
             Screens.setScreen(new ChangelogScreen((Screen) parent, (Path) modpackDir, (Changelogs) changelog));
         }
-
         public static void restart(Object modpackDir, Object updateType, Object changelogs) {
             Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
         }
-
-        public static void danger(Object parent, Object modpackUpdaterInstance) {
-            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
+        //only updated danger screen for selection Manager 
+        public static void danger(Object parent, Object modpackUpdaterInstance, Object selectionManagerInstance) {
+            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance, (SelectionManager) selectionManagerInstance));
         }
-
+        // changed error Screen to ne Errors
         public static void error(String... errors) {
             Screens.setScreen(new ErrorScreen(errors));
         }
-
         public static void title() {
             Screens.setScreen(new TitleScreen());
         }
-
         public static void menu() {
 //            Screens.setScreen(new MenuScreen());
         }
