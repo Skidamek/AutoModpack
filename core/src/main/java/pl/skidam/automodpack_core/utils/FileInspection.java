@@ -114,6 +114,7 @@ public class FileInspection {
             "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
             "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
             "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModLanguageLoader",
             "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
             "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
     );
