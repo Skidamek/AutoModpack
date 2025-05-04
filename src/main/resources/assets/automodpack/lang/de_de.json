@@ -1,6 +1,8 @@
 {
   "automodpack.restart.full": "Das Modpack wurde heruntergeladen!",
   "automodpack.restart.update": "Es wurde ein Update für das Modpack heruntergeladen!",
+  "automodpack.restart.select": "Vom Server benötigtes Modpack wurde ausgewählt!",
+  "automodpack.restart.automodpack": "AutoModpack wurde auf die vom Server benötigte Version aktualisiert!",
   "automodpack.restart.description": "Um den Vorgang abzuschließen, musst du das Spiel neu starten.",
   "automodpack.restart.secDescription": "Möchtest du jetzt neu starten?",
   "automodpack.restart.confirm": "Ja, Spiel schließen",
@@ -21,6 +23,7 @@
 
   "automodpack.changelog.view": "Änderungen anzeigen",
   "automodpack.changelog.noChanges": "Keine Änderungen gefunden.",
+  "automodpack.changelog.openPage": "Projektseite öffnen",
 
   "automodpack.download.calculating": "Berechnung läuft...",
   "automodpack.download.eta": "Verbleibende Zeit: %s",
@@ -38,8 +41,15 @@
   "automodpack.fetch": "Hole direkte URLs von Modrinth und CurseForge...",
   "automodpack.fetch.found": "Es wurden %s direkte URLs gefunden.",
 
-  "automodpack.select": "Modpack auswählen",
+  "automodpack.validation.text": "Du verbindest dich mit einem unbekannten AutoModpack-Host.",
+  "automodpack.validation.description": "Verifiziere bitte den Fingerabdruck des Serverzertifikats.",
+  "automodpack.validation.secDescription": "Bitte deinen Serveradministrator um den Fingerabdruck, wenn du ihn nicht hast.",
+  "automodpack.validation.thiDescription": "Diese Überprüfung verhindert, dass die Downloadverbindung manipuliert wird.",
+  "automodpack.validation.run": "Verifizieren",
+  "automodpack.validation.failed": "Verifikation fehlgeschlagen",
 
+  "automodpack.retry": "Erneut versuchen",
+  "automodpack.select": "Modpack auswählen",
   "automodpack.yes": "Ja",
   "automodpack.no": "Nein",
   "automodpack.cancel": "Abbrechen",
