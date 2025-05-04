@@ -216,7 +216,7 @@ class PreValidationConnection {
             unvalidatedCertificate = certificate;
         }
 
-        if (!isSelfSigned(certificate) || session.isValid()) {
+        if (!isSelfSigned(certificate)) {
             DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
             // Verify if the certificate verifies against the required domains
             if (!hostnameVerifier.verify(modpackAddresses.hostAddress.getHostString(), session) || !hostnameVerifier.verify(modpackAddresses.serverAddress.getHostString(), session)) {
