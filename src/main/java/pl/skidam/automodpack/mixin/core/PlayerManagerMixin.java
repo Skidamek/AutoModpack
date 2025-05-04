@@ -3,7 +3,7 @@ package pl.skidam.automodpack.mixin.core;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.server.PlayerManager;
-/*? if >=1.20.2 {*/
+/*? if >1.20.3 {*/
 import net.minecraft.server.network.ConnectedClientData;
 /*?}*/
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -18,12 +18,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 
+/*? if >1.21.4 {*/
+/*import java.net.URI;
+*//*?}*/
+
 import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
 
 @Mixin(PlayerManager.class)
 public class PlayerManagerMixin {
 
-/*? if >=1.20.2 {*/
+/*? if >1.20.3 {*/
     @Inject(at = @At("TAIL"), method = "onPlayerConnect")
     private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
 /*?} else {*/
@@ -41,7 +45,12 @@ private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity pla
         if (serverConfig.nagUnModdedClients && !Common.players.get(playerName)) {
             // Send chat nag message which is clickable and opens the link
             Text nagText = VersionedText.literal(serverConfig.nagMessage).styled(style -> style.withBold(true));
-            Text nagClickableText = VersionedText.literal(serverConfig.nagClickableMessage).styled(style -> style.withUnderline(true).withColor(TextColor.fromFormatting(Formatting.BLUE)).withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, serverConfig.nagClickableLink)));
+            Text nagClickableText = VersionedText.literal(serverConfig.nagClickableMessage).styled(style -> style.withUnderline(true).withColor(TextColor.fromFormatting(Formatting.BLUE))
+                    /*? if >1.21.4 {*/
+                    /*.withClickEvent(new ClickEvent.OpenUrl(URI.create(serverConfig.nagClickableLink))));
+                    *//*?} else {*/
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, serverConfig.nagClickableLink)));
+                    /*?}*/
             player.sendMessage(nagText, false);
             player.sendMessage(nagClickableText, false);
         }
