@@ -8,6 +8,7 @@ import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -62,7 +63,11 @@ public class Common {
             return;
         }
 
-        hostServer.start();
+        var channel = hostServer.start();
+
+        if (channel.isEmpty()) {
+            new TrafficShaper(null);
+        }
     }
 
     public static void beforeShutdownServer() {

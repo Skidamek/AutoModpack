@@ -24,7 +24,7 @@ public class DataS2CPacket {
             String clientHasUpdate = buf.readString(Short.MAX_VALUE);
 
             if ("true".equals(clientHasUpdate)) { // disconnect
-                LOGGER.warn("{} has not installed modpack", profile.getName());
+                LOGGER.warn("{} has not installed modpack. Certificate fingerprint to verify: {}", profile.getName(), hostServer.getCertificateFingerprint());
                 Text reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
                 ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
                 connection.send(new LoginDisconnectS2CPacket(reason));
@@ -40,7 +40,7 @@ public class DataS2CPacket {
                 LOGGER.error("Host server error. AutoModpack host server is down or server is not configured correctly");
 
                 if (serverConfig.hostModpackOnMinecraftPort) {
-                    LOGGER.warn("You are hosting Http server on the minecraft port.");
+                    LOGGER.warn("You are hosting AutoModpack host server on the minecraft port.");
                     LOGGER.warn("However client can't access it, try making `hostIp` and `hostLocalIp` blank in the server config.");
                     LOGGER.warn("If that doesn't work, follow the steps bellow.");
                     LOGGER.warn("");
@@ -57,6 +57,8 @@ public class DataS2CPacket {
                 if (serverConfig.reverseProxy) {
                     LOGGER.error("Turn off reverseProxy in config, if you don't actually use it!");
                 }
+
+                LOGGER.warn("Server certificate fingerprint to verify: {}", hostServer.getCertificateFingerprint());
             }
         } catch (Exception e) {
             LOGGER.error("Error while handling DataS2CPacket", e);

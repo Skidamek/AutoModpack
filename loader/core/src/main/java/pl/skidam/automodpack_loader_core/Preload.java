@@ -14,8 +14,11 @@ import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -47,53 +50,39 @@ public class Preload {
         }
 
         selectedModpackDir = optionalSelectedModpackDir.get();
-        String selectedModpackLink = "";
+        InetSocketAddress selectedModpackAddress = null;
+        InetSocketAddress selectedServerAddress = null;
         if (!clientConfig.selectedModpack.isBlank() && clientConfig.installedModpacks.containsKey(clientConfig.selectedModpack)) {
-            selectedModpackLink = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
+            var entry = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
+            selectedModpackAddress = entry.hostAddress;
+            selectedServerAddress = entry.serverAddress;
         }
 
-        // Check if the modpack link is missing or blank
-        if (selectedModpackLink == null || selectedModpackLink.isBlank()) {
+        // Only selfupdate if no modpack is selected
+        if (selectedModpackAddress == null) {
             SelfUpdater.update();
-            return;
-        }
+        } else {
+            Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
-        // Check if link is old http link, and parse it to new format (beta 24 -> beta 25)
-        if (selectedModpackLink.startsWith("http") && selectedModpackLink.contains("/automodpack")) {
-            var newSelectedModpackLink = selectedModpackLink;
-            newSelectedModpackLink = newSelectedModpackLink.replace("http://", "");
-            newSelectedModpackLink = newSelectedModpackLink.replace("https://", "");
-            String[] split = newSelectedModpackLink.split("/automodpack");
-            newSelectedModpackLink = split[0];
-            if (newSelectedModpackLink != null && !newSelectedModpackLink.isBlank()) {
-                LOGGER.info("Updated modpack link to new format: {} -> {}", selectedModpackLink, newSelectedModpackLink);
-                clientConfig.installedModpacks.put(clientConfig.selectedModpack, newSelectedModpackLink);
-                ConfigTools.save(clientConfigFile, clientConfig);
-                selectedModpackLink = newSelectedModpackLink;
+            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress);
+            var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
+            var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+
+            // Use the latest modpack content if available
+            if (optionalLatestModpackContent.isPresent()) {
+                latestModpackContent = optionalLatestModpackContent.get();
+
+                // Update AutoModpack to server version only if we can get newest modpack content
+                if (SelfUpdater.update(latestModpackContent)) {
+                    return;
+                }
             }
-        }
 
-        InetSocketAddress selectedModpackAddress = AddressHelpers.parse(selectedModpackLink);
-        Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
+            // Delete dummy files
+            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
 
-        var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedModpackAddress, secret);
-        var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
-
-        // Use the latest modpack content if available
-        if (optionalLatestModpackContent.isPresent()) {
-            latestModpackContent = optionalLatestModpackContent.get();
-
-            // Update AutoModpack to server version only if we can get newest modpack content
-            if (SelfUpdater.update(latestModpackContent)) {
-                return;
-            }
-        }
-
-        // Delete dummy files
-        CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
-
-        // Update modpack
-        new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackAddress, secret);
+            // Update modpack
+            new ModpackUpdater().prepareUpdate(latestModpackContent, selectedModpackAddress, secret)
     }
 
 
@@ -180,14 +169,33 @@ public class Preload {
                 clientConfig.installedModpacks = new HashMap<>();
             }
 
+            if (clientConfig.selectedModpack == null) {
+                clientConfig.selectedModpack = "";
+            }
+
             // Save changes
             ConfigTools.save(clientConfigFile, clientConfig);
         }
 
+        knownHosts = ConfigTools.load(knownHostsFile, Jsons.KnownHostsFields.class);
+        if (knownHosts != null) {
+            if (knownHosts.hosts == null) {
+                knownHosts.hosts = new HashMap<>();
+            }
+        }
+
         try {
             Files.createDirectories(privateDir);
-            if (Files.exists(privateDir) && System.getProperty("os.name").toLowerCase().contains("win")) {
-                Files.setAttribute(privateDir, "dos:hidden", true);
+            String os = System.getProperty("os.name").toLowerCase();
+            try {
+                if (os.contains("win")) {
+                    Files.setAttribute(privateDir, "dos:hidden", true);
+                } else if (os.contains("nix") || os.contains("nux") || os.contains("aix") || os.contains("mac")) {
+                    Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------"); // Corresponds to 0700
+                    Files.setPosixFilePermissions(privateDir, perms);
+                }
+            } catch (UnsupportedOperationException e) {
+                LOGGER.warn("Failed to set private directory attributes for os: {}", os, e);
             }
         } catch (IOException e) {
             LOGGER.error("Failed to create private directory", e);

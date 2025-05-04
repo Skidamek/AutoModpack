@@ -218,8 +218,8 @@ public class CustomFileUtils {
                     digest.update(buffer, 0, bytesRead);
                 }
             }
-            byte[] hashBytes = digest.digest();
-            return convertBytesToHex(hashBytes);
+            byte[] hash = digest.digest();
+            return HexFormat.of().formatHex(hash);
         } catch (UnsupportedOperationException e) {
             try { // yes... its awful
                 MessageDigest digest = MessageDigest.getInstance("SHA-1");
@@ -231,8 +231,8 @@ public class CustomFileUtils {
                     }
                 }
 
-                byte[] hashBytes = digest.digest();
-                return convertBytesToHex(hashBytes);
+                byte[] hash = digest.digest();
+                return HexFormat.of().formatHex(hash);
             } catch (Exception ex) {
                 e.printStackTrace();
                 ex.printStackTrace();
@@ -242,19 +242,6 @@ public class CustomFileUtils {
         }
         return null;
     }
-
-    private static String convertBytesToHex(byte[] bytes) {
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : bytes) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1) {
-                hexString.append('0');
-            }
-            hexString.append(hex);
-        }
-        return hexString.toString();
-    }
-
 
     public static String getCurseforgeMurmurHash(Path file) throws IOException {
         if (!Files.exists(file)) {

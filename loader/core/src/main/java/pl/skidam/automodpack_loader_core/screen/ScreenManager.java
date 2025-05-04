@@ -50,6 +50,11 @@ public class ScreenManager implements ScreenService {
     }
 
     @Override
+    public void validation(Object... args) {
+        INSTANCE.validation(args);
+    }
+
+    @Override
     public Optional<String> getScreenString() {
         return INSTANCE.getScreenString();
     }

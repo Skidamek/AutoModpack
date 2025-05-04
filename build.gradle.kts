@@ -1,4 +1,3 @@
-import net.fabricmc.loom.task.RemapJarTask
 import java.util.*
 
 plugins {
@@ -236,11 +235,6 @@ tasks.processResources {
     from("../../src/main/resources") {
         include("META-INF/services/**")
     }
-}
-
-// If false, build can stuck on remapping
-tasks.named<RemapJarTask>("remapJar") {
-    remapperIsolation.set(true)
 }
 
 java {

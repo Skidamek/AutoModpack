@@ -23,7 +23,6 @@ import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
-import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
 import java.util.*;
 
@@ -33,9 +32,10 @@ public class NettyServer {
     public static final AttributeKey<Boolean> USE_COMPRESSION = AttributeKey.valueOf("useCompression");
     private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
+    private MultithreadEventLoopGroup eventLoopGroup;
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
-    private X509Certificate certificate;
+    private String certificateFingerprint;
     private SslContext sslCtx;
 
     public void addConnection(Channel channel, String secret) {
@@ -54,6 +54,10 @@ public class NettyServer {
         return connections;
     }
 
+    public String getCertificateFingerprint() {
+        return certificateFingerprint;
+    }
+
     public void addPaths(ObservableMap<String, Path> paths) {
         this.paths.putAll(paths.getMap());
         paths.addOnPutCallback(this.paths::put);
@@ -70,30 +74,25 @@ public class NettyServer {
 
     public Optional<ChannelFuture> start() {
         try {
-            X509Certificate cert;
-            PrivateKey key;
 
             if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
                 // Create a self-signed certificate
                 KeyPair keyPair = NetUtils.generateKeyPair();
-                cert = NetUtils.selfSign(keyPair);
-                key = keyPair.getPrivate();
+                X509Certificate cert = NetUtils.selfSign(keyPair);
 
                 // save it to the file
                 NetUtils.saveCertificate(cert, serverCertFile);
                 NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
-            } else {
-                cert = NetUtils.loadCertificate(serverCertFile);
-                key = NetUtils.loadPrivateKey(serverPrivateKeyFile);
             }
 
-            if (cert == null || key == null) {
-                throw new IllegalStateException("Failed to load certificate or private key");
+            X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
+
+            if (cert == null) {
+                throw new IllegalStateException("Server certificate couldn't be loaded");
             }
 
             // Shiny TLS 1.3
-            certificate = cert;
-            sslCtx = SslContextBuilder.forServer(key, cert)
+            sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
                     .sslProvider(SslProvider.JDK)
                     .protocols("TLSv1.3")
                     .ciphers(Arrays.asList(
@@ -101,6 +100,10 @@ public class NettyServer {
                             "TLS_AES_256_GCM_SHA384",
                             "TLS_CHACHA20_POLY1305_SHA256"))
                     .build();
+
+            // generate sha256 from cert as a fingerprint
+            certificateFingerprint = NetUtils.getFingerprint(cert);
+            LOGGER.warn("Certificate fingerprint for client validation: {}", certificateFingerprint);
 
             if (!canStart()) {
                 return Optional.empty();
@@ -111,7 +114,6 @@ public class NettyServer {
             LOGGER.info("Starting modpack host server on {}", bindAddress);
 
             Class<? extends ServerChannel> socketChannelClass;
-            MultithreadEventLoopGroup eventLoopGroup;
             if (Epoll.isAvailable()) {
                 socketChannelClass = EpollServerSocketChannel.class;
                 eventLoopGroup = new EpollEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
@@ -120,12 +122,14 @@ public class NettyServer {
                 eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
             }
 
+            new TrafficShaper(eventLoopGroup);
+
             serverChannel = new ServerBootstrap()
                     .channel(socketChannelClass)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
-                        protected void initChannel(SocketChannel ch) throws Exception {
+                        protected void initChannel(SocketChannel ch) {
                             ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(sslCtx));
                         }
                     })
@@ -157,6 +161,8 @@ public class NettyServer {
 
         try {
             serverChannel.channel().close().sync();
+            TrafficShaper.trafficShaper.getTrafficShapingHandler().release();
+            eventLoopGroup.shutdownGracefully().sync();
         } catch (InterruptedException e) {
             LOGGER.error("Interrupted server channel", e);
             return false;
@@ -171,10 +177,6 @@ public class NettyServer {
         }
 
         return serverChannel.channel().isOpen();
-    }
-
-    public X509Certificate getCert() {
-        return certificate;
     }
 
     public SslContext getSslCtx() {

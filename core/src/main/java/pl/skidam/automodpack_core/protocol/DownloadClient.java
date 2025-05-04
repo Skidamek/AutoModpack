@@ -1,36 +1,114 @@
 package pl.skidam.automodpack_core.protocol;
 
-import pl.skidam.automodpack_core.auth.Secrets;
 import com.github.luben.zstd.Zstd;
-import pl.skidam.automodpack_core.callbacks.IntCallback;
-
+import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import javax.net.ssl.*;
 import java.io.*;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.file.Path;
-import java.security.SecureRandom;
-import java.security.cert.Certificate;
+import java.security.*;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.IntConsumer;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import pl.skidam.automodpack_core.config.Jsons;
+
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 /**
  * A DownloadClient that creates a pool of connections.
  * Each connection performs an initial plain-text handshake by sending the AMMC magic,
  * waiting for the AMOK reply, and then upgrading the same socket to TLSv1.3.
- * Subsequent protocol messages are framed and compressed (using Zstd) to match your full protocol.
+ * Subsequent protocol messages are framed and compressed (using Zstd).
  */
-public class DownloadClient {
+public class DownloadClient implements AutoCloseable {
     private final List<Connection> connections = new ArrayList<>();
 
-    public DownloadClient(InetSocketAddress address, Secrets.Secret secret, int poolSize) throws Exception {
-        for (int i = 0; i < poolSize; i++) {
-            connections.add(new Connection(address, secret));
+    /**
+     * Creates a new {@link DownloadClient} for the specified address. If the first connection fails with a verification
+     * error on a self-signed certificate, {@code trustedByUserCallback} is executed to determine whether the
+     * certificate should be trusted anyway.
+     *
+     * @param modpackAddresses      the object containing host and server addresses
+     * @param secretBytes           the secret bytes obtained from the server
+     * @param poolSize              the number of connections
+     * @param trustedByUserCallback the callback to determine whether a certificate should be trusted
+     */
+    public DownloadClient(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
+        KeyStore keyStore;
+        if (poolSize < 1) {
+            throw new IllegalArgumentException("Pool size must be greater than 0");
+        }
+
+        try {
+            keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+        } catch (KeyStoreException e) {
+            throw new RuntimeException("Failed to create a KeyStore of the default type.", e);
+        }
+        try {
+            keyStore.load(null);
+        } catch (NoSuchAlgorithmException | CertificateException e) {
+            throw new RuntimeException("Failed to load empty KeyStore", e);
+        }
+
+        PreValidationConnection firstConnection = getPreValidationConnection(modpackAddresses, keyStore);
+        if (firstConnection.getSocket() != null && !firstConnection.getSocket().isClosed() && firstConnection.getUnvalidatedCertificate() == null && secretBytes != null) {
+            connections.add(new Connection(firstConnection, secretBytes));
+        } else if (firstConnection.getSocket() != null) {
+            firstConnection.getSocket().close();
+        }
+
+        if (trustedByUserCallback != null && firstConnection.getUnvalidatedCertificate() != null && trustedByUserCallback.apply(firstConnection.getUnvalidatedCertificate())) {
+            try {
+                keyStore.setCertificateEntry(modpackAddresses.hostAddress.getHostString(), firstConnection.getUnvalidatedCertificate());
+            } catch (KeyStoreException e) {
+                throw new RuntimeException("Could not add the trusted certificate to the KeyStore.", e);
+            }
+        }
+
+        if (secretBytes == null) {
+            return;
+        }
+
+        for (int i = connections.size(); i < poolSize; i++) {
+            PreValidationConnection preValidationConnection = getPreValidationConnection(modpackAddresses, keyStore);
+            connections.add(new Connection(preValidationConnection, secretBytes));
+        }
+    }
+
+    private static PreValidationConnection getPreValidationConnection(Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException {
+        PreValidationConnection preValidationConnection;
+        try {
+            preValidationConnection = new PreValidationConnection(modpackAddresses, keyStore);
+        } catch (KeyStoreException e) {
+            throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
+        }
+        return preValidationConnection;
+    }
+
+    /**
+     * Tries to create a new {@link DownloadClient}, logging an error if the operation fails.
+     *
+     * @param modpackAddresses      the object containing host and server addresses
+     * @param secretBytes           the secret bytes obtained from the server
+     * @param poolSize              the number of connections
+     * @param trustedByUserCallback the callback to determine whether a certificate should be trusted
+     * @return the {@link DownloadClient} on success or {@code null} on failure
+     * @see DownloadClient#DownloadClient(Jsons.ModpackAddresses, byte[], int, Function) DownloadClient
+     */
+    public static DownloadClient tryCreate(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) {
+        try {
+            return new DownloadClient(modpackAddresses, secretBytes, poolSize, trustedByUserCallback);
+        } catch (IOException e) {
+            LOGGER.error("Failed to create a download client. Error: {}", e.getMessage());
+            return null;
         }
     }
 
@@ -54,7 +132,7 @@ public class DownloadClient {
      * Downloads a file identified by its SHA-1 hash to the given destination.
      * Returns a CompletableFuture that completes when the download finishes.
      */
-    public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
+    public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
         Connection conn = getFreeConnection();
         return conn.sendDownloadFile(fileHash, destination, chunkCallback);
     }
@@ -70,6 +148,7 @@ public class DownloadClient {
     /**
      * Closes all connections.
      */
+    @Override
     public void close() {
         for (Connection conn : connections) {
             conn.close();
@@ -80,11 +159,134 @@ public class DownloadClient {
 }
 
 /**
- * A helper class representing a single connection.
+ * A helper class for connecting to the server that allows for retrieving certificates that failed verification.
  * It first performs a plain-text handshake then upgrades the same socket to TLS.
+ */
+class PreValidationConnection {
+    private final SSLSocket socket;
+    private final X509Certificate unvalidatedCertificate;
+
+    /**
+     * Creates a new connection by first opening a plain TCP socket,
+     * sending the AMMC magic, waiting for the AMOK reply, and then upgrading to TLS.
+     * 
+     * @param modpackAddresses the object containing host and server addresses
+     * @param keyStore         the keystore containing trusted certificates
+     */
+    public PreValidationConnection(Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
+        // Step 1. Create a plain TCP connection.
+        Socket plainSocket = new Socket();
+        plainSocket.connect(modpackAddresses.hostAddress, 15000);
+        plainSocket.setSoTimeout(15000);
+        DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
+        DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
+
+        // Step 2. Send the handshake (AMMC magic) over the plain socket.
+        plainOut.writeInt(MAGIC_AMMC);
+        plainOut.flush();
+
+        // Step 3. Wait for the server’s reply (AMOK magic).
+        int handshakeResponse = plainIn.readInt();
+        if (handshakeResponse != MAGIC_AMOK) {
+            plainSocket.close();
+            throw new IOException("Invalid handshake response from server: " + handshakeResponse);
+        }
+
+        // Step 4. Upgrade the plain socket to TLS using the same underlying connection.
+        AtomicReference<X509Certificate[]> interceptedCertificateChain = new AtomicReference<>();
+
+        SSLContext context = createSSLContext(keyStore, interceptedCertificateChain::set);
+        SSLSocketFactory factory = context.getSocketFactory();
+        // The createSocket(Socket, host, port, autoClose) wraps the existing plain socket.
+        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, modpackAddresses.hostAddress.getHostString(), modpackAddresses.hostAddress.getPort(), true);
+        sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
+        sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
+        SSLParameters sslParameters = new SSLParameters();
+        sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
+        sslSocket.setSSLParameters(sslParameters);
+
+        SSLSession session = sslSocket.getSession();
+        X509Certificate certificate = null;
+        X509Certificate unvalidatedCertificate = null;
+        X509Certificate[] serverCertificateChain = interceptedCertificateChain.get();
+        if (serverCertificateChain != null && serverCertificateChain.length > 0) {
+            certificate = serverCertificateChain[0];
+        }
+
+        if (certificate == null) {
+            throw new IOException("No certificate found in server's response");
+        }
+
+        if (!session.isValid()) { // Handshake failed
+            sslSocket.close();
+            unvalidatedCertificate = certificate;
+        }
+
+        if (!isSelfSigned(certificate)) {
+            DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
+            // Verify if the certificate verifies against the required domains
+            if (!hostnameVerifier.verify(modpackAddresses.hostAddress.getHostString(), session) || !hostnameVerifier.verify(modpackAddresses.serverAddress.getHostString(), session)) {
+                sslSocket.close();
+                unvalidatedCertificate = certificate;
+                LOGGER.error("Certificate validation failed: certificate doesn't match the required domains {} and {}", modpackAddresses.hostAddress.getHostString(), modpackAddresses.serverAddress.getHostString());
+            } else {
+                LOGGER.info("Signed certificate validation succeeded for {} and {}", modpackAddresses.hostAddress.getHostString(), modpackAddresses.serverAddress.getHostString());
+            }
+        }
+
+        // The unvalidatedCertificate will be non-null if the certificate failed automated validation and requires manual verification by the client.
+        // If null, the certificate was validated successfully.
+        this.unvalidatedCertificate = unvalidatedCertificate;
+        this.socket = sslSocket;
+    }
+
+    private static boolean isSelfSigned(X509Certificate certificate) {
+        try {
+            certificate.verify(certificate.getPublicKey());
+        } catch (CertificateException | NoSuchAlgorithmException | SignatureException | InvalidKeyException | NoSuchProviderException e) {
+            return false;
+        }
+        return true;
+    }
+
+    protected SSLSocket getSocket() {
+        return socket;
+    }
+
+    public X509Certificate getUnvalidatedCertificate() {
+        return unvalidatedCertificate;
+    }
+
+    /**
+     * Creates an SSLContext that trusts the certificates in {@code trustedCertificates}, and verifies certificates
+     * using the default key store otherwise.
+     *
+     * @param trustedCertificates a {@link KeyStore} containing certificates to be trusted
+     * @param onValidating        a callback that is run for every certificate chain before verification
+     */
+    private SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating)
+            throws KeyStoreException {
+        SSLContext sslContext;
+        try {
+            sslContext = SSLContext.getInstance("TLSv1.3");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("TLS 1.3 is not supported", e);
+        }
+        X509ExtendedTrustManager trustManager = new CustomizableTrustManager(trustedCertificates, onValidating);
+        try {
+            sslContext.init(null, new TrustManager[]{trustManager}, new SecureRandom());
+        } catch (KeyManagementException e) {
+            throw new RuntimeException("Failed to initialize SSLContext", e);
+        }
+        return sslContext;
+    }
+}
+
+/**
+ * A helper class representing a single connection.
  * Outbound messages are compressed with Zstd and framed; inbound frames are decompressed and processed.
  */
-class Connection {
+class Connection implements AutoCloseable {
     private static final byte PROTOCOL_VERSION = 1;
 
     private final boolean useCompression;
@@ -100,72 +302,24 @@ class Connection {
     }
 
     /**
-     * Creates a new connection by first opening a plain TCP socket,
-     * sending the AMMC magic, waiting for the AMOK reply, and then upgrading to TLS.
+     * Creates a new connection from a successful {@link PreValidationConnection} instance. Throws an exception if the
+     * handshake of the {@link PreValidationConnection} has failed.
      */
-    public Connection(InetSocketAddress address, Secrets.Secret secret) throws Exception {
-        try {
-            // Step 1. Create a plain TCP connection.
-            LOGGER.debug("Initializing connection to: {}", address.getHostString());
-            Socket plainSocket = new Socket();
-            plainSocket.connect(address, 15000);
-            plainSocket.setSoTimeout(15000);
-            DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
-            DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
-
-            // Step 2. Send the handshake (AMMC magic) over the plain socket.
-            plainOut.writeInt(MAGIC_AMMC);
-            plainOut.flush();
-
-            // Step 3. Wait for the server’s reply (AMOK magic).
-            int handshakeResponse = plainIn.readInt();
-            if (handshakeResponse != MAGIC_AMOK) {
-                plainSocket.close();
-                throw new IOException("Invalid handshake response from server: " + handshakeResponse);
-            }
-
-            // Step 4. Upgrade the plain socket to TLS using the same underlying connection.
-            SSLContext context = createSSLContext();
-            SSLSocketFactory factory = context.getSocketFactory();
-            // The createSocket(Socket, host, port, autoClose) wraps the existing plain socket.
-            SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, address.getHostName(), address.getPort(), true);
-            sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
-            sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
-            sslSocket.startHandshake();
-
-            // Step 5. Perform custom TLS certificate validation.
-            Certificate[] certs = sslSocket.getSession().getPeerCertificates();
-            if (certs == null || certs.length == 0 || certs.length > 3) {
-                sslSocket.close();
-                throw new IOException("Invalid server certificate chain");
-            }
-
-            boolean validated = false;
-            for (Certificate cert : certs) {
-                if (cert instanceof X509Certificate x509Cert) {
-                    String fingerprint = NetUtils.getFingerprint(x509Cert, secret.secret());
-                    if (fingerprint.equals(secret.fingerprint())) {
-                        validated = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!validated) {
-                sslSocket.close();
-                throw new IOException("Server certificate validation failed");
-            }
-
+    public Connection(PreValidationConnection preValidationConnection, byte[] secretBytes) throws IOException {
 //        useCompression = !AddressHelpers.isLocal(address);
-            useCompression = true;
-            secretBytes = Base64.getUrlDecoder().decode(secret.secret());
+        if (preValidationConnection.getSocket() == null || preValidationConnection.getSocket().isClosed()) {
+            throw new SSLHandshakeException("Server certificate is not valid, connection got closed");
+        }
+        this.socket = preValidationConnection.getSocket();
+        this.useCompression = true;
+        this.secretBytes = secretBytes;
 
+        try {
             // Now use the SSL socket for further communication.
-            this.socket = sslSocket;
-            this.in = new DataInputStream(sslSocket.getInputStream());
-            this.out = new DataOutputStream(sslSocket.getOutputStream());
-            LOGGER.debug("Connection established with: {}", address.getHostString());
-        } catch (Exception e) {
+            this.in = new DataInputStream(this.socket.getInputStream());
+            this.out = new DataOutputStream(this.socket.getOutputStream());
+            LOGGER.debug("Connection established with: {}", this.socket.getInetAddress().getHostAddress());
+        } catch (IOException e) {
             throw new IOException("Failed to establish connection", e);
         }
     }
@@ -181,7 +335,7 @@ class Connection {
     /**
      * Sends a file request over this connection.
      */
-    public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntCallback chunkCallback) {
+    public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
         if (destination == null) {
             throw new IllegalArgumentException("Destination cannot be null");
         }
@@ -267,18 +421,28 @@ class Connection {
     }
 
     /**
-     * Compresses and writes a protocol message using Zstd.
-     * Message framing: [int: compressedLength][int: originalLength][compressed payload].
+     * Compresses (if enabled) and writes a protocol message using Zstd in chunks.
+     * Each chunk is framed individually.
+     * Framing without compression: [int: chunkLength][chunk payload].
+     * Framing with compression: [int: compressedChunkLength][int: originalChunkLength][compressed chunk payload].
      */
     private void writeProtocolMessage(byte[] payload) throws IOException {
-        if (!useCompression) {
-            out.writeInt(payload.length);
-            out.write(payload);
-        } else {
-            byte[] compressed = Zstd.compress(payload);
-            out.writeInt(compressed.length);
-            out.writeInt(payload.length);
-            out.write(compressed);
+        int offset = 0;
+        while (offset < payload.length) {
+            int bytesToSend = Math.min(payload.length - offset, CHUNK_SIZE);
+            byte[] chunk = new byte[bytesToSend];
+            System.arraycopy(payload, offset, chunk, 0, bytesToSend);
+
+            if (!useCompression) {
+                out.writeInt(chunk.length);
+                out.write(chunk);
+            } else {
+                byte[] compressedChunk = Zstd.compress(chunk);
+                out.writeInt(compressedChunk.length);
+                out.writeInt(chunk.length);
+                out.write(compressedChunk);
+            }
+            offset += bytesToSend;
         }
         out.flush();
     }
@@ -288,18 +452,27 @@ class Connection {
      */
     private byte[] readProtocolMessageFrame() throws IOException {
         if (!useCompression) {
-            int origLength = in.readInt();
-            byte[] data = new byte[origLength];
+            int originalLength = in.readInt();
+            byte[] data = new byte[originalLength];
             in.readFully(data);
             return data;
         } else {
-            int compLength = in.readInt();
-            int origLength = in.readInt();
-            byte[] compData = new byte[compLength];
-            in.readFully(compData);
-            byte[] decompressed = Zstd.decompress(compData, origLength);
+            int compressedLength = in.readInt();
+            int originalLength = in.readInt();
 
-            if (decompressed.length != origLength) {
+            if (compressedLength < 0 || originalLength < 0) {
+                throw new IllegalArgumentException("Invalid compressed or original length");
+            }
+
+            if (originalLength > CHUNK_SIZE) {
+                throw new IllegalArgumentException("Original length exceeds maximum packet size");
+            }
+
+            byte[] compressed = new byte[compressedLength];
+            in.readFully(compressed);
+            byte[] decompressed = Zstd.decompress(compressed, originalLength);
+
+            if (decompressed.length != originalLength) {
                 throw new IOException("Decompressed length does not match original length");
             }
 
@@ -310,11 +483,11 @@ class Connection {
     /**
      * Processes a file/refresh response according to your protocol.
      * The response is expected to have:
-     *   - A header frame: [protocolVersion][messageType][(if FILE_RESPONSE_TYPE) long expectedFileSize]
-     *   - One or more data frames containing file data until the total file size is reached.
-     *   - A final frame: [protocolVersion][END_OF_TRANSMISSION]
+     * - A header frame: [protocolVersion][messageType][(if FILE_RESPONSE_TYPE) long expectedFileSize]
+     * - One or more data frames containing file data until the total file size is reached.
+     * - A final frame: [protocolVersion][END_OF_TRANSMISSION]
      */
-    private Path readFileResponse(Path destination, IntCallback chunkCallback) throws IOException {
+    private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
         // Header frame
         byte[] headerFrame = readProtocolMessageFrame();
         try (DataInputStream headerIn = new DataInputStream(new ByteArrayInputStream(headerFrame))) {
@@ -329,7 +502,7 @@ class Connection {
             }
 
             long receivedBytes = 0;
-            OutputStream fos = new FileOutputStream(destination.toFile()) ;
+            OutputStream fos = new FileOutputStream(destination.toFile());
 
             if (messageType == END_OF_TRANSMISSION) {
                 fos.close();
@@ -346,13 +519,13 @@ class Connection {
             // Read data frames until the expected file size is received.
             while (receivedBytes < expectedFileSize) {
                 byte[] dataFrame = readProtocolMessageFrame();
-                int toWrite = Math.min(dataFrame.length, (int)(expectedFileSize - receivedBytes));
+                int toWrite = Math.min(dataFrame.length, (int) (expectedFileSize - receivedBytes));
 
                 fos.write(dataFrame, 0, toWrite);
                 receivedBytes += toWrite;
 
                 if (chunkCallback != null) {
-                    chunkCallback.run(toWrite);
+                    chunkCallback.accept(toWrite);
                 }
             }
 
@@ -377,6 +550,7 @@ class Connection {
     /**
      * Closes the underlying socket and shuts down the executor.
      */
+    @Override
     public void close() {
         try {
             socket.close();
@@ -384,21 +558,5 @@ class Connection {
             // Log or handle as needed.
         }
         executor.shutdownNow();
-    }
-
-    /**
-     * Creates an SSLContext that trusts all certificates (like InsecureTrustManagerFactory).
-     */
-    private SSLContext createSSLContext() throws Exception {
-        SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
-        TrustManager[] trustAllCerts = new TrustManager[] {
-            new X509TrustManager() {
-                public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-                public void checkClientTrusted(X509Certificate[] certs, String authType) { }
-                public void checkServerTrusted(X509Certificate[] certs, String authType) { }
-            }
-        };
-        sslContext.init(null, trustAllCerts, new SecureRandom());
-        return sslContext;
     }
 }

@@ -64,6 +64,11 @@ public class ScreenImpl implements ScreenService {
     }
 
     @Override
+    public void validation(Object... args) {
+        Screens.validation(args[0], args[1], args[2], args[3]);
+    }
+
+    @Override
     public Optional<String> getScreenString() {
         Screen screen = Screens.getScreen();
         return Optional.of(screen.getTitle().getString().toLowerCase());
@@ -90,9 +95,11 @@ public class ScreenImpl implements ScreenService {
         public static void download(Object downloadManager, Object header) {
             Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
         }
+
         public static void fetch(Object fetchManager) {
             Screens.setScreen(new FetchScreen((FetchManager) fetchManager));
         }
+
         public static void changelog(Object parent, Object modpackDir, Object changelog) {
             Screens.setScreen(new ChangelogScreen((Screen) parent, (Path) modpackDir, (Changelogs) changelog));
         }
@@ -112,6 +119,12 @@ public class ScreenImpl implements ScreenService {
         }
         public static void menu() {
 //            Screens.setScreen(new MenuScreen());
+        }
+
+        public static void validation(Object parent, Object serverFingerprint, Object validatedCallback,
+                                      Object canceledCallback) {
+            Screens.setScreen(new ValidationScreen((Screen) parent, (String) serverFingerprint,
+                    (Runnable) validatedCallback, (Runnable) canceledCallback));
         }
     }
 }

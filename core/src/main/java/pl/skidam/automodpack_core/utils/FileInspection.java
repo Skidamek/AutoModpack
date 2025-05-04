@@ -58,18 +58,22 @@ public class FileInspection {
         }
 
         String modId = FileInspection.getModID(file);
-        String modVersion = FileInspection.getModVersion(file);
-        LoaderManagerService.EnvironmentType environmentType = FileInspection.getModEnvironment(file);
-        Set<String> dependencies = FileInspection.getModDependencies(file);
-        Set<String> providesIDs = FileInspection.getAllProvidedIDs(file);
+        if (modId != null) { // If mod id is null dont need to check for other info
+            String modVersion = FileInspection.getModVersion(file);
+            LoaderManagerService.EnvironmentType environmentType = FileInspection.getModEnvironment(file);
+            Set<String> dependencies = FileInspection.getModDependencies(file);
+            Set<String> providesIDs = FileInspection.getAllProvidedIDs(file);
 
-        if (modId != null && modVersion != null && environmentType != null && dependencies != null) {
-            var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
-            modCache.put(hashPathPair, mod);
-            return mod;
+            if (modVersion != null && dependencies != null) {
+                var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
+                modCache.put(hashPathPair, mod);
+                return mod;
+            }
+
+            LOGGER.error("Not enough mod information for file: {} modId: {}, modVersion: {}, dependencies: {}", file, modId, modVersion, dependencies);
         }
 
-        LOGGER.error("Failed to get mod info for file: {}", file);
+        LOGGER.debug("Failed to get mod info for file: {}", file);
         return null;
     }
 
@@ -110,6 +114,7 @@ public class FileInspection {
             "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
             "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
             "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModLanguageLoader",
             "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
             "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
     );
@@ -294,7 +299,7 @@ public class FileInspection {
                             modVersion = mod.getString("version");
                         }
                     }
-                    return modVersion;
+                    return modVersion != null ? modVersion : "1";
                 }
                 case "modId" -> {
                     String modID = null;
@@ -327,11 +332,11 @@ public class FileInspection {
                 case "dependencies" -> {
                     String modID = getModID(file);
                     TomlArray dependenciesArray = result.getArray("dependencies.\"" + modID + "\"");
+                    Set<String> dependencies = new HashSet<>();
                     if (dependenciesArray == null) {
-                        return Set.of();
+                        return dependencies;
                     }
 
-                    Set<String> dependencies = new HashSet<>();
                     for (Object o : dependenciesArray.toList()) {
                         TomlTable mod = (TomlTable) o;
                         if (mod != null) {
