@@ -291,14 +291,14 @@ public class FileInspection {
 
             switch (infoType) {
                 case "version" -> {
-                    String modVersion = "1";
+                    String modVersion = null;
                     for (Object o : modsArray.toList()) {
                         TomlTable mod = (TomlTable) o;
                         if (mod != null) {
                             modVersion = mod.getString("version");
                         }
                     }
-                    return modVersion;
+                    return modVersion != null ? modVersion : "1";
                 }
                 case "modId" -> {
                     String modID = null;
