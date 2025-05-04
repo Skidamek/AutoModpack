@@ -232,19 +232,19 @@ public class ModpackUpdater {
 
             newDownloadedFiles.clear();
             int wholeQueue = serverModpackContent.list.size();
-            LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
-
-            DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(),
-                    Math.min(wholeQueue, 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
-            if (downloadClient == null) {
-                return;
-            }
-
-            downloadManager = new DownloadManager(totalBytesToDownload);
-            new ScreenManager().download(downloadManager, getModpackName());
-            downloadManager.attachDownloadClient(downloadClient);
-
             if (wholeQueue > 0) {
+                LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
+
+                DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(),
+                        Math.min(wholeQueue, 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+                if (downloadClient == null) {
+                    return;
+                }
+
+                downloadManager = new DownloadManager(totalBytesToDownload);
+                new ScreenManager().download(downloadManager, getModpackName());
+                downloadManager.attachDownloadClient(downloadClient);
+
                 var randomizedList = new LinkedList<>(serverModpackContent.list);
                 Collections.shuffle(randomizedList);
                 for (var item : randomizedList) {
@@ -283,94 +283,94 @@ public class ModpackUpdater {
                 downloadManager.joinAll();
 
                 LOGGER.info("Finished downloading files in {}ms", System.currentTimeMillis() - startFetching);
-            }
 
-            if (downloadManager.isCanceled()) {
-                LOGGER.warn("Download canceled");
-                return;
-            }
+                if (downloadManager.isCanceled()) {
+                    LOGGER.warn("Download canceled");
+                    return;
+                }
 
-            downloadManager.cancelAllAndShutdown();
-            totalBytesToDownload = 0;
+                downloadManager.cancelAllAndShutdown();
+                totalBytesToDownload = 0;
 
-            Map<String, String> hashesToRefresh = new HashMap<>(); // File name, hash
-            var failedDownloadsSecMap = new HashMap<>(failedDownloads);
-            failedDownloadsSecMap.forEach((k, v) -> {
-                hashesToRefresh.put(k.file, k.sha1);
-                failedDownloads.remove(k);
-                totalBytesToDownload += Long.parseLong(k.size);
-            });
+                Map<String, String> hashesToRefresh = new HashMap<>(); // File name, hash
+                var failedDownloadsSecMap = new HashMap<>(failedDownloads);
+                failedDownloadsSecMap.forEach((k, v) -> {
+                    hashesToRefresh.put(k.file, k.sha1);
+                    failedDownloads.remove(k);
+                    totalBytesToDownload += Long.parseLong(k.size);
+                });
 
-            if (!hashesToRefresh.isEmpty()) {
-                LOGGER.warn("Failed to download {} files", hashesToRefresh.size());
-            }
+                if (!hashesToRefresh.isEmpty()) {
+                    LOGGER.warn("Failed to download {} files", hashesToRefresh.size());
+                }
 
-            if (!hashesToRefresh.isEmpty()) {
-                // make byte[][] from hashesToRefresh.values()
-                byte[][] hashesArray = hashesToRefresh.values().stream()
-                        .map(String::getBytes)
-                        .toArray(byte[][]::new);
+                if (!hashesToRefresh.isEmpty()) {
+                    // make byte[][] from hashesToRefresh.values()
+                    byte[][] hashesArray = hashesToRefresh.values().stream()
+                            .map(String::getBytes)
+                            .toArray(byte[][]::new);
 
-                // send it to the server and get the new modpack content
-                // TODO set client to a waiting for the server to respond screen
-                LOGGER.warn("Trying to refresh the modpack content");
-                LOGGER.info("Sending hashes to refresh: {}", hashesToRefresh.values());
-                var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackAddresses, modpackSecret, hashesArray, false);
-                if (refreshedContentOptional.isEmpty()) {
-                    LOGGER.error("Failed to refresh the modpack content");
-                } else {
-                    LOGGER.info("Successfully refreshed the modpack content");
-                    // retry the download
-                    // success
-                    // or fail and then show the error
+                    // send it to the server and get the new modpack content
+                    // TODO set client to a waiting for the server to respond screen
+                    LOGGER.warn("Trying to refresh the modpack content");
+                    LOGGER.info("Sending hashes to refresh: {}", hashesToRefresh.values());
+                    var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackAddresses, modpackSecret, hashesArray, false);
+                    if (refreshedContentOptional.isEmpty()) {
+                        LOGGER.error("Failed to refresh the modpack content");
+                    } else {
+                        LOGGER.info("Successfully refreshed the modpack content");
+                        // retry the download
+                        // success
+                        // or fail and then show the error
 
-                    var refreshedContent = refreshedContentOptional.get();
-                    this.modpackContentJson = GSON.toJson(refreshedContent);
+                        var refreshedContent = refreshedContentOptional.get();
+                        this.modpackContentJson = GSON.toJson(refreshedContent);
 
-                    // filter list to only the failed downloads
-                    var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
+                        // filter list to only the failed downloads
+                        var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
 
-                    downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
-                    if (downloadClient == null) {
-                        return;
+                        downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+                        if (downloadClient == null) {
+                            return;
+                        }
+                        downloadManager = new DownloadManager(totalBytesToDownload);
+                        new ScreenManager().download(downloadManager, getModpackName());
+                        downloadManager.attachDownloadClient(downloadClient);
+
+                        // TODO try to fetch again from modrinth and curseforge
+
+                        randomizedList = new LinkedList<>(refreshedFilteredList);
+                        Collections.shuffle(randomizedList);
+                        for (var item : randomizedList) {
+                            String fileName = item.file;
+                            String serverSHA1 = item.sha1;
+
+                            Path downloadFile = CustomFileUtils.getPath(modpackDir, fileName);
+
+                            LOGGER.info("Retrying to download {} from {}", fileName, modpackAddresses.hostAddress.getHostName());
+
+                            Runnable failureCallback = () -> {
+                                failedDownloads.put(item, List.of());
+                            };
+
+                            Runnable successCallback = () -> {
+                                changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
+                            };
+
+                            downloadManager.download(downloadFile, serverSHA1, List.of(), successCallback, failureCallback);
+                        }
+
+                        downloadManager.joinAll();
+
+                        if (downloadManager.isCanceled()) {
+                            LOGGER.warn("Download canceled");
+                            return;
+                        }
+
+                        downloadManager.cancelAllAndShutdown();
+
+                        LOGGER.info("Finished refreshed downloading files in {}ms", System.currentTimeMillis() - startFetching);
                     }
-                    downloadManager = new DownloadManager(totalBytesToDownload);
-                    new ScreenManager().download(downloadManager, getModpackName());
-                    downloadManager.attachDownloadClient(downloadClient);
-
-                    // TODO try to fetch again from modrinth and curseforge
-
-                    var randomizedList = new LinkedList<>(refreshedFilteredList);
-                    Collections.shuffle(randomizedList);
-                    for (var item : randomizedList) {
-                        String fileName = item.file;
-                        String serverSHA1 = item.sha1;
-
-                        Path downloadFile = CustomFileUtils.getPath(modpackDir, fileName);
-
-                        LOGGER.info("Retrying to download {} from {}", fileName, modpackAddresses.hostAddress.getHostName());
-
-                        Runnable failureCallback = () -> {
-                            failedDownloads.put(item, List.of());
-                        };
-
-                        Runnable successCallback = () -> {
-                            changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
-                        };
-
-                        downloadManager.download(downloadFile, serverSHA1, List.of(), successCallback, failureCallback);
-                    }
-
-                    downloadManager.joinAll();
-
-                    if (downloadManager.isCanceled()) {
-                        LOGGER.warn("Download canceled");
-                        return;
-                    }
-
-                    downloadManager.cancelAllAndShutdown();
-
-                    LOGGER.info("Finished refreshed downloading files in {}ms", System.currentTimeMillis() - startFetching);
                 }
             }
 
