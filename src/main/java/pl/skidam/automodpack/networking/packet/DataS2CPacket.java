@@ -57,6 +57,8 @@ public class DataS2CPacket {
                 if (serverConfig.reverseProxy) {
                     LOGGER.error("Turn off reverseProxy in config, if you don't actually use it!");
                 }
+
+                LOGGER.warn("Server certificate fingerprint to verify: {}", hostServer.getCertificateFingerprint());
             }
         } catch (Exception e) {
             LOGGER.error("Error while handling DataS2CPacket", e);
