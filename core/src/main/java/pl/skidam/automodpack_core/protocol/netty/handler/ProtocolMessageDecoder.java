@@ -56,10 +56,4 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
                 throw new IllegalArgumentException("Unknown message type: " + type);
         }
     }
-
-    @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        cause.printStackTrace();
-        ctx.close();
-    }
 }

@@ -41,8 +41,15 @@
     "automodpack.fetch": "Fetching direct url's from Modrinth and CurseForge...",
     "automodpack.fetch.found": "Found %s direct url's.",
 
-    "automodpack.select": "Select Modpack",
+    "automodpack.validation.text": "You are connecting to an unknown AutoModpack host",
+    "automodpack.validation.description": "Please verify the server's certificate fingerprint",
+    "automodpack.validation.secDescription": "Request the fingerprint from your server administrator if you don't have it",
+    "automodpack.validation.thiDescription": "This security check prevents tampering with connections during modpack download",
+    "automodpack.validation.run": "Verify",
+    "automodpack.validation.failed": "Verification failed",
 
+    "automodpack.retry": "Try again",
+    "automodpack.select": "Select Modpack",
     "automodpack.yes": "Yes",
     "automodpack.no": "No",
     "automodpack.cancel": "Cancel",

@@ -92,7 +92,6 @@ public class ModpackLoader15 implements ModpackLoaderService {
         modpackNestedMods = getOnlyNewestMods(modpackNestedMods);
         standardNestedMods = getOnlyNewestMods(standardNestedMods);
 
-        // mod from standard mods dir - mod from modpack mods dir
         List<ModCandidate> conflictingNestedModsImpl = new ArrayList<>();
 
         for (ModCandidate standardNestedMod : standardNestedMods) {

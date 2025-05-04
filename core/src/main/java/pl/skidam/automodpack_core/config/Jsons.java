@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.config;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 
+import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,8 +14,34 @@ public class Jsons {
     public static class ClientConfigFields {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public String selectedModpack = ""; // modpack name
-        public Map<String, String> installedModpacks; // modpack name, link
+        public Map<String, ModpackAddresses> installedModpacks; // modpack name, <modpack host address, minecraft server address>
         public boolean selfUpdater = false;
+    }
+
+
+    public static class ModpackAddresses {
+        public InetSocketAddress hostAddress; // modpack host address
+        public InetSocketAddress serverAddress; // minecraft server address
+
+        public ModpackAddresses() {
+            // Default constructor for Gson
+        }
+
+        /**
+         * ModpackEntry holds server connection details.
+         *
+         * @param hostAddress   modpack server address that COULD be manipulated by the server
+         * @param serverAddress minecraft server address that represents the target address
+         *                      which client uses to connect. This value CANNOT be manipulated by the server.
+         */
+        public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress) {
+            this.hostAddress = hostAddress;
+            this.serverAddress = serverAddress;
+        }
+
+        public boolean isAnyEmpty() {
+            return hostAddress == null || serverAddress == null || hostAddress.getHostString().isBlank() || serverAddress.getHostString().isBlank();
+        }
     }
 
     public static class ServerConfigFields {
@@ -41,6 +68,7 @@ public class Jsons {
         public boolean updateIpsOnEveryStart = false;
         public int hostPort = -1;
         public boolean reverseProxy = false;
+        public int bandwidthLimit = 0;
         public long secretLifetime = 336; // 336 hours = 14 days
         public boolean validateSecrets = true;
         public boolean selfUpdater = false;
@@ -48,10 +76,10 @@ public class Jsons {
     }
 
     public static class ServerCoreConfigFields {
-        public String automodpackVersion = "4.0.0-beta9";
+        public String automodpackVersion = "4.0.0-beta29"; // TODO: dont hardcode it
         public String loader = "fabric";
-        public String loaderVersion = "0.15.11";
-        public String mcVersion = "1.20.1";
+        public String loaderVersion = "0.16.10";
+        public String mcVersion = "1.21.1";
     }
 
     public static class WorkaroundFields {
@@ -62,6 +90,10 @@ public class Jsons {
 
     public static class SecretsFields {
         public Map<String, Secrets.Secret> secrets = new HashMap<>();
+    }
+
+    public static class KnownHostsFields {
+        public Map<String, String> hosts; // host, fingerprint
     }
 
     public static class ModpackContentFields {

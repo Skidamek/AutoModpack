@@ -12,8 +12,8 @@ pluginManagement {
 
 plugins {
     id("com.github.johnrengelman.shadow") version "8.1.1" apply false
-    id("dev.architectury.loom") version "1.7-SNAPSHOT" apply false
-    id("dev.kikugie.stonecutter") version "0.5"
+    id("dev.architectury.loom") version "1.10-SNAPSHOT" apply false
+    id("dev.kikugie.stonecutter") version "0.6"
 }
 
 include(":core")
