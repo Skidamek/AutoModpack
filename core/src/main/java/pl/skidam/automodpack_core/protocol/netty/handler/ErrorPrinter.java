@@ -17,7 +17,7 @@ public class ErrorPrinter extends ChannelDuplexHandler {
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         if (cause instanceof DecoderException && cause.getCause() != null && cause.getCause() instanceof SSLHandshakeException) {
             // Probably the client rejecting the server certificate. Omit stack trace to reduce log output.
-            LOGGER.info("Error occurred in connection to client at address {}: {}", ctx.channel().remoteAddress(), cause.getMessage());
+            LOGGER.debug("Error occurred in connection to client at address {}: {}", ctx.channel().remoteAddress(), cause.getMessage());
         } else {
             // Unusual error. A stack trace might be useful.
             LOGGER.warn("Error occurred in connection to client at address {}", ctx.channel().remoteAddress(), cause);
