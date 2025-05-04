@@ -433,6 +433,19 @@ public class ModpackUtils {
         return Optional.empty();
     }
 
+    public static boolean canConnectModpackHost(Jsons.ModpackAddresses modpackAddresses) {
+        if (modpackAddresses.isAnyEmpty())
+            throw new IllegalArgumentException("Modpack addresses are empty!");
+
+        try (DownloadClient client = DownloadClient.tryCreate(modpackAddresses, null, 1, null)) {
+            return client != null;
+        } catch (Exception e) {
+            LOGGER.error("Error while pinging AutoModpack host server", e);
+        }
+
+        return false;
+    };
+
     /**
      * Returns a callback for use with {@link DownloadClient} that checks for trusted fingerprints in the known hosts
      * list of the client config.

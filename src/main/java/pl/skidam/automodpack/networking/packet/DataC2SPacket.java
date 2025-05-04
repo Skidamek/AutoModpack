@@ -90,6 +90,8 @@ public class DataC2SPacket {
                         needsDisconnecting = false;
                     }
                 }
+            } else if (ModpackUtils.canConnectModpackHost(modpackAddresses)) { // Can't download modpack because e.g. certificate is not verified but it can connect to the modpack host
+                needsDisconnecting = true;
             }
 
             if (clientConfig.selectedModpack != null && !clientConfig.selectedModpack.isBlank()) {

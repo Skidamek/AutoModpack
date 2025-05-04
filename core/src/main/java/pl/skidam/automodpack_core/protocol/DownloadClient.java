@@ -59,8 +59,10 @@ public class DownloadClient implements AutoCloseable {
         }
 
         PreValidationConnection firstConnection = getPreValidationConnection(modpackAddresses, keyStore);
-        if (firstConnection.getSocket() != null && firstConnection.getUnvalidatedCertificate() == null && !firstConnection.getSocket().isClosed()) {
+        if (firstConnection.getSocket() != null && !firstConnection.getSocket().isClosed() && firstConnection.getUnvalidatedCertificate() == null && secretBytes != null) {
             connections.add(new Connection(firstConnection, secretBytes));
+        } else if (firstConnection.getSocket() != null) {
+            firstConnection.getSocket().close();
         }
 
         if (trustedByUserCallback != null && firstConnection.getUnvalidatedCertificate() != null && trustedByUserCallback.apply(firstConnection.getUnvalidatedCertificate())) {
@@ -69,6 +71,10 @@ public class DownloadClient implements AutoCloseable {
             } catch (KeyStoreException e) {
                 throw new RuntimeException("Could not add the trusted certificate to the KeyStore.", e);
             }
+        }
+
+        if (secretBytes == null) {
+            return;
         }
 
         for (int i = connections.size(); i < poolSize; i++) {
