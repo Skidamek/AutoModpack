@@ -10,8 +10,8 @@ import java.util.concurrent.*;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
-public class Modpack {
-    public final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
+public class ModpackExecutor {
+    private final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
     public final Map<String, ModpackContent> modpacks = Collections.synchronizedMap(new HashMap<>());
 
     private ModpackContent init() {
@@ -61,17 +61,11 @@ public class Modpack {
         return activeCount > 0 || queueSize > 0;
     }
 
-    public void shutdownExecutor() {
-        CREATION_EXECUTOR.shutdown();
-        try {
-            if (!CREATION_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
-                CREATION_EXECUTOR.shutdownNow();
-                if (!CREATION_EXECUTOR.awaitTermination(3, TimeUnit.SECONDS)) {
-                    LOGGER.error("CREATION Executor did not terminate");
-                }
-            }
-        } catch (InterruptedException e) {
-            CREATION_EXECUTOR.shutdownNow();
-        }
+    public ThreadPoolExecutor getExecutor() {
+        return CREATION_EXECUTOR;
+    }
+
+    public void stop() {
+        CREATION_EXECUTOR.close();
     }
 }

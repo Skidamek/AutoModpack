@@ -265,17 +265,7 @@ public class DownloadManager {
             downloadClient.close();
         }
 
-        DOWNLOAD_EXECUTOR.shutdownNow();
-        try {
-            if (!DOWNLOAD_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
-                DOWNLOAD_EXECUTOR.shutdownNow();
-                if (!DOWNLOAD_EXECUTOR.awaitTermination(3, TimeUnit.SECONDS)) {
-                    LOGGER.error("DOWNLOAD EXECUTOR did not terminate");
-                }
-            }
-        } catch (InterruptedException e) {
-            DOWNLOAD_EXECUTOR.shutdownNow();
-        }
+        DOWNLOAD_EXECUTOR.close();
     }
 
 
