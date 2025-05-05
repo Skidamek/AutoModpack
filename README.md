@@ -32,7 +32,7 @@
 
 This isn't just another mod; it's a game-changer for private servers. Here's why:
 
-*   🔌 **Plug N Play:** Install the mod, and you're done! Live in perfect sync with the server's modpack forever.
+*   🔌 **Plug-'n'-Play:** Install the mod, and you're done! Live in perfect sync with the server's modpack forever.
 *   🔄 **Seamless Player Updates:** Players get the latest modpack updates automatically, without manual downloads or disruptions.
 *   🚀 **Effortless Admin Management:** Easily manage mods, configs, resource packs, shaders, and more. Your modpack, your control.
 *   ⚡️ **Direct & Respectful Downloads:** The mod pulls directly from Modrinth and CurseForge APIs, so mod authors get credit for every download.
@@ -45,7 +45,7 @@ AutoModpack works by generating a modpack (**metadata file**) on the server, con
 When a client connects to server (simplified):
 
 1.  AutoModpack securely connects to the modpack host server and fetches the metadata.
-2.  Uses Modrinth and CurseForge APIs to download directly most if not all of your modpack's files.
+2.  It uses Modrinth and CurseForge APIs to download directly your modpack's files where possible.
 3.  All files are downloaded to the client's automodpack folder.
 4.  Restart the game, AutoModpack loads the modpack and the client is perfectly synced and ready to play!
 
@@ -53,11 +53,11 @@ On subsequent game boots, AutoModpack checks for updates. If changes are detecte
 
 ## ⚠️ Security and Trust - Read This!
 
-> With great power comes with responsibility.
+> With great power comes great responsibility.
 
 Because it downloads files directly into your game folder, it's crucial to **only use it on servers you absolutely trust**. A malicious server (administrator) *can* include harmful files.
 
-While AutoModpack itself tries to be as secure as possible, due to the nature of the internet the creators and contributors of AutoModpack are not responsible for any harm, damage, loss, or issues that may result from files downloaded from a server you connect to using the mod. **By using AutoModpack, you acknowledge and accept this risk.**
+While AutoModpack itself tries to be as secure as possible, due to the nature of the internet, the creators and contributors of AutoModpack are not responsible for any harm, damage, loss, or issues that may result from files downloaded from a server you connect to using the mod. **By using AutoModpack, you acknowledge and accept this risk.**
 
 **If you have valuable security insights or concerns, please reach out!** You can contact privately on [Discord](https://discordapp.com/users/464522287618457631) or open an issue on GitHub.
 ## 🚀 Getting Started is a Breeze!
