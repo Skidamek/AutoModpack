@@ -18,10 +18,6 @@ public class WildCards {
 
         if (directoriesToSearch.isEmpty()) return;
 
-        for (String wildcard : wildcardsList) {
-            LOGGER.debug("Searching wildcard: {}", wildcard);
-        }
-
         wildcardsList = new ArrayList<>(wildcardsList);
 
         // sort the files, that files starting with `!` are last to then exclude them
@@ -70,8 +66,6 @@ public class WildCards {
 
                 wildcardPathStr = wildcardPathStr.replace(File.separator, "/");
 
-                LOGGER.debug("{}{}", "Path: " + path + " wildcard: " + wildcard + " startsWithSlash: " + startsWithSlash + " blackListed: ", blackListed);
-
                 if (Files.isDirectory(path)) {
                     try (var files = Files.list(path)) {
                         String finalWildcardPathStr = wildcardPathStr;
@@ -119,20 +113,16 @@ public class WildCards {
             if (blackListed) {
                 wildcardMatches.remove(formattedPath, path);
                 wildcardBlackListed.put(formattedPath, path);
-                LOGGER.debug("{} is excluded! Skipping...", "File " + formattedPath);
             } else if (!wildcardMatches.containsKey(formattedPath)) {
                 wildcardMatches.put(formattedPath, path);
-                LOGGER.debug("{} matches!", "File " + formattedPath);
             }
         }
     }
 
     private boolean fileMatches(String file, String wildCardString) {
         if (!wildCardString.contains("*")) {
-            LOGGER.debug("{}{}", "* NOT found in wildcard: " + wildCardString + " file: ", file);
             return file.endsWith(wildCardString);
         } else if (wildCardString.contains("**")) {
-            LOGGER.debug("{}{}", "** found in wildcard: " + wildCardString + " file: ", file);
             String[] parts = wildCardString.split("\\*\\*");
             if (parts.length == 0) return true;
             int startIndex = 0;
@@ -144,8 +134,6 @@ public class WildCards {
                 startIndex = currentIndex + part.length();
             }
             return true;
-        } else {
-            LOGGER.debug("{}{}", "* found in wildcard: " + wildCardString + " file: ", file);
         }
 
         // Wild card magic
