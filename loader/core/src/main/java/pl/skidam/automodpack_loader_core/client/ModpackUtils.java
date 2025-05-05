@@ -107,7 +107,7 @@ public class ModpackUtils {
                     modpackFileExists = true;
                 }
 
-                if (isMod && filesNotToCopy.contains(formattedFile)) {
+                if (runFileExists && isMod && filesNotToCopy.contains(formattedFile)) {
                     LOGGER.info("Deleting {} file from run directory", formattedFile);
                     CustomFileUtils.forceDelete(runFile);
                     needsRestart = true;
@@ -116,25 +116,30 @@ public class ModpackUtils {
                 }
             }
 
+            // We only copy mods to the run directory which are not ignored - which need a workaround
+            // If its any other file type, always copy
             if (filesNotToCopy.contains(formattedFile)) {
                 continue;
             }
 
             if (modpackFileExists && !runFileExists) {
-                // We only copy mods which are not ignored - which need a workaround, log it
                 CustomFileUtils.copyFile(modpackFile, runFile);
 
                 if (isMod) {
                     needsRestart = true;
-                    LOGGER.info("Applying workaround for {} mod", formattedFile);
+                    LOGGER.warn("Applying workaround for {} mod", formattedFile);
                 }
-            } else if (!modpackFileExists) {
+            } else if (!modpackFileExists) { // This should never happen, since we previously verified that whole modpack is downloaded
                 LOGGER.error("File {} doesn't exist!? If you see this please report this to the automodpack repo and attach this log https://github.com/Skidamek/AutoModpack/issues", formattedFile);
                 Thread.dumpStack();
             } else if (!runFileHashMatch) {
-                // We need to update run file assuming that modpack file is up to date
-                LOGGER.info("Overwriting {} file to the modpack version", formattedFile);
                 CustomFileUtils.copyFile(modpackFile, runFile);
+                if (isMod) {
+                    needsRestart = true;
+                    LOGGER.warn("Overwriting mod {} file to modpack version", formattedFile);
+                } else {
+                    LOGGER.info("Overwriting {} file to the modpack version", formattedFile);
+                }
             }
         }
 
@@ -169,8 +174,8 @@ public class ModpackUtils {
         return needsRestart;
     }
 
-    // Returns ignored files list, which is workarounds set + conflicting nested mods
-    public static Set<String> getWorkaroundsWithNested(List<FileInspection.Mod> conflictingNestedMods, Set<String> workarounds) {
+    // Returns ignored files list, which is conflicting nested mods + workarounds set
+    public static Set<String> getIgnoredFiles(List<FileInspection.Mod> conflictingNestedMods, Set<String> workarounds) {
         Set<String> newIgnoredFiles = new HashSet<>(workarounds);
 
         for (FileInspection.Mod mod : conflictingNestedMods) {
@@ -444,7 +449,7 @@ public class ModpackUtils {
         }
 
         return false;
-    };
+    }
 
     /**
      * Returns a callback for use with {@link DownloadClient} that checks for trusted fingerprints in the known hosts
