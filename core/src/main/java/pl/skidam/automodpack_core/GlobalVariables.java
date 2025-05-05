@@ -26,7 +26,7 @@ public class GlobalVariables {
     public static ModpackExecutor modpackExecutor;
     public static NettyServer hostServer;
     public static Jsons.ServerConfigFields serverConfig;
-    public static Jsons.ClientConfigFields clientConfig;
+    public static Jsons.ClientConfigFieldsV2 clientConfig;
     public static Jsons.KnownHostsFields knownHosts;
     public static final Path automodpackDir = Path.of("automodpack");
     public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
