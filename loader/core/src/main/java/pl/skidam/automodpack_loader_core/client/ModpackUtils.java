@@ -286,11 +286,11 @@ public class ModpackUtils {
 
         String installedModpackName = clientConfig.selectedModpack;
         Jsons.ModpackAddresses installedModpackAddresses = clientConfig.installedModpacks.get(installedModpackName);
-        InetSocketAddress installedModpackAddress = installedModpackAddresses.hostAddress;
-        InetSocketAddress installedServerAddress = installedModpackAddresses.serverAddress;
         String serverModpackName = serverModpackContent.modpackName;
 
-        if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
+        if (installedModpackAddresses != null && !serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
+            InetSocketAddress installedModpackAddress = installedModpackAddresses.hostAddress;
+            InetSocketAddress installedServerAddress = installedModpackAddresses.serverAddress;
 
             Path newModpackDir = modpackDir.getParent().resolve(serverModpackName);
 
