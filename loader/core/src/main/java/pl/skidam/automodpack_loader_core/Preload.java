@@ -117,9 +117,7 @@ public class Preload {
         // load client config
         if (clientConfigOverride == null) {
             var clientConfigVersion = ConfigTools.loadCheck(clientConfigFile, Jsons.VersionConfigField.class);
-            if (clientConfigVersion == null) {
-                LOGGER.error("Failed to load client config version!");
-            } else {
+            if (clientConfigVersion != null) {
                 // Update the configs schemes to not crash the game if loaded with old config!
                 if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
                     var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
