@@ -45,7 +45,7 @@ public class TrafficShaper {
         if (TrafficShaper.trafficShaper != null) {
             TrafficShaper.trafficShaper.getTrafficShapingHandler().release();
             if (TrafficShaper.trafficShaper.getExecutor() != null) {
-                TrafficShaper.trafficShaper.getExecutor().close();
+                TrafficShaper.trafficShaper.getExecutor().shutdown();
             }
             TrafficShaper.trafficShaper = null;
         }
