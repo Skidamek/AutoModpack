@@ -6,8 +6,10 @@ import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
+@Debug(export = true)
 @Mixin(value = ServerLoginNetworkHandler.class, priority = 300)
 public abstract class ServerLoginNetworkHandlerMixin  {
 
@@ -34,8 +36,13 @@ public abstract class ServerLoginNetworkHandlerMixin  {
 
         // Handle queries
         if (this.automodpack$addon.handle(packet)) {
-            // We have handled it, cancel vanilla behavior
-            ci.cancel();
+            ci.cancel(); // We have handled it, cancel vanilla behavior
+        } else {
+            /*? if >=1.20.2 {*/
+            if (packet.response() instanceof LoginResponsePayload response) {
+                response.data().skipBytes(response.data().readableBytes());
+            }
+            /*?}*/
         }
     }
 
