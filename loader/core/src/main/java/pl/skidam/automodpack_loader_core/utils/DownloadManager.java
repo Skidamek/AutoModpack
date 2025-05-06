@@ -265,7 +265,7 @@ public class DownloadManager {
             downloadClient.close();
         }
 
-        DOWNLOAD_EXECUTOR.close();
+        DOWNLOAD_EXECUTOR.shutdown();
     }
 
 

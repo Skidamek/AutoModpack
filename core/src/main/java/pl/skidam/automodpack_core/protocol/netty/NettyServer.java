@@ -168,7 +168,7 @@ public class NettyServer {
             TrafficShaper.close();
 
             if (eventLoopGroup != null) {
-                eventLoopGroup.close();
+                eventLoopGroup.shutdownGracefully().sync();
             }
         } catch (InterruptedException e) {
             LOGGER.error("Interrupted server channel", e);

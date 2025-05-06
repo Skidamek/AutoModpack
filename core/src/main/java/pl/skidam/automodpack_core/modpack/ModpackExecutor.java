@@ -66,6 +66,6 @@ public class ModpackExecutor {
     }
 
     public void stop() {
-        CREATION_EXECUTOR.close();
+        CREATION_EXECUTOR.shutdown();
     }
 }
