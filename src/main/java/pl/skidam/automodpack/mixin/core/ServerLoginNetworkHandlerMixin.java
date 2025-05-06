@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
-@Debug(export = true)
 @Mixin(value = ServerLoginNetworkHandler.class, priority = 300)
 public abstract class ServerLoginNetworkHandlerMixin  {
 
