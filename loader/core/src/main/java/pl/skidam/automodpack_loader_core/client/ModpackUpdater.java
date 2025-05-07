@@ -379,15 +379,7 @@ public class ModpackUpdater {
             Path cwd = Path.of(System.getProperty("user.dir"));
             CustomFileUtils.deleteDummyFiles(cwd, serverModpackContent.list);
 
-            if (preload) {
-                LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
-                CheckAndLoadModpack();
-            } else if (failedDownloads.isEmpty()) {
-                boolean requiredRestart = applyModpack();
-                LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);
-                UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
-                new ReLauncher(modpackDir, updateType, changelogs).restart(false);
-            } else {
+            if (!failedDownloads.isEmpty()) {
                 StringBuilder failedFiles = new StringBuilder();
                 for (var download : failedDownloads.entrySet()) {
                     var item = download.getKey();
@@ -398,6 +390,14 @@ public class ModpackUpdater {
 
                 new ScreenManager().error("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");
                 LOGGER.error("Update failed successfully! Try again! Took: {}ms", System.currentTimeMillis() - start);
+            } else if (preload) {
+                LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
+                CheckAndLoadModpack();
+            } else  {
+                boolean requiredRestart = applyModpack();
+                LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);
+                UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
+                new ReLauncher(modpackDir, updateType, changelogs).restart(false);
             }
         } catch (SocketTimeoutException | ConnectException e) {
             LOGGER.error("{} is not responding", "Modpack host of " + modpackAddresses.hostAddress, e);
