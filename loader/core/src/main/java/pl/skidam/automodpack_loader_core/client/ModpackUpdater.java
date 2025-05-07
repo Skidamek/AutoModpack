@@ -451,6 +451,8 @@ public class ModpackUpdater {
         Set<String> workaroundMods = new WorkaroundUtil(modpackDir).getWorkaroundMods(modpackContent);
         Set<String> filesNotToCopy = getFilesNotToCopy(modpackContent.list, workaroundMods);
         boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
+        workaroundMods = new WorkaroundUtil(modpackDir).getWorkaroundMods(modpackContent);
+        filesNotToCopy = getFilesNotToCopy(modpackContent.list, workaroundMods);
 
         Set<Path> modpackMods = new HashSet<>();
         Collection<FileInspection.Mod> modpackModList = new ArrayList<>();

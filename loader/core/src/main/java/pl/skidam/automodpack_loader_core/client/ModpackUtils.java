@@ -144,6 +144,7 @@ public class ModpackUtils {
             }
 
             if (modsToKeep.contains(runFile)) {
+                LOGGER.info("Keeping {} file in the standard mods directory", formattedFile);
                 continue;
             }
 
@@ -151,7 +152,7 @@ public class ModpackUtils {
             boolean runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
 
             if (runFileHashMatch && runFileExists && isMod && filesNotToCopy.contains(formattedFile)) {
-                LOGGER.info("Deleting {} file from standard mods directory", runFile);
+                LOGGER.info("Deleting {} file from standard mods directory", formattedFile);
                 CustomFileUtils.executeOrder66(runFile);
                 needsRestart = true;
             }
