@@ -174,7 +174,7 @@ public class ModpackUpdater {
 
                 if (Files.exists(path) && modpackContentField.editable) {
                     skippedEditableFiles++;
-                    LOGGER.info("Skipping editable file: {}", file);
+                    LOGGER.debug("Skipping editable file: {}", file);
                     iterator.remove();
                     continue;
                 }
