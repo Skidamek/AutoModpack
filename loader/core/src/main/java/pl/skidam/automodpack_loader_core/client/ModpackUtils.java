@@ -96,7 +96,7 @@ public class ModpackUtils {
             boolean runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
 
             if (runFileHashMatch && !modpackFileExists) {
-                LOGGER.info("Copying {} file to the modpack directory", formattedFile);
+                LOGGER.debug("Copying {} file to the modpack directory", formattedFile);
                 CustomFileUtils.copyFile(runFile, modpackFile);
                 modpackFileExists = true;
             }
