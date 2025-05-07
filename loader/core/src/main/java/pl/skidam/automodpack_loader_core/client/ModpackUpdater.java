@@ -447,10 +447,9 @@ public class ModpackUpdater {
         List<FileInspection.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir);
 
         boolean needsRestart0 = deleteNonModpackFiles(modpackContent);
+
         Set<String> workaroundMods = new WorkaroundUtil(modpackDir).getWorkaroundMods(modpackContent);
         Set<String> filesNotToCopy = getFilesNotToCopy(modpackContent.list, workaroundMods);
-
-        // Copy files to running directory
         boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
 
         Set<Path> modpackMods = new HashSet<>();
@@ -494,9 +493,13 @@ public class ModpackUpdater {
         Set<String> ignoredFiles = ModpackUtils.getIgnoredFiles(conflictingNestedMods, workaroundMods);
 
         // Remove duplicate mods
-        boolean needsRestart3 = ModpackUtils.removeDupeMods(modpackDir, standardModList, modpackModList, ignoredFiles, workaroundMods);
+        ModpackUtils.RemoveDupeModsResult removeDupeModsResult = ModpackUtils.removeDupeMods(modpackDir, standardModList, modpackModList, ignoredFiles, workaroundMods);
+        boolean needsRestart3 = removeDupeModsResult.requiresRestart();
 
-        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3;
+        // Remove rest of mods not for standard mods directory
+        boolean needsRestart4 = ModpackUtils.removeRestModsNotToCopy(modpackContent, filesNotToCopy, removeDupeModsResult.modsToKeep());
+
+        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3 || needsRestart4;
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory

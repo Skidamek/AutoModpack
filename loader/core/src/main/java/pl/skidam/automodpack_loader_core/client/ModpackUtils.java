@@ -78,11 +78,6 @@ public class ModpackUtils {
     }
 
     public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
-        if (serverModpackContent == null || serverModpackContent.list == null) {
-            LOGGER.error("Server modpack content list is null");
-            return false;
-        }
-
         boolean needsRestart = false;
 
         // correct the files locations
@@ -100,20 +95,10 @@ public class ModpackUtils {
             boolean runFileExists = Files.exists(runFile);
             boolean runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
 
-            if (runFileHashMatch) {
-                if (!modpackFileExists) {
-                    LOGGER.info("Copying {} file to the modpack directory", formattedFile);
-                    CustomFileUtils.copyFile(runFile, modpackFile);
-                    modpackFileExists = true;
-                }
-
-//                if (runFileExists && isMod && filesNotToCopy.contains(formattedFile)) {
-//                    LOGGER.info("Deleting {} file from run directory", formattedFile);
-//                    CustomFileUtils.forceDelete(runFile);
-//                    needsRestart = true;
-//                    runFileExists = false;
-//                    runFileHashMatch = false;
-//                }
+            if (runFileHashMatch && !modpackFileExists) {
+                LOGGER.info("Copying {} file to the modpack directory", formattedFile);
+                CustomFileUtils.copyFile(runFile, modpackFile);
+                modpackFileExists = true;
             }
 
             // We only copy mods to the run directory which are not ignored - which need a workaround
@@ -140,6 +125,35 @@ public class ModpackUtils {
                 } else {
                     LOGGER.info("Overwriting {} file to the modpack version", formattedFile);
                 }
+            }
+        }
+
+        return needsRestart;
+    }
+
+    public static boolean removeRestModsNotToCopy(Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy, Set<Path> modsToKeep) {
+        boolean needsRestart = false;
+
+        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
+            String formattedFile = contentItem.file;
+            Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
+            boolean isMod = "mod".equals(contentItem.type);
+
+            if (isMod) { // Make it into standardized mods directory, for support custom launchers
+                runFile = CustomFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
+            }
+
+            if (modsToKeep.contains(runFile)) {
+                continue;
+            }
+
+            boolean runFileExists = Files.exists(runFile);
+            boolean runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
+
+            if (runFileHashMatch && runFileExists && isMod && filesNotToCopy.contains(formattedFile)) {
+                LOGGER.info("Deleting {} file from standard mods directory", runFile);
+                CustomFileUtils.executeOrder66(runFile);
+                needsRestart = true;
             }
         }
 
@@ -188,8 +202,6 @@ public class ModpackUtils {
     // Checks if in standard mods folder are any mods that are in modpack
     // Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
     public static Map<FileInspection.Mod, FileInspection.Mod> getDupeMods(Path modpackDir, Set<String> ignoredMods, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList) {
-        if (standardModList.isEmpty() || modpackModList.isEmpty()) return Map.of();
-
         final Map<FileInspection.Mod, FileInspection.Mod> duplicates = new HashMap<>();
 
         for (FileInspection.Mod modpackMod : modpackModList) {
@@ -206,15 +218,17 @@ public class ModpackUtils {
         return duplicates;
     }
 
+    public record RemoveDupeModsResult(boolean requiresRestart, Set<Path> modsToKeep) {}
+
     // Returns true if removed any mod from standard mods folder
     // If the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // If you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
-    public static boolean removeDupeMods(Path modpackDir, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList, Set<String> ignoredMods, Set<String> workaroundMods) throws IOException {
+    public static RemoveDupeModsResult removeDupeMods(Path modpackDir, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList, Set<String> ignoredMods, Set<String> workaroundMods) throws IOException {
 
         var dupeMods = ModpackUtils.getDupeMods(modpackDir, ignoredMods, standardModList, modpackModList);
 
         if (dupeMods.isEmpty()) {
-            return false;
+            return new RemoveDupeModsResult(false, Set.of());
         }
 
         Set<FileInspection.Mod> modsToKeep = new HashSet<>();
@@ -234,7 +248,8 @@ public class ModpackUtils {
             idsToKeep.addAll(mod.providesIDs());
         });
 
-        List<Path> deletedMods = new ArrayList<>();
+        boolean requiresRestart = false;
+        Set<Path> dependentMods = new HashSet<>();
 
         // Remove dupe mods unless they need to stay - workaround mods
         for (var dupeMod : dupeMods.entrySet()) {
@@ -251,22 +266,25 @@ public class ModpackUtils {
             boolean isWorkaround = workaroundMods.contains(CustomFileUtils.formatPath(standardModPath, MODS_DIR.getParent()));
 
             if (isDependent) {
+                Path newStandardModPath = standardModPath.getParent().resolve(modpackModPath.getFileName());
+                dependentMods.add(newStandardModPath);
+
                 // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 if (!Objects.equals(modpackMod.hash(), standardMod.hash())) {
                     LOGGER.warn("Changing duplicated mod {} - {} to modpack version - {}", modId, standardMod.modVersion(), modpackMod.modVersion());
                     CustomFileUtils.executeOrder66(standardModPath);
-                    CustomFileUtils.copyFile(modpackModPath, standardModPath.getParent().resolve(modpackModPath.getFileName()));
-                    deletedMods.add(standardModPath);
+                    CustomFileUtils.copyFile(modpackModPath, newStandardModPath);
+                    requiresRestart = true;
                 }
             } else if (!isWorkaround) {
                 LOGGER.warn("Removing {} mod. It is duplicated modpack mod and no other mods are dependent on it!", modId);
                 CustomFileUtils.executeOrder66(standardModPath);
-                deletedMods.add(standardModPath);
+                requiresRestart = true;
             }
         }
 
-        return !deletedMods.isEmpty();
+        return new RemoveDupeModsResult(requiresRestart, dependentMods);
     }
 
     private static void addDependenciesRecursively(FileInspection.Mod mod, Collection<FileInspection.Mod> modList, Set<FileInspection.Mod> modsToKeep) {
