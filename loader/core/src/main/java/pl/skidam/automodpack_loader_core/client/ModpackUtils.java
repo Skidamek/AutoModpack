@@ -383,12 +383,6 @@ public class ModpackUtils {
         Path modpackDir = CustomFileUtils.getPath(modpacksDir, correctedName);
 
         if (!modpackName.isEmpty()) {
-            // Check if we don't have already installed modpack via this link
-            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.values().stream().anyMatch(entry ->
-                (entry.hostAddress.getHostString() + ":" + entry.hostAddress.getPort()).equals(strAddress))) {
-                return modpackDir;
-            }
-
             String nameFromName = modpackName;
 
             if (FileInspection.isInValidFileName(modpackName)) {
