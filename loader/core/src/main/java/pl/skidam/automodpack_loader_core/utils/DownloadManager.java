@@ -96,7 +96,7 @@ public class DownloadManager {
 
             if (failed) {
                 bytesToDownload += queuedDownload.file.toFile().length(); // Add size of the whole file again because we will try to download it again
-                CustomFileUtils.forceDelete(queuedDownload.file);
+                CustomFileUtils.executeOrder66(queuedDownload.file);
 
                 if (!interrupted) {
                     if (queuedDownload.attempts < (numberOfIndexes + 1) * MAX_DOWNLOAD_ATTEMPTS) {
@@ -149,7 +149,7 @@ public class DownloadManager {
             if (Objects.equals(hashPathPair.hash(), CustomFileUtils.getHash(outFile))) {
                 return;
             } else {
-                CustomFileUtils.forceDelete(outFile);
+                CustomFileUtils.executeOrder66(outFile);
             }
         }
 
@@ -170,7 +170,7 @@ public class DownloadManager {
             if (Objects.equals(hashPathPair.hash(), CustomFileUtils.getHash(outFile))) {
                 return;
             } else {
-                CustomFileUtils.forceDelete(outFile);
+                CustomFileUtils.executeOrder66(outFile);
             }
         }
 
@@ -252,7 +252,7 @@ public class DownloadManager {
         queuedDownloads.clear();
         downloadsInProgress.forEach((url, downloadData) -> {
             downloadData.future.cancel(true);
-            CustomFileUtils.forceDelete(downloadData.file);
+            CustomFileUtils.executeOrder66(downloadData.file);
         });
 
         // TODO Release the number of occupied permits, not all

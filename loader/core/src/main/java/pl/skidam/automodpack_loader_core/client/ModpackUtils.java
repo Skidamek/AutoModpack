@@ -107,13 +107,13 @@ public class ModpackUtils {
                     modpackFileExists = true;
                 }
 
-                if (runFileExists && isMod && filesNotToCopy.contains(formattedFile)) {
-                    LOGGER.info("Deleting {} file from run directory", formattedFile);
-                    CustomFileUtils.forceDelete(runFile);
-                    needsRestart = true;
-                    runFileExists = false;
-                    runFileHashMatch = false;
-                }
+//                if (runFileExists && isMod && filesNotToCopy.contains(formattedFile)) {
+//                    LOGGER.info("Deleting {} file from run directory", formattedFile);
+//                    CustomFileUtils.forceDelete(runFile);
+//                    needsRestart = true;
+//                    runFileExists = false;
+//                    runFileHashMatch = false;
+//                }
             }
 
             // We only copy mods to the run directory which are not ignored - which need a workaround
@@ -255,13 +255,13 @@ public class ModpackUtils {
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 if (!Objects.equals(modpackMod.hash(), standardMod.hash())) {
                     LOGGER.warn("Changing duplicated mod {} - {} to modpack version - {}", modId, standardMod.modVersion(), modpackMod.modVersion());
-                    CustomFileUtils.forceDelete(standardModPath);
+                    CustomFileUtils.executeOrder66(standardModPath);
                     CustomFileUtils.copyFile(modpackModPath, standardModPath.getParent().resolve(modpackModPath.getFileName()));
                     deletedMods.add(standardModPath);
                 }
             } else if (!isWorkaround) {
                 LOGGER.warn("Removing {} mod. It is duplicated modpack mod and no other mods are dependent on it!", modId);
-                CustomFileUtils.forceDelete(standardModPath);
+                CustomFileUtils.executeOrder66(standardModPath);
                 deletedMods.add(standardModPath);
             }
         }

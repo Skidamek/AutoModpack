@@ -33,7 +33,7 @@ public class CustomFileUtils {
 
     private static final Path CWD = Path.of(System.getProperty("user.dir"));
 
-    public static void forceDelete(Path file) {
+    public static void executeOrder66(Path file) {
         try {
             Files.deleteIfExists(file);
         } catch (IOException ignored) {
@@ -172,7 +172,7 @@ public class CustomFileUtils {
             stream.filter(path -> !shouldIgnore(path, ignoreList))
                     .forEach(path -> {
                         if (compareFilesByteByByte(path, smallDummyJar)) {
-                            CustomFileUtils.forceDelete(path);
+                            CustomFileUtils.executeOrder66(path);
                         }
                     });
         } catch (IOException e) {
