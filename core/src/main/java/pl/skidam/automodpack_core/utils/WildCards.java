@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -58,47 +57,42 @@ public class WildCards {
             return;
         }
 
-        if (matchesRules(node, startDirectory, composedWhiteRules)) {
-            wildcardMatches.put(formatPath(node, startDirectory), node);
+        String formattedPath = matchesRules(node, startDirectory, composedWhiteRules);
+        if (formattedPath != null) {
+            wildcardMatches.put(formattedPath, node);
         }
     }
 
     public void matchBlackRules(Path startDirectory, Map<String, List<String>> composedBlackRules) {
-        Set<Path> pathsToRemove = new HashSet<>();
+        Set<String> pathsToRemove = new HashSet<>();
 
         for (Path node : getWildcardMatches().values()) {
             if (!node.toFile().isFile()) {
                 continue;
             }
 
-            if (matchesRules(node, startDirectory, composedBlackRules)) {
-                pathsToRemove.add(node);
+            String formattedPath = matchesRules(node, startDirectory, composedBlackRules);
+            if (formattedPath != null) {
+                pathsToRemove.add(formattedPath);
             }
         }
 
-        wildcardMatches.values().removeAll(pathsToRemove);
+        for (String path : pathsToRemove) {
+            wildcardMatches.remove(path);
+        }
     }
 
 
-    private boolean matchesRules(Path node, Path startDirectory, Map<String, List<String>> rules) {
-        // Get the path of the current node relative to the start directory
-        Path relativePath = startDirectory.relativize(node);
+    private String matchesRules(Path node, Path startDirectory, Map<String, List<String>> rules) {
+        final String formattedPath = formatPath(node, startDirectory);
 
-        // Convert the relative path to a string using forward slashes for consistent matching
-        String relativePathString = relativePath.toString().replace(File.separator, "/");
-
-        // Ensure the relative path starts with '/' for consistent rule matching
-        if (!relativePathString.startsWith("/")) {
-            relativePathString = "/" + relativePathString;
-        }
-
-        int lastSlashIndex = relativePathString.lastIndexOf("/");
+        int lastSlashIndex = formattedPath.lastIndexOf("/");
         if (lastSlashIndex == -1) {
-            return false; // No directory part
+            return null; // No directory part
         }
 
-        String directoryPart = relativePathString.substring(0, lastSlashIndex);
-        String fileNamePart = relativePathString.substring(lastSlashIndex);
+        String directoryPart = formattedPath.substring(0, lastSlashIndex);
+        String fileNamePart = formattedPath.substring(lastSlashIndex);
 
         // Iterate through the rules and check directory matches
         for (Map.Entry<String, List<String>> entry : rules.entrySet()) {
@@ -112,14 +106,14 @@ public class WildCards {
                 for (String rulePath : rulePaths) {
                     if (rulePath.equals("/**")) {
                         // Match all files in the directory
-                        return true;
+                        return formattedPath;
                     } else if (rulePath.equals("/*") || rulePath.equals("/")) {
                         if (!directoryMatch) {
                             continue;
                         }
 
                         // Match any file in the directory
-                        return true;
+                        return formattedPath;
                     } else if (rulePath.contains("*")) {
                         if (!directoryMatch) {
                             continue;
@@ -132,7 +126,7 @@ public class WildCards {
                         }
 
                         String[] ruleParts = rulePath.split("\\*");
-                        String partOne = "";
+                        String partOne;
                         String partTwo = "";
                         if (ruleParts.length == 1) {
                             partOne = ruleParts[0];
@@ -145,16 +139,16 @@ public class WildCards {
                         }
 
                         if (fileNamePart.startsWith(partOne) && fileNamePart.endsWith(partTwo)) {
-                            return true;
+                            return formattedPath;
                         }
                     } else if (rulePath.equals(fileNamePart)) { // Exact match
-                        return true;
+                        return formattedPath;
                     }
                 }
             }
         }
 
-        return false;
+        return null;
     }
 
     public Map<String, List<String>> composeRules(List<String> rules) {
