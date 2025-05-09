@@ -10,7 +10,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static pl.skidam.automodpack_core.GlobalVariables.DEBUG;
 
-class WildCards2Test {
+class WildCardsTest {
 
     private WildCards wildCards;
     private final Path testFilesDir = Path.of("src/test/resources/testFiles");
@@ -18,8 +18,6 @@ class WildCards2Test {
     @BeforeEach
     void setUp() {
         DEBUG = true;
-
-        System.setProperty("user.dir", testFilesDir.toString());
 
         var wildcards = List.of(
                 "/file.txt",
