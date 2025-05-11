@@ -210,7 +210,7 @@ class PreValidationConnection {
         SSLContext context = createSSLContext(keyStore, interceptedCertificateChain::set);
         SSLSocketFactory factory = context.getSocketFactory();
         // The createSocket(Socket, host, port, autoClose) wraps the existing plain socket.
-        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, AddressHelpers.getHostNameOrAddress(resolvedHostAddress), resolvedHostAddress.getPort(), true);
+        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, resolvedHostAddress.getHostString(), resolvedHostAddress.getPort(), true);
         sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
         sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
         SSLParameters sslParameters = new SSLParameters();

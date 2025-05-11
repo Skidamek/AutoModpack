@@ -89,18 +89,13 @@ public class AddressHelpers {
 
     // This method has a benefit of not attempting to resolve the hostname or reverse DNS lookup
     // It will just return hostname or address as a string
-    // Using always just getHostString() method breaks on srv records and returns the whole dns record with minecraft address
+    // Using getHostString() method breaks on srv records and returns the whole dns record
     public static String getHostNameOrAddress(InetSocketAddress socketAddress) {
         if (socketAddress == null) {
             return null;
         }
 
-        String host;
-        if (socketAddress.getAddress() == null) {
-            host = socketAddress.getHostName();
-        } else {
-            host = socketAddress.getHostString();
-        }
+        String host = socketAddress.getHostString();
 
         if (host == null || host.isEmpty()) {
             throw new IllegalArgumentException("Address or hostname is empty");
