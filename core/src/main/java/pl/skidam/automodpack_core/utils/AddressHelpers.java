@@ -87,6 +87,20 @@ public class AddressHelpers {
         return ip;
     }
 
+    // This method has a benefit of not attempting to resolve the hostname or reverse DNS lookup
+    // It will just return hostname or address as a string
+    public static String getHostNameOrAddress(InetSocketAddress socketAddress) {
+        if (socketAddress == null) {
+            return null;
+        }
+
+        if (socketAddress.getAddress() == null) {
+            return socketAddress.getHostName();
+        }
+
+        return socketAddress.getHostString();
+    }
+
     public static InetSocketAddress parse(String address) {
         if (address == null) return null;
        InetSocketAddress socketAddress = null;
@@ -96,11 +110,11 @@ public class AddressHelpers {
                 String host = address.substring(0, portIndex);
                 String port = address.substring(portIndex + 1);
                 if (port.matches("\\d+")) {
-                    socketAddress = new InetSocketAddress(host, Integer.parseInt(port));
+                    socketAddress = InetSocketAddress.createUnresolved(host, Integer.parseInt(port));
                 }
             }
             if (socketAddress == null) {
-                socketAddress = new InetSocketAddress(address, 0);
+                socketAddress = InetSocketAddress.createUnresolved(address, 0);
             }
         } catch (Exception e) {
             LOGGER.error("Error while parsing address", e);

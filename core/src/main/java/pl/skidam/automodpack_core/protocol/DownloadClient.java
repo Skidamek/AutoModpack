@@ -4,6 +4,7 @@ import com.github.luben.zstd.Zstd;
 import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import javax.net.ssl.*;
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.file.Path;
 import java.security.*;
@@ -18,6 +19,7 @@ import java.util.function.Function;
 import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
@@ -30,6 +32,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
  */
 public class DownloadClient implements AutoCloseable {
     private final List<Connection> connections = new ArrayList<>();
+    private final Map<String, InetSocketAddress> addresses = new HashMap<>();
 
     /**
      * Creates a new {@link DownloadClient} for the specified address. If the first connection fails with a verification
@@ -83,10 +86,22 @@ public class DownloadClient implements AutoCloseable {
         }
     }
 
-    private static PreValidationConnection getPreValidationConnection(Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException {
+    private PreValidationConnection getPreValidationConnection(Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException {
         PreValidationConnection preValidationConnection;
         try {
-            preValidationConnection = new PreValidationConnection(modpackAddresses, keyStore);
+            InetSocketAddress resolvedInetSocketAddress;
+            String hostName = AddressHelpers.getHostNameOrAddress(modpackAddresses.hostAddress);
+            if (addresses.containsKey(hostName)) {
+                resolvedInetSocketAddress = addresses.get(hostName);
+            } else {
+                resolvedInetSocketAddress = new InetSocketAddress(hostName, modpackAddresses.hostAddress.getPort());
+                if (resolvedInetSocketAddress.isUnresolved()) {
+                    throw new IOException("Failed to resolve host address: " + hostName);
+                }
+                addresses.put(hostName, resolvedInetSocketAddress);
+            }
+
+            preValidationConnection = new PreValidationConnection(resolvedInetSocketAddress, modpackAddresses, keyStore);
         } catch (KeyStoreException e) {
             throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
         }
@@ -173,10 +188,10 @@ class PreValidationConnection {
      * @param modpackAddresses the object containing host and server addresses
      * @param keyStore         the keystore containing trusted certificates
      */
-    public PreValidationConnection(Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
+    public PreValidationConnection(InetSocketAddress resolvedHostAddress, Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
         // Step 1. Create a plain TCP connection.
         Socket plainSocket = new Socket();
-        plainSocket.connect(modpackAddresses.hostAddress, 15000);
+        plainSocket.connect(resolvedHostAddress, 15000); // To create socket, we need to pass a resolved socket address
         plainSocket.setSoTimeout(15000);
         DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
         DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
@@ -198,7 +213,7 @@ class PreValidationConnection {
         SSLContext context = createSSLContext(keyStore, interceptedCertificateChain::set);
         SSLSocketFactory factory = context.getSocketFactory();
         // The createSocket(Socket, host, port, autoClose) wraps the existing plain socket.
-        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, modpackAddresses.hostAddress.getHostString(), modpackAddresses.hostAddress.getPort(), true);
+        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, AddressHelpers.getHostNameOrAddress(resolvedHostAddress), resolvedHostAddress.getPort(), true);
         sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
         sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
         SSLParameters sslParameters = new SSLParameters();
@@ -222,15 +237,17 @@ class PreValidationConnection {
             unvalidatedCertificate = certificate;
         }
 
-        if (!isSelfSigned(certificate)) {
+        if (!isSelfSigned(certificate) && session.isValid()) {
             DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
             // Verify if the certificate verifies against the required domains
-            if (!hostnameVerifier.verify(modpackAddresses.hostAddress.getHostString(), session) || !hostnameVerifier.verify(modpackAddresses.serverAddress.getHostString(), session)) {
+            String modpackHostHostName = AddressHelpers.getHostNameOrAddress(modpackAddresses.hostAddress);
+            String modpackServerHostName = AddressHelpers.getHostNameOrAddress(modpackAddresses.serverAddress);
+            if (!hostnameVerifier.verify(modpackHostHostName, session) || !hostnameVerifier.verify(modpackServerHostName, session)) {
                 sslSocket.close();
                 unvalidatedCertificate = certificate;
-                LOGGER.error("Certificate validation failed: certificate doesn't match the required domains {} and {}", modpackAddresses.hostAddress.getHostString(), modpackAddresses.serverAddress.getHostString());
+                LOGGER.error("Certificate validation failed: certificate doesn't match the required domains {} and {}", modpackHostHostName, modpackServerHostName);
             } else {
-                LOGGER.info("Signed certificate validation succeeded for {} and {}", modpackAddresses.hostAddress.getHostString(), modpackAddresses.serverAddress.getHostString());
+                LOGGER.info("Signed certificate validation succeeded for {} and {}", modpackHostHostName, modpackServerHostName);
             }
         }
 

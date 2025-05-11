@@ -24,7 +24,7 @@ public class ConfigTools {
     private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress>,JsonDeserializer<InetSocketAddress> {
         @Override
         public JsonElement serialize(InetSocketAddress src, Type typeOfSrc, JsonSerializationContext context) {
-            return new JsonPrimitive(src.getHostString() + ":" + src.getPort());
+            return new JsonPrimitive(AddressHelpers.getHostNameOrAddress(src) + ":" + src.getPort());
         }
 
         @Override

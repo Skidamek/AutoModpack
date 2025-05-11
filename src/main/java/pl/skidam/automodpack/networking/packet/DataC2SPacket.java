@@ -48,13 +48,13 @@ public class DataC2SPacket {
             if (packetAddress.isBlank()) {
                 LOGGER.info("Address from connected server: {}:{}", modpackAddress.getAddress().getHostAddress(), modpackAddress.getPort());
             } else if (packetPort != null) {
-                modpackAddress = new InetSocketAddress(packetAddress, packetPort);
+                modpackAddress = InetSocketAddress.createUnresolved(packetAddress, packetPort);
                 LOGGER.info("Received address packet from server! {}:{}", packetAddress, packetPort);
             } else {
                 var portIndex = packetAddress.lastIndexOf(':');
                 var port = portIndex == -1 ? 0 : Integer.parseInt(packetAddress.substring(portIndex + 1));
                 var addressString = portIndex == -1 ? packetAddress : packetAddress.substring(0, portIndex);
-                modpackAddress = new InetSocketAddress(addressString, port);
+                modpackAddress = InetSocketAddress.createUnresolved(addressString, port);
                 LOGGER.info("Received address packet from server! {} Attached port: {}", addressString, port);
             }
 
