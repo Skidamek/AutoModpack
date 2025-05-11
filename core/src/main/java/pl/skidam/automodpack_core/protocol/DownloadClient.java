@@ -32,7 +32,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
  */
 public class DownloadClient implements AutoCloseable {
     private final List<Connection> connections = new ArrayList<>();
-    private final Map<String, InetSocketAddress> addresses = new HashMap<>();
+    private InetSocketAddress address = null;
 
     /**
      * Creates a new {@link DownloadClient} for the specified address. If the first connection fails with a verification
@@ -89,19 +89,16 @@ public class DownloadClient implements AutoCloseable {
     private PreValidationConnection getPreValidationConnection(Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException {
         PreValidationConnection preValidationConnection;
         try {
-            InetSocketAddress resolvedInetSocketAddress;
             String hostName = AddressHelpers.getHostNameOrAddress(modpackAddresses.hostAddress);
-            if (addresses.containsKey(hostName)) {
-                resolvedInetSocketAddress = addresses.get(hostName);
-            } else {
-                resolvedInetSocketAddress = new InetSocketAddress(hostName, modpackAddresses.hostAddress.getPort());
+            if (address == null) {
+                InetSocketAddress resolvedInetSocketAddress = new InetSocketAddress(hostName, modpackAddresses.hostAddress.getPort());
                 if (resolvedInetSocketAddress.isUnresolved()) {
                     throw new IOException("Failed to resolve host address: " + hostName);
                 }
-                addresses.put(hostName, resolvedInetSocketAddress);
+                address = resolvedInetSocketAddress;
             }
 
-            preValidationConnection = new PreValidationConnection(resolvedInetSocketAddress, modpackAddresses, keyStore);
+            preValidationConnection = new PreValidationConnection(address, modpackAddresses, keyStore);
         } catch (KeyStoreException e) {
             throw new RuntimeException("Failed to establish connection due to an issue with the generated KeyStore.", e);
         }
