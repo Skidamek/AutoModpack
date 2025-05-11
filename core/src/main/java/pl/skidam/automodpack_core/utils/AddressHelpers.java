@@ -106,8 +106,15 @@ public class AddressHelpers {
             throw new IllegalArgumentException("Address or hostname is empty");
         }
 
+        // If the host ends with a dot, remove it (fun fact: its a valid domain but not for us)
         if (host.endsWith(".")) {
             host = host.substring(0, host.length() - 1);
+        }
+
+        // If theres `_minecraft._tcp.` in the host, remove it and everything before it
+        String srvRecord = "_minecraft._tcp.";
+        if (host.contains(srvRecord)) {
+            host = host.substring(host.indexOf(srvRecord) + srvRecord.length());
         }
 
         return host;
