@@ -7,6 +7,10 @@ import net.minecraft.network.PacketByteBuf;
 // credits to fabric api
 public class PayloadHelper {
 
+    public static void write(PacketByteBuf byteBuf, PacketByteBuf data) {
+        byteBuf.writeBytes(data.copy());
+    }
+
     public static PacketByteBuf read(PacketByteBuf byteBuf, int maxSize) {
         assertSize(byteBuf, maxSize);
 

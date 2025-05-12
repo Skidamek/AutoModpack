@@ -16,6 +16,8 @@ import net.minecraft.network.packet.c2s.login.LoginQueryResponsePayload;
 import net.minecraft.network.packet.s2c.login.LoginQueryRequestPayload;
 /*?}*/
 
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+
 public class LoginQueryParser {
 	public Packet<?> packet;
 	public boolean success = true;
@@ -30,7 +32,6 @@ public class LoginQueryParser {
 			/*this.queryId = packetS2C.getQueryId();
 			this.buf = packetS2C.getPayload();
 		    this.channelName = packetS2C.getChannel();
-	        this.success = true;
             *//*?} else {*/
 			this.queryId = packetS2C.queryId();
 			LoginQueryRequestPayload payload = packetS2C.payload();
@@ -44,7 +45,6 @@ public class LoginQueryParser {
 			/*? if <1.20.2 {*/
             /*this.queryId = packetC2S.getQueryId();
             this.buf = packetC2S.getResponse();
-            this.success = true;
 			*//*?} else {*/
 			this.queryId = packetC2S.queryId();
 			LoginQueryResponsePayload payload = packetC2S.response();
@@ -55,7 +55,7 @@ public class LoginQueryParser {
 			/*?}*/
 		} else {
 			success = false;
-			throw new IllegalArgumentException("Invalid packet type " + packet);
+            LOGGER.error("Invalid packet type: {}", packet.getClass().getName());
 		}
 	}
 }

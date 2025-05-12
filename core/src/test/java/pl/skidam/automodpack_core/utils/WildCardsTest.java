@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.utils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -15,25 +14,24 @@ class WildCardsTest {
 
     private WildCards wildCards;
     private final Path testFilesDir = Path.of("src/test/resources/testFiles");
-    private final String testFilesStr = testFilesDir.toString().replace(File.separator, "/");
 
     @BeforeEach
     void setUp() {
         DEBUG = true;
 
         var wildcards = List.of(
-                "/" + testFilesStr + "/file.txt",
-                "/" + testFilesStr + "/config/config*",
-                "/" + testFilesStr + "/config/mod-config.toml",
-                "/" + testFilesStr + "/mods/*.jar",
-                "!/" + testFilesStr + "/mods/server-*jar",
-                "!/" + testFilesStr + "/mods/*19.jar",
-                "!/" + testFilesStr + "/shaders/*.txt",
-                "/" + testFilesStr + "/thisfiledoesnotexist.txt",
-                "/" + testFilesStr + "/shaders/*",
-                "!/" + testFilesStr + "/shaders/notashader.zip",
-                "/" + testFilesStr + "/foo/**",
-                "/" + testFilesStr + "/directory/*/*"
+                "/file.txt",
+                "/config/config*",
+                "/config/mod-config.toml",
+                "/mods/*.jar",
+                "!/mods/server-*jar",
+                "!/mods/*19.jar",
+                "!/shaders/*.txt",
+                "/thisfiledoesnotexist.txt",
+                "/shaders/*",
+                "!/shaders/notashader.zip",
+                "/foo/**",
+                "/directory/*/*"
         );
         wildCards = new WildCards(wildcards, Set.of(testFilesDir));
 
@@ -60,9 +58,6 @@ class WildCardsTest {
             testFilesDir.resolve("foo/poo/file.json"),
             testFilesDir.resolve("foo/poo/moo/file.json"),
             testFilesDir.resolve("foo/poo/moo/file2.json")
-//            ,
-//            testFilesDir.resolve("directory/which/file.json"),
-//            testFilesDir.resolve("directory/who/file.json")
     );
 
     @Test

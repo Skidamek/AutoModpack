@@ -239,10 +239,12 @@ public class FileInspection {
         return (String) getModInfo(file, "modId");
     }
 
+    @SuppressWarnings("unchecked")
     public static Set<String> getAllProvidedIDs(Path file) {
         return (Set<String>) getModInfo(file, "provides");
     }
 
+    @SuppressWarnings("unchecked")
     public static Set<String> getModDependencies(Path file) {
         return (Set<String>) getModInfo(file, "dependencies");
     }

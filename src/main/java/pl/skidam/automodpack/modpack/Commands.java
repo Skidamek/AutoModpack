@@ -172,13 +172,13 @@ public class Commands {
 
     private static int generateModpack(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            if (modpack.isGenerating()) {
+            if (modpackExecutor.isGenerating()) {
                 send(context, "Modpack is already generating! Please wait!", Formatting.RED, false);
                 return;
             }
             send(context, "Generating Modpack...", Formatting.YELLOW, true);
             long start = System.currentTimeMillis();
-            if (modpack.generateNew()) {
+            if (modpackExecutor.generateNew()) {
                 send(context, "Modpack generated! took " + (System.currentTimeMillis() - start) + "ms", Formatting.GREEN, true);
             } else {
                 send(context, "Modpack generation failed! Check logs for more info.", Formatting.RED, true);

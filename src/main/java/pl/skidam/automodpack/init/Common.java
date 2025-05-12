@@ -4,10 +4,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.Identifier;
 import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
-import pl.skidam.automodpack_core.modpack.Modpack;
+import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
-import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,7 +22,7 @@ public class Common {
         if (serverConfig.generateModpackOnStart) {
             LOGGER.info("Generating modpack...");
             long genStart = System.currentTimeMillis();
-            if (modpack.generateNew()) {
+            if (modpackExecutor.generateNew()) {
                 LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
             } else {
                 LOGGER.error("Failed to generate modpack!");
@@ -31,7 +30,7 @@ public class Common {
         } else {
             LOGGER.info("Loading last modpack...");
             long genStart = System.currentTimeMillis();
-            if (modpack.loadLast()) {
+            if (modpackExecutor.loadLast()) {
                 LOGGER.info("Modpack loaded! took " + (System.currentTimeMillis() - genStart) + "ms");
             } else {
                 LOGGER.error("Failed to load modpack!");
@@ -44,7 +43,7 @@ public class Common {
     public static void init() {
         GAME_CALL = new GameCall();
         hostServer = new NettyServer();
-        modpack = new Modpack();
+        modpackExecutor = new ModpackExecutor();
     }
 
     public static void afterSetupServer() {
@@ -52,11 +51,7 @@ public class Common {
             return;
         }
 
-        var channel = hostServer.start();
-
-        if (channel.isEmpty()) {
-            new TrafficShaper(null);
-        }
+        hostServer.start();
     }
 
     public static void beforeShutdownServer() {
@@ -65,7 +60,7 @@ public class Common {
         }
 
         hostServer.stop();
-        modpack.shutdownExecutor();
+        modpackExecutor.stop();
     }
 
     public static Identifier id(String path) {

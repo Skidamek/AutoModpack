@@ -9,15 +9,26 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@SuppressWarnings("unused")
 public class Jsons {
 
-    public static class ClientConfigFields {
+    public static class VersionConfigField {
+        public int DO_NOT_CHANGE_IT = 0; // file version
+    }
+
+    public static class ClientConfigFieldsV1 {
         public int DO_NOT_CHANGE_IT = 1; // file version
+        public String selectedModpack = ""; // modpack name
+        public Map<String, String> installedModpacks; // modpack name, <modpack host address, minecraft server address>
+        public boolean selfUpdater = false;
+    }
+
+    public static class ClientConfigFieldsV2 {
+        public int DO_NOT_CHANGE_IT = 2; // file version
         public String selectedModpack = ""; // modpack name
         public Map<String, ModpackAddresses> installedModpacks; // modpack name, <modpack host address, minecraft server address>
         public boolean selfUpdater = false;
     }
-
 
     public static class ModpackAddresses {
         public InetSocketAddress hostAddress; // modpack host address
@@ -76,17 +87,11 @@ public class Jsons {
     }
 
     public static class ServerCoreConfigFields {
-        public String automodpackVersion = "4.0.0-beta29"; // TODO: dont hardcode it
+        public String automodpackVersion = "4.0.0-beta35"; // TODO: dont hardcode it
         public String loader = "fabric";
-        public String loaderVersion = "0.16.10";
+        public String loaderVersion = "0.16.14";
         public String mcVersion = "1.21.1";
     }
-
-    public static class WorkaroundFields {
-        public int DO_NOT_CHANGE_IT = 1; // file version
-        public Set<String> workaroundMods;
-    }
-
 
     public static class SecretsFields {
         public Map<String, Secrets.Secret> secrets = new HashMap<>();

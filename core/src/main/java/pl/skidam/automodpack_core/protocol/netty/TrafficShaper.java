@@ -11,16 +11,14 @@ import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
 public class TrafficShaper {
 
     private final GlobalTrafficShapingHandler trafficShapingHandler;
-    private final ScheduledExecutorService executor;
+    private ScheduledExecutorService executor = null;
     public static TrafficShaper trafficShaper;
 
     public TrafficShaper(ScheduledExecutorService executor) {
-        if (TrafficShaper.trafficShaper != null) {
-            TrafficShaper.trafficShaper.getTrafficShapingHandler().release();
-            TrafficShaper.trafficShaper = null;
-        }
+        close(); // There can be only one traffic shaper instance, close previous one if exists
         if (executor == null) {
             executor = Executors.newSingleThreadScheduledExecutor();
+            this.executor = executor;
         }
 
         long bandwidthLimit = serverConfig.bandwidthLimit * 1024L * 1024L / 8L;
@@ -31,8 +29,7 @@ public class TrafficShaper {
             LOGGER.info("Setting bandwidth limit to {} Mbps.", serverConfig.bandwidthLimit);
         }
 
-        this.executor = executor;
-        this.trafficShapingHandler = new GlobalTrafficShapingHandler(this.executor, bandwidthLimit, 0);
+        this.trafficShapingHandler = new GlobalTrafficShapingHandler(executor, bandwidthLimit, 0);
         TrafficShaper.trafficShaper = this;
     }
 
@@ -42,5 +39,15 @@ public class TrafficShaper {
 
     public ScheduledExecutorService getExecutor() {
         return this.executor;
+    }
+
+    public static void close() {
+        if (TrafficShaper.trafficShaper != null) {
+            TrafficShaper.trafficShaper.getTrafficShapingHandler().release();
+            if (TrafficShaper.trafficShaper.getExecutor() != null) {
+                TrafficShaper.trafficShaper.getExecutor().shutdown();
+            }
+            TrafficShaper.trafficShaper = null;
+        }
     }
 }

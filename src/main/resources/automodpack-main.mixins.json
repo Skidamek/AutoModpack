@@ -18,6 +18,7 @@
     "core.ClientConnectionAccessor",
     "core.ClientLoginNetworkHandlerAccessor",
     "core.ClientLoginNetworkHandlerMixin",
+    "core.ConnectScreenMixin",
     "core.DrawContextAccessor",
     "core.MusicTrackerMixin"
   ],

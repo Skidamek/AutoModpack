@@ -73,8 +73,12 @@ public class NettyServer {
     }
 
     public Optional<ChannelFuture> start() {
-        try {
+        if (!serverConfig.modpackHost) {
+            LOGGER.warn("Modpack hosting is disabled in config");
+            return Optional.empty();
+        }
 
+        try {
             if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
                 // Create a self-signed certificate
                 KeyPair keyPair = NetUtils.generateKeyPair();
@@ -106,6 +110,7 @@ public class NettyServer {
             LOGGER.warn("Certificate fingerprint for client validation: {}", certificateFingerprint);
 
             if (!canStart()) {
+                new TrafficShaper(null);
                 return Optional.empty();
             }
 
@@ -151,18 +156,20 @@ public class NettyServer {
 
     // Returns true if stopped successfully
     public boolean stop() {
-        if (serverChannel == null) {
-            if (shouldHost) {
-                shouldHost = false;
-                return true;
-            }
-            return false;
-        }
-
         try {
-            serverChannel.channel().close().sync();
-            TrafficShaper.trafficShaper.getTrafficShapingHandler().release();
-            eventLoopGroup.shutdownGracefully().sync();
+            if (serverChannel == null) {
+                if (shouldHost) {
+                    shouldHost = false;
+                }
+            } else {
+                serverChannel.channel().close().sync();
+            }
+
+            TrafficShaper.close();
+
+            if (eventLoopGroup != null) {
+                eventLoopGroup.shutdownGracefully().sync();
+            }
         } catch (InterruptedException e) {
             LOGGER.error("Interrupted server channel", e);
             return false;
@@ -184,12 +191,7 @@ public class NettyServer {
     }
 
     private boolean canStart() {
-        if (isRunning()) {
-            return false;
-        }
-
-        if (!serverConfig.modpackHost) {
-            LOGGER.warn("Modpack hosting is disabled in config");
+        if (isRunning() || !serverConfig.modpackHost) {
             return false;
         }
 
