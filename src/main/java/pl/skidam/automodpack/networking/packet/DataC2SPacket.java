@@ -52,6 +52,8 @@ public class DataC2SPacket {
                 return CompletableFuture.completedFuture(new PacketByteBuf(Unpooled.buffer()));
             }
 
+            ModPackets.setOriginalServerAddress(null); // Reset for next server reconnection
+
             if (packetAddress.isBlank()) {
                 LOGGER.info("Address from connected server: {}:{}", modpackAddress.getHostString(), modpackAddress.getPort());
             } else if (packetPort != null) {
