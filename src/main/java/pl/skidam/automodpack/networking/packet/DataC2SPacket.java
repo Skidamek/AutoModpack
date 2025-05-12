@@ -6,6 +6,7 @@ import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
@@ -42,8 +43,13 @@ public class DataC2SPacket {
                 // 2. Dont disconnect and join server
             }
 
-            InetSocketAddress serverAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
+            InetSocketAddress serverAddress = ModPackets.getOriginalServerAddress();
             InetSocketAddress modpackAddress = serverAddress;
+
+            if (serverAddress == null) {
+                LOGGER.error("Server address is null! Something gone very wrong! Please report this issue! https://github.com/Skidamek/AutoModpack/issues");
+                return CompletableFuture.completedFuture(new PacketByteBuf(Unpooled.buffer()));
+            }
 
             if (packetAddress.isBlank()) {
                 LOGGER.info("Address from connected server: {}:{}", modpackAddress.getAddress().getHostAddress(), modpackAddress.getPort());
