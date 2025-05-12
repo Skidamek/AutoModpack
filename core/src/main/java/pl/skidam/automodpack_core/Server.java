@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
@@ -62,9 +63,9 @@ public class Server {
         Path mainModpackDir = modpackDir.resolve("main");
         mainModpackDir.toFile().mkdirs();
 
-        Modpack modpack = new Modpack();
-        ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, modpack.CREATION_EXECUTOR);
-        boolean generated = modpack.generateNew(modpackContent);
+        ModpackExecutor modpackExecutor = new ModpackExecutor();
+        ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, modpackExecutor.getExecutor());
+        boolean generated = modpackExecutor.generateNew(modpackContent);
 
         if (generated) {
             LOGGER.info("Modpack generated!");
@@ -73,9 +74,12 @@ public class Server {
         }
         LOGGER.info("Start FullServerPack generation!");
 
+        modpackExecutor.stop();
+
         FullServerPack fullserverpack = new FullServerPack();
         FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, hostContentModpackDir, fullserverpack.CREATION_EXECUTOR);
         boolean fullpackgenerated = fullserverpack.generateNew(fullServerPackContent);
+
 
         if (fullpackgenerated) {
             LOGGER.info("FullServerPack generated!");

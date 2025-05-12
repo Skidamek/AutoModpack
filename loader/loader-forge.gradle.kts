@@ -36,10 +36,11 @@ dependencies {
 
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
+
     implementation("org.tomlj:tomlj:1.1.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
-    implementation("com.github.luben:zstd-jni:1.5.7-1")
-    implementation("org.apache.httpcomponents.client5:httpclient5:5.4.3")
+    implementation("com.github.luben:zstd-jni:1.5.7-3")
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.4.4")
 
     if (project.name.contains("neoforge")) {
         "neoForge"("net.neoforged:neoforge:${property("loader_neoforge")}")

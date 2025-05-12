@@ -33,7 +33,7 @@ public class ModpackContent {
             directoriesToSearch.add(cwd);
             this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, Set.of(cwd)); // Synced files should search only in cwd
         } else {
-            this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, Collections.emptySet());
+            this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, Set.of());
         }
         this.EDITABLE_CARDS = new WildCards(allowEditsInFiles, directoriesToSearch);
         this.CREATION_EXECUTOR = CREATION_EXECUTOR;

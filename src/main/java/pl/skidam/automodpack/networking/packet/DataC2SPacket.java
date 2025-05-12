@@ -6,10 +6,12 @@ import net.minecraft.client.network.ClientLoginNetworkHandler;
 import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -42,20 +44,22 @@ public class DataC2SPacket {
                 // 2. Dont disconnect and join server
             }
 
-            InetSocketAddress serverAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
+            InetSocketAddress serverAddress = ModPackets.getOriginalServerAddress();
             InetSocketAddress modpackAddress = serverAddress;
 
+            if (serverAddress == null) {
+                LOGGER.error("Server address is null! Something gone very wrong! Please report this issue! https://github.com/Skidamek/AutoModpack/issues");
+                return CompletableFuture.completedFuture(new PacketByteBuf(Unpooled.buffer()));
+            }
+
             if (packetAddress.isBlank()) {
-                LOGGER.info("Address from connected server: {}:{}", modpackAddress.getAddress().getHostAddress(), modpackAddress.getPort());
+                LOGGER.info("Address from connected server: {}:{}", modpackAddress.getHostString(), modpackAddress.getPort());
             } else if (packetPort != null) {
-                modpackAddress = new InetSocketAddress(packetAddress, packetPort);
+                modpackAddress = InetSocketAddress.createUnresolved(packetAddress, packetPort);
                 LOGGER.info("Received address packet from server! {}:{}", packetAddress, packetPort);
             } else {
-                var portIndex = packetAddress.lastIndexOf(':');
-                var port = portIndex == -1 ? 0 : Integer.parseInt(packetAddress.substring(portIndex + 1));
-                var addressString = portIndex == -1 ? packetAddress : packetAddress.substring(0, portIndex);
-                modpackAddress = new InetSocketAddress(addressString, port);
-                LOGGER.info("Received address packet from server! {} Attached port: {}", addressString, port);
+                modpackAddress = AddressHelpers.parse(packetAddress);
+                LOGGER.info("Received address packet from server! {} With attached port: {}", modpackAddress.getHostString(), modpackAddress.getPort());
             }
 
             Boolean needsDisconnecting = null;

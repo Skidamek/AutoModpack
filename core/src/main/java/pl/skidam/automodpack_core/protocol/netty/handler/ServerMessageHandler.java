@@ -7,7 +7,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.stream.ChunkedFile;
 import io.netty.util.CharsetUtil;
-import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.protocol.netty.message.EchoMessage;
@@ -85,7 +84,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
             if (optionalPath.isEmpty()) continue;
             Path path = optionalPath.get();
             ModpackContent modpack = null;
-            for (var content : GlobalVariables.modpack.modpacks.values()) {
+            for (var content : modpackExecutor.modpacks.values()) {
                 if (!content.pathsMap.getMap().containsKey(hash)) {
                     continue;
                 }

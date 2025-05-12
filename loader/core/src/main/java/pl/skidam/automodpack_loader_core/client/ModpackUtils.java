@@ -79,11 +79,6 @@ public class ModpackUtils {
     }
 
     public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
-        if (serverModpackContent == null || serverModpackContent.list == null) {
-            LOGGER.error("Server modpack content list is null");
-            return false;
-        }
-
         boolean needsRestart = false;
 
         // correct the files locations
@@ -101,41 +96,66 @@ public class ModpackUtils {
             boolean runFileExists = Files.exists(runFile);
             boolean runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
 
-            if (runFileHashMatch) {
-                if (!modpackFileExists) {
-                    LOGGER.info("Copying {} file to the modpack directory", formattedFile);
-                    CustomFileUtils.copyFile(runFile, modpackFile);
-                    modpackFileExists = true;
-                }
-
-                if (isMod && filesNotToCopy.contains(formattedFile)) {
-                    LOGGER.info("Deleting {} file from run directory", formattedFile);
-                    CustomFileUtils.forceDelete(runFile);
-                    needsRestart = true;
-                    runFileExists = false;
-                    runFileHashMatch = false;
-                }
+            if (runFileHashMatch && !modpackFileExists) {
+                LOGGER.debug("Copying {} file to the modpack directory", formattedFile);
+                CustomFileUtils.copyFile(runFile, modpackFile);
+                modpackFileExists = true;
             }
 
+            // We only copy mods to the run directory which are not ignored - which need a workaround
+            // If its any other file type, always copy
             if (filesNotToCopy.contains(formattedFile)) {
                 continue;
             }
 
             if (modpackFileExists && !runFileExists) {
-                // We only copy mods which are not ignored - which need a workaround, log it
                 CustomFileUtils.copyFile(modpackFile, runFile);
 
                 if (isMod) {
                     needsRestart = true;
-                    LOGGER.info("Applying workaround for {} mod", formattedFile);
+                    LOGGER.warn("Applying workaround for {} mod", formattedFile);
                 }
-            } else if (!modpackFileExists) {
+            } else if (!modpackFileExists) { // This should never happen, since we previously verified that whole modpack is downloaded
                 LOGGER.error("File {} doesn't exist!? If you see this please report this to the automodpack repo and attach this log https://github.com/Skidamek/AutoModpack/issues", formattedFile);
                 Thread.dumpStack();
             } else if (!runFileHashMatch) {
-                // We need to update run file assuming that modpack file is up to date
-                LOGGER.info("Overwriting {} file to the modpack version", formattedFile);
                 CustomFileUtils.copyFile(modpackFile, runFile);
+                if (isMod) {
+                    needsRestart = true;
+                    LOGGER.warn("Overwriting mod {} file to modpack version", formattedFile);
+                } else {
+                    LOGGER.info("Overwriting {} file to the modpack version", formattedFile);
+                }
+            }
+        }
+
+        return needsRestart;
+    }
+
+    public static boolean removeRestModsNotToCopy(Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy, Set<Path> modsToKeep) {
+        boolean needsRestart = false;
+
+        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
+            String formattedFile = contentItem.file;
+            Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
+            boolean isMod = "mod".equals(contentItem.type);
+
+            if (isMod) { // Make it into standardized mods directory, for support custom launchers
+                runFile = CustomFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
+            }
+
+            if (modsToKeep.contains(runFile)) {
+                LOGGER.info("Keeping {} file in the standard mods directory", formattedFile);
+                continue;
+            }
+
+            boolean runFileExists = Files.exists(runFile);
+            boolean runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
+
+            if (runFileHashMatch && runFileExists && isMod && filesNotToCopy.contains(formattedFile)) {
+                LOGGER.info("Deleting {} file from standard mods directory", formattedFile);
+                CustomFileUtils.executeOrder66(runFile);
+                needsRestart = true;
             }
         }
 
@@ -170,8 +190,8 @@ public class ModpackUtils {
         return needsRestart;
     }
 
-    // Returns ignored files list, which is workarounds set + conflicting nested mods
-    public static Set<String> getWorkaroundsWithNested(List<FileInspection.Mod> conflictingNestedMods, Set<String> workarounds) {
+    // Returns ignored files list, which is conflicting nested mods + workarounds set
+    public static Set<String> getIgnoredFiles(List<FileInspection.Mod> conflictingNestedMods, Set<String> workarounds) {
         Set<String> newIgnoredFiles = new HashSet<>(workarounds);
 
         for (FileInspection.Mod mod : conflictingNestedMods) {
@@ -184,8 +204,6 @@ public class ModpackUtils {
     // Checks if in standard mods folder are any mods that are in modpack
     // Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
     public static Map<FileInspection.Mod, FileInspection.Mod> getDupeMods(Path modpackDir, Set<String> ignoredMods, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList) {
-        if (standardModList.isEmpty() || modpackModList.isEmpty()) return Map.of();
-
         final Map<FileInspection.Mod, FileInspection.Mod> duplicates = new HashMap<>();
 
         for (FileInspection.Mod modpackMod : modpackModList) {
@@ -202,15 +220,17 @@ public class ModpackUtils {
         return duplicates;
     }
 
+    public record RemoveDupeModsResult(boolean requiresRestart, Set<Path> modsToKeep) {}
+
     // Returns true if removed any mod from standard mods folder
     // If the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // If you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
-    public static boolean removeDupeMods(Path modpackDir, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList, Set<String> ignoredMods, Set<String> workaroundMods) throws IOException {
+    public static RemoveDupeModsResult removeDupeMods(Path modpackDir, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList, Set<String> ignoredMods, Set<String> workaroundMods) throws IOException {
 
         var dupeMods = ModpackUtils.getDupeMods(modpackDir, ignoredMods, standardModList, modpackModList);
 
         if (dupeMods.isEmpty()) {
-            return false;
+            return new RemoveDupeModsResult(false, Set.of());
         }
 
         Set<FileInspection.Mod> modsToKeep = new HashSet<>();
@@ -230,7 +250,8 @@ public class ModpackUtils {
             idsToKeep.addAll(mod.providesIDs());
         });
 
-        List<Path> deletedMods = new ArrayList<>();
+        boolean requiresRestart = false;
+        Set<Path> dependentMods = new HashSet<>();
 
         // Remove dupe mods unless they need to stay - workaround mods
         for (var dupeMod : dupeMods.entrySet()) {
@@ -247,22 +268,25 @@ public class ModpackUtils {
             boolean isWorkaround = workaroundMods.contains(CustomFileUtils.formatPath(standardModPath, MODS_DIR.getParent()));
 
             if (isDependent) {
+                Path newStandardModPath = standardModPath.getParent().resolve(modpackModPath.getFileName());
+                dependentMods.add(newStandardModPath);
+
                 // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 if (!Objects.equals(modpackMod.hash(), standardMod.hash())) {
                     LOGGER.warn("Changing duplicated mod {} - {} to modpack version - {}", modId, standardMod.modVersion(), modpackMod.modVersion());
-                    CustomFileUtils.forceDelete(standardModPath);
-                    CustomFileUtils.copyFile(modpackModPath, standardModPath.getParent().resolve(modpackModPath.getFileName()));
-                    deletedMods.add(standardModPath);
+                    CustomFileUtils.executeOrder66(standardModPath);
+                    CustomFileUtils.copyFile(modpackModPath, newStandardModPath);
+                    requiresRestart = true;
                 }
             } else if (!isWorkaround) {
                 LOGGER.warn("Removing {} mod. It is duplicated modpack mod and no other mods are dependent on it!", modId);
-                CustomFileUtils.forceDelete(standardModPath);
-                deletedMods.add(standardModPath);
+                CustomFileUtils.executeOrder66(standardModPath);
+                requiresRestart = true;
             }
         }
 
-        return !deletedMods.isEmpty();
+        return new RemoveDupeModsResult(requiresRestart, dependentMods);
     }
 
     private static void addDependenciesRecursively(FileInspection.Mod mod, Collection<FileInspection.Mod> modList, Set<FileInspection.Mod> modsToKeep) {
@@ -282,11 +306,11 @@ public class ModpackUtils {
 
         String installedModpackName = clientConfig.selectedModpack;
         Jsons.ModpackAddresses installedModpackAddresses = clientConfig.installedModpacks.get(installedModpackName);
-        InetSocketAddress installedModpackAddress = installedModpackAddresses.hostAddress;
-        InetSocketAddress installedServerAddress = installedModpackAddresses.serverAddress;
         String serverModpackName = serverModpackContent.modpackName;
 
-        if (!serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
+        if (installedModpackAddresses != null && !serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
+            InetSocketAddress installedModpackAddress = installedModpackAddresses.hostAddress;
+            InetSocketAddress installedServerAddress = installedModpackAddresses.serverAddress;
 
             Path newModpackDir = modpackDir.getParent().resolve(serverModpackName);
 
@@ -406,12 +430,6 @@ public class ModpackUtils {
         Path modpackDir = CustomFileUtils.getPath(modpacksDir, correctedName);
 
         if (!modpackName.isEmpty()) {
-            // Check if we don't have already installed modpack via this link
-            if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.values().stream().anyMatch(entry ->
-                (entry.hostAddress.getHostString() + ":" + entry.hostAddress.getPort()).equals(strAddress))) {
-                return modpackDir;
-            }
-
             String nameFromName = modpackName;
 
             if (FileInspection.isInValidFileName(modpackName)) {
@@ -472,7 +490,7 @@ public class ModpackUtils {
         }
 
         return false;
-    };
+    }
 
     /**
      * Returns a callback for use with {@link DownloadClient} that checks for trusted fingerprints in the known hosts

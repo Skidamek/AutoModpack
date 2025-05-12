@@ -49,7 +49,6 @@ public class ServerLoginNetworkAddon implements PacketSender {
         }
 
         this.synchronizers.removeIf(future -> {
-
             if (!future.isDone()) {
                 return false;
             }
@@ -125,7 +124,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
             this.channels.put(loginQuery.queryId, loginQuery.channelName);
             this.connection.send(packet);
         } else {
-            LOGGER.error("Failed to send packet: " + packet);
+            LOGGER.error("Failed to send packet: {}", packet);
         }
     }
 }

@@ -7,11 +7,12 @@ import net.minecraft.util.Identifier;
 /*public record LoginResponsePayload(Identifier id, PacketByteBuf data) { }
 *//*?} else {*/
 import net.minecraft.network.packet.c2s.login.LoginQueryResponsePayload;
+import pl.skidam.automodpack.networking.PayloadHelper;
 
 public record LoginResponsePayload(Identifier id, PacketByteBuf data) implements LoginQueryResponsePayload {
-   @Override
-   public void write(PacketByteBuf buf) {
-       buf.writeBytes(data().copy());
-   }
+    @Override
+    public void write(PacketByteBuf buf) {
+        PayloadHelper.write(buf, data());
+    }
 }
 /*}*/

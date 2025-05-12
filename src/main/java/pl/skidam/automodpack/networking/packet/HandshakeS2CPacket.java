@@ -101,7 +101,7 @@ public class HandshakeS2CPacket {
                 return;
             }
 
-            if (modpack.isGenerating()) {
+            if (modpackExecutor.isGenerating()) {
                 Text reason = VersionedText.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);

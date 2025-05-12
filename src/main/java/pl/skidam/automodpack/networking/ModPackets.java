@@ -14,11 +14,23 @@ import pl.skidam.automodpack.networking.packet.DataS2CPacket;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 
 
+import java.net.InetSocketAddress;
+
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModPackets {
     public static final Identifier HANDSHAKE = LoginNetworkingIDs.getIdentifier(LoginNetworkingIDs.HANDSHAKE);
     public static final Identifier DATA = LoginNetworkingIDs.getIdentifier(LoginNetworkingIDs.DATA);
+
+    private static InetSocketAddress originalServerAddress;
+
+    public static void setOriginalServerAddress(InetSocketAddress address) {
+        originalServerAddress = address;
+    }
+
+    public static InetSocketAddress getOriginalServerAddress() {
+        return originalServerAddress;
+    }
 
     public static void registerC2SPackets() {
         ClientLoginNetworking.registerGlobalReceiver(HANDSHAKE, HandshakeC2SPacket::receive);

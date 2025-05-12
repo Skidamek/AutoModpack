@@ -1,167 +1,17 @@
 package pl.skidam.automodpack_core.utils;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.regex.Matcher;
+import java.util.stream.Stream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.utils.CustomFileUtils.formatPath;
 
 public class WildCards {
 
     private final Map<String, Path> wildcardMatches = new HashMap<>();
-    private final Map<String, Path> wildcardBlackListed = new HashMap<>();
-
-    public WildCards(List<String> wildcardsList, Set<Path> directoriesToSearch) {
-
-        if (directoriesToSearch.isEmpty()) return;
-
-        for (String wildcard : wildcardsList) {
-            LOGGER.debug("Searching wildcard: {}", wildcard);
-        }
-
-        wildcardsList = new ArrayList<>(wildcardsList);
-
-        // sort the files, that files starting with `!` are last to then exclude them
-        wildcardsList.sort(Comparator.comparing(s -> s.startsWith("!")));
-
-        for (String wildcard : wildcardsList) {
-            boolean blackListed = wildcard.startsWith("!");
-            wildcard = blackListed ? wildcard.replaceFirst("!", "") : wildcard;
-            String wildcardPathStr = wildcard.replace(File.separator, "/");
-
-            // this isn't filesystem related yet, must be in modpack content format
-            if (wildcard.contains("/")) {
-                if (wildcard.lastIndexOf('/') == 0) {
-                    wildcard = wildcard.replace("/", "");
-                    wildcardPathStr = wildcard;
-                } else {
-                    wildcardPathStr = wildcard.substring(0, wildcard.lastIndexOf('/'));
-                }
-            }
-
-            if (wildcardPathStr.contains("*")) {
-                LOGGER.warn("Wildcard: \"{}\" contains '*' in a directory, which is not supported. Wildcards only works with filenames not directories.", wildcard);
-                continue;
-            }
-
-            wildcardPathStr = wildcardPathStr.replace("/", File.separator);
-
-            for (Path pathToSearch : directoriesToSearch) {
-                Path wildcardPath = Path.of(wildcardPathStr);
-                boolean startsWithSlash;
-
-                if (!Files.exists(wildcardPath)) {
-                    startsWithSlash = wildcardPathStr.charAt(0) == File.separatorChar;
-                    wildcardPathStr = startsWithSlash ? wildcardPathStr.replaceFirst(Matcher.quoteReplacement(File.separator), "") : wildcardPathStr;
-                    wildcardPath = Path.of(wildcardPathStr);
-                } else {
-                    startsWithSlash = false;
-                }
-
-                Path path;
-                if (!wildcardPath.startsWith(pathToSearch)) {
-                    path = pathToSearch.resolve(wildcardPath);
-                } else {
-                    path = wildcardPath;
-                }
-
-                wildcardPathStr = wildcardPathStr.replace(File.separator, "/");
-
-                LOGGER.debug("{}{}", "Path: " + path + " wildcard: " + wildcard + " startsWithSlash: " + startsWithSlash + " blackListed: ", blackListed);
-
-                if (Files.isDirectory(path)) {
-                    try (var files = Files.list(path)) {
-                        String finalWildcardPathStr = wildcardPathStr;
-                        String finalWildcard = wildcard;
-                        files.forEach(childPath -> processFile(childPath, finalWildcardPathStr, finalWildcard, startsWithSlash, blackListed));
-                    } catch (IOException e) {
-                        LOGGER.error("Error occurred while processing directory for wildcard: {} path: {}", wildcard, path, e);
-                    }
-                } else {
-                    processFile(path, wildcardPathStr, wildcard, startsWithSlash, blackListed);
-                }
-            }
-        }
-    }
-
-
-    private void processFile(Path file, String pathStr, String finalWildcard, boolean startsWithSlash, boolean blackListed) {
-        if (Files.isDirectory(file)) {
-            try (var files = Files.list(file)) {
-                String finalPathStr = pathStr;
-                files.forEach(childPath -> processFile(childPath, finalPathStr, finalWildcard, startsWithSlash, blackListed));
-            } catch (IOException e) {
-                LOGGER.error("Error occurred while processing directory for wildcard: {} path: {}", finalWildcard, file, e);
-            }
-        } else {
-            String formattedPath = file.toString().replace(File.separator, "/");
-            int index = formattedPath.indexOf(pathStr);
-            if (index != -1) {
-                pathStr = pathStr + file.toString().substring(index + pathStr.length());
-                pathStr = pathStr.replace(File.separator, "/");
-                pathStr = pathStr.startsWith("/") ? pathStr : "/" + pathStr;
-                matchFile(file, pathStr, finalWildcard, startsWithSlash, blackListed);
-            } else if (finalWildcard.contains("**")) {
-                matchFile(file, formattedPath, finalWildcard, startsWithSlash, blackListed);
-            } else {
-                throw new IllegalStateException("FormattedPath: " + formattedPath + " PathStr: " + pathStr + " Does not match the wildcard: " + finalWildcard + " StartsWithSlash: " + startsWithSlash + " IsBlackListed: " + blackListed);
-            }
-        }
-    }
-
-    private void matchFile(Path path, String formattedPath, String finalWildcard, boolean startsWithSlash, boolean blackListed) {
-        String formatedPath = path.toString().replace(File.separator, "/");
-        String matchFileStr = startsWithSlash ? "/" + formatedPath : formatedPath;
-        if (fileMatches(matchFileStr, finalWildcard)) {
-            if (blackListed) {
-                wildcardMatches.remove(formattedPath, path);
-                wildcardBlackListed.put(formattedPath, path);
-                LOGGER.debug("{} is excluded! Skipping...", "File " + formattedPath);
-            } else if (!wildcardMatches.containsKey(formattedPath)) {
-                wildcardMatches.put(formattedPath, path);
-                LOGGER.debug("{} matches!", "File " + formattedPath);
-            }
-        }
-    }
-
-    private boolean fileMatches(String file, String wildCardString) {
-        if (!wildCardString.contains("*")) {
-            LOGGER.debug("{}{}", "* NOT found in wildcard: " + wildCardString + " file: ", file);
-            return file.endsWith(wildCardString);
-        } else if (wildCardString.contains("**")) {
-            LOGGER.debug("{}{}", "** found in wildcard: " + wildCardString + " file: ", file);
-            String[] parts = wildCardString.split("\\*\\*");
-            if (parts.length == 0) return true;
-            int startIndex = 0;
-            for (String part : parts) {
-                int currentIndex = file.indexOf(part, startIndex);
-                if (currentIndex == -1) {
-                    return false;
-                }
-                startIndex = currentIndex + part.length();
-            }
-            return true;
-        } else {
-            LOGGER.debug("{}{}", "* found in wildcard: " + wildCardString + " file: ", file);
-        }
-
-        // Wild card magic
-        String[] excludeFileParts = wildCardString.split("\\*");
-        int startIndex = 0;
-        for (String excludeFilePart : excludeFileParts) {
-            int currentIndex = file.indexOf(excludeFilePart, startIndex);
-            if (currentIndex == -1) {
-                return false;
-            }
-
-            startIndex = currentIndex + excludeFilePart.length();
-        }
-
-        return true;
-    }
 
     public boolean fileMatches(String path, Path file) {
         return wildcardMatches.containsKey(path) || wildcardMatches.containsValue(file);
@@ -171,11 +21,155 @@ public class WildCards {
         return wildcardMatches;
     }
 
-    public boolean fileBlackListed(String path, Path file) {
-        return wildcardBlackListed.containsKey(path) || wildcardBlackListed.containsValue(file);
+    private final List<String> whiteListRules = new ArrayList<>();
+    private final List<String> blackListRules = new ArrayList<>();
+
+    public void separateRules(List<String> rules) {
+        for (String rule : rules) {
+            if (rule.startsWith("!")) {
+                blackListRules.add(rule.substring(1));
+            } else {
+                whiteListRules.add(rule);
+            }
+        }
     }
 
-    public Map<String, Path> getWildcardBlackListed() {
-        return wildcardBlackListed;
+    public WildCards(List<String> rules, Set<Path> startDirectories) {
+        try {
+            separateRules(rules);
+            Map<String, List<String>> composedWhiteRules = composeRules(whiteListRules);
+            Map<String, List<String>> composedBlackRules = composeRules(blackListRules);
+
+            for (Path startDirectory : startDirectories) {
+                try (Stream<Path> paths = Files.walk(startDirectory)) {
+                    paths.forEach(node -> matchWhiteRules(node, startDirectory, composedWhiteRules));
+                }
+
+                matchBlackRules(startDirectory, composedBlackRules);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to walk directories: {}", startDirectories, e);
+        }
+    }
+
+    public void matchWhiteRules(Path node, Path startDirectory, Map<String, List<String>> composedWhiteRules) {
+        if (!node.toFile().isFile()) {
+            return;
+        }
+
+        String formattedPath = matchesRules(node, startDirectory, composedWhiteRules);
+        if (formattedPath != null) {
+            wildcardMatches.put(formattedPath, node);
+        }
+    }
+
+    public void matchBlackRules(Path startDirectory, Map<String, List<String>> composedBlackRules) {
+        Set<String> pathsToRemove = new HashSet<>();
+
+        for (Path node : getWildcardMatches().values()) {
+            if (!node.toFile().isFile()) {
+                continue;
+            }
+
+            String formattedPath = matchesRules(node, startDirectory, composedBlackRules);
+            if (formattedPath != null) {
+                pathsToRemove.add(formattedPath);
+            }
+        }
+
+        for (String path : pathsToRemove) {
+            wildcardMatches.remove(path);
+        }
+    }
+
+
+    private String matchesRules(Path node, Path startDirectory, Map<String, List<String>> rules) {
+        final String formattedPath = formatPath(node, startDirectory);
+
+        int lastSlashIndex = formattedPath.lastIndexOf("/");
+        if (lastSlashIndex == -1) {
+            return null; // No directory part
+        }
+
+        String directoryPart = formattedPath.substring(0, lastSlashIndex);
+        String fileNamePart = formattedPath.substring(lastSlashIndex);
+
+        // Iterate through the rules and check directory matches
+        for (Map.Entry<String, List<String>> entry : rules.entrySet()) {
+            String ruleDirectory = entry.getKey();
+            List<String> rulePaths = entry.getValue();
+
+            // Check if the directory part matches the rule
+            if (directoryPart.startsWith(ruleDirectory)) {
+                boolean directoryMatch = directoryPart.equals(ruleDirectory);
+
+                for (String rulePath : rulePaths) {
+                    if (rulePath.equals("/**")) {
+                        // Match all files in the directory
+                        return formattedPath;
+                    } else if (rulePath.equals("/*") || rulePath.equals("/")) {
+                        if (!directoryMatch) {
+                            continue;
+                        }
+
+                        // Match any file in the directory
+                        return formattedPath;
+                    } else if (rulePath.contains("*")) {
+                        if (!directoryMatch) {
+                            continue;
+                        }
+
+                        // Only one * in the rule path is allowed
+                        if (rulePath.indexOf("*") != rulePath.lastIndexOf("*")) {
+                            LOGGER.error("Only one * in the rule path is allowed: {}", rulePath);
+                            continue;
+                        }
+
+                        String[] ruleParts = rulePath.split("\\*");
+                        String partOne;
+                        String partTwo = "";
+                        if (ruleParts.length == 1) {
+                            partOne = ruleParts[0];
+                        } else if (ruleParts.length == 2) {
+                            partOne = ruleParts[0];
+                            partTwo = ruleParts[1];
+                        } else {
+                            LOGGER.error("Invalid rule path: {}", rulePath);
+                            continue;
+                        }
+
+                        if (fileNamePart.startsWith(partOne) && fileNamePart.endsWith(partTwo)) {
+                            return formattedPath;
+                        }
+                    } else if (rulePath.equals(fileNamePart)) { // Exact match
+                        return formattedPath;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public Map<String, List<String>> composeRules(List<String> rules) {
+        Map<String, List<String>> directoryRulePathsMap = new HashMap<>(rules.size());
+
+        for (String rule : rules) {
+            int lastSlashIndex = rule.lastIndexOf("/");
+            if (lastSlashIndex == -1) {
+                continue;
+            }
+
+            String directoryPart = rule.substring(0, lastSlashIndex);
+            if (directoryPart.contains("*")) {
+                LOGGER.error("Wildcards in directory part are not supported yet: {}", directoryPart);
+                continue;
+            }
+
+            String rulePath = rule.substring(lastSlashIndex);
+            directoryRulePathsMap.computeIfAbsent(directoryPart, k -> new ArrayList<>()).add(rulePath);
+        }
+
+        return directoryRulePathsMap;
     }
 }

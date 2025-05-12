@@ -171,12 +171,12 @@ public class SelfUpdater {
             var updateType = UpdateType.AUTOMODPACK;
             var relauncher = new ReLauncher(updateType);
             Runnable callback = () -> {
-                CustomFileUtils.forceDelete(THIZ_JAR);
+                CustomFileUtils.executeOrder66(THIZ_JAR);
                 LOGGER.info("Successfully updated AutoModpack!");
             };
 
             CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
-            CustomFileUtils.forceDelete(automodpackUpdateJar);
+            CustomFileUtils.executeOrder66(automodpackUpdateJar);
             relauncher.restart(true, callback);
         } catch (Exception e) {
             LOGGER.error("Failed to update! " + e);

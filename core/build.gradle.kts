@@ -20,9 +20,9 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("io.netty:netty-all:4.1.118.Final")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
-    implementation("com.github.luben:zstd-jni:1.5.7-1")
+    implementation("com.github.luben:zstd-jni:1.5.7-3")
     implementation("org.tomlj:tomlj:1.1.1")
-    implementation("org.apache.httpcomponents.client5:httpclient5:5.4.3")
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.4.4")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
     testImplementation("org.junit.jupiter:junit-jupiter-engine:5.9.2")
 }

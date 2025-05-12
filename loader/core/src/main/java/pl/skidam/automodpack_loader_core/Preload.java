@@ -115,26 +115,39 @@ public class Preload {
 
         // load client config
         if (clientConfigOverride == null) {
-            clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFields.class);
+            var clientConfigVersion = ConfigTools.loadCheck(clientConfigFile, Jsons.VersionConfigField.class);
+            if (clientConfigVersion != null) {
+                // Update the configs schemes to not crash the game if loaded with old config!
+                if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
+                    var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
+                    // update to v2 - just delete the installedModpacks
+                    if (clientConfigV1 != null) {
+                        clientConfigV1.installedModpacks = null;
+                        clientConfigV1.DO_NOT_CHANGE_IT = 2;
+                        clientConfigVersion.DO_NOT_CHANGE_IT = 2;
+                    }
+                    ConfigTools.save(clientConfigFile, clientConfigV1);
+                    LOGGER.info("Updated client config version to {}", clientConfigVersion.DO_NOT_CHANGE_IT);
+                }
+
+//                if (clientConfigVersion.DO_NOT_CHANGE_IT == 2) {
+//                    // Noice!
+//                }
+            }
+
+            clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV2.class);
         } else {
             // TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
             LOGGER.warn("You are using unofficial {} mod", MOD_ID);
             LOGGER.warn("Using client config overrides! Editing the {} file will have no effect", clientConfigFile);
             LOGGER.warn("Remove the {} file from inside the jar or remove and download fresh {} mod jar from modrinth/curseforge", clientConfigFileOverrideResource, MOD_ID);
-            clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFields.class);
+            clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV2.class);
         }
 
         // load server config
         serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
 
         if (serverConfig != null) {
-            int previousServerConfigVersion = serverConfig.DO_NOT_CHANGE_IT;
-            serverConfig.DO_NOT_CHANGE_IT = new Jsons.ServerConfigFields().DO_NOT_CHANGE_IT;
-
-            if (previousServerConfigVersion != serverConfig.DO_NOT_CHANGE_IT) {
-                LOGGER.info("Updated server config version to {}", serverConfig.DO_NOT_CHANGE_IT);
-            }
-
             // Add current loader to the list
             if (serverConfig.acceptedLoaders == null) {
                 serverConfig.acceptedLoaders = List.of(LOADER);
@@ -153,17 +166,6 @@ public class Preload {
         }
 
         if (clientConfig != null) {
-            int previousClientConfigVersion = clientConfig.DO_NOT_CHANGE_IT;
-            clientConfig.DO_NOT_CHANGE_IT = new Jsons.ClientConfigFields().DO_NOT_CHANGE_IT;
-
-            if (previousClientConfigVersion != clientConfig.DO_NOT_CHANGE_IT) {
-                if (clientConfigOverride == null) {
-                    LOGGER.info("Updated client config version to {}", clientConfig.DO_NOT_CHANGE_IT);
-                } else {
-                    LOGGER.error("Client config version is outdated!");
-                }
-            }
-
             // Very important to have this map initialized
             if (clientConfig.installedModpacks == null) {
                 clientConfig.installedModpacks = new HashMap<>();
