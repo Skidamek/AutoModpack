@@ -87,34 +87,6 @@ public class AddressHelpers {
         return ip;
     }
 
-    // This method has a benefit of not attempting to resolve the hostname or reverse DNS lookup
-    // It will just return hostname or address as a string
-    // Using getHostString() method breaks on srv records and returns the whole dns record
-    public static String getHostNameOrAddress(InetSocketAddress socketAddress) {
-        if (socketAddress == null) {
-            return null;
-        }
-
-        String host = socketAddress.getHostString();
-
-        if (host == null || host.isEmpty()) {
-            throw new IllegalArgumentException("Address or hostname is empty");
-        }
-
-        // If the host ends with a dot, remove it (fun fact: its a valid domain but not for us)
-        if (host.endsWith(".")) {
-            host = host.substring(0, host.length() - 1);
-        }
-
-        // If theres `_minecraft._tcp.` in the host, remove it and everything before it
-        String srvRecord = "_minecraft._tcp.";
-        if (host.contains(srvRecord)) {
-            host = host.substring(host.indexOf(srvRecord) + srvRecord.length());
-        }
-
-        return host;
-    }
-
     public static InetSocketAddress parse(String address) {
         if (address == null) return null;
        InetSocketAddress socketAddress = null;

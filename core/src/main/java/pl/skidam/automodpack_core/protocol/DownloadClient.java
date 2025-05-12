@@ -89,7 +89,7 @@ public class DownloadClient implements AutoCloseable {
     private PreValidationConnection getPreValidationConnection(Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException {
         PreValidationConnection preValidationConnection;
         try {
-            String hostName = AddressHelpers.getHostNameOrAddress(modpackAddresses.hostAddress);
+            String hostName = modpackAddresses.hostAddress.getHostString();
             if (address == null) {
                 InetSocketAddress resolvedInetSocketAddress = new InetSocketAddress(hostName, modpackAddresses.hostAddress.getPort());
                 if (resolvedInetSocketAddress.isUnresolved()) {
@@ -237,8 +237,8 @@ class PreValidationConnection {
         if (!isSelfSigned(certificate) && session.isValid()) {
             DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
             // Verify if the certificate verifies against the required domains
-            String modpackHostHostName = AddressHelpers.getHostNameOrAddress(modpackAddresses.hostAddress);
-            String modpackServerHostName = AddressHelpers.getHostNameOrAddress(modpackAddresses.serverAddress);
+            String modpackHostHostName = modpackAddresses.hostAddress.getHostString();
+            String modpackServerHostName = modpackAddresses.serverAddress.getHostString();
             if (!hostnameVerifier.verify(modpackHostHostName, session) || !hostnameVerifier.verify(modpackServerHostName, session)) {
                 sslSocket.close();
                 unvalidatedCertificate = certificate;

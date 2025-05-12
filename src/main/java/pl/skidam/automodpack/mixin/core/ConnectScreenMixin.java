@@ -33,6 +33,10 @@ public abstract class ConnectScreenMixin {
     /*@Inject(method = "connect(Lnet/minecraft/client/MinecraftClient;Lnet/minecraft/client/network/ServerAddress;)V", at = @At("HEAD"))
     public void onConnect(MinecraftClient client, ServerAddress address, CallbackInfo ci) {
     *//*?}*/
-        ModPackets.setOriginalServerAddress(InetSocketAddress.createUnresolved(address.getAddress(), address.getPort()));
+        String host = address.getAddress();
+        if (host.endsWith(".")) { // It breaks our checks and looks ugly, but its a valid domain...
+            host = host.substring(0, host.length() - 1);
+        }
+        ModPackets.setOriginalServerAddress(InetSocketAddress.createUnresolved(host, address.getPort()));
     }
 }
