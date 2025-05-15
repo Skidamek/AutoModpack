@@ -5,6 +5,8 @@ import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.*;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
+import pl.skidam.automodpack_core.modpack.FullServerPack;
+import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.nio.file.Path;
@@ -24,6 +26,8 @@ public class GlobalVariables {
     public static Path THIZ_JAR;
     public static Path MODS_DIR;
     public static ModpackExecutor modpackExecutor;
+    public static Modpack modpack;
+    public static FullServerPack fullpacks;
     public static NettyServer hostServer;
     public static Jsons.ServerConfigFields serverConfig;
     public static Jsons.ClientConfigFieldsV2 clientConfig;
@@ -50,6 +54,7 @@ public class GlobalVariables {
     public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
     public static final Path clientSecretsFile = privateDir.resolve("automodpack-client-secrets.json");
     public static final Path modpacksDir = automodpackDir.resolve("modpacks");
+    public static final Path hostFullServerPackDir = automodpackDir.resolve("serverpack");
 
     public static final String clientConfigFileOverrideResource = "overrides-automodpack-client.json";
     public static String clientConfigOverride; // read from inside a jar file on preload, used instead of clientConfigFile if exists
