@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.net.InetSocketAddress;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack.networking.ModPackets;
 
 /*? if >= 1.20.5 {*/
@@ -33,6 +33,6 @@ public abstract class ConnectScreenMixin {
     /*@Inject(method = "connect(Lnet/minecraft/client/MinecraftClient;Lnet/minecraft/client/network/ServerAddress;)V", at = @At("HEAD"))
     public void onConnect(MinecraftClient client, ServerAddress address, CallbackInfo ci) {
     *//*?}*/
-        ModPackets.setOriginalServerAddress(InetSocketAddress.createUnresolved(address.getAddress(), address.getPort()));
+        ModPackets.setOriginalServerAddress(AddressHelpers.format(address.getAddress(), address.getPort()));
     }
 }

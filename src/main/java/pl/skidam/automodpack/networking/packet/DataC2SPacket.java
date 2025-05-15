@@ -45,12 +45,15 @@ public class DataC2SPacket {
             }
 
             InetSocketAddress serverAddress = ModPackets.getOriginalServerAddress();
-            InetSocketAddress modpackAddress = serverAddress;
-
+            ModPackets.setOriginalServerAddress(null); // Reset for next server reconnection
             if (serverAddress == null) {
                 LOGGER.error("Server address is null! Something gone very wrong! Please report this issue! https://github.com/Skidamek/AutoModpack/issues");
                 return CompletableFuture.completedFuture(new PacketByteBuf(Unpooled.buffer()));
             }
+
+            // Get actual address of the server client have connected to and format it
+            InetSocketAddress modpackAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
+            modpackAddress = AddressHelpers.format(modpackAddress.getHostString(), modpackAddress.getPort());
 
             if (packetAddress.isBlank()) {
                 LOGGER.info("Address from connected server: {}:{}", modpackAddress.getHostString(), modpackAddress.getPort());

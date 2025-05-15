@@ -135,7 +135,7 @@ dependencies {
             include(modImplementation(fabricApi.module("fabric-command-api-v2", property("fabric_version") as String))!!) // TODO transitive false
         }
 
-        // JiJ mixin extras, fabric loader 0.15.7 has it but many people are using older versions
+        // JiJ lastest version of mixin extras so all mods work (workaround) - remove when we detect such incompatibilities and copy the jij mod to the mods folder, currently the stable loader version would be loaded instead of the lastest required by some mods
         include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${property("mixin_extras")}")!!)!!)
     }
 
