@@ -87,6 +87,13 @@ public class AddressHelpers {
         return ip;
     }
 
+    public static InetSocketAddress format(String host, int port) {
+        if (host.endsWith(".")) { // It breaks our checks and looks ugly, but its a valid domain...
+            host = host.substring(0, host.length() - 1);
+        }
+        return InetSocketAddress.createUnresolved(host, port);
+    }
+
     public static InetSocketAddress parse(String address) {
         if (address == null) return null;
        InetSocketAddress socketAddress = null;

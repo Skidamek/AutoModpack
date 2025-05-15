@@ -19,7 +19,6 @@ import java.util.function.Function;
 import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
@@ -234,17 +233,22 @@ class PreValidationConnection {
             unvalidatedCertificate = certificate;
         }
 
-        if (!isSelfSigned(certificate) && session.isValid()) {
-            DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
-            // Verify if the certificate verifies against the required domains
-            String modpackHostHostName = modpackAddresses.hostAddress.getHostString();
-            String modpackServerHostName = modpackAddresses.serverAddress.getHostString();
-            if (!hostnameVerifier.verify(modpackHostHostName, session) || !hostnameVerifier.verify(modpackServerHostName, session)) {
-                sslSocket.close();
-                unvalidatedCertificate = certificate;
-                LOGGER.error("Certificate validation failed: certificate doesn't match the required domains {} and {}", modpackHostHostName, modpackServerHostName);
+        // Check if its valid CA signed certificate for the host domain
+        if (!isSelfSigned(certificate)) {
+            if (!session.isValid()) {
+                String modpackHostDomain = modpackAddresses.hostAddress.getHostString();
+                LOGGER.error("Received a CA-signed certificate, but the TLS handshake failed. This is most likely because the certificate could not be verified against the modpack host domain: {}", modpackHostDomain);
             } else {
-                LOGGER.info("Signed certificate validation succeeded for {} and {}", modpackHostHostName, modpackServerHostName);
+                // Verify that this certificate is also valid for the minecraft server domain
+                DefaultHostnameVerifier hostnameVerifier = new DefaultHostnameVerifier();
+                String minecraftServerDomain = modpackAddresses.serverAddress.getHostString();
+                if (!hostnameVerifier.verify(minecraftServerDomain, session)) {
+                    sslSocket.close();
+                    unvalidatedCertificate = certificate;
+                    LOGGER.error("Received a CA-signed certificate, but the TLS handshake failed. This is most likely because the certificate could not be verified against the Minecraft server domain: {}", minecraftServerDomain);
+                } else {
+                    LOGGER.info("Signed certificate validation succeeded for {}", minecraftServerDomain);
+                }
             }
         }
 
