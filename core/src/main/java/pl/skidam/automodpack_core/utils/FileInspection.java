@@ -341,9 +341,10 @@ public class FileInspection {
 
                     for (Object o : dependenciesArray.toList()) {
                         TomlTable mod = (TomlTable) o;
-                        if (mod != null) {
-                            dependencies.add(mod.getString("modId"));
-                        }
+                        if (mod == null) continue;
+                        String depId = mod.getString("modId");
+                        if (depId == null) continue;
+                        dependencies.add(depId);
                     }
                     return dependencies;
                 }
@@ -358,11 +359,18 @@ public class FileInspection {
                     for (Object o : dependenciesArray.toList()) {
                         TomlTable mod = (TomlTable) o;
                         if (mod == null) continue;
+                        String depId = mod.getString("modId");
+                        if (depId == null) continue; // we only check for minecraft, neoforge and forge
+                        if (!depId.equals("minecraft") && !depId.equals("neoforge") && !depId.equals("forge")) continue;
                         String depEnv = mod.getString("side");
                         if (depEnv == null) continue;
                         switch (depEnv.toLowerCase()) {
                             case "client" -> environment = LoaderManagerService.EnvironmentType.CLIENT;
                             case "server" -> environment = LoaderManagerService.EnvironmentType.SERVER;
+                        }
+
+                        if (environment != LoaderManagerService.EnvironmentType.UNIVERSAL) {
+                            return environment;
                         }
                     }
 
