@@ -104,6 +104,14 @@ public class WildCards {
 
             // Resolve wildcard in the directory part
             if (ruleDirectory.contains("*")) {
+                // TODO: fix edge-cases
+//                Wildcards:
+//                /kubejs/**
+//                !/kubejs/server*/**
+//                Removing path: /kubejs/server_scripts/README.txt
+//                HERE - It should also remove the README.txt file from subdirectoriy of the server_scripts
+//                --- Matched Paths ---
+//                /kubejs/server_scripts/01_unification/README.txt
                 if (wildcardMatch(directoryPart, ruleDirectory)) {
                     directoryMatch = true;
                     directoryStrictMatch = true;
@@ -186,6 +194,10 @@ public class WildCards {
 
             String directoryPart = rule.substring(0, lastSlashIndex);
             String rulePath = rule.substring(lastSlashIndex);
+
+            if (directoryPart.contains("*")) {
+                LOGGER.warn("Wildcards in directories are experimental! Use with caution.");
+            }
 
             directoryRulePathsMap.computeIfAbsent(directoryPart, k -> new ArrayList<>()).add(rulePath);
         }
