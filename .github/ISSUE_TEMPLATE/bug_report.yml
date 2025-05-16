@@ -94,4 +94,4 @@ body:
         - label: I have provided all the necessary information to reproduce the issue.
           required: true
         - label: I have verified that the issue does not occur without the AutoModpack - Ignore you are reporting a mod conflict issue.
-          required: true
+          required: false
