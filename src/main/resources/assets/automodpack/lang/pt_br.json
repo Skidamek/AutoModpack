@@ -44,7 +44,7 @@
   "automodpack.validation.text": "Você está se conectando a um host AutoModpack desconhecido",
   "automodpack.validation.description": "Por favor, verifique a impressão digital do certificado do servidor",
   "automodpack.validation.secDescription": "Solicite a impressão digital ao administrador do servidor se você não a tiver",
-  "automodpack.validation.thiDescription": "Essa verificação de segurança previne manipulações durante o download do modpack",
+  "automodpack.validation.thiDescription": "Esta medida de segurança evita a manipulação da conexão durante o download",
   "automodpack.validation.run": "Verificar",
   "automodpack.validation.failed": "Verificação falhou",
 
