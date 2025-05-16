@@ -60,8 +60,8 @@ public class Jsons {
         public String modpackName = "";
         public boolean modpackHost = true;
         public boolean generateModpackOnStart = true;
-        public List<String> syncedFiles = List.of("/mods/*.jar", "!/mods/iDontWantThisModInModpack.jar", "!/config/andThisConfigToo.json", "!/mods/andAllTheseMods-*.jar", "!/mods/server-*.jar");
-        public List<String> allowEditsInFiles = List.of("/options.txt", "/config/*", "!/config/excludeThisFile");
+        public List<String> syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server*/**", "/emotes/*");
+        public List<String> allowEditsInFiles = List.of("/options.txt", "/config/**");
         public boolean autoExcludeUnnecessaryFiles = true;
 //        public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
 //        public List<List<String>> forceLoad = new ArrayList<>();
