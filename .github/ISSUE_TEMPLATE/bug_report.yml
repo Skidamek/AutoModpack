@@ -41,17 +41,17 @@ body:
     attributes:
       label: Relevant logs
       description: |-
-        If it's a crash, send the corresponding Minecraft log in the `logs` folder, or crash report in the `crash-reports` folder, here.
-        Please upload the log file as an attachment, or upload the log to [pastebin](https://pastebin.com/) / [mclo.gs](https://mclo.gs/) and paste the url here.
+        Please send the corresponding Minecraft log from the `logs` folder here.
+        Please upload the log file as an attachment, or upload the log to [mclo.gs](https://mclo.gs/) and paste the url here - mclo.gs sanitizes sensitive information such as ip addresses.
         Please refrain from pasting the entire log file directly.
         Leave empty if there is none.
-      placeholder: https://pastebin.com/J6b7lKxR
+      placeholder: https://mclo.gs/
   - type: input
     id: versions
     attributes:
       label: Minecraft & Mod Loader versions
       description: The Minecraft version(s) and mod loader with loader version where this bug occurs in.
-      placeholder: 1.18.2 fabric 0.14.21
+      placeholder: 1.21.1 fabric 0.16.14
     validations:
       required: true
   - type: input
@@ -90,4 +90,8 @@ body:
         - label: I have verified that the issue persists in the latest version of the mod.
           required: true
         - label: I have searched the existing issues and confirmed that this is not a duplicate.
+          required: true
+        - label: I have provided all the necessary information to reproduce the issue.
+          required: true
+        - label: I have verified that the issue does not occur without the AutoModpack - Ignore you are reporting a mod conflict issue.
           required: true
