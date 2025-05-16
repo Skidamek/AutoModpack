@@ -99,46 +99,36 @@ public class WildCards {
             String ruleDirectory = entry.getKey();
             List<String> rulePaths = entry.getValue();
 
-            // Check if the directory part matches the rule
-            if (directoryPart.startsWith(ruleDirectory)) {
-                boolean directoryMatch = directoryPart.equals(ruleDirectory);
+            boolean directoryMatch = directoryPart.startsWith(ruleDirectory);
+            boolean directoryStrictMatch = directoryPart.equals(ruleDirectory);
 
+            // Resolve wildcard in the directory part
+            if (ruleDirectory.contains("*")) {
+                if (wildcardMatch(directoryPart, ruleDirectory)) {
+                    directoryMatch = true;
+                    directoryStrictMatch = true;
+                }
+            }
+
+            // Check if the directory part matches the rule
+            if (directoryMatch) {
                 for (String rulePath : rulePaths) {
                     if (rulePath.equals("/**")) {
                         // Match all files in the directory
                         return formattedPath;
                     } else if (rulePath.equals("/*") || rulePath.equals("/")) {
-                        if (!directoryMatch) {
+                        if (!directoryStrictMatch) {
                             continue;
                         }
 
                         // Match any file in the directory
                         return formattedPath;
                     } else if (rulePath.contains("*")) {
-                        if (!directoryMatch) {
+                        if (!directoryStrictMatch) {
                             continue;
                         }
 
-                        // Only one * in the rule path is allowed
-                        if (rulePath.indexOf("*") != rulePath.lastIndexOf("*")) {
-                            LOGGER.error("Only one * in the rule path is allowed: {}", rulePath);
-                            continue;
-                        }
-
-                        String[] ruleParts = rulePath.split("\\*");
-                        String partOne;
-                        String partTwo = "";
-                        if (ruleParts.length == 1) {
-                            partOne = ruleParts[0];
-                        } else if (ruleParts.length == 2) {
-                            partOne = ruleParts[0];
-                            partTwo = ruleParts[1];
-                        } else {
-                            LOGGER.error("Invalid rule path: {}", rulePath);
-                            continue;
-                        }
-
-                        if (fileNamePart.startsWith(partOne) && fileNamePart.endsWith(partTwo)) {
+                        if (wildcardMatch(fileNamePart, rulePath)) {
                             return formattedPath;
                         }
                     } else if (rulePath.equals(fileNamePart)) { // Exact match
@@ -151,6 +141,40 @@ public class WildCards {
         return null;
     }
 
+    private boolean wildcardMatch(String target, String rule) {
+        if (target.equals(rule)) {
+            return true;
+        }
+
+        // Only one * in the rule path is allowed
+        if (rule.indexOf("*") != rule.lastIndexOf("*")) {
+            LOGGER.error("Only one * in the rule path is allowed: {}", rule);
+            return false;
+        }
+
+        int targetLayers = target.split("/").length;
+        int ruleLayers = rule.split("/").length;
+
+        if (targetLayers != ruleLayers) {
+            return false;
+        }
+
+        String[] ruleParts = rule.split("\\*");
+        String partOne;
+        String partTwo = "";
+        if (ruleParts.length == 1) {
+            partOne = ruleParts[0];
+        } else if (ruleParts.length == 2) {
+            partOne = ruleParts[0];
+            partTwo = ruleParts[1];
+        } else {
+            LOGGER.error("Invalid rule path: {}", rule);
+            return false;
+        }
+
+        return target.startsWith(partOne) && target.endsWith(partTwo);
+    }
+
     public Map<String, List<String>> composeRules(List<String> rules) {
         Map<String, List<String>> directoryRulePathsMap = new HashMap<>(rules.size());
 
@@ -161,12 +185,8 @@ public class WildCards {
             }
 
             String directoryPart = rule.substring(0, lastSlashIndex);
-            if (directoryPart.contains("*")) {
-                LOGGER.error("Wildcards in directory part are not supported yet: {}", directoryPart);
-                continue;
-            }
-
             String rulePath = rule.substring(lastSlashIndex);
+
             directoryRulePathsMap.computeIfAbsent(directoryPart, k -> new ArrayList<>()).add(rulePath);
         }
 
