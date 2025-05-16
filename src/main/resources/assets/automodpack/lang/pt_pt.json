@@ -1,0 +1,58 @@
+{
+  "automodpack.restart.full": "O Modpack foi descarregado!",
+  "automodpack.restart.update": "Uma atualização foi descarregada para o Modpack!",
+  "automodpack.restart.select": "O Modpack requerido pelo servidor foi selecionado!",
+  "automodpack.restart.automodpack": "Versão do AutoModpack atualizada para a requerida pelo servidor!",
+  "automodpack.restart.description": "Para jogar, tens de reiniciar o jogo.",
+  "automodpack.restart.secDescription": "Queres reiniciar agora?",
+  "automodpack.restart.confirm": "Sim, fechar o jogo",
+  "automodpack.restart.cancel": "Não, voltar ao jogo",
+
+  "automodpack.delete": "Eliminar Modpack",
+  "automodpack.delete.description": "Vais perder todos os conteúdos do modpack descarregado.",
+  "automodpack.delete.secDescription": "Terás de reiniciar o jogo.",
+  "automodpack.delete.thiDescription": "Tens a certeza de que queres eliminá-lo?",
+  "automodpack.delete.confirm": "Eliminar e sair",
+  "automodpack.delete.cancel": "Voltar ao jogo",
+
+  "automodpack.danger": "Este servidor fornece um modpack externo!",
+  "automodpack.danger.description": "Queres descarregá-lo?",
+  "automodpack.danger.secDescription": "Pode ser arriscado! NÃO descarregues se não confiares nos administradores do servidor!",
+  "automodpack.danger.confirm": "Descarregar",
+  "automodpack.danger.cancel": "Não descarregar",
+
+  "automodpack.changelog.view": "Ver alterações",
+  "automodpack.changelog.noChanges": "Nenhuma alteração encontrada.",
+  "automodpack.changelog.openPage": "Abrir página do projeto",
+
+  "automodpack.download.calculating": "A calcular...",
+  "automodpack.download.eta": "Tempo restante: %s",
+  "automodpack.download.downloading": "A descarregar:",
+  "automodpack.download.noFiles": "Sem ficheiros para descarregar!",
+
+  "automodpack.redownload": "Re-descarregar Modpack",
+  "automodpack.redownload.description": "Pode corrigir problemas com o modpack.",
+
+  "automodpack.error": "Algo correu mal!",
+  "automodpack.error.files": "Falha ao descarregar alguns ficheiros.",
+  "automodpack.error.critical": "Erro crítico ao descarregar o modpack.",
+  "automodpack.error.logs": "Consulta os registos para mais detalhes.",
+
+  "automodpack.fetch": "A obter URLs diretas do Modrinth e CurseForge...",
+  "automodpack.fetch.found": "Foram encontradas %s URLs diretas.",
+
+  "automodpack.validation.text": "Estás a ligar-te a um host AutoModpack desconhecido",
+  "automodpack.validation.description": "Por favor, verifica a impressão digital do certificado do servidor",
+  "automodpack.validation.secDescription": "Solicita a impressão digital ao administrador do servidor, se não a tiveres",
+  "automodpack.validation.thiDescription": "Esta verificação de segurança impede interferências durante a descarga do modpack",
+  "automodpack.validation.run": "Verificar",
+  "automodpack.validation.failed": "Falha na verificação",
+
+  "automodpack.retry": "Tentar novamente",
+  "automodpack.select": "Selecionar Modpack",
+  "automodpack.yes": "Sim",
+  "automodpack.no": "Não",
+  "automodpack.cancel": "Cancelar",
+  "automodpack.back": "Voltar",
+  "automodpack.wait": "Por favor, aguarda..."
+}
