@@ -7,14 +7,14 @@
     "automodpack.restart.secDescription": "¿Quieres reiniciar el juego ahora?",
     "automodpack.restart.confirm": "Sí, cerrar el juego",
     "automodpack.restart.cancel": "No, volver al juego",
-  
+
     "automodpack.delete": "Eliminar Modpack",
     "automodpack.delete.description": "Perderás todo lo descargado por el modpack.",
     "automodpack.delete.secDescription": "Necesitarás reiniciar el juego.",
     "automodpack.delete.thiDescription": "¿Estás seguro de que quieres eliminarlo?",
     "automodpack.delete.confirm": "Eliminar y salir",
     "automodpack.delete.cancel": "Volver al juego",
-  
+
     "automodpack.danger": "¡Este servidor proporciona un modpack externo!",
     "automodpack.danger.description": "¿Deseas descargarlo?",
     "automodpack.danger.secDescription": "¡Podría ser arriesgado! ¡NO lo descargues si no confías en los dueños del servidor!",
@@ -41,11 +41,18 @@
     "automodpack.fetch": "Obteniendo URLs directas desde Modrinth y CurseForge...",
     "automodpack.fetch.found": "Encontradas %s urls directas.",
 
-    "automodpack.select": "Seleccionar Modpack",
+    "automodpack.validation.text": "Te estás conectando a un host de AutoModpack desconocido",
+    "automodpack.validation.description": "Por favor, verifica la huella digital del certificado del servidor",
+    "automodpack.validation.secDescription": "Solicita la huella digital a tu administrador del servidor si no la tienes",
+    "automodpack.validation.thiDescription": "Esta medida de seguridad evita la manipulación de la conexión durante la descarga",
+    "automodpack.validation.run": "Verificar",
+    "automodpack.validation.failed": "La verificación ha fallado",
 
-    "automodpack.yes": "Si",
+    "automodpack.retry": "Intentar de nuevo",
+    "automodpack.select": "Seleccionar Modpack",
+    "automodpack.yes": "Sí",
     "automodpack.no": "No",
     "automodpack.cancel": "Cancelar",
     "automodpack.back": "Atrás",
     "automodpack.wait": "Por favor, espere..."
-  }
+}
