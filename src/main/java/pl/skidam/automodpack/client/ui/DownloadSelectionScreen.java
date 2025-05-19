@@ -13,6 +13,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.utils.SelectionManager;
 
+import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
+
 public class DownloadSelectionScreen extends VersionedScreen {
     private final Screen parent;
     private final ModpackUpdater modpackUpdaterInstance;
