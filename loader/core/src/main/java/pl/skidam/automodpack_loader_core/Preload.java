@@ -196,8 +196,8 @@ public class Preload {
                     Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------"); // Corresponds to 0700
                     Files.setPosixFilePermissions(privateDir, perms);
                 }
-            } catch (UnsupportedOperationException e) {
-                LOGGER.warn("Failed to set private directory attributes for os: {}", os, e);
+            } catch (UnsupportedOperationException | IOException e) {
+                LOGGER.debug("Failed to set private directory attributes for os: {}", os);
             }
         } catch (IOException e) {
             LOGGER.error("Failed to create private directory", e);
