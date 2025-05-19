@@ -1,0 +1,58 @@
+{
+  "automodpack.restart.full": "OMG! Modpak haz been downloadeded! So excite!",
+  "automodpack.restart.update": "Hay! A nuz updayt haz been downloadeded to Modpak! Fank u!",
+  "automodpack.restart.select": "Teh Modpak needed by server haz been selekted! Iz good nao!",
+  "automodpack.restart.automodpack": "AutoModpak mod iz updayted to teh one teh server luvs!",
+  "automodpack.restart.description": "To play, u haz to do a restart of teh game. kthxbye!",
+  "automodpack.restart.secDescription": "U wanna do teh restart nao? Plz say yes!",
+  "automodpack.restart.confirm": "Yas, close teh game nao!",
+  "automodpack.restart.cancel": "Noes, i wanna stay in game! Bak to teh game nao!",
+
+  "automodpack.delete": "Make Modpak go bye-bye",
+  "automodpack.delete.description": "U will lose all ur stuffs from teh downloadeded modpak. Boo hoo!",
+  "automodpack.delete.secDescription": "U will need to restart teh game after. Sigh.",
+  "automodpack.delete.thiDescription": "R u SUPER shur u wanna make it go bye-bye forevur?",
+  "automodpack.delete.confirm": "Make it go bye-bye and quit nao!",
+  "automodpack.delete.cancel": "Stay in game! Bak to teh game!",
+
+  "automodpack.danger": "Dis server haz a MODPAK from OUTSIDE! It iz diffrent!",
+  "automodpack.danger.description": "U wanna download dis modpak? Iz it good?",
+  "automodpack.danger.secDescription": "It might be SCAREY! DO NOT download if u not trust teh server peeple! Be ware!",
+  "automodpack.danger.confirm": "Download teh modpak!",
+  "automodpack.danger.cancel": "Dun download teh modpak! Iz too scarey!",
+
+  "automodpack.changelog.view": "See teh changz! Wut hapened?",
+  "automodpack.changelog.noChanges": "No changz found. Nothin new. Bored nao.",
+  "automodpack.changelog.openPage": "Open teh page for dis projec! Click nao!",
+
+  "automodpack.download.calculating": "My brain iz calchoolating... plz wait...",
+  "automodpack.download.eta": "Time left: %s. So slow!",
+  "automodpack.download.downloading": "Downloading... almost there... maybe?:",
+  "automodpack.download.noFiles": "No filez to download! Wut? No fun!",
+
+  "automodpack.redownload": "Download Modpak again! Maybe it fix!",
+  "automodpack.redownload.description": "It may fix teh sad issuez with teh modpak. Hope so!",
+
+  "automodpack.error": "OMG! Somethin went BAD! Halp!",
+  "automodpack.error.files": "Failed to download sum filez. Iz brok!",
+  "automodpack.error.critical": "BAD BAD error while downloading modpak! Iz cwy!",
+  "automodpack.error.logs": "Check teh logz for moar sad storyz.",
+
+  "automodpack.fetch": "Fetchin' direct urlz from Modrinth and CurseForge... iz workin'!",
+  "automodpack.fetch.found": "Found %s direkt urlz! So many!",
+
+  "automodpack.validation.text": "U r konnektin to a AutoModpak host u dun kno! Iz it safe?",
+  "automodpack.validation.description": "Plz check teh server's sertyfikat fingrprint. Iz important!",
+  "automodpack.validation.secDescription": "Ask teh server peeple for teh fingrprint if u dun haz it. Be brave!",
+  "automodpack.validation.thiDescription": "Dis iz to stop bad peeple from messin' with ur konnektunz while u download teh modpak!",
+  "automodpack.validation.run": "Verifee it nao!",
+  "automodpack.validation.failed": "Verifikayshun failed! Iz bad!",
+
+  "automodpack.retry": "Try again! Maybe it work dis time!",
+  "automodpack.select": "Selekt teh Modpak u want!",
+  "automodpack.yes": "Yas!",
+  "automodpack.no": "Noes!",
+  "automodpack.cancel": "Cancel nao!",
+  "automodpack.back": "Go bak!",
+  "automodpack.wait": "Plz wait... im doin' stuff..."
+}

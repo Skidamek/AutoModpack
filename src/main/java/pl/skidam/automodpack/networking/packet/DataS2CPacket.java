@@ -21,6 +21,14 @@ public class DataS2CPacket {
         try {
             GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 
+            if (!understood) {
+                return;
+            }
+
+            if (buf.readableBytes() == 0) {
+                return;
+            }
+
             String clientHasUpdate = buf.readString(Short.MAX_VALUE);
 
             if ("true".equals(clientHasUpdate)) { // disconnect

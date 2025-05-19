@@ -57,7 +57,9 @@ class WildCardsTest {
             testFilesDir.resolve("foo/boo/file.toml"),
             testFilesDir.resolve("foo/poo/file.json"),
             testFilesDir.resolve("foo/poo/moo/file.json"),
-            testFilesDir.resolve("foo/poo/moo/file2.json")
+            testFilesDir.resolve("foo/poo/moo/file2.json"),
+            testFilesDir.resolve("directory/which/file.json"),
+            testFilesDir.resolve("directory/who/file.json")
     );
 
     @Test
