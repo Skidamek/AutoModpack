@@ -68,8 +68,9 @@ public class DataC2SPacket {
             Boolean needsDisconnecting = null;
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
 
-            Path modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
+
             Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress);
+            Path modpackDir = ModpackUtils.getModpackPath(modpackAddresses, modpackName);
             var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, true);
 
             if (optionalServerModpackContent.isPresent()) {
@@ -77,7 +78,7 @@ public class DataC2SPacket {
 
                 if (update) {
                     disconnectImmediately(handler);
-                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), address, secret);
+                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), modpackAddresses, secret);
                     needsDisconnecting = true;
                 } else {
                     boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, modpackAddresses, Set.of());

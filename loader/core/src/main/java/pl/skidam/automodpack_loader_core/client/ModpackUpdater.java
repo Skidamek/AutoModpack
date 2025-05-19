@@ -48,12 +48,12 @@ public class ModpackUpdater {
         return serverModpackContent.modpackName;
     }
   
-    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, InetSocketAddress address, Secrets.Secret secret) {
+    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret) {
         this.serverModpackContent = modpackContent;
-        this.modpackAddress = address;
+        this.modpackAddresses = modpackAddresses;
+        this.modpackAddress = modpackAddresses.hostAddress;
         this.modpackSecret = secret;
-        this.modpackDir = ModpackUtils.getModpackPath(address, modpackContent.modpackName);
-        this.modpackAddresses = new Jsons.ModpackAddresses(address, null); // falls nur hostAddress benötigt wird
+        this.modpackDir = ModpackUtils.getModpackPath(modpackAddresses, modpackContent.modpackName);
 
         // check out of selected Modpack
         SelectionManager.setSelectedPack(serverModpackContent.modpackName);
@@ -169,7 +169,7 @@ public class ModpackUpdater {
     public void startServerUpdate() {}
     */
     public void startUpdate() {
-        modpackDir = ModpackUtils.getModpackPath(modpackAddress, serverModpackContent.modpackName);
+        modpackDir = ModpackUtils.getModpackPath(modpackAddresses, serverModpackContent.modpackName);
         LOGGER.info("Using modpack directory: {}", modpackDir);
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");

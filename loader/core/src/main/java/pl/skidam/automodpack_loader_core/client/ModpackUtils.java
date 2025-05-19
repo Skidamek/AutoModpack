@@ -415,12 +415,13 @@ public class ModpackUtils {
     }
 
     // Returns modpack name formatted for path or url if server doesn't provide modpack name
-    public static Path getModpackPath(InetSocketAddress address, String modpackName) {
+    public static Path getModpackPath(Jsons.ModpackAddresses address, String modpackName) {
         if (modpackName.equalsIgnoreCase("fullserver")) {
             return hostFullServerPackDir.resolve("fullserver");
         }
 
-        String strAddress = address.getHostString() + ":" + address.getPort();
+        InetSocketAddress Address = address.hostAddress;
+        String strAddress = Address.getHostString() + ":" + Address.getPort();
         String correctedName = strAddress;
 
         if (FileInspection.isInValidFileName(strAddress)) {
