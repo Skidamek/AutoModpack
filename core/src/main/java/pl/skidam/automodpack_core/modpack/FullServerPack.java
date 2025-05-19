@@ -7,15 +7,17 @@ import java.nio.file.Files;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class FullServerPack {
-    public final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("FullServerPackCreation-%d").build());
+    public final ModpackExecutor executor;
+
     public final Map<String, FullServerPackContent> fullpacks = Collections.synchronizedMap(new HashMap<>());
+
+    public FullServerPack(ModpackExecutor executor) {
+        this.executor = executor;
+    }
 
 
 
@@ -36,7 +38,7 @@ public class FullServerPack {
             return null;
         }
 
-        return new FullServerPackContent(serverConfig.modpackName, hostContentModpackDir, CREATION_EXECUTOR);
+        return new FullServerPackContent(serverConfig.modpackName, hostContentModpackDir, executor.getExecutor());
     }
 
     public boolean generateNew(FullServerPackContent content) {
@@ -55,13 +57,22 @@ public class FullServerPack {
     }
 
     public boolean isGenerating() {
+        return executor.isRunning();
+        /* Old executer
+
         int activeCount = CREATION_EXECUTOR.getActiveCount();
         int queueSize = CREATION_EXECUTOR.getQueue().size();
         return activeCount > 0 || queueSize > 0;
+
+        */
     }
 
     public void shutdownExecutor() {
+        executor.stop();
+
+        /* Old executer
         CREATION_EXECUTOR.shutdown();
+
         try {
             if (!CREATION_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
                 CREATION_EXECUTOR.shutdownNow();
@@ -72,5 +83,7 @@ public class FullServerPack {
         } catch (InterruptedException e) {
             CREATION_EXECUTOR.shutdownNow();
         }
+        */
+
     }
 }

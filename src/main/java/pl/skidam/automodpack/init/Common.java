@@ -6,7 +6,6 @@ import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.FullServerPack;
-import pl.skidam.automodpack_core.modpack.Modpack;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -56,8 +55,7 @@ public class Common {
         hostServer = new NettyServer();
 
         modpackExecutor = new ModpackExecutor();
-        modpack = new Modpack();
-        fullpacks = new FullServerPack();
+        fullpacks = new FullServerPack(modpackExecutor);
 
     }
 
@@ -77,7 +75,6 @@ public class Common {
         hostServer.stop();
 
         modpackExecutor.stop();
-        modpack.shutdownExecutor();
         fullpacks.shutdownExecutor();
     }
 

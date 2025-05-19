@@ -6,7 +6,6 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -59,8 +58,7 @@ public class DownloadSelectionScreen extends VersionedScreen {
         }
 
         //Full Serverpack Button if Modpack has permission from server
-        Jsons.ModpackContentFields servercontent = modpackUpdaterInstance.getServerModpackContent();
-        if (servercontent != null && servercontent.enableFullServerPack) {
+        if (serverConfig != null && serverConfig.enableFullServerPack) {
             this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, VersionedText.translatable("automodpack.ds.fullserverpack").formatted(Formatting.RED), button -> {
                 SelectionManager.setSelectedPack("fullserver");
                 Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);

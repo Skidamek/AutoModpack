@@ -357,7 +357,7 @@ public class ModpackUtils {
     }
 
     // Returns true if value changed
-    public static boolean selectModpack(Path modpackDirToSelect, InetSocketAddress modpackAddressToSelect, Set<String> newDownloadedFiles) {
+    public static boolean selectModpack(Path modpackDirToSelect, Jsons.ModpackAddresses modpackAddresses, Set<String> newDownloadedFiles) {
         modpackDirToSelect = getCorrectModpackDir(modpackDirToSelect);
 
         final String modpackToSelect = modpackDirToSelect.getFileName().toString();
