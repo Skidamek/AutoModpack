@@ -40,16 +40,16 @@ This isn't just another mod; it's a game-changer for private servers. Here's why
 
 ## 🛠️ How the Magic Happens
 
-AutoModpack works by generating a modpack (**metadata file**) on the server, containing all the files of your modpack. The server then hosts this file and the modpack files.
+AutoModpack works by generating a modpack (**metadata file**) on the server, which contains all the files of your modpack. The server then hosts this file and the modpack files.
 
-When a client connects to server (simplified):
+When a client connects to the server:
 
-1.  AutoModpack securely connects to the modpack host server and fetches the metadata.
-2.  It uses Modrinth and CurseForge APIs to download directly your modpack's files where possible.
-3.  All files are downloaded to the client's automodpack folder.
-4.  Restart the game, AutoModpack loads the modpack and the client is perfectly synced and ready to play!
+1.  Connection; AutoModpack establishes a secure connection and prompts you to [verify the server's certificate fingerprint](https://github.com/Skidamek/AutoModpack/wiki/FAQ#how-to-verify-the-certificate-fingerprint).
+2.  Direct links; Fetches the APIs for direct downloads of your modpack's files from Modrinth and CurseForge, where possible (mods, resource packs, shaders).
+3.  Modpack download; All files are downloaded to the client's automodpack folder.
+4.  Game restart; AutoModpack loads the modpack, and the client is perfectly synced and ready to play!
 
-On subsequent game boots, AutoModpack checks for updates. If changes are detected, it updates the modpack in the background, no additional restarts required!
+On subsequent game launches, AutoModpack checks for updates. If changes are detected, it updates the modpack in the background—no additional restarts are required!
 
 ## ⚠️ Security and Trust - Read This!
 
@@ -59,17 +59,19 @@ Because it downloads files directly into your game folder, it's crucial to **onl
 
 While AutoModpack itself tries to be as secure as possible, due to the nature of the internet, the creators and contributors of AutoModpack are not responsible for any harm, damage, loss, or issues that may result from files downloaded from a server you connect to using the mod. **By using AutoModpack, you acknowledge and accept this risk.**
 
-**If you have valuable security insights or concerns, please reach out!** You can contact privately on [Discord](https://discordapp.com/users/464522287618457631) or open an issue on GitHub.
+**If you have valuable security insights or concerns, please reach out!** You can contact privately on [Discord](https://discordapp.com/users/464522287618457631) or publicly on [Discord server](https://discord.gg/hS6aMyeA9P) or just open an issue on [GitHub](https://github.com/Skidamek/AutoModpack/issues).
 ## 🚀 Getting Started is a Breeze!
 
 Installing AutoModpack is as simple as installing any other mod.
 
 1.  Download the AutoModpack from the releases page on [GitHub](https://github.com/Skidamek/AutoModpack/releases), [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack), or [Modrinth](https://modrinth.com/mod/automodpack).
 2.  Place the downloaded file into the `/mods/` folder of both your server and client Minecraft installations.
+3.  Start your server and let AutoModpack generate the initial modpack metadata.
+4.  Connect to your server with the mod installed on your client.
 
 That's typically all you need to do! AutoModpack will automatically create the modpack from your server's mods.
 
-**Want to customize your modpack further?** Add configs, client-side-only mods, and more? **Check out the [wiki](https://github.com/Skidamek/AutoModpack/wiki)!** It *hopefully* has all the details you need to tailor AutoModpack to your specific needs.
+**Want to customize your modpack further?** Add configs, client-side-only mods, and more? **Check out the [wiki]https://moddedmc.wiki/en/project/automodpack/docs)!** It *hopefully* has all the details you need to tailor AutoModpack to your specific needs. If you encounter any issues or have questions, feel free to [join Discord server](https://discord.gg/hS6aMyeA9P) or open an issue on [GitHub](https://github.com/Skidamek/AutoModpack/issues).
 
 Prefer an all-in-one solution? You can also use our [modified Fabric installer](https://github.com/Skidamek/AutoModpack-Installer/releases/tag/Latest) which downloads AutoModpack alongside the Fabric loader.
 

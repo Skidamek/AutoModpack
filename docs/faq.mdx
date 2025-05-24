@@ -4,13 +4,6 @@ No, it's both. You need to have it installed on server as well as on client.
 ### How do i add client only mods to the modpack? (e.g. server crashes with some mod but i want it for clients)
 See [modpack creation page](https://github.com/Skidamek/AutoModpack/wiki/Modpack-Creation)
 
-### How to verify the certificate fingerprint?
-Just copy the fingerprint from your server console to the game. This prevents attacks such as [MITM](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). Its recommended to share this fingerprint with players ahead of time.
-
-However please do not think of it like a password to the modpack, its not a password or any secret, its a public verifiable piece of server certificate, anyone can download modpack without previous knowledge of such fingerprint e.g. by bypassing this check with `I AM INCREDIBLY STUPID`. (don't do it)
-
-If you don't want players to explicitly verify the certificate and you own a domain (required), you can provide your own CA signed certificate e.g. using [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html). On the server in the `~/automodpack/.private/` directory, replace the `cert.crt` (with the full chain certificate) and `key.pem` files ([key has to be in PKCS#8 (PEM) format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) - here be cautious as interception of these files may result in impersonation of the server, [read more](https://security.stackexchange.com/a/16694). If you're hosting modpack on different sub/domain than your minecraft server, make sure that your certificate verifies both of the sub/domains.
-
 ### How to restrict access to my modpack?
 Enable `validateSecrets` in the [config](https://github.com/Skidamek/AutoModpack/wiki/Configuration), turn on `online-mode` in the server.properties and enable whitelist or ban someone.
 
