@@ -1,0 +1,26 @@
+{
+  "usage": {
+    "name": "Usage",
+    "icon": null
+  },
+  "configuration": {
+    "name": "\uD83D\uDEE0\uFE0F Configuration",
+    "icon": null
+  },
+  "commands": {
+    "name": "⌨\uFE0F Commands",
+    "icon": null
+  },
+  "examples": {
+    "name": "\uD83D\uDCF7 Examples",
+    "icon": null
+  },
+  "technicals": {
+    "name": "\uD83D\uDC68\u200D\uD83D\uDCBB Technical Details",
+    "icon": null
+  },
+  "faq.mdx": {
+    "name": "❔ FAQ",
+    "icon": null
+  }
+}

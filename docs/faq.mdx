@@ -1,0 +1,49 @@
+### Is it server side mod?
+No, it's both. You need to have it installed on server as well as on client.
+
+### How do i add client only mods to the modpack? (e.g. server crashes with some mod but i want it for clients)
+See [modpack creation page](https://github.com/Skidamek/AutoModpack/wiki/Modpack-Creation)
+
+### How to verify the certificate fingerprint?
+Just copy the fingerprint from your server console to the game. This prevents attacks such as [MITM](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). Its recommended to share this fingerprint with players ahead of time.
+
+However please do not think of it like a password to the modpack, its not a password or any secret, its a public verifiable piece of server certificate, anyone can download modpack without previous knowledge of such fingerprint e.g. by bypassing this check with `I AM INCREDIBLY STUPID`. (don't do it)
+
+If you don't want players to explicitly verify the certificate and you own a domain (required), you can provide your own CA signed certificate e.g. using [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html). On the server in the `~/automodpack/.private/` directory, replace the `cert.crt` (with the full chain certificate) and `key.pem` files ([key has to be in PKCS#8 (PEM) format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) - here be cautious as interception of these files may result in impersonation of the server, [read more](https://security.stackexchange.com/a/16694). If you're hosting modpack on different sub/domain than your minecraft server, make sure that your certificate verifies both of the sub/domains.
+
+### How to restrict access to my modpack?
+Enable `validateSecrets` in the [config](https://github.com/Skidamek/AutoModpack/wiki/Configuration), turn on `online-mode` in the server.properties and enable whitelist or ban someone.
+
+### Does it work on lan (single-player world with option for other players to join)?
+Yes. Just remember to generate modpack via command /`automodpack generate` and start modpack host /`automodpack host start`.
+
+### Does it work with single-player world shared via essential, world host, e4mc?
+Likely no, most of these type of mods forward only minecraft packets. These mods would need to support automodpack protocol or just relay all tcp packets instead of limiting to minecraft protocol.
+
+### Can I use non modpack mods on client?
+Yes, you can add any mod you want to use alongside downloaded modpack by just placing the mod into the standard mods folder.
+
+### How can I delete files from modpack?
+Just delete file from server, or exclude it from sync, read about `syncedFiles` in [config](https://github.com/Skidamek/AutoModpack/wiki/Configuration#server-config-file)
+
+### Can I remove/disable non modpack files/mods from player use?
+Not yet, it may come in the future.
+
+### Do I have to open any port on my router?
+No, you don't need to. By default AutoModpack injects into minecraft networking I/O which reuses your minecraft server port. (e.g. 25565)
+
+If you want to use different port. Disable `hostModpackOnMinecraftPort` and change `hostPort` in [config](https://github.com/Skidamek/AutoModpack/wiki/Configuration#server-config-file)
+
+### What happens when I update AutoModpack version on server?
+Fear no more, clients **will not** get out of sync.
+
+Clients always try to sync to the server's version of AutoModpack which is always downloaded from Modrinth.
+
+### Why is the host modpack path so long?
+There are plans to implement ability of adding more than just one, `main` modpack.
+
+### Which minecraft versions are supported?
+All of the versions you see in the [latest release](https://github.com/Skidamek/AutoModpack/releases/latest).
+
+### Does this mod updates other mods?
+No, it's out of scope for this project. This mod only synchronizes server modpack to the clients.

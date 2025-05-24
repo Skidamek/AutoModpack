@@ -1,0 +1,18 @@
+{
+  "connection.mdx": {
+    "name": "Connection Flow",
+    "icon": null
+  },
+  "certificate.mdx": {
+    "name": "Certificate Handling",
+    "icon": null
+  },
+  "file_structure.mdx": {
+    "name": "File Structure",
+    "icon": null
+  },
+  "modpack_host.mdx": {
+    "name": "Modpack Hosting",
+    "icon": null
+  }
+}
