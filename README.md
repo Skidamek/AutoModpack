@@ -71,7 +71,7 @@ Installing AutoModpack is as simple as installing any other mod.
 
 That's typically all you need to do! AutoModpack will automatically create the modpack from your server's mods.
 
-**Want to customize your modpack further?** Add configs, client-side-only mods, and more? **Check out the [wiki]https://moddedmc.wiki/en/project/automodpack/docs)!** It *hopefully* has all the details you need to tailor AutoModpack to your specific needs. If you encounter any issues or have questions, feel free to [join Discord server](https://discord.gg/hS6aMyeA9P) or open an issue on [GitHub](https://github.com/Skidamek/AutoModpack/issues).
+**Want to customize your modpack further?** Add configs, client-side-only mods, and more? **Check out the [wiki](https://moddedmc.wiki/en/project/automodpack/docs)!** It *hopefully* has all the details you need to tailor AutoModpack to your specific needs. If you encounter any issues or have questions, feel free to join [Discord server](https://discord.gg/hS6aMyeA9P) or open an issue on [GitHub](https://github.com/Skidamek/AutoModpack/issues).
 
 Prefer an all-in-one solution? You can also use our [modified Fabric installer](https://github.com/Skidamek/AutoModpack-Installer/releases/tag/Latest) which downloads AutoModpack alongside the Fabric loader.
 
