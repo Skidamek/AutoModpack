@@ -1,6 +1,39 @@
 ### How to verify the certificate fingerprint?
-Just copy the fingerprint from your server console to the game. This prevents attacks such as [MITM](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). Its recommended to share this fingerprint with players ahead of time.
+Just copy the fingerprint from your server console to the game. This prevents attacks such as [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). Fingerprint is the same for everyone on your server, its recommended to share it with players ahead of time.
 
-However please do not think of it like a password to the modpack, its not a password or any secret, its a public verifiable piece of server certificate, anyone can download modpack without previous knowledge of such fingerprint e.g. by bypassing this check with `I AM INCREDIBLY STUPID`. (don't do it)
+However please do not think of it like a password to the modpack, its not a password or any secret, its a public verifiable piece of server certificate, **anyone could download** your modpack without previous knowledge of such fingerprint e.g. by bypassing this check with `I AM INCREDIBLY STUPID`. (don't do it)
+<Callout>
+To provide modpack for only authorized/whitelisted players, use `validateSecrets` option in the [server config](../configuration/server-config) (its enabled by default).
+</Callout>
 
-If you don't want players to explicitly verify the certificate and you own a domain (required), you can provide your own CA signed certificate e.g. using [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html). On the server in the `~/automodpack/.private/` directory, replace the `cert.crt` (with the full chain certificate) and `key.pem` files ([key has to be in PKCS#8 (PEM) format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) - here be cautious as interception of these files may result in impersonation of the server, [read more](https://security.stackexchange.com/a/16694). If you're hosting modpack on different sub/domain than your minecraft server, make sure that your certificate verifies both of the sub/domains.
+If you don't want players to explicitly verify the certificate manually and you own a domain (required), you can provide your own CA signed certificate.
+
+### How to provide your own CA signed certificate?
+
+You can use tools like [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html).
+
+After obtaining the certificate, on the server in the `~/automodpack/.private/` directory, replace the `cert.crt` (with the full chain certificate) and `key.pem` files ([key has to be in PKCS#8 (PEM) format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) - here be cautious as interception of these files may result in impersonation of the server, [read more](https://security.stackexchange.com/a/16694). If you're hosting modpack on different sub/domain than your minecraft server, make sure that your certificate verifies both of the sub/domains.
+
+### Little tutorial on how to obtain a certificate using Certbot
+
+Install Certbot on your pc or server, then run the example command and follow further certbot instructions to obtain a certificate for your domain:
+
+```bash
+# certbot certonly --manual --preferred-challenges dns -d <domain-name> <second-domain-name>
+```
+<Callout variant="warning">
+Never copy-paste random commands from the internet, always read the documentation of the tool you're using!
+</Callout>
+
+After obtaining the certificate, the files you need are `fullchain.pem` (the full chain certificate, copy and rename to `cert.crt`) and `privkey.pem` (the private key, copy and rename to `key.pem`).
+
+### Wait but why do I need all this? Its just a modpack for my friends!
+
+If someone could easily take control over the automodpack connection, they could download on your (or your friends) computers anything they want.
+Minecraft isn't sandboxed in any way and mods **can run any arbitrary code** so if someone could easily inject some malicious piece of code to any automodpack modpack no matter who the victim is, that would be a huge win for them anyway, they could steal passwords from your browser, accounts to various services or even delete your very important folder with funny cat memes, there are many possibilities.
+That's why i believe it's important to have some security measures.
+
+### Hmm... ok but nobody knows about my server besides my friends, why should I care?
+
+Even if you think that nobody knows about your server, it may not be true. There are many ways how someone could find out about your server.
+For example there are many minecraft server scanners which scan the entire internet for minecraft servers, and you could be a victim if your server would be found vulnerable and we wouldn't verify the certificate.

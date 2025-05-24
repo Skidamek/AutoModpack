@@ -1,0 +1,35 @@
+So you want to start using AutoModpack? Great! Let's get you started.
+
+## Installation
+
+1. **Download AutoModpack**: Get the latest version of AutoModpack for your minecraft version from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack).
+2. **Install AutoModpack**: Place the downloaded mod into your `mods` folder of your minecraft instance.
+3. **Start your server**: Launch your minecraft server with AutoModpack installed. This will generate the initial modpack metadata.
+
+Now you are in most cases ready to go, at this point, its recommended to try connecting to your server with just the automodpack installed on the client and see if everything works.
+
+## First Connection
+On first connection you will be prompted to verify the server's certificate fingerprint. This is a security measure to ensure that you are connecting to the correct server and not a malicious one. Read more about [certificate verification](technicals/certificate).
+After successful verification, AutoModpack will asks you to confirm the modpack installation. Confirm and modpack should be downloaded and installed automatically.
+
+Now restart your game and your servers' modpack should loaded and you should be able to connect to your server again but this time spawning in the overworld!
+
+<Callout>
+If you don't see your modpack mods in the mods folder, don't worry. Mods won't be installed to your standard mods folder, they will be installed in the `~/.minecraft/automodpack/modapcks/<your-modpack>/mods/` folder instead. There are some [good reasons for that](technicals/file-structure).
+</Callout>
+
+## Troubleshooting
+If you encounter any issues at this point, here are some common troubleshooting steps:
+- Make sure you are using the same version of AutoModpack on both server and client.
+- Ensure that your server is running and accessible without AutoModpack.
+- Check the server logs there might be some nudge about what went wrong.
+- Read the [faq page](faq) for common questions and answers.
+
+If you are still having issues, join our [Discord server](https://discord.gg/hS6aMyeA9P) and create a post in the `#support` channel, we will try to help!
+
+## Next Steps
+
+Now that you have AutoModpack installed and working, you can start customizing your modpack. Here are some things you can do next:
+
+- Read the [modpack creation page](technicals/modpack-creation) to learn how to manage your modpack.
+- Read the [configuration page](configuration/server-config) to learn how to configure AutoModpack to your needs.

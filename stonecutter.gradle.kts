@@ -7,6 +7,13 @@ import java.util.zip.ZipOutputStream
 
 plugins {
     id("dev.kikugie.stonecutter")
+    id("org.moddedmc.wiki.toolkit") version "0.2.7"
+}
+
+wiki {
+    docs.create("automodpack") {
+        root = file("docs")
+    }
 }
 
 stonecutter active "1.21.1-neoforge" /* [SC] DO NOT EDIT */

@@ -1,0 +1,35 @@
+### Encryption
+
+Modpack download connection is secured using TLS 1.3.
+
+This is the same security standard used by HTTPS, the protocol which you're using all the time to browse the web (even now!).
+
+TLS has method of verifying the server's identity using a certificate which is crucial to prevent attacks such as [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack).
+
+That's why AutoModpack requires you to verify the server's certificate fingerprint when connecting to the server for the first time. Read [how to verify the certificate fingerprint](certificate) for more details.
+
+### Direct Downloads
+
+AutoModpack uses direct download links from Modrinth and CurseForge APIs to download most of your modpack files.
+This means that the mod authors get credit for every download.
+
+However if file you are providing in the modpack is not available on Modrinth or CurseForge, AutoModpack will download it (also directly) but from your server.
+
+### Compression
+
+To speed up the download, AutoModpack compresses the modpack files using [Zstandard](https://facebook.github.io/zstd/) compression algorithm.
+This algorithm is very fast and provides great compression ratio, which means that the modpack files are smaller and faster to download.
+This is especially useful for larger modpacks or slower internet connections.
+However this only applies to files downloaded from your server.
+
+### Authorization
+
+<Callout>
+Do not confuse this with [certificate fingerprint verification](certificate), which is used to verify the server's identity.
+</Callout>
+
+AutoModpack uses a simple authorization mechanism to prevent unauthorized access to your modpack.
+When you connect to the server, in the background AutoModpack generates a random unique secret for each player. This secret is then send to the player and used to authorize the player to download the modpack files.
+Every time you reconnect to the server, the old secret is invalidated and a new one is generated.
+This prevents unauthorized access to your modpack files and ensures that only whitelisted and not banned players can download the modpack.
+If you don't want to use this feature, you can disable it (`validateSecrets`) in the [server config](../configuration/server-config).

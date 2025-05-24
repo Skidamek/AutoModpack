@@ -5,7 +5,7 @@ No, it's both. You need to have it installed on server as well as on client.
 See [modpack creation page](https://github.com/Skidamek/AutoModpack/wiki/Modpack-Creation)
 
 ### How to restrict access to my modpack?
-Enable `validateSecrets` in the [config](https://github.com/Skidamek/AutoModpack/wiki/Configuration), turn on `online-mode` in the server.properties and enable whitelist or ban someone.
+Enable `validateSecrets` in the [config](configuration/server-config), turn on `online-mode` in the server.properties and enable whitelist or ban someone.
 
 ### Does it work on lan (single-player world with option for other players to join)?
 Yes. Just remember to generate modpack via command /`automodpack generate` and start modpack host /`automodpack host start`.
@@ -28,9 +28,7 @@ No, you don't need to. By default AutoModpack injects into minecraft networking 
 If you want to use different port. Disable `hostModpackOnMinecraftPort` and change `hostPort` in [config](https://github.com/Skidamek/AutoModpack/wiki/Configuration#server-config-file)
 
 ### What happens when I update AutoModpack version on server?
-Fear no more, clients **will not** get out of sync.
-
-Clients always try to sync to the server's version of AutoModpack which is always downloaded from Modrinth.
+Client always try to sync to the server's version of AutoModpack. It updates or downgrades itself to the server's version if such is found on the Modrinth.
 
 ### Why is the host modpack path so long?
 There are plans to implement ability of adding more than just one, `main` modpack.
@@ -38,5 +36,11 @@ There are plans to implement ability of adding more than just one, `main` modpac
 ### Which minecraft versions are supported?
 All of the versions you see in the [latest release](https://github.com/Skidamek/AutoModpack/releases/latest).
 
-### Does this mod updates other mods?
-No, it's out of scope for this project. This mod only synchronizes server modpack to the clients.
+### Does this mod updates my modpack mods to the latest versions?
+No, it's out of scope for this project. This mod only synchronizes server modpack to the clients. All your mods on the server would have to still be updated manually. AutoModpack just makes sure client versions matches the server ones.
+
+### I found a bug, what should I do?
+If you found a bug, please report it on the [issue tracker](https://github.com/Skidamek/AutoModpack/issues)
+
+### I found a security vulnerability, what should I do?
+Please report it privately to the author on [Discord](https://discordapp.com/users/464522287618457631), we will try to resolve it ASAP.

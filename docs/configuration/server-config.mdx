@@ -27,23 +27,3 @@
 | `validateSecrets`             | `true`                                                                   | Makes modpack host validate and authorize modpack download attempts using unique secrets.                                                                                                                                                                                                                                                                                                                                                                                                                         |     |
 | `selfUpdater`                 | `false`                                                                  | Turn on/off all automodpack updates. This does not affect the mod's activity in installing modpacks.                                                                                                                                                                                                                                                                                                                                                                                                              |     |
 | `acceptedLoaders`             | `"<mod loader used by server>"`                                          | Allows players from different modloaders to connect to your server (as long, automodpack support that loader and other mods on your server aren't incompatible with each other) with the same modpack. (use with caution, some mods may not work on both loaders)                                                                                                                                                                                                                                                 |     |
-
-### Client Config File
-
-`/automodpack/automodpack-client.json`
-
-| Name                | Default Value    | Description                                                                                                           |
-|---------------------|------------------|-----------------------------------------------------------------------------------------------------------------------|
-| `DO_NOT_CHANGE_IT`  | `<file version>` | File version number used for auto conversion old config versions to new ones with automodpack update.                 |
-| `selectedModpack`   |                  | The main folder of the modpack that you want to play. Typing the name of the modpack here will cause it to be loaded. |
-| `installedModpacks` |                  | A list of modpacks that are installed on the client.                                                                  |
-| `selfUpdater`       | `false`          | Turn on/off all automodpack updates. This does not affect the mod's activity in installing modpacks.                  |
-
-
-
-## Troubleshooting Config Issues
-When finished editing configuration files, make sure to reload them by executing command `automodpack config reload` or restart the server/game.
-
-If you can't find the config files, make sure the client/server was started at least once, so that the files are generated.
-
-If values get restored to default it might mean that your config file is malformed make sure to use editor with JSON parser build-in. Or check in some online one e.g. https://jsonformatter.org/json-parser.

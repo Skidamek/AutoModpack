@@ -2,12 +2,16 @@
 
 #### Two ways of adding content to the modpack.
 
-- To re-use already existing files on server use `syncedFiles` read more in [config](https://github.com/Skidamek/AutoModpack/wiki/Configuration#server-config-file). As an example with default config it creates modpack containing *every* mod (file ending with .jar) from server `~/mods/` folder.
+- To re-use already existing files on server use `syncedFiles` read more in [config](../configuration/server-config). As an example with default config it creates modpack containing *every* mod (file ending with .jar) from server `~/mods/` folder.
 
 - To add more files to modpack use separate directory `~/automodpack/host-modpack/main/`.
 For example to add more mods create folder `mods` and place there mods so that will be `~/automodpack/host-modpack/main/mods/`**`your-mod.jar`**.
 Or to add resourcepacks analogically create folder `resourcepacks` and place there resourcepacks so that will be `~/automodpack/host-modpack/main/resourcepacks/`**`your-resourcepack.zip`**.
 
+<Callout>
+Do not place in the modpack cache files, like connector's `.connector` directory, its not supposed to be provided within modpack and it break seamless/reboot-less updates.
+</Callout>
+
 Both of these methods translate to the `~/.minecraft/` on client side (root directory of minecraft instance).
 
-Remember to regenerate the modpack using `/automodpack generate` (see [commands](https://github.com/Skidamek/AutoModpack/wiki/Commands))
+Remember to regenerate the modpack using `/automodpack generate` (see [commands](../commands/commands))
