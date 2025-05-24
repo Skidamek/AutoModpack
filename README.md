@@ -44,7 +44,7 @@ AutoModpack works by generating a modpack (**metadata file**) on the server, whi
 
 When a client connects to the server:
 
-1.  Connection; AutoModpack establishes a secure connection and prompts you to [verify the server's certificate fingerprint](https://github.com/Skidamek/AutoModpack/wiki/FAQ#how-to-verify-the-certificate-fingerprint).
+1.  Connection; AutoModpack establishes a secure connection and prompts you to [verify the server's certificate fingerprint](https://moddedmc.wiki/en/project/automodpack/docs/technicals/certificate).
 2.  Direct links; Fetches the APIs for direct downloads of your modpack's files from Modrinth and CurseForge, where possible (mods, resource packs, shaders).
 3.  Modpack download; All files are downloaded to the client's automodpack folder.
 4.  Game restart; AutoModpack loads the modpack, and the client is perfectly synced and ready to play!
