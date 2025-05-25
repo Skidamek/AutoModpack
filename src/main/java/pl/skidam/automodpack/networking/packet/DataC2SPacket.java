@@ -56,13 +56,16 @@ public class DataC2SPacket {
             modpackAddress = AddressHelpers.format(modpackAddress.getHostString(), modpackAddress.getPort());
 
             if (packetAddress.isBlank()) {
-                LOGGER.info("Address from connected server: {}:{}", modpackAddress.getHostString(), modpackAddress.getPort());
+                if (packetPort != null) { // Server may just send port without address
+                    modpackAddress = InetSocketAddress.createUnresolved(modpackAddress.getHostString(), packetPort);
+                }
+                LOGGER.info("Modpack address from connected server: {}:{}", modpackAddress.getHostString(), modpackAddress.getPort());
             } else if (packetPort != null) {
                 modpackAddress = InetSocketAddress.createUnresolved(packetAddress, packetPort);
-                LOGGER.info("Received address packet from server! {}:{}", packetAddress, packetPort);
+                LOGGER.info("Received modpack address packet {}:{}", packetAddress, packetPort);
             } else {
                 modpackAddress = AddressHelpers.parse(packetAddress);
-                LOGGER.info("Received address packet from server! {} With attached port: {}", modpackAddress.getHostString(), modpackAddress.getPort());
+                LOGGER.info("Received modpack address packet {} With attached port: {}", modpackAddress.getHostString(), modpackAddress.getPort());
             }
 
             Boolean needsDisconnecting = null;
