@@ -1,5 +1,5 @@
 ### How to verify the certificate fingerprint?
-Just copy the fingerprint from your server console to the game. This prevents attacks such as [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). Fingerprint is the same for everyone on your server, its recommended to share it with players ahead of time.
+**Just copy the fingerprint from your server console to the game.** This prevents attacks such as [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). Fingerprint is the same for everyone on your server, its recommended to share it with players ahead of time.
 
 However please do not think of it like a password to the modpack, its not a password or any secret, its a public verifiable piece of server certificate, **anyone could download** your modpack without previous knowledge of such fingerprint e.g. by bypassing this check with `I AM INCREDIBLY STUPID`. (don't do it)
 <Callout>
@@ -12,14 +12,15 @@ If you don't want players to explicitly verify the certificate manually and you 
 
 You can use tools like [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html).
 
-After obtaining the certificate, on the server in the `~/automodpack/.private/` directory, replace the `cert.crt` (with the full chain certificate) and `key.pem` files ([key has to be in PKCS#8 (PEM) format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) - here be cautious as interception of these files may result in impersonation of the server, [read more](https://security.stackexchange.com/a/16694). If you're hosting modpack on different sub/domain than your minecraft server, make sure that your certificate verifies both of the sub/domains.
+After obtaining the certificate, on the server in the `~/automodpack/.private/` directory, replace the `cert.crt` (with the full chain certificate) and `key.pem` files ([key has to be in PKCS#8 (PEM) format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) - here be cautious as interception of these files may result in impersonation of the server, [read more](https://security.stackexchange.com/a/16694).
+If you're hosting modpack on different sub/domain than your minecraft server, make sure that your certificate verifies both of the sub/domains.
 
 ### Little tutorial on how to obtain a certificate using Certbot
 
 Install Certbot on your pc or server, then run the example command and follow further certbot instructions to obtain a certificate for your domain:
 
 ```bash
-# certbot certonly --manual --preferred-challenges dns -d <domain-name> <second-domain-name>
+# certbot certonly --manual --preferred-challenges dns -d <domain-name>
 ```
 <Callout variant="warning">
 Never copy-paste random commands from the internet, always read the documentation of the tool you're using!
@@ -37,3 +38,4 @@ That's why i believe it's important to have some security measures.
 
 Even if you think that nobody knows about your server, it may not be true. There are many ways how someone could find out about your server.
 For example there are many minecraft server scanners which scan the entire internet for minecraft servers, and you could be a victim if your server would be found vulnerable and we wouldn't verify the certificate.
+However nothing we do here stops someone from taking control over your server in different ways, (e.g. gaining access to it via ssh or your server hosting panel) that's why it's very important that you as a server owner take your security seriously and use strong passwords, enable two-factor authentication and keep your server software up to date.

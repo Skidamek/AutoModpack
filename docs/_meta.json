@@ -23,6 +23,10 @@
     "name": "\uD83D\uDC68\u200D\uD83D\uDCBB Technical Details",
     "icon": null
   },
+  "compatibility": {
+    "name": "\uD83D\uDCDA Compatibility",
+    "icon": null
+  },
   "faq.mdx": {
     "name": "❔ FAQ",
     "icon": null
