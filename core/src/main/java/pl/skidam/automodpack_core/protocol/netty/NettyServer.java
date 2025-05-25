@@ -200,35 +200,37 @@ public class NettyServer {
             return false;
         }
 
-        if (serverConfig.hostModpackOnMinecraftPort) {
-            shouldHost = true;
-            LOGGER.info("Hosting modpack on Minecraft port");
-            return false;
-        }
-
-        if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostIp == null || serverConfig.hostIp.isEmpty())) {
+        if (serverConfig.updateIpsOnEveryStart) {
             String publicIp = AddressHelpers.getPublicIp();
+            String localIp = AddressHelpers.getLocalIp();
             if (publicIp != null) {
                 serverConfig.hostIp = publicIp;
-                ConfigTools.save(serverConfigFile, serverConfig);
                 LOGGER.warn("Setting Host IP to {}", serverConfig.hostIp);
             } else {
-                LOGGER.error("Host IP isn't set in config, please change it manually! Couldn't get public IP");
-                return false;
+                LOGGER.error("Couldn't get public IP, please change it manually! ");
             }
-        }
 
-        if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostLocalIp == null || serverConfig.hostLocalIp.isEmpty())) {
+            if (localIp != null) {
+                serverConfig.hostLocalIp = localIp;
+                LOGGER.warn("Setting Host Local IP to {}", serverConfig.hostLocalIp);
+            } else {
+                LOGGER.error("Couldn't get local IP, please change it manually! ");
+            }
+
             try {
-                serverConfig.hostLocalIp = AddressHelpers.getLocalIp();
                 ConfigTools.save(serverConfigFile, serverConfig);
-                LOGGER.warn("Setting Host local IP to {}", serverConfig.hostLocalIp);
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
 
-        shouldHost = true;
-        return true;
+        shouldHost = true; // At this point we know that we want to host the modpack
+
+        if (serverConfig.hostModpackOnMinecraftPort) {
+            LOGGER.info("Hosting modpack on Minecraft port");
+            return false; // Dont start separate server for modpack hosting, use minecraft port instead
+        } else {
+            return true; // Start separate server for modpack hosting
+        }
     }
 }
