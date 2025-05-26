@@ -91,6 +91,7 @@ public class AddressHelpers {
         if (host.endsWith(".")) { // It breaks our checks and looks ugly, but its a valid domain...
             host = host.substring(0, host.length() - 1);
         }
+        host = host.toLowerCase(); // #382
         return InetSocketAddress.createUnresolved(host, port);
     }
 
