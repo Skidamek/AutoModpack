@@ -44,7 +44,6 @@ body:
         Please send the corresponding Minecraft log from the `logs` folder here.
         Please upload the log file as an attachment, or upload the log to [mclo.gs](https://mclo.gs/) and paste the url here - mclo.gs sanitizes sensitive information such as ip addresses.
         Please refrain from pasting the entire log file directly.
-        Leave empty if there is none.
       placeholder: https://mclo.gs/
   - type: input
     id: versions
@@ -93,5 +92,5 @@ body:
           required: true
         - label: I have provided all the necessary information to reproduce the issue.
           required: true
-        - label: I have verified that the issue does not occur without the AutoModpack - Ignore you are reporting a mod conflict issue.
+        - label: I have verified that the issue does not occur without the AutoModpack - Ignore if you are reporting a mod conflict issue.
           required: false
