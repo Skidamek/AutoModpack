@@ -138,6 +138,9 @@ public class ModpackContent {
             modpackContent.loaderVersion = LOADER_VERSION;
             modpackContent.loader = LOADER;
             modpackContent.modpackName = MODPACK_NAME;
+            //add enableFullServerPack in ModpackContent to Check if Server give Permission to Server Pack
+            modpackContent.enableFullServerPack = serverConfig.enableFullServerPack;
+
 
             ConfigTools.saveModpackContent(hostModpackContentFile, modpackContent);
         }
