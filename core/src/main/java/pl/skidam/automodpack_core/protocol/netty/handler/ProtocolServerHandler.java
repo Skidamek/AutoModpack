@@ -27,7 +27,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
         }
 
         int magic = in.getInt(0);
-        if (magic == MAGIC_AMMC) {
+        if (magic == MAGIC_AMMC && sslCtx != null) {
             // Consume the packet
             in.skipBytes(in.readableBytes());
 
@@ -49,11 +49,22 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
 
             // Set up the pipeline for our protocol
-            ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
-            if (sslCtx != null) { // If SSL context is provided, add TLS handler}
-                ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
-            }
-            ctx.pipeline() // Add the rest
+            ctx.pipeline()
+                    .addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler())
+                    .addLast("tls", sslCtx.newHandler(ctx.alloc()))
+                    .addLast("zstd-encoder", new ZstdEncoder())
+                    .addLast("zstd-decoder", new ZstdDecoder())
+                    .addLast("chunked-write", new ChunkedWriteHandler())
+                    .addLast("protocol-msg-decoder", new ProtocolMessageDecoder())
+                    .addLast("msg-handler", new ServerMessageHandler())
+                    .addLast("error-printer", new ErrorPrinter());
+
+        } else if (sslCtx == null) {
+            ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
+
+            // Set up the pipeline for our protocol
+            ctx.pipeline()
+                    .addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler())
                     .addLast("zstd-encoder", new ZstdEncoder())
                     .addLast("zstd-decoder", new ZstdDecoder())
                     .addLast("chunked-write", new ChunkedWriteHandler())

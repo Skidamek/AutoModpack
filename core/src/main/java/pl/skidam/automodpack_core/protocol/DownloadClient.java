@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
+import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.config.Jsons;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -185,22 +186,30 @@ class PreValidationConnection {
      * @param keyStore         the keystore containing trusted certificates
      */
     public PreValidationConnection(InetSocketAddress resolvedHostAddress, Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
-        // Step 1. Create a plain TCP connection.
-        Socket plainSocket = new Socket();
-        plainSocket.connect(resolvedHostAddress, 15000); // To create socket, we need to pass a resolved socket address
-        plainSocket.setSoTimeout(15000);
-        DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
-        DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
+        Socket plainSocket; // TODO: this sucks!
+        try { // Try to establish a connection via magic packets, if that fails, try to connect directly with TLS from start.
+            // Step 1. Create a plain TCP connection.
+            plainSocket = new Socket();
+            plainSocket.connect(resolvedHostAddress, 5000); // To create socket, we need to pass a resolved socket address
+            plainSocket.setSoTimeout(5000);
+            DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
+            DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
 
-        // Step 2. Send the handshake (AMMC magic) over the plain socket.
-        plainOut.writeInt(MAGIC_AMMC);
-        plainOut.flush();
+            // Step 2. Send the handshake (AMMC magic) over the plain socket.
+            plainOut.writeInt(MAGIC_AMMC);
+            plainOut.flush();
 
-        // Step 3. Wait for the server’s reply (AMOK magic).
-        int handshakeResponse = plainIn.readInt();
-        if (handshakeResponse != MAGIC_AMOK) {
-            plainSocket.close();
-            throw new IOException("Invalid handshake response from server: " + handshakeResponse);
+            // Step 3. Wait for the server’s reply (AMOK magic).
+            int handshakeResponse = plainIn.readInt();
+            if (handshakeResponse != MAGIC_AMOK) {
+                plainSocket.close();
+                throw new IOException("Invalid handshake response from server: " + handshakeResponse);
+            }
+        } catch (IOException e) {
+            GlobalVariables.LOGGER.warn("AM magic handshake failed, trying to connect directly with TLS: {}", e.getMessage());
+            plainSocket = new Socket();
+            plainSocket.connect(resolvedHostAddress, 15000); // To create socket, we need to pass a resolved socket address
+            plainSocket.setSoTimeout(15000);
         }
 
         // Step 4. Upgrade the plain socket to TLS using the same underlying connection.

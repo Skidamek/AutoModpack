@@ -80,7 +80,7 @@ public class NettyServer {
 
         try {
             if (serverConfig.disableInternalTLS) {
-                LOGGER.warn("Internal TLS is disabled, clients will not be able to connect unless you have a reverse proxy with TLS 1.3 for us.");
+                LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use a reverse proxy with TLS.");
             } else {
                 if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
                     // Create a self-signed certificate
