@@ -186,12 +186,12 @@ class PreValidationConnection {
      * @param keyStore         the keystore containing trusted certificates
      */
     public PreValidationConnection(InetSocketAddress resolvedHostAddress, Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
-        Socket plainSocket; // TODO: this sucks!
+        Socket plainSocket; // TODO: this sucks! prioritize what works and use that, instead of trying both methods in the same order.
         try { // Try to establish a connection via magic packets, if that fails, try to connect directly with TLS from start.
             // Step 1. Create a plain TCP connection.
             plainSocket = new Socket();
-            plainSocket.connect(resolvedHostAddress, 5000); // To create socket, we need to pass a resolved socket address
-            plainSocket.setSoTimeout(5000);
+            plainSocket.connect(resolvedHostAddress, 3000); // To create socket, we need to pass a resolved socket address
+            plainSocket.setSoTimeout(3000);
             DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
             DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
 
@@ -208,8 +208,8 @@ class PreValidationConnection {
         } catch (IOException e) {
             GlobalVariables.LOGGER.warn("AM magic handshake failed, trying to connect directly with TLS: {}", e.getMessage());
             plainSocket = new Socket();
-            plainSocket.connect(resolvedHostAddress, 15000); // To create socket, we need to pass a resolved socket address
-            plainSocket.setSoTimeout(15000);
+            plainSocket.connect(resolvedHostAddress, 3000); // To create socket, we need to pass a resolved socket address
+            plainSocket.setSoTimeout(3000);
         }
 
         // Step 4. Upgrade the plain socket to TLS using the same underlying connection.
