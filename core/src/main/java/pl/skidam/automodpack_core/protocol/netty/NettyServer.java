@@ -79,35 +79,39 @@ public class NettyServer {
         }
 
         try {
-            if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
-                // Create a self-signed certificate
-                KeyPair keyPair = NetUtils.generateKeyPair();
-                X509Certificate cert = NetUtils.selfSign(keyPair);
+            if (serverConfig.disableInternalTLS) {
+                LOGGER.warn("Internal TLS is disabled, clients will not be able to connect unless you have a reverse proxy with TLS 1.3 for us.");
+            } else {
+                if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
+                    // Create a self-signed certificate
+                    KeyPair keyPair = NetUtils.generateKeyPair();
+                    X509Certificate cert = NetUtils.selfSign(keyPair);
 
-                // save it to the file
-                NetUtils.saveCertificate(cert, serverCertFile);
-                NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+                    // save it to the file
+                    NetUtils.saveCertificate(cert, serverCertFile);
+                    NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+                }
+
+                X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
+
+                if (cert == null) {
+                    throw new IllegalStateException("Server certificate couldn't be loaded");
+                }
+
+                // Shiny TLS 1.3
+                sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
+                        .sslProvider(SslProvider.JDK)
+                        .protocols("TLSv1.3")
+                        .ciphers(Arrays.asList(
+                                "TLS_AES_128_GCM_SHA256",
+                                "TLS_AES_256_GCM_SHA384",
+                                "TLS_CHACHA20_POLY1305_SHA256"))
+                        .build();
+
+                // generate sha256 from cert as a fingerprint
+                certificateFingerprint = NetUtils.getFingerprint(cert);
+                LOGGER.warn("Certificate fingerprint for client validation: {}", certificateFingerprint);
             }
-
-            X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
-
-            if (cert == null) {
-                throw new IllegalStateException("Server certificate couldn't be loaded");
-            }
-
-            // Shiny TLS 1.3
-            sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
-                    .sslProvider(SslProvider.JDK)
-                    .protocols("TLSv1.3")
-                    .ciphers(Arrays.asList(
-                            "TLS_AES_128_GCM_SHA256",
-                            "TLS_AES_256_GCM_SHA384",
-                            "TLS_CHACHA20_POLY1305_SHA256"))
-                    .build();
-
-            // generate sha256 from cert as a fingerprint
-            certificateFingerprint = NetUtils.getFingerprint(cert);
-            LOGGER.warn("Certificate fingerprint for client validation: {}", certificateFingerprint);
 
             if (!canStart()) {
                 new TrafficShaper(null);

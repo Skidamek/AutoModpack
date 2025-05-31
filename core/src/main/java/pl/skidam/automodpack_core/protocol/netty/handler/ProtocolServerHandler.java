@@ -49,9 +49,11 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
 
             // Set up the pipeline for our protocol
-            ctx.pipeline()
-                    .addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler())
-                    .addLast("tls", sslCtx.newHandler(ctx.alloc()))
+            ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
+            if (sslCtx != null) { // If SSL context is provided, add TLS handler}
+                ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
+            }
+            ctx.pipeline() // Add the rest
                     .addLast("zstd-encoder", new ZstdEncoder())
                     .addLast("zstd-decoder", new ZstdDecoder())
                     .addLast("chunked-write", new ChunkedWriteHandler())
