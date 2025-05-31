@@ -61,6 +61,7 @@ public class Preload {
         // Only selfupdate if no modpack is selected
         if (selectedModpackAddress == null) {
             SelfUpdater.update();
+            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), null);
         } else {
             Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
