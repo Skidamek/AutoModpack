@@ -114,8 +114,9 @@ public class NettyServer {
                 return Optional.empty();
             }
 
-            int port = serverConfig.hostPort;
-            InetSocketAddress bindAddress = new InetSocketAddress("0.0.0.0", port);
+            String address = serverConfig.bindAddress;
+            int port = serverConfig.bindPort;
+            InetSocketAddress bindAddress = new InetSocketAddress(address, port);
             LOGGER.info("Starting modpack host server on {}", bindAddress);
 
             Class<? extends ServerChannel> socketChannelClass;
@@ -204,15 +205,15 @@ public class NettyServer {
             String publicIp = AddressHelpers.getPublicIp();
             String localIp = AddressHelpers.getLocalIp();
             if (publicIp != null) {
-                serverConfig.hostIp = publicIp;
-                LOGGER.warn("Setting Host IP to {}", serverConfig.hostIp);
+                serverConfig.addressToSend = publicIp;
+                LOGGER.warn("Setting Host IP to {}", serverConfig.addressToSend);
             } else {
                 LOGGER.error("Couldn't get public IP, please change it manually! ");
             }
 
             if (localIp != null) {
-                serverConfig.hostLocalIp = localIp;
-                LOGGER.warn("Setting Host Local IP to {}", serverConfig.hostLocalIp);
+                serverConfig.localAddressToSend = localIp;
+                LOGGER.warn("Setting Host Local IP to {}", serverConfig.localAddressToSend);
             } else {
                 LOGGER.error("Couldn't get local IP, please change it manually! ");
             }

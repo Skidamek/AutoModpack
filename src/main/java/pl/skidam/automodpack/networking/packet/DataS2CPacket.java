@@ -53,17 +53,17 @@ public class DataS2CPacket {
                     LOGGER.warn("If that doesn't work, follow the steps bellow.");
                     LOGGER.warn("");
                 } else {
-                    LOGGER.warn("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", GlobalVariables.serverConfig.hostPort);
+                    LOGGER.warn("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", serverConfig.bindPort);
                     LOGGER.warn("");
                 }
 
-                LOGGER.warn("Make sure that host IP '{}' and host local IP '{}' are correct in the config file!", GlobalVariables.serverConfig.hostIp, GlobalVariables.serverConfig.hostLocalIp);
+                LOGGER.warn("Make sure that '{}' address and '{}' local address are correct in the config file!", serverConfig.addressToSend, serverConfig.localAddressToSend);
                 LOGGER.warn("host IP should be an ip which are players outside of server network connecting to and host local IP should be an ip which are players inside of server network connecting to");
                 LOGGER.warn("It can be Ip or a correctly set domain");
                 LOGGER.warn("If you need, change port in config file, forward / open it and restart server");
 
-                if (serverConfig.reverseProxy) {
-                    LOGGER.error("Turn off reverseProxy in config, if you don't actually use it!");
+                if (serverConfig.bindPort != serverConfig.portToSend) {
+                    LOGGER.error("bindPort '{}' is different than portToSend '{}'. If you are not using reverse proxy, match them! If you do use reverse proxy, make sure it is setup correctly.", serverConfig.bindPort, serverConfig.portToSend);
                 }
 
                 LOGGER.warn("Server certificate fingerprint to verify: {}", hostServer.getCertificateFingerprint());

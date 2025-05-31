@@ -55,7 +55,7 @@ public class Jsons {
         }
     }
 
-    public static class ServerConfigFields {
+    public static class ServerConfigFieldsV1 {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public String modpackName = "";
         public boolean modpackHost = true;
@@ -63,16 +63,12 @@ public class Jsons {
         public List<String> syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
         public List<String> allowEditsInFiles = List.of("/options.txt", "/config/**");
         public boolean autoExcludeUnnecessaryFiles = true;
-//        public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
-//        public List<List<String>> forceLoad = new ArrayList<>();
         public boolean requireAutoModpackOnClient = true;
         public boolean nagUnModdedClients = true;
         public String nagMessage = "This server provides dedicated modpack through AutoModpack!";
         public String nagClickableMessage = "Click here to get the AutoModpack!";
         public String nagClickableLink = "https://modrinth.com/project/automodpack";
         public boolean autoExcludeServerSideMods = true;
-//        public boolean velocityMode = false; compat plugin... someday I hope
-//        public boolean forceToDisableAllOtherModsOnClients = false;
         public boolean hostModpackOnMinecraftPort = true;
         public String hostIp = "";
         public String hostLocalIp = "";
@@ -82,6 +78,35 @@ public class Jsons {
         public int bandwidthLimit = 0;
         public long secretLifetime = 336; // 336 hours = 14 days
         public boolean validateSecrets = true;
+        public boolean selfUpdater = false;
+        public List<String> acceptedLoaders;
+    }
+
+    public static class ServerConfigFieldsV2 {
+        public int DO_NOT_CHANGE_IT = 2; // file version
+        public String modpackName = "";
+        public boolean modpackHost = true;
+        public boolean generateModpackOnStart = true;
+        public List<String> syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
+        public List<String> allowEditsInFiles = List.of("/options.txt", "/config/**");
+        public boolean autoExcludeServerSideMods = true;
+        public boolean autoExcludeUnnecessaryFiles = true;
+        public boolean requireAutoModpackOnClient = true;
+        public boolean nagUnModdedClients = true;
+        public String nagMessage = "This server provides dedicated modpack through AutoModpack!";
+        public String nagClickableMessage = "Click here to get the AutoModpack!";
+        public String nagClickableLink = "https://modrinth.com/project/automodpack";
+        public boolean hostModpackOnMinecraftPort = true;
+        public String bindAddress = "0.0.0.0";
+        public int bindPort = -1;
+        public String addressToSend = "";
+        public String localAddressToSend = "";
+        public int portToSend = -1;
+        public boolean disableInternalTLS = false;
+        public boolean updateIpsOnEveryStart = false;
+        public int bandwidthLimit = 0;
+        public boolean validateSecrets = true;
+        public long secretLifetime = 336; // 336 hours = 14 days
         public boolean selfUpdater = false;
         public List<String> acceptedLoaders;
     }
