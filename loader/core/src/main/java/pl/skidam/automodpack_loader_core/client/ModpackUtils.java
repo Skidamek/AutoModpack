@@ -308,9 +308,6 @@ public class ModpackUtils {
         String serverModpackName = serverModpackContent.modpackName;
 
         if (installedModpackAddresses != null && !serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
-            InetSocketAddress installedModpackAddress = installedModpackAddresses.hostAddress;
-            InetSocketAddress installedServerAddress = installedModpackAddresses.serverAddress;
-            boolean requiresMagic = installedModpackAddresses.requiresMagic;
 
             Path newModpackDir = modpackDir.getParent().resolve(serverModpackName);
 
@@ -325,8 +322,7 @@ public class ModpackUtils {
                 e.printStackTrace();
             }
 
-            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(installedModpackAddress, installedServerAddress, requiresMagic);
-            selectModpack(newModpackDir, modpackAddresses, Set.of());
+            selectModpack(newModpackDir, installedModpackAddresses, Set.of());
 
             return newModpackDir;
         }
