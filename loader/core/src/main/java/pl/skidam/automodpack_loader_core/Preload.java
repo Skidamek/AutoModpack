@@ -52,10 +52,12 @@ public class Preload {
         selectedModpackDir = optionalSelectedModpackDir.get();
         InetSocketAddress selectedModpackAddress = null;
         InetSocketAddress selectedServerAddress = null;
+        boolean requiresMagic = true; // Default to true
         if (!clientConfig.selectedModpack.isBlank() && clientConfig.installedModpacks.containsKey(clientConfig.selectedModpack)) {
             var entry = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
             selectedModpackAddress = entry.hostAddress;
             selectedServerAddress = entry.serverAddress;
+            requiresMagic = entry.requiresMagic;
         }
 
         // Only selfupdate if no modpack is selected
@@ -65,7 +67,7 @@ public class Preload {
         } else {
             Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
-            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress);
+            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress, requiresMagic);
             var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
             var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 

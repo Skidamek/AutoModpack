@@ -27,7 +27,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
         }
 
         int magic = in.getInt(0);
-        if (magic == MAGIC_AMMC && sslCtx != null) {
+        if (magic == MAGIC_AMMC) { // Server should always support AMMC protocol (magic packets) (preferred way to connect, required for hosting on Minecraft port and good for backwards compatibility)
             // Consume the packet
             in.skipBytes(in.readableBytes());
 
@@ -49,9 +49,11 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
 
             // Set up the pipeline for our protocol
-            ctx.pipeline()
-                    .addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler())
-                    .addLast("tls", sslCtx.newHandler(ctx.alloc()))
+            ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
+            if (sslCtx != null) { // If SSL context is provided, add TLS handler
+                ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
+            }
+            ctx.pipeline() // Add the rest
                     .addLast("zstd-encoder", new ZstdEncoder())
                     .addLast("zstd-decoder", new ZstdDecoder())
                     .addLast("chunked-write", new ChunkedWriteHandler())
@@ -59,7 +61,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                     .addLast("msg-handler", new ServerMessageHandler())
                     .addLast("error-printer", new ErrorPrinter());
 
-        } else if (sslCtx == null) {
+        } else if (sslCtx == null) { // However if theres no magic packet and we dont use internal TLS, we have to try to connect anyway, for use with reverse proxy setups
             ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
 
             // Set up the pipeline for our protocol

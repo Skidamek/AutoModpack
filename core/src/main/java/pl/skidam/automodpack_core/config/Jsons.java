@@ -33,6 +33,7 @@ public class Jsons {
     public static class ModpackAddresses {
         public InetSocketAddress hostAddress; // modpack host address
         public InetSocketAddress serverAddress; // minecraft server address
+        public boolean requiresMagic; // if true, client will use magic packets to connect to the modpack host
 
         public ModpackAddresses() {
             // Default constructor for Gson
@@ -45,9 +46,10 @@ public class Jsons {
          * @param serverAddress minecraft server address that represents the target address
          *                      which client uses to connect. This value CANNOT be manipulated by the server.
          */
-        public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress) {
+        public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, boolean requiresMagic) {
             this.hostAddress = hostAddress;
             this.serverAddress = serverAddress;
+            this.requiresMagic = requiresMagic;
         }
 
         public boolean isAnyEmpty() {

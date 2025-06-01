@@ -37,6 +37,7 @@ public class DataC2SPacket {
             String modpackName = dataPacket.modpackName;
             Secrets.Secret secret = dataPacket.secret;
             boolean modRequired = dataPacket.modRequired;
+            boolean requiresMagic = dataPacket.requiresMagic;
 
             if (modRequired) {
                 // TODO set screen to refreshed danger screen which will ask user to install modpack with two options
@@ -72,7 +73,7 @@ public class DataC2SPacket {
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
 
             Path modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
-            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress);
+            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
             var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, true);
 
             if (optionalServerModpackContent.isPresent()) {

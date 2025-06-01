@@ -18,7 +18,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 
-import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.config.Jsons;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -140,6 +139,13 @@ public class DownloadClient implements AutoCloseable {
         throw new IllegalStateException("No available connections");
     }
 
+    public boolean usedMagic() {
+        if (connections.isEmpty()) {
+            return true; // Default to true
+        }
+        return connections.get(0).usedMagic();
+    }
+
     /**
      * Downloads a file identified by its SHA-1 hash to the given destination.
      * Returns a CompletableFuture that completes when the download finishes.
@@ -177,6 +183,7 @@ public class DownloadClient implements AutoCloseable {
 class PreValidationConnection {
     private final SSLSocket socket;
     private final X509Certificate unvalidatedCertificate;
+    private final boolean usedMagic;
 
     /**
      * Creates a new connection by first opening a plain TCP socket,
@@ -186,30 +193,39 @@ class PreValidationConnection {
      * @param keyStore         the keystore containing trusted certificates
      */
     public PreValidationConnection(InetSocketAddress resolvedHostAddress, Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
-        Socket plainSocket; // TODO: this sucks! prioritize what works and use that, instead of trying both methods in the same order.
-        try { // Try to establish a connection via magic packets, if that fails, try to connect directly with TLS from start.
+        Socket plainSocket = null;
+        boolean requiresMagic = modpackAddresses.requiresMagic;
+        if (requiresMagic) { // TODO make it even better
+            try { // Try to establish a connection via magic packets, if that fails, try to connect directly with TLS from start.
+                // Step 1. Create a plain TCP connection.
+                plainSocket = new Socket();
+                plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
+                plainSocket.setSoTimeout(10000);
+                DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
+                DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
+
+                // Step 2. Send the handshake (AMMC magic) over the plain socket.
+                plainOut.writeInt(MAGIC_AMMC);
+                plainOut.flush();
+
+                // Step 3. Wait for the server’s reply (AMOK magic).
+                int handshakeResponse = plainIn.readInt();
+                if (handshakeResponse != MAGIC_AMOK) {
+                    plainSocket.close();
+                    throw new IOException("Invalid handshake response from server: " + handshakeResponse);
+                }
+            } catch (IOException e) {
+                requiresMagic = false;
+                plainSocket.close();
+                LOGGER.warn("AM magic handshake failed, trying to connect directly with TLS: {}", e.getMessage());
+            }
+        }
+
+        if (!requiresMagic) {
             // Step 1. Create a plain TCP connection.
             plainSocket = new Socket();
-            plainSocket.connect(resolvedHostAddress, 3000); // To create socket, we need to pass a resolved socket address
-            plainSocket.setSoTimeout(3000);
-            DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
-            DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
-
-            // Step 2. Send the handshake (AMMC magic) over the plain socket.
-            plainOut.writeInt(MAGIC_AMMC);
-            plainOut.flush();
-
-            // Step 3. Wait for the server’s reply (AMOK magic).
-            int handshakeResponse = plainIn.readInt();
-            if (handshakeResponse != MAGIC_AMOK) {
-                plainSocket.close();
-                throw new IOException("Invalid handshake response from server: " + handshakeResponse);
-            }
-        } catch (IOException e) {
-            GlobalVariables.LOGGER.warn("AM magic handshake failed, trying to connect directly with TLS: {}", e.getMessage());
-            plainSocket = new Socket();
-            plainSocket.connect(resolvedHostAddress, 3000); // To create socket, we need to pass a resolved socket address
-            plainSocket.setSoTimeout(3000);
+            plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
+            plainSocket.setSoTimeout(10000);
         }
 
         // Step 4. Upgrade the plain socket to TLS using the same underlying connection.
@@ -236,6 +252,8 @@ class PreValidationConnection {
         if (certificate == null) {
             throw new IOException("No certificate found in server's response");
         }
+
+        this.usedMagic = requiresMagic; // We have a certificate, meaning that the connection was successful, so save current state of connection to save it for later use.
 
         if (!session.isValid()) { // Handshake failed
             sslSocket.close();
@@ -284,6 +302,10 @@ class PreValidationConnection {
         return unvalidatedCertificate;
     }
 
+    public boolean usedMagic() {
+        return usedMagic;
+    }
+
     /**
      * Creates an SSLContext that trusts the certificates in {@code trustedCertificates}, and verifies certificates
      * using the default key store otherwise.
@@ -323,6 +345,7 @@ class Connection implements AutoCloseable {
     private final DataOutputStream out;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean busy = new AtomicBoolean(false);
+    private final boolean usedMagic;
 
     public boolean isActive() {
         return !socket.isClosed();
@@ -340,6 +363,7 @@ class Connection implements AutoCloseable {
         this.socket = preValidationConnection.getSocket();
         this.useCompression = true;
         this.secretBytes = secretBytes;
+        this.usedMagic = preValidationConnection.usedMagic();
 
         try {
             // Now use the SSL socket for further communication.
@@ -357,6 +381,10 @@ class Connection implements AutoCloseable {
 
     public void setBusy(boolean value) {
         busy.set(value);
+    }
+
+    public boolean usedMagic() {
+        return usedMagic;
     }
 
     /**

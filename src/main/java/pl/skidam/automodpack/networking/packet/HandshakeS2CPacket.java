@@ -134,7 +134,7 @@ public class HandshakeS2CPacket {
                 portToSend = minecraftServerPort;
             }
 
-            DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
+            DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, serverConfig.hostModpackOnMinecraftPort);
 
             String packetContentJson = dataPacket.toJson();
 

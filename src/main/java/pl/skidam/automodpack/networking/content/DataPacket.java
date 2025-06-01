@@ -9,13 +9,15 @@ public class DataPacket {
     public String modpackName;
     public Secrets.Secret secret;
     public boolean modRequired;
+    public boolean requiresMagic;
 
-    public DataPacket(String address, Integer port, String modpackName, Secrets.Secret secret, boolean modRequired) {
+    public DataPacket(String address, Integer port, String modpackName, Secrets.Secret secret, boolean modRequired, boolean requiresMagic) {
         this.address = address;
         this.port = port;
         this.modpackName = modpackName;
         this.secret = secret;
         this.modRequired = modRequired;
+        this.requiresMagic = requiresMagic;
     }
 
     public String toJson() {
