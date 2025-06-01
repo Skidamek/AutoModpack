@@ -40,44 +40,30 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             var handlers = ctx.pipeline().toMap();
             handlers.forEach((name, handler) -> ctx.pipeline().remove(handler));
 
-//                InetSocketAddress address = (InetSocketAddress) ctx.channel().remoteAddress();
-//                boolean isLocalConnection = AddressHelpers.isLocal(address);
-//
-//                // Use compression only for non-local connections
-//                ctx.pipeline().channel().attr(NetUtils.USE_COMPRESSION).set(!isLocalConnection);
-
-            ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
-
-            // Set up the pipeline for our protocol
-            ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
-            if (sslCtx != null) { // If SSL context is provided, add TLS handler
-                ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
-            }
-            ctx.pipeline() // Add the rest
-                    .addLast("zstd-encoder", new ZstdEncoder())
-                    .addLast("zstd-decoder", new ZstdDecoder())
-                    .addLast("chunked-write", new ChunkedWriteHandler())
-                    .addLast("protocol-msg-decoder", new ProtocolMessageDecoder())
-                    .addLast("msg-handler", new ServerMessageHandler())
-                    .addLast("error-printer", new ErrorPrinter());
-
+            setupPipeline(ctx);
         } else if (sslCtx == null) { // However if theres no magic packet and we dont use internal TLS, we have to try to connect anyway, for use with reverse proxy setups
-            ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
-
-            // Set up the pipeline for our protocol
-            ctx.pipeline()
-                    .addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler())
-                    .addLast("zstd-encoder", new ZstdEncoder())
-                    .addLast("zstd-decoder", new ZstdDecoder())
-                    .addLast("chunked-write", new ChunkedWriteHandler())
-                    .addLast("protocol-msg-decoder", new ProtocolMessageDecoder())
-                    .addLast("msg-handler", new ServerMessageHandler())
-                    .addLast("error-printer", new ErrorPrinter());
+            setupPipeline(ctx);
         }
 
         // Always remove this handler after processing if its still there
         if (ctx.pipeline().get(this.getClass()) != null) {
             ctx.pipeline().remove(this);
         }
+    }
+
+    private void setupPipeline(ChannelHandlerContext ctx) {
+        ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
+
+        ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
+        if (sslCtx != null) { // If SSL context is provided, add TLS handler
+            ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
+        }
+        ctx.pipeline() // Add the rest
+                .addLast("zstd-encoder", new ZstdEncoder())
+                .addLast("zstd-decoder", new ZstdDecoder())
+                .addLast("chunked-write", new ChunkedWriteHandler())
+                .addLast("protocol-msg-decoder", new ProtocolMessageDecoder())
+                .addLast("msg-handler", new ServerMessageHandler())
+                .addLast("error-printer", new ErrorPrinter());
     }
 }
