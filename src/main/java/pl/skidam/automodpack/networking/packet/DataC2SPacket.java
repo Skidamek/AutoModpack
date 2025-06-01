@@ -74,6 +74,8 @@ public class DataC2SPacket {
 
             Path modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
             Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
+            ModpackUtils.AttemptedConnection attemptedConnection = ModpackUtils.canConnectModpackHost(modpackAddresses);
+            modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, attemptedConnection.usedMagic());
             var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, true);
 
             if (optionalServerModpackContent.isPresent()) {
@@ -101,7 +103,7 @@ public class DataC2SPacket {
                         needsDisconnecting = false;
                     }
                 }
-            } else if (ModpackUtils.canConnectModpackHost(modpackAddresses)) { // Can't download modpack because e.g. certificate is not verified but it can connect to the modpack host
+            } else if (attemptedConnection.success()) { // Can't download modpack because e.g. certificate is not verified but it can connect to the modpack host
                 needsDisconnecting = true;
             }
 

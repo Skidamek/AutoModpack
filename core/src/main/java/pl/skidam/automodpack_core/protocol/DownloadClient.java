@@ -32,6 +32,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 public class DownloadClient implements AutoCloseable {
     private final List<Connection> connections = new ArrayList<>();
     private InetSocketAddress address = null;
+    private final boolean usedMagic;
 
     /**
      * Creates a new {@link DownloadClient} for the specified address. If the first connection fails with a verification
@@ -61,6 +62,7 @@ public class DownloadClient implements AutoCloseable {
         }
 
         PreValidationConnection firstConnection = getPreValidationConnection(modpackAddresses, keyStore);
+        usedMagic = firstConnection.usedMagic();
         if (firstConnection.getSocket() != null && !firstConnection.getSocket().isClosed() && firstConnection.getUnvalidatedCertificate() == null && secretBytes != null) {
             connections.add(new Connection(firstConnection, secretBytes));
         } else if (firstConnection.getSocket() != null) {
@@ -140,10 +142,7 @@ public class DownloadClient implements AutoCloseable {
     }
 
     public boolean usedMagic() {
-        if (connections.isEmpty()) {
-            return true; // Default to true
-        }
-        return connections.get(0).usedMagic();
+        return usedMagic;
     }
 
     /**
@@ -195,7 +194,8 @@ class PreValidationConnection {
     public PreValidationConnection(InetSocketAddress resolvedHostAddress, Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
         Socket plainSocket = null;
         boolean requiresMagic = modpackAddresses.requiresMagic;
-        if (requiresMagic) { // TODO make it even better
+        if (requiresMagic) { // TODO write this logic better
+            LOGGER.info("AM magic handshake required");
             try { // Try to establish a connection via magic packets, if that fails, try to connect directly with TLS from start.
                 // Step 1. Create a plain TCP connection.
                 plainSocket = new Socket();
@@ -215,13 +215,14 @@ class PreValidationConnection {
                     throw new IOException("Invalid handshake response from server: " + handshakeResponse);
                 }
             } catch (IOException e) {
+                LOGGER.warn("AM magic handshake failed, trying to connect directly with TLS: {}", e.getMessage());
                 requiresMagic = false;
                 plainSocket.close();
-                LOGGER.warn("AM magic handshake failed, trying to connect directly with TLS: {}", e.getMessage());
             }
         }
 
         if (!requiresMagic) {
+            LOGGER.info("AM magic handshake not required, connecting directly with TLS");
             // Step 1. Create a plain TCP connection.
             plainSocket = new Socket();
             plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
@@ -345,7 +346,6 @@ class Connection implements AutoCloseable {
     private final DataOutputStream out;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean busy = new AtomicBoolean(false);
-    private final boolean usedMagic;
 
     public boolean isActive() {
         return !socket.isClosed();
@@ -363,7 +363,6 @@ class Connection implements AutoCloseable {
         this.socket = preValidationConnection.getSocket();
         this.useCompression = true;
         this.secretBytes = secretBytes;
-        this.usedMagic = preValidationConnection.usedMagic();
 
         try {
             // Now use the SSL socket for further communication.
@@ -381,10 +380,6 @@ class Connection implements AutoCloseable {
 
     public void setBusy(boolean value) {
         busy.set(value);
-    }
-
-    public boolean usedMagic() {
-        return usedMagic;
     }
 
     /**

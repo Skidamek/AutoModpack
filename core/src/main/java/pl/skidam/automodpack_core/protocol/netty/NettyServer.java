@@ -168,6 +168,7 @@ public class NettyServer {
                 }
             } else {
                 serverChannel.channel().close().sync();
+                serverChannel = null;
             }
 
             TrafficShaper.close();

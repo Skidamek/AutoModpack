@@ -452,17 +452,24 @@ public class ModpackUtils {
         return Optional.empty();
     }
 
-    public static boolean canConnectModpackHost(Jsons.ModpackAddresses modpackAddresses) {
+    public record AttemptedConnection(boolean success, boolean usedMagic) {}
+
+    public static AttemptedConnection canConnectModpackHost(Jsons.ModpackAddresses modpackAddresses) {
         if (modpackAddresses.isAnyEmpty())
             throw new IllegalArgumentException("Modpack addresses are empty!");
 
+        boolean usedMagic = modpackAddresses.requiresMagic;
         try (DownloadClient client = DownloadClient.tryCreate(modpackAddresses, null, 1, null)) {
-            return client != null;
+            boolean success = client != null;
+            if (success) {
+                usedMagic = client.usedMagic();
+            }
+            return new AttemptedConnection(success, usedMagic);
         } catch (Exception e) {
             LOGGER.error("Error while pinging AutoModpack host server", e);
         }
 
-        return false;
+        return new AttemptedConnection(false, usedMagic);
     }
 
     /**
