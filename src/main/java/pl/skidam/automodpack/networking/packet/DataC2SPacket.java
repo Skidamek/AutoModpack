@@ -60,14 +60,12 @@ public class DataC2SPacket {
                 if (packetPort != null) { // Server may just send port without address
                     modpackAddress = InetSocketAddress.createUnresolved(modpackAddress.getHostString(), packetPort);
                 }
-                LOGGER.info("Modpack address from connected server: {}:{}", modpackAddress.getHostString(), modpackAddress.getPort());
             } else if (packetPort != null) {
                 modpackAddress = InetSocketAddress.createUnresolved(packetAddress, packetPort);
-                LOGGER.info("Received modpack address packet {}:{}", packetAddress, packetPort);
             } else {
                 modpackAddress = AddressHelpers.parse(packetAddress);
-                LOGGER.info("Received modpack address packet {} With attached port: {}", modpackAddress.getHostString(), modpackAddress.getPort());
             }
+            LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 
             Boolean needsDisconnecting = null;
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());

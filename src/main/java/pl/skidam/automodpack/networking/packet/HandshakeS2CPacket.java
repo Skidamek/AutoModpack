@@ -128,13 +128,14 @@ public class HandshakeS2CPacket {
                 portToSend = serverConfig.portToSend;
 
                 if (!addressToSend.isBlank()) {
-                    LOGGER.info("Sending {} modpack url: {}:{}", profile.getName(), addressToSend, portToSend);
+                    LOGGER.info("Sending {} modpack address: {}:{}", profile.getName(), addressToSend, portToSend);
                 }
             } else if (serverConfig.hostModpackOnMinecraftPort) {
                 portToSend = minecraftServerPort;
             }
 
-            DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, serverConfig.hostModpackOnMinecraftPort);
+            boolean requiresMagic = serverConfig.hostModpackOnMinecraftPort || !serverConfig.disableInternalTLS;
+            DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
 
             String packetContentJson = dataPacket.toJson();
 

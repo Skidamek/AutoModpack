@@ -195,7 +195,6 @@ class PreValidationConnection {
         Socket plainSocket = null;
         boolean requiresMagic = modpackAddresses.requiresMagic;
         if (requiresMagic) { // TODO write this logic better
-            LOGGER.info("AM magic handshake required");
             try { // Try to establish a connection via magic packets, if that fails, try to connect directly with TLS from start.
                 // Step 1. Create a plain TCP connection.
                 plainSocket = new Socket();
@@ -222,7 +221,6 @@ class PreValidationConnection {
         }
 
         if (!requiresMagic) {
-            LOGGER.info("AM magic handshake not required, connecting directly with TLS");
             // Step 1. Create a plain TCP connection.
             plainSocket = new Socket();
             plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
