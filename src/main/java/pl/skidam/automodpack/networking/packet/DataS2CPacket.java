@@ -9,7 +9,6 @@ import net.minecraft.server.network.ServerLoginNetworkHandler;
 import net.minecraft.text.Text;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
-import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 
@@ -45,9 +44,10 @@ public class DataS2CPacket {
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
 
+                // TODO: re-write these messages to reflect better new state of implementation/configuration
                 LOGGER.error("Host server error. AutoModpack host server is down or server is not configured correctly");
 
-                if (serverConfig.hostModpackOnMinecraftPort) {
+                if (serverConfig.bindPort == -1) {
                     LOGGER.warn("You are hosting AutoModpack host server on the minecraft port.");
                     LOGGER.warn("However client can't access it, try making `hostIp` and `hostLocalIp` blank in the server config.");
                     LOGGER.warn("If that doesn't work, follow the steps bellow.");

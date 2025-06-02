@@ -38,7 +38,6 @@ public class Server {
         serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
         if (serverConfig != null) {
             serverConfig.syncedFiles = new ArrayList<>();
-            serverConfig.hostModpackOnMinecraftPort = false;
             serverConfig.validateSecrets = false;
             ConfigTools.save(serverConfigFile, serverConfig);
 

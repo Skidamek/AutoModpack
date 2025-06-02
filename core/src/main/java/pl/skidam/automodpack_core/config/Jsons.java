@@ -98,7 +98,6 @@ public class Jsons {
         public String nagMessage = "This server provides dedicated modpack through AutoModpack!";
         public String nagClickableMessage = "Click here to get the AutoModpack!";
         public String nagClickableLink = "https://modrinth.com/project/automodpack";
-        public boolean hostModpackOnMinecraftPort = true;
         public String bindAddress = "0.0.0.0";
         public int bindPort = -1;
         public String addressToSend = "";

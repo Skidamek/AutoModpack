@@ -232,7 +232,7 @@ public class NettyServer {
 
         shouldHost = true; // At this point we know that we want to host the modpack
 
-        if (serverConfig.hostModpackOnMinecraftPort) {
+        if (serverConfig.bindPort == -1) {
             LOGGER.info("Hosting modpack on Minecraft port");
             return false; // Dont start separate server for modpack hosting, use minecraft port instead
         } else {

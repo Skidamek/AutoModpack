@@ -18,7 +18,7 @@ public abstract class ServerNetworkIoMixin {
             at = @At("TAIL")
     )
     private void injectAutoModpackHost(Channel channel, CallbackInfo ci) {
-        if (!serverConfig.hostModpackOnMinecraftPort) {
+        if (serverConfig.bindPort != -1) {
             return;
         }
 
