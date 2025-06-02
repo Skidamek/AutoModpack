@@ -53,18 +53,23 @@ public class DataC2SPacket {
             }
 
             // Get actual address of the server client have connected to and format it
-            InetSocketAddress modpackAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
-            modpackAddress = AddressHelpers.format(modpackAddress.getHostString(), modpackAddress.getPort());
+            InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
+            String effectiveHost = connectedAddress.getHostString();
+            int effectivePort = connectedAddress.getPort();
 
-            if (packetAddress.isBlank()) {
-                if (packetPort != null) { // Server may just send port without address
-                    modpackAddress = InetSocketAddress.createUnresolved(modpackAddress.getHostString(), packetPort);
-                }
-            } else if (packetPort != null) {
-                modpackAddress = InetSocketAddress.createUnresolved(packetAddress, packetPort);
-            } else {
-                modpackAddress = AddressHelpers.parse(packetAddress);
+            // If the packet specifies a non-blank address, use it to override the host.
+            if (!packetAddress.isBlank()) {
+                effectiveHost = packetAddress;
             }
+
+            // If the packet specifies a port, use it to override the port.
+            if (packetPort != null) {
+                effectivePort = packetPort;
+            }
+
+            // Construct the final modpack address
+            InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
+
             LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 
             Boolean needsDisconnecting = null;

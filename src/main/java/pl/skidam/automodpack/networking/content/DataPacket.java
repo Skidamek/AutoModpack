@@ -1,9 +1,12 @@
 package pl.skidam.automodpack.networking.content;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import pl.skidam.automodpack_core.auth.Secrets;
 
 public class DataPacket {
+    private static final Gson gson = new GsonBuilder().serializeNulls().serializeNulls().create();
+
     public String address;
     public Integer port;
     public String modpackName;
@@ -21,12 +24,10 @@ public class DataPacket {
     }
 
     public String toJson() {
-        Gson gson = new Gson();
         return gson.toJson(this);
     }
 
     public static DataPacket fromJson(String json) {
-        Gson gson = new Gson();
         return gson.fromJson(json, DataPacket.class);
     }
 }
