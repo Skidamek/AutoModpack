@@ -32,7 +32,6 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 public class DownloadClient implements AutoCloseable {
     private final List<Connection> connections = new ArrayList<>();
     private InetSocketAddress address = null;
-    private final boolean usedMagic;
 
     /**
      * Creates a new {@link DownloadClient} for the specified address. If the first connection fails with a verification
@@ -62,7 +61,6 @@ public class DownloadClient implements AutoCloseable {
         }
 
         PreValidationConnection firstConnection = getPreValidationConnection(modpackAddresses, keyStore);
-        usedMagic = firstConnection.usedMagic();
         if (firstConnection.getSocket() != null && !firstConnection.getSocket().isClosed() && firstConnection.getUnvalidatedCertificate() == null && secretBytes != null) {
             connections.add(new Connection(firstConnection, secretBytes));
         } else if (firstConnection.getSocket() != null) {
@@ -141,10 +139,6 @@ public class DownloadClient implements AutoCloseable {
         throw new IllegalStateException("No available connections");
     }
 
-    public boolean usedMagic() {
-        return usedMagic;
-    }
-
     /**
      * Downloads a file identified by its SHA-1 hash to the given destination.
      * Returns a CompletableFuture that completes when the download finishes.
@@ -182,7 +176,6 @@ public class DownloadClient implements AutoCloseable {
 class PreValidationConnection {
     private final SSLSocket socket;
     private final X509Certificate unvalidatedCertificate;
-    private final boolean usedMagic;
 
     /**
      * Creates a new connection by first opening a plain TCP socket,
@@ -192,14 +185,13 @@ class PreValidationConnection {
      * @param keyStore         the keystore containing trusted certificates
      */
     public PreValidationConnection(InetSocketAddress resolvedHostAddress, Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
-        Socket plainSocket = null;
-        boolean requiresMagic = modpackAddresses.requiresMagic;
-        if (requiresMagic) { // TODO write this logic better
-            try { // Try to establish a connection via magic packets, if that fails, try to connect directly with TLS from start.
-                // Step 1. Create a plain TCP connection.
-                plainSocket = new Socket();
-                plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
-                plainSocket.setSoTimeout(10000);
+        // Step 1. Create a plain TCP connection.
+        Socket plainSocket = new Socket();
+        plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
+        plainSocket.setSoTimeout(10000);
+
+        if (modpackAddresses.requiresMagic) {
+            try {
                 DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
                 DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
 
@@ -214,17 +206,13 @@ class PreValidationConnection {
                     throw new IOException("Invalid handshake response from server: " + handshakeResponse);
                 }
             } catch (IOException e) {
-                LOGGER.warn("AM magic handshake failed, trying to connect directly with TLS: {}", e.getMessage());
-                requiresMagic = false;
+                LOGGER.error("AM magic handshake failed {}", e.getMessage());
                 plainSocket.close();
             }
         }
 
-        if (!requiresMagic) {
-            // Step 1. Create a plain TCP connection.
-            plainSocket = new Socket();
-            plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
-            plainSocket.setSoTimeout(10000);
+        if (plainSocket.isClosed() || !plainSocket.isConnected()) {
+            throw new IOException("Failed to establish a plain socket connection to " + resolvedHostAddress);
         }
 
         // Step 4. Upgrade the plain socket to TLS using the same underlying connection.
@@ -251,8 +239,6 @@ class PreValidationConnection {
         if (certificate == null) {
             throw new IOException("No certificate found in server's response");
         }
-
-        this.usedMagic = requiresMagic; // We have a certificate, meaning that the connection was successful, so save current state of connection to save it for later use.
 
         if (!session.isValid()) { // Handshake failed
             sslSocket.close();
@@ -299,10 +285,6 @@ class PreValidationConnection {
 
     public X509Certificate getUnvalidatedCertificate() {
         return unvalidatedCertificate;
-    }
-
-    public boolean usedMagic() {
-        return usedMagic;
     }
 
     /**
