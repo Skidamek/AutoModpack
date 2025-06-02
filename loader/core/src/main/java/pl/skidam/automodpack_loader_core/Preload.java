@@ -119,16 +119,15 @@ public class Preload {
 
         // load client config
         if (clientConfigOverride == null) {
-            var clientConfigVersion = ConfigTools.loadCheck(clientConfigFile, Jsons.VersionConfigField.class);
+            var clientConfigVersion = ConfigTools.softLoad(clientConfigFile, Jsons.VersionConfigField.class);
             if (clientConfigVersion != null) {
-                // Update the configs schemes to not crash the game if loaded with old config!
                 if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
+                    // Update the configs schemes to not crash the game if loaded with old config!
                     var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
-                    // update to v2 - just delete the installedModpacks
-                    if (clientConfigV1 != null) {
-                        clientConfigV1.installedModpacks = null;
-                        clientConfigV1.DO_NOT_CHANGE_IT = 2;
+                    if (clientConfigV1 != null) { // update to V2 - just delete the installedModpacks
                         clientConfigVersion.DO_NOT_CHANGE_IT = 2;
+                        clientConfigV1.DO_NOT_CHANGE_IT = 2;
+                        clientConfigV1.installedModpacks = null;
                     }
 
                     ConfigTools.save(clientConfigFile, clientConfigV1);
@@ -145,30 +144,15 @@ public class Preload {
             clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV2.class);
         }
 
-        var serverConfigVersion = ConfigTools.loadCheck(serverConfigFile, Jsons.VersionConfigField.class);
+        var serverConfigVersion = ConfigTools.softLoad(serverConfigFile, Jsons.VersionConfigField.class);
         if (serverConfigVersion != null) {
             if (serverConfigVersion.DO_NOT_CHANGE_IT == 1) {
-                // Update the configs schemes to not crash the game if loaded with old config!
-                Jsons.ServerConfigFieldsV2 serverConfigV2 = new Jsons.ServerConfigFieldsV2();
+                // Update the configs schemes to make this update not as breaking as it could be
                 var serverConfigV1 = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV1.class);
-                if (serverConfigV1 != null) {
-                    serverConfigV1.DO_NOT_CHANGE_IT = 2;
+                var serverConfigV2 = ConfigTools.softLoad(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+                if (serverConfigV1 != null && serverConfigV2 != null) {
                     serverConfigVersion.DO_NOT_CHANGE_IT = 2;
-
-                    // copy the previous config values to the new config
-                    serverConfigV2.modpackName = serverConfigV1.modpackName;
-                    serverConfigV2.modpackHost = serverConfigV1.modpackHost;
-                    serverConfigV2.generateModpackOnStart = serverConfigV1.generateModpackOnStart;
-                    serverConfigV2.syncedFiles = serverConfigV1.syncedFiles;
-                    serverConfigV2.allowEditsInFiles = serverConfigV1.allowEditsInFiles;
-                    serverConfigV2.autoExcludeUnnecessaryFiles = serverConfigV1.autoExcludeUnnecessaryFiles;
-                    serverConfigV2.requireAutoModpackOnClient = serverConfigV1.requireAutoModpackOnClient;
-                    serverConfigV2.nagUnModdedClients = serverConfigV1.nagUnModdedClients;
-                    serverConfigV2.nagMessage = serverConfigV1.nagMessage;
-                    serverConfigV2.nagClickableMessage = serverConfigV1.nagClickableMessage;
-                    serverConfigV2.nagClickableLink = serverConfigV1.nagClickableLink;
-                    serverConfigV2.acceptedLoaders = serverConfigV1.acceptedLoaders;
-
+                    serverConfigV2.DO_NOT_CHANGE_IT = 2;
                     serverConfigV2.addressToSend = serverConfigV1.hostIp;
                     serverConfigV2.localAddressToSend = serverConfigV1.hostLocalIp;
                     serverConfigV2.portToSend = serverConfigV1.hostPort;
