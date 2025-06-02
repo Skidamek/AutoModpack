@@ -134,7 +134,7 @@ public class HandshakeS2CPacket {
                 portToSend = minecraftServerPort;
             }
 
-            boolean requiresMagic = serverConfig.bindPort == -1 || !serverConfig.disableInternalTLS;
+            boolean requiresMagic = serverConfig.bindPort == -1;
             DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
 
             String packetContentJson = dataPacket.toJson();

@@ -10,6 +10,7 @@ import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 
 import java.util.List;
 
+import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 public class ProtocolServerHandler extends ByteToMessageDecoder {
@@ -41,7 +42,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             handlers.forEach((name, handler) -> ctx.pipeline().remove(handler));
 
             setupPipeline(ctx);
-        } else if (sslCtx == null) { // However if theres no magic packet and we dont use internal TLS, we have to try to connect anyway, for use with reverse proxy setups
+        } else if (sslCtx == null || serverConfig.bindPort != -1) { // However if theres no magic packet and we dont use internal TLS or we are hosting on separate port, we have to try to connect anyway, for use with reverse proxy setups
             setupPipeline(ctx);
         }
 
