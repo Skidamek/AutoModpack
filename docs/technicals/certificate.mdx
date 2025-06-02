@@ -28,6 +28,44 @@ If you're hosting modpack on the same port as your minecraft server, in most cas
 Never copy-paste random commands from the internet, always read the documentation of the tool you're using!
 </Callout>
 
+#### Reverse Proxy using Nginx
+
+You need to have nginx installed and a valid certificated prepared. You can get a certificate easly with Certbot:
+```bash
+# certbot certonly --nginx --preferred_challenges dns -d <modpack-host-domain> -d <minecraft-server-domain>
+```
+
+Add the follow into the `/etc/nginx/nginx.conf` file:
+```
+stream {
+    server {
+        listen 33038 ssl;
+        ssl_protocols TLSv1.3;
+        proxy_pass 127.0.0.1:33037;
+        ssl_certificate     /etc/letsencrypt/live/<modpack-host-domain>/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/<modpack-host-domain>/privkey.pem;
+    }
+}
+```
+
+You also need to change the `<minecraft-dir>/automodpack/automodpack-server.json` to:
+```json
+{
+    ...
+    "bindAddress": "127.0.0.1",
+    "bindPort": 33037,
+    "addressToSend": "<modpack-host-domain>",
+    "localAddressToSend": "<modpack-host-domain>",
+    "portToSend": 33038,
+    "disableInternalTLS": true,
+    ...
+}
+```
+
+<Callout variant="warning">
+Never copy-paste random commands from the internet, always read the documentation of the tool you're using!
+</Callout>
+
 After obtaining the certificate, the files you need are `fullchain.pem` (the full chain certificate, copy and rename to `cert.crt`) and `privkey.pem` (the private key, copy and rename to `key.pem`).
 
 ### Wait but why do I need all this? Its just a modpack for my friends!
