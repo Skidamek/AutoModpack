@@ -5,6 +5,9 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.text.ClickEvent;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
@@ -154,11 +157,23 @@ public class Commands {
         return Command.SINGLE_SUCCESS;
     }
 
-
     private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
         Formatting statusColor = hostServer.isRunning() ? Formatting.GREEN : Formatting.RED;
         String status = hostServer.isRunning() ? "running" : "not running";
         send(context, "Modpack hosting status", Formatting.GREEN, status, statusColor, false);
+        String fingerprint = hostServer.getCertificateFingerprint();
+        Text fingerprintText = VersionedText.literal(fingerprint)
+                .formatted(Formatting.YELLOW).styled(style -> style
+                        /*? if >1.21.4 {*/
+                        /*.withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
+                         *//*?} else {*/
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
+        /*?}*/
+        VersionedCommandSource.sendFeedback(context,
+                VersionedText.literal("Certificate fingerprint: ")
+                        .formatted(Formatting.WHITE)
+                        .append(fingerprintText), false);
+
         return Command.SINGLE_SUCCESS;
     }
 
