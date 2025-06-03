@@ -31,7 +31,7 @@ public class DataS2CPacket {
             String clientHasUpdate = buf.readString(Short.MAX_VALUE);
 
             if ("true".equals(clientHasUpdate)) { // disconnect
-                LOGGER.warn("{} has not installed modpack. Certificate fingerprint to verify: {}", profile.getName(), hostServer.getCertificateFingerprint());
+                LOGGER.warn("{} has not installed modpack. Certificate fingerprint: {}", profile.getName(), hostServer.getCertificateFingerprint());
                 Text reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
                 ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
                 connection.send(new LoginDisconnectS2CPacket(reason));
