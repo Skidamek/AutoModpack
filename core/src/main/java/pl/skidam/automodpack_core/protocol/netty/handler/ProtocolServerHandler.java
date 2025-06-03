@@ -42,7 +42,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             handlers.forEach((name, handler) -> ctx.pipeline().remove(handler));
 
             setupPipeline(ctx);
-        } else if (sslCtx == null || serverConfig.bindPort != -1) { // However if theres no magic packet and we dont use internal TLS or we are hosting on separate port, we have to try to connect anyway, for use with reverse proxy setups
+        } else if (sslCtx == null || serverConfig.bindPort != -1) { // However if there's no magic packet and we don't use internal TLS or we are hosting on a separate port, we have to try to connect anyway, for use with reverse proxy setups
             setupPipeline(ctx);
         }
 
