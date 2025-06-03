@@ -202,11 +202,10 @@ class PreValidationConnection {
                 // Step 3. Wait for the server’s reply (AMOK magic).
                 int handshakeResponse = plainIn.readInt();
                 if (handshakeResponse != MAGIC_AMOK) {
-                    plainSocket.close();
-                    throw new IOException("Invalid handshake response from server: " + handshakeResponse);
+                    throw new IOException("Invalid response from server: " + handshakeResponse);
                 }
             } catch (IOException e) {
-                LOGGER.error("AM magic handshake failed {}", e.getMessage());
+                LOGGER.error("AutoModpack magic handshake failed", e);
                 plainSocket.close();
             }
         }
