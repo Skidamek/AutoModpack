@@ -162,13 +162,13 @@ public class NettyServer {
     // Returns true if stopped successfully
     public boolean stop() {
         try {
-            if (serverChannel == null) {
-                if (shouldHost) {
-                    shouldHost = false;
-                }
-            } else {
+            if (serverChannel != null) {
                 serverChannel.channel().close().sync();
                 serverChannel = null;
+            }
+
+            if (shouldHost) {
+                shouldHost = false;
             }
 
             TrafficShaper.close();
