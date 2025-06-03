@@ -6,7 +6,8 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.ClickEvent;
-import net.minecraft.text.Text;
+import net.minecraft.text.HoverEvent;
+import net.minecraft.text.MutableText;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
@@ -161,17 +162,17 @@ public class Commands {
         String status = hostServer.isRunning() ? "running" : "not running";
         send(context, "Modpack hosting status", Formatting.GREEN, status, statusColor, false);
         String fingerprint = hostServer.getCertificateFingerprint();
-        Text fingerprintText = VersionedText.literal(fingerprint)
-                .formatted(Formatting.YELLOW).styled(style -> style
-                        /*? if >1.21.4 {*/
-                        /*.withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
-                         *//*?} else {*/
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
-        /*?}*/
-        VersionedCommandSource.sendFeedback(context,
-                VersionedText.literal("Certificate fingerprint: ")
-                        .formatted(Formatting.WHITE)
-                        .append(fingerprintText), false);
+        if (fingerprint != null) {
+            MutableText fingerprintText = VersionedText.literal(fingerprint).styled(style -> style
+                            /*? if >1.21.4 {*/
+                            /*.withHoverEvent(new HoverEvent.ShowText, VersionedText.translatable("chat.copy.click"))
+                            /*.withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
+                             *//*?} else {*/
+                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
+                            .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
+                            /*?}*/
+            send(context, "Certificate fingerprint", Formatting.WHITE, fingerprintText, Formatting.YELLOW, false);
+        }
 
         return Command.SINGLE_SUCCESS;
     }
@@ -217,6 +218,17 @@ public class Commands {
                             .formatted(Formatting.WHITE))
                     .append(VersionedText.literal(appendMsg)
                             .formatted(appendMsgColor)),
+                broadcast);
+    }
+
+    private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, MutableText appendMsg, Formatting appendMsgColor, boolean broadcast) {
+        VersionedCommandSource.sendFeedback(context,
+                VersionedText.literal(msg)
+                        .formatted(msgColor)
+                        .append(VersionedText.literal(" - ")
+                                .formatted(Formatting.WHITE))
+                        .append(appendMsg
+                                .formatted(appendMsgColor)),
                 broadcast);
     }
 }

@@ -107,7 +107,9 @@ public class NettyServer {
 
             // generate sha256 from cert as a fingerprint
             certificateFingerprint = NetUtils.getFingerprint(cert);
-            LOGGER.warn("Certificate fingerprint for client validation: {}", certificateFingerprint);
+            if (certificateFingerprint != null) {
+                LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
+            }
 
             if (!canStart()) {
                 new TrafficShaper(null);
