@@ -123,20 +123,14 @@ public class HandshakeS2CPacket {
             Secrets.Secret secret = Secrets.generateSecret();
             SecretsStore.saveHostSecret(profile.getId().toString(), secret);
 
-            Integer portToSend = null;
-            if (serverConfig.portToSend != -1) {
-                portToSend = serverConfig.portToSend;
+            int portToSend = serverConfig.bindPort == -1 ? minecraftServerPort : serverConfig.portToSend;
+            boolean requiresMagic = serverConfig.bindPort == -1;
 
-                if (!addressToSend.isBlank()) {
-                    LOGGER.info("Sending {} modpack address: {}:{}", profile.getName(), addressToSend, portToSend);
-                }
-            } else if (serverConfig.bindPort == -1) {
-                portToSend = minecraftServerPort;
+            if (!addressToSend.isBlank()) {
+                LOGGER.info("Sending {} modpack address: {}:{}", profile.getName(), addressToSend, portToSend);
             }
 
-            boolean requiresMagic = serverConfig.bindPort == -1;
             DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
-
             String packetContentJson = dataPacket.toJson();
 
             PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());

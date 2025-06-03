@@ -30,10 +30,10 @@ public class DataC2SPacket {
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient minecraftClient, ClientLoginNetworkHandler handler, PacketByteBuf buf) {
         try {
             String serverResponse = buf.readString(Short.MAX_VALUE);
-
             DataPacket dataPacket = DataPacket.fromJson(serverResponse);
+
             String packetAddress = dataPacket.address;
-            Integer packetPort = dataPacket.port;
+            int packetPort = dataPacket.port;
             String modpackName = dataPacket.modpackName;
             Secrets.Secret secret = dataPacket.secret;
             boolean modRequired = dataPacket.modRequired;
@@ -63,7 +63,7 @@ public class DataC2SPacket {
             }
 
             // If the packet specifies a port, use it to override the port.
-            if (packetPort != null) {
+            if (packetPort != -1) {
                 effectivePort = packetPort;
             }
 

@@ -8,13 +8,13 @@ public class DataPacket {
     private static final Gson gson = new GsonBuilder().serializeNulls().serializeNulls().create();
 
     public String address;
-    public Integer port;
+    public int port;
     public String modpackName;
     public Secrets.Secret secret;
     public boolean modRequired;
     public boolean requiresMagic;
 
-    public DataPacket(String address, Integer port, String modpackName, Secrets.Secret secret, boolean modRequired, boolean requiresMagic) {
+    public DataPacket(String address, int port, String modpackName, Secrets.Secret secret, boolean modRequired, boolean requiresMagic) {
         this.address = address;
         this.port = port;
         this.modpackName = modpackName;
