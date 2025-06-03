@@ -54,21 +54,17 @@ public class DataC2SPacket {
 
             // Get actual address of the server client have connected to and format it
             InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
-            String effectiveHost = connectedAddress.getHostString();
-            int effectivePort = connectedAddress.getPort();
+            String effectiveHost;
 
-            // If the packet specifies a non-blank address, use it to override the host.
-            if (!packetAddress.isBlank()) {
+            // If the packet specifies a non-blank address, use it or else use address from the server client have connected to.
+            if (packetAddress.isBlank()) {
+                effectiveHost = connectedAddress.getHostString();
+            } else {
                 effectiveHost = packetAddress;
             }
 
-            // If the packet specifies a port, use it to override the port.
-            if (packetPort != -1) {
-                effectivePort = packetPort;
-            }
-
             // Construct the final modpack address
-            InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
+            InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, packetPort);
 
             LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 

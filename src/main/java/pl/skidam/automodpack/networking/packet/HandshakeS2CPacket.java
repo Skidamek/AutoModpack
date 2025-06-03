@@ -123,7 +123,7 @@ public class HandshakeS2CPacket {
             Secrets.Secret secret = Secrets.generateSecret();
             SecretsStore.saveHostSecret(profile.getId().toString(), secret);
 
-            int portToSend = serverConfig.bindPort == -1 ? minecraftServerPort : serverConfig.portToSend;
+            int portToSend = serverConfig.portToSend == -1 ? minecraftServerPort : serverConfig.portToSend;
             boolean requiresMagic = serverConfig.bindPort == -1;
 
             if (!addressToSend.isBlank()) {
