@@ -6,6 +6,9 @@ public class PreloadScreenImpl implements ScreenService {
 
     // We leave this all empty
     @Override
+    public void downloadselection(Object... args) { }
+
+    @Override
     public void download(Object... args) { }
 
     @Override
