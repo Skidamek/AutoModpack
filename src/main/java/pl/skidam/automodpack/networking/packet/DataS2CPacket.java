@@ -57,7 +57,7 @@ public class DataS2CPacket {
                 LOGGER.warn("Make sure that 'addressToSend' and 'localAddressToSend' are correct in the config file!");
                 LOGGER.warn("It can be either an IP address or a domain pointing to your modpack host server.");
                 LOGGER.warn("If nothing works, try changing the 'bindPort' in the config file, then forward / open it and restart server");
-                LOGGER.warn("Do note that some hosting providers may proxy that port internally and they may give you a different address with port to use, in that case separate the given address by ':' and set the first part as 'addressToSend' and the second part as 'portToSend' in the config file.");
+                LOGGER.warn("Note that some hosting providers may proxy this port internally and give you a different address and port to use. In this case, separate the given address with ':', and set the first part as 'addressToSend' and the second part as 'portToSend' in the config file.");
 
                 if (serverConfig.bindPort != serverConfig.portToSend && serverConfig.bindPort != -1 && serverConfig.portToSend != -1) {
                     LOGGER.error("bindPort '{}' is different than portToSend '{}'. If you are not using reverse proxy, match them! If you do use reverse proxy, make sure it is setup correctly.", serverConfig.bindPort, serverConfig.portToSend);
