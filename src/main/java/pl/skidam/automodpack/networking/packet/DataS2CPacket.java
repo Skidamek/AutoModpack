@@ -44,29 +44,26 @@ public class DataS2CPacket {
                 connection.send(new LoginDisconnectS2CPacket(reason));
                 connection.disconnect(reason);
 
-                // TODO: re-write these messages to reflect better new state of implementation/configuration
                 LOGGER.error("Host server error. AutoModpack host server is down or server is not configured correctly");
 
                 if (serverConfig.bindPort == -1) {
-                    LOGGER.warn("You are hosting AutoModpack host server on the minecraft port.");
-                    LOGGER.warn("However client can't access it, try making `hostIp` and `hostLocalIp` blank in the server config.");
-                    LOGGER.warn("If that doesn't work, follow the steps bellow.");
+                    LOGGER.warn("You are hosting AutoModpack host server on the Minecraft port.");
                     LOGGER.warn("");
                 } else {
                     LOGGER.warn("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", serverConfig.bindPort);
                     LOGGER.warn("");
                 }
 
-                LOGGER.warn("Make sure that '{}' address and '{}' local address are correct in the config file!", serverConfig.addressToSend, serverConfig.localAddressToSend);
-                LOGGER.warn("host IP should be an ip which are players outside of server network connecting to and host local IP should be an ip which are players inside of server network connecting to");
-                LOGGER.warn("It can be Ip or a correctly set domain");
-                LOGGER.warn("If you need, change port in config file, forward / open it and restart server");
+                LOGGER.warn("Make sure that 'addressToSend' and 'localAddressToSend' are correct in the config file!");
+                LOGGER.warn("It can be either an Ip address or a domain pointing to your modpack host server.");
+                LOGGER.warn("If nothing works, try changing the 'bindPort' in the config file, then forward / open it and restart server");
+                LOGGER.warn("Do note that some hosting providers may proxy that port internally and they may give you a different address with port to use, in that case separate the given address by ':' and set the first part as 'addressToSend' and the second part as 'portToSend' in the config file.");
 
-                if (serverConfig.bindPort != serverConfig.portToSend) {
+                if (serverConfig.bindPort != serverConfig.portToSend && serverConfig.bindPort != -1 && serverConfig.portToSend != -1) {
                     LOGGER.error("bindPort '{}' is different than portToSend '{}'. If you are not using reverse proxy, match them! If you do use reverse proxy, make sure it is setup correctly.", serverConfig.bindPort, serverConfig.portToSend);
                 }
 
-                LOGGER.warn("Server certificate fingerprint to verify: {}", hostServer.getCertificateFingerprint());
+                LOGGER.warn("Server certificate fingerprint: {}", hostServer.getCertificateFingerprint());
             }
         } catch (Exception e) {
             LOGGER.error("Error while handling DataS2CPacket", e);
