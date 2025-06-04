@@ -153,10 +153,26 @@ public class Preload {
                 if (serverConfigV1 != null && serverConfigV2 != null) {
                     serverConfigVersion.DO_NOT_CHANGE_IT = 2;
                     serverConfigV2.DO_NOT_CHANGE_IT = 2;
-                    serverConfigV2.addressToSend = serverConfigV1.hostIp;
-                    serverConfigV2.localAddressToSend = serverConfigV1.hostLocalIp;
-                    serverConfigV2.portToSend = serverConfigV1.hostPort;
-                    serverConfigV2.bindPort = serverConfigV1.hostPort;
+
+                    if (serverConfigV1.hostIp.isBlank()) {
+                        serverConfigV2.addressToSend = "";
+                    } else {
+                        serverConfigV2.addressToSend = AddressHelpers.parse(serverConfigV1.hostIp).getHostString();
+                    }
+
+                    if (serverConfigV1.hostLocalIp.isBlank()) {
+                        serverConfigV2.localAddressToSend = "";
+                    } else {
+                        serverConfigV2.localAddressToSend = AddressHelpers.parse(serverConfigV1.hostLocalIp).getHostString();
+                    }
+
+                    if (serverConfigV1.hostModpackOnMinecraftPort) {
+                        serverConfigV2.bindPort = -1;
+                        serverConfigV2.portToSend = -1;
+                    } else {
+                        serverConfigV2.bindPort = serverConfigV1.hostPort;
+                        serverConfigV2.portToSend = serverConfigV1.hostPort;
+                    }
                 }
 
                 ConfigTools.save(serverConfigFile, serverConfigV2);
