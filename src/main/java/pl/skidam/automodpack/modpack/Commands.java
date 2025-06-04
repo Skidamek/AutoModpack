@@ -24,7 +24,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class Commands {
 
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(
+        var automodpackNode = dispatcher.register(
                 literal("automodpack")
                         .executes(Commands::about)
                         .then(literal("generate")
@@ -50,6 +50,9 @@ public class Commands {
                                         .requires((source) -> source.hasPermissionLevel(3))
                                         .executes(Commands::connections)
                                 )
+                                .then(literal("fingerprint"))
+                                .requires((source) -> source.hasPermissionLevel(3))
+                                .executes(Commands::fingerprint)
                         )
                         .then(literal("config")
                                 .requires((source) -> source.hasPermissionLevel(3))
@@ -59,14 +62,39 @@ public class Commands {
                                 )
                         )
         );
+
+        dispatcher.register(
+                literal("amp")
+                        .executes(Commands::about)
+                        .redirect(automodpackNode)
+        );
     }
 
-    private static int connections(CommandContext<ServerCommandSource> serverCommandSourceCommandContext) {
+    private static int fingerprint(CommandContext<ServerCommandSource> context) {
+        String fingerprint = hostServer.getCertificateFingerprint();
+        if (fingerprint != null) {
+            MutableText fingerprintText = VersionedText.literal(fingerprint).styled(style -> style
+                    /*? if >1.21.4 {*/
+                    /*.withHoverEvent(new HoverEvent.ShowText, VersionedText.translatable("chat.copy.click"))
+                    /*.withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
+                     *//*?} else {*/
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
+            /*?}*/
+            send(context, "Certificate fingerprint", Formatting.WHITE, fingerprintText, Formatting.YELLOW, false);
+        } else {
+            send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", Formatting.RED, false);
+        }
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int connections(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
             var connections = hostServer.getConnections();
             var uniqueSecrets = Set.copyOf(connections.values());
 
-            send(serverCommandSourceCommandContext, String.format("Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), Formatting.YELLOW, false);
+            send(context, String.format("Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), Formatting.YELLOW, false);
 
             for (String secret : uniqueSecrets) {
                 var playerSecretPair = SecretsStore.getHostSecret(secret);
@@ -77,7 +105,7 @@ public class Commands {
 
                 long connNum = connections.values().stream().filter(secret::equals).count();
 
-                send(serverCommandSourceCommandContext, String.format("Player: %s (%s) is downloading modpack using %d connections", profile.getName(), playerId, connNum), Formatting.GREEN, false);
+                send(context, String.format("Player: %s (%s) is downloading modpack using %d connections", profile.getName(), playerId, connNum), Formatting.GREEN, false);
             }
         });
 
@@ -161,26 +189,13 @@ public class Commands {
         Formatting statusColor = hostServer.isRunning() ? Formatting.GREEN : Formatting.RED;
         String status = hostServer.isRunning() ? "running" : "not running";
         send(context, "Modpack hosting status", Formatting.GREEN, status, statusColor, false);
-        String fingerprint = hostServer.getCertificateFingerprint();
-        if (fingerprint != null) {
-            MutableText fingerprintText = VersionedText.literal(fingerprint).styled(style -> style
-                            /*? if >1.21.4 {*/
-                            /*.withHoverEvent(new HoverEvent.ShowText, VersionedText.translatable("chat.copy.click"))
-                            /*.withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
-                             *//*?} else {*/
-                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
-                            .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
-                            /*?}*/
-            send(context, "Certificate fingerprint", Formatting.WHITE, fingerprintText, Formatting.YELLOW, false);
-        }
-
         return Command.SINGLE_SUCCESS;
     }
 
     private static int about(CommandContext<ServerCommandSource> context) {
         send(context, "AutoModpack", Formatting.GREEN, AM_VERSION, Formatting.WHITE, false);
         send(context, "/automodpack generate", Formatting.YELLOW, false);
-        send(context, "/automodpack host start/stop/restart/connections", Formatting.YELLOW, false);
+        send(context, "/automodpack host start/stop/restart/connections/fingerprint", Formatting.YELLOW, false);
         send(context, "/automodpack config reload", Formatting.YELLOW, false);
         return Command.SINGLE_SUCCESS;
     }
@@ -213,11 +228,11 @@ public class Commands {
     private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, String appendMsg, Formatting appendMsgColor, boolean broadcast) {
         VersionedCommandSource.sendFeedback(context,
                 VersionedText.literal(msg)
-                    .formatted(msgColor)
-                    .append(VersionedText.literal(" - ")
-                            .formatted(Formatting.WHITE))
-                    .append(VersionedText.literal(appendMsg)
-                            .formatted(appendMsgColor)),
+                        .formatted(msgColor)
+                        .append(VersionedText.literal(" - ")
+                                .formatted(Formatting.WHITE))
+                        .append(VersionedText.literal(appendMsg)
+                                .formatted(appendMsgColor)),
                 broadcast);
     }
 
