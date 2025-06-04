@@ -41,11 +41,6 @@ public class Server {
             serverConfig.validateSecrets = false;
             ConfigTools.save(serverConfigFile, serverConfig);
 
-            if (serverConfig.bindAddress == null || serverConfig.bindAddress.isBlank()) {
-                LOGGER.error("Host address not set in config!");
-                return;
-            }
-
             if (serverConfig.bindPort == -1) {
                 LOGGER.error("Host port not set in config!");
                 return;
