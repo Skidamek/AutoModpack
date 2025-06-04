@@ -23,6 +23,10 @@ public class ModpackExecutor {
         try {
             if (!Files.exists(hostContentModpackDir)) {
                 Files.createDirectories(hostContentModpackDir);
+                Files.createDirectory(hostContentModpackDir.resolve("mods"));
+                Files.createDirectory(hostContentModpackDir.resolve("config"));
+                Files.createDirectory(hostContentModpackDir.resolve("shaderpacks"));
+                Files.createDirectory(hostContentModpackDir.resolve("resourcepacks"));
             }
         } catch (IOException e) {
             e.printStackTrace();
