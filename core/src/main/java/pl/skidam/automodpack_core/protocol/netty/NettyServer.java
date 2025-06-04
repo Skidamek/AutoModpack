@@ -169,9 +169,7 @@ public class NettyServer {
                 serverChannel = null;
             }
 
-            if (shouldHost) {
                 shouldHost = false;
-            }
 
             TrafficShaper.close();
 
