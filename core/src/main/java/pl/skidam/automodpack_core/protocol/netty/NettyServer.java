@@ -89,11 +89,11 @@ public class NettyServer {
             }
 
             boolean bindsOnLoopback = bindAddress.getAddress().isLoopbackAddress();
-            if (serverConfig.disableInternalTLS && (serverConfig.bindPort == -1 || !bindsOnLoopback)) {
-                LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use a reverse proxy with TLS.");
+            if (serverConfig.disableInternalTLS && serverConfig.bindPort != -1 && bindsOnLoopback) {
+                LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use e.g. a reverse proxy with TLS.");
             } else {
                 if (serverConfig.disableInternalTLS) {
-                    LOGGER.error("Internal TLS cannot be disabled. You have to bind modpack host on a loopback address and a separate port ");
+                    LOGGER.error("Internal TLS cannot be disabled. You have to bind modpack host on a loopback address with a separate port.");
                 }
 
                 if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
