@@ -145,9 +145,9 @@ public class CustomFileUtils {
 
         // Checks if in file parents paths (absolute path) there is modpack directory (absolute path)
         if (modpackFileStrAbs.startsWith(modpackPathStrAbs)) {
-            formattedFile = modpackFileStrAbs.replaceFirst(modpackPathStrAbs, "");
+            formattedFile = modpackFileStrAbs.substring(modpackPathStrAbs.length());
         } else if (modpackFileStrAbs.startsWith(cwdStrAbs)) {
-            formattedFile = modpackFileStrAbs.replaceFirst(cwdStrAbs, "");
+            formattedFile = modpackFileStrAbs.substring(cwdStrAbs.length());
         } else if (!modpackFileStrAbs.equals(modpackFileStr)) { // possible in e.g. docker
             LOGGER.error("File: {} ({}) is not in modpack directory: {} ({}) or current working directory: {}", modpackFileStr, modpackFileStrAbs, modpackPath, modpackPathStrAbs, cwdStrAbs);
         }
