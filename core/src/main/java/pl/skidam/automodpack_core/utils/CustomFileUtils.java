@@ -144,10 +144,10 @@ public class CustomFileUtils {
         String formattedFile = modpackFileStr;
 
         // Checks if in file parents paths (absolute path) there is modpack directory (absolute path)
-        if (modpackFileStrAbs.contains(modpackPathStrAbs)) {
-            formattedFile = modpackFileStrAbs.replace(modpackPathStrAbs, "");
-        } else if (modpackFileStrAbs.contains(cwdStrAbs)) {
-            formattedFile = modpackFileStrAbs.replace(cwdStrAbs, "");
+        if (modpackFileStrAbs.startsWith(modpackPathStrAbs)) {
+            formattedFile = modpackFileStrAbs.replaceFirst(modpackPathStrAbs, "");
+        } else if (modpackFileStrAbs.startsWith(cwdStrAbs)) {
+            formattedFile = modpackFileStrAbs.replaceFirst(cwdStrAbs, "");
         } else if (!modpackFileStrAbs.equals(modpackFileStr)) { // possible in e.g. docker
             LOGGER.error("File: {} ({}) is not in modpack directory: {} ({}) or current working directory: {}", modpackFileStr, modpackFileStrAbs, modpackPath, modpackPathStrAbs, cwdStrAbs);
         }
