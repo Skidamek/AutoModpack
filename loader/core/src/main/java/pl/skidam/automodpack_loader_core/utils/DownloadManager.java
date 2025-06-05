@@ -230,8 +230,13 @@ public class DownloadManager {
         return bytesToDownload - bytesDownloaded;
     }
 
-    public float getTotalPercentageOfFileSizeDownloaded() {
-        return (float) bytesDownloaded / bytesToDownload * 100;
+    public int getTotalPercentageOfFileSizeDownloaded() {
+        if (bytesDownloaded == 0 || bytesToDownload == 0) {
+            return 0;
+        }
+
+        int percentage = (int) (bytesDownloaded * 100 / bytesToDownload);
+        return Math.max(0, Math.min(100, percentage));
     }
 
     public String getStage() {

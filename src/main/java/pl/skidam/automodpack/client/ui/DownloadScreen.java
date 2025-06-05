@@ -26,13 +26,10 @@ public class DownloadScreen extends VersionedScreen {
     private static long ticks = 0;
     private ButtonWidget cancelButton;
 
-    // Temp save for the last download values
-//    private final Map<String, String> mapOfFileStats = new HashMap<>(); // URL, Percentage of download
     private String lastStage = "-1";
     private int lastPercentage = -1;
     private String lastSpeed = "-1";
     private String lastETA = "-1";
-    private float lastDownloadedScale = 0.0F;
 
     public DownloadScreen(DownloadManager downloadManager, String header) {
         super(VersionedText.literal("DownloadScreen"));
@@ -50,22 +47,8 @@ public class DownloadScreen extends VersionedScreen {
 
         Util.getMainWorkerExecutor().execute(() -> {
             while (downloadManager != null && downloadManager.isRunning()) {
-
-//                for (Map.Entry<String, DownloadManager.DownloadData> map : ModpackUpdater.downloadManager.downloadsInProgress.entrySet()) {
-//                    mapOfFileStats.put(map.getKey(), ModpackUpdater.downloadManager.getPercentageOfFileSizeDownloaded(map.getKey()) + "%");
-//                }
-//
-//                for (Map.Entry<String, String> map : mapOfFileStats.entrySet()) {
-//                    if (!ModpackUpdater.downloadManager.downloadsInProgress.containsKey(map.getKey())) {
-//                        mapOfFileStats.remove(map.getKey());
-//                    }
-//                }
-
-                // TODO make it work better pls
                 lastStage = downloadManager.getStage();
-                lastPercentage = (int) downloadManager.getTotalPercentageOfFileSizeDownloaded();
-                lastDownloadedScale = (float) (downloadManager.getTotalPercentageOfFileSizeDownloaded() * 0.01);
-
+                lastPercentage = downloadManager.getTotalPercentageOfFileSizeDownloaded();
                 lastSpeed = SpeedMeter.formatDownloadSpeedToMbps(downloadManager.getSpeedMeter().getCurrentSpeedInBytes());
                 lastETA = SpeedMeter.formatETAToSeconds(downloadManager.getSpeedMeter().getETAInSeconds());
             }
@@ -111,7 +94,7 @@ public class DownloadScreen extends VersionedScreen {
     }
 
     private float getDownloadScale() {
-        return lastDownloadedScale;
+        return Math.max(0, Math.min(100, lastPercentage)) * 0.01F; // Convert the clamped percentage to a scale between 0.0f and 1.0f
     }
 
     private void drawDownloadingFiles(VersionedMatrices matrices) {
@@ -128,23 +111,14 @@ public class DownloadScreen extends VersionedScreen {
             int currentY = y + 15;
             synchronized (downloadManager.downloadsInProgress) {
                 for (DownloadManager.DownloadData downloadData : downloadManager.downloadsInProgress.values()) {
-
                     String text = downloadData.getFileName();
-
-//                    DownloadManager.DownloadData downloadData = map.getValue();
-//                    String percentage = mapOfFileStats.get(map.getKey());
-//
-//                    if (percentage != null) {
-//                        text += " " + percentage;
-//                    }
-
-                    drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.literal(text).formatted(Formatting.GRAY), (int) (this.width / 2 * scale), currentY, 16777215);
+                    drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.literal(text).formatted(Formatting.GRAY), (int) ((float) this.width / 2 * scale), currentY, 16777215);
                     currentY += 10;
                 }
             }
         } else {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.noFiles"), (int) (this.width / 2 * scale), y, 16777215);
-            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) (this.width / 2 * scale), y + 25, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.noFiles"), (int) ((float) this.width / 2 * scale), y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) ((float) this.width / 2 * scale), y + 25, 16777215);
         }
 
         matrices.pop();
@@ -207,11 +181,7 @@ public class DownloadScreen extends VersionedScreen {
                 downloadManager.cancelAllAndShutdown();
             }
 
-            // TODO delete files that were downloaded
-            // we will use the same method as to modpacks manager
-
             new ScreenManager().title();
-
         } catch (Exception e) {
             e.printStackTrace();
         }
