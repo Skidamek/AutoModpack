@@ -114,7 +114,7 @@ public class Commands {
 
     private static int reload(CommandContext<ServerCommandSource> context) {
         Util.getMainWorkerExecutor().execute(() -> {
-            var tempServerConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
+            var tempServerConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
             if (tempServerConfig != null) {
                 serverConfig = tempServerConfig;
                 send(context, "AutoModpack server config reloaded!", Formatting.GREEN, true);

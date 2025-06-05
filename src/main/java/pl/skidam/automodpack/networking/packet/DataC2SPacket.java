@@ -30,13 +30,14 @@ public class DataC2SPacket {
     public static CompletableFuture<PacketByteBuf> receive(MinecraftClient minecraftClient, ClientLoginNetworkHandler handler, PacketByteBuf buf) {
         try {
             String serverResponse = buf.readString(Short.MAX_VALUE);
-
             DataPacket dataPacket = DataPacket.fromJson(serverResponse);
+
             String packetAddress = dataPacket.address;
-            Integer packetPort = dataPacket.port;
+            int packetPort = dataPacket.port;
             String modpackName = dataPacket.modpackName;
             Secrets.Secret secret = dataPacket.secret;
             boolean modRequired = dataPacket.modRequired;
+            boolean requiresMagic = dataPacket.requiresMagic;
 
             if (modRequired) {
                 // TODO set screen to refreshed danger screen which will ask user to install modpack with two options
@@ -52,27 +53,26 @@ public class DataC2SPacket {
             }
 
             // Get actual address of the server client have connected to and format it
-            InetSocketAddress modpackAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
-            modpackAddress = AddressHelpers.format(modpackAddress.getHostString(), modpackAddress.getPort());
+            InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
+            String effectiveHost;
 
+            // If the packet specifies a non-blank address, use it or else use address from the server client have connected to.
             if (packetAddress.isBlank()) {
-                if (packetPort != null) { // Server may just send port without address
-                    modpackAddress = InetSocketAddress.createUnresolved(modpackAddress.getHostString(), packetPort);
-                }
-                LOGGER.info("Modpack address from connected server: {}:{}", modpackAddress.getHostString(), modpackAddress.getPort());
-            } else if (packetPort != null) {
-                modpackAddress = InetSocketAddress.createUnresolved(packetAddress, packetPort);
-                LOGGER.info("Received modpack address packet {}:{}", packetAddress, packetPort);
+                effectiveHost = connectedAddress.getHostString();
             } else {
-                modpackAddress = AddressHelpers.parse(packetAddress);
-                LOGGER.info("Received modpack address packet {} With attached port: {}", modpackAddress.getHostString(), modpackAddress.getPort());
+                effectiveHost = packetAddress;
             }
+
+            // Construct the final modpack address
+            InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, packetPort);
+
+            LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 
             Boolean needsDisconnecting = null;
             PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
 
             Path modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
-            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress);
+            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
             var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, true);
 
             if (optionalServerModpackContent.isPresent()) {

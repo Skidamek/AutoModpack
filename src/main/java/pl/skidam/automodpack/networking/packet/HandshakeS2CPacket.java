@@ -113,9 +113,9 @@ public class HandshakeS2CPacket {
 
             // If the player is connecting locally, use the local host IP
             if (AddressHelpers.isLocal(playerAddress)) {
-                addressToSend = serverConfig.hostLocalIp;
+                addressToSend = serverConfig.localAddressToSend;
             } else {
-                addressToSend = serverConfig.hostIp;
+                addressToSend = serverConfig.addressToSend;
             }
 
             // now we know player is authenticated, packets are encrypted and player is whitelisted
@@ -123,35 +123,24 @@ public class HandshakeS2CPacket {
             Secrets.Secret secret = Secrets.generateSecret();
             SecretsStore.saveHostSecret(profile.getId().toString(), secret);
 
-            // We send empty string if hostIp/hostLocalIp is not specified in server config. Client will use ip by which it connected to the server in first place.
-            DataPacket dataPacket = new DataPacket(addressToSend, null, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
-
-            if (serverConfig.reverseProxy) {
-                // With reverse proxy we dont append port to the link, it should be already included in the link
-                // But we need to check if the port is set in the config, since that's where modpack is actually hosted
-                if (serverConfig.hostPort == -1 && !serverConfig.hostModpackOnMinecraftPort) {
-                    LOGGER.error("Reverse proxy is enabled but host port is not set in config! Please set it manually.");
-                }
-
-                LOGGER.info("Sending {} modpack url: {}", profile.getName(), addressToSend);
-            } else { // Append server port
-                int portToSend;
-                if (serverConfig.hostModpackOnMinecraftPort) {
+            int portToSend = serverConfig.portToSend;
+            if (portToSend == -1) {
+                if (serverConfig.bindPort == -1) {
                     portToSend = minecraftServerPort;
                 } else {
-                    portToSend = serverConfig.hostPort;
-
-                    if (serverConfig.hostPort == -1) {
-                        LOGGER.error("Host port is not set in config! Please set it manually.");
-                    }
+                    portToSend = serverConfig.bindPort;
                 }
-
-                if (!addressToSend.isBlank()) {
-                    LOGGER.info("Sending {} modpack url: {}:{}", profile.getName(), addressToSend, portToSend);
-                }
-                dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient);
             }
 
+            boolean requiresMagic = serverConfig.bindPort == -1;
+
+            if (addressToSend.isBlank()) {
+                LOGGER.info("Sending {} modpack host port: {}", profile.getName(), portToSend);
+            } else {
+                LOGGER.info("Sending {} modpack host address: {}:{}", profile.getName(), addressToSend, portToSend);
+            }
+
+            DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
             String packetContentJson = dataPacket.toJson();
 
             PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());

@@ -35,14 +35,13 @@ public class Server {
         serverConfigFile = modpackDir.resolve("automodpack-server.json");
         serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
-        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
         if (serverConfig != null) {
             serverConfig.syncedFiles = new ArrayList<>();
-            serverConfig.hostModpackOnMinecraftPort = false;
             serverConfig.validateSecrets = false;
             ConfigTools.save(serverConfigFile, serverConfig);
 
-            if (serverConfig.hostPort == -1) {
+            if (serverConfig.bindPort == -1) {
                 LOGGER.error("Host port not set in config!");
                 return;
             }
@@ -72,7 +71,7 @@ public class Server {
 
         modpackExecutor.stop();
 
-        LOGGER.info("Starting server on port {}", serverConfig.hostPort);
+        LOGGER.info("Starting server on port {}", serverConfig.bindPort);
         server.start();
         // wait for server to stop
         while (server.isRunning()) {

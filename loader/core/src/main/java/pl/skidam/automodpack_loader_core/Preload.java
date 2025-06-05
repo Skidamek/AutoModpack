@@ -52,19 +52,22 @@ public class Preload {
         selectedModpackDir = optionalSelectedModpackDir.get();
         InetSocketAddress selectedModpackAddress = null;
         InetSocketAddress selectedServerAddress = null;
+        boolean requiresMagic = true; // Default to true
         if (!clientConfig.selectedModpack.isBlank() && clientConfig.installedModpacks.containsKey(clientConfig.selectedModpack)) {
             var entry = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
             selectedModpackAddress = entry.hostAddress;
             selectedServerAddress = entry.serverAddress;
+            requiresMagic = entry.requiresMagic;
         }
 
         // Only selfupdate if no modpack is selected
         if (selectedModpackAddress == null) {
             SelfUpdater.update();
+            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), null);
         } else {
             Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
-            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress);
+            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress, requiresMagic);
             var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
             var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
@@ -116,24 +119,20 @@ public class Preload {
 
         // load client config
         if (clientConfigOverride == null) {
-            var clientConfigVersion = ConfigTools.loadCheck(clientConfigFile, Jsons.VersionConfigField.class);
+            var clientConfigVersion = ConfigTools.softLoad(clientConfigFile, Jsons.VersionConfigField.class);
             if (clientConfigVersion != null) {
-                // Update the configs schemes to not crash the game if loaded with old config!
                 if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
+                    // Update the configs schemes to not crash the game if loaded with old config!
                     var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
-                    // update to v2 - just delete the installedModpacks
-                    if (clientConfigV1 != null) {
-                        clientConfigV1.installedModpacks = null;
-                        clientConfigV1.DO_NOT_CHANGE_IT = 2;
+                    if (clientConfigV1 != null) { // update to V2 - just delete the installedModpacks
                         clientConfigVersion.DO_NOT_CHANGE_IT = 2;
+                        clientConfigV1.DO_NOT_CHANGE_IT = 2;
+                        clientConfigV1.installedModpacks = null;
                     }
+
                     ConfigTools.save(clientConfigFile, clientConfigV1);
                     LOGGER.info("Updated client config version to {}", clientConfigVersion.DO_NOT_CHANGE_IT);
                 }
-
-//                if (clientConfigVersion.DO_NOT_CHANGE_IT == 2) {
-//                    // Noice!
-//                }
             }
 
             clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV2.class);
@@ -145,8 +144,44 @@ public class Preload {
             clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV2.class);
         }
 
+        var serverConfigVersion = ConfigTools.softLoad(serverConfigFile, Jsons.VersionConfigField.class);
+        if (serverConfigVersion != null) {
+            if (serverConfigVersion.DO_NOT_CHANGE_IT == 1) {
+                // Update the configs schemes to make this update not as breaking as it could be
+                var serverConfigV1 = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV1.class);
+                var serverConfigV2 = ConfigTools.softLoad(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+                if (serverConfigV1 != null && serverConfigV2 != null) {
+                    serverConfigVersion.DO_NOT_CHANGE_IT = 2;
+                    serverConfigV2.DO_NOT_CHANGE_IT = 2;
+
+                    if (serverConfigV1.hostIp.isBlank()) {
+                        serverConfigV2.addressToSend = "";
+                    } else {
+                        serverConfigV2.addressToSend = AddressHelpers.parse(serverConfigV1.hostIp).getHostString();
+                    }
+
+                    if (serverConfigV1.hostLocalIp.isBlank()) {
+                        serverConfigV2.localAddressToSend = "";
+                    } else {
+                        serverConfigV2.localAddressToSend = AddressHelpers.parse(serverConfigV1.hostLocalIp).getHostString();
+                    }
+
+                    if (serverConfigV1.hostModpackOnMinecraftPort) {
+                        serverConfigV2.bindPort = -1;
+                        serverConfigV2.portToSend = -1;
+                    } else {
+                        serverConfigV2.bindPort = serverConfigV1.hostPort;
+                        serverConfigV2.portToSend = serverConfigV1.hostPort;
+                    }
+                }
+
+                ConfigTools.save(serverConfigFile, serverConfigV2);
+                LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
+            }
+        }
+
         // load server config
-        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
 
         if (serverConfig != null) {
             // Add current loader to the list
