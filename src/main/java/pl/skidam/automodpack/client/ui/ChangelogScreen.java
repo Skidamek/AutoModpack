@@ -109,24 +109,11 @@ public class ChangelogScreen extends VersionedScreen {
             modpackContent = ConfigTools.loadModpackContent(optionalModpackContentFile.get());
         }
 
-        int modsAdded = 0;
-        int modsRemoved = 0;
         if (modpackContent == null) return;
-        for (var changelog : changelogs.changesAddedList.entrySet()) {
-            String fileType = ModpackContentTools.getFileType(changelog.getKey(), modpackContent);
-            if (fileType.equals("mod")) {
-                modsAdded++;
-            }
-        }
+        int filesAdded = changelogs.changesAddedList.size();
+        int filesRemoved = changelogs.changesDeletedList.size();
 
-        for (var changelog : changelogs.changesDeletedList.entrySet()) {
-            String fileType = ModpackContentTools.getFileType(changelog.getKey(), modpackContent);
-            if (fileType.equals("mod")) {
-                modsRemoved++;
-            }
-        }
-
-        String summary = "Mods + " + modsAdded + " | - " + modsRemoved;
+        String summary = "Files: + " + filesAdded + " | - " + filesRemoved;
 
         drawCenteredTextWithShadow(matrices, textRenderer, VersionedText.literal(summary), this.width / 2, 5, 16777215);
     }
