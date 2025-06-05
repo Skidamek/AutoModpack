@@ -26,6 +26,10 @@ public class WildCards {
 
     public void separateRules(List<String> rules) {
         for (String rule : rules) {
+            if (rule == null || rule.isBlank()) {
+                continue;
+            }
+
             if (rule.startsWith("!")) {
                 blackListRules.add(rule.substring(1));
             } else {
@@ -187,6 +191,10 @@ public class WildCards {
         Map<String, List<String>> directoryRulePathsMap = new HashMap<>(rules.size());
 
         for (String rule : rules) {
+            if (rule == null || rule.isBlank()) {
+                continue;
+            }
+
             int lastSlashIndex = rule.lastIndexOf("/");
             if (lastSlashIndex == -1) {
                 continue;
