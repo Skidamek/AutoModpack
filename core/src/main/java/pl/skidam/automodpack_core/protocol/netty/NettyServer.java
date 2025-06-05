@@ -79,7 +79,16 @@ public class NettyServer {
         }
 
         try {
-            boolean bindsOnLoopback = AddressHelpers.isLoopback(serverConfig.bindAddress);
+            String address = serverConfig.bindAddress;
+            int port = serverConfig.bindPort;
+            InetSocketAddress bindAddress;
+            if (address == null || address.isBlank()) {
+                bindAddress = new InetSocketAddress(port);
+            } else {
+                bindAddress = new InetSocketAddress(address, port);
+            }
+
+            boolean bindsOnLoopback = bindAddress.getAddress().isLoopbackAddress();
             if (serverConfig.disableInternalTLS && (serverConfig.bindPort == -1 || !bindsOnLoopback)) {
                 LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use a reverse proxy with TLS.");
             } else {
@@ -125,14 +134,6 @@ public class NettyServer {
                 return Optional.empty();
             }
 
-            String address = serverConfig.bindAddress;
-            int port = serverConfig.bindPort;
-            InetSocketAddress bindAddress;
-            if (address == null || address.isBlank()) {
-                bindAddress = new InetSocketAddress(port);
-            } else {
-                bindAddress = new InetSocketAddress(address, port);;
-            }
             LOGGER.info("Starting modpack host server on {}", bindAddress);
 
             Class<? extends ServerChannel> socketChannelClass;

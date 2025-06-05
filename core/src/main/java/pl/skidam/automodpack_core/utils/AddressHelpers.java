@@ -131,18 +131,4 @@ public class AddressHelpers {
         String localIpv6 = getLocalIpv6();
         return areIpsEqual(address, localIp) || areIpsEqual(address, localIpv6);
     }
-
-    public static boolean isLoopback(String address) {
-        if (address == null || address.isBlank()) {
-            return false;
-        }
-
-        try {
-            InetAddress inetAddress = InetAddress.getByName(address);
-            return inetAddress.isLoopbackAddress();
-        } catch (UnknownHostException e) {
-            LOGGER.error("Error while checking if address is loopback", e);
-            return false;
-        }
-    }
 }
