@@ -15,7 +15,6 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class ConfigTools {
 
     public static Gson GSON = new GsonBuilder()
-            .serializeNulls()
             .disableHtmlEscaping()
             .setPrettyPrinting()
             .registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())

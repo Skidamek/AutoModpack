@@ -40,7 +40,7 @@ public class FetchManager {
         List<String> mo = new ArrayList<>();
         for (Map.Entry<String, Datas> entry : fetchDatas.entrySet()) {
             FetchData fetchData = entry.getValue().fetchData();
-            if (fetchData.murmur != null) {
+            if (fetchData.murmur != null && !fetchData.murmur.isBlank()) {
                 cf.put(fetchData.sha1, fetchData.murmur);
             }
 

@@ -39,7 +39,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
         return curseForgeAPIList;
     }
 
-    public static CurseForgeAPI parseJsonObject(JsonObject JSONObject, Map<String, String> hashes) {
+    private static CurseForgeAPI parseJsonObject(JsonObject JSONObject, Map<String, String> hashes) {
         if (JSONObject == null) {
             LOGGER.error("CurseForgeAPI Can't parse null object");
             return null;

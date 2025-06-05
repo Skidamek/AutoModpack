@@ -125,32 +125,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
         return modrinthAPIList;
     }
 
-    // https://docs.modrinth.com/#tag/version-files
-    public static ModrinthAPI getModInfoFromSHA1(String sha1) {
-        if (sha1 == null || sha1.isEmpty()) {
-            return null;
-        }
-
-        String requestUrl = BASE_URL + "/version_file/" + sha1 + "?algorithm=sha1";
-        requestUrl = requestUrl.replaceAll("\"", "%22"); // so important!
-
-        try {
-            JsonObject JSONObject = Json.fromUrl(requestUrl);
-            return parseJsonObject(JSONObject, List.of(sha1));
-        } catch (IndexOutOfBoundsException e) {
-            LOGGER.warn("Something gone wrong while getting info from Modrinth API: {}", requestUrl);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-//    public static void main(String[] args) {
-//        var ww = getModsInfosFromListOfSHA1(List.of("2ff512a70c437c20523de01ea95b6fc9b164a5c0"));
-//        ww.forEach(System.out::println);
-//    }
-
-    public static ModrinthAPI parseJsonObject(JsonObject JSONObject, List<String> listOfSha1) {
+    private static ModrinthAPI parseJsonObject(JsonObject JSONObject, List<String> listOfSha1) {
         if (JSONObject == null) {
             return null;
         }
