@@ -6,7 +6,7 @@ public class SpeedMeter {
 
 	private final DownloadManager downloadManager;
 	private final ConcurrentSkipListMap<Long, Long> bytesDownloadedPerSec = new ConcurrentSkipListMap<>();
-	private static final int MAX_ENTRIES = 5;
+	private static final int MAX_ENTRIES = 3;
 
 	public SpeedMeter(DownloadManager downloadManager) {
 		this.downloadManager = downloadManager;
@@ -26,20 +26,18 @@ public class SpeedMeter {
 	}
 
 	/**
-	 * Get the download speed in bytes per second.
+	 * Get the average download speed in bytes per second from the last few seconds.
 	 */
-	public synchronized long getCurrentSpeedInBytes() {
-		long lastTimeBucket = System.currentTimeMillis() / 1000 * 1000 - 1000;
+	public long getAverageSpeedOfLastFewSeconds(int seconds) {
+		long totalBytes = 0;
+		int count = 0;
 
-		Long value = -1L;
-
-		if (bytesDownloadedPerSec.containsKey(lastTimeBucket)) {
-			value = bytesDownloadedPerSec.get(lastTimeBucket);
-		} else if (bytesDownloadedPerSec.containsKey(lastTimeBucket - 1000)) {
-			value = bytesDownloadedPerSec.get(lastTimeBucket - 1000);
+		for (Long bytes : bytesDownloadedPerSec.values()) {
+			totalBytes += bytes;
+			count++;
 		}
 
-		return value != null ? value : -1;
+		return count >= seconds ? totalBytes / count : -1;
 	}
 
 	/**
@@ -47,7 +45,7 @@ public class SpeedMeter {
 	 */
 	public long getETAInSeconds() {
 		long totalBytesRemaining = downloadManager.getTotalBytesRemaining();
-		long speed = getCurrentSpeedInBytes();
+		long speed = getAverageSpeedOfLastFewSeconds(3);
 
 		if (speed <= 0) {
 			return -1;
@@ -70,11 +68,16 @@ public class SpeedMeter {
 	}
 
 	/**
-	 * Format ETA into HH:MM:SS.
+	 * Format ETA into MM:SS format or HH:MM:SS format.
 	 */
 	public static String formatETAToSeconds(long seconds) {
-		if (seconds < 0) {
+		seconds++; // Increment by 1 to avoid showing 00:00:00 for 0 seconds
+		if (seconds < 1) {
 			return "-1";
+		}
+
+		if (seconds < 3600) {
+			return String.format("%02d:%02d", seconds / 60, seconds % 60);
 		}
 
 		return String.format("%02d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60);
