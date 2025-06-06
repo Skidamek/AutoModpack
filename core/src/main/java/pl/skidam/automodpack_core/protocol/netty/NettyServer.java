@@ -19,7 +19,9 @@ import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.ObservableMap;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -81,14 +83,20 @@ public class NettyServer {
         try {
             String address = serverConfig.bindAddress;
             int port = serverConfig.bindPort;
-            InetSocketAddress bindAddress;
-            if (address == null || address.isBlank()) {
-                bindAddress = new InetSocketAddress(port);
+            InetSocketAddress bindAddress = null;
+            InetAddress inetAddress;
+            if (port == -1) {
+                inetAddress = InetAddress.getByName(address);
             } else {
-                bindAddress = new InetSocketAddress(address, port);
+                if (address == null || address.isBlank()) {
+                    bindAddress = new InetSocketAddress(port);
+                } else {
+                    bindAddress = new InetSocketAddress(address, port);
+                }
+                inetAddress = bindAddress.getAddress();
             }
 
-            boolean bindsOnLoopback = bindAddress.getAddress().isLoopbackAddress();
+            boolean bindsOnLoopback = inetAddress.isLoopbackAddress();
             if (serverConfig.disableInternalTLS && serverConfig.bindPort != -1 && bindsOnLoopback) {
                 LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use e.g. a reverse proxy with TLS.");
             } else {
