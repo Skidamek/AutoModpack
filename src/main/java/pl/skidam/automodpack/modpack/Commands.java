@@ -76,8 +76,8 @@ public class Commands {
         if (fingerprint != null) {
             MutableText fingerprintText = VersionedText.literal(fingerprint).styled(style -> style
                     /*? if >1.21.4 {*/
-                    /*.withHoverEvent(new HoverEvent.ShowText, VersionedText.translatable("chat.copy.click"))
-                    /*.withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
+                    /*.withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
+                    .withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
                      *//*?} else {*/
                     .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
                     .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
