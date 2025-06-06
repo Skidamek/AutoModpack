@@ -113,7 +113,7 @@ public class ChangelogScreen extends VersionedScreen {
         int filesAdded = changelogs.changesAddedList.size();
         int filesRemoved = changelogs.changesDeletedList.size();
 
-        String summary = "Files: + " + filesAdded + " | - " + filesRemoved;
+        String summary = "+ " + filesAdded + " | - " + filesRemoved;
 
         drawCenteredTextWithShadow(matrices, textRenderer, VersionedText.literal(summary), this.width / 2, 5, 16777215);
     }
