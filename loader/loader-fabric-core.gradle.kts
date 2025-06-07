@@ -28,7 +28,7 @@ dependencies {
     implementation("org.tomlj:tomlj:1.1.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
     implementation("com.github.luben:zstd-jni:1.5.7-3")
-    implementation("org.apache.httpcomponents.client5:httpclient5:5.4.4")
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.5")
 
     compileOnly("net.fabricmc:fabric-loader:${property("loader_fabric")}")
 }
