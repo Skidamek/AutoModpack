@@ -1,7 +1,7 @@
 
 package pl.skidam.automodpack.mixin.core;
 
-/*? if >1.21.3 {*/
+/*? if >1.21.4 {*/
 /*import net.minecraft.client.sound.MusicInstance;
 *//*?} else {*/
 import net.minecraft.sound.MusicSound;
@@ -21,7 +21,7 @@ public class MusicTrackerMixin {
             at = @At("HEAD"),
             cancellable = true
     )
-    /*? if >1.21.3 {*/
+    /*? if >1.21.4 {*/
     /*private void play(MusicInstance music, CallbackInfo ci) {
     *//*?} else {*/
     private void play(MusicSound type, CallbackInfo ci) {

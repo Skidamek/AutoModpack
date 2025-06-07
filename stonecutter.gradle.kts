@@ -18,15 +18,17 @@ wiki {
 
 stonecutter active "1.21.1-neoforge" /* [SC] DO NOT EDIT */
 
-stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chiseled) { 
-    group = "project"
-    ofTask("build")
-    finalizedBy("mergeJars")
-}
+//stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chiseled) {
+//    group = "project"
+//    ofTask("build")
+//    finalizedBy("mergeJars")
+//}
 
-stonecutter parameters {
-    val loader = metadata.project.substringAfterLast("-")
-    consts(loader, "fabric", "forge", "neoforge")
+stonecutter.parameters {
+    constants {
+        val loader: String = metadata.project.substringAfter('-')
+        match(loader, "fabric", "forge", "neoforge")
+    }
 }
 
 // Non stonecutter stuff

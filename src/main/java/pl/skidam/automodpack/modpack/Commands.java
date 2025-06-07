@@ -75,7 +75,7 @@ public class Commands {
         String fingerprint = hostServer.getCertificateFingerprint();
         if (fingerprint != null) {
             MutableText fingerprintText = VersionedText.literal(fingerprint).styled(style -> style
-                    /*? if >1.21.4 {*/
+                    /*? if >1.21.5 {*/
                     /*.withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
                     .withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
                      *//*?} else {*/

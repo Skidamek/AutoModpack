@@ -1,6 +1,7 @@
 import java.util.*
 
 plugins {
+    id("dev.kikugie.stonecutter")
     id("dev.architectury.loom")
 }
 
@@ -265,4 +266,8 @@ tasks.named<Jar>("jar") {
     from(rootProject.file("LICENSE")) {
         rename { "${it}_${mod.id}" }
     }
+}
+
+tasks.named("build") {
+    finalizedBy(rootProject.tasks.named("mergeJars"))
 }

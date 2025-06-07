@@ -58,7 +58,7 @@ public class ListEntryWidget extends AlwaysSelectedEntryListWidget<ListEntry> {
     }
     *//*?}*/
 
-	/*? if >1.21.3 {*/
+	/*? if >1.21.4 {*/
 	/*public double getScrollAmount() {
 		return this.getScrollY();
 	}

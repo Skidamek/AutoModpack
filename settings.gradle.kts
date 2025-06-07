@@ -6,14 +6,15 @@ pluginManagement {
         maven { url = uri("https://maven.fabricmc.net/") }
         maven { url = uri("https://maven.neoforged.net/releases") }
         maven { url = uri("https://files.minecraftforge.net/maven/") }
+        maven { url = uri("https://maven.kikugie.dev/snapshots") }
         mavenLocal()
     }
 }
 
 plugins {
-    id("com.github.johnrengelman.shadow") version "8.1.1" apply false
+    id("dev.kikugie.stonecutter") version "0.7-alpha.21"
     id("dev.architectury.loom") version "1.9-SNAPSHOT" apply false // with 1.10 wait for remap fixes on neo/forge
-    id("dev.kikugie.stonecutter") version "0.6"
+    id("com.github.johnrengelman.shadow") version "8.1.1" apply false
 }
 
 include(":core")

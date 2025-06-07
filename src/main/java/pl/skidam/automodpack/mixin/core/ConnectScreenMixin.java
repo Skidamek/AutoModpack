@@ -26,7 +26,7 @@ public abstract class ConnectScreenMixin {
     /*? if >= 1.20.5 {*/
     @Inject(method = "connect(Lnet/minecraft/client/MinecraftClient;Lnet/minecraft/client/network/ServerAddress;Lnet/minecraft/client/network/ServerInfo;Lnet/minecraft/client/network/CookieStorage;)V", at = @At("HEAD"))
     public void onConnect(MinecraftClient client, ServerAddress address, ServerInfo info, CookieStorage cookieStorage, CallbackInfo ci) {
-    /*?} else if > 1.19.2 {*/
+    /*?} else if > 1.19.3 {*/
     /*@Inject(method = "connect(Lnet/minecraft/client/MinecraftClient;Lnet/minecraft/client/network/ServerAddress;Lnet/minecraft/client/network/ServerInfo;)V", at = @At("HEAD"))
     public void onConnect(MinecraftClient client, ServerAddress address, ServerInfo info, CallbackInfo ci) {
     *//*?} else {*/

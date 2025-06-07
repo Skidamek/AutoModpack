@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.networking;
 
-/*? if <=1.19.2 {*/
+/*? if <=1.19.3 {*/
 /*import net.minecraft.network.Packet;
 *//*?} else {*/
 import net.minecraft.network.packet.Packet;

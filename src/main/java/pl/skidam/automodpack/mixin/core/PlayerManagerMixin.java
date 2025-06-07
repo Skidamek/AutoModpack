@@ -46,7 +46,7 @@ private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity pla
             // Send chat nag message which is clickable and opens the link
             Text nagText = VersionedText.literal(serverConfig.nagMessage).styled(style -> style.withBold(true));
             Text nagClickableText = VersionedText.literal(serverConfig.nagClickableMessage).styled(style -> style.withUnderline(true).withColor(TextColor.fromFormatting(Formatting.BLUE))
-                    /*? if >1.21.4 {*/
+                    /*? if >1.21.5 {*/
                     /*.withClickEvent(new ClickEvent.OpenUrl(URI.create(serverConfig.nagClickableLink))));
                     *//*?} else {*/
                     .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, serverConfig.nagClickableLink)));
