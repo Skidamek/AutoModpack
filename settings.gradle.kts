@@ -12,7 +12,7 @@ pluginManagement {
 }
 
 plugins {
-    id("dev.kikugie.stonecutter") version "0.7-alpha.21"
+    id("dev.kikugie.stonecutter") version "0.7-alpha.22"
     id("dev.architectury.loom") version "1.9-SNAPSHOT" apply false // with 1.10 wait for remap fixes on neo/forge
     id("com.github.johnrengelman.shadow") version "8.1.1" apply false
 }
