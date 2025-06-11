@@ -18,7 +18,6 @@ import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -48,9 +47,9 @@ public class HandshakeS2CPacket {
             profile = new GameProfile(offlineUUID, playerName);
         }
 
-        if (!connection.isEncrypted()) {
-            LOGGER.warn("Connection is not encrypted for player: {}", playerName);
-        }
+//        if (!connection.isEncrypted()) {
+//            LOGGER.warn("Connection is not encrypted for player: {}", playerName);
+//        }
 
         if (!GameHelpers.isPlayerAuthorized(connection.getAddress(), profile)) {
             return;
@@ -108,21 +107,12 @@ public class HandshakeS2CPacket {
                 return;
             }
 
-            String playerAddress = connection.getAddress().toString();
-            String addressToSend;
-
-            // If the player is connecting locally, use the local host IP
-            if (AddressHelpers.isLocal(playerAddress)) {
-                addressToSend = serverConfig.localAddressToSend;
-            } else {
-                addressToSend = serverConfig.addressToSend;
-            }
-
             // now we know player is authenticated, packets are encrypted and player is whitelisted
             // regenerate unique secret
             Secrets.Secret secret = Secrets.generateSecret();
             SecretsStore.saveHostSecret(profile.getId().toString(), secret);
 
+            String addressToSend = serverConfig.addressToSend;
             int portToSend = serverConfig.portToSend;
             if (portToSend == -1) {
                 if (serverConfig.bindPort == -1) {

@@ -48,13 +48,11 @@ public class DataS2CPacket {
 
                 if (serverConfig.bindPort == -1) {
                     LOGGER.warn("You are hosting AutoModpack host server on the Minecraft port.");
-                    LOGGER.warn("");
                 } else {
                     LOGGER.warn("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", serverConfig.bindPort);
-                    LOGGER.warn("");
                 }
 
-                LOGGER.warn("Make sure that 'addressToSend' and 'localAddressToSend' are correct in the config file!");
+                LOGGER.warn("Make sure that 'addressToSend' is correctly set in the config file!");
                 LOGGER.warn("It can be either an IP address or a domain pointing to your modpack host server.");
                 LOGGER.warn("If nothing works, try changing the 'bindPort' in the config file, then forward / open it and restart server");
                 LOGGER.warn("Note that some hosting providers may proxy this port internally and give you a different address and port to use. In this case, separate the given address with ':', and set the first part as 'addressToSend' and the second part as 'portToSend' in the config file.");

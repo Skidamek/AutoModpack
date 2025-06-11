@@ -220,19 +220,11 @@ public class NettyServer {
 
         if (serverConfig.updateIpsOnEveryStart) {
             String publicIp = AddressHelpers.getPublicIp();
-            String localIp = AddressHelpers.getLocalIp();
             if (publicIp != null) {
                 serverConfig.addressToSend = publicIp;
                 LOGGER.warn("Setting Host IP to {}", serverConfig.addressToSend);
             } else {
                 LOGGER.error("Couldn't get public IP, please change it manually! ");
-            }
-
-            if (localIp != null) {
-                serverConfig.localAddressToSend = localIp;
-                LOGGER.warn("Setting Host Local IP to {}", serverConfig.localAddressToSend);
-            } else {
-                LOGGER.error("Couldn't get local IP, please change it manually! ");
             }
 
             try {

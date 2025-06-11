@@ -160,12 +160,6 @@ public class Preload {
                         serverConfigV2.addressToSend = AddressHelpers.parse(serverConfigV1.hostIp).getHostString();
                     }
 
-                    if (serverConfigV1.hostLocalIp.isBlank()) {
-                        serverConfigV2.localAddressToSend = "";
-                    } else {
-                        serverConfigV2.localAddressToSend = AddressHelpers.parse(serverConfigV1.hostLocalIp).getHostString();
-                    }
-
                     if (serverConfigV1.hostModpackOnMinecraftPort) {
                         serverConfigV2.bindPort = -1;
                         serverConfigV2.portToSend = -1;

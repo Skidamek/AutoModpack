@@ -101,7 +101,6 @@ public class Jsons {
         public String bindAddress = "";
         public int bindPort = -1;
         public String addressToSend = "";
-        public String localAddressToSend = "";
         public int portToSend = -1;
         public boolean disableInternalTLS = false;
         public boolean updateIpsOnEveryStart = false;
