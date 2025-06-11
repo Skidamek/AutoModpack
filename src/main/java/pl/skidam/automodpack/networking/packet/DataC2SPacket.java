@@ -55,6 +55,7 @@ public class DataC2SPacket {
             // Get actual address of the server client have connected to and format it
             InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
             String effectiveHost;
+            int effectivePort;
 
             // If the packet specifies a non-blank address, use it or else use address from the server client have connected to.
             if (packetAddress.isBlank()) {
@@ -63,8 +64,14 @@ public class DataC2SPacket {
                 effectiveHost = packetAddress;
             }
 
+            if (packetPort == -1) {
+                effectivePort = connectedAddress.getPort();
+            } else {
+                effectivePort = packetPort;
+            }
+
             // Construct the final modpack address
-            InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, packetPort);
+            InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
 
             LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 

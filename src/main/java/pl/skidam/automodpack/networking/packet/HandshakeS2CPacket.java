@@ -114,21 +114,9 @@ public class HandshakeS2CPacket {
 
             String addressToSend = serverConfig.addressToSend;
             int portToSend = serverConfig.portToSend;
-            if (portToSend == -1) {
-                if (serverConfig.bindPort == -1) {
-                    portToSend = minecraftServerPort;
-                } else {
-                    portToSend = serverConfig.bindPort;
-                }
-            }
-
             boolean requiresMagic = serverConfig.bindPort == -1;
 
-            if (addressToSend.isBlank()) {
-                LOGGER.info("Sending {} modpack host port: {}", profile.getName(), portToSend);
-            } else {
-                LOGGER.info("Sending {} modpack host address: {}:{}", profile.getName(), addressToSend, portToSend);
-            }
+            LOGGER.info("Sending {} modpack host address: {}:{}", profile.getName(), addressToSend, portToSend);
 
             DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
             String packetContentJson = dataPacket.toJson();
