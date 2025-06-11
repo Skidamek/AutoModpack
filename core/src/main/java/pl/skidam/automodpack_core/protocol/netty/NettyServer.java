@@ -19,9 +19,7 @@ import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.ObservableMap;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -81,27 +79,11 @@ public class NettyServer {
         }
 
         try {
-            String address = serverConfig.bindAddress;
-            int port = serverConfig.bindPort;
-            InetSocketAddress bindAddress = null;
-            InetAddress inetAddress;
-            if (port == -1) {
-                inetAddress = InetAddress.getByName(address);
-            } else {
-                if (address == null || address.isBlank()) {
-                    bindAddress = new InetSocketAddress(port);
-                } else {
-                    bindAddress = new InetSocketAddress(address, port);
-                }
-                inetAddress = bindAddress.getAddress();
-            }
-
-            boolean bindsOnLoopback = inetAddress.isLoopbackAddress();
-            if (serverConfig.disableInternalTLS && serverConfig.bindPort != -1 && bindsOnLoopback) {
+            if (serverConfig.disableInternalTLS && serverConfig.bindPort != -1) {
                 LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use e.g. a reverse proxy with TLS.");
             } else {
                 if (serverConfig.disableInternalTLS) {
-                    LOGGER.error("Internal TLS cannot be disabled. You have to bind modpack host on a loopback address with a separate port.");
+                    LOGGER.error("Internal TLS cannot be disabled. You have to bind modpack host on a separate port, preferably also on a loopback address or atleast some private one.");
                 }
 
                 if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
@@ -140,6 +122,17 @@ public class NettyServer {
             if (!canStart()) {
                 new TrafficShaper(null);
                 return Optional.empty();
+            }
+
+            String address = serverConfig.bindAddress;
+            int port = serverConfig.bindPort;
+            InetSocketAddress bindAddress = null;
+            if (port != -1) {
+                if (address == null || address.isBlank()) {
+                    bindAddress = new InetSocketAddress(port);
+                } else {
+                    bindAddress = new InetSocketAddress(address, port);
+                }
             }
 
             LOGGER.info("Starting modpack host server on {}", bindAddress);
