@@ -86,7 +86,7 @@ public class ChangelogScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        this.listEntryWidget.render(matrices, mouseX, mouseY, delta);
+        this.listEntryWidget.render(matrices.getContext(), mouseX, mouseY, delta);
 
         ListEntry selectedEntry = listEntryWidget.getSelectedOrNull();
         if (selectedEntry != null) {
@@ -115,7 +115,7 @@ public class ChangelogScreen extends VersionedScreen {
 
         String summary = "+ " + filesAdded + " | - " + filesRemoved;
 
-        drawCenteredTextWithShadow(matrices, textRenderer, VersionedText.literal(summary), this.width / 2, 5, 16777215);
+        drawCenteredTextWithShadow(matrices, textRenderer, VersionedText.literal(summary), this.width / 2, 5, TextColors.WHITE);
     }
 
     private void updateChangelogs() {

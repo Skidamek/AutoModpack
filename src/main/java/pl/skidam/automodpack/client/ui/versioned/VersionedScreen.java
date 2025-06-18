@@ -21,10 +21,11 @@ import com.mojang.blaze3d.systems.RenderSystem;
 
 /*? if >=1.20 {*/
 import net.minecraft.client.gui.DrawContext;
-import pl.skidam.automodpack.mixin.core.DrawContextAccessor;
 /*?}*/
 
-/*? if >=1.21.2 {*/
+/*? if >=1.21.6 {*/
+/*import net.minecraft.client.gl.RenderPipelines;
+*//*?} elif >=1.21.2 {*/
 /*import net.minecraft.client.render.RenderLayer;
 import java.util.function.Function;
 *//*?}*/
@@ -42,22 +43,23 @@ public class VersionedScreen extends Screen {
 	*//*?} else {*/
 	@Override
 	public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
-		VersionedMatrices matrices = new VersionedMatrices(this.client, ((DrawContextAccessor) matrix).vertexConsumers());
-		/*?}*/
+		VersionedMatrices matrices = new VersionedMatrices(matrix);
+	/*?}*/
 
 		// Render background
 		/*? if <1.20.2 {*/
-        /*super.renderBackground(matrices);
+        /*super.renderBackground(matrices.getContext());
 		*//*?} elif <1.20.6 {*/
-        /*super.renderBackground(matrices, mouseX, mouseY, delta);
+        /*super.renderBackground(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?} else {*/
-		super.render(matrices, mouseX, mouseY, delta);
+		super.render(matrix, mouseX, mouseY, delta);
 		/*?}*/
+
 		// Render the rest of our screen
 		versionedRender(matrices, mouseX, mouseY, delta);
 
 		/*? if <1.20.6 {*/
-		/*super.render(matrices, mouseX, mouseY, delta);
+		/*super.render(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?}*/
 	}
 
@@ -77,11 +79,11 @@ public class VersionedScreen extends Screen {
 
 	/*? if >=1.20 {*/
 	public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
-		matrices.drawCenteredTextWithShadow(textRenderer, text, centerX, y, color);
+		matrices.getContext().drawCenteredTextWithShadow(textRenderer, text, centerX, y, color);
 	}
 	/*?} else {*/
 	/*public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
-		textRenderer.drawWithShadow(matrices, text, (float)(centerX - textRenderer.getWidth(text) / 2), (float)y, color);
+		textRenderer.drawWithShadow(matrices.getContext(), text, (float)(centerX - textRenderer.getWidth(text) / 2), (float)y, color);
 	}
 	*//*?}*/
 
@@ -103,15 +105,17 @@ public class VersionedScreen extends Screen {
 		^//^?} else {^/
 		RenderSystem.setShaderTexture(0, textureID);
 		/^?}^/
-		DrawableHelper.drawTexture(matrices, x, y, u, v, width, height, textureWidth, textureHeight);
+		DrawableHelper.drawTexture(matrices.getContext(), x, y, u, v, width, height, textureWidth, textureHeight);
 	}
 	*//*?} else {*/
 	public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
-		/*? if >=1.21.2 {*/
+		/*? if >=1.21.6 {*/
+		/*matrices.getContext().drawTexture(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		*//*?} elif >=1.21.2 {*/
 		/*Function<Identifier, RenderLayer> renderLayers = RenderLayer::getGuiTextured;
-		matrices.drawTexture(renderLayers, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		matrices.getContext().drawTexture(renderLayers, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		*//*?} else {*/
-		matrices.drawTexture(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		matrices.getContext().drawTexture(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		/*?}*/
 	}
 	/*?}*/

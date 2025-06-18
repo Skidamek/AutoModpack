@@ -86,13 +86,13 @@ public class ValidationScreen extends VersionedScreen {
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.text").formatted(Formatting.BOLD),
-                this.width / 2, this.height / 2 - 100, 16777215);
+                this.width / 2, this.height / 2 - 100, TextColors.WHITE);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.description"),
-                this.width / 2, this.height / 2 - 75, 16777215);
+                this.width / 2, this.height / 2 - 75, TextColors.WHITE);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.secDescription"),
-                this.width / 2, this.height / 2 - 65, 16777215);
+                this.width / 2, this.height / 2 - 65, TextColors.WHITE);
         drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.thiDescription"),
-                this.width / 2, this.height / 2 - 55, 16777215);
+                this.width / 2, this.height / 2 - 55, TextColors.WHITE);
     }
 
     @Override

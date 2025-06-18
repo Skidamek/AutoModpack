@@ -4,6 +4,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.widget.AlwaysSelectedEntryListWidget;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
+import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 
@@ -11,7 +12,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 /*import net.minecraft.client.util.math.MatrixStack;
 *//*?} else {*/
 import net.minecraft.client.gui.DrawContext;
-import pl.skidam.automodpack.mixin.core.DrawContextAccessor;
 /*?}*/
 
 public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
@@ -45,11 +45,14 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
 	@Override
 	/*? if <1.20 {*/
     /*public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-        VersionedMatrices versionedMatrices = new VersionedMatrices();
+		VersionedMatrices versionedMatrices = new VersionedMatrices();
     *//*?} else {*/
-	public void render(DrawContext context, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-		VersionedMatrices versionedMatrices = new VersionedMatrices(this.client, ((DrawContextAccessor) context).vertexConsumers());
+	public void render(DrawContext drawContext, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+		VersionedMatrices versionedMatrices = new VersionedMatrices(drawContext);
 	/*?}*/
+		versionedRender(versionedMatrices, index, y, x, entryWidth, entryHeight, mouseX, mouseY, hovered, tickDelta);
+	}
+	public void versionedRender(VersionedMatrices versionedMatrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 		versionedMatrices.push();
 
 		int centeredX = x + entryWidth / 2;
@@ -63,7 +66,7 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
 			centeredY = centeredY - 10 / 2;
 		}
 
-		VersionedScreen.drawCenteredTextWithShadow(versionedMatrices, client.textRenderer, text, centeredX, centeredY, 16777215);
+		VersionedScreen.drawCenteredTextWithShadow(versionedMatrices, client.textRenderer, text, centeredX, centeredY, TextColors.WHITE);
 
 		// if (mainPageUrls != null) {
 		//     int badgeX = x - 42;

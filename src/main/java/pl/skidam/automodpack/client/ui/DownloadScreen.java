@@ -105,20 +105,20 @@ public class DownloadScreen extends VersionedScreen {
         matrices.scale(scale, scale, scale);
 
         if (downloadManager != null && !downloadManager.downloadsInProgress.isEmpty()) {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.downloading").formatted(Formatting.BOLD), this.width / 2, y, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.downloading").formatted(Formatting.BOLD), this.width / 2, y, TextColors.WHITE);
 
             // Use a separate variable for the current y position
             int currentY = y + 15;
             synchronized (downloadManager.downloadsInProgress) {
                 for (DownloadManager.DownloadData downloadData : downloadManager.downloadsInProgress.values()) {
                     String text = downloadData.getFileName();
-                    drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.literal(text).formatted(Formatting.GRAY), (int) ((float) this.width / 2 * scale), currentY, 16777215);
+                    drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.literal(text), (int) ((float) this.width / 2 * scale), currentY, TextColors.GRAY);
                     currentY += 10;
                 }
             }
         } else {
-            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.noFiles"), (int) ((float) this.width / 2 * scale), y, 16777215);
-            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) ((float) this.width / 2 * scale), y + 25, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.download.noFiles"), (int) ((float) this.width / 2 * scale), y, TextColors.WHITE);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.wait").formatted(Formatting.BOLD), (int) ((float) this.width / 2 * scale), y + 25, TextColors.WHITE);
         }
 
         matrices.pop();
@@ -142,15 +142,15 @@ public class DownloadScreen extends VersionedScreen {
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
         drawDownloadingFiles(matrices);
         MutableText titleText = VersionedText.literal(header).formatted(Formatting.BOLD);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, titleText, this.width / 2, this.height / 2 - 110, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, titleText, this.width / 2, this.height / 2 - 110, TextColors.WHITE);
 
         if (downloadManager != null && downloadManager.isRunning()) {
             MutableText percentage = (MutableText) this.getPercentage();
             MutableText stage = (MutableText) this.getStage();
             MutableText eta = (MutableText) this.getTotalETA();
             MutableText speed = (MutableText) this.getTotalDownloadSpeed();
-            drawCenteredTextWithShadow(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, 16777215);
-            drawCenteredTextWithShadow(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, 16777215);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, stage, this.width / 2, this.height / 2 - 10, TextColors.WHITE);
+            drawCenteredTextWithShadow(matrices, this.textRenderer, eta, this.width / 2, this.height / 2 + 10, TextColors.WHITE);
 
 
             // Render progress bar

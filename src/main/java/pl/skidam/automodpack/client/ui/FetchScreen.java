@@ -51,9 +51,9 @@ public class FetchScreen extends VersionedScreen {
         }
 
         // Fetching direct url's from Modrinth and CurseForge.
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.fetch").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.fetch.found", getFetchesDone()), this.width / 2, this.height / 2 - 30, 16777215);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.fetch").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.fetch.found", getFetchesDone()), this.width / 2, this.height / 2 - 30, TextColors.WHITE);
     }
 
     @Override
