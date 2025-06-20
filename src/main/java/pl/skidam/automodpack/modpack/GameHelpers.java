@@ -1,10 +1,10 @@
 package pl.skidam.automodpack.modpack;
 
 import com.mojang.authlib.GameProfile;
-import net.minecraft.util.UserCache;
-
 import java.net.SocketAddress;
 import java.util.UUID;
+import net.minecraft.server.players.GameProfileCache;
+import net.minecraft.server.players.PlayerList;
 
 import static pl.skidam.automodpack.init.Common.server;
 
@@ -12,14 +12,14 @@ public class GameHelpers {
 
     // Simpler version of `PlayerManager.checkCanJoin`
     public static boolean isPlayerAuthorized(SocketAddress address, GameProfile profile) {
-        var playerManager = server.getPlayerManager();
-        if (playerManager.getUserBanList().contains(profile)) {
+        var playerManager = server.getPlayerList();
+        if (playerManager.getBans().isBanned(profile)) {
             return false;
         }
-        if (!playerManager.isWhitelisted(profile)) {
+        if (!playerManager.isWhiteListed(profile)) {
             return false;
         }
-        if (playerManager.getIpBanList().isBanned(address)) {
+        if (playerManager.getIpBans().isBanned(address)) {
             return false;
         }
 
@@ -32,9 +32,9 @@ public class GameHelpers {
         String playerName = "Player"; // mock name, name matters less than UUID anyway
         GameProfile profile = new GameProfile(uuid, playerName);
 
-        UserCache userCache = server.getUserCache();
+        GameProfileCache userCache = server.getProfileCache();
         if (userCache != null) {
-            profile = userCache.getByUuid(uuid).orElse(profile);
+            profile = userCache.get(uuid).orElse(profile);
         }
 
         return profile;

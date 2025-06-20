@@ -2,12 +2,12 @@ package pl.skidam.automodpack.networking.packet;
 
 import com.mojang.authlib.GameProfile;
 import io.netty.buffer.Unpooled;
-import net.minecraft.network.ClientConnection;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
+import net.minecraft.network.Connection;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
 import net.minecraft.server.*;
-import net.minecraft.server.network.ServerLoginNetworkHandler;
-import net.minecraft.text.Text;
+import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
@@ -27,8 +27,8 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class HandshakeS2CPacket {
 
-    public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
-        ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+    public static void receive(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
+        Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
         String playerName = profile.getName();
@@ -51,7 +51,7 @@ public class HandshakeS2CPacket {
 //            LOGGER.warn("Connection is not encrypted for player: {}", playerName);
 //        }
 
-        if (!GameHelpers.isPlayerAuthorized(connection.getAddress(), profile)) {
+        if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), profile)) {
             return;
         }
 
@@ -59,22 +59,22 @@ public class HandshakeS2CPacket {
             Common.players.put(playerName, false);
             LOGGER.warn("{} has not installed AutoModpack.", playerName);
             if (serverConfig.requireAutoModpackOnClient) {
-                Text reason = VersionedText.literal("AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
-                connection.send(new LoginDisconnectS2CPacket(reason));
+                Component reason = VersionedText.literal("AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " modloader is required to play on this server!");
+                connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
             }
         } else {
             Common.players.put(playerName, true);
             GameProfile finalProfile = profile;
-            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, finalProfile, server.getServerPort(), buf, sender)));
+            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, finalProfile, server.getPort(), buf, sender)));
         }
     }
 
-    public static void handleHandshake(ClientConnection connection, GameProfile profile, int minecraftServerPort, PacketByteBuf buf, PacketSender packetSender) {
+    public static void handleHandshake(Connection connection, GameProfile profile, int minecraftServerPort, FriendlyByteBuf buf, PacketSender packetSender) {
         try {
             LOGGER.info("{} has installed AutoModpack.", profile.getName());
 
-            String clientResponse = buf.readString(Short.MAX_VALUE);
+            String clientResponse = buf.readUtf(Short.MAX_VALUE);
             HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
 
             boolean isAcceptedLoader = false;
@@ -86,11 +86,11 @@ public class HandshakeS2CPacket {
             }
 
             if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
-                Text reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " to play on this server!");
+                Component reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " to play on this server!");
                 if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
                     reason = VersionedText.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
                 }
-                connection.send(new LoginDisconnectS2CPacket(reason));
+                connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
                 return;
             }
@@ -101,8 +101,8 @@ public class HandshakeS2CPacket {
             }
 
             if (modpackExecutor.isGenerating()) {
-                Text reason = VersionedText.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
-                connection.send(new LoginDisconnectS2CPacket(reason));
+                Component reason = VersionedText.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
+                connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
                 return;
             }
@@ -121,8 +121,8 @@ public class HandshakeS2CPacket {
             DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
             String packetContentJson = dataPacket.toJson();
 
-            PacketByteBuf outBuf = new PacketByteBuf(Unpooled.buffer());
-            outBuf.writeString(packetContentJson, Short.MAX_VALUE);
+            FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());
+            outBuf.writeUtf(packetContentJson, Short.MAX_VALUE);
             packetSender.sendPacket(DATA, outBuf);
         } catch (Exception e) {
             LOGGER.error("Error while handling handshake for {}", profile.getName(), e);

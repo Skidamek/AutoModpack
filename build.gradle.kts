@@ -20,7 +20,7 @@ class ModData {
 }
 
 class LoaderData {
-    private val name = stonecutter.current.version.substringAfterLast("-")
+    private val name = stonecutter.current.project.substringAfterLast("-")
     val isFabric = name == "fabric"
     val isForge = name == "forge"
     val isNeoForge = name == "neoforge"
@@ -79,11 +79,11 @@ modstitch {
     // This metadata is used to fill out the information inside
     // the metadata files found in the templates folder.
     metadata {
-        modId = "examplemod"
-        modName = "Example Mod"
-        modVersion = "1.0.0"
-        modGroup = "com.example"
-        modAuthor = "John Doe, Patrina Doe, Jill Doe"
+        modId = "automodpack"
+        modName = "AutoModpack"
+        modVersion = mod.version
+        modGroup = mod.group
+        modAuthor = "Skidam"
 
         fun <K, V> MapProperty<K, V>.populate(block: MapProperty<K, V>.() -> Unit) {
             block()
@@ -111,7 +111,7 @@ modstitch {
 
         // Configure loom like normal in this block.
         configureLoom {
-
+            accessWidenerPath = file("../../src/main/resources/automodpack.accesswidener")
         }
     }
 
@@ -130,6 +130,9 @@ modstitch {
         // This block configures the `neoforge` extension that MDG exposes by default,
         // you can configure MDG like normal from here
         configureNeoforge {
+            accessTransformers {
+                file("../../src/main/resources/META-INF/accesstransformer.cfg")
+            }
             runs.all {
                 disableIdeRun()
             }
@@ -148,6 +151,52 @@ modstitch {
         // if (isLoom) configs.register("examplemod-fabric")
         // if (isModDevGradleRegular) configs.register("examplemod-neoforge")
         // if (isModDevGradleLegacy) configs.register("examplemod-forge")
+    }
+}
+
+dependencies {
+//    modstitchImplementation(project(":core"))
+//    modstitchImplementation(project(":loader-core"))
+    implementation(project(":core"))
+    implementation(project(":loader-core"))
+
+    modstitch.loom {
+
+        // TODO: fix it
+//        setOf(
+//            "fabric-api-base", // Required by modules below
+//            "fabric-resource-loader-v0", // Required for translatable texts
+//            "fabric-registry-sync-v0", // Required for custom sounds
+//            "fabric-networking-api-v1" // Required by registry sync module
+//        ).forEach {
+//            modstitchModImplementation(fabricApi.module(it, property("fabric_version") as String))
+//        }
+        // TODO transitive false
+//        modstitchModImplementation("net.fabricmc.fabric-api:fabric-api-base:${property("fabric_version")}")
+//        modstitchModImplementation("net.fabricmc.fabric-api:fabric-resource-loader-v0:${property("fabric_version")}")
+//        modstitchModImplementation("net.fabricmc.fabric-api:fabric-registry-sync-v0:${property("fabric_version")}")
+//        modstitchModImplementation("net.fabricmc.fabric-api:fabric-networking-api-v1:${property("fabric_version")}")
+//        if (stonecutter.eval(minecraftVersionData.toString(), "<1.19.2")) {
+//            modstitchModImplementation("net.fabricmc.fabric-api:fabric-command-api-v1:${property("fabric_version")}") // TODO transitive false
+//        } else {
+//            modstitchModImplementation("net.fabricmc.fabric-api:fabric-command-api-v2:${property("fabric_version")}") // TODO transitive false
+//        }
+
+        modstitchModImplementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_version")}")
+
+        // JiJ lastest version of mixin extras so all mods work (workaround) - remove when we detect such incompatibilities and copy the jij mod to the mods folder, currently the stable loader version would be loaded instead of the lastest required by some mods
+        modstitchJiJ(modstitchImplementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${property("mixin_extras")}")!!)!!)
+    }
+
+    if (!loader.isFabric) {
+        compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1")
+    }
+
+    if (loader.isForge) {
+        modstitchImplementation(annotationProcessor("io.github.llamalad7:mixinextras-common:${property("mixin_extras")}")!!)
+        modstitchImplementation(modstitchJiJ("io.github.llamalad7:mixinextras-forge:${property("mixin_extras")}")!!)
+    } else if (loader.isNeoForge) {
+        modstitchImplementation(modstitchJiJ("io.github.llamalad7:mixinextras-neoforge:${property("mixin_extras")}")!!)
     }
 }
 

@@ -1,30 +1,26 @@
 
 package pl.skidam.automodpack.mixin.core;
 
-/*? if >1.21.4 {*/
-/*import net.minecraft.client.sound.MusicInstance;
-*//*?} else {*/
-import net.minecraft.sound.MusicSound;
-/*?}*/
-import net.minecraft.client.sound.MusicTracker;
+import net.minecraft.client.sounds.MusicManager;
+import net.minecraft.sounds.Music;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
-@Mixin(MusicTracker.class)
+@Mixin(MusicManager.class)
 public class MusicTrackerMixin {
 
     @Inject(
-            method = "play",
+            method = "startPlaying",
             at = @At("HEAD"),
             cancellable = true
     )
     /*? if >1.21.4 {*/
     /*private void play(MusicInstance music, CallbackInfo ci) {
     *//*?} else {*/
-    private void play(MusicSound type, CallbackInfo ci) {
+    private void play(Music type, CallbackInfo ci) {
     /*?}*/
         if (AudioManager.isMusicPlaying()) {
             ci.cancel();

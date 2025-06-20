@@ -4,61 +4,64 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
-import net.minecraft.text.MutableText;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Util;
+import com.mojang.brigadier.tree.LiteralCommandNode;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-
+import pl.skidam.automodpack_core.config.Jsons.ServerConfigFieldsV2;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
+import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
 
-import static net.minecraft.server.command.CommandManager.literal;
+import static net.minecraft.commands.Commands.literal;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class Commands {
 
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         var automodpackNode = dispatcher.register(
                 literal("automodpack")
                         .executes(Commands::about)
                         .then(literal("generate")
-                                .requires((source) -> source.hasPermissionLevel(3))
+                                .requires((source) -> source.hasPermission(3))
                                 .executes(Commands::generateModpack)
                         )
                         .then(literal("host")
-                                .requires((source) -> source.hasPermissionLevel(3))
+                                .requires((source) -> source.hasPermission(3))
                                 .executes(Commands::modpackHostAbout)
                                 .then(literal("start")
-                                        .requires((source) -> source.hasPermissionLevel(3))
+                                        .requires((source) -> source.hasPermission(3))
                                         .executes(Commands::startModpackHost)
                                 )
                                 .then(literal("stop")
-                                        .requires((source) -> source.hasPermissionLevel(3))
+                                        .requires((source) -> source.hasPermission(3))
                                         .executes(Commands::stopModpackHost)
                                 )
                                 .then(literal("restart")
-                                        .requires((source) -> source.hasPermissionLevel(3))
+                                        .requires((source) -> source.hasPermission(3))
                                         .executes(Commands::restartModpackHost)
                                 )
                                 .then(literal("connections")
-                                        .requires((source) -> source.hasPermissionLevel(3))
+                                        .requires((source) -> source.hasPermission(3))
                                         .executes(Commands::connections)
                                 )
                                 .then(literal("fingerprint")
-                                        .requires((source) -> source.hasPermissionLevel(3))
+                                        .requires((source) -> source.hasPermission(3))
                                         .executes(Commands::fingerprint)
                                 )
                         )
                         .then(literal("config")
-                                .requires((source) -> source.hasPermissionLevel(3))
+                                .requires((source) -> source.hasPermission(3))
                                 .then(literal("reload")
-                                        .requires((source) -> source.hasPermissionLevel(3))
+                                        .requires((source) -> source.hasPermission(3))
                                         .executes(Commands::reload)
                                 )
                         )
@@ -71,10 +74,10 @@ public class Commands {
         );
     }
 
-    private static int fingerprint(CommandContext<ServerCommandSource> context) {
+    private static int fingerprint(CommandContext<CommandSourceStack> context) {
         String fingerprint = hostServer.getCertificateFingerprint();
         if (fingerprint != null) {
-            MutableText fingerprintText = VersionedText.literal(fingerprint).styled(style -> style
+            MutableComponent fingerprintText = VersionedText.literal(fingerprint).withStyle(style -> style
                     /*? if >1.21.5 {*/
                     /*.withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
                     .withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
@@ -82,20 +85,20 @@ public class Commands {
                     .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
                     .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
             /*?}*/
-            send(context, "Certificate fingerprint", Formatting.WHITE, fingerprintText, Formatting.YELLOW, false);
+            send(context, "Certificate fingerprint", ChatFormatting.WHITE, fingerprintText, ChatFormatting.YELLOW, false);
         } else {
-            send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", Formatting.RED, false);
+            send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
         }
 
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int connections(CommandContext<ServerCommandSource> context) {
-        Util.getMainWorkerExecutor().execute(() -> {
+    private static int connections(CommandContext<CommandSourceStack> context) {
+        Util.backgroundExecutor().execute(() -> {
             var connections = hostServer.getConnections();
             var uniqueSecrets = Set.copyOf(connections.values());
 
-            send(context, String.format("Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), Formatting.YELLOW, false);
+            send(context, String.format("Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), ChatFormatting.YELLOW, false);
 
             for (String secret : uniqueSecrets) {
                 var playerSecretPair = SecretsStore.getHostSecret(secret);
@@ -106,65 +109,65 @@ public class Commands {
 
                 long connNum = connections.values().stream().filter(secret::equals).count();
 
-                send(context, String.format("Player: %s (%s) is downloading modpack using %d connections", profile.getName(), playerId, connNum), Formatting.GREEN, false);
+                send(context, String.format("Player: %s (%s) is downloading modpack using %d connections", profile.getName(), playerId, connNum), ChatFormatting.GREEN, false);
             }
         });
 
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int reload(CommandContext<ServerCommandSource> context) {
-        Util.getMainWorkerExecutor().execute(() -> {
+    private static int reload(CommandContext<CommandSourceStack> context) {
+        Util.backgroundExecutor().execute(() -> {
             var tempServerConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
             if (tempServerConfig != null) {
                 serverConfig = tempServerConfig;
-                send(context, "AutoModpack server config reloaded!", Formatting.GREEN, true);
+                send(context, "AutoModpack server config reloaded!", ChatFormatting.GREEN, true);
             } else {
-                send(context, "Error while reloading config file!", Formatting.RED, true);
+                send(context, "Error while reloading config file!", ChatFormatting.RED, true);
             }
         });
 
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int startModpackHost(CommandContext<ServerCommandSource> context) {
-        Util.getMainWorkerExecutor().execute(() -> {
+    private static int startModpackHost(CommandContext<CommandSourceStack> context) {
+        Util.backgroundExecutor().execute(() -> {
             if (!hostServer.isRunning()) {
-                send(context, "Starting modpack hosting...", Formatting.YELLOW, true);
+                send(context, "Starting modpack hosting...", ChatFormatting.YELLOW, true);
                 hostServer.start();
                 if (hostServer.isRunning()) {
-                    send(context, "Modpack hosting started!", Formatting.GREEN, true);
+                    send(context, "Modpack hosting started!", ChatFormatting.GREEN, true);
                 } else {
-                    send(context, "Couldn't start server!", Formatting.RED, true);
+                    send(context, "Couldn't start server!", ChatFormatting.RED, true);
                 }
             } else {
-                send(context, "Modpack hosting is already running!", Formatting.RED, false);
+                send(context, "Modpack hosting is already running!", ChatFormatting.RED, false);
             }
         });
 
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int stopModpackHost(CommandContext<ServerCommandSource> context) {
-        Util.getMainWorkerExecutor().execute(() -> {
+    private static int stopModpackHost(CommandContext<CommandSourceStack> context) {
+        Util.backgroundExecutor().execute(() -> {
             if (hostServer.isRunning()) {
-                send(context, "Stopping modpack hosting...", Formatting.RED, true);
+                send(context, "Stopping modpack hosting...", ChatFormatting.RED, true);
                 if (hostServer.stop()) {
-                    send(context, "Modpack hosting stopped!", Formatting.RED, true);
+                    send(context, "Modpack hosting stopped!", ChatFormatting.RED, true);
                 } else {
-                    send(context, "Couldn't stop server!", Formatting.RED, true);
+                    send(context, "Couldn't stop server!", ChatFormatting.RED, true);
                 }
             } else {
-                send(context, "Modpack hosting is not running!", Formatting.RED, false);
+                send(context, "Modpack hosting is not running!", ChatFormatting.RED, false);
             }
         });
 
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int restartModpackHost(CommandContext<ServerCommandSource> context) {
-        Util.getMainWorkerExecutor().execute(() -> {
-            send(context, "Restarting modpack hosting...", Formatting.YELLOW, true);
+    private static int restartModpackHost(CommandContext<CommandSourceStack> context) {
+        Util.backgroundExecutor().execute(() -> {
+            send(context, "Restarting modpack hosting...", ChatFormatting.YELLOW, true);
             boolean needStop = hostServer.isRunning();
             boolean stopped = false;
             if (needStop) {
@@ -172,13 +175,13 @@ public class Commands {
             }
 
             if (needStop && !stopped) {
-                send(context, "Couldn't restart server!", Formatting.RED, true);
+                send(context, "Couldn't restart server!", ChatFormatting.RED, true);
             } else {
                 hostServer.start();
                 if (hostServer.isRunning()) {
-                    send(context, "Modpack hosting restarted!", Formatting.GREEN, true);
+                    send(context, "Modpack hosting restarted!", ChatFormatting.GREEN, true);
                 } else {
-                    send(context, "Couldn't restart server!", Formatting.RED, true);
+                    send(context, "Couldn't restart server!", ChatFormatting.RED, true);
                 }
             }
         });
@@ -186,65 +189,65 @@ public class Commands {
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int modpackHostAbout(CommandContext<ServerCommandSource> context) {
-        Formatting statusColor = hostServer.isRunning() ? Formatting.GREEN : Formatting.RED;
+    private static int modpackHostAbout(CommandContext<CommandSourceStack> context) {
+        ChatFormatting statusColor = hostServer.isRunning() ? ChatFormatting.GREEN : ChatFormatting.RED;
         String status = hostServer.isRunning() ? "running" : "not running";
-        send(context, "Modpack hosting status", Formatting.GREEN, status, statusColor, false);
+        send(context, "Modpack hosting status", ChatFormatting.GREEN, status, statusColor, false);
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int about(CommandContext<ServerCommandSource> context) {
-        send(context, "AutoModpack", Formatting.GREEN, AM_VERSION, Formatting.WHITE, false);
-        send(context, "/automodpack generate", Formatting.YELLOW, false);
-        send(context, "/automodpack host start/stop/restart/connections/fingerprint", Formatting.YELLOW, false);
-        send(context, "/automodpack config reload", Formatting.YELLOW, false);
+    private static int about(CommandContext<CommandSourceStack> context) {
+        send(context, "AutoModpack", ChatFormatting.GREEN, AM_VERSION, ChatFormatting.WHITE, false);
+        send(context, "/automodpack generate", ChatFormatting.YELLOW, false);
+        send(context, "/automodpack host start/stop/restart/connections/fingerprint", ChatFormatting.YELLOW, false);
+        send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
         return Command.SINGLE_SUCCESS;
     }
 
-    private static int generateModpack(CommandContext<ServerCommandSource> context) {
-        Util.getMainWorkerExecutor().execute(() -> {
+    private static int generateModpack(CommandContext<CommandSourceStack> context) {
+        Util.backgroundExecutor().execute(() -> {
             if (modpackExecutor.isGenerating()) {
-                send(context, "Modpack is already generating! Please wait!", Formatting.RED, false);
+                send(context, "Modpack is already generating! Please wait!", ChatFormatting.RED, false);
                 return;
             }
-            send(context, "Generating Modpack...", Formatting.YELLOW, true);
+            send(context, "Generating Modpack...", ChatFormatting.YELLOW, true);
             long start = System.currentTimeMillis();
             if (modpackExecutor.generateNew()) {
-                send(context, "Modpack generated! took " + (System.currentTimeMillis() - start) + "ms", Formatting.GREEN, true);
+                send(context, "Modpack generated! took " + (System.currentTimeMillis() - start) + "ms", ChatFormatting.GREEN, true);
             } else {
-                send(context, "Modpack generation failed! Check logs for more info.", Formatting.RED, true);
+                send(context, "Modpack generation failed! Check logs for more info.", ChatFormatting.RED, true);
             }
         });
 
         return Command.SINGLE_SUCCESS;
     }
 
-    private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, boolean broadcast) {
+    private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, boolean broadcast) {
         VersionedCommandSource.sendFeedback(context,
                 VersionedText.literal(msg)
-                        .formatted(msgColor),
+                        .withStyle(msgColor),
                 broadcast);
     }
 
-    private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, String appendMsg, Formatting appendMsgColor, boolean broadcast) {
+    private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, String appendMsg, ChatFormatting appendMsgColor, boolean broadcast) {
         VersionedCommandSource.sendFeedback(context,
                 VersionedText.literal(msg)
-                        .formatted(msgColor)
+                        .withStyle(msgColor)
                         .append(VersionedText.literal(" - ")
-                                .formatted(Formatting.WHITE))
+                                .withStyle(ChatFormatting.WHITE))
                         .append(VersionedText.literal(appendMsg)
-                                .formatted(appendMsgColor)),
+                                .withStyle(appendMsgColor)),
                 broadcast);
     }
 
-    private static void send(CommandContext<ServerCommandSource> context, String msg, Formatting msgColor, MutableText appendMsg, Formatting appendMsgColor, boolean broadcast) {
+    private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, MutableComponent appendMsg, ChatFormatting appendMsgColor, boolean broadcast) {
         VersionedCommandSource.sendFeedback(context,
                 VersionedText.literal(msg)
-                        .formatted(msgColor)
+                        .withStyle(msgColor)
                         .append(VersionedText.literal(" - ")
-                                .formatted(Formatting.WHITE))
+                                .withStyle(ChatFormatting.WHITE))
                         .append(appendMsg
-                                .formatted(appendMsgColor)),
+                                .withStyle(appendMsgColor)),
                 broadcast);
     }
 }

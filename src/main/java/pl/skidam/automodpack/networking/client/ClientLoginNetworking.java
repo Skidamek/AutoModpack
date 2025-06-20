@@ -1,20 +1,20 @@
 package pl.skidam.automodpack.networking.client;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientLoginNetworkHandler;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.util.Identifier;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 
 // credits to fabric api
 public class ClientLoginNetworking {
 
-    private static final Map<Identifier, LoginQueryRequestHandler> handlers = new HashMap<>();
+    private static final Map<ResourceLocation, LoginQueryRequestHandler> handlers = new HashMap<>();
 
     /**
      * Registers a handler to a query request channel.
@@ -23,14 +23,14 @@ public class ClientLoginNetworking {
      * @param channelName the id of the channel
      * @param handler the handler
      */
-    public static void registerGlobalReceiver(Identifier channelName, LoginQueryRequestHandler handler) {
+    public static void registerGlobalReceiver(ResourceLocation channelName, LoginQueryRequestHandler handler) {
         Objects.requireNonNull(channelName, "Channel name cannot be null");
         Objects.requireNonNull(handler, "Channel handler cannot be null");
 
         handlers.put(channelName, handler);
     }
 
-    public static LoginQueryRequestHandler getHandler(Identifier channelName) {
+    public static LoginQueryRequestHandler getHandler(ResourceLocation channelName) {
         return handlers.get(channelName);
     }
 
@@ -40,7 +40,7 @@ public class ClientLoginNetworking {
          * Handles an incoming query request from a server.
          *
          * <p>This method is executed on {@linkplain io.netty.channel.EventLoop netty's event loops}.
-         * Modification to the game should be {@linkplain net.minecraft.util.thread.ThreadExecutor#submit(Runnable) scheduled} using the provided Minecraft client instance.
+         * Modification to the game should be {@linkplain net.minecraft.util.thread.BlockableEventLoop#submit(Runnable) scheduled} using the provided Minecraft client instance.
          *
          * <p>The return value of this method is a completable future that may be used to delay the login process to the server until a task {@link CompletableFuture#isDone() is done}.
          * The future should complete in reasonably time to prevent disconnection by the server.
@@ -52,6 +52,6 @@ public class ClientLoginNetworking {
          * @return a completable future which contains the payload to respond to the server with.
          * If the future contains {@code null}, then the server will be notified that the client did not understand the query.
          */
-        CompletableFuture<@Nullable PacketByteBuf> receive(MinecraftClient client, ClientLoginNetworkHandler handler, PacketByteBuf buf);
+        CompletableFuture<@Nullable FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf);
     }
 }
