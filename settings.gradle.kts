@@ -1,5 +1,6 @@
 pluginManagement {
     repositories {
+        mavenLocal()
         mavenCentral()
         gradlePluginPortal()
         maven { url = uri("https://maven.architectury.dev/") }
@@ -7,17 +8,19 @@ pluginManagement {
         maven { url = uri("https://maven.neoforged.net/releases") }
         maven { url = uri("https://files.minecraftforge.net/maven/") }
         maven { url = uri("https://maven.kikugie.dev/snapshots") }
-        mavenLocal()
     }
 }
 
 plugins {
-    id("dev.kikugie.stonecutter") version "0.7-alpha.22"
-    id("dev.architectury.loom") version "1.9-SNAPSHOT" apply false // with 1.10 wait for remap fixes on neo/forge
-    id("com.github.johnrengelman.shadow") version "8.1.1" apply false
+    id("dev.kikugie.stonecutter") version "0.7-beta.3"
+    id("com.gradleup.shadow") version "8.3.6" apply false
 }
 
 include(":core")
+
+fun getProperty(key: String): String? {
+    return settings.extra[key] as? String
+}
 
 val coreModules = getProperty("core_modules")!!.split(',').map { it.trim() }
 
@@ -35,32 +38,35 @@ coreModules.forEach { module ->
     }
 }
 
-fun getProperty(key: String): String? {
-    return settings.extra[key] as? String
-}
-
-fun getVersions(key: String): Set<String> {
-    return getProperty(key)!!.split(',').map { it.trim() }.toSet()
-}
-
-val versions = mapOf(
-    "forge" to getVersions("forge_versions"),
-    "fabric" to getVersions("fabric_versions"),
-    "neoforge" to getVersions("neoforge_versions")
-)
-
-val sharedVersions = versions.map { entry ->
-    val loader = entry.key
-    entry.value.map { "$it-$loader" }
-}.flatten().toSet()
-
 stonecutter {
     kotlinController = true
     centralScript = "build.gradle.kts"
 
-    shared {
-        versions(sharedVersions)
-    }
+    create(rootProject) {
+        /**
+         * @param mcVersion The base minecraft version.
+         * @param loaders A list of loaders to target, supports "fabric" (1.14+), "neoforge"(1.20.6+), "vanilla"(any) or "forge"(<=1.20.1)
+         */
+        fun mc(mcVersion: String, name: String = mcVersion, loaders: Iterable<String>) =
+            loaders.forEach { vers("$name-$it", mcVersion) }
 
-    create(rootProject)
+        // Configure your targets here!
+        mc("1.21.6", loaders = listOf("fabric", "neoforge"))
+        mc("1.21.5", loaders = listOf("fabric", "neoforge"))
+        mc("1.21.4", loaders = listOf("fabric", "neoforge"))
+        mc("1.21.3", loaders = listOf("fabric", "neoforge"))
+        mc("1.21.1", loaders = listOf("fabric", "neoforge"))
+        mc("1.20.6", loaders = listOf("fabric", "neoforge"))
+        mc("1.20.4", loaders = listOf("fabric", "neoforge"))
+        mc("1.20.1", loaders = listOf("fabric", "forge"))
+        mc("1.19.4", loaders = listOf("fabric", "forge"))
+        mc("1.19.2", loaders = listOf("fabric", "forge"))
+        mc("1.18.2", loaders = listOf("fabric", "forge"))
+
+        // This is the default target.
+        // https://stonecutter.kikugie.dev/stonecutter/guide/setup#settings-settings-gradle-kts
+        vcsVersion = "1.21.4-fabric"
+    }
 }
+
+rootProject.name = "AutoModpack"

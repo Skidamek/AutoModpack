@@ -1,8 +1,8 @@
 import net.fabricmc.loom.task.RemapJarTask
 
 plugins {
-    id("dev.architectury.loom")
-    id("com.github.johnrengelman.shadow")
+    id("dev.architectury.loom") version "1.9-SNAPSHOT"
+    id("com.gradleup.shadow")
 }
 
 val loader = property("loom.platform") as String

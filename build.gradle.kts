@@ -2,7 +2,12 @@ import java.util.*
 
 plugins {
     id("dev.kikugie.stonecutter")
-    id("dev.architectury.loom")
+    id("dev.isxander.modstitch.base") version "0.5.16-unstable-local"
+}
+
+fun prop(name: String, consumer: (prop: String) -> Unit) {
+    (findProperty(name) as? String?)
+        ?.let(consumer)
 }
 
 class ModData {
@@ -15,18 +20,19 @@ class ModData {
 }
 
 class LoaderData {
-    private val name = loom.platform.get().name.lowercase()
+    private val name = stonecutter.current.version.substringAfterLast("-")
     val isFabric = name == "fabric"
     val isForge = name == "forge"
     val isNeoForge = name == "neoforge"
 
     fun getVersion() : String? {
         return if (isForge) {
-            property("loader_forge")?.toString()
+            property("deps.forge")?.toString()
         } else if (isNeoForge) {
-            property("loader_neoforge")?.toString()
+            property("deps.neoforge")?.toString()
         } else if (isFabric) {
-            property("loader_fabric")?.toString()
+            "0.16.14"
+//            property("loader_fabric")?.toString()
         } else {
             null
         }
@@ -39,153 +45,229 @@ class LoaderData {
 
 class MinecraftVersionData {
     private val name = stonecutter.current.version.substringBeforeLast("-")
-    val needsJava21 = greaterOrEqual("1.20.5")
-
-    fun greaterThan(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) > 0
-    }
-
-    fun lessThan(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) < 0
-    }
-
-    fun greaterOrEqual(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) >= 0
-    }
-
-    fun lessOrEqual(other: String) : Boolean {
-        return stonecutter.compare(name, other.lowercase()) <= 0
-    }
-
-    override fun equals(other: Any?) : Boolean {
-        return name == other
-    }
+    private val needsJava21 = stonecutter.eval(name, ">=1.20.5")
 
     override fun toString(): String {
         return name
     }
 
-    override fun hashCode(): Int {
-        var result = name.hashCode()
-        result = 31 * result + needsJava21.hashCode()
-        return result
+    fun needsJava21(): Boolean {
+        return needsJava21
     }
 }
 
 val mod = ModData()
 val loader = LoaderData()
-val minecraftVersion = MinecraftVersionData()
+val minecraftVersionData = MinecraftVersionData()
 
 
 version = mod.version
 group = mod.group
-base.archivesName.set("${mod.name}-mc$minecraftVersion-$loader".lowercase(Locale.getDefault()))
+base.archivesName.set("${mod.name}-mc$minecraftVersionData-$loader".lowercase(Locale.getDefault()))
 
-repositories {
-    mavenCentral()
-    mavenLocal()
-    maven { url = uri("https://api.modrinth.com/maven") }
-    maven { url = uri("https://maven.neoforged.net/releases") }
-    maven { url = uri("https://files.minecraftforge.net/maven/") }
-    maven { url = uri("https://libraries.minecraft.net/") }
-}
+modstitch {
+    minecraftVersion = minecraftVersionData.toString()
 
-dependencies {
-    // just for IDE not complaining (its already included in the shadow jar of core-${mod_brand})
-    // + needed for runtime in dev env
-    implementation(project(":core"))
-    implementation(project(":loader-core"))
+    javaTarget = if (minecraftVersionData.needsJava21()) 21 else 17
 
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
+    // If parchment doesnt exist for a version yet you can safely
+    // omit the "deps.parchment" property from your versioned gradle.properties
+    parchment {
+        prop("deps.parchment") { mappingsVersion = it }
+    }
 
-    // TODO fix dev env launch
+    // This metadata is used to fill out the information inside
+    // the metadata files found in the templates folder.
+    metadata {
+        modId = "examplemod"
+        modName = "Example Mod"
+        modVersion = "1.0.0"
+        modGroup = "com.example"
+        modAuthor = "John Doe, Patrina Doe, Jill Doe"
 
-    minecraft("com.mojang:minecraft:$minecraftVersion")
+        fun <K, V> MapProperty<K, V>.populate(block: MapProperty<K, V>.() -> Unit) {
+            block()
+        }
 
-    // Mappings have to be patched for new neoforge
-    if (loader.isNeoForge && minecraftVersion.equals("1.20.6")) {
-        mappings(
-            loom.layered {
-                mappings("net.fabricmc:yarn:${property("yarn_mappings")}:v2")
-                mappings("dev.architectury:yarn-mappings-patch-neoforge:1.20.6+build.4")
+        replacementProperties.populate {
+            // You can put any other replacement properties/metadata here that
+            // modstitch doesn't initially support. Some examples below.
+            put("mod_issue_tracker", "https://github.com/modunion/modstitch/issues")
+            put("pack_format", when (property("deps.minecraft")) {
+                "1.19" -> 9
+                "1.20.1" -> 15
+                "1.21.4" -> 46
+                else -> 80
+//                else -> throw IllegalArgumentException("Please store the resource pack version for ${property("deps.minecraft")} in build.gradle.kts! https://minecraft.wiki/w/Pack_format")
+            }.toString())
+        }
+    }
+
+    // Fabric Loom (Fabric)
+    loom {
+        // It's not recommended to store the Fabric Loader version in properties.
+        // Make sure its up to date.
+        fabricLoaderVersion = "0.16.14"
+
+        // Configure loom like normal in this block.
+        configureLoom {
+
+        }
+    }
+
+    // ModDevGradle (NeoForge, Forge, Forgelike)
+    moddevgradle {
+        enable {
+            prop("deps.forge") { forgeVersion = it }
+            prop("deps.neoform") { neoFormVersion = it }
+            prop("deps.neoforge") { neoForgeVersion = it }
+            prop("deps.mcp") { mcpVersion = it }
+        }
+
+        // Configures client and server runs for MDG, it is not done by default
+        defaultRuns()
+
+        // This block configures the `neoforge` extension that MDG exposes by default,
+        // you can configure MDG like normal from here
+        configureNeoforge {
+            runs.all {
+                disableIdeRun()
             }
-        )
-    } else if (loader.isNeoForge && minecraftVersion.greaterOrEqual("1.21")) {
-        mappings(
-            loom.layered {
-                mappings("net.fabricmc:yarn:${property("yarn_mappings")}:v2")
-                mappings("dev.architectury:yarn-mappings-patch-neoforge:1.21+build.4")
-            }
-        )
-    } else {
-        mappings("net.fabricmc:yarn:${property("yarn_mappings")}:v2")
+        }
     }
 
-    if (loader.isFabric) {
-        setOf(
-            "fabric-api-base", // Required by modules below
-            "fabric-resource-loader-v0", // Required for translatable texts
-            "fabric-registry-sync-v0", // Required for custom sounds
-            "fabric-networking-api-v1" // Required by registry sync module
-        ).forEach {
-            include(modImplementation(fabricApi.module(it, property("fabric_version") as String))!!) // TODO transitive false
-        }
-        if (minecraftVersion.lessThan("1.19.2")) {
-            include(modImplementation(fabricApi.module("fabric-command-api-v1", property("fabric_version") as String))!!) // TODO transitive false
-        } else {
-            include(modImplementation(fabricApi.module("fabric-command-api-v2", property("fabric_version") as String))!!) // TODO transitive false
-        }
+    mixin {
+        // You do not need to specify mixins in any mods.json/toml file if this is set to
+        // true, it will automatically be generated.
+        addMixinsToModManifest = true
 
-        // JiJ lastest version of mixin extras so all mods work (workaround) - remove when we detect such incompatibilities and copy the jij mod to the mods folder, currently the stable loader version would be loaded instead of the lastest required by some mods
-        include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${property("mixin_extras")}")!!)!!)
-    }
+//        configs.register("examplemod")
 
-    if (loader.isFabric) {
-        modImplementation("net.fabricmc:fabric-loader:${loader.getVersion()}")
-    } else if (loader.isForge) {
-        "forge"("net.minecraftforge:forge:$minecraftVersion-${loader.getVersion()}")
-
-        // For pseudo mixin (compat with Forgified Fabric API)
-        compileOnly(fabricApi.module("fabric-networking-api-v1", "0.92.2+1.20.1")) // version is not important
-
-        implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:${property("mixin_extras")}")!!)
-        implementation(include("io.github.llamalad7:mixinextras-forge:${property("mixin_extras")}")!!)
-    } else if (loader.isNeoForge) {
-
-        // For pseudo mixin (compat with Forgified Fabric API)
-        compileOnly(fabricApi.module("fabric-networking-api-v1", "0.92.2+1.20.1")) // version is not important
-
-        "neoForge"("net.neoforged:neoforge:${loader.getVersion()}")
-
-        // Bundle mixin extras to 1.20.2 since it has too old version of it
-        if (minecraftVersion.equals("1.20.2")) {
-            implementation(include("io.github.llamalad7:mixinextras-neoforge:${property("mixin_extras")}")!!)
-        }
+        // Most of the time you wont ever need loader specific mixins.
+        // If you do, simply make the mixin file and add it like so for the respective loader:
+        // if (isLoom) configs.register("examplemod-fabric")
+        // if (isModDevGradleRegular) configs.register("examplemod-neoforge")
+        // if (isModDevGradleLegacy) configs.register("examplemod-forge")
     }
 }
 
-loom {
-    runConfigs["client"].apply {
-        ideConfigGenerated(true)
-        vmArgs("-Dmixin.debug.export=true")
-        runDir = "../../run"
-    }
+//// Stonecutter constants for mod loaders.
+//// See https://stonecutter.kikugie.dev/stonecutter/guide/comments#condition-constants
+//var constraint: String = name.split("-")[1]
+//stonecutter {
+//    consts(
+//        "fabric" to constraint.equals("fabric"),
+//        "neoforge" to constraint.equals("neoforge"),
+//        "forge" to constraint.equals("forge"),
+//        "vanilla" to constraint.equals("vanilla")
+//    )
+//}
 
-    runConfigs["server"].apply {
-        ideConfigGenerated(true)
-        vmArgs("-Dmixin.debug.export=true")
-        runDir = "../../run"
-    }
+//repositories {
+//    mavenCentral()
+//    mavenLocal()
+//    maven { url = uri("https://api.modrinth.com/maven") }
+//    maven { url = uri("https://maven.neoforged.net/releases") }
+//    maven { url = uri("https://files.minecraftforge.net/maven/") }
+//    maven { url = uri("https://libraries.minecraft.net/") }
+//}
 
-    if (loader.isForge) {
-        forge {
-            convertAccessWideners = true
-            mixinConfigs = listOf("automodpack-main.mixins.json")
-        }
-    }
+//dependencies {
+//    // just for IDE not complaining (its already included in the shadow jar of core-${mod_brand})
+//    // + needed for runtime in dev env
+//    implementation(project(":core"))
+//    implementation(project(":loader-core"))
+//
+//    testImplementation("org.junit.jupiter:junit-jupiter-api:5.9.2")
+//
+//    // TODO fix dev env launch
+//
+//    minecraft("com.mojang:minecraft:$minecraftVersion")
+//
+//    // Mappings have to be patched for new neoforge
+//    if (loader.isNeoForge && minecraftVersion.equals("1.20.6")) {
+//        mappings(
+//            loom.layered {
+//                mappings("net.fabricmc:yarn:${property("yarn_mappings")}:v2")
+//                mappings("dev.architectury:yarn-mappings-patch-neoforge:1.20.6+build.4")
+//            }
+//        )
+//    } else if (loader.isNeoForge && minecraftVersion.greaterOrEqual("1.21")) {
+//        mappings(
+//            loom.layered {
+//                mappings("net.fabricmc:yarn:${property("yarn_mappings")}:v2")
+//                mappings("dev.architectury:yarn-mappings-patch-neoforge:1.21+build.4")
+//            }
+//        )
+//    } else {
+//        mappings("net.fabricmc:yarn:${property("yarn_mappings")}:v2")
+//    }
+//
+//    if (loader.isFabric) {
+//        setOf(
+//            "fabric-api-base", // Required by modules below
+//            "fabric-resource-loader-v0", // Required for translatable texts
+//            "fabric-registry-sync-v0", // Required for custom sounds
+//            "fabric-networking-api-v1" // Required by registry sync module
+//        ).forEach {
+//            include(modImplementation(fabricApi.module(it, property("fabric_version") as String))!!) // TODO transitive false
+//        }
+//        if (minecraftVersion.lessThan("1.19.2")) {
+//            include(modImplementation(fabricApi.module("fabric-command-api-v1", property("fabric_version") as String))!!) // TODO transitive false
+//        } else {
+//            include(modImplementation(fabricApi.module("fabric-command-api-v2", property("fabric_version") as String))!!) // TODO transitive false
+//        }
+//
+//        // JiJ lastest version of mixin extras so all mods work (workaround) - remove when we detect such incompatibilities and copy the jij mod to the mods folder, currently the stable loader version would be loaded instead of the lastest required by some mods
+//        include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${property("mixin_extras")}")!!)!!)
+//    }
+//
+//    if (loader.isFabric) {
+//        modImplementation("net.fabricmc:fabric-loader:${loader.getVersion()}")
+//    } else if (loader.isForge) {
+//        "forge"("net.minecraftforge:forge:$minecraftVersion-${loader.getVersion()}")
+//
+//        // For pseudo mixin (compat with Forgified Fabric API)
+//        compileOnly(fabricApi.module("fabric-networking-api-v1", "0.92.2+1.20.1")) // version is not important
+//
+//        implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:${property("mixin_extras")}")!!)
+//        implementation(include("io.github.llamalad7:mixinextras-forge:${property("mixin_extras")}")!!)
+//    } else if (loader.isNeoForge) {
+//
+//        // For pseudo mixin (compat with Forgified Fabric API)
+//        compileOnly(fabricApi.module("fabric-networking-api-v1", "0.92.2+1.20.1")) // version is not important
+//
+//        "neoForge"("net.neoforged:neoforge:${loader.getVersion()}")
+//
+//        // Bundle mixin extras to 1.20.2 since it has too old version of it
+//        if (minecraftVersion.equals("1.20.2")) {
+//            implementation(include("io.github.llamalad7:mixinextras-neoforge:${property("mixin_extras")}")!!)
+//        }
+//    }
+//}
 
-    accessWidenerPath = file("../../src/main/resources/automodpack.accesswidener")
-}
+//loom {
+//    runConfigs["client"].apply {
+//        ideConfigGenerated(true)
+//        vmArgs("-Dmixin.debug.export=true")
+//        runDir = "../../run"
+//    }
+//
+//    runConfigs["server"].apply {
+//        ideConfigGenerated(true)
+//        vmArgs("-Dmixin.debug.export=true")
+//        runDir = "../../run"
+//    }
+//
+//    if (loader.isForge) {
+//        forge {
+//            convertAccessWideners = true
+//            mixinConfigs = listOf("automodpack-main.mixins.json")
+//        }
+//    }
+//
+//    accessWidenerPath = file("../../src/main/resources/automodpack.accesswidener")
+//}
 
 if (stonecutter.current.isActive) {
     rootProject.tasks.register("buildActive") {
@@ -239,7 +321,7 @@ tasks.processResources {
 }
 
 java {
-    if (minecraftVersion.needsJava21) {
+    if (minecraftVersionData.needsJava21()) {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
 

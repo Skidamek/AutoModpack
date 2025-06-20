@@ -18,15 +18,19 @@ wiki {
 
 stonecutter active "1.21.1-neoforge" /* [SC] DO NOT EDIT */
 
-//stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chiseled) {
-//    group = "project"
-//    ofTask("build")
-//    finalizedBy("mergeJars")
-//}
+allprojects {
+    repositories {
+        mavenCentral()
+        mavenLocal()
+        maven("https://maven.architectury.dev/")
+        maven("https://maven.neoforged.net/releases")
+        maven("https://maven.fabricmc.net/")
+    }
+}
 
 stonecutter.parameters {
     constants {
-        val loader: String = metadata.project.substringAfter('-')
+        val loader: String = current.project.substringAfter('-')
         match(loader, "fabric", "forge", "neoforge")
     }
 }

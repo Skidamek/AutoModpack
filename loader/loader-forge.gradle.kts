@@ -2,8 +2,8 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import net.fabricmc.loom.task.RemapJarTask
 
 plugins {
-    id("dev.architectury.loom")
-    id("com.github.johnrengelman.shadow")
+    id("dev.architectury.loom") version "1.9-SNAPSHOT"
+    id("com.gradleup.shadow")
 }
 
 val loader = property("loom.platform") as String
@@ -43,7 +43,7 @@ dependencies {
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5")
 
     if (project.name.contains("neoforge")) {
-        "neoForge"("net.neoforged:neoforge:${property("loader_neoforge")}")
+        "neoForge"("net.neoforged:neoforge:${property("deps.neoforge")}")
     } else {
         "forge"("net.minecraftforge:forge:${property("minecraft_version")}-${property("loader_forge")}")
     }
