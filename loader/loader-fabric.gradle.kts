@@ -1,8 +1,5 @@
-import net.fabricmc.loom.task.RemapJarTask
-
 plugins {
-    id("dev.architectury.loom") version "1.9-SNAPSHOT"
-    id("com.gradleup.shadow")
+    java
 }
 
 val loader = property("loom.platform") as String
@@ -28,14 +25,11 @@ dependencies {
     compileOnly(project(":core"))
     compileOnly(project(":loader-core"))
 
-    minecraft("com.mojang:minecraft:${property("minecraft_version")}")
-    mappings(loom.officialMojangMappings()) // We dont really use minecraft code there so we can use mojang mappings
-
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
     implementation("org.tomlj:tomlj:1.1.1")
 
-    modImplementation("net.fabricmc:fabric-loader:${property("loader_fabric")}")
+    implementation("net.fabricmc:fabric-loader:${property("loader_fabric")}")
 }
 
 java {
@@ -51,8 +45,4 @@ java {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
-}
-
-tasks.named<RemapJarTask>("remapJar") {
-    isEnabled = false
 }

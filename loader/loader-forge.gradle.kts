@@ -2,7 +2,7 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import net.fabricmc.loom.task.RemapJarTask
 
 plugins {
-    id("dev.architectury.loom") version "1.9-SNAPSHOT"
+    id("dev.architectury.loom") version "1.10-SNAPSHOT" // here unfortunately we need to use some kind of loom or MDG because just getting neoforge or forge bin is not enough (neo)forge has a lot of layers and modules which otherwise we need to include manually
     id("com.gradleup.shadow")
 }
 
@@ -117,7 +117,6 @@ tasks.withType<JavaCompile> {
 
 tasks.named<RemapJarTask>("remapJar") {
     isEnabled = false
-
 }
 
 tasks.named<Jar>("jar") {

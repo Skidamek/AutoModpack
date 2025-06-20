@@ -155,8 +155,6 @@ modstitch {
 }
 
 dependencies {
-//    modstitchImplementation(project(":core"))
-//    modstitchImplementation(project(":loader-core"))
     implementation(project(":core"))
     implementation(project(":loader-core"))
 
