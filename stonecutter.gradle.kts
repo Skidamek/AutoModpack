@@ -7,6 +7,12 @@ import java.util.zip.ZipOutputStream
 
 plugins {
     id("dev.kikugie.stonecutter")
+    kotlin("jvm") version "2.1.21" apply false
+    id("co.uzzu.dotenv.gradle") version "4.0.0"
+    id("fabric-loom") version "1.10-SNAPSHOT" apply false
+    id("net.neoforged.moddev") version "2.0.95" apply false
+    id("me.modmuss50.mod-publish-plugin") version "0.8.+" apply false
+    id("com.gradleup.shadow") version "8.3.6" apply false
     id("org.moddedmc.wiki.toolkit") version "0.2.7"
 }
 
@@ -16,19 +22,10 @@ wiki {
     }
 }
 
-stonecutter active "1.21.1-neoforge" /* [SC] DO NOT EDIT */
-
-//stonecutter registerChiseled tasks.register("chiseledBuild", stonecutter.chiseled) {
-//    group = "project"
-//    ofTask("build")
-//    finalizedBy("mergeJars")
-//}
+stonecutter active "1.21.1-fabric" /* [SC] DO NOT EDIT */
 
 stonecutter.parameters {
-    constants {
-        val loader: String = metadata.project.substringAfter('-')
-        match(loader, "fabric", "forge", "neoforge")
-    }
+    constants.match(node.metadata.project.substringAfterLast('-'), "fabric", "neoforge", "forge")
 }
 
 // Non stonecutter stuff

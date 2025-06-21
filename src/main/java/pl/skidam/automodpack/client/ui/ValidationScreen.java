@@ -1,12 +1,11 @@
 package pl.skidam.automodpack.client.ui;
 
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.toast.SystemToast;
-import net.minecraft.client.toast.Toast;
-import net.minecraft.util.Formatting;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.client.gui.components.toasts.Toast;
+import net.minecraft.client.gui.screens.Screen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -18,10 +17,10 @@ public class ValidationScreen extends VersionedScreen {
     private final Runnable validatedCallback;
     private final Runnable canceledCallback;
     private boolean validated = false;
-    private final Toast failedToast = new SystemToast(SystemToast.Type.PACK_LOAD_FAILURE, VersionedText.translatable("automodpack.validation.failed"), VersionedText.translatable("automodpack.retry"));
-    private TextFieldWidget textField;
-    private ButtonWidget backButton;
-    private ButtonWidget validateButton;
+    private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE, VersionedText.translatable("automodpack.validation.failed"), VersionedText.translatable("automodpack.retry"));
+    private EditBox textField;
+    private Button backButton;
+    private Button validateButton;
 
     public ValidationScreen(Screen parent, String serverFingerprint, Runnable validatedCallback,
                             Runnable canceledCallback) {
@@ -38,15 +37,15 @@ public class ValidationScreen extends VersionedScreen {
 
         initWidgets();
 
-        this.addDrawableChild(this.textField);
-        this.addDrawableChild(this.backButton);
-        this.addDrawableChild(this.validateButton);
+        this.addRenderableWidget(this.textField);
+        this.addRenderableWidget(this.backButton);
+        this.addRenderableWidget(this.validateButton);
         this.setInitialFocus(this.textField);
     }
 
     public void initWidgets() {
-        assert this.client != null;
-        this.textField = new TextFieldWidget(this.textRenderer, this.width / 2 - 170, this.height / 2 - 20, 340, 20,
+        assert this.minecraft != null;
+        this.textField = new EditBox(this.font, this.width / 2 - 170, this.height / 2 - 20, 340, 20,
                 VersionedText.literal("")
         );
         this.textField.setMaxLength(64); // default is 30 which is too little
@@ -54,7 +53,7 @@ public class ValidationScreen extends VersionedScreen {
         this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20,
                 VersionedText.translatable("automodpack.back"),
                 button -> {
-                    this.client.setScreen(parent);
+                    this.minecraft.setScreen(parent);
                     if (!this.validated) {
                         this.canceledCallback.run();
                     }
@@ -63,7 +62,7 @@ public class ValidationScreen extends VersionedScreen {
 
         this.validateButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20,
                 VersionedText.translatable("automodpack.validation.run"),
-                button -> validate(textField.getText()));
+                button -> validate(textField.getValue()));
     }
 
     private void validate(String input) {
@@ -71,27 +70,27 @@ public class ValidationScreen extends VersionedScreen {
         if (input.equals(serverFingerprint) || input.equals("I AM INCREDIBLY STUPID")) {
             validateButton.active = false;
             this.validated = true;
-            if (this.client != null) {
-                this.client.setScreen(parent);
+            if (this.minecraft != null) {
+                this.minecraft.setScreen(parent);
             }
             validatedCallback.run();
         } else {
             GlobalVariables.LOGGER.error("Server fingerprint validation failed, try again");
-            if (this.client != null) {
-                this.client.getToastManager().add(failedToast);
+            if (this.minecraft != null) {
+                this.minecraft.getToasts().addToast(failedToast);
             }
         }
     }
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.text").formatted(Formatting.BOLD),
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.text").withStyle(ChatFormatting.BOLD),
                 this.width / 2, this.height / 2 - 100, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.description"),
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.description"),
                 this.width / 2, this.height / 2 - 75, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.secDescription"),
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.secDescription"),
                 this.width / 2, this.height / 2 - 65, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.validation.thiDescription"),
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.validation.thiDescription"),
                 this.width / 2, this.height / 2 - 55, TextColors.WHITE);
     }
 

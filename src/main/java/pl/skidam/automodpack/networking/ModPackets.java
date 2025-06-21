@@ -1,10 +1,10 @@
 package pl.skidam.automodpack.networking;
 
 import io.netty.buffer.Unpooled;
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerLoginNetworkHandler;
-import net.minecraft.util.Identifier;
+import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import pl.skidam.automodpack.networking.client.ClientLoginNetworking;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.packet.HandshakeC2SPacket;
@@ -19,8 +19,8 @@ import java.net.InetSocketAddress;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModPackets {
-    public static final Identifier HANDSHAKE = LoginNetworkingIDs.getIdentifier(LoginNetworkingIDs.HANDSHAKE);
-    public static final Identifier DATA = LoginNetworkingIDs.getIdentifier(LoginNetworkingIDs.DATA);
+    public static final ResourceLocation HANDSHAKE = LoginNetworkingIDs.getIdentifier(LoginNetworkingIDs.HANDSHAKE);
+    public static final ResourceLocation DATA = LoginNetworkingIDs.getIdentifier(LoginNetworkingIDs.DATA);
 
     private static InetSocketAddress originalServerAddress;
 
@@ -46,14 +46,14 @@ public class ModPackets {
     }
 
     // Fires just after client go into login state and before any FML packet is sent.
-    public static void onReady(ServerLoginNetworkHandler handler, MinecraftServer server, ServerLoginNetworking.LoginSynchronizer synchronizer, PacketSender sender) {
+    public static void onReady(ServerLoginPacketListenerImpl handler, MinecraftServer server, ServerLoginNetworking.LoginSynchronizer synchronizer, PacketSender sender) {
         synchronizer.waitFor(server.submit(() -> {
-            PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+            FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
 
             HandshakePacket handshakePacket = new HandshakePacket(serverConfig.acceptedLoaders, AM_VERSION, MC_VERSION);
             String jsonHandshakePacket = handshakePacket.toJson();
 
-            buf.writeString(jsonHandshakePacket, Short.MAX_VALUE);
+            buf.writeUtf(jsonHandshakePacket, Short.MAX_VALUE);
             sender.sendPacket(HANDSHAKE, buf);
         }));
     }

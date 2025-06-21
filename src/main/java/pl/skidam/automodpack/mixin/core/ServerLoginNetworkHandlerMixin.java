@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.mixin.core;
 
-import net.minecraft.network.packet.c2s.login.LoginQueryResponseC2SPacket;
-import net.minecraft.server.network.ServerLoginNetworkHandler;
+import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
+import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -9,10 +9,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
-@Mixin(value = ServerLoginNetworkHandler.class, priority = 300)
+@Mixin(value = ServerLoginPacketListenerImpl.class, priority = 300)
 public abstract class ServerLoginNetworkHandlerMixin  {
 
-    @Shadow private ServerLoginNetworkHandler.State state;
+    @Shadow private ServerLoginPacketListenerImpl.State state;
     @Unique private ServerLoginNetworkAddon automodpack$addon;
 
     @Inject(
@@ -20,15 +20,15 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             at = @At("RETURN")
     )
     private void initAddon(CallbackInfo ci) {
-        this.automodpack$addon = new ServerLoginNetworkAddon((ServerLoginNetworkHandler) (Object) this);
+        this.automodpack$addon = new ServerLoginNetworkAddon((ServerLoginPacketListenerImpl) (Object) this);
     }
 
     @Inject(
-            method = "onQueryResponse",
+            method = "handleCustomQueryPacket",
             at = @At("HEAD"),
             cancellable = true
     )
-    private void handleCustomPayload(LoginQueryResponseC2SPacket packet, CallbackInfo ci) {
+    private void handleCustomPayload(ServerboundCustomQueryAnswerPacket packet, CallbackInfo ci) {
         if (this.automodpack$addon == null) {
             return;
         }
@@ -38,7 +38,7 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             ci.cancel(); // We have handled it, cancel vanilla behavior
         } else {
             /*? if >=1.20.2 {*/
-            if (packet.response() instanceof LoginResponsePayload response) {
+            if (packet.payload() instanceof LoginResponsePayload response) {
                 response.data().skipBytes(response.data().readableBytes());
             }
             /*?}*/
@@ -55,7 +55,7 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             return;
         }
 
-        if (state != ServerLoginNetworkHandler.State.NEGOTIATING && state != ServerLoginNetworkHandler.State./*? if <1.20.2 {*/ /*READY_TO_ACCEPT *//*?} else {*/VERIFYING/*?}*/) {
+        if (state != ServerLoginPacketListenerImpl.State.NEGOTIATING && state != ServerLoginPacketListenerImpl.State./*? if <1.20.2 {*/ /*READY_TO_ACCEPT *//*?} else {*/VERIFYING/*?}*/) {
             return;
         }
 

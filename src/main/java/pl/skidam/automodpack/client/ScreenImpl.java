@@ -1,9 +1,5 @@
 package pl.skidam.automodpack.client;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.TitleScreen;
-import net.minecraft.util.Util;
 import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -14,6 +10,10 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;
 import java.util.Optional;
+import net.minecraft.Util;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
 
 public class ScreenImpl implements ScreenService {
 
@@ -75,12 +75,12 @@ public class ScreenImpl implements ScreenService {
 
     private static class Screens {
         private static Screen getScreen() {
-            return MinecraftClient.getInstance().currentScreen;
+            return Minecraft.getInstance().screen;
         }
 
         public static void setScreen(Screen screen) {
             // required for forge to handle it properly
-            Util.getMainWorkerExecutor().execute(() -> MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(screen)));
+            Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(screen)));
         }
 
         public static void download(Object downloadManager, Object header) {

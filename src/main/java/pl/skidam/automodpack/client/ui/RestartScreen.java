@@ -1,11 +1,10 @@
 package pl.skidam.automodpack.client.ui;
 
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.util.Formatting;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 import java.nio.file.Path;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.Button;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -17,9 +16,9 @@ public class RestartScreen extends VersionedScreen {
     private final Path modpackDir;
     private final UpdateType updateType;
     private final Changelogs changelogs;
-    private static ButtonWidget cancelButton;
-    private static ButtonWidget restartButton;
-    private static ButtonWidget changelogsButton;
+    private static Button cancelButton;
+    private static Button restartButton;
+    private static Button changelogsButton;
 
     public RestartScreen(Path modpackDir, UpdateType updateType, Changelogs changelogs) {
         super(VersionedText.literal("RestartScreen"));
@@ -38,9 +37,9 @@ public class RestartScreen extends VersionedScreen {
 
         initWidgets();
 
-        this.addDrawableChild(cancelButton);
-        this.addDrawableChild(restartButton);
-        this.addDrawableChild(changelogsButton);
+        this.addRenderableWidget(cancelButton);
+        this.addRenderableWidget(restartButton);
+        this.addRenderableWidget(changelogsButton);
 
         if (changelogs == null || changelogs.changesAddedList.isEmpty() && changelogs.changesDeletedList.isEmpty()) {
             changelogsButton.active = false;
@@ -48,12 +47,12 @@ public class RestartScreen extends VersionedScreen {
     }
 
     public void initWidgets() {
-        assert this.client != null;
+        assert this.minecraft != null;
         cancelButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.cancel"), button -> {
-            this.client.setScreen(null);
+            this.minecraft.setScreen(null);
         });
 
-        restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").formatted(Formatting.BOLD), button -> {
+        restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> {
             System.exit(0);
         });
 
@@ -64,9 +63,9 @@ public class RestartScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.restart." + updateType.toString()).formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.restart.description"), this.width / 2, this.height / 2 - 35, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.restart.secDescription"), this.width / 2, this.height / 2 - 25, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.restart." + updateType.toString()).withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 60, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.restart.description"), this.width / 2, this.height / 2 - 35, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.restart.secDescription"), this.width / 2, this.height / 2 - 25, TextColors.WHITE);
     }
 
     @Override

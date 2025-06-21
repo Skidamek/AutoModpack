@@ -1,13 +1,11 @@
 package pl.skidam.automodpack.client.audio;
 
-import net.minecraft.client.sound.AbstractSoundInstance;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvent;
-
 import java.util.function.Supplier;
-
-/*? if >=1.19.1 {*/
-import net.minecraft.util.math.random.Random;
+import net.minecraft.client.resources.sounds.AbstractSoundInstance;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundSource;
+/*? if >= 1.19.1 && < 1.21.2 {*/
+import net.minecraft.util.RandomSource;
 /*?}*/
 
 public class CustomSoundInstance extends AbstractSoundInstance {
@@ -16,11 +14,11 @@ public class CustomSoundInstance extends AbstractSoundInstance {
         /*? if >=1.21.2 {*/
         /*super(event.get().id(), SoundCategory.MASTER, Random.create());
         *//*?} elif >=1.19.1 {*/
-        super(event.get().getId(), SoundCategory.MASTER, Random.create());
+        super(event.get().getLocation(), SoundSource.MASTER, RandomSource.create());
         /*?} else {*/
-        /*super(event.get().getId(), SoundCategory.MASTER);
+        /*super(event.get().getLocation(), SoundSource.MASTER);
         *//*?}*/
-        this.attenuationType = AttenuationType.NONE;
+        this.attenuation = Attenuation.NONE;
     }
 
     @Override
@@ -34,7 +32,7 @@ public class CustomSoundInstance extends AbstractSoundInstance {
     }
 
     @Override
-    public boolean isRepeatable() {
+    public boolean isLooping() {
         return true;
     }
 }
