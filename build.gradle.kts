@@ -160,15 +160,15 @@ dependencies {
 
     modstitch.loom {
 
-        // TODO: fix it
-//        setOf(
-//            "fabric-api-base", // Required by modules below
-//            "fabric-resource-loader-v0", // Required for translatable texts
-//            "fabric-registry-sync-v0", // Required for custom sounds
-//            "fabric-networking-api-v1" // Required by registry sync module
-//        ).forEach {
-//            modstitchModImplementation(fabricApi.module(it, property("fabric_version") as String))
-//        }
+        modstitchModImplementation(platform("net.fabricmc.fabric-api:fabric-api-bom:${property("fabric_version")}"))
+        setOf(
+            "fabric-api-base", // Required by modules below
+            "fabric-resource-loader-v0", // Required for translatable texts
+            "fabric-registry-sync-v0", // Required for custom sounds
+            "fabric-networking-api-v1" // Required by registry sync module
+        ).forEach {
+            modstitchModImplementation("net.fabricmc.fabric-api:$it")
+        }
         // TODO transitive false
 //        modstitchModImplementation("net.fabricmc.fabric-api:fabric-api-base:${property("fabric_version")}")
 //        modstitchModImplementation("net.fabricmc.fabric-api:fabric-resource-loader-v0:${property("fabric_version")}")
@@ -179,8 +179,6 @@ dependencies {
 //        } else {
 //            modstitchModImplementation("net.fabricmc.fabric-api:fabric-command-api-v2:${property("fabric_version")}") // TODO transitive false
 //        }
-
-        modstitchModImplementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_version")}")
 
         // JiJ lastest version of mixin extras so all mods work (workaround) - remove when we detect such incompatibilities and copy the jij mod to the mods folder, currently the stable loader version would be loaded instead of the lastest required by some mods
         modstitchJiJ(modstitchImplementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${property("mixin_extras")}")!!)!!)
@@ -195,6 +193,13 @@ dependencies {
         modstitchImplementation(modstitchJiJ("io.github.llamalad7:mixinextras-forge:${property("mixin_extras")}")!!)
     } else if (loader.isNeoForge) {
         modstitchImplementation(modstitchJiJ("io.github.llamalad7:mixinextras-neoforge:${property("mixin_extras")}")!!)
+    }
+}
+
+tasks {
+    processResources {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        outputs.upToDateWhen { false } // work around modstitch mixin cache issue
     }
 }
 
