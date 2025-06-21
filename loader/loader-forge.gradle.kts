@@ -14,9 +14,9 @@ if (mcVer < 1000) {
 }
 
 base {
-    archivesName = property("mod_id") as String + "-" + project.name
-    version =  property("mod_version") as String
-    group = property("mod_group") as String
+    archivesName = property("mod.id") as String + "-" + project.name
+    version =  property("mod.version") as String
+    group = property("mod.group") as String
 }
 
 repositories {
