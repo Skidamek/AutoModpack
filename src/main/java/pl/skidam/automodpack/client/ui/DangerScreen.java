@@ -1,9 +1,9 @@
 package pl.skidam.automodpack.client.ui;
 
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Util;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
+import net.minecraft.client.gui.screens.Screen;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
@@ -27,22 +27,22 @@ public class DangerScreen extends VersionedScreen {
     @Override
     protected void init() {
         super.init();
-        assert this.client != null;
+        assert this.minecraft != null;
 
-        this.addDrawableChild(buttonWidget(this.width / 2 - 115, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.cancel"), button -> {
-            this.client.setScreen(parent);
+        this.addRenderableWidget(buttonWidget(this.width / 2 - 115, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.cancel"), button -> {
+            this.minecraft.setScreen(parent);
         }));
 
-        this.addDrawableChild(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").formatted(Formatting.BOLD), button -> {
-            Util.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
+        this.addRenderableWidget(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.confirm").withStyle(ChatFormatting.BOLD), button -> {
+            Util.backgroundExecutor().execute(modpackUpdaterInstance::startUpdate);
         }));
     }
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.danger").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.danger.description"), this.width / 2, this.height / 2 - 35, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.danger.secDescription"), this.width / 2, this.height / 2 - 25, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.danger").withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 60, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.danger.description"), this.width / 2, this.height / 2 - 35, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.danger.secDescription"), this.width / 2, this.height / 2 - 25, TextColors.WHITE);
     }
 
     @Override

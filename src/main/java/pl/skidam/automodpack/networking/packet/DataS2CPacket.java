@@ -1,12 +1,12 @@
 package pl.skidam.automodpack.networking.packet;
 
 import com.mojang.authlib.GameProfile;
-import net.minecraft.network.ClientConnection;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
+import net.minecraft.network.Connection;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerLoginNetworkHandler;
-import net.minecraft.text.Text;
+import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -16,7 +16,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class DataS2CPacket {
 
-    public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
+    public static void receive(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
         try {
             GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 
@@ -28,20 +28,20 @@ public class DataS2CPacket {
                 return;
             }
 
-            String clientHasUpdate = buf.readString(Short.MAX_VALUE);
+            String clientHasUpdate = buf.readUtf(Short.MAX_VALUE);
 
             if ("true".equals(clientHasUpdate)) { // disconnect
                 LOGGER.warn("{} has not installed modpack. Certificate fingerprint: {}", profile.getName(), hostServer.getCertificateFingerprint());
-                Text reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
-                ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
-                connection.send(new LoginDisconnectS2CPacket(reason));
+                Component reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
+                Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+                connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
             } else if ("false".equals(clientHasUpdate)) {
                 LOGGER.info("{} has installed whole modpack", profile.getName());
             } else {
-                Text reason = VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
-                ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
-                connection.send(new LoginDisconnectS2CPacket(reason));
+                Component reason = VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
+                Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+                connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
 
                 LOGGER.error("Host server error. AutoModpack host server is down or server is not configured correctly");

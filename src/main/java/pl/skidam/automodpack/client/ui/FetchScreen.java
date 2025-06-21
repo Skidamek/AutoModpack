@@ -1,8 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.util.Formatting;
-
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.components.Button;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -11,7 +10,7 @@ import pl.skidam.automodpack_loader_core.utils.FetchManager;
 
 public class FetchScreen extends VersionedScreen {
 
-    private ButtonWidget cancelButton;
+    private Button cancelButton;
     private final FetchManager fetchManager;
 
     public FetchScreen(FetchManager fetchManager) {
@@ -25,7 +24,7 @@ public class FetchScreen extends VersionedScreen {
 
         initWidgets();
 
-        this.addDrawableChild(cancelButton);
+        this.addRenderableWidget(cancelButton);
     }
 
     private void initWidgets() {
@@ -51,9 +50,9 @@ public class FetchScreen extends VersionedScreen {
         }
 
         // Fetching direct url's from Modrinth and CurseForge.
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.fetch").formatted(Formatting.BOLD), this.width / 2, this.height / 2 - 60, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.fetch.found", getFetchesDone()), this.width / 2, this.height / 2 - 30, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.fetch").withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 60, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.fetch.found", getFetchesDone()), this.width / 2, this.height / 2 - 30, TextColors.WHITE);
     }
 
     @Override

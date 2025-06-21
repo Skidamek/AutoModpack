@@ -1,9 +1,9 @@
 package pl.skidam.automodpack.networking.server;
 
-import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerLoginNetworkHandler;
-import net.minecraft.util.Identifier;
+import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import pl.skidam.automodpack.networking.PacketSender;
 
 import java.util.HashMap;
@@ -14,7 +14,7 @@ import java.util.concurrent.Future;
 // credits to fabric api
 public class ServerLoginNetworking {
 
-    private static final Map<Identifier, LoginQueryResponseHandler> handlers = new HashMap<>();
+    private static final Map<ResourceLocation, LoginQueryResponseHandler> handlers = new HashMap<>();
 
     /**
      * Registers a handler to a query response channel.
@@ -23,14 +23,14 @@ public class ServerLoginNetworking {
      * @param channelName the id of the channel
      * @param handler the handler
      */
-    public static void registerGlobalReceiver(Identifier channelName, LoginQueryResponseHandler handler) {
+    public static void registerGlobalReceiver(ResourceLocation channelName, LoginQueryResponseHandler handler) {
         Objects.requireNonNull(channelName, "Channel name cannot be null");
         Objects.requireNonNull(handler, "Channel handler cannot be null");
 
         handlers.put(channelName, handler);
     }
 
-    public static LoginQueryResponseHandler getHandler(Identifier channelName) {
+    public static LoginQueryResponseHandler getHandler(ResourceLocation channelName) {
         return handlers.get(channelName);
     }
 
@@ -40,7 +40,7 @@ public class ServerLoginNetworking {
          * Handles an incoming query response from a client.
          *
          * <p>This method is executed on {@linkplain io.netty.channel.EventLoop netty's event loops}.
-         * Modification to the game should be {@linkplain net.minecraft.util.thread.ThreadExecutor#submit(Runnable) scheduled} using the provided Minecraft client instance.
+         * Modification to the game should be {@linkplain net.minecraft.util.thread.BlockableEventLoop#submit(Runnable) scheduled} using the provided Minecraft client instance.
          *
          * <p><b>Whether the client understood the query should be checked before reading from the payload of the packet.</b>
          * @param server the server
@@ -49,7 +49,7 @@ public class ServerLoginNetworking {
          * @param buf the payload of the packet
          * @param synchronizer the synchronizer which may be used to delay log-in till a {@link Future} is completed.
          */
-        void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, LoginSynchronizer synchronizer, PacketSender responseSender);
+        void receive(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf, LoginSynchronizer synchronizer, PacketSender responseSender);
     }
 
 
@@ -92,7 +92,7 @@ public class ServerLoginNetworking {
          * 	}));
          * });
          * }</pre>
-         * Usually it is enough to pass the return value for {@link net.minecraft.util.thread.ThreadExecutor#submit(Runnable)} for {@code future}.</p>
+         * Usually it is enough to pass the return value for {@link net.minecraft.util.thread.BlockableEventLoop#submit(Runnable)} for {@code future}.</p>
          *
          * @param future the future that must be done before the player can log in
          */

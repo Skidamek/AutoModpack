@@ -2,8 +2,8 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import net.fabricmc.loom.task.RemapJarTask
 
 plugins {
-    id("dev.architectury.loom")
-    id("com.github.johnrengelman.shadow")
+    id("dev.architectury.loom") version "1.10-SNAPSHOT" // here unfortunately we need to use some kind of loom or MDG because just getting neoforge or forge bin is not enough (neo)forge has a lot of layers and modules which otherwise we need to include manually
+    id("com.gradleup.shadow")
 }
 
 val loader = property("loom.platform") as String
@@ -43,7 +43,7 @@ dependencies {
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5")
 
     if (project.name.contains("neoforge")) {
-        "neoForge"("net.neoforged:neoforge:${property("loader_neoforge")}")
+        "neoForge"("net.neoforged:neoforge:${property("deps.neoforge")}")
     } else {
         "forge"("net.minecraftforge:forge:${property("minecraft_version")}-${property("loader_forge")}")
     }
@@ -117,7 +117,6 @@ tasks.withType<JavaCompile> {
 
 tasks.named<RemapJarTask>("remapJar") {
     isEnabled = false
-
 }
 
 tasks.named<Jar>("jar") {

@@ -1,8 +1,5 @@
 package pl.skidam.automodpack.mixin.dev;
 
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.TitleScreen;
-import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -14,10 +11,14 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOADER_MANAGER;
 
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.network.chat.Component;
+
 @Mixin(TitleScreen.class)
 public class TestButton extends Screen {
 
-    protected TestButton(Text title) {
+    protected TestButton(Component title) {
         super(title);
     }
 
@@ -33,7 +34,7 @@ public class TestButton extends Screen {
         }
 
 /*? if >=1.17 {*/
-        this.addDrawableChild(
+        this.addRenderableWidget(
 /*?} else {*//*
    this.addButton(
 *//*?}*/
