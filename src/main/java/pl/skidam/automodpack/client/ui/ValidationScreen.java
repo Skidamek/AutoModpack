@@ -77,7 +77,11 @@ public class ValidationScreen extends VersionedScreen {
         } else {
             GlobalVariables.LOGGER.error("Server fingerprint validation failed, try again");
             if (this.minecraft != null) {
-                this.minecraft.getToasts().addToast(failedToast);
+                /*? if > 1.21.1 {*/
+                this.minecraft.getToastManager().addToast(failedToast);
+                /*?} else {*/
+                /*this.minecraft.getToasts().addToast(failedToast);
+                *//*?}*/
             }
         }
     }

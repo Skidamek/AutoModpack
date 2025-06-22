@@ -59,10 +59,10 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
     *//*?}*/
 
 	/*? if >1.21.4 {*/
-	/*public double getScrollAmount() {
-		return this.getScrollY();
+	public double getScrollAmount() {
+		return this.scrollAmount();
 	}
-	*//*?}*/
+	/*?}*/
 
 	public final ListEntry getEntryAtPos(double x, double y) {
 		int int_5 = Mth.floor(y - (double) getTop()) - this.headerHeight + (int) this.getScrollAmount() - 4;
@@ -79,18 +79,18 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
 	}
 
 	/*? if <=1.21.3 {*/
-	@Override
+	/*@Override
 	protected void updateScrollingState(double mouseX, double mouseY, int button) {
 		super.updateScrollingState(mouseX, mouseY, button);
 		this.scrolling = button == 0 && mouseX >= (double) this.getScrollbarPosition() && mouseX < (double) (this.getScrollbarPosition() + 6);
 	}
-	/*?}*/
+	*//*?}*/
 
 	@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
 		/*? if <=1.21.3 {*/
-		this.updateScrollingState(mouseX, mouseY, button);
-		/*?}*/
+		/*this.updateScrollingState(mouseX, mouseY, button);
+		*//*?}*/
 		if (!this.isMouseOver(mouseX, mouseY)) {
 			return false;
 		} else {

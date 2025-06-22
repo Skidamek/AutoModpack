@@ -9,10 +9,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.audio.AudioManager;
 
 /*? if >1.21.4 {*/
-/*import net.minecraft.client.sounds.MusicInfo;
-*//*?} else {*/
-import net.minecraft.sounds.Music;
-/*?}*/
+import net.minecraft.client.sounds.MusicInfo;
+/*?} else {*/
+/*import net.minecraft.sounds.Music;
+*//*?}*/
 
 @Mixin(MusicManager.class)
 public class MusicTrackerMixin {
@@ -23,10 +23,10 @@ public class MusicTrackerMixin {
             cancellable = true
     )
     /*? if >1.21.4 {*/
-    /*private void play(MusicInfo p_383115_, CallbackInfo ci) {
-    *//*?} else {*/
-    private void play(Music type, CallbackInfo ci) {
-    /*?}*/
+    private void play(MusicInfo p_383115_, CallbackInfo ci) {
+    /*?} else {*/
+    /*private void play(Music type, CallbackInfo ci) {
+    *//*?}*/
         if (AudioManager.isMusicPlaying()) {
             ci.cancel();
         }

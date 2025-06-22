@@ -17,19 +17,19 @@ public class VersionedMatrices  /*? if <1.20 >>*/ /*extends MatrixStack*/   {
 	}
 
 	/*? if >=1.21.6 {*/
-	/*public void push() {
-		context.getMatrices().pushMatrix();
+	public void push() {
+		context.pose().pushMatrix();
 	}
 
 	public void pop() {
-		context.getMatrices().popMatrix();
+		context.pose().popMatrix();
 	}
 
 	public void scale(float x, float y, float z) {
-		context.getMatrices().scale(x, y);
+		context.pose().scale(x, y);
 	}
-	*//*?} else {*/
-	public void push() {
+	/*?} else {*/
+	/*public void push() {
 		context.pose().pushPose();
 	}
 
@@ -40,7 +40,7 @@ public class VersionedMatrices  /*? if <1.20 >>*/ /*extends MatrixStack*/   {
 	public void scale(float x, float y, float z) {
 		context.pose().scale(x, y, z);
 	}
-	/*?}*/
+	*//*?}*/
 /*?} else {*/
 	/*public PoseStack getContext() {
 		return this;
