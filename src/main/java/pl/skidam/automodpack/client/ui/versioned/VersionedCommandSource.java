@@ -17,13 +17,11 @@ public class VersionedCommandSource extends CommandSourceStack {
         super(output, pos, rot, world, level, name, displayName, server, entity);
     }
 
-/*? if >=1.20 {*/
-   public static void sendFeedback(CommandContext<CommandSourceStack> context, Component message, boolean broadcastToOps) {
-       context.getSource().sendSuccess(() -> message, broadcastToOps);
-   }
-/*?} else {*/
-    /*public static void sendFeedback(CommandContext<ServerCommandSource> context, Text message, boolean broadcastToOps) {
-        context.getSource().sendFeedback(message, broadcastToOps);
+    public static void sendFeedback(CommandContext<CommandSourceStack> context, Component message, boolean broadcastToOps) {
+    /*? if >=1.20 {*/
+        context.getSource().sendSuccess(() -> message, broadcastToOps);
+     /*?} else {*/
+        /*context.getSource().sendSuccess(message, broadcastToOps);
+    *//*?}*/
     }
-*//*?}*/
 }

@@ -101,7 +101,7 @@ public class DownloadScreen extends VersionedScreen {
         float scale = 1.0F;
         int y = this.height / 2 - 90;
 
-        matrices.push();
+        matrices.pushPose();
         matrices.scale(scale, scale, scale);
 
         if (downloadManager != null && !downloadManager.downloadsInProgress.isEmpty()) {
@@ -121,7 +121,7 @@ public class DownloadScreen extends VersionedScreen {
             drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.wait").withStyle(ChatFormatting.BOLD), (int) ((float) this.width / 2 * scale), y + 25, TextColors.WHITE);
         }
 
-        matrices.pop();
+        matrices.popPose();
     }
 
     private void checkAndStartMusic() {

@@ -1,9 +1,9 @@
 package pl.skidam.automodpack.init;
 
 /*? if neoforge {*/
-/*/^? if >1.20.5 {^/
+/*? if >1.20.5 {*/
 import net.neoforged.fml.common.EventBusSubscriber;
-/^?}^/
+/*?}*/
 import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
@@ -40,11 +40,11 @@ public class NeoForgeInit {
          LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
     }
 
-/^? if >1.20.5 {^/
+/*? if >1.20.5 {*/
    @EventBusSubscriber(modid = MOD_ID)
-/^?} else {^/
-   /^@Mod.EventBusSubscriber(modid = MOD_ID)
-^//^?}^/
+/*?} else {*/
+   /*@Mod.EventBusSubscriber(modid = MOD_ID)
+*//*?}*/
     public static class events {
         @SubscribeEvent
         public static void onCommandsRegister(RegisterCommandsEvent event) {
@@ -52,4 +52,4 @@ public class NeoForgeInit {
         }
     }
 }
-*//*?}*/
+/*?}*/

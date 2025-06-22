@@ -16,12 +16,12 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 
 /*? if >1.20.3 {*/
-/*import net.minecraft.server.network.CommonListenerCookie;
-*//*?}*/
+import net.minecraft.server.network.CommonListenerCookie;
+/*?}*/
 
 /*? if >=1.21.5 {*/
-/*import java.net.URI;
-*//*?}*/
+import java.net.URI;
+/*?}*/
 
 import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
 
@@ -29,12 +29,12 @@ import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
 public class PlayerManagerMixin {
 
 /*? if >1.20.3 {*/
-    /*@Inject(at = @At("TAIL"), method = "placeNewPlayer")
+    @Inject(at = @At("TAIL"), method = "placeNewPlayer")
     private void onPlayerConnect(Connection connection, ServerPlayer player, CommonListenerCookie clientData, CallbackInfo ci) {
-*//*?} else {*/
-@Inject(at = @At("TAIL"), method = "placeNewPlayer")
+/*?} else {*/
+/*@Inject(at = @At("TAIL"), method = "placeNewPlayer")
 private void onPlayerConnect(Connection netManager, ServerPlayer player, CallbackInfo ci) {
-/*?}*/
+*//*?}*/
         GameProfile profile = player.getGameProfile();
         String playerName = profile.getName();
 
@@ -48,10 +48,10 @@ private void onPlayerConnect(Connection netManager, ServerPlayer player, Callbac
             Component nagText = VersionedText.literal(serverConfig.nagMessage).withStyle(style -> style.withBold(true));
             Component nagClickableText = VersionedText.literal(serverConfig.nagClickableMessage).withStyle(style -> style.withUnderlined(true).withColor(TextColor.fromLegacyFormat(ChatFormatting.BLUE))
                     /*? if >=1.21.5 {*/
-                    /*.withClickEvent(new ClickEvent.OpenUrl(URI.create(serverConfig.nagClickableLink))));
-                    *//*?} else {*/
-                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, serverConfig.nagClickableLink)));
-                    /*?}*/
+                    .withClickEvent(new ClickEvent.OpenUrl(URI.create(serverConfig.nagClickableLink))));
+                    /*?} else {*/
+                    /*.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, serverConfig.nagClickableLink)));
+                    *//*?}*/
             player.displayClientMessage(nagText, false);
             player.displayClientMessage(nagClickableText, false);
         }

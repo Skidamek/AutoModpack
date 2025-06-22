@@ -4,15 +4,11 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.tree.LiteralCommandNode;
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.config.Jsons.ServerConfigFieldsV2;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
@@ -79,12 +75,12 @@ public class Commands {
         if (fingerprint != null) {
             MutableComponent fingerprintText = VersionedText.literal(fingerprint).withStyle(style -> style
                     /*? if >=1.21.5 {*/
-                    /*.withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
+                    .withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
                     .withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
-                     *//*?} else {*/
-                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
+                     /*?} else {*/
+                    /*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
                     .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
-            /*?}*/
+            *//*?}*/
             send(context, "Certificate fingerprint", ChatFormatting.WHITE, fingerprintText, ChatFormatting.YELLOW, false);
         } else {
             send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);

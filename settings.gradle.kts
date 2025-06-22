@@ -50,16 +50,16 @@ stonecutter {
         match("1.21.4", "fabric", "neoforge")
         match("1.21.3", "fabric", "neoforge")
         match("1.21.1", "fabric", "neoforge")
-//        match("1.20.6", "fabric", "neoforge")
-//        match("1.20.4", "fabric", "neoforge")
+        match("1.20.6", "fabric", "neoforge")
+        match("1.20.4", "fabric", "neoforge")
         match("1.20.1", "fabric", "forge")
-//        match("1.19.4", "fabric", "forge")
-//        match("1.19.2", "fabric", "forge")
-//        match("1.18.2", "fabric", "forge")
+        match("1.19.4", "fabric", "forge")
+        match("1.19.2", "fabric", "forge")
+        match("1.18.2", "fabric", "forge")
 
         // This is the default target.
         // https://stonecutter.kikugie.dev/stonecutter/guide/setup#settings-settings-gradle-kts
-//        vcsVersion = "1.21.1-fabric"
+        vcsVersion = "1.21.6-neoforge"
     }
 }
 

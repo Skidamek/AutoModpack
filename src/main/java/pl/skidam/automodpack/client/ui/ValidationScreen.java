@@ -17,7 +17,7 @@ public class ValidationScreen extends VersionedScreen {
     private final Runnable validatedCallback;
     private final Runnable canceledCallback;
     private boolean validated = false;
-    private final Toast failedToast = new SystemToast(SystemToast.SystemToastIds.PACK_LOAD_FAILURE, VersionedText.translatable("automodpack.validation.failed"), VersionedText.translatable("automodpack.retry"));
+    private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE, VersionedText.translatable("automodpack.validation.failed"), VersionedText.translatable("automodpack.retry"));
     private EditBox textField;
     private Button backButton;
     private Button validateButton;
@@ -78,10 +78,10 @@ public class ValidationScreen extends VersionedScreen {
             GlobalVariables.LOGGER.error("Server fingerprint validation failed, try again");
             if (this.minecraft != null) {
                 /*? if > 1.21.1 {*/
-                /*this.minecraft.getToastManager().addToast(failedToast);
-                *//*?} else {*/
-                this.minecraft.getToasts().addToast(failedToast);
-                /*?}*/
+                this.minecraft.getToastManager().addToast(failedToast);
+                /*?} else {*/
+                /*this.minecraft.getToasts().addToast(failedToast);
+                *//*?}*/
             }
         }
     }

@@ -12,10 +12,10 @@ public class CustomSoundInstance extends AbstractSoundInstance {
 
     public CustomSoundInstance(Supplier<SoundEvent> event) {
         /*? if >=1.21.2 {*/
-        /*super(event.get().location(), SoundSource.MASTER, RandomSource.create());
-        *//*?} else if >=1.19.1 {*/
-        super(event.get().getLocation(), SoundSource.MASTER, RandomSource.create());
-        /*?} else {*/
+        super(event.get().location(), SoundSource.MASTER, RandomSource.create());
+        /*?} else if >=1.19.1 {*/
+        /*super(event.get().getLocation(), SoundSource.MASTER, RandomSource.create());
+        *//*?} else {*/
         /*super(event.get().getLocation(), SoundSource.MASTER);
         *//*?}*/
         this.attenuation = Attenuation.NONE;
