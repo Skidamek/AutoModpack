@@ -58,7 +58,7 @@ public class ListEntryWidget extends ObjectSelectionList<ListEntry> {
     }
     *//*?}*/
 
-	/*? if >1.21.4 {*/
+	/*? if >=1.21.4 {*/
 	public double getScrollAmount() {
 		return this.scrollAmount();
 	}

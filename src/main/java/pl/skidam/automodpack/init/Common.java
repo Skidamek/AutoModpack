@@ -67,7 +67,7 @@ public class Common {
         /*? if >1.19.1 {*/
         return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
         /*?} else {*/
-        /*return new Identifier(MOD_ID, path);
+        /*return new ResourceLocation(MOD_ID, path);
         *//*?}*/
     }
 }

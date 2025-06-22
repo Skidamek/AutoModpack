@@ -16,9 +16,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
 
-/*? if >1.21.4 {*/
-import java.net.URI;
-/*?}*/
+/*? if >=1.21.5 {*/
+/*import java.net.URI;
+*//*?}*/
 
 import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
 
@@ -44,11 +44,11 @@ private void onPlayerConnect(ClientConnection connection, ServerPlayerEntity pla
             // Send chat nag message which is clickable and opens the link
             Component nagText = VersionedText.literal(serverConfig.nagMessage).withStyle(style -> style.withBold(true));
             Component nagClickableText = VersionedText.literal(serverConfig.nagClickableMessage).withStyle(style -> style.withUnderlined(true).withColor(TextColor.fromLegacyFormat(ChatFormatting.BLUE))
-                    /*? if >1.21.5 {*/
-                    .withClickEvent(new ClickEvent.OpenUrl(URI.create(serverConfig.nagClickableLink))));
-                    /*?} else {*/
-                    /*.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, serverConfig.nagClickableLink)));
-                    *//*?}*/
+                    /*? if >=1.21.5 {*/
+                    /*.withClickEvent(new ClickEvent.OpenUrl(URI.create(serverConfig.nagClickableLink))));
+                    *//*?} else {*/
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, serverConfig.nagClickableLink)));
+                    /*?}*/
             player.displayClientMessage(nagText, false);
             player.displayClientMessage(nagClickableText, false);
         }

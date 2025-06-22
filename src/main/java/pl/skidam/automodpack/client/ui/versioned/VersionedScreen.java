@@ -10,11 +10,11 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 
 /*? if >=1.21.6 {*/
-import net.minecraft.client.renderer.RenderPipelines;
-/*?} elif >=1.21.2 {*/
-/*import net.minecraft.client.render.RenderLayer;
+/*import net.minecraft.client.renderer.RenderPipelines;
+*//*?} else if >=1.21.2 {*/
+import net.minecraft.client.renderer.RenderType;
 import java.util.function.Function;
-*//*?}*/
+/*?}*/
 
 public class VersionedScreen extends Screen {
 
@@ -85,7 +85,7 @@ public class VersionedScreen extends Screen {
 	/*?}*/
 
 	/*? if <=1.20 {*/
-	/*public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+	/*public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/^? if <=1.16.5 {^/
 		/^MinecraftClient.getInstance().getTextureManager().bindTexture(textureID);
 		^//^?} else {^/
@@ -96,11 +96,11 @@ public class VersionedScreen extends Screen {
 	*//*?} else {*/
 	public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/*? if >=1.21.6 {*/
-		matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
-		/*?} elif >=1.21.2 {*/
-		/*Function<Identifier, RenderLayer> renderLayers = RenderLayer::getGuiTextured;
-		matrices.getContext().blit(renderLayers, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
-		*//*?} else {*/
+		/*matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		*//*?} elif >=1.21.2 {*/
+		Function<ResourceLocation, RenderType> RenderTypes = RenderType::guiTextured;
+		matrices.getContext().blit(RenderTypes, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		/*?} else {*/
 		/*matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		*//*?}*/
 	}

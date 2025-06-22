@@ -78,13 +78,13 @@ public class Commands {
         String fingerprint = hostServer.getCertificateFingerprint();
         if (fingerprint != null) {
             MutableComponent fingerprintText = VersionedText.literal(fingerprint).withStyle(style -> style
-                    /*? if >1.21.5 {*/
-                    .withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
+                    /*? if >=1.21.5 {*/
+                    /*.withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
                     .withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
-                     /*?} else {*/
-                    /*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
+                     *//*?} else {*/
+                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
                     .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
-            *//*?}*/
+            /*?}*/
             send(context, "Certificate fingerprint", ChatFormatting.WHITE, fingerprintText, ChatFormatting.YELLOW, false);
         } else {
             send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);

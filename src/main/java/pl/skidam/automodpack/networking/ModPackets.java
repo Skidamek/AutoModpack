@@ -19,8 +19,8 @@ import java.net.InetSocketAddress;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModPackets {
-    public static final ResourceLocation HANDSHAKE = LoginNetworkingIDs.getIdentifier(LoginNetworkingIDs.HANDSHAKE);
-    public static final ResourceLocation DATA = LoginNetworkingIDs.getIdentifier(LoginNetworkingIDs.DATA);
+    public static final ResourceLocation HANDSHAKE = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.HANDSHAKE);
+    public static final ResourceLocation DATA = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.DATA);
 
     private static InetSocketAddress originalServerAddress;
 

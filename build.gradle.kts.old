@@ -15,7 +15,7 @@ class ModData {
     val name = property("mod_name").toString()
     val version = property("mod_version").toString()
     val group = property("mod_group").toString()
-    val minecraftDependency = property("minecraft_dependency").toString()
+    val minecraftDependency = property("meta.minecraft").toString()
     val description = property("mod_description").toString()
 }
 
@@ -334,7 +334,7 @@ tasks.processResources {
         "id" to mod.id,
         "name" to mod.name,
         "version" to mod.version,
-        "minecraft_dependency" to mod.minecraftDependency,
+        "meta.minecraft" to mod.minecraftDependency,
         "description" to mod.description
     )
 

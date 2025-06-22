@@ -21,7 +21,7 @@ public enum LoginNetworkingIDs {
         return value;
     }
 
-    public static ResourceLocation getIdentifier(LoginNetworkingIDs ID) {
+    public static ResourceLocation getResourceLocation(LoginNetworkingIDs ID) {
         return Common.id(ID.toString().toLowerCase());
     }
 
@@ -39,7 +39,7 @@ public enum LoginNetworkingIDs {
     public static ResourceLocation getByValue(int value) {
         for (var ID : LoginNetworkingIDs.values()) {
             if (ID.getValue() == value) {
-                return getIdentifier(ID);
+                return getResourceLocation(ID);
             }
         }
         return null;
