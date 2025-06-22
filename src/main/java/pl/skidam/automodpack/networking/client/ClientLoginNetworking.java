@@ -1,7 +1,5 @@
 package pl.skidam.automodpack.networking.client;
 
-import org.jetbrains.annotations.Nullable;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -52,6 +50,6 @@ public class ClientLoginNetworking {
          * @return a completable future which contains the payload to respond to the server with.
          * If the future contains {@code null}, then the server will be notified that the client did not understand the query.
          */
-        CompletableFuture<@Nullable FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf);
+        CompletableFuture<FriendlyByteBuf> receive(Minecraft client, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf);
     }
 }

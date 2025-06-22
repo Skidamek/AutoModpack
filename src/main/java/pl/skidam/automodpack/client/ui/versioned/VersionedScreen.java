@@ -12,9 +12,9 @@ import net.minecraft.resources.ResourceLocation;
 /*? if >=1.21.6 {*/
 /*import net.minecraft.client.renderer.RenderPipelines;
 *//*?} else if >=1.21.2 {*/
-import net.minecraft.client.renderer.RenderType;
+/*import net.minecraft.client.renderer.RenderType;
 import java.util.function.Function;
-/*?}*/
+*//*?}*/
 
 public class VersionedScreen extends Screen {
 
@@ -34,19 +34,19 @@ public class VersionedScreen extends Screen {
 
 		// Render background
 		/*? if <1.20.2 {*/
-        /*super.renderBackground(matrices.getContext());
-		*//*?} elif <1.20.6 {*/
+        super.renderBackground(matrices.getContext());
+		/*?} elif <1.20.6 {*/
         /*super.renderBackground(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?} else {*/
-		super.render(matrix, mouseX, mouseY, delta);
-		/*?}*/
+		/*super.render(matrix, mouseX, mouseY, delta);
+		*//*?}*/
 
 		// Render the rest of our screen
 		versionedRender(matrices, mouseX, mouseY, delta);
 
 		/*? if <1.20.6 {*/
-		/*super.render(matrices.getContext(), mouseX, mouseY, delta);
-		*//*?}*/
+		super.render(matrices.getContext(), mouseX, mouseY, delta);
+		/*?}*/
 	}
 
 	// This method is to be override by the child classes
@@ -87,7 +87,7 @@ public class VersionedScreen extends Screen {
 	/*? if <=1.20 {*/
 	/*public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/^? if <=1.16.5 {^/
-		/^MinecraftClient.getInstance().getTextureManager().bindTexture(textureID);
+		/^Minecraft.getInstance().getTextureManager().bindTexture(textureID);
 		^//^?} else {^/
 		RenderSystem.setShaderTexture(0, textureID);
 		/^?}^/
@@ -98,11 +98,11 @@ public class VersionedScreen extends Screen {
 		/*? if >=1.21.6 {*/
 		/*matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		*//*?} elif >=1.21.2 {*/
-		Function<ResourceLocation, RenderType> RenderTypes = RenderType::guiTextured;
+		/*Function<ResourceLocation, RenderType> RenderTypes = RenderType::guiTextured;
 		matrices.getContext().blit(RenderTypes, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
-		/*?} else {*/
-		/*matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
-		*//*?}*/
+		*//*?} else {*/
+		matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		/*?}*/
 	}
 	/*?}*/
 }

@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.mixin.core;
 
-import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
+import net.minecraft.network.protocol.login.ServerboundCustomQueryPacket;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
@@ -28,7 +28,7 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             at = @At("HEAD"),
             cancellable = true
     )
-    private void handleCustomPayload(ServerboundCustomQueryAnswerPacket packet, CallbackInfo ci) {
+    private void handleCustomPayload(ServerboundCustomQueryPacket packet, CallbackInfo ci) {
         if (this.automodpack$addon == null) {
             return;
         }
@@ -38,10 +38,10 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             ci.cancel(); // We have handled it, cancel vanilla behavior
         } else {
             /*? if >=1.20.2 {*/
-            if (packet.payload() instanceof LoginResponsePayload response) {
+            /*if (packet.payload() instanceof LoginResponsePayload response) {
                 response.data().skipBytes(response.data().readableBytes());
             }
-            /*?}*/
+            *//*?}*/
         }
     }
 
@@ -55,7 +55,7 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             return;
         }
 
-        if (state != ServerLoginPacketListenerImpl.State.NEGOTIATING && state != ServerLoginPacketListenerImpl.State./*? if <1.20.2 {*/ /*READY_TO_ACCEPT *//*?} else {*/VERIFYING/*?}*/) {
+        if (state != ServerLoginPacketListenerImpl.State.NEGOTIATING && state != ServerLoginPacketListenerImpl.State./*? if <1.20.2 {*/ READY_TO_ACCEPT /*?} else {*//*VERIFYING*//*?}*/) {
             return;
         }
 

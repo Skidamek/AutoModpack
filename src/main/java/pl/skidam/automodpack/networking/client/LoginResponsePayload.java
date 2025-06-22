@@ -1,8 +1,12 @@
 package pl.skidam.automodpack.networking.client;
 
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.protocol.login.custom.CustomQueryAnswerPayload;
 import net.minecraft.resources.ResourceLocation;
+
+/*? if <1.20.2 {*/
+public record LoginResponsePayload(ResourceLocation id, FriendlyByteBuf data) { }
+/*?} else {*/
+/*import net.minecraft.network.protocol.login.custom.CustomQueryAnswerPayload;
 import pl.skidam.automodpack.networking.PayloadHelper;
 
 public record LoginResponsePayload(ResourceLocation id, FriendlyByteBuf data) implements CustomQueryAnswerPayload {
@@ -11,4 +15,4 @@ public record LoginResponsePayload(ResourceLocation id, FriendlyByteBuf data) im
         PayloadHelper.write(buf, data());
     }
 }
-/*}*/
+*//*?}*/

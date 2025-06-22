@@ -28,7 +28,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
 public class DataC2SPacket {
-    public static CompletableFuture<FriendlyByteBuf> receive(Minecraft minecraftClient, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
+    public static CompletableFuture<FriendlyByteBuf> receive(Minecraft Minecraft, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
         try {
             String serverResponse = buf.readUtf(Short.MAX_VALUE);
             DataPacket dataPacket = DataPacket.fromJson(serverResponse);

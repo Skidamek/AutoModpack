@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.networking;
 
 /*? if >=1.20.2 {*/
-import io.netty.buffer.Unpooled;
+/*import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
 
 // credits to fabric api
@@ -28,4 +28,4 @@ public class PayloadHelper {
         }
     }
 }
-/*?} else {*/
+*//*?} else {*/

@@ -42,8 +42,8 @@ public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
     /*public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 		VersionedMatrices versionedMatrices = new VersionedMatrices();
     *//*?} else {*/
-	public void render(GuiGraphics drawContext, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-		VersionedMatrices versionedMatrices = new VersionedMatrices(drawContext);
+	public void render(GuiGraphics GuiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+		VersionedMatrices versionedMatrices = new VersionedMatrices(GuiGraphics);
 	/*?}*/
 		versionedRender(versionedMatrices, index, y, x, entryWidth, entryHeight, mouseX, mouseY, hovered, tickDelta);
 	}

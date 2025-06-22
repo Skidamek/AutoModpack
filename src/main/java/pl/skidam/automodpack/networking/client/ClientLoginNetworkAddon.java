@@ -9,7 +9,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
-import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
+import net.minecraft.network.protocol.login.ServerboundCustomQueryPacket;
 import net.minecraft.resources.ResourceLocation;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
@@ -46,9 +46,9 @@ public class ClientLoginNetworkAddon {
         FriendlyByteBuf buf = new FriendlyByteBuf(payload.slice());
 
         try {
-            CompletableFuture<@Nullable FriendlyByteBuf> future = handler.receive(this.client, this.handler, buf);
+            CompletableFuture<FriendlyByteBuf> future = handler.receive(this.client, this.handler, buf);
             future.thenAccept(resultBuf -> {
-                ServerboundCustomQueryAnswerPacket packet = new ServerboundCustomQueryAnswerPacket(queryId, /*? if <1.20.2 {*/ /*resultBuf *//*?} else {*/ new LoginResponsePayload(channelName, resultBuf) /*?}*/);
+                ServerboundCustomQueryPacket packet = new ServerboundCustomQueryPacket(queryId, /*? if <1.20.2 {*/ resultBuf /*?} else {*/ /*new LoginResponsePayload(channelName, resultBuf) *//*?}*/);
                 ((ClientLoginNetworkHandlerAccessor) this.handler).getConnection().send(packet);
             });
         } catch (Throwable e) {

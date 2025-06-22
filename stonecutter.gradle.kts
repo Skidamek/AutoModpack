@@ -22,10 +22,24 @@ wiki {
     }
 }
 
-stonecutter active "1.21.4-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "1.20.1-forge" /* [SC] DO NOT EDIT */
 
 stonecutter.parameters {
     constants.match(node.metadata.project.substringAfterLast('-'), "fabric", "neoforge", "forge")
+
+    replacements {
+        string {
+            direction = eval(current.version, ">=1.20.2")
+            phase = "FIRST"
+            replace("ServerboundCustomQueryPacket", "ServerboundCustomQueryAnswerPacket")
+        }
+
+        string {
+            direction = eval(current.version, ">=1.20.2")
+            phase = "FIRST"
+            replace(".SystemToastIds.", ".SystemToastId.")
+        }
+    }
 }
 
 // Non stonecutter stuff

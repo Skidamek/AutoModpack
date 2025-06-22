@@ -23,7 +23,8 @@ dependencies {
     implementation(project(":loader-core"))
 
     compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1")
-    implementation(jarJar("io.github.llamalad7:mixinextras-forge:${property("mixin_extras")}")!!)
+    compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${property("deps.mixin-extras")}")!!)
+    implementation(jarJar("io.github.llamalad7:mixinextras-forge:${property("deps.mixin-extras")}")!!)
 }
 
 tasks {

@@ -13,17 +13,17 @@ import net.minecraft.sounds.SoundEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 *//*?} elif forge {*/
-/*import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
-*//*?} else {*/
-/*? if >=1.19.3 {*/
+/*?} else {*/
+/*/^? if >=1.19.3 {^/
 import net.minecraft.core.Registry;
- /*?} else {*/
-/*import net.minecraft.core.Registry;
+ /^?} else {^/
+/^import net.minecraft.core.Registry;
+^//^?}^/
 *//*?}*/
-/*?}*/
 
 public class AudioManager {
     private static CustomSoundInstance SOUND_INSTANCE;
@@ -41,12 +41,12 @@ public class AudioManager {
     private static Supplier<SoundEvent> WAITING_MUSIC;
 
 /*? if forge {*/
-    /*public AudioManager(IEventBus eventBus) {
+    public AudioManager(IEventBus eventBus) {
         DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, MOD_ID);
         SOUND_REGISTER.register(eventBus);
         WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
     }
-*//*?}*/
+/*?}*/
 
 /*? if neoforge {*/
     /*public AudioManager(IEventBus eventBus) {
@@ -57,22 +57,22 @@ public class AudioManager {
 *//*?}*/
 
     /*? if fabric {*/
-    public AudioManager() {
+    /*public AudioManager() {
         SoundEvent waiting_music = register();
         WAITING_MUSIC = () -> waiting_music;
     }
 
     private SoundEvent register() {
         ResourceLocation id = Common.id("waiting_music");
-/*? if >=1.19.3 {*/
+/^? if >=1.19.3 {^/
         Registry<SoundEvent> register = BuiltInRegistries.SOUND_EVENT;
-         /*?} else {*/
-        /*Registry<SoundEvent> register = Registry.SOUND_EVENT;
-*//*?}*/
+         /^?} else {^/
+        /^Registry<SoundEvent> register = Registry.SOUND_EVENT;
+^//^?}^/
 
         return Registry.register(register, id, WAITING_MUSIC_EVENT);
     }
-/*?}*/
+*//*?}*/
 
 
     public static void playMusic() {

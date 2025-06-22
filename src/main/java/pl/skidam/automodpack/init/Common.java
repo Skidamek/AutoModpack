@@ -65,7 +65,7 @@ public class Common {
 
     public static ResourceLocation id(String path) {
         /*? if >1.19.1 {*/
-        return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
+        return ResourceLocation.tryBuild(MOD_ID, path);
         /*?} else {*/
         /*return new ResourceLocation(MOD_ID, path);
         *//*?}*/
