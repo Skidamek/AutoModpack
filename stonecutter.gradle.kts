@@ -32,32 +32,8 @@ stonecutter.parameters {
 val mergedDir = File("${rootProject.projectDir}/merged")
 
 class MinecraftVersionData(private val name: String) {
-    fun greaterThan(other: String) : Boolean {
-        return stonecutter.eval(name, ">" + other.lowercase())
-    }
-
-    fun lessThan(other: String) : Boolean {
-        return stonecutter.eval(name, "<" + other.lowercase())
-    }
-
-    fun greaterOrEqual(other: String) : Boolean {
-        return stonecutter.eval(name, ">=" + other.lowercase())
-    }
-
-    fun lessOrEqual(other: String) : Boolean {
-        return stonecutter.eval(name, "<=" + other.lowercase())
-    }
-
-    override fun equals(other: Any?) : Boolean {
-        return name == other
-    }
-
-    override fun toString(): String {
-        return name
-    }
-
-    override fun hashCode(): Int {
-        return name.hashCode()
+    fun eval(other: String) : Boolean {
+        return stonecutter.eval(name,other.lowercase())
     }
 }
 
@@ -98,13 +74,13 @@ tasks.register("mergeJars") {
                 if (jarToMerge.name.contains("fabric")) {
                     loaderModule = "fabric/core"
                 } else if (jarToMerge.name.contains("neoforge")) {
-                    loaderModule = if (minecraftVersion.greaterOrEqual("1.20.6")) {
+                    loaderModule = if (minecraftVersion.eval(">=1.20.6")) {
                         "neoforge/fml4"
                     } else {
                         "neoforge/fml2"
                     }
                 } else if (jarToMerge.name.contains("forge")) {
-                    loaderModule = if (minecraftVersion.lessOrEqual("1.18.2")) {
+                    loaderModule = if (minecraftVersion.eval("<=1.18.2")) {
                         "forge/fml40"
                     } else {
                         "forge/fml47"
@@ -176,7 +152,7 @@ fun appendFileToZip(zipFile: File, fileToAppend: File, entryName: String) {
                         zipStream.putNextEntry(zipEntry)
                         existingZipStream.copyTo(zipStream)
                         zipStream.closeEntry()
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         println("Error while copying entry: ${entry.name}")
                     }
                 }
