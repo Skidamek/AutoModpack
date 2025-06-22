@@ -21,6 +21,9 @@ legacyForge {
 dependencies {
     implementation(project(":core"))
     implementation(project(":loader-core"))
+
+    compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1")
+    implementation(jarJar("io.github.llamalad7:mixinextras-forge:${property("mixin_extras")}")!!)
 }
 
 tasks {
@@ -44,15 +47,11 @@ java {
     if (stonecutter.eval(stonecutter.current.version, ">=1.20.5")) {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(21))
-        }
+        toolchain.languageVersion.set(JavaLanguageVersion.of(21))
     } else {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(17))
-        }
+        toolchain.languageVersion.set(JavaLanguageVersion.of(17))
     }
     withSourcesJar()
 }

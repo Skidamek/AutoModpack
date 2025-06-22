@@ -1,7 +1,8 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
-    java
+    kotlin("jvm")
+    id("automodpack.common")
     id("com.gradleup.shadow")
 }
 
@@ -23,14 +24,14 @@ dependencies {
     compileOnly(project(":loader-fabric-16"))
 
     compileOnly("com.google.code.gson:gson:2.10.1")
-    compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
+    compileOnly("org.apache.logging.log4j:log4j-core:2.8.1")
 
     implementation("org.tomlj:tomlj:1.1.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
     implementation("com.github.luben:zstd-jni:1.5.7-3")
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5")
 
-    compileOnly("net.fabricmc:fabric-loader:${property("loader_fabric")}")
+    compileOnly("net.fabricmc:fabric-loader:${property("deps.fabric")}")
 }
 
 configurations {
@@ -83,9 +84,7 @@ java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
+toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
     withSourcesJar()
 }

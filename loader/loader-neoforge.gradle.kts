@@ -3,7 +3,7 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 plugins {
     kotlin("jvm")
     id("automodpack.common")
-    id("net.neoforged.moddev.legacyforge")
+    id("net.neoforged.moddev")
     id("com.gradleup.shadow")
 }
 
@@ -13,8 +13,8 @@ base {
     group = property("mod.group") as String
 }
 
-legacyForge {
-    version = property("deps.forge") as String
+neoForge {
+    version = property("deps.neoforge") as String
 }
 
 dependencies {
@@ -90,9 +90,9 @@ tasks.named<ShadowJar>("shadowJar") {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-    toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
     withSourcesJar()
 }
 

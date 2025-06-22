@@ -1,12 +1,6 @@
 plugins {
-    java
-}
-
-val loader = property("loom.platform") as String
-var mcVer = (property("minecraft_version") as String).replace(".", "").toInt()
-// make from 3 char release 4 char release e.g. 1.21 -> 1.21.0 == 1210
-if (mcVer < 1000) {
-    mcVer *= 10
+    kotlin("jvm")
+    id("automodpack.common")
 }
 
 base {
@@ -29,16 +23,14 @@ dependencies {
     compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
     implementation("org.tomlj:tomlj:1.1.1")
 
-    implementation("net.fabricmc:fabric-loader:${property("loader_fabric")}")
+    implementation("net.fabricmc:fabric-loader:${property("deps.fabric")}")
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
 
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
+toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 
     withSourcesJar()
 }

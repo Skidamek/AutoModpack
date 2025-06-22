@@ -21,6 +21,8 @@ neoForge {
 dependencies {
     implementation(project(":core"))
     implementation(project(":loader-core"))
+
+    compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1")
 }
 
 tasks {
@@ -44,4 +46,5 @@ java {
     withSourcesJar()
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
+    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
 }

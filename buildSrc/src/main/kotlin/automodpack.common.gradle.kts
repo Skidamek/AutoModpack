@@ -15,6 +15,7 @@ repositories {
         filter { groups.forEach(::includeGroup) }
     }
     strictMaven("https://maven.parchmentmc.org", "org.parchmentmc.data")
+    maven("https://maven.fabricmc.net/")
 }
 
 // TODO: Uncomment and fix this
