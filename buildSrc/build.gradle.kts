@@ -10,6 +10,5 @@ repositories {
 }
 
 dependencies {
-//    implementation(project(":core"))
-//    implementation(project(":loader-core"))
+
 }

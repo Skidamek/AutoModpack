@@ -1,7 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
-    kotlin("jvm")
+    java
     id("net.neoforged.moddev.legacyforge")
     id("com.gradleup.shadow")
 }
