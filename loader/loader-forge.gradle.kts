@@ -2,7 +2,6 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
     kotlin("jvm")
-    id("automodpack.common")
     id("net.neoforged.moddev.legacyforge")
     id("com.gradleup.shadow")
 }
@@ -33,10 +32,6 @@ dependencies {
 tasks {
     processResources {
         exclude("**/fabric.mod.json", "**/automodpack.accesswidener")
-    }
-
-    named("createMinecraftArtifacts") {
-//        dependsOn("stonecutterGenerate")
     }
 
     register<Copy>("buildAndCollect") {
@@ -98,10 +93,6 @@ java {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
-}
-
-tasks.named<Jar>("jar") {
-    isEnabled = false
 }
 
 tasks.named("assemble") {

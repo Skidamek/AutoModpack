@@ -1,6 +1,5 @@
 plugins {
     kotlin("jvm")
-    id("automodpack.common")
 }
 
 base {
@@ -22,12 +21,10 @@ dependencies {
     implementation("org.tomlj:tomlj:1.1.1")
 }
 
-java {
-    // leave it on java 17 to be compatible with older versions and we dont really need 21 there anyway
+java { // leave it on java 17 to be compatible with older versions and we dont really need 21 there anyway
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
     toolchain.languageVersion.set(JavaLanguageVersion.of(17))
-
     withSourcesJar()
 }
 

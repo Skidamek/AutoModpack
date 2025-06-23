@@ -2,7 +2,6 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
     kotlin("jvm")
-    id("automodpack.common")
     id("com.gradleup.shadow")
 }
 
@@ -83,9 +82,7 @@ tasks.named<ShadowJar>("shadowJar") {
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
-
-toolchain.languageVersion.set(JavaLanguageVersion.of(17))
-
+    toolchain.languageVersion.set(JavaLanguageVersion.of(17))
     withSourcesJar()
 }
 
