@@ -49,7 +49,6 @@ jobs:
               echo "Building all subprojects"
               ./gradlew clean
               ./gradlew build
-              ./gradlew mergeJars
           else
               args=$(echo "${{ inputs.target_subproject }}" | tr ',' '\n' | sed 's/$/:build/' | paste -sd ' ')
               echo "Building with arguments=$args"
