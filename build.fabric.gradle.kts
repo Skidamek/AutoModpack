@@ -6,8 +6,9 @@ plugins {
     id("fabric-loom")
 }
 
-version = "${property("mod.version")}+${property("deps.minecraft")}"
-base.archivesName = property("mod.id") as String
+version = "${property("mod.version")}"
+group = "${property("mod.group")}"
+base.archivesName.set("${property("mod.name")}-mc${property("deps.minecraft")}-fabric".lowercase())
 
 loom {
     accessWidenerPath = rootProject.file("src/main/resources/automodpack.accesswidener")
@@ -60,7 +61,7 @@ java {
 
 tasks {
     processResources {
-        exclude("**/neoforge.mods.toml", "**/forge.mods.toml")
+        exclude("**/neoforge.mods.toml", "**/mods.toml", "**/accesstransformer.cfg")
     }
 
     register<Copy>("buildAndCollect") {

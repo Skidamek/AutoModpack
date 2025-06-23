@@ -4,8 +4,9 @@ plugins {
     id("net.neoforged.moddev")
 }
 
-version = "${property("mod.version")}+${property("deps.minecraft")}"
-base.archivesName = property("mod.id") as String
+version = "${property("mod.version")}"
+group = "${property("mod.group")}"
+base.archivesName.set("${property("mod.name")}-mc${property("deps.minecraft")}-neoforge".lowercase())
 
 neoForge {
     version = property("deps.neoforge") as String

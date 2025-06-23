@@ -51,33 +51,42 @@ class MinecraftVersionData(private val name: String) {
     }
 }
 
-val coreModules = getProperty("core_modules")!!.split(',').map { it.trim() }
-
-fun getProperty(key: String): String? {
-    return project.findProperty(key) as? String
-}
-
-// TODO find better way to do it
+// TODO find better way to do it, its slow af
 // If you get Array Exception, run "clean" task
 tasks.register("mergeJars") {
-    coreModules.forEach { module ->
-        dependsOn(":loader-$module:build")
-    }
-
     doLast {
         mergedDir.mkdirs()
-        val jarsToMerge = File("$rootDir/versions").listFiles()
-            ?.flatMap {
+        val versions = File("$rootDir/versions").listFiles()
+
+        if (versions == null || versions.isEmpty()) {
+            error("No versions found in the versions directory!")
+        }
+
+        val jarsToMerge = versions
+            .flatMap {
                 File("$it/build/libs").listFiles()
                     ?.filter { file -> file.isFile && !file.name.endsWith("-sources.jar") && file.name.endsWith(".jar") }
                     ?: emptyList()
             }
-            ?: emptyList()
 
         val tasks = mutableListOf<CompletableFuture<Void>>()
         val time = System.currentTimeMillis()
         val size = jarsToMerge.size
         var current = 0
+
+        if (size == 0) {
+            error("No jars found to merge!")
+        }
+
+        if (size > versions.size) {
+            error("Found more jars to merge than versions! $size/${versions.size}: $jarsToMerge")
+        }
+
+        if (size < versions.size) {
+            println("WARN: Found less jars to merge than versions! $size/${versions.size}: $jarsToMerge")
+        }
+
+        println("Found ${jarsToMerge.size} jars to merge. Merging...")
 
         for (jarToMerge in jarsToMerge) {
             val task = CompletableFuture.runAsync {
@@ -119,7 +128,7 @@ tasks.register("mergeJars") {
         if (size == 0) {
             error("No jars to merge!")
         } else if (size != current) {
-            error("Not all jars were merged!")
+            error("Not all jars were merged! size = $size, current = $current")
         } else {
             println("All jars were merged! Took: ${System.currentTimeMillis() - time}ms")
         }

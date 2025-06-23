@@ -100,9 +100,9 @@ tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
 }
 
-//tasks.named<Jar>("jar") {
-//    isEnabled = false
-//}
+tasks.named<Jar>("jar") {
+    isEnabled = false
+}
 
 tasks.named("assemble") {
     dependsOn("shadowJar")

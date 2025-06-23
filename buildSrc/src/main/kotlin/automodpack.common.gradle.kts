@@ -18,16 +18,23 @@ repositories {
     maven("https://maven.fabricmc.net/")
 }
 
-// TODO: Uncomment and fix this
-//tasks.named<ProcessResources>("processResources") {
-//    fun prop(name: String) = project.property(name) as String
-//
-//    val props = HashMap<String, String>().apply {
-//        this["version"] = prop("mod.version")
-//        this["minecraft"] = prop("deps.minecraft")
-//    }
-//
-//    filesMatching(listOf("fabric.mod.json", "META-INF/neoforge.mods.toml", "META-INF/mods.toml")) {
-//        expand(props)
-//    }
-//}
+tasks.named<ProcessResources>("processResources") {
+    if (project.name.contains("core") || project.name.contains("loader")) {
+        println("Skipping processResources for ${project.name} as it is a core or loader module.")
+        return@named // skip
+    }
+
+    fun prop(name: String) = project.property(name) as String
+
+    val props = HashMap<String, String>().apply {
+        this["version"] = prop("mod.version")
+        this["minecraft"] = prop("meta.minecraft")
+        this["id"] = prop("mod.id")
+        this["name"] = prop("mod.name")
+        this["description"] = prop("mod.description")
+    }
+
+    filesMatching(listOf("fabric.mod.json", "META-INF/neoforge.mods.toml", "META-INF/mods.toml")) {
+        expand(props)
+    }
+}
