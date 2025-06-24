@@ -99,12 +99,6 @@ public class SelfUpdater {
             String OUR_VERSION = currentVersionSplit[0].replace(".", "");
             String REMOTE_VERSION = remoteVersionSplit[0].replace(".", "");
 
-            // Don't allow downgrades pass 4.0.0-beta38
-            if (Integer.parseInt(REMOTE_VERSION) < 400 || (remoteIsBeta && remoteBeta < 38)) {
-                message = "Can't downgrade AutoModpack to version: " + automodpack.fileVersion() + ". Use newer version!";
-                continue;
-            }
-
             // Compare versions as numbers
             if (!gettingServerVersion) {
                 try {
@@ -154,7 +148,30 @@ public class SelfUpdater {
         return false;
     }
 
+    public static boolean validUpdate(ModrinthAPI automodpack) {
+        String[] remoteVersionSplit = automodpack.fileVersion().split("-beta");
+
+        int remoteBeta = -1;
+        boolean remoteIsBeta = false;
+        if (remoteVersionSplit.length > 1) {
+            remoteIsBeta = true;
+            remoteBeta = Integer.parseInt(remoteVersionSplit[1]);
+        }
+
+        // Removes '-betaX' if exists
+        // Removes '.' - dots - to then parse it as number
+        String REMOTE_VERSION = remoteVersionSplit[0].replace(".", "");
+
+        // Don't allow downgrades pass 4.0.0-beta38
+        return Integer.parseInt(REMOTE_VERSION) >= 400 && (!remoteIsBeta || remoteBeta >= 38);
+    }
+
     public static void installModVersion(ModrinthAPI automodpack) {
+        if (!validUpdate(automodpack)) {
+            LOGGER.error("Can't downgrade AutoModpack to version: " + automodpack.fileVersion() + ". Use newer version!");
+            return;
+        }
+
         Path automodpackUpdateJar = automodpackDir.resolve(automodpack.fileName());
         Path newAutomodpackJar;
 
