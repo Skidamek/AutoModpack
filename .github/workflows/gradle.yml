@@ -9,6 +9,3 @@ jobs:
   build: # runs on linux
     uses: ./.github/workflows/build.yml
     secrets: inherit
-#    # [FEATURE] MIXIN_AUDITOR
-#    with:
-#      mixin_audit: true

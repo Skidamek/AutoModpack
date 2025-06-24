@@ -103,18 +103,43 @@ jobs:
           fi
 
       - name: Read common properties
-        id: properties_common
+        id: properties_c
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: gradle.properties
           properties: 'mod.name mod.version'
 
       - name: Read version-specific properties
-        id: properties_versioned
+        id: properties_v
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: ${{ format('versions/{0}/gradle.properties', matrix.subproject) }}
-          properties: 'deps.minecraft publish.versions'
+          properties: 'publish.versions'
+
+      - name: Fix game version
+        id: publish.versions
+        run: |
+          # Fixed \n in publish.versions isn't parsed by christian-draeger/read-properties as a line separator
+          echo 'value<<EOF' >> $GITHUB_OUTPUT
+          echo -e "${{ steps.properties_v.outputs.publish.versions }}" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+
+      - name: Prepare file information
+        id: file_info
+        run: |
+          shopt -s extglob
+          FILE_PATHS=$(ls ${{ format('build-artifacts/!(*-@(dev|sources|shadow)).jar') }})
+          for FILE_PATH in $FILE_PATHS; do
+              if [[ $FILE_PATH == *${{ matrix.mc_version }}* ]] && [[ $FILE_PATH == *${{ matrix.mod_brand }}* ]]; then
+                  FILE_NAME=$(basename $FILE_PATH)
+                  FILE_HASH=$(sha256sum $FILE_PATH | awk '{ print $1 }')
+                  echo "path=$FILE_PATH" >> $GITHUB_OUTPUT
+                  echo "name=$FILE_NAME" >> $GITHUB_OUTPUT
+                  echo "hash=$FILE_HASH" >> $GITHUB_OUTPUT
+                  cat $GITHUB_OUTPUT
+                  exit 0
+              fi
+          done
 
       - name: Prepare changelog
         uses: actions/github-script@v6
@@ -141,12 +166,12 @@ jobs:
 
           files: ${{ steps.file_info.outputs.path }}
 
-          name: ${{ format('{0} {1} {2}', steps.properties_common.outputs.mod.name, steps.properties_common.outputs.mod.version, matrix.mod_brand) }}
-          version: ${{ steps.properties_common.outputs.mod.version }}
+          name: ${{ format('{0} {1} {2}', steps.properties_c.outputs.mod.name, steps.properties_c.outputs.mod.version, matrix.mod_brand) }}
+          version: ${{ steps.properties_c.outputs.mod.version }}
           version-type: release
 
           loaders: ${{ matrix.mod_brand }}
-          game-versions: ${{ steps.game_versions.outputs.value }}
+          game-versions: ${{ steps.publish.versions.outputs.value }}
           game-version-filter: any
           dependencies: ''  # declare the dependencies explicitly, so mc-publish won't try to load from fabric.mod.json
 
