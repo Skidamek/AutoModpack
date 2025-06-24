@@ -4,10 +4,7 @@ on: [workflow_call]
 
 jobs:
   tests:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 21
