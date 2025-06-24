@@ -1,9 +1,6 @@
 package pl.skidam.automodpack.networking.packet;
 
 import io.netty.buffer.Unpooled;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientLoginNetworkHandler;
-import net.minecraft.network.PacketByteBuf;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.ModPackets;
@@ -20,16 +17,20 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
+import net.minecraft.network.FriendlyByteBuf;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
 public class DataC2SPacket {
-    public static CompletableFuture<PacketByteBuf> receive(MinecraftClient minecraftClient, ClientLoginNetworkHandler handler, PacketByteBuf buf) {
+    public static CompletableFuture<FriendlyByteBuf> receive(Minecraft Minecraft, ClientHandshakePacketListenerImpl handler, FriendlyByteBuf buf) {
         try {
-            String serverResponse = buf.readString(Short.MAX_VALUE);
+            String serverResponse = buf.readUtf(Short.MAX_VALUE);
             DataPacket dataPacket = DataPacket.fromJson(serverResponse);
 
             String packetAddress = dataPacket.address;
@@ -49,11 +50,11 @@ public class DataC2SPacket {
             ModPackets.setOriginalServerAddress(null); // Reset for next server reconnection
             if (serverAddress == null) {
                 LOGGER.error("Server address is null! Something gone very wrong! Please report this issue! https://github.com/Skidamek/AutoModpack/issues");
-                return CompletableFuture.completedFuture(new PacketByteBuf(Unpooled.buffer()));
+                return CompletableFuture.completedFuture(new FriendlyByteBuf(Unpooled.buffer()));
             }
 
             // Get actual address of the server client have connected to and format it
-            InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getAddress();
+            InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
             String effectiveHost;
             int effectivePort;
 
@@ -76,7 +77,7 @@ public class DataC2SPacket {
             LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 
             Boolean needsDisconnecting = null;
-            PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
+            FriendlyByteBuf response = new FriendlyByteBuf(Unpooled.buffer());
 
             Path modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
             Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
@@ -115,18 +116,18 @@ public class DataC2SPacket {
                 SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
             }
 
-            response.writeString(String.valueOf(needsDisconnecting), Short.MAX_VALUE);
+            response.writeUtf(String.valueOf(needsDisconnecting), Short.MAX_VALUE);
 
             return CompletableFuture.completedFuture(response);
         } catch (Exception e) {
             LOGGER.error("Error while handling data packet", e);
-            PacketByteBuf response = new PacketByteBuf(Unpooled.buffer());
-            response.writeString("null", Short.MAX_VALUE);
-            return CompletableFuture.completedFuture(new PacketByteBuf(Unpooled.buffer()));
+            FriendlyByteBuf response = new FriendlyByteBuf(Unpooled.buffer());
+            response.writeUtf("null", Short.MAX_VALUE);
+            return CompletableFuture.completedFuture(new FriendlyByteBuf(Unpooled.buffer()));
         }
     }
 
-    private static void disconnectImmediately(ClientLoginNetworkHandler clientLoginNetworkHandler) {
+    private static void disconnectImmediately(ClientHandshakePacketListenerImpl clientLoginNetworkHandler) {
         ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) clientLoginNetworkHandler).getConnection()).getChannel().disconnect();
     }
 }

@@ -1,48 +1,40 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-
-/*? if <=1.16.5 {*//*
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.Element;
-import net.minecraft.client.gui.widget.ClickableWidget;
-*//*?}*/
-
-/*? if <1.20 {*/
-/*import net.minecraft.client.gui.DrawableHelper;
-import net.minecraft.client.util.math.MatrixStack;
-import com.mojang.blaze3d.systems.RenderSystem;
-*//*?}*/
-
-/*? if >=1.20 {*/
-import net.minecraft.client.gui.DrawContext;
-/*?}*/
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 
 /*? if >=1.21.6 {*/
-/*import net.minecraft.client.gl.RenderPipelines;
-*//*?} elif >=1.21.2 {*/
-/*import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.renderer.RenderPipelines;
+/*?} else if >=1.21.2 {*/
+/*import net.minecraft.client.renderer.RenderType;
 import java.util.function.Function;
 *//*?}*/
 
+/*? if <1.20 {*/
+/*import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.gui.GuiComponent;
+*//*?} else {*/
+import net.minecraft.client.gui.GuiGraphics;
+/*?}*/
+
 public class VersionedScreen extends Screen {
 
-	protected VersionedScreen(Text title) {
+	protected VersionedScreen(Component title) {
 		super(title);
 	}
 
 	/*? if <1.20 {*/
 	/*@Override
-    public void render(MatrixStack matrix, int mouseX, int mouseY, float delta) {
+    public void render(PoseStack matrix, int mouseX, int mouseY, float delta) {
         VersionedMatrices matrices = new VersionedMatrices();
 	*//*?} else {*/
 	@Override
-	public void render(DrawContext matrix, int mouseX, int mouseY, float delta) {
+	public void render(GuiGraphics matrix, int mouseX, int mouseY, float delta) {
 		VersionedMatrices matrices = new VersionedMatrices(matrix);
 	/*?}*/
 
@@ -78,45 +70,45 @@ public class VersionedScreen extends Screen {
 	*//*?}*/
 
 	/*? if >=1.20 {*/
-	public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
-		matrices.getContext().drawCenteredTextWithShadow(textRenderer, text, centerX, y, color);
+	public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
+		matrices.getContext().drawCenteredString(textRenderer, text, centerX, y, color);
 	}
 	/*?} else {*/
-	/*public static void drawCenteredTextWithShadow(VersionedMatrices matrices, TextRenderer textRenderer, MutableText text, int centerX, int y, int color) {
-		textRenderer.drawWithShadow(matrices.getContext(), text, (float)(centerX - textRenderer.getWidth(text) / 2), (float)y, color);
+	/*public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
+		textRenderer.drawShadow(matrices.getContext(), text, (float)(centerX - textRenderer.width(text) / 2), (float)y, color);
 	}
 	*//*?}*/
 
 
 	/*? if <1.19.3 {*/
-	/*public static ButtonWidget buttonWidget(int x, int y, int width, int height, Text message, ButtonWidget.PressAction onPress) {
-		return new ButtonWidget(x, y, width, height, message, onPress);
+	/*public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
+		return new Button(x, y, width, height, message, onPress);
 	}
 	*//*?} else {*/
-	public static ButtonWidget buttonWidget(int x, int y, int width, int height, Text message, ButtonWidget.PressAction onPress) {
-		return ButtonWidget.builder(message, onPress).position(x, y).size(width, height).build();
+	public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
+		return Button.builder(message, onPress).pos(x, y).size(width, height).build();
 	}
 	/*?}*/
 
 	/*? if <=1.20 {*/
-	/*public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+	/*public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/^? if <=1.16.5 {^/
-		/^MinecraftClient.getInstance().getTextureManager().bindTexture(textureID);
+		/^Minecraft.getInstance().getTextureManager().bindTexture(textureID);
 		^//^?} else {^/
 		RenderSystem.setShaderTexture(0, textureID);
 		/^?}^/
-		DrawableHelper.drawTexture(matrices.getContext(), x, y, u, v, width, height, textureWidth, textureHeight);
+		GuiComponent.blit(matrices.getContext(), x, y, u, v, width, height, textureWidth, textureHeight);
 	}
 	*//*?} else {*/
-	public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+	public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/*? if >=1.21.6 {*/
-		/*matrices.getContext().drawTexture(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
-		*//*?} elif >=1.21.2 {*/
-		/*Function<Identifier, RenderLayer> renderLayers = RenderLayer::getGuiTextured;
-		matrices.getContext().drawTexture(renderLayers, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		/*?} elif >=1.21.2 {*/
+		/*Function<ResourceLocation, RenderType> RenderTypes = RenderType::guiTextured;
+		matrices.getContext().blit(RenderTypes, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		*//*?} else {*/
-		matrices.getContext().drawTexture(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
-		/*?}*/
+		/*matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+		*//*?}*/
 	}
 	/*?}*/
 }

@@ -1,34 +1,34 @@
 package pl.skidam.automodpack.client.ui.widget;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.widget.AlwaysSelectedEntryListWidget;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.ObjectSelectionList;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 
-/*? if <1.20 {*/
-/*import net.minecraft.client.util.math.MatrixStack;
-*//*?} else {*/
-import net.minecraft.client.gui.DrawContext;
-/*?}*/
+/*? if >=1.20 {*/
+import net.minecraft.client.gui.GuiGraphics;
+/*?} else {*/
+/*import com.mojang.blaze3d.vertex.PoseStack;
+*//*?}*/
 
-public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
+public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
 
-	protected final MinecraftClient client;
-	private final MutableText text;
+	protected final Minecraft client;
+	private final MutableComponent text;
 	private final String mainPageUrl;
 	private final boolean bigFont;
 
-	public ListEntry(MutableText text, String mainPageUrl, boolean bigFont, MinecraftClient client) {
+	public ListEntry(MutableComponent text, String mainPageUrl, boolean bigFont, Minecraft client) {
 		this.text = text;
 		this.mainPageUrl = mainPageUrl;
 		this.client = client;
 		this.bigFont = bigFont;
 	}
 
-	public ListEntry(MutableText text, boolean bigFont, MinecraftClient client) {
+	public ListEntry(MutableComponent text, boolean bigFont, Minecraft client) {
 		this.text = text;
 		this.mainPageUrl = null;
 		this.client = client;
@@ -37,23 +37,23 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
 
 	/*? if >=1.17 {*/
 	@Override
-	public Text getNarration() {
+	public Component getNarration() {
 		return text;
 	}
 	/*?}*/
 
 	@Override
 	/*? if <1.20 {*/
-    /*public void render(MatrixStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+    /*public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 		VersionedMatrices versionedMatrices = new VersionedMatrices();
     *//*?} else {*/
-	public void render(DrawContext drawContext, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-		VersionedMatrices versionedMatrices = new VersionedMatrices(drawContext);
+	public void render(GuiGraphics GuiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+		VersionedMatrices versionedMatrices = new VersionedMatrices(GuiGraphics);
 	/*?}*/
 		versionedRender(versionedMatrices, index, y, x, entryWidth, entryHeight, mouseX, mouseY, hovered, tickDelta);
 	}
 	public void versionedRender(VersionedMatrices versionedMatrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-		versionedMatrices.push();
+		versionedMatrices.pushPose();
 
 		int centeredX = x + entryWidth / 2;
 		int centeredY = y + entryHeight / 2;
@@ -66,7 +66,7 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
 			centeredY = centeredY - 10 / 2;
 		}
 
-		VersionedScreen.drawCenteredTextWithShadow(versionedMatrices, client.textRenderer, text, centeredX, centeredY, TextColors.WHITE);
+		VersionedScreen.drawCenteredTextWithShadow(versionedMatrices, client.font, text, centeredX, centeredY, TextColors.WHITE);
 
 		// if (mainPageUrls != null) {
 		//     int badgeX = x - 42;
@@ -78,10 +78,10 @@ public class ListEntry extends AlwaysSelectedEntryListWidget.Entry<ListEntry> {
 		//     }
 		// }
 
-		versionedMatrices.pop();
+		versionedMatrices.popPose();
 	}
 
-	public MutableText getText() {
+	public MutableComponent getText() {
 		return this.text;
 	}
 

@@ -1,2 +1,2 @@
 accessWidener v1 named
-accessible class net/minecraft/server/network/ServerLoginNetworkHandler$State
+accessible class net/minecraft/server/network/ServerLoginPacketListenerImpl$State

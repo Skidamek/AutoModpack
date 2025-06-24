@@ -12,12 +12,6 @@ on:
         type: string
         required: false
         default: ''
-#      # [FEATURE] MIXIN_AUDITOR
-#      mixin_audit:
-#        description: run mixin audit for Minecraft server after build
-#        type: boolean
-#        required: false
-#        default: false
 
 jobs:
   build:
@@ -58,52 +52,8 @@ jobs:
           BUILD_ID: ${{ github.run_number }}
           BUILD_RELEASE: ${{ inputs.release }}
 
-      #      # [FEATURE] MIXIN_AUDITOR
-      #      - name: Run mixin audit check for Minecraft server
-      #        if: ${{ inputs.mixin_audit }}
-      #        timeout-minutes: 10
-      #        run: |
-      #          mkdir -p ./run
-      #          echo eula=true > ./run/eula.txt
-      #          ./gradlew runServerMixinAudit
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: merged
-
-  #      # [FEATURE] FALLENS_MAVEN
-  #      - name: Publish with gradle
-  #        if: inputs.release || github.ref == 'refs/heads/dev'
-  #        run: |
-  #          if [ -z "${{ inputs.target_subproject }}" ]; then
-  #              echo "Publishing all subprojects"
-  #              ./gradlew publish
-  #          else
-  #              args=$(echo "${{ inputs.target_subproject }}" | tr ',' '\n' | sed 's/$/:publish/' | paste -sd ' ')
-  #              echo "Publishing with arguments=$args"
-  #              ./gradlew $args
-  #          fi
-  #        env:
-  #          BUILD_RELEASE: ${{ inputs.release }}
-  #          FALLENS_MAVEN_TOKEN: ${{ secrets.FALLENS_MAVEN_TOKEN }}
-
-#  summary:
-#    runs-on: ubuntu-22.04
-#    needs:
-#      - build
-#
-#    steps:
-#      - uses: actions/checkout@v4
-#
-#      - name: Download build artifacts
-#        uses: actions/download-artifact@v4
-#        with:
-#          name: build-artifacts
-#          path: build-artifacts
-#
-#      - name: Make build summary
-#        run: python3 .github/workflows/scripts/summary.py  # ubuntu-22.04 uses Python 3.10.6
-#        env:
-#          TARGET_SUBPROJECT: ${{ inputs.target_subproject }}

@@ -8,15 +8,13 @@ version = "${version}"
 displayName = "${name}"
 displayURL = "https://modrinth.com/mod/automodpack"
 authors = "Skidam"
-description = '''
-
-'''
+description = "${description}"
 logoFile = "icon.png"
 
 [[dependencies."${id}"]]
 modId = "minecraft"
 mandatory = true
-versionRange = "${minecraft_dependency}"
+versionRange = "${minecraft}"
 ordering = "NONE"
 side = "BOTH"
 
