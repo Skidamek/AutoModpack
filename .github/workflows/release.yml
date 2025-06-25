@@ -166,8 +166,8 @@ jobs:
 
           files: ${{ steps.file_info.outputs.path }}
 
-          name: ${{ format('{0} {1} {2}', steps.properties_c.outputs.mod.name, steps.properties_c.outputs.mod.version, matrix.mod_brand) }}
-          version: ${{ steps.properties_c.outputs.mod.version }}
+          name: ${{ format('{0} {1} {2}', steps.properties_c.outputs.mod_name, steps.properties_c.outputs.mod_version, matrix.mod_brand) }}
+          version: ${{ steps.properties_c.outputs.mod_version }}
           version-type: release
 
           loaders: ${{ matrix.mod_brand }}
