@@ -1,5 +1,6 @@
 AutoModpack should work with all minecraft modifications (it would be a bit bad modpack updater if it didn't). However, there are some exceptions and limitations that you should be aware of:
 
-- Majrusz's Mods: Require a modified Majrusz Library to work with AutoModpack. [Github Issue](https://github.com/Skidamek/AutoModpack/issues/268).
+- Majrusz's Mods: Requires a modified Majrusz Library to work with AutoModpack. [Github Issue](https://github.com/Skidamek/AutoModpack/issues/268). Or `forceCopyFilesToStandardLocation` in server config.
+- [CITResewnNeoPatcher](https://modrinth.com/mod/cit-resewn-neopatcher): Requires to specify fabric version of CITResewn in `forceCopyFilesToStandardLocation` in server config, like (`/mods/citresewn-1.2.1+1.21.jar`).
 - [ModSets](https://modrinth.com/mod/mod-sets): It's currently broken due to similarities in mod loading modification process.
 - [Cesium](https://modrinth.com/mod/cesium): Cesium is currently incompatible due to wrong way of zstd packaging on AutoModpack side. It will be fixed soon. [GitHub Issue](https://github.com/Skidamek/AutoModpack/issues/384)

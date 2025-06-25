@@ -20,11 +20,12 @@ public class ModpackContent {
     private final String MODPACK_NAME;
     private final WildCards SYNCED_FILES_CARDS;
     private final WildCards EDITABLE_CARDS;
+    private final WildCards FORCE_COPY_FILES_TO_STANDARD_LOCATION;
     private final Path MODPACK_DIR;
     private final ThreadPoolExecutor CREATION_EXECUTOR;
     private final Map<String, String> sha1MurmurMapPreviousContent = new HashMap<>();
 
-    public ModpackContent(String modpackName, Path cwd, Path modpackDir, List<String> syncedFiles, List<String> allowEditsInFiles, ThreadPoolExecutor CREATION_EXECUTOR) {
+    public ModpackContent(String modpackName, Path cwd, Path modpackDir, List<String> syncedFiles, List<String> allowEditsInFiles, List<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR) {
         this.MODPACK_NAME = modpackName;
         this.MODPACK_DIR = modpackDir;
         Set<Path> directoriesToSearch = new HashSet<>(2);
@@ -36,6 +37,7 @@ public class ModpackContent {
             this.SYNCED_FILES_CARDS = new WildCards(syncedFiles, Set.of());
         }
         this.EDITABLE_CARDS = new WildCards(allowEditsInFiles, directoriesToSearch);
+        this.FORCE_COPY_FILES_TO_STANDARD_LOCATION = new WildCards(forceCopyFilesToStandardLocation, directoriesToSearch);
         this.CREATION_EXECUTOR = CREATION_EXECUTOR;
     }
 
@@ -297,7 +299,13 @@ public class ModpackContent {
             LOGGER.info("File {} is editable!", formattedFile);
         }
 
-        return new Jsons.ModpackContentFields.ModpackContentItem(formattedFile, size, type, isEditable, sha1, murmur);
+        boolean forcedToCopy = false;
+        if (FORCE_COPY_FILES_TO_STANDARD_LOCATION.fileMatches(formattedFile, file)) {
+            forcedToCopy = true;
+            LOGGER.info("File {} is forced to copy to standard location!", formattedFile);
+        }
+
+        return new Jsons.ModpackContentFields.ModpackContentItem(formattedFile, size, type, isEditable, forcedToCopy, sha1, murmur);
 
     }
 }

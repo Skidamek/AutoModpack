@@ -15,6 +15,7 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -494,8 +495,13 @@ public class ModpackUpdater {
         boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods, standardModList);
         Set<String> ignoredFiles = ModpackUtils.getIgnoredFiles(conflictingNestedMods, workaroundMods);
 
+        Set<String> forceCopyFiles = modpackContent.list.stream()
+                .filter(item -> item.forceCopy)
+                .map(item -> item.file)
+                .collect(Collectors.toSet());
+
         // Remove duplicate mods
-        ModpackUtils.RemoveDupeModsResult removeDupeModsResult = ModpackUtils.removeDupeMods(modpackDir, standardModList, modpackModList, ignoredFiles, workaroundMods);
+        ModpackUtils.RemoveDupeModsResult removeDupeModsResult = ModpackUtils.removeDupeMods(modpackDir, standardModList, modpackModList, ignoredFiles, workaroundMods, forceCopyFiles);
         boolean needsRestart3 = removeDupeModsResult.requiresRestart();
 
         // Remove rest of mods not for standard mods directory
@@ -509,16 +515,20 @@ public class ModpackUpdater {
         Set<String> filesNotToCopy = new HashSet<>();
 
         // Make list of files which we do not copy to the running directory
-        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : modpackContentItems) {
+        for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentItems) {
+            if (item.forceCopy) {
+                continue;
+            }
+
             // We only want to copy editable file if its downloaded first time
             // So we add to ignored any other editable file
-            if (modpackContentItem.editable && !newDownloadedFiles.contains(modpackContentItem.file)) {
-                filesNotToCopy.add(modpackContentItem.file);
+            if (item.editable && !newDownloadedFiles.contains(item.file)) {
+                filesNotToCopy.add(item.file);
             }
 
             // We only want to copy mods which need a workaround
-            if (modpackContentItem.type.equals("mod") && !workaroundMods.contains(modpackContentItem.file)) {
-                filesNotToCopy.add(modpackContentItem.file);
+            if (item.type.equals("mod") && !workaroundMods.contains(item.file)) {
+                filesNotToCopy.add(item.file);
             }
         }
 

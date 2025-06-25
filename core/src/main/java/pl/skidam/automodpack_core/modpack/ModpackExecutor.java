@@ -33,7 +33,7 @@ public class ModpackExecutor {
         }
 
         Path cwd = Path.of(System.getProperty("user.dir"));
-        return new ModpackContent(serverConfig.modpackName, cwd, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, CREATION_EXECUTOR);
+        return new ModpackContent(serverConfig.modpackName, cwd, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, CREATION_EXECUTOR);
     }
 
     public boolean generateNew(ModpackContent content) {
