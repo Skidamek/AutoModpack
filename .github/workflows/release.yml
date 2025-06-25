@@ -171,7 +171,7 @@ jobs:
           version-type: release
 
           loaders: ${{ matrix.mod_brand }}
-          game-versions: ${{ steps.publish.versions.outputs.value }}
+          game-versions: ${{ steps.publish_versions.outputs.value }}
           game-version-filter: any
           dependencies: ''  # declare the dependencies explicitly, so mc-publish won't try to load from fabric.mod.json
 
