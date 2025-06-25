@@ -81,7 +81,7 @@ tasks.register("mergeJar") {
             ?: error("No jar found to merge in build/libs directory! ${buildDirLibs.absolutePath}")
 
         val time = System.currentTimeMillis()
-        println("Found ${jarToMerge} merge. Merging...")
+        println("Found $jarToMerge to merge. Merging...")
 
         val minecraftVersionStr = jarToMerge.name.substringAfterLast("-mc").substringBefore("-")
         if (minecraftVersionStr.isEmpty()) {
