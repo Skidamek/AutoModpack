@@ -56,10 +56,6 @@ tasks {
 
     processResources {
         exclude("**/fabric.mod.json", "**/automodpack.accesswidener")
-
-        filesMatching("assets/automodpack/icon.png") {
-            path = "icon.png"
-        }
     }
 
     named("createMinecraftArtifacts") {

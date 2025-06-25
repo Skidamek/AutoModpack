@@ -9,7 +9,7 @@ displayName = "${name}"
 displayURL = "https://modrinth.com/mod/automodpack"
 authors = "Skidam"
 description = "${description}"
-logoFile = "icon.png"
+logoFile = "assets/automodpack/icon.png"
 
 [[dependencies."${id}"]]
 modId = "minecraft"
