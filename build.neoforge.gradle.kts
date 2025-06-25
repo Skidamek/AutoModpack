@@ -29,6 +29,10 @@ dependencies {
 tasks {
     processResources {
         exclude("**/fabric.mod.json", "**/automodpack.accesswidener", "**/forge.mods.toml")
+
+        filesMatching("assets/automodpack/icon.png") {
+            path = "icon.png"
+        }
     }
 
     named("createMinecraftArtifacts") {
