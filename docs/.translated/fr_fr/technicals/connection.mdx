@@ -1,0 +1,35 @@
+### Chiffrement
+
+La connexion pour le téléchargement du modpack est sécurisée à l'aide de TLS 1.3.
+
+C'est la même norme de sécurité que celle utilisée par HTTPS, le protocole que vous utilisez tout le temps pour naviguer sur le web (même en ce moment \!).
+
+TLS dispose d'une méthode de vérification de l'identité du serveur à l'aide d'un certificat, ce qui est crucial pour prévenir des attaques telles que [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack).
+
+C'est pourquoi AutoModpack vous demande de vérifier l'empreinte du certificat du serveur lors de la première connexion. Lisez [Comment vérifier l'empreinte du certificat](certificate) pour plus de détails.
+
+### Téléchargements Directs
+
+AutoModpack utilise des liens de téléchargement direct depuis les API de Modrinth et CurseForge pour télécharger la plupart des fichiers de votre modpack.
+Cela signifie que les auteurs des mods sont crédités pour chaque téléchargement.
+
+Cependant, si un fichier que vous fournissez dans le modpack n'est pas disponible sur Modrinth ou CurseForge, AutoModpack le téléchargera (également directement) mais depuis votre serveur.
+
+### Compression
+
+Pour accélérer le téléchargement, AutoModpack compresse les fichiers du modpack à l'aide de l'algorithme de compression [Zstandard](https://facebook.github.io/zstd/).
+Cet algorithme est très rapide et offre un excellent taux de compression, ce qui signifie que les fichiers du modpack sont plus petits et plus rapides à télécharger.
+C'est particulièrement utile pour les modpacks plus volumineux ou les connexions Internet plus lentes.
+Cependant, cela ne s'applique qu'aux fichiers téléchargés depuis votre serveur.
+
+### Autorisation
+
+\<Callout\>
+Ne confondez pas cela avec la [certificate fingerprint verification](certificate), qui est utilisée pour vérifier l'identité du serveur.
+\</Callout\>
+
+AutoModpack utilise un mécanisme d'autorisation simple pour empêcher l'accès non autorisé à votre modpack.
+Lorsque vous vous connectez au serveur, en arrière-plan, AutoModpack génère un secret unique et aléatoire pour chaque joueur. Ce secret est ensuite envoyé au joueur et utilisé pour l'autoriser à télécharger les fichiers du modpack.
+Chaque fois que vous vous reconnectez au serveur, l'ancien secret est invalidé et un nouveau est généré.
+Cela empêche l'accès non autorisé aux fichiers de votre modpack et garantit que seuls les joueurs sur liste blanche et non bannis peuvent télécharger le modpack.
+Si vous ne souhaitez pas utiliser cette fonctionnalité, vous pouvez la désactiver (`validateSecrets`) dans la [server config](../configuration/server-config).
