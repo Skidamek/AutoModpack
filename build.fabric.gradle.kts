@@ -6,9 +6,9 @@ plugins {
     id("fabric-loom")
 }
 
-version = "${property("mod.version")}"
+version = "${property("mod_version")}"
 group = "${property("mod.group")}"
-base.archivesName.set("${property("mod.name")}-mc${property("deps.minecraft")}-fabric".lowercase())
+base.archivesName.set("${property("mod_name")}-mc${property("deps.minecraft")}-fabric".lowercase())
 
 loom {
     accessWidenerPath = rootProject.file("src/main/resources/automodpack.accesswidener")
@@ -67,7 +67,7 @@ tasks {
     register<Copy>("buildAndCollect") {
         group = "build"
         from(remapJar.map { it.archiveFile })
-        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod.version")}"))
+        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod_version")}"))
         dependsOn("build")
     }
 }

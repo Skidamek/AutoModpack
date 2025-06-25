@@ -107,19 +107,19 @@ jobs:
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: gradle.properties
-          properties: 'mod.name mod.version'
+          properties: 'mod_name mod_version'
 
       - name: Read version-specific properties
         id: properties_v
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: ${{ format('versions/{0}/gradle.properties', matrix.subproject) }}
-          properties: 'publish.versions'
+          properties: 'publish_versions'
 
       - name: Fix game version
         id: publish_versions
         run: |
-          # Fixed \n in publish.versions isn't parsed by christian-draeger/read-properties as a line separator
+          # Fixed \n in publish_versions isn't parsed by christian-draeger/read-properties as a line separator
           echo 'value<<EOF' >> $GITHUB_OUTPUT
           echo -e "${{ steps.properties_v.outputs.publish_versions }}" >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT

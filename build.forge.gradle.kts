@@ -8,9 +8,9 @@ plugins {
     id("net.neoforged.moddev.legacyforge")
 }
 
-version = "${property("mod.version")}"
+version = "${property("mod_version")}"
 group = "${property("mod.group")}"
-base.archivesName.set("${property("mod.name")}-mc${property("deps.minecraft")}-forge".lowercase())
+base.archivesName.set("${property("mod_name")}-mc${property("deps.minecraft")}-forge".lowercase())
 
 legacyForge {
     version = property("deps.forge") as String
@@ -65,7 +65,7 @@ tasks {
     register<Copy>("buildAndCollect") {
         group = "build"
         from(jar.map { it.archiveFile })
-        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod.version")}"))
+        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod_version")}"))
         dependsOn("build")
     }
 }
