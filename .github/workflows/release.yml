@@ -117,7 +117,7 @@ jobs:
           properties: 'publish.versions'
 
       - name: Fix game version
-        id: publish.versions
+        id: publish_versions
         run: |
           # Fixed \n in publish.versions isn't parsed by christian-draeger/read-properties as a line separator
           echo 'value<<EOF' >> $GITHUB_OUTPUT
