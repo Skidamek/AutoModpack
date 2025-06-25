@@ -14,6 +14,7 @@ import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_loader_core.SelfUpdater.validUpdate;
 
 public class HandshakeC2SPacket {
 
@@ -30,9 +31,9 @@ public class HandshakeC2SPacket {
             outBuf.writeUtf(clientHandshakePacket.toJson(), Short.MAX_VALUE);
 
             if (serverHandshakePacket.equals(clientHandshakePacket) || (serverHandshakePacket.loaders.contains(loader) && serverHandshakePacket.amVersion.equals(AM_VERSION))) {
-                LOGGER.info("Versions match " + serverHandshakePacket.amVersion);
+                LOGGER.info("Versions match {}", serverHandshakePacket.amVersion);
             } else {
-                LOGGER.warn("Versions mismatch " + serverHandshakePacket.amVersion);
+                LOGGER.warn("Versions mismatch. Server: {}: Client: {}", serverHandshakePacket.amVersion, AM_VERSION);
                 LOGGER.info("Trying to change automodpack version to the version required by server...");
                 updateMod(handler, serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
             }
@@ -58,8 +59,12 @@ public class HandshakeC2SPacket {
             return;
         }
 
-        ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
+        if (!validUpdate(automodpack)) {
+            LOGGER.error("Can't downgrade AutoModpack to version: {}. Server should use newer version! Please do not downgrade AutoModpack on client to prevent security vulnerabilities!", automodpack.fileVersion());
+            return;
+        }
 
+        ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
         SelfUpdater.installModVersion(automodpack);
     }
 }

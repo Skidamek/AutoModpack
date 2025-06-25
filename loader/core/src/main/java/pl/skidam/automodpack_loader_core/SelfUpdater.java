@@ -168,7 +168,7 @@ public class SelfUpdater {
 
     public static void installModVersion(ModrinthAPI automodpack) {
         if (!validUpdate(automodpack)) {
-            LOGGER.error("Can't downgrade AutoModpack to version: " + automodpack.fileVersion() + ". Use newer version!");
+            LOGGER.error("Can't downgrade AutoModpack to version: {}. Server should use newer version! Please do not downgrade AutoModpack on client to prevent security vulnerabilities!", automodpack.fileVersion());
             return;
         }
 
