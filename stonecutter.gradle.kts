@@ -1,10 +1,8 @@
 plugins {
     id("dev.kikugie.stonecutter")
     kotlin("jvm") version "2.1.21" apply false
-    id("co.uzzu.dotenv.gradle") version "4.0.0"
     id("fabric-loom") version "1.10-SNAPSHOT" apply false
     id("net.neoforged.moddev") version "2.0.95" apply false
-    id("me.modmuss50.mod-publish-plugin") version "0.8.+" apply false
     id("com.gradleup.shadow") version "8.3.6" apply false
     id("org.moddedmc.wiki.toolkit") version "0.2.7"
 }

@@ -4,11 +4,10 @@ plugins {
 }
 
 repositories {
-    google()
     mavenCentral()
     gradlePluginPortal()
 }
 
 dependencies {
-
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.1") // For JSON parsing e.g. in build.forge.gradle.kts
 }
