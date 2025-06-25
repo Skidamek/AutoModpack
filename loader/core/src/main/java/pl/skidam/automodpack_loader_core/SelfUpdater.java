@@ -163,12 +163,16 @@ public class SelfUpdater {
         String REMOTE_VERSION = remoteVersionSplit[0].replace(".", "");
 
         // Don't allow downgrades pass 4.0.0-beta38
-        return Integer.parseInt(REMOTE_VERSION) >= 400 && (!remoteIsBeta || remoteBeta >= 38);
+        if (Integer.parseInt(REMOTE_VERSION) >= 400 && (!remoteIsBeta || remoteBeta >= 38)) {
+            return true;
+        }
+
+        LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged and disabled from auto-server-syncing. To protect against potential security vulnerabilities, please use a newer version.", automodpack.fileVersion());
+        return false;
     }
 
     public static void installModVersion(ModrinthAPI automodpack) {
         if (!validUpdate(automodpack)) {
-            LOGGER.error("Can't downgrade AutoModpack to version: {}. Server should use newer version! Please do not downgrade AutoModpack on client to prevent security vulnerabilities!", automodpack.fileVersion());
             return;
         }
 
