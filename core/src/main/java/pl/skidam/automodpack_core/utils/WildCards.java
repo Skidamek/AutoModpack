@@ -46,7 +46,12 @@ public class WildCards {
 
             for (Path startDirectory : startDirectories) {
                 try (Stream<Path> paths = Files.walk(startDirectory)) {
-                    paths.forEach(node -> matchWhiteRules(node, startDirectory, composedWhiteRules));
+                    try { // Fixes some wierd edge cases
+                        paths.filter(Files::isRegularFile)
+                                .forEach(node -> matchWhiteRules(node, startDirectory, composedWhiteRules));
+                    } catch (Exception e) {
+                        LOGGER.error("Error processing files in directory: {}", startDirectory, e);
+                    }
                 }
 
                 matchBlackRules(startDirectory, composedBlackRules);
