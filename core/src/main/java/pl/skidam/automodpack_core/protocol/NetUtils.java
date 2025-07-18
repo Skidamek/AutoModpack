@@ -88,6 +88,7 @@ public class NetUtils {
 		public static X509Certificate readCert(Path path) throws IOException, CertificateException {
 			try (InputStream in = Files.newInputStream(path)) {
 				CertificateFactory cf = CertificateFactory.getInstance("X.509");
+				
 				return (X509Certificate) cf.generateCertificate(in);
 			}
 		}
