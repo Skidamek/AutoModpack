@@ -83,16 +83,12 @@ public class NetUtils {
         Files.writeString(path, certPem);
     }
 
-	// CertificateUtils.java
-	public class CertificateUtils {
-		public static X509Certificate readCert(Path path) throws IOException, CertificateException {
-			try (InputStream in = Files.newInputStream(path)) {
-				CertificateFactory cf = CertificateFactory.getInstance("X.509");
-				
-				return (X509Certificate) cf.generateCertificate(in);
-			}
-		}
+    public static X509Certificate loadCertificate(Path path) throws Exception {
+	try (InputStream in = Files.newInputStream(path)) {
+		CertificateFactory cf = CertificateFactory.getInstance("X.509");
+		return (X509Certificate) cf.generateCertificate(in);
 	}
+    }
 
     public static void savePrivateKey(PrivateKey key, Path path) throws Exception {
         PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(key.getEncoded());
