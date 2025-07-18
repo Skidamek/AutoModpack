@@ -84,6 +84,7 @@ public class NetUtils {
     }
 
     public static X509Certificate loadCertificate(Path path) throws Exception {
+        if (!Files.exists(path)) return null;
         try (InputStream in = Files.newInputStream(path)) {
             CertificateFactory cf = CertificateFactory.getInstance("X.509");
             return (X509Certificate) cf.generateCertificate(in);
