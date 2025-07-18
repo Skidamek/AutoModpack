@@ -8,6 +8,7 @@ import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 
+import java.io.InputStream;
 import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
