@@ -277,7 +277,7 @@ public class ModpackContent {
         }
 
         // Exclude automodpack mod
-        if (type.equals("mod") && (MOD_ID + "-bootstrap").equals(FileInspection.getModID(file))) {
+        if (type.equals("mod") && (MOD_ID + "_bootstrap").equals(FileInspection.getModID(file))) {
             return null;
         }
 
