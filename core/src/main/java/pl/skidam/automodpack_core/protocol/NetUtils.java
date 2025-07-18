@@ -9,7 +9,6 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 
 import java.io.InputStream;
-import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -85,10 +84,10 @@ public class NetUtils {
     }
 
     public static X509Certificate loadCertificate(Path path) throws Exception {
-	try (InputStream in = Files.newInputStream(path)) {
-		CertificateFactory cf = CertificateFactory.getInstance("X.509");
-		return (X509Certificate) cf.generateCertificate(in);
-	}
+        try (InputStream in = Files.newInputStream(path)) {
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            return (X509Certificate) cf.generateCertificate(in);
+        }
     }
 
     public static void savePrivateKey(PrivateKey key, Path path) throws Exception {
