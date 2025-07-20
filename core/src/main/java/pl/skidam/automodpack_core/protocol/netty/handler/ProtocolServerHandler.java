@@ -56,7 +56,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
         ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
 
         // add error handler pipeline
-        ctx.pipeline().addLast("error-printer", new ErrorPrinter());
+        ctx.pipeline().addLast("error-printer-first", new ErrorPrinter());
         ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
         if (sslCtx != null) { // If SSL context is provided, add TLS handler
             ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
@@ -67,6 +67,6 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                 .addLast("chunked-write", new ChunkedWriteHandler())
                 .addLast("protocol-msg-decoder", new ProtocolMessageDecoder())
                 .addLast("msg-handler", new ServerMessageHandler())
-                .addLast("error-printer", new ErrorPrinter());
+                .addLast("error-printer-last", new ErrorPrinter());
     }
 }
