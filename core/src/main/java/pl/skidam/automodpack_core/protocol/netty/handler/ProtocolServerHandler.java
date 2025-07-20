@@ -55,6 +55,8 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
     private void setupPipeline(ChannelHandlerContext ctx) {
         ctx.pipeline().channel().attr(NettyServer.USE_COMPRESSION).set(true);
 
+        // add error handler pipeline
+        ctx.pipeline().addLast("error-printer", new ErrorPrinter());
         ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
         if (sslCtx != null) { // If SSL context is provided, add TLS handler
             ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
