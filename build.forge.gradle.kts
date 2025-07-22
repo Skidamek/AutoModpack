@@ -26,6 +26,7 @@ legacyForge {
 dependencies {
     implementation(project(":core"))
     implementation(project(":loader-core"))
+    implementation(files(rootDir.resolve("ModflaredApi.jar")))
 
     compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1")
     compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${property("deps.mixin-extras")}")!!)

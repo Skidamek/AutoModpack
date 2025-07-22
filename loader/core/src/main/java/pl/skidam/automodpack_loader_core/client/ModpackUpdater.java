@@ -36,17 +36,18 @@ public class ModpackUpdater {
     private Secrets.Secret modpackSecret;
     private Path modpackDir;
     private Path modpackContentFile;
-
+    private Runnable callback;
 
     public String getModpackName() {
         return serverModpackContent.modpackName;
     }
 
-    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
+    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath, Runnable callback) {
         this.serverModpackContent = modpackContent;
         this.modpackAddresses = modpackAddresses;
         this.modpackSecret = secret;
         this.modpackDir = modpackPath;
+        this.callback = callback;
 
         if (this.modpackAddresses.isAnyEmpty() || modpackPath.toString().isEmpty()) {
             throw new IllegalArgumentException("Address or modpackPath is null or empty");
@@ -376,6 +377,10 @@ public class ModpackUpdater {
 
             // Downloads completed
             Files.writeString(modpackContentFile, modpackContentJson);
+
+            if (callback != null) {
+                callback.run();
+            }
 
             Path cwd = Path.of(System.getProperty("user.dir"));
             CustomFileUtils.deleteDummyFiles(cwd, serverModpackContent.list);

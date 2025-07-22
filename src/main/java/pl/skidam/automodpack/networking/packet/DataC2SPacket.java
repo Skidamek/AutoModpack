@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.networking.packet;
 
+import de.rafael.modflared.api.ModflaredApi;
 import io.netty.buffer.Unpooled;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
@@ -17,7 +18,6 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Minecraft;
@@ -76,7 +76,6 @@ public class DataC2SPacket {
 
             LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 
-            Boolean needsDisconnecting = null;
             FriendlyByteBuf response = new FriendlyByteBuf(Unpooled.buffer());
 
             Path modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
@@ -87,9 +86,20 @@ public class DataC2SPacket {
                 boolean update = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
                 if (update) {
+                    String connectedAddressString = connectedAddress.getHostString();
+                    int connectedPort = connectedAddress.getPort();
+                    if (ModflaredApi.IAPITUNNEL != null && ModflaredApi.IAPITUNNEL.isModflaredTunnel(connectedAddressString, connectedPort)) {
+                        ModflaredApi.IAPITUNNEL.addTunnelDependency(connectedAddress.getHostString(), connectedAddress.getPort(), "automodpack");
+                    }
+
+                    Runnable callback = () -> {
+                        if (ModflaredApi.IAPITUNNEL != null) {
+                            ModflaredApi.IAPITUNNEL.removeTunnelDependency(connectedAddressString, connectedPort, "automodpack");
+                        }
+                    };
+
                     disconnectImmediately(handler);
-                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), modpackAddresses, secret, modpackDir);
-                    needsDisconnecting = true;
+                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), modpackAddresses, secret, modpackDir, callback);
                 } else {
                     boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, modpackAddresses, Set.of());
 
@@ -103,21 +113,17 @@ public class DataC2SPacket {
                         SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
                         disconnectImmediately(handler);
                         new ReLauncher(modpackDir, UpdateType.SELECT, null).restart(false);
-                        needsDisconnecting = true;
-                    } else {
-                        needsDisconnecting = false;
                     }
                 }
             } else if (ModpackUtils.canConnectModpackHost(modpackAddresses)) { // Can't download modpack because e.g. certificate is not verified but it can connect to the modpack host
-                needsDisconnecting = true;
+                disconnectImmediately(handler);
             }
 
             if (clientConfig.selectedModpack != null && !clientConfig.selectedModpack.isBlank()) {
                 SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
             }
 
-            response.writeUtf(String.valueOf(needsDisconnecting), Short.MAX_VALUE);
-
+            response.writeUtf("false", Short.MAX_VALUE);
             return CompletableFuture.completedFuture(response);
         } catch (Exception e) {
             LOGGER.error("Error while handling data packet", e);

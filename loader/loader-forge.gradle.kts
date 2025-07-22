@@ -19,6 +19,7 @@ legacyForge {
 dependencies {
     compileOnly(project(":core"))
     compileOnly(project(":loader-core"))
+    implementation(files(rootDir.resolve("ModflaredApi.jar")))
 
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.apache.logging.log4j:log4j-core:2.8.1")
