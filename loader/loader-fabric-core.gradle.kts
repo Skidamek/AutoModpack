@@ -21,6 +21,7 @@ dependencies {
     compileOnly(project(":loader-core"))
     compileOnly(project(":loader-fabric-15"))
     compileOnly(project(":loader-fabric-16"))
+    implementation(files(rootDir.resolve("ModflaredApi.jar")))
 
     compileOnly("com.google.code.gson:gson:2.10.1")
     compileOnly("org.apache.logging.log4j:log4j-core:2.8.1")
