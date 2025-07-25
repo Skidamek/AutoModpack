@@ -28,9 +28,9 @@ public class ModpackUpdater {
     public FetchManager fetchManager;
     public long totalBytesToDownload = 0;
     public boolean fullDownload = false;
-    private Jsons.ModpackContentFields serverModpackContent;
+    private Jsons.ModpackGroupFields serverModpackContent;
     private String modpackContentJson;
-    public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
+    public Map<Jsons.ModpackGroupFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
     private Jsons.ModpackAddresses modpackAddresses;
     private Secrets.Secret modpackSecret;
@@ -39,10 +39,10 @@ public class ModpackUpdater {
 
 
     public String getModpackName() {
-        return serverModpackContent.modpackName;
+        return serverModpackContent.groupName;
     }
 
-    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
+    public void prepareUpdate(Jsons.ModpackGroupFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
         this.serverModpackContent = modpackContent;
         this.modpackAddresses = modpackAddresses;
         this.modpackSecret = secret;
@@ -159,7 +159,7 @@ public class ModpackUpdater {
             modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
             modpackContentFile = modpackDir.resolve(modpackContentFile.getFileName());
 
-            Iterator<Jsons.ModpackContentFields.ModpackContentItem> iterator = serverModpackContent.list.iterator();
+            Iterator<Jsons.ModpackGroupFields.ModpackContentItem> iterator = serverModpackContent.list.iterator();
 
             // CLEAN UP THE LIST
 
@@ -167,7 +167,7 @@ public class ModpackUpdater {
             int skippedEditableFiles = 0;
 
             while (iterator.hasNext()) {
-                Jsons.ModpackContentFields.ModpackContentItem modpackContentField = iterator.next();
+                Jsons.ModpackGroupFields.ModpackContentItem modpackContentField = iterator.next();
                 String file = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
@@ -208,7 +208,7 @@ public class ModpackUpdater {
 
             List<FetchManager.FetchData> fetchDatas = new LinkedList<>();
 
-            for (Jsons.ModpackContentFields.ModpackContentItem field : serverModpackContent.list) {
+            for (Jsons.ModpackGroupFields.ModpackContentItem field : serverModpackContent.list) {
 
                 totalBytesToDownload += Long.parseLong(field.size);
 
@@ -418,7 +418,7 @@ public class ModpackUpdater {
         } catch (IllegalArgumentException e) {
             LOGGER.error("Failed to save client secret", e);
         }
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+        Jsons.ModpackGroupFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
             throw new IllegalStateException("Failed to load modpack content"); // Something gone very wrong...
@@ -511,11 +511,11 @@ public class ModpackUpdater {
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory
-    private Set<String> getFilesNotToCopy(Set<Jsons.ModpackContentFields.ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
+    private Set<String> getFilesNotToCopy(Set<Jsons.ModpackGroupFields.ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
         Set<String> filesNotToCopy = new HashSet<>();
 
         // Make list of files which we do not copy to the running directory
-        for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentItems) {
+        for (Jsons.ModpackGroupFields.ModpackContentItem item : modpackContentItems) {
             if (item.forceCopy) {
                 continue;
             }
@@ -535,7 +535,7 @@ public class ModpackUpdater {
         return filesNotToCopy;
     }
 
-    private boolean deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent) throws IOException {
+    private boolean deleteNonModpackFiles(Jsons.ModpackGroupFields modpackContent) throws IOException {
         List<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).toList();
         List<Path> pathList;
         try (Stream<Path> pathStream = Files.walk(modpackDir)) {
