@@ -17,7 +17,7 @@ public class WorkaroundUtil {
 
     // returns list of formatted modpack files which are mods with services (these mods need special treatment in order to work properly)
     // mods returned by this method should be installed in standard `~/mods/` directory
-    public Set<String> getWorkaroundMods(Jsons.ModpackContentFields modpackContentFields) {
+    public Set<String> getWorkaroundMods(Jsons.ModpackGroupFields modpackGroupFields) {
         Set<String> workaroundMods = new HashSet<>();
 
         // this workaround is needed only for neo/forge mods
@@ -25,7 +25,7 @@ public class WorkaroundUtil {
             return workaroundMods;
         }
 
-        for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
+        for (Jsons.ModpackGroupFields.ModpackContentItem item : modpackGroupFields.list) {
             if (item.type.equals("mod")) {
                 Path modPath = CustomFileUtils.getPath(modpackPath, item.file);
                 if (FileInspection.hasSpecificServices(modPath)) {
