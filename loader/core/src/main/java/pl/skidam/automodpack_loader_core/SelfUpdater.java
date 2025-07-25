@@ -182,7 +182,7 @@ public class SelfUpdater {
         try {
             DownloadManager downloadManager = new DownloadManager();
 
-            new ScreenManager().download(downloadManager, "AutoModapck " + automodpack.fileVersion());
+            new ScreenManager().download(downloadManager, "AutoModpack " + automodpack.fileVersion());
 
             // Download it
             downloadManager.download(

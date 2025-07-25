@@ -101,7 +101,7 @@ public class HandshakeS2CPacket {
             }
 
             if (modpackExecutor.isGenerating()) {
-                Component reason = VersionedText.literal("AutoModapck is generating modpack. Please wait a moment and try again.");
+                Component reason = VersionedText.literal("AutoModpack is generating modpack. Please wait a moment and try again.");
                 connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
                 return;
