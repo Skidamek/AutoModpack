@@ -49,6 +49,10 @@ public class ModpackContent {
         return MODPACK_NAME;
     }
 
+    public Path getModpackContentFile() {
+        return MODPACK_DIR.resolve(hostModpackContentFile.getFileName().toString());
+    }
+
     public boolean create() {
         try {
             pathsMap.clear();
@@ -139,7 +143,7 @@ public class ModpackContent {
         synchronized (list) {
             Jsons.ModpackGroupFields modpackContent = new Jsons.ModpackGroupFields(list);
             modpackContent.groupName = MODPACK_NAME;
-            ConfigTools.saveModpackContent(MODPACK_DIR.resolve(hostModpackContentFile.getFileName().toString()), modpackContent);
+            ConfigTools.saveModpackContent(getModpackContentFile(), modpackContent);
 
             synchronized (hostModpackContentFile) {
                 Jsons.ModpackContentMasterFields masterContent = ConfigTools.load(hostModpackContentFile, Jsons.ModpackContentMasterFields.class);

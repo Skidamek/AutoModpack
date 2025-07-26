@@ -4,7 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.protocol.netty.message.EchoMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.PackMetaRequestMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.FileRequestMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.FileResponseMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.RefreshRequestMessage;
@@ -23,11 +23,11 @@ public class ProtocolMessageDecoder extends ByteToMessageDecoder {
         in.readBytes(secret);
 
         switch (type) {
-            case ECHO_TYPE:
+            case PACK_META_REQUEST_TYPE:
                 int dataLength = in.readInt();
                 byte[] data = new byte[dataLength];
                 in.readBytes(data);
-                out.add(new EchoMessage(version, secret, data));
+                out.add(new PackMetaRequestMessage(version, secret, data));
                 break;
             case FILE_REQUEST_TYPE:
                 int fileHashLength = in.readInt();
