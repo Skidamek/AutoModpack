@@ -5,7 +5,6 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
-import pl.skidam.automodpack_core.modpack.FullServerPackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.nio.file.Path;
@@ -37,14 +36,13 @@ public class Server {
         serverConfigFile = modpackDir.resolve("automodpack-server.json");
         serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
-        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
         if (serverConfig != null) {
             serverConfig.syncedFiles = new ArrayList<>();
-            serverConfig.hostModpackOnMinecraftPort = false;
             serverConfig.validateSecrets = false;
             ConfigTools.save(serverConfigFile, serverConfig);
 
-            if (serverConfig.hostPort == -1) {
+            if (serverConfig.bindPort == -1) {
                 LOGGER.error("Host port not set in config!");
                 return;
             }
@@ -63,7 +61,7 @@ public class Server {
         mainModpackDir.toFile().mkdirs();
 
         ModpackExecutor modpackExecutor = new ModpackExecutor();
-        ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, modpackExecutor.getExecutor());
+        ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, modpackExecutor.getExecutor());
         boolean generated = modpackExecutor.generateNew(modpackContent);
 
         if (generated) {
@@ -71,7 +69,12 @@ public class Server {
         } else {
             LOGGER.error("Failed to generate modpack!");
         }
-        LOGGER.info("Start FullServerPack generation!");
+
+        //beta modpack Executor 
+        //modpackExecutor.stop();
+
+        // change hostPort to bindPort?
+        //LOGGER.info("Starting server on port {}", serverConfig.bindPort);
 
         FullServerPack fullserverpack = new FullServerPack(modpackExecutor);
         FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, hostContentModpackDir, fullserverpack.executor.getExecutor());
@@ -87,6 +90,7 @@ public class Server {
         modpackExecutor.stop();
         fullserverpack.shutdownExecutor();
         LOGGER.info("Starting server on port {}", serverConfig.hostPort);
+
         server.start();
         // wait for server to stop
         while (server.isRunning()) {

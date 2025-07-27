@@ -1,6 +1,7 @@
 {
   "automodpack.restart.full": "模组已下载完成！",
   "automodpack.restart.update": "模组已完成更新！",
+  "automodpack.restart.select": "服务器所需的模组包已被选择！",
   "automodpack.restart.automodpack": "需要将AutoModpack模组更新至服务器要求的版本！",
   "automodpack.restart.description": "要完成此操作，您必须重启游戏。",
   "automodpack.restart.secDescription": "您现在要重启游戏吗？",
@@ -40,8 +41,15 @@
   "automodpack.fetch": "正在从Modrinth和CurseForge直接获取URL...",
   "automodpack.fetch.found": "找到%s个URL。",
 
-  "automodpack.select": "选择模组",
+  "automodpack.validation.text": "您正在连接到一个未知的 AutoModpack 主机",
+  "automodpack.validation.description": "请验证服务器的证书指纹",
+  "automodpack.validation.secDescription": "如果您没有指纹，请向您的服务器管理员索取",
+  "automodpack.validation.thiDescription": "此安全检查可防止在模组包下载过程中连接被篡改",
+  "automodpack.validation.run": "验证",
+  "automodpack.validation.failed": "验证失败",
 
+  "automodpack.retry": "重试",
+  "automodpack.select": "选择模组",
   "automodpack.yes": "是",
   "automodpack.no": "否",
   "automodpack.cancel": "取消",

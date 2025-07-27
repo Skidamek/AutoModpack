@@ -1,13 +1,13 @@
 package pl.skidam.automodpack.networking.server;
 
 import io.netty.buffer.Unpooled;
-import net.minecraft.network.ClientConnection;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.c2s.login.LoginQueryResponseC2SPacket;
-import net.minecraft.network.packet.s2c.login.LoginQueryRequestS2CPacket;
+import net.minecraft.network.Connection;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
+import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerLoginNetworkHandler;
-import net.minecraft.util.Identifier;
+import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.LoginNetworkingIDs;
@@ -25,14 +25,14 @@ import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 // credits to fabric api
 public class ServerLoginNetworkAddon implements PacketSender {
 
-    private final ServerLoginNetworkHandler handler;
-    private final ClientConnection connection;
+    private final ServerLoginPacketListenerImpl handler;
+    private final Connection connection;
     private final MinecraftServer server;
     private final Collection<Future<?>> synchronizers = new ConcurrentLinkedQueue<>();
-    public final Map<Integer, Identifier> channels = new ConcurrentHashMap<>();
+    public final Map<Integer, ResourceLocation> channels = new ConcurrentHashMap<>();
     private boolean firstTick = true;
 
-    public ServerLoginNetworkAddon(ServerLoginNetworkHandler serverLoginNetworkHandler) {
+    public ServerLoginNetworkAddon(ServerLoginPacketListenerImpl serverLoginNetworkHandler) {
         this.handler = serverLoginNetworkHandler;
         this.connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
         this.server = ((ServerLoginNetworkHandlerAccessor) handler).getServer();
@@ -70,15 +70,15 @@ public class ServerLoginNetworkAddon implements PacketSender {
      * @param packet the packet to handle
      * @return true if the packet was handled
      */
-    public boolean handle(LoginQueryResponseC2SPacket packet) {
+    public boolean handle(ServerboundCustomQueryAnswerPacket packet) {
         LoginQueryParser loginQuery = new LoginQueryParser(packet);
         if (loginQuery.success) return handle(loginQuery.queryId, loginQuery.buf);
         return false;
     }
 
-    private boolean handle(int queryId, @Nullable PacketByteBuf originalBuf) {
+    private boolean handle(int queryId, @Nullable FriendlyByteBuf originalBuf) {
 
-        Identifier channel = this.channels.remove(queryId);
+        ResourceLocation channel = this.channels.remove(queryId);
 
         if (channel == null) {
             // Not an AutoModpack packet.
@@ -92,7 +92,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
             return false;
         }
 
-        PacketByteBuf buf = understood ? new PacketByteBuf(originalBuf.slice()) : new PacketByteBuf(Unpooled.EMPTY_BUFFER);
+        FriendlyByteBuf buf = understood ? new FriendlyByteBuf(originalBuf.slice()) : new FriendlyByteBuf(Unpooled.EMPTY_BUFFER);
 
         try {
             handler.receive(this.server, this.handler, understood, buf, this.synchronizers::add, this);
@@ -105,18 +105,18 @@ public class ServerLoginNetworkAddon implements PacketSender {
     }
 
     @Override
-    public LoginQueryRequestS2CPacket createPacket(Identifier channelName, PacketByteBuf buf) {
+    public ClientboundCustomQueryPacket createPacket(ResourceLocation channelName, FriendlyByteBuf buf) {
         Integer queryId = LoginNetworkingIDs.getByKey(channelName);
 
         if (queryId == null) {
             return null;
         }
 
-        return new LoginQueryRequestS2CPacket(queryId, /*? if <1.20.2 {*/ /*channelName, buf *//*?} else {*/ new LoginRequestPayload(channelName, buf) /*?}*/);
+        return new ClientboundCustomQueryPacket(queryId, /*? if <1.20.2 {*/ /*channelName, buf *//*?} else {*/ new LoginRequestPayload(channelName, buf) /*?}*/);
     }
 
     @Override
-    public void sendPacket(LoginQueryRequestS2CPacket packet) {
+    public void sendPacket(ClientboundCustomQueryPacket packet) {
         Objects.requireNonNull(packet, "Connection cannot be null");
 
         LoginQueryParser loginQuery = new LoginQueryParser(packet);

@@ -3,7 +3,7 @@ loaderVersion = "[1,)"
 license = "LGPLv3"
 
 [[mods]]
-modId = "automodpack-bootstrap"
+modId = "automodpack_bootstrap"
 version = "1.0.0"
 displayName = "AutoModpack bootstrap"
 displayURL = "https://modrinth.com/mod/automodpack"

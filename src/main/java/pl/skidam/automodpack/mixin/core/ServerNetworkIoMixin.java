@@ -10,7 +10,7 @@ import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
-@Mixin(targets = "net/minecraft/server/ServerNetworkIo$1", priority = 2137)
+@Mixin(targets = "net/minecraft/server/network/ServerConnectionListener$1", priority = 2137)
 public abstract class ServerNetworkIoMixin {
 
     @Inject(
@@ -18,7 +18,7 @@ public abstract class ServerNetworkIoMixin {
             at = @At("TAIL")
     )
     private void injectAutoModpackHost(Channel channel, CallbackInfo ci) {
-        if (!serverConfig.hostModpackOnMinecraftPort) {
+        if (serverConfig.bindPort != -1) {
             return;
         }
 

@@ -1,8 +1,8 @@
 package pl.skidam.automodpack.mixin.core;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientLoginNetworkHandler;
-import net.minecraft.network.packet.s2c.login.LoginQueryRequestS2CPacket;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
+import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -12,23 +12,23 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.networking.client.ClientLoginNetworkAddon;
 
-@Mixin(value = ClientLoginNetworkHandler.class, priority = 300)
+@Mixin(value = ClientHandshakePacketListenerImpl.class, priority = 300)
 public class ClientLoginNetworkHandlerMixin {
-    @Shadow @Final private MinecraftClient client;
+    @Shadow @Final private Minecraft minecraft;
     @Unique
     private ClientLoginNetworkAddon autoModpack$addon;
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void initAddon(CallbackInfo ci) {
-        this.autoModpack$addon = new ClientLoginNetworkAddon((ClientLoginNetworkHandler) (Object) this, this.client);
+        this.autoModpack$addon = new ClientLoginNetworkAddon((ClientHandshakePacketListenerImpl) (Object) this, this.minecraft);
     }
 
     @Inject(
-            method = "onQueryRequest",
+            method = "handleCustomQuery",
             at = @At(value = "HEAD"),
             cancellable = true
     )
-    private void handleQueryRequest(LoginQueryRequestS2CPacket packet, CallbackInfo ci) {
+    private void handleQueryRequest(ClientboundCustomQueryPacket packet, CallbackInfo ci) {
         if (this.autoModpack$addon == null) {
             return;
         }

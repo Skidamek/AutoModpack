@@ -1,0 +1,74 @@
+### Comment vérifier l'empreinte du certificat ?
+Pour vérifier, il suffit de **copier l’empreinte depuis la console de votre serveur dans le jeu.** Il s’agit d’une vérification unique : vous n’aurez pas à la refaire après la première connexion. Ce processus permet de prévenir les menaces de sécurité comme les attaques de type [Man-in-the-middle](https://fr.wikipedia.org/wiki/Attaque_de_l%27homme_du_milieu). L’empreinte est la même pour tous les joueurs de votre serveur et elle ne change jamais. Il est recommandé de la partager avec les joueurs à l’avance.
+
+Si vous ne trouvez pas l’empreinte dans la console, vous pouvez la récupérer à tout moment avec la commande `/automodpack host fingerprint` [commande](../commands/commands).
+
+Cependant, ne la considérez pas comme un mot de passe pour le modpack : ce n’en est pas un, et ce n’est pas non plus un secret. C’est une partie publique et vérifiable du certificat du serveur, **n’importe qui pourrait télécharger** votre modpack sans connaître cette empreinte, par exemple en contournant cette vérification avec `I AM INCREDIBLY STUPID`. (ne faites pas ça)
+<Callout>
+Pour fournir le modpack uniquement aux joueurs autorisés/liste blanche, utilisez l’option `validateSecrets` dans la [configuration du serveur](../configuration/server-config) (activée par défaut).
+</Callout>
+
+Si vous ne souhaitez pas que les joueurs valident manuellement le certificat et que vous possédez un nom de domaine (requis), vous pouvez fournir votre propre certificat signé par une autorité de certification (CA).
+
+### Comment fournir votre propre certificat signé par une CA ?
+
+Vous pouvez utiliser des outils comme [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html).
+
+Une fois le certificat obtenu, sur le serveur dans le dossier `~/automodpack/.private/`, remplacez les fichiers `cert.crt` (avec le certificat complet en chaîne) et `key.pem` ([la clé doit être au format PKCS#8 (PEM)](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) – attention : l’interception de ces fichiers pourrait permettre l’usurpation de votre serveur, [en savoir plus](https://security.stackexchange.com/a/16694).  
+Si vous hébergez le modpack sur un sous-domaine ou domaine différent de celui de votre serveur Minecraft, assurez-vous que votre certificat couvre bien les deux.
+
+### Petit tutoriel pour obtenir un certificat avec Certbot
+
+Installez Certbot sur votre PC ou serveur, puis exécutez la commande suivante et suivez les instructions fournies par Certbot pour obtenir un certificat pour votre domaine :
+
+```bash
+# certbot certonly --manual --preferred-challenges dns -d <modpack-host-domain> -d <minecraft-server-domain>
+
+
+✅ Si vous hébergez le modpack sur **le même port que le serveur Minecraft**, les domaines sont souvent identiques → dans ce cas, **le second `-d` n’est pas nécessaire**.
+
+> ⚠️ **Attention** : ne copiez-collez jamais une commande trouvée au hasard sur Internet.
+> Lisez toujours la documentation de l’outil que vous utilisez !
+
+Une fois le certificat obtenu :
+
+* `fullchain.pem` → renommez-le en `cert.crt`
+* `privkey.pem` → renommez-le en `key.pem`
+
+Placez-les dans `~/automodpack/.private/`
+
+---
+
+### Mais pourquoi ai-je besoin de tout ça ? C’est juste un modpack pour mes amis !
+
+Si quelqu’un peut prendre le contrôle de la connexion Automodpack,
+il pourrait **installer n’importe quoi sur votre PC (ou celui de vos amis)**.
+
+Minecraft **n’est pas sandboxé**, et les mods peuvent **exécuter n’importe quel code**.
+Donc injecter du code malveillant, même si vous n’êtes pas une cible spécifique, est un énorme risque :
+
+* vol de mots de passe
+* vol de comptes
+* suppression de fichiers importants (comme votre dossier de mèmes de chats)
+
+➡️ **Voilà pourquoi la sécurité est essentielle**, même dans un petit contexte entre amis.
+
+---
+
+### Hmm... ok, mais personne ne connaît mon serveur à part mes amis, pourquoi devrais-je m’en soucier ?
+
+Même si vous pensez que votre serveur est privé, **ce n’est probablement pas le cas**.
+Des scanners de serveurs Minecraft analysent **tout Internet** pour détecter les serveurs accessibles.
+
+Si votre serveur est vulnérable et que vous ne vérifiez pas le certificat, vous devenez une cible potentielle.
+
+🔐 De plus, rien n’empêche une attaque via d’autres moyens :
+
+* accès SSH
+* panneau d’administration de l’hébergeur
+
+👉 **En tant qu’administrateur**, prenez ces mesures sérieusement :
+
+* mots de passe robustes
+* authentification à deux facteurs
+* mises à jour régulières de votre logiciel serveur

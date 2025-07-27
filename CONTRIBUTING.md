@@ -10,7 +10,7 @@ If you're a developer, you can contribute to the AutoModpack project by writing 
 1. Discuss the changes you want to make. By e.g. creating an issue.
 2. Fork the repository and create a new branch for your feature or bug fix.
 3. Make your code changes.
-4. Build code with `./gradlew chiseledBuild` command.
+4. Build code with `./gradlew build` command.
 5. Test your changes thoroughly to prevent regressions.
 6. Submit a pull request, describing your changes and providing relevant context.
 

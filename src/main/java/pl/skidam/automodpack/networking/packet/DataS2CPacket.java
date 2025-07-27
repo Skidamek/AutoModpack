@@ -1,15 +1,14 @@
 package pl.skidam.automodpack.networking.packet;
 
 import com.mojang.authlib.GameProfile;
-import net.minecraft.network.ClientConnection;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.network.packet.s2c.login.LoginDisconnectS2CPacket;
+import net.minecraft.network.Connection;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerLoginNetworkHandler;
-import net.minecraft.text.Text;
+import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
-import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 
@@ -17,7 +16,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class DataS2CPacket {
 
-    public static void receive(MinecraftServer server, ServerLoginNetworkHandler handler, boolean understood, PacketByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
+    public static void receive(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
         try {
             GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 
@@ -29,44 +28,40 @@ public class DataS2CPacket {
                 return;
             }
 
-            String clientHasUpdate = buf.readString(Short.MAX_VALUE);
+            String clientHasUpdate = buf.readUtf(Short.MAX_VALUE);
 
             if ("true".equals(clientHasUpdate)) { // disconnect
-                LOGGER.warn("{} has not installed modpack. Certificate fingerprint to verify: {}", profile.getName(), hostServer.getCertificateFingerprint());
-                Text reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
-                ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
-                connection.send(new LoginDisconnectS2CPacket(reason));
+                LOGGER.warn("{} has not installed modpack. Certificate fingerprint: {}", profile.getName(), hostServer.getCertificateFingerprint());
+                Component reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
+                Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+                connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
             } else if ("false".equals(clientHasUpdate)) {
                 LOGGER.info("{} has installed whole modpack", profile.getName());
             } else {
-                Text reason = VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
-                ClientConnection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
-                connection.send(new LoginDisconnectS2CPacket(reason));
+                Component reason = VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
+                Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+                connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
 
                 LOGGER.error("Host server error. AutoModpack host server is down or server is not configured correctly");
 
-                if (serverConfig.hostModpackOnMinecraftPort) {
-                    LOGGER.warn("You are hosting AutoModpack host server on the minecraft port.");
-                    LOGGER.warn("However client can't access it, try making `hostIp` and `hostLocalIp` blank in the server config.");
-                    LOGGER.warn("If that doesn't work, follow the steps bellow.");
-                    LOGGER.warn("");
+                if (serverConfig.bindPort == -1) {
+                    LOGGER.warn("You are hosting AutoModpack host server on the Minecraft port.");
                 } else {
-                    LOGGER.warn("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", GlobalVariables.serverConfig.hostPort);
-                    LOGGER.warn("");
+                    LOGGER.warn("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", serverConfig.bindPort);
                 }
 
-                LOGGER.warn("Make sure that host IP '{}' and host local IP '{}' are correct in the config file!", GlobalVariables.serverConfig.hostIp, GlobalVariables.serverConfig.hostLocalIp);
-                LOGGER.warn("host IP should be an ip which are players outside of server network connecting to and host local IP should be an ip which are players inside of server network connecting to");
-                LOGGER.warn("It can be Ip or a correctly set domain");
-                LOGGER.warn("If you need, change port in config file, forward / open it and restart server");
+                LOGGER.warn("Make sure that 'addressToSend' is correctly set in the config file!");
+                LOGGER.warn("It can be either an IP address or a domain pointing to your modpack host server.");
+                LOGGER.warn("If nothing works, try changing the 'bindPort' in the config file, then forward / open it and restart server");
+                LOGGER.warn("Note that some hosting providers may proxy this port internally and give you a different address and port to use. In this case, separate the given address with ':', and set the first part as 'addressToSend' and the second part as 'portToSend' in the config file.");
 
-                if (serverConfig.reverseProxy) {
-                    LOGGER.error("Turn off reverseProxy in config, if you don't actually use it!");
+                if (serverConfig.bindPort != serverConfig.portToSend && serverConfig.bindPort != -1 && serverConfig.portToSend != -1) {
+                    LOGGER.error("bindPort '{}' is different than portToSend '{}'. If you are not using reverse proxy, match them! If you do use reverse proxy, make sure it is setup correctly.", serverConfig.bindPort, serverConfig.portToSend);
                 }
 
-                LOGGER.warn("Server certificate fingerprint to verify: {}", hostServer.getCertificateFingerprint());
+                LOGGER.warn("Server certificate fingerprint: {}", hostServer.getCertificateFingerprint());
             }
         } catch (Exception e) {
             LOGGER.error("Error while handling DataS2CPacket", e);

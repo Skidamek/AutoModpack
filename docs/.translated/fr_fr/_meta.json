@@ -1,0 +1,34 @@
+{
+  "quick-start.mdx": {
+    "name": "🚀 Démarrage rapide",
+    "icon": null
+  },
+  "usage": {
+    "name": "Utilisation",
+    "icon": null
+  },
+  "configuration": {
+    "name": "\uD83D\uDEE0\uFE0F Configuration",
+    "icon": null
+  },
+  "commands": {
+    "name": "⌨\uFE0F Commandes",
+    "icon": null
+  },
+  "examples": {
+    "name": "\uD83D\uDCF7 Exemples",
+    "icon": null
+  },
+  "technicals": {
+    "name": "\uD83D\uDC68\u200D\uD83D\uDCBB Détails techniques",
+    "icon": null
+  },
+  "compatibility": {
+    "name": "\uD83D\uDCDA Compatibilité",
+    "icon": null
+  },
+  "faq.mdx": {
+    "name": "❔ FAQ",
+    "icon": null
+  }
+}

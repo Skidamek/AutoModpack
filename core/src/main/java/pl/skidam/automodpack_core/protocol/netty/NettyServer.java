@@ -79,43 +79,62 @@ public class NettyServer {
         }
 
         try {
-            if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
-                // Create a self-signed certificate
-                KeyPair keyPair = NetUtils.generateKeyPair();
-                X509Certificate cert = NetUtils.selfSign(keyPair);
+            if (serverConfig.disableInternalTLS && serverConfig.bindPort != -1) {
+                LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use e.g. a reverse proxy with TLS.");
+            } else {
+                if (serverConfig.disableInternalTLS) {
+                    LOGGER.error("Internal TLS cannot be disabled. You have to bind modpack host on a separate port, preferably also on a loopback address or atleast some private one.");
+                }
 
-                // save it to the file
-                NetUtils.saveCertificate(cert, serverCertFile);
-                NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+                if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
+                    // Create a self-signed certificate
+                    KeyPair keyPair = NetUtils.generateKeyPair();
+                    X509Certificate cert = NetUtils.selfSign(keyPair);
+
+                    // save it to the file
+                    NetUtils.saveCertificate(cert, serverCertFile);
+                    NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+                }
+
+                X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
+
+                if (cert == null) {
+                    throw new IllegalStateException("Server certificate couldn't be loaded");
+                }
+
+                // Shiny TLS 1.3
+                sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
+                        .sslProvider(SslProvider.JDK)
+                        .protocols("TLSv1.3")
+                        .ciphers(Arrays.asList(
+                                "TLS_AES_128_GCM_SHA256",
+                                "TLS_AES_256_GCM_SHA384",
+                                "TLS_CHACHA20_POLY1305_SHA256"))
+                        .build();
+
+                // generate sha256 from cert as a fingerprint
+                certificateFingerprint = NetUtils.getFingerprint(cert);
+                if (certificateFingerprint != null) {
+                    LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
+                }
             }
-
-            X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
-
-            if (cert == null) {
-                throw new IllegalStateException("Server certificate couldn't be loaded");
-            }
-
-            // Shiny TLS 1.3
-            sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
-                    .sslProvider(SslProvider.JDK)
-                    .protocols("TLSv1.3")
-                    .ciphers(Arrays.asList(
-                            "TLS_AES_128_GCM_SHA256",
-                            "TLS_AES_256_GCM_SHA384",
-                            "TLS_CHACHA20_POLY1305_SHA256"))
-                    .build();
-
-            // generate sha256 from cert as a fingerprint
-            certificateFingerprint = NetUtils.getFingerprint(cert);
-            LOGGER.warn("Certificate fingerprint for client validation: {}", certificateFingerprint);
 
             if (!canStart()) {
                 new TrafficShaper(null);
                 return Optional.empty();
             }
 
-            int port = serverConfig.hostPort;
-            InetSocketAddress bindAddress = new InetSocketAddress("0.0.0.0", port);
+            String address = serverConfig.bindAddress;
+            int port = serverConfig.bindPort;
+            InetSocketAddress bindAddress = null;
+            if (port != -1) {
+                if (address == null || address.isBlank()) {
+                    bindAddress = new InetSocketAddress(port);
+                } else {
+                    bindAddress = new InetSocketAddress(address, port);
+                }
+            }
+
             LOGGER.info("Starting modpack host server on {}", bindAddress);
 
             Class<? extends ServerChannel> socketChannelClass;
@@ -157,13 +176,12 @@ public class NettyServer {
     // Returns true if stopped successfully
     public boolean stop() {
         try {
-            if (serverChannel == null) {
-                if (shouldHost) {
-                    shouldHost = false;
-                }
-            } else {
+            if (serverChannel != null) {
                 serverChannel.channel().close().sync();
+                serverChannel = null;
             }
+
+            shouldHost = false;
 
             TrafficShaper.close();
 
@@ -200,35 +218,29 @@ public class NettyServer {
             return false;
         }
 
-        if (serverConfig.hostModpackOnMinecraftPort) {
-            shouldHost = true;
-            LOGGER.info("Hosting modpack on Minecraft port");
-            return false;
-        }
-
-        if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostIp == null || serverConfig.hostIp.isEmpty())) {
+        if (serverConfig.updateIpsOnEveryStart) {
             String publicIp = AddressHelpers.getPublicIp();
             if (publicIp != null) {
-                serverConfig.hostIp = publicIp;
-                ConfigTools.save(serverConfigFile, serverConfig);
-                LOGGER.warn("Setting Host IP to {}", serverConfig.hostIp);
+                serverConfig.addressToSend = publicIp;
+                LOGGER.warn("Setting Host IP to {}", serverConfig.addressToSend);
             } else {
-                LOGGER.error("Host IP isn't set in config, please change it manually! Couldn't get public IP");
-                return false;
+                LOGGER.error("Couldn't get public IP, please change it manually! ");
             }
-        }
 
-        if (serverConfig.updateIpsOnEveryStart || (serverConfig.hostLocalIp == null || serverConfig.hostLocalIp.isEmpty())) {
             try {
-                serverConfig.hostLocalIp = AddressHelpers.getLocalIp();
                 ConfigTools.save(serverConfigFile, serverConfig);
-                LOGGER.warn("Setting Host local IP to {}", serverConfig.hostLocalIp);
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
 
-        shouldHost = true;
-        return true;
+        shouldHost = true; // At this point we know that we want to host the modpack
+
+        if (serverConfig.bindPort == -1) {
+            LOGGER.info("Hosting modpack on Minecraft port");
+            return false; // Dont start separate server for modpack hosting, use minecraft port instead
+        } else {
+            return true; // Start separate server for modpack hosting
+        }
     }
 }

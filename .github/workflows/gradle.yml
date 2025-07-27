@@ -1,6 +1,6 @@
 name: Dev Builds
 
-on: [workflow_dispatch, pull_request, push]
+on: [workflow_dispatch, push]
 
 jobs:
   tests: # runs on linux and windows
@@ -9,6 +9,3 @@ jobs:
   build: # runs on linux
     uses: ./.github/workflows/build.yml
     secrets: inherit
-#    # [FEATURE] MIXIN_AUDITOR
-#    with:
-#      mixin_audit: true

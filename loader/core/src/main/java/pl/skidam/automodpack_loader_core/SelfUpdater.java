@@ -83,21 +83,26 @@ public class SelfUpdater {
                 continue;
             }
 
-            boolean currentBeta = AM_VERSION.contains("-beta");
-            boolean remoteBeta = fileVersion.contains("-beta");
+            boolean currentIsBeta = AM_VERSION.contains("-beta");
+            boolean remoteIsBeta = fileVersion.contains("-beta");
 
             String[] currentVersionSplit = AM_VERSION.split("-beta");
             String[] remoteVersionSplit = fileVersion.split("-beta");
 
+            int remoteBeta = -1;
+            if (remoteIsBeta) {
+                remoteBeta = Integer.parseInt(remoteVersionSplit[1]);
+            }
+
             // Removes '-betaX' if exists
             // Removes '.' - dots - to then parse it as number
             String OUR_VERSION = currentVersionSplit[0].replace(".", "");
-            String LATEST_VERSION = remoteVersionSplit[0].replace(".", "");
+            String REMOTE_VERSION = remoteVersionSplit[0].replace(".", "");
 
             // Compare versions as numbers
             if (!gettingServerVersion) {
                 try {
-                    if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(LATEST_VERSION)) {
+                    if (Integer.parseInt(OUR_VERSION) > Integer.parseInt(REMOTE_VERSION)) {
                         message = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion();
                         break; // Break, checked version is lower than installed, meaning that higher version doesn't exist.
                     }
@@ -105,19 +110,19 @@ public class SelfUpdater {
                     LOGGER.error("Failed to parse version numbers: " + e);
                 }
 
-                if (currentBeta && remoteBeta) {
+                if (currentIsBeta && remoteIsBeta) {
                     if (Integer.parseInt(currentVersionSplit[1]) > Integer.parseInt(remoteVersionSplit[1])) {
                         message = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion();
                         break; // Break, checked version is lower than installed, meaning that higher version doesn't exist.
                     }
                 }
 
-                if (!currentBeta && remoteBeta) {
+                if (!currentIsBeta && remoteIsBeta) {
                     message = "You are using stable version of AutoModpack: " + AM_VERSION + " latest pre-released or beta version is: " + automodpack.fileVersion();
                     continue;
                 }
 
-                if (currentBeta && !remoteBeta) {
+                if (currentIsBeta && !remoteIsBeta) {
                     message = "You are using pre-released or beta version of AutoModpack: " + AM_VERSION + " latest stable version is: " + automodpack.fileVersion();
                     continue;
                 }
@@ -143,14 +148,41 @@ public class SelfUpdater {
         return false;
     }
 
+    public static boolean validUpdate(ModrinthAPI automodpack) {
+        String[] remoteVersionSplit = automodpack.fileVersion().split("-beta");
+
+        int remoteBeta = -1;
+        boolean remoteIsBeta = false;
+        if (remoteVersionSplit.length > 1) {
+            remoteIsBeta = true;
+            remoteBeta = Integer.parseInt(remoteVersionSplit[1]);
+        }
+
+        // Removes '-betaX' if exists
+        // Removes '.' - dots - to then parse it as number
+        String REMOTE_VERSION = remoteVersionSplit[0].replace(".", "");
+
+        // Don't allow downgrades pass 4.0.0-beta38
+        if (Integer.parseInt(REMOTE_VERSION) >= 400 && (!remoteIsBeta || remoteBeta >= 38)) {
+            return true;
+        }
+
+        LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged and disabled from auto-server-syncing. To protect against potential security vulnerabilities, please use a newer version.", automodpack.fileVersion());
+        return false;
+    }
+
     public static void installModVersion(ModrinthAPI automodpack) {
+        if (!validUpdate(automodpack)) {
+            return;
+        }
+
         Path automodpackUpdateJar = automodpackDir.resolve(automodpack.fileName());
         Path newAutomodpackJar;
 
         try {
             DownloadManager downloadManager = new DownloadManager();
 
-            new ScreenManager().download(downloadManager, "AutoModapck " + automodpack.fileVersion());
+            new ScreenManager().download(downloadManager, "AutoModpack " + automodpack.fileVersion());
 
             // Download it
             downloadManager.download(

@@ -1,0 +1,24 @@
+Tous les fichiers d'AutoModpack sont conservés dans le dossier `~/automodpack/`.
+
+### Serveur
+
+Le modpack est généré à partir des fichiers se trouvant dans `~/automodpack/host-modpack/main/` et/ou `syncedFiles` (lisez la [config](https://github.com/Skidamek/AutoModpack/blob/main/docs/configuration/server-config)) ce qui se traduit par le dossier `~/.minecraft/` (dossier racine de l'instance minecraft) sur le client.
+
+La génération du modpack signifie la création de `~/automodpack/host-modpack/automodpack-content.json` qui contient les métadonnées de chaque fichier du modpack. Vous **ne devriez PAS** toucher ce fichier manuellement, modifiez plutôt la configuration.
+
+### Client
+
+Tous les modpacks téléchargés sont conservés dans `~/automodpack/modpacks/`.
+
+Tous les fichiers du modpack sélectionné sont copiés dans `~/.minecraft/` à l'exception des **mods** (avec quelques exceptions, en raison des limitations du mod loader).
+
+S'il les détecte, AutoModpack essaie également de se débarrasser de la plupart, sinon de la totalité, des mods dupliqués de votre dossier mods standard en faveur du dossier mods d'AutoModpack.
+\<Callout\>
+Cela ne devrait pas causer de crashs, mais si vous remarquez qu'AutoModpack supprime une dépendance causant un crash du jeu, veuillez le signaler \!
+\</Callout\>
+
+Les mods sont séparés pour plusieurs raisons. Une telle approche atténue les inconvénients courants liés au placement de tous les mods du modpack dans le dossier mods standard, tels que :
+
+  - **Crashs dus aux conflits de mods** : Cela ne les résoudra pas, mais cela donne au moins au propriétaire du serveur la possibilité de supprimer ou de corriger à distance les mods en conflit sans intervention manuelle du côté client.
+  - **Débogage** : Il est plus facile de voir quels mods font partie du modpack et lesquels n'en font pas partie. Comme les clients peuvent ajouter leurs propres mods au dossier mods standard, il est plus facile de déboguer lorsque quelque chose se casse ou entre en conflit.
+  - **Redémarrages** : Si tous les mods du modpack étaient placés dans le dossier mods standard, il faudrait un redémarrage pour mettre à jour les mods du modpack. Maintenant, cela peut être fait de manière transparente au démarrage sans aucun redémarrage \!

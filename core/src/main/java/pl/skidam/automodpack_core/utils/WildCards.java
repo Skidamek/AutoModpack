@@ -26,6 +26,10 @@ public class WildCards {
 
     public void separateRules(List<String> rules) {
         for (String rule : rules) {
+            if (rule == null || rule.isBlank()) {
+                continue;
+            }
+
             if (rule.startsWith("!")) {
                 blackListRules.add(rule.substring(1));
             } else {
@@ -42,7 +46,12 @@ public class WildCards {
 
             for (Path startDirectory : startDirectories) {
                 try (Stream<Path> paths = Files.walk(startDirectory)) {
-                    paths.forEach(node -> matchWhiteRules(node, startDirectory, composedWhiteRules));
+                    try { // Fixes some wierd edge cases
+                        paths.filter(Files::isRegularFile)
+                                .forEach(node -> matchWhiteRules(node, startDirectory, composedWhiteRules));
+                    } catch (Exception e) {
+                        LOGGER.error("Error processing files in directory: {}", startDirectory, e);
+                    }
                 }
 
                 matchBlackRules(startDirectory, composedBlackRules);
@@ -187,6 +196,10 @@ public class WildCards {
         Map<String, List<String>> directoryRulePathsMap = new HashMap<>(rules.size());
 
         for (String rule : rules) {
+            if (rule == null || rule.isBlank()) {
+                continue;
+            }
+
             int lastSlashIndex = rule.lastIndexOf("/");
             if (lastSlashIndex == -1) {
                 continue;

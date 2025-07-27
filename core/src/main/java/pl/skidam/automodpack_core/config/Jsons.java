@@ -33,6 +33,7 @@ public class Jsons {
     public static class ModpackAddresses {
         public InetSocketAddress hostAddress; // modpack host address
         public InetSocketAddress serverAddress; // minecraft server address
+        public boolean requiresMagic; // if true, client will use magic packets to connect to the modpack host
 
         public ModpackAddresses() {
             // Default constructor for Gson
@@ -45,9 +46,10 @@ public class Jsons {
          * @param serverAddress minecraft server address that represents the target address
          *                      which client uses to connect. This value CANNOT be manipulated by the server.
          */
-        public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress) {
+        public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, boolean requiresMagic) {
             this.hostAddress = hostAddress;
             this.serverAddress = serverAddress;
+            this.requiresMagic = requiresMagic;
         }
 
         public boolean isAnyEmpty() {
@@ -55,26 +57,29 @@ public class Jsons {
         }
     }
 
-    public static class ServerConfigFields {
+    public static class ServerConfigFieldsV1 {
         public int DO_NOT_CHANGE_IT = 1; // file version
         public String modpackName = "";
         public boolean modpackHost = true;
         public boolean generateModpackOnStart = true;
-        public List<String> syncedFiles = List.of("/mods/*.jar", "!/mods/iDontWantThisModInModpack.jar", "!/config/andThisConfigToo.json", "!/mods/andAllTheseMods-*.jar", "!/mods/server-*.jar");
-        public List<String> allowEditsInFiles = List.of("/options.txt", "/config/*", "!/config/excludeThisFile");
+        public List<String> syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*", "!/mods/iDontWantThisModInModpack.jar", "!/config/andThisConfigToo.json", "!/mods/andAllTheseMods-*.jar", "!/mods/server-*.jar");
+        public List<String> allowEditsInFiles = List.of("/options.txt", "/config/**", "!/config/excludeThisFile");
         public boolean enableFullServerPack = false;
         public List<String> ServerPackExcluded = List.of("!/config/bottokens.toml", "!/config/ipadresses.json");
         public boolean autoExcludeUnnecessaryFiles = true;
-        //        public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
-//        public List<List<String>> forceLoad = new ArrayList<>();
+        //public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
+        //public List<List<String>> forceLoad = new ArrayList<>();
+
         public boolean requireAutoModpackOnClient = true;
         public boolean nagUnModdedClients = true;
         public String nagMessage = "This server provides dedicated modpack through AutoModpack!";
         public String nagClickableMessage = "Click here to get the AutoModpack!";
         public String nagClickableLink = "https://modrinth.com/project/automodpack";
         public boolean autoExcludeServerSideMods = true;
-        //        public boolean velocityMode = false; compat plugin... someday I hope
-//        public boolean forceToDisableAllOtherModsOnClients = false;
+
+        //public boolean velocityMode = false; compat plugin... someday I hope
+        //public boolean forceToDisableAllOtherModsOnClients = false;
+
         public boolean hostModpackOnMinecraftPort = true;
         public String hostIp = "";
         public String hostLocalIp = "";
@@ -88,8 +93,36 @@ public class Jsons {
         public List<String> acceptedLoaders;
     }
 
+    public static class ServerConfigFieldsV2 {
+        public int DO_NOT_CHANGE_IT = 2; // file version
+        public String modpackName = "";
+        public boolean modpackHost = true;
+        public boolean generateModpackOnStart = true;
+        public List<String> syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
+        public List<String> allowEditsInFiles = List.of("/options.txt", "/config/**");
+        public List<String> forceCopyFilesToStandardLocation = List.of();
+        public boolean autoExcludeServerSideMods = true;
+        public boolean autoExcludeUnnecessaryFiles = true;
+        public boolean requireAutoModpackOnClient = true;
+        public boolean nagUnModdedClients = true;
+        public String nagMessage = "This server provides dedicated modpack through AutoModpack!";
+        public String nagClickableMessage = "Click here to get the AutoModpack!";
+        public String nagClickableLink = "https://modrinth.com/project/automodpack";
+        public String bindAddress = "";
+        public int bindPort = -1;
+        public String addressToSend = "";
+        public int portToSend = -1;
+        public boolean disableInternalTLS = false;
+        public boolean updateIpsOnEveryStart = false;
+        public int bandwidthLimit = 0;
+        public boolean validateSecrets = true;
+        public long secretLifetime = 336; // 336 hours = 14 days
+        public boolean selfUpdater = false;
+        public List<String> acceptedLoaders;
+    }
+
     public static class ServerCoreConfigFields {
-        public String automodpackVersion = "4.0.0-beta35"; // TODO: dont hardcode it
+        public String automodpackVersion = "4.0.0-beta37"; // TODO: dont hardcode it
         public String loader = "fabric";
         public String loaderVersion = "0.16.14";
         public String mcVersion = "1.21.1";
@@ -125,14 +158,16 @@ public class Jsons {
             public String size;
             public String type;
             public boolean editable;
+            public boolean forceCopy;
             public String sha1;
             public String murmur;
 
-            public ModpackContentItem(String file, String size, String type, boolean editable, String sha1, String murmur) {
+            public ModpackContentItem(String file, String size, String type, boolean editable, boolean forceCopy, String sha1, String murmur) {
                 this.file = file;
                 this.size = size;
                 this.type = type;
                 this.editable = editable;
+                this.forceCopy = forceCopy;
                 this.sha1 = sha1;
                 this.murmur = murmur;
             }

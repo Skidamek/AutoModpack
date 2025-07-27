@@ -1,0 +1,49 @@
+### Est-ce un mod côté serveur ?
+Non, c'est les deux. Vous devez l'installer à la fois sur le serveur et sur le client.
+
+### Comment puis-je ajouter des mods uniquement client au modpack ? (ex: le serveur crash avec un certain mod mais je le veux pour les clients)
+Jetez un œil à la [page de création de modpack](techinicals/modpack-creation).
+
+### Comment restreindre l'accès à mon modpack ?
+Activez `validateSecrets` dans la [config](configuration/server-config), activez `online-mode` dans le fichier server.properties et activez la whitelist ou bannissez quelqu'un.
+
+### Est-ce que cela fonctionne en LAN (monde solo avec l'option pour que d'autres joueurs rejoignent) ?
+Oui. N'oubliez pas de générer le modpack via la commande /`automodpack generate` et de démarrer l'hébergement du modpack avec /`automodpack host start`.
+
+### Est-ce que cela fonctionne avec un monde solo partagé via Essential, World Host, e4mc ?
+Peu de chance, la plupart de ces types de mods ne transfèrent que les paquets Minecraft. Ces mods devraient prendre en charge le protocole d'AutoModpack ou simplement relayer tous les paquets TCP au lieu de se limiter au protocole Minecraft.
+
+### Puis-je utiliser des mods hors-modpack sur le client ?
+Oui, vous pouvez ajouter n'importe quel mod que vous souhaitez utiliser en parallèle du modpack téléchargé en plaçant simplement le mod dans le dossier mods standard.
+
+### Comment puis-je supprimer des fichiers du modpack ?
+Supprimez simplement le fichier du serveur, ou excluez-le de la synchronisation, lisez la section sur `syncedFiles` dans la [config](configuration/server-config).
+
+### Puis-je retirer/désactiver les fichiers/mods hors-modpack pour les joueurs ?
+Pas encore, mais cela pourrait arriver dans le futur.
+
+### Dois-je ouvrir un port sur mon routeur ?
+Non, ce n'est pas nécessaire. Par défaut, AutoModpack s'injecte dans les E/S réseau de Minecraft, ce qui réutilise le port de votre serveur Minecraft. (ex: 25565)
+
+Si vous voulez utiliser un port différent, désactivez `hostModpackOnMinecraftPort` et modifiez `hostPort` dans la [config](configuration/server-config).
+
+### Que se passe-t-il quand je mets à jour la version d'AutoModpack sur le serveur ?
+Le client essaie toujours de se synchroniser avec la version d'AutoModpack du serveur. Il se met à jour ou se rétrograde à la version du serveur si celle-ci est trouvée sur Modrinth.
+
+### Pourquoi le chemin d'hébergement du modpack est-il si long ?
+Il est prévu d'implémenter la possibilité d'ajouter plus d'un seul modpack, le modpack `main`.
+
+### Quelles versions de Minecraft sont supportées ?
+Toutes les versions que vous voyez dans la [dernière version](https://github.com/Skidamek/AutoModpack/releases/latest).
+
+### Mon launcher est-il supporté ?
+Jetez un œil à la [page de compatibilité](compatibility/launchers) pour plus d'informations sur les launchers supportés.
+
+### Est-ce que ce mod met à jour les mods de mon modpack aux dernières versions ?
+Non, c'est hors du champ d'application de ce projet. Ce mod ne fait que synchroniser le modpack du serveur avec les clients. Tous vos mods sur le serveur devront toujours être mis à jour manuellement. AutoModpack s'assure simplement que les versions du client correspondent à celles du serveur.
+
+### J'ai trouvé un bug, que dois-je faire ?
+Si vous avez trouvé un bug, veuillez le signaler sur le [tracker de bugs](https://github.com/Skidamek/AutoModpack/issues).
+
+### J'ai trouvé une faille de sécurité, que dois-je faire ?
+Veuillez la signaler en privé à l'auteur sur [Discord](https://discordapp.com/users/464522287618457631), nous essaierons de la résoudre dès que possible.

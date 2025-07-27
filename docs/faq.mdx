@@ -1,0 +1,49 @@
+### Is it server side mod?
+No, it's both. You need to have it installed on server as well as on client.
+
+### How do i add client only mods to the modpack? (e.g. server crashes with some mod but i want it for clients)
+Take a look at [modpack creation page](techinicals/modpack-creation).
+
+### How to restrict access to my modpack?
+Enable `validateSecrets` in the [config](configuration/server-config), turn on `online-mode` in the server.properties and enable whitelist or ban someone.
+
+### Does it work on lan (single-player world with option for other players to join)?
+Yes. Just remember to generate modpack via command /`automodpack generate` and start modpack host /`automodpack host start`.
+
+### Does it work with single-player world shared via essential, world host, e4mc?
+Likely no, most of these type of mods forward only minecraft packets. These mods would need to support automodpack protocol or just relay all tcp packets instead of limiting to minecraft protocol.
+
+### Can I use non modpack mods on client?
+Yes, you can add any mod you want to use alongside downloaded modpack by just placing the mod into the standard mods folder.
+
+### How can I delete files from modpack?
+Just delete file from server, or exclude it from sync, read about `syncedFiles` in [config](configuration/server-config)
+
+### Can I remove/disable non modpack files/mods from player use?
+Not yet, it may come in the future.
+
+### Do I have to open any port on my router?
+No, you don't need to. By default AutoModpack injects into minecraft networking I/O which reuses your minecraft server port. (e.g. 25565)
+
+If you want to use different port. Disable `hostModpackOnMinecraftPort` and change `hostPort` in [config](configuration/server-config).
+
+### What happens when I update AutoModpack version on server?
+Client always try to sync to the server's version of AutoModpack. It updates or downgrades itself to the server's version if such is found on the Modrinth.
+
+### Why is the host modpack path so long?
+There are plans to implement ability of adding more than just one, `main` modpack.
+
+### Which minecraft versions are supported?
+All of the versions you see in the [latest release](https://github.com/Skidamek/AutoModpack/releases/latest).
+
+### Is my launcher supported?
+Take a look at the [compatibility page](compatibility/launchers) for more information about supported launchers.
+
+### Does this mod updates my modpack mods to the latest versions?
+No, it's out of scope for this project. This mod only synchronizes server modpack to the clients. All your mods on the server would have to still be updated manually. AutoModpack just makes sure client versions matches the server ones.
+
+### I found a bug, what should I do?
+If you found a bug, please report it on the [issue tracker](https://github.com/Skidamek/AutoModpack/issues).
+
+### I found a security vulnerability, what should I do?
+Please report it privately to the author on [Discord](https://discordapp.com/users/464522287618457631), we will try to resolve it ASAP.
