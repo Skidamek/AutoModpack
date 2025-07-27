@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.DecoderException;
+import io.netty.handler.ssl.NotSslRecordException;
 
 import javax.net.ssl.SSLHandshakeException;
 
@@ -15,7 +16,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 public class ErrorPrinter extends ChannelDuplexHandler {
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        if (cause instanceof DecoderException && cause.getCause() != null && cause.getCause() instanceof SSLHandshakeException) {
+        if (cause instanceof DecoderException && cause.getCause() != null && (cause.getCause() instanceof SSLHandshakeException || cause.getCause() instanceof NotSslRecordException)) {
             // Probably the client rejecting the server certificate. Omit stack trace to reduce log output.
             LOGGER.debug("Error occurred in connection to client at address {}: {}", ctx.channel().remoteAddress(), cause.getMessage());
         } else {

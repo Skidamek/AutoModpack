@@ -1,0 +1,14 @@
+Most minecraft proxies won't work with AutoModpack due to early login stage packets. However Gate Lite is supported and works well with AutoModpack. Here is a list of known proxies and their compatibility:
+
+| Proxy Name                                        | Compatibility | Notes       |
+|---------------------------------------------------|---------------|-------------|
+| [Gate Lite](https://gate.minekube.com/guide/lite) | ✅             | Supported   |
+| Gate                                              | ❌             | Unsupported |
+| Velocity                                          | ❌             | Unsupported |
+| Waterfall                                         | ❌             | Unsupported |
+| BungeeCord                                        | ❌             | Unsupported |
+
+When using Gate Lite, it's crucial to correctly configure `portToSend`. By default, clients attempt to connect to the modpack host using the same port they used to connect to your Minecraft server. However, when using a proxy like Gate, this port differs from your actual Minecraft server's port, preventing clients from connecting to download the modpack.
+
+Therefore, if your modpack is hosted with `bindPort` set to `-1`, `portToSend` must be set to the port from which your Minecraft server is accessible from (typically, this will be the same port on which Minecraft server listens).
+Similarly, if `bindPort` is set to a specific port, `portToSend` must be set to the port from which modpack host is accessible from (typically, this will be the same as `bindPort`).

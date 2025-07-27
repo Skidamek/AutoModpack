@@ -91,6 +91,7 @@ public class AddressHelpers {
         if (host.endsWith(".")) { // It breaks our checks and looks ugly, but its a valid domain...
             host = host.substring(0, host.length() - 1);
         }
+        host = host.toLowerCase(); // #382
         return InetSocketAddress.createUnresolved(host, port);
     }
 
@@ -103,11 +104,11 @@ public class AddressHelpers {
                 String host = address.substring(0, portIndex);
                 String port = address.substring(portIndex + 1);
                 if (port.matches("\\d+")) {
-                    socketAddress = InetSocketAddress.createUnresolved(host, Integer.parseInt(port));
+                    socketAddress = format(host, Integer.parseInt(port));
                 }
             }
             if (socketAddress == null) {
-                socketAddress = InetSocketAddress.createUnresolved(address, 0);
+                socketAddress = format(address, 0);
             }
         } catch (Exception e) {
             LOGGER.error("Error while parsing address", e);

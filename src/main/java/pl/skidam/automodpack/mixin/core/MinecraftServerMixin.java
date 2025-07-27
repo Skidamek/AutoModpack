@@ -10,17 +10,13 @@ import pl.skidam.automodpack.init.Common;
 @Mixin(MinecraftServer.class)
 public class MinecraftServerMixin {
 
-	/*? if >=1.19.3 {*/
-	@Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;createMetadata()Lnet/minecraft/server/ServerMetadata;", ordinal = 0), method = "runServer")
-/*?} else {*/
-	/*@Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;setFavicon(Lnet/minecraft/server/ServerMetadata;)V", ordinal = 0), method = "runServer")
-*//*?}*/
+	@Inject(at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;initServer()Z", shift = At.Shift.AFTER), method = "runServer")
 	private void afterSetupServer(CallbackInfo info) {
         Common.server = (MinecraftServer) (Object) this;
 		Common.afterSetupServer();
 	}
 
-	@Inject(at = @At("HEAD"), method = "shutdown")
+	@Inject(at = @At("HEAD"), method = "stopServer")
 	private void beforeShutdownServer(CallbackInfo info) {
 		Common.beforeShutdownServer();
 	}

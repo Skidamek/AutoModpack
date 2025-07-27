@@ -187,20 +187,31 @@ class PreValidationConnection {
     public PreValidationConnection(InetSocketAddress resolvedHostAddress, Jsons.ModpackAddresses modpackAddresses, KeyStore keyStore) throws IOException, KeyStoreException {
         // Step 1. Create a plain TCP connection.
         Socket plainSocket = new Socket();
-        plainSocket.connect(resolvedHostAddress, 15000); // To create socket, we need to pass a resolved socket address
-        plainSocket.setSoTimeout(15000);
-        DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
-        DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
+        plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
+        plainSocket.setSoTimeout(10000);
 
-        // Step 2. Send the handshake (AMMC magic) over the plain socket.
-        plainOut.writeInt(MAGIC_AMMC);
-        plainOut.flush();
+        if (modpackAddresses.requiresMagic) {
+            try {
+                DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
+                DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
 
-        // Step 3. Wait for the server’s reply (AMOK magic).
-        int handshakeResponse = plainIn.readInt();
-        if (handshakeResponse != MAGIC_AMOK) {
-            plainSocket.close();
-            throw new IOException("Invalid handshake response from server: " + handshakeResponse);
+                // Step 2. Send the handshake (AMMC magic) over the plain socket.
+                plainOut.writeInt(MAGIC_AMMC);
+                plainOut.flush();
+
+                // Step 3. Wait for the server’s reply (AMOK magic).
+                int handshakeResponse = plainIn.readInt();
+                if (handshakeResponse != MAGIC_AMOK) {
+                    throw new IOException("Invalid response from server: " + handshakeResponse);
+                }
+            } catch (IOException e) {
+                LOGGER.error("AutoModpack magic handshake failed", e);
+                plainSocket.close();
+            }
+        }
+
+        if (plainSocket.isClosed() || !plainSocket.isConnected()) {
+            throw new IOException("Failed to establish a plain socket connection to " + resolvedHostAddress);
         }
 
         // Step 4. Upgrade the plain socket to TLS using the same underlying connection.

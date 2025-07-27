@@ -1,6 +1,7 @@
 {
   "pack": {
     "description": "${name} Resources",
-    "pack_format": 1
+    "pack_format": 15,
+    "supported_formats": [1, 1000]
   }
 }

@@ -1,0 +1,14 @@
+{
+  "launchers.mdx": {
+    "name": "Launchers compatibility",
+    "icon": null
+  },
+  "mods.mdx": {
+    "name": "Modifications compatibility",
+    "icon": null
+  },
+  "proxies.mdx": {
+    "name": "Proxies compatibility",
+    "icon": null
+  }
+}

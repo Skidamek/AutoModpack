@@ -225,8 +225,7 @@ public class ModpackUtils {
     // Returns true if removed any mod from standard mods folder
     // If the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // If you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
-    public static RemoveDupeModsResult removeDupeMods(Path modpackDir, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList, Set<String> ignoredMods, Set<String> workaroundMods) throws IOException {
-
+    public static RemoveDupeModsResult removeDupeMods(Path modpackDir, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList, Set<String> ignoredMods, Set<String> workaroundMods, Set<String> forceCopyFiles) throws IOException {
         var dupeMods = ModpackUtils.getDupeMods(modpackDir, ignoredMods, standardModList, modpackModList);
 
         if (dupeMods.isEmpty()) {
@@ -260,12 +259,14 @@ public class ModpackUtils {
             Path modpackModPath = modpackMod.modPath();
             Path standardModPath = standardMod.modPath();
             String modId = modpackMod.modID();
+            String formatedPath = CustomFileUtils.formatPath(standardModPath, MODS_DIR.getParent());
             Collection<String> providesIDs = modpackMod.providesIDs();
             List<String> IDs = new ArrayList<>(providesIDs);
             IDs.add(modId);
 
             boolean isDependent = IDs.stream().anyMatch(idsToKeep::contains);
-            boolean isWorkaround = workaroundMods.contains(CustomFileUtils.formatPath(standardModPath, MODS_DIR.getParent()));
+            boolean isWorkaround = workaroundMods.contains(formatedPath);
+            boolean isForceCopy = forceCopyFiles.contains(formatedPath);
 
             if (isDependent) {
                 Path newStandardModPath = standardModPath.getParent().resolve(modpackModPath.getFileName());
@@ -279,7 +280,7 @@ public class ModpackUtils {
                     CustomFileUtils.copyFile(modpackModPath, newStandardModPath);
                     requiresRestart = true;
                 }
-            } else if (!isWorkaround) {
+            } else if (!isWorkaround && !isForceCopy) {
                 LOGGER.warn("Removing {} mod. It is duplicated modpack mod and no other mods are dependent on it!", modId);
                 CustomFileUtils.executeOrder66(standardModPath);
                 requiresRestart = true;
@@ -309,8 +310,6 @@ public class ModpackUtils {
         String serverModpackName = serverModpackContent.modpackName;
 
         if (installedModpackAddresses != null && !serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
-            InetSocketAddress installedModpackAddress = installedModpackAddresses.hostAddress;
-            InetSocketAddress installedServerAddress = installedModpackAddresses.serverAddress;
 
             Path newModpackDir = modpackDir.getParent().resolve(serverModpackName);
 
@@ -325,8 +324,7 @@ public class ModpackUtils {
                 e.printStackTrace();
             }
 
-            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(installedModpackAddress, installedServerAddress);
-            selectModpack(newModpackDir, modpackAddresses, Set.of());
+            selectModpack(newModpackDir, installedModpackAddresses, Set.of());
 
             return newModpackDir;
         }

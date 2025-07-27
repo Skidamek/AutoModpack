@@ -23,13 +23,17 @@ public class ModpackExecutor {
         try {
             if (!Files.exists(hostContentModpackDir)) {
                 Files.createDirectories(hostContentModpackDir);
+                Files.createDirectory(hostContentModpackDir.resolve("mods"));
+                Files.createDirectory(hostContentModpackDir.resolve("config"));
+                Files.createDirectory(hostContentModpackDir.resolve("shaderpacks"));
+                Files.createDirectory(hostContentModpackDir.resolve("resourcepacks"));
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
 
         Path cwd = Path.of(System.getProperty("user.dir"));
-        return new ModpackContent(serverConfig.modpackName, cwd, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, CREATION_EXECUTOR);
+        return new ModpackContent(serverConfig.modpackName, cwd, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, CREATION_EXECUTOR);
     }
 
     public boolean generateNew(ModpackContent content) {

@@ -27,7 +27,6 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class ConfigTools {
 
     public static Gson GSON = new GsonBuilder()
-            .serializeNulls()
             .disableHtmlEscaping()
             .setPrettyPrinting()
             .registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())
@@ -57,27 +56,13 @@ public class ConfigTools {
     }
 
     // Config stuff
-    public static <T> T loadCheck(Path configFile, Class<T> configClass) {
+    public static <T> T softLoad(Path configFile, Class<T> configClass) {
         try {
             if (Files.isRegularFile(configFile)) {
                 String json = Files.readString(configFile);
-                T obj = GSON.fromJson(json, configClass);
-                if (obj == null) {
-                    LOGGER.error("Parsed object is null. Possible JSON syntax error in file: " + configFile);
-                    return null;
-                }
-
-                return obj;
+                return GSON.fromJson(json, configClass);
             }
-        } catch (JsonSyntaxException e) {
-            LOGGER.error("JSON syntax error while loading config! {} {}", configClass, e.getMessage());
-            LOGGER.error("This error most often happens when you e.g. forget to put a comma between fields in JSON file. Check the file: " + configFile.toAbsolutePath().normalize());
-            return null;
-        } catch (Exception e) {
-            LOGGER.error("Couldn't load config! " + configClass);
-            e.printStackTrace();
-        }
-
+        } catch (Exception ignored) { }
         return null;
     }
 

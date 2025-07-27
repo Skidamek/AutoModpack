@@ -8,7 +8,7 @@ import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 
-import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -85,15 +85,10 @@ public class NetUtils {
 
     public static X509Certificate loadCertificate(Path path) throws Exception {
         if (!Files.exists(path)) return null;
-        String certPem = Files.readString(path).replaceAll("\n", "");
-        String beginMarker = "-----BEGIN CERTIFICATE-----";
-        String endMarker = "-----END CERTIFICATE-----";
-        int begin = certPem.indexOf(beginMarker);
-        int end = certPem.indexOf(endMarker);
-        if (begin == -1 || end == -1) return null;
-        String cert = certPem.substring(begin + beginMarker.length(), end).trim();
-        CertificateFactory cf = CertificateFactory.getInstance("X.509");
-        return (X509Certificate) cf.generateCertificate(new ByteArrayInputStream(Base64.getDecoder().decode(cert)));
+        try (InputStream in = Files.newInputStream(path)) {
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            return (X509Certificate) cf.generateCertificate(in);
+        }
     }
 
     public static void savePrivateKey(PrivateKey key, Path path) throws Exception {

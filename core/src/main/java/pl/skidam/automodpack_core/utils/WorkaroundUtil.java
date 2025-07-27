@@ -25,11 +25,11 @@ public class WorkaroundUtil {
             return workaroundMods;
         }
 
-        for (Jsons.ModpackContentFields.ModpackContentItem mod : modpackContentFields.list) {
-            if (mod.type.equals("mod")) {
-                Path modPath = CustomFileUtils.getPath(modpackPath, mod.file);
+        for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
+            if (item.type.equals("mod")) {
+                Path modPath = CustomFileUtils.getPath(modpackPath, item.file);
                 if (FileInspection.hasSpecificServices(modPath)) {
-                    workaroundMods.add(mod.file);
+                    workaroundMods.add(item.file);
                 }
             }
         }

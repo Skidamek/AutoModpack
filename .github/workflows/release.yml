@@ -103,25 +103,25 @@ jobs:
           fi
 
       - name: Read common properties
-        id: properties_common
+        id: properties_c
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: gradle.properties
           properties: 'mod_name mod_version'
 
       - name: Read version-specific properties
-        id: properties_versioned
+        id: properties_v
         uses: christian-draeger/read-properties@1.1.1
         with:
           path: ${{ format('versions/{0}/gradle.properties', matrix.subproject) }}
-          properties: 'minecraft_version game_versions'
+          properties: 'publish_versions'
 
       - name: Fix game version
-        id: game_versions
+        id: publish_versions
         run: |
-          # Fixed \n in game_versions isn't parsed by christian-draeger/read-properties as a line separator
+          # Fixed \n in publish_versions isn't parsed by christian-draeger/read-properties as a line separator
           echo 'value<<EOF' >> $GITHUB_OUTPUT
-          echo -e "${{ steps.properties_versioned.outputs.game_versions }}" >> $GITHUB_OUTPUT
+          echo -e "${{ steps.properties_v.outputs.publish_versions }}" >> $GITHUB_OUTPUT
           echo 'EOF' >> $GITHUB_OUTPUT
 
       - name: Prepare file information
@@ -166,12 +166,12 @@ jobs:
 
           files: ${{ steps.file_info.outputs.path }}
 
-          name: ${{ format('{0} {1} {2}', steps.properties_common.outputs.mod_name, steps.properties_common.outputs.mod_version, matrix.mod_brand) }}
-          version: ${{ steps.properties_common.outputs.mod_version }}
+          name: ${{ format('{0} {1} {2}', steps.properties_c.outputs.mod_name, steps.properties_c.outputs.mod_version, matrix.mod_brand) }}
+          version: ${{ steps.properties_c.outputs.mod_version }}
           version-type: release
 
           loaders: ${{ matrix.mod_brand }}
-          game-versions: ${{ steps.game_versions.outputs.value }}
+          game-versions: ${{ steps.publish_versions.outputs.value }}
           game-version-filter: any
           dependencies: ''  # declare the dependencies explicitly, so mc-publish won't try to load from fabric.mod.json
 

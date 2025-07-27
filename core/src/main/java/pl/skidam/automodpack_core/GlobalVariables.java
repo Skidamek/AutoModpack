@@ -29,7 +29,7 @@ public class GlobalVariables {
     public static Modpack modpack;
     public static FullServerPack fullpacks;
     public static NettyServer hostServer;
-    public static Jsons.ServerConfigFields serverConfig;
+    public static Jsons.ServerConfigFieldsV2 serverConfig;
     public static Jsons.ClientConfigFieldsV2 clientConfig;
     public static Jsons.KnownHostsFields knownHosts;
     public static final Path automodpackDir = Path.of("automodpack");

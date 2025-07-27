@@ -1,30 +1,52 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
 /*? if >=1.20 {*/
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.client.gui.GuiGraphics;
 /*?} else {*/
-/*import net.minecraft.client.util.math.MatrixStack;
+/*import com.mojang.blaze3d.vertex.PoseStack;
 *//*?}*/
 
-public class VersionedMatrices extends /*? if >=1.20 >>*/  DrawContext /*? if <1.20 >>*/ /*MatrixStack*/   {
+public class VersionedMatrices  /*? if <1.20 {*/ /*extends PoseStack *//*?}*/   {
 
 /*? if >=1.20 {*/
-	public VersionedMatrices(MinecraftClient client, VertexConsumerProvider.Immediate vertexConsumers) {
-		super(client, vertexConsumers);
+	private final GuiGraphics context;
+
+	public VersionedMatrices(GuiGraphics context) {
+		this.context = context;
 	}
 
-	public void push() {
-		getMatrices().push();
+	public GuiGraphics getContext() {
+		return context;
 	}
 
-	public void pop() {
-		getMatrices().pop();
+	/*? if >=1.21.6 {*/
+	public void pushPose() {
+		context.pose().pushMatrix();
+	}
+
+	public void popPose() {
+		context.pose().popMatrix();
 	}
 
 	public void scale(float x, float y, float z) {
-		getMatrices().scale(x, y, z);
+		context.pose().scale(x, y);
 	}
-/*?}*/
+	/*?} else {*/
+	/*public void pushPose() {
+		context.pose().pushPose();
+	}
+
+	public void popPose() {
+		context.pose().popPose();
+	}
+
+	public void scale(float x, float y, float z) {
+		context.pose().scale(x, y, z);
+	}
+	*//*?}*/
+/*?} else {*/
+	/*public PoseStack getContext() {
+		return this;
+	}
+*//*?}*/
 }

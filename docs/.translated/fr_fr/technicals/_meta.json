@@ -1,0 +1,22 @@
+{
+  "connection.mdx": {
+    "name": "Connection",
+    "icon": null
+  },
+  "certificate.mdx": {
+    "name": "Gestion des certificats",
+    "icon": null
+  },
+  "modpack-creation.mdx": {
+    "name": "Création du modpack",
+    "icon": null
+  },
+  "file-structure.mdx": {
+    "name": "Structure des fichiers",
+    "icon": null
+  },
+  "modpack-hosting.mdx": {
+    "name": "Hebergement du modpack",
+    "icon": null
+  }
+}
