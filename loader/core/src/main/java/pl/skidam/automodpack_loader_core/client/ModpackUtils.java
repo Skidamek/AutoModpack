@@ -355,7 +355,7 @@ public class ModpackUtils {
     }
 
     // Returns true if value changed
-    public static boolean selectModpack(Path modpackDirToSelect, InetSocketAddress modpackAddressToSelect, Set<String> newDownloadedFiles) {
+    public static boolean selectModpack(Path modpackDirToSelect, Jsons.ModpackAddresses modpackAddresses, Set<String> newDownloadedFiles) {
         modpackDirToSelect = getCorrectModpackDir(modpackDirToSelect);
 
         final String modpackToSelect = modpackDirToSelect.getFileName().toString();
@@ -413,12 +413,13 @@ public class ModpackUtils {
     }
 
     // Returns modpack name formatted for path or url if server doesn't provide modpack name
-    public static Path getModpackPath(InetSocketAddress address, String modpackName) {
+    public static Path getModpackPath(Jsons.ModpackAddresses address, String modpackName) {
         if (modpackName.equalsIgnoreCase("fullserver")) {
             return hostFullServerPackDir.resolve("fullserver");
         }
 
-        String strAddress = address.getHostString() + ":" + address.getPort();
+        InetSocketAddress Address = address.hostAddress;
+        String strAddress = Address.getHostString() + ":" + Address.getPort();
         String correctedName = strAddress;
 
         if (FileInspection.isInValidFileName(strAddress)) {

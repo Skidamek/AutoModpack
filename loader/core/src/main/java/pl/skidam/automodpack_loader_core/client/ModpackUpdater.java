@@ -12,6 +12,7 @@ import pl.skidam.automodpack_loader_core.utils.*;
 
 import java.io.IOException;
 import java.net.ConnectException;
+import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
 import java.util.*;
@@ -34,6 +35,7 @@ public class ModpackUpdater {
     public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
     private Jsons.ModpackAddresses modpackAddresses;
+    private InetSocketAddress modpackAddress;
     private Secrets.Secret modpackSecret;
     private Path modpackDir;
     private Path modpackContentFile;
@@ -47,12 +49,12 @@ public class ModpackUpdater {
         return serverModpackContent.modpackName;
     }
   
-    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, InetSocketAddress address, Secrets.Secret secret) {
+    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret) {
         this.serverModpackContent = modpackContent;
-        this.modpackAddress = address;
+        this.modpackAddresses = modpackAddresses;
+        this.modpackAddress = modpackAddresses.hostAddress;
         this.modpackSecret = secret;
-        this.modpackDir = ModpackUtils.getModpackPath(address, modpackContent.modpackName);
-        this.modpackAddresses = new Jsons.ModpackAddresses(address, null); // falls nur hostAddress benötigt wird
+        this.modpackDir = ModpackUtils.getModpackPath(modpackAddresses, modpackContent.modpackName);
 
         // check out of selected Modpack
         SelectionManager.setSelectedPack(serverModpackContent.modpackName);
@@ -168,7 +170,7 @@ public class ModpackUpdater {
     public void startServerUpdate() {}
     */
     public void startUpdate() {
-        modpackDir = ModpackUtils.getModpackPath(modpackAddress, serverModpackContent.modpackName);
+        modpackDir = ModpackUtils.getModpackPath(modpackAddresses, serverModpackContent.modpackName);
         LOGGER.info("Using modpack directory: {}", modpackDir);
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");

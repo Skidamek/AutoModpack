@@ -62,15 +62,24 @@ public class Jsons {
         public String modpackName = "";
         public boolean modpackHost = true;
         public boolean generateModpackOnStart = true;
-        public List<String> syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
-        public List<String> allowEditsInFiles = List.of("/options.txt", "/config/**");
+        public List<String> syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*", "!/mods/iDontWantThisModInModpack.jar", "!/config/andThisConfigToo.json", "!/mods/andAllTheseMods-*.jar", "!/mods/server-*.jar");
+        public List<String> allowEditsInFiles = List.of("/options.txt", "/config/**", "!/config/excludeThisFile");
+        public boolean enableFullServerPack = false;
+        public List<String> ServerPackExcluded = List.of("!/config/bottokens.toml", "!/config/ipadresses.json");
         public boolean autoExcludeUnnecessaryFiles = true;
+        //public List<String> forceLoad = List.of("/resourcepacks/someResourcePack.zip", "/shaderpacks/someShaderPack.zip");
+        //public List<List<String>> forceLoad = new ArrayList<>();
+
         public boolean requireAutoModpackOnClient = true;
         public boolean nagUnModdedClients = true;
         public String nagMessage = "This server provides dedicated modpack through AutoModpack!";
         public String nagClickableMessage = "Click here to get the AutoModpack!";
         public String nagClickableLink = "https://modrinth.com/project/automodpack";
         public boolean autoExcludeServerSideMods = true;
+
+        //public boolean velocityMode = false; compat plugin... someday I hope
+        //public boolean forceToDisableAllOtherModsOnClients = false;
+
         public boolean hostModpackOnMinecraftPort = true;
         public String hostIp = "";
         public String hostLocalIp = "";
@@ -133,6 +142,7 @@ public class Jsons {
         public String loader = "";
         public String loaderVersion = "";
         public String mcVersion = "";
+        public boolean enableFullServerPack = false;
         public Set<ModpackContentItem> list;
 
         public ModpackContentFields(Set<ModpackContentItem> list) {
@@ -166,6 +176,46 @@ public class Jsons {
             public String toString() {
                 return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
             }
+
+        }
+    }
+    public static class FullServerPackContentFields {
+        public String modpackName = "";
+        public String mcVersion = "";
+        public String loader = "";
+        public Set<FullServerPackContentItem> list;
+
+        public FullServerPackContentFields(String modpackName, String mcVersion, String loader, Set<FullServerPackContentItem> list) {
+            this.modpackName = modpackName;
+            this.mcVersion = mcVersion;
+            this.loader = loader;
+            this.list = list;
+        }
+
+        public FullServerPackContentFields() {
+            this.list = Set.of();
+        }
+
+        public static class FullServerPackContentItem {
+            public String file;
+            public String size;
+            public String type;
+            public String sha1;
+            public String murmur;
+
+            public FullServerPackContentItem(String file, String size, String type, String sha1, String murmur) {
+                this.file = file;
+                this.size = size;
+                this.type = type;
+                this.sha1 = sha1;
+                this.murmur = murmur;
+            }
+
+            @Override
+            public String toString() {
+                return String.format("FullServerPackContentItem(file=%s, size=%s, type=%s, sha1=%s, murmur=%s)", file, size, type, sha1, murmur);
+            }
         }
     }
 }
+
