@@ -17,6 +17,7 @@ loom {
 dependencies {
     implementation(project(":core"))
     implementation(project(":loader-core"))
+    implementation(files(rootDir.resolve("ModflaredApi.jar")))
 
     minecraft("com.mojang:minecraft:${property("deps.minecraft")}")
     mappings(loom.layered {
