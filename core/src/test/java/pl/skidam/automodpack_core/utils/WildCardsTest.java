@@ -34,6 +34,7 @@ class WildCardsTest {
                 "/directory/*/*"
         );
         wildCards = new WildCards(wildcards, Set.of(testFilesDir));
+        wildCards.match();
 
         System.out.println();
         System.out.println();
