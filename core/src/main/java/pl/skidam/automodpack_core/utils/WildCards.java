@@ -33,6 +33,10 @@ public class WildCards {
 
     public void match() {
         try {
+            if (RULES == null || RULES.isEmpty()) {
+                return;
+            }
+
             separateRules(RULES);
             Map<String, List<String>> composedWhiteRules = composeRules(whiteListRules);
             Map<String, List<String>> composedBlackRules = composeRules(blackListRules);
