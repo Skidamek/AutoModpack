@@ -29,7 +29,11 @@ public class WildCards {
         START_DIRECTORIES = startDirectories;
     }
 
-    public static Map<Path, Set<Path>> discoveredDirectories = new HashMap<>();
+    private static final Map<Path, Set<Path>> discoveredDirectories = new HashMap<>();
+
+    public static void clearDiscoveredDirectories() {
+        discoveredDirectories.clear();
+    }
 
     public void match() {
         try {
