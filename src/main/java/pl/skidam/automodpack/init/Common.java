@@ -19,21 +19,24 @@ public class Common {
     public static MinecraftServer server = null;
 
     public static void serverInit() {
-        if (serverConfig.generateModpackOnStart) {
-            LOGGER.info("Generating modpack...");
-            long genStart = System.currentTimeMillis();
-            if (modpackExecutor.generateNew()) {
-                LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+        for (String groupId : serverConfig.groups.keySet()) {
+            var groupDecl = serverConfig.groups.get(groupId);
+            if (groupDecl.generateModpackOnStart) {
+                LOGGER.info("Generating modpack...");
+                long genStart = System.currentTimeMillis();
+                if (modpackExecutor.generateNew(groupId)) {
+                    LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+                } else {
+                    LOGGER.error("Failed to generate modpack!");
+                }
             } else {
-                LOGGER.error("Failed to generate modpack!");
-            }
-        } else {
-            LOGGER.info("Loading last modpack...");
-            long genStart = System.currentTimeMillis();
-            if (modpackExecutor.loadLast()) {
-                LOGGER.info("Modpack loaded! took " + (System.currentTimeMillis() - genStart) + "ms");
-            } else {
-                LOGGER.error("Failed to load modpack!");
+                LOGGER.info("Loading last modpack...");
+                long genStart = System.currentTimeMillis();
+                if (modpackExecutor.loadLast(groupId)) {
+                    LOGGER.info("Modpack loaded! took " + (System.currentTimeMillis() - genStart) + "ms");
+                } else {
+                    LOGGER.error("Failed to load modpack!");
+                }
             }
         }
 

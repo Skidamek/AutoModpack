@@ -172,10 +172,32 @@ public class Preload {
                 ConfigTools.save(serverConfigFile, serverConfigV2);
                 LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
             }
+
+            if (serverConfigVersion.DO_NOT_CHANGE_IT == 2) {
+                // Update the configs schemes to not crash the game if loaded with old config!
+                var serverConfigV2 = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+                var serverConfigV3 = ConfigTools.softLoad(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
+                if (serverConfigV2 != null && serverConfigV3 != null) {
+                    serverConfigVersion.DO_NOT_CHANGE_IT = 3;
+                    serverConfigV3.DO_NOT_CHANGE_IT = 3;
+
+                    // copy all modpack fields from v2 to main modpack v3
+                    serverConfigV3.groups.get("main").groupName = serverConfigV2.modpackName;
+                    serverConfigV3.groups.get("main").generateModpackOnStart = serverConfigV2.generateModpackOnStart;
+                    serverConfigV3.groups.get("main").autoExcludeUnnecessaryFiles = serverConfigV2.autoExcludeUnnecessaryFiles;
+                    serverConfigV3.groups.get("main").autoExcludeServerSideMods = serverConfigV2.autoExcludeServerSideMods;
+                    serverConfigV3.groups.get("main").allowEditsInFiles = serverConfigV2.allowEditsInFiles;
+                    serverConfigV3.groups.get("main").syncedFiles = serverConfigV2.syncedFiles;
+                    serverConfigV3.groups.get("main").forceCopyFilesToStandardLocation = serverConfigV2.forceCopyFilesToStandardLocation;
+
+                    ConfigTools.save(serverConfigFile, serverConfigV3);
+                    LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
+                }
+            }
         }
 
         // load server config
-        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
 
         if (serverConfig != null) {
             // Add current loader to the list
@@ -186,9 +208,12 @@ public class Preload {
             }
 
             // Check modpack name and fix it if needed, because it will be used for naming a folder on client
-            if (!serverConfig.modpackName.isEmpty() && FileInspection.isInValidFileName(serverConfig.modpackName)) {
-                serverConfig.modpackName = FileInspection.fixFileName(serverConfig.modpackName);
-                LOGGER.info("Changed modpack name to {}", serverConfig.modpackName);
+            for (String groupId : serverConfig.groups.keySet()) {
+                if (!groupId.isEmpty() && FileInspection.isInValidFileName(groupId)) {
+                    serverConfig.groups.put(FileInspection.fixFileName(groupId), serverConfig.groups.get(groupId));
+                    serverConfig.groups.remove(groupId);
+                    LOGGER.info("Changed modpack name to {}", groupId);
+                }
             }
 
             // Save changes
