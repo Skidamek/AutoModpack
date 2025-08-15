@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
+import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -69,9 +70,27 @@ public class Server {
             LOGGER.error("Failed to generate modpack!");
         }
 
-        modpackExecutor.stop();
+        //beta modpack Executor 
+        //modpackExecutor.stop();
 
-        LOGGER.info("Starting server on port {}", serverConfig.bindPort);
+        // change hostPort to bindPort?
+        //LOGGER.info("Starting server on port {}", serverConfig.bindPort);
+
+        FullServerPack fullserverpack = new FullServerPack(modpackExecutor);
+        FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, hostContentModpackDir, fullserverpack.executor.getExecutor());
+        boolean fullpackgenerated = fullserverpack.generateNew(fullServerPackContent);
+
+
+        if (fullpackgenerated) {
+            LOGGER.info("FullServerPack generated!");
+        } else {
+            LOGGER.error("Failed to generate serverpack!");
+        }
+
+        modpackExecutor.stop();
+        fullserverpack.shutdownExecutor();
+        LOGGER.info("Starting server on port {}", serverConfig.hostPort);
+
         server.start();
         // wait for server to stop
         while (server.isRunning()) {
