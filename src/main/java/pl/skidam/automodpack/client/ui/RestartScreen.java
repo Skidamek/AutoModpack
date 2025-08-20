@@ -53,7 +53,7 @@ public class RestartScreen extends VersionedScreen {
         });
 
         restartButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20, VersionedText.translatable("automodpack.restart.confirm").withStyle(ChatFormatting.BOLD), button -> {
-            System.exit(0);
+            minecraft.stop();
         });
 
         changelogsButton = buttonWidget(this.width / 2 - 75, this.height / 2 + 75, 150, 20, VersionedText.translatable("automodpack.changelog.view"), button -> {

@@ -69,6 +69,10 @@ public class ModpackExecutor {
         return activeCount > 0 || queueSize > 0;
     }
 
+    public boolean isRunning() {
+        return !CREATION_EXECUTOR.isShutdown() && !CREATION_EXECUTOR.isTerminated();
+    }
+
     public ThreadPoolExecutor getExecutor() {
         return CREATION_EXECUTOR;
     }

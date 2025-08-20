@@ -21,10 +21,94 @@ public class WildCards {
         return wildcardMatches;
     }
 
+    private final List<String> RULES;
+    private final Set<Path> START_DIRECTORIES;
+
+    public WildCards(List<String> rules, Set<Path> startDirectories) {
+        RULES = rules;
+        START_DIRECTORIES = startDirectories;
+    }
+
+    private static final Map<Path, Set<Path>> discoveredDirectories = new HashMap<>();
+
+    public static void clearDiscoveredDirectories() {
+        discoveredDirectories.clear();
+    }
+
+    public void match() {
+        try {
+            if (RULES == null || RULES.isEmpty()) {
+                return;
+            }
+
+            separateRules(RULES);
+            Map<String, List<String>> composedWhiteRules = composeRules(whiteListRules);
+            Map<String, List<String>> composedBlackRules = composeRules(blackListRules);
+
+            for (Path startDirectory : START_DIRECTORIES) {
+                Set<Path> alreadyDiscovered = discoveredDirectories.getOrDefault(startDirectory, Set.of());
+                if (!alreadyDiscovered.isEmpty()) {
+                    for (Path node : alreadyDiscovered) {
+                        try {
+                            matchWhiteRules(node, startDirectory, composedWhiteRules);
+                        } catch (Exception e) {
+                            LOGGER.error("Error processing file: {} From already discovered directory: {}", node, startDirectory, e);
+                        }
+                    }
+                } else {
+                    try (Stream<Path> paths = Files.walk(startDirectory)) {
+                        try { // Fixes some wierd edge cases
+                            paths.filter(Files::isRegularFile)
+                                    .forEach(node -> {
+                                        if (!discoveredDirectories.containsKey(startDirectory)) {
+                                            discoveredDirectories.put(startDirectory, new HashSet<>());
+                                        }
+                                        discoveredDirectories.get(startDirectory).add(node);
+                                        matchWhiteRules(node, startDirectory, composedWhiteRules);
+                                    });
+                        } catch (Exception e) {
+                            LOGGER.error("Error processing files in directory: {}", startDirectory, e);
+                        }
+                    }
+                }
+
+                matchBlackRules(startDirectory, composedBlackRules);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to walk directories: {}", START_DIRECTORIES, e);
+        }
+    }
+
+    private Map<String, List<String>> composeRules(List<String> rules) {
+        Map<String, List<String>> directoryRulePathsMap = new HashMap<>(rules.size());
+
+        for (String rule : rules) {
+            if (rule == null || rule.isBlank()) {
+                continue;
+            }
+
+            int lastSlashIndex = rule.lastIndexOf("/");
+            if (lastSlashIndex == -1) {
+                continue;
+            }
+
+            String directoryPart = rule.substring(0, lastSlashIndex);
+            String rulePath = rule.substring(lastSlashIndex);
+
+            if (directoryPart.contains("*")) {
+                LOGGER.warn("Wildcards in directories are experimental! Use with caution.");
+            }
+
+            directoryRulePathsMap.computeIfAbsent(directoryPart, k -> new ArrayList<>()).add(rulePath);
+        }
+
+        return directoryRulePathsMap;
+    }
+
     private final List<String> whiteListRules = new ArrayList<>();
     private final List<String> blackListRules = new ArrayList<>();
 
-    public void separateRules(List<String> rules) {
+    private void separateRules(List<String> rules) {
         for (String rule : rules) {
             if (rule == null || rule.isBlank()) {
                 continue;
@@ -38,48 +122,17 @@ public class WildCards {
         }
     }
 
-    public WildCards(List<String> rules, Set<Path> startDirectories) {
-        try {
-            separateRules(rules);
-            Map<String, List<String>> composedWhiteRules = composeRules(whiteListRules);
-            Map<String, List<String>> composedBlackRules = composeRules(blackListRules);
-
-            for (Path startDirectory : startDirectories) {
-                try (Stream<Path> paths = Files.walk(startDirectory)) {
-                    try { // Fixes some wierd edge cases
-                        paths.filter(Files::isRegularFile)
-                                .forEach(node -> matchWhiteRules(node, startDirectory, composedWhiteRules));
-                    } catch (Exception e) {
-                        LOGGER.error("Error processing files in directory: {}", startDirectory, e);
-                    }
-                }
-
-                matchBlackRules(startDirectory, composedBlackRules);
-            }
-        } catch (IOException e) {
-            LOGGER.error("Failed to walk directories: {}", startDirectories, e);
-        }
-    }
-
-    public void matchWhiteRules(Path node, Path startDirectory, Map<String, List<String>> composedWhiteRules) {
-        if (!node.toFile().isFile()) {
-            return;
-        }
-
+    private void matchWhiteRules(Path node, Path startDirectory, Map<String, List<String>> composedWhiteRules) {
         String formattedPath = matchesRules(node, startDirectory, composedWhiteRules);
         if (formattedPath != null) {
             wildcardMatches.put(formattedPath, node);
         }
     }
 
-    public void matchBlackRules(Path startDirectory, Map<String, List<String>> composedBlackRules) {
+    private void matchBlackRules(Path startDirectory, Map<String, List<String>> composedBlackRules) {
         Set<String> pathsToRemove = new HashSet<>();
 
         for (Path node : getWildcardMatches().values()) {
-            if (!node.toFile().isFile()) {
-                continue;
-            }
-
             String formattedPath = matchesRules(node, startDirectory, composedBlackRules);
             if (formattedPath != null) {
                 pathsToRemove.add(formattedPath);
@@ -190,31 +243,5 @@ public class WildCards {
         }
 
         return target.startsWith(partOne) && target.endsWith(partTwo);
-    }
-
-    public Map<String, List<String>> composeRules(List<String> rules) {
-        Map<String, List<String>> directoryRulePathsMap = new HashMap<>(rules.size());
-
-        for (String rule : rules) {
-            if (rule == null || rule.isBlank()) {
-                continue;
-            }
-
-            int lastSlashIndex = rule.lastIndexOf("/");
-            if (lastSlashIndex == -1) {
-                continue;
-            }
-
-            String directoryPart = rule.substring(0, lastSlashIndex);
-            String rulePath = rule.substring(lastSlashIndex);
-
-            if (directoryPart.contains("*")) {
-                LOGGER.warn("Wildcards in directories are experimental! Use with caution.");
-            }
-
-            directoryRulePathsMap.computeIfAbsent(directoryPart, k -> new ArrayList<>()).add(rulePath);
-        }
-
-        return directoryRulePathsMap;
     }
 }

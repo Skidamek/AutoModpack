@@ -23,6 +23,7 @@ import java.util.function.Function;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
+
 public class ModpackUtils {
 
     public static boolean isUpdate(Jsons.ModpackGroupFields serverModpackContent, Path modpackDir) {
@@ -330,9 +331,33 @@ public class ModpackUtils {
 
         return modpackDir;
     }
+    //get minecraft path....
+    public static Path getMinecraftPath() {
+        return Path.of(System.getProperty("user.dir"));
+    }
+
+    //try to get modpacks about minecraft path for utils
+    public static Path getModpackPathFolder(String modpackpackage) {
+        return getMinecraftPath().resolve("automodpack/host-modpack/").resolve(modpackpackage);
+    }
+    // get all client Packages and paths from host-modpack util test
+    public static Path getClientPackage() {
+        return getMinecraftPath().resolve("automodpack/host-modpack");
+    }
+
+    //add FullserverPack to selecting packs and it is need to change save folder
+    //add corrected Modpackpath if fullserverpack is selected
+    public static Path getCorrectModpackDir(Path modpackDirToSelect) {
+        if (modpackDirToSelect.getFileName().toString().equalsIgnoreCase("fullserver")) {
+            return hostFullServerPackDir.resolve("fullserver");
+        }
+        return modpackDirToSelect;
+    }
 
     // Returns true if value changed
     public static boolean selectModpack(Path modpackDirToSelect, Jsons.ModpackAddresses modpackAddresses, Set<String> newDownloadedFiles) {
+        modpackDirToSelect = getCorrectModpackDir(modpackDirToSelect);
+
         final String modpackToSelect = modpackDirToSelect.getFileName().toString();
         String selectedModpack = clientConfig.selectedModpack;
 
@@ -388,9 +413,13 @@ public class ModpackUtils {
     }
 
     // Returns modpack name formatted for path or url if server doesn't provide modpack name
-    public static Path getModpackPath(InetSocketAddress address, String modpackName) {
+    public static Path getModpackPath(Jsons.ModpackAddresses address, String modpackName) {
+        if (modpackName.equalsIgnoreCase("fullserver")) {
+            return hostFullServerPackDir.resolve("fullserver");
+        }
 
-        String strAddress = address.getHostString() + ":" + address.getPort();
+        InetSocketAddress Address = address.hostAddress;
+        String strAddress = Address.getHostString() + ":" + Address.getPort();
         String correctedName = strAddress;
 
         if (FileInspection.isInValidFileName(strAddress)) {

@@ -9,6 +9,7 @@ import java.util.Optional;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModpackContentTools {
+
     public static String getFileType(String file, Jsons.ModpackGroupFields list) {
         for (Jsons.ModpackGroupFields.ModpackContentItem item : list.list) {
             if (item.file.contains(file)) { // compare file absolute path if it contains item.file
@@ -24,7 +25,6 @@ public class ModpackContentTools {
         }
 
         // eg. modpack = /automodpack/modpacks/TestPack `directory`
-
         return Optional.of(modpacksDir.resolve(modpack));
     }
 

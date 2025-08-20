@@ -12,6 +12,7 @@ import pl.skidam.automodpack_loader_core.utils.*;
 
 import java.io.IOException;
 import java.net.ConnectException;
+import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
 import java.util.*;
@@ -24,6 +25,7 @@ import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 // TODO: clean up this mess
 public class ModpackUpdater {
     public Changelogs changelogs = new Changelogs();
+    public SelectionManager selectionManager;
     public DownloadManager downloadManager;
     public FetchManager fetchManager;
     public long totalBytesToDownload = 0;
@@ -33,22 +35,31 @@ public class ModpackUpdater {
     public Map<Jsons.ModpackGroupFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
     private Jsons.ModpackAddresses modpackAddresses;
+    private InetSocketAddress modpackAddress;
     private Secrets.Secret modpackSecret;
     private Path modpackDir;
     private Path modpackContentFile;
 
-
+    //if name is null... i hope it is right
     public String getModpackName() {
-        return serverModpackContent.groupName;
+        if (serverModpackContent == null) {
+            LOGGER.warn("name was initialized before server modpack content.");
+            return "unknown Modpack";
+        }
+        return serverModpackContent.modpackName;
     }
-
-    public void prepareUpdate(Jsons.ModpackGroupFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
+  
+    public void prepareUpdate(Jsons.ModpackGroupFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret) {
         this.serverModpackContent = modpackContent;
         this.modpackAddresses = modpackAddresses;
+        this.modpackAddress = modpackAddresses.hostAddress;
         this.modpackSecret = secret;
-        this.modpackDir = modpackPath;
+        this.modpackDir = ModpackUtils.getModpackPath(modpackAddresses, modpackContent.modpackName);
 
-        if (this.modpackAddresses.isAnyEmpty() || modpackPath.toString().isEmpty()) {
+        // check out of selected Modpack
+        SelectionManager.setSelectedPack(serverModpackContent.modpackName);
+
+        if (modpackAddress == null || modpackDir.toString().isEmpty()) {
             throw new IllegalArgumentException("Address or modpackPath is null or empty");
         }
 
@@ -83,12 +94,18 @@ public class ModpackUpdater {
                 }
             } else if (!preload) {
                 fullDownload = true;
-                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
+                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this, null);
                 return;
             }
 
             LOGGER.warn("Modpack update found");
             startUpdate();
+            /* should be cleaned after update
+            startHighUpdate();
+            startLowUpdate();
+            startServerUpdate();
+
+             */
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
         }
@@ -143,9 +160,18 @@ public class ModpackUpdater {
         LOGGER.info("Modpack is already loaded");
     }
 
+    /* Delete soon this one
     // TODO split it into different methods, its too long
+    // Todo HighUpdate main folder rename in high end folder for Client (complete Folder from Automodpack folders (main))
+    public void startHighUpdate() {}
+    // Todo LowUpdate low folder adding and only Download low client folder
+    public void startLowUpdate() {}
+    // TODO Download all files, also the files whats declared in automodpack-server and server sided files.
+    public void startServerUpdate() {}
+    */
     public void startUpdate() {
-
+        modpackDir = ModpackUtils.getModpackPath(modpackAddresses, serverModpackContent.modpackName);
+        LOGGER.info("Using modpack directory: {}", modpackDir);
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");
             return;
@@ -424,7 +450,7 @@ public class ModpackUpdater {
             throw new IllegalStateException("Failed to load modpack content"); // Something gone very wrong...
         }
 
-        if (serverModpackContent != null) {
+        if (clientConfig.syncLoaderVersion && serverModpackContent != null) {
             // Change loader and minecraft version in launchers like prism, multimc.
             if (serverModpackContent.loader != null && serverModpackContent.loaderVersion != null) {
                 if (serverModpackContent.loader.equals(LOADER)) { // Server may use different loader than client

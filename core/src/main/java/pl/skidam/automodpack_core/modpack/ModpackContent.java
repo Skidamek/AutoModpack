@@ -55,6 +55,11 @@ public class ModpackContent {
 
     public boolean create() {
         try {
+            SYNCED_FILES_CARDS.match();
+            EDITABLE_CARDS.match();
+            FORCE_COPY_FILES_TO_STANDARD_LOCATION.match();
+            WildCards.clearDiscoveredDirectories();
+
             pathsMap.clear();
             sha1MurmurMapPreviousContent.clear();
             getPreviousContent().ifPresent(previousContent -> previousContent.list.forEach(item -> sha1MurmurMapPreviousContent.put(item.sha1, item.murmur)));
@@ -143,6 +148,15 @@ public class ModpackContent {
         synchronized (list) {
             Jsons.ModpackGroupFields modpackContent = new Jsons.ModpackGroupFields(list);
             modpackContent.groupName = MODPACK_NAME;
+            
+            // Set version information and server pack permission
+            modpackContent.automodpackVersion = AM_VERSION;
+            modpackContent.mcVersion = MC_VERSION;
+            modpackContent.loaderVersion = LOADER_VERSION;
+            modpackContent.loader = LOADER;
+            modpackContent.modpackName = MODPACK_NAME;
+            modpackContent.enableFullServerPack = serverConfig.enableFullServerPack;
+
             ConfigTools.saveModpackContent(getModpackContentFile(), modpackContent);
 
             synchronized (hostModpackContentFile) {
@@ -151,13 +165,11 @@ public class ModpackContent {
                     masterContent = new Jsons.ModpackContentMasterFields();
                 }
 
-                masterContent.automodpackVersion = AM_VERSION;
-                masterContent.mcVersion = MC_VERSION;
-                masterContent.loaderVersion = LOADER_VERSION;
-                masterContent.loader = LOADER;
-
                 masterContent.groups.removeIf(group -> group.groupName.equals(MODPACK_NAME));
                 masterContent.groups.add(modpackContent);
+                
+                // Save the master content file
+                ConfigTools.save(hostModpackContentFile, masterContent);
             }
         }
     }

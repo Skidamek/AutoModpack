@@ -5,6 +5,7 @@ import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
+import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -39,6 +40,15 @@ public class Common {
                 }
             }
         }
+        if (serverConfig.enableFullServerPack) {
+            LOGGER.info("Generating FullServerModpack...");
+            long genStart = System.currentTimeMillis();
+            if (fullpacks.generateNew()) {
+                LOGGER.info("FullServerModpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+            } else {
+                LOGGER.error("Failed to generate fullservermodpack!");
+            }
+        }
 
         ModPackets.registerS2CPackets();
     }
@@ -46,7 +56,10 @@ public class Common {
     public static void init() {
         GAME_CALL = new GameCall();
         hostServer = new NettyServer();
+
         modpackExecutor = new ModpackExecutor();
+        fullpacks = new FullServerPack(modpackExecutor);
+
     }
 
     public static void afterSetupServer() {
@@ -63,7 +76,9 @@ public class Common {
         }
 
         hostServer.stop();
+
         modpackExecutor.stop();
+        fullpacks.shutdownExecutor();
     }
 
     public static ResourceLocation id(String path) {
