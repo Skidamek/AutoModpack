@@ -47,6 +47,11 @@ public class ModpackContent {
 
     public boolean create() {
         try {
+            SYNCED_FILES_CARDS.match();
+            EDITABLE_CARDS.match();
+            FORCE_COPY_FILES_TO_STANDARD_LOCATION.match();
+            WildCards.clearDiscoveredDirectories();
+
             pathsMap.clear();
             sha1MurmurMapPreviousContent.clear();
             getPreviousContent().ifPresent(previousContent -> previousContent.list.forEach(item -> sha1MurmurMapPreviousContent.put(item.sha1, item.murmur)));
