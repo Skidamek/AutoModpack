@@ -28,7 +28,7 @@ public class GlobalVariables {
     public static ModpackExecutor modpackExecutor;
     public static FullServerPack fullpacks;
     public static NettyServer hostServer;
-    public static Jsons.ServerConfigFieldsV2 serverConfig;
+    public static Jsons.ServerConfigFieldsV3 serverConfig;
     public static Jsons.ClientConfigFieldsV2 clientConfig;
     public static Jsons.KnownHostsFields knownHosts;
     public static final Path automodpackDir = Path.of("automodpack");
@@ -37,8 +37,8 @@ public class GlobalVariables {
     // Main - required
     // Addons - optional addon packs
     // Switches - optional or required packs, chosen by the player, only one can be installed at a time
-    public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
-    public static Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
+    public static final Path mainHostContentModpackDir = hostModpackDir.resolve("main");
+    public static final Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
     public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
     public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
     public static final Path privateDir = automodpackDir.resolve(".private");

@@ -4,11 +4,9 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.FullServerPack;
-import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -32,13 +30,12 @@ public class Server {
 
         modpackDir.toFile().mkdirs();
 
-        hostModpackContentFile = modpackDir.resolve("automodpack-content.json");
+//        hostModpackContentFile = modpackDir.resolve("automodpack-content.json");
         serverConfigFile = modpackDir.resolve("automodpack-server.json");
         serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
-        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
         if (serverConfig != null) {
-            serverConfig.syncedFiles = new ArrayList<>();
             serverConfig.validateSecrets = false;
             ConfigTools.save(serverConfigFile, serverConfig);
 
@@ -61,14 +58,14 @@ public class Server {
         mainModpackDir.toFile().mkdirs();
 
         ModpackExecutor modpackExecutor = new ModpackExecutor();
-        ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, modpackExecutor.getExecutor());
-        boolean generated = modpackExecutor.generateNew(modpackContent);
+//        ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, modpackExecutor.getExecutor());
+//        boolean generated = modpackExecutor.generateNew(modpackContent);
 
-        if (generated) {
-            LOGGER.info("Modpack generated!");
-        } else {
-            LOGGER.error("Failed to generate modpack!");
-        }
+//        if (generated) {
+//            LOGGER.info("Modpack generated!");
+//        } else {
+//            LOGGER.error("Failed to generate modpack!");
+//        }
 
         //beta modpack Executor 
         //modpackExecutor.stop();

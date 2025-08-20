@@ -136,11 +136,11 @@ public class ConfigTools {
 
 
     // Modpack content stuff
-    public static Jsons.ModpackContentFields loadModpackContent(Path modpackContentFile) {
+    public static Jsons.ModpackGroupFields loadModpackContent(Path modpackContentFile) {
         try {
             if (Files.isRegularFile(modpackContentFile)) {
                 String json = Files.readString(modpackContentFile);
-                return GSON.fromJson(json, Jsons.ModpackContentFields.class);
+                return GSON.fromJson(json, Jsons.ModpackGroupFields.class);
             }
         } catch (Exception e) {
             LOGGER.error("Couldn't load modpack content! {}", modpackContentFile.toAbsolutePath().normalize(), e);
@@ -148,7 +148,7 @@ public class ConfigTools {
         return null;
     }
 
-    public static void saveModpackContent(Path modpackContentFile, Jsons.ModpackContentFields configObject) {
+    public static void saveModpackContent(Path modpackContentFile, Jsons.ModpackGroupFields configObject) {
         try {
             if (!Files.isDirectory(modpackContentFile.getParent())) {
                 Files.createDirectories(modpackContentFile.getParent());

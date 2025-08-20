@@ -149,6 +149,15 @@ public class DownloadClient implements AutoCloseable {
     }
 
     /**
+     *
+     */
+    public CompletableFuture<Path> fetchPackMeta(String groupId, Path destination, IntConsumer chunkCallback) {
+        Connection conn = getFreeConnection();
+        return conn.sendPackMetaRequest(groupId, destination, chunkCallback);
+    }
+
+
+    /**
      * Sends a refresh request with the given file hashes.
      */
     public CompletableFuture<Path> requestRefresh(byte[][] fileHashes, Path destination) {
@@ -381,6 +390,42 @@ class Connection implements AutoCloseable {
                 dos.write(secretBytes);
                 dos.writeInt(fileHash.length);
                 dos.write(fileHash);
+                dos.flush();
+                byte[] payload = baos.toByteArray();
+
+                writeProtocolMessage(payload);
+                return readFileResponse(destination, chunkCallback);
+            } catch (Exception e) {
+                exception = e;
+                throw new CompletionException(e);
+            } finally {
+                finalBlock(exception);
+            }
+        }, executor);
+    }
+
+    /**
+     * Sends a pack meta request over this connection.
+     */
+    public CompletableFuture<Path> sendPackMetaRequest(String groupId, Path destination, IntConsumer chunkCallback) {
+        if (destination == null) {
+            throw new IllegalArgumentException("Destination cannot be null");
+        }
+
+        byte[] groupIdBytes = groupId.getBytes();
+
+        return CompletableFuture.supplyAsync(() -> {
+            Exception exception = null;
+            try {
+                // Build File Request message:
+                // [protocolVersion][FILE_REQUEST_TYPE][secret][int: groupIdBytes.length][groupIdBytes]
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                DataOutputStream dos = new DataOutputStream(baos);
+                dos.writeByte(PROTOCOL_VERSION);
+                dos.writeByte(FILE_REQUEST_TYPE);
+                dos.write(secretBytes);
+                dos.writeInt(groupIdBytes.length);
+                dos.write(groupIdBytes);
                 dos.flush();
                 byte[] payload = baos.toByteArray();
 

@@ -14,26 +14,30 @@ public class ModpackExecutor {
     private final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
     public final Map<String, ModpackContent> modpacks = Collections.synchronizedMap(new HashMap<>());
 
-    private ModpackContent init() {
+    private ModpackContent init(String groupId) {
         if (isGenerating()) {
             LOGGER.error("Called generate() twice!");
             return null;
         }
 
+        Path modpackHostPath = hostModpackDir.resolve(groupId);
+
         try {
-            if (!Files.exists(hostContentModpackDir)) {
-                Files.createDirectories(hostContentModpackDir);
-                Files.createDirectory(hostContentModpackDir.resolve("mods"));
-                Files.createDirectory(hostContentModpackDir.resolve("config"));
-                Files.createDirectory(hostContentModpackDir.resolve("shaderpacks"));
-                Files.createDirectory(hostContentModpackDir.resolve("resourcepacks"));
+            if (!Files.exists(modpackHostPath)) {
+                Files.createDirectories(modpackHostPath);
+                Files.createDirectory(modpackHostPath.resolve("mods"));
+                Files.createDirectory(modpackHostPath.resolve("config"));
+                Files.createDirectory(modpackHostPath.resolve("shaderpacks"));
+                Files.createDirectory(modpackHostPath.resolve("resourcepacks"));
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
 
+        var groupDecl = serverConfig.groups.get(groupId);
+
         Path cwd = Path.of(System.getProperty("user.dir"));
-        return new ModpackContent(serverConfig.modpackName, cwd, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, CREATION_EXECUTOR);
+        return new ModpackContent(groupDecl.groupName, cwd, modpackHostPath, groupDecl.syncedFiles, groupDecl.allowEditsInFiles, groupDecl.forceCopyFilesToStandardLocation, groupDecl.autoExcludeUnnecessaryFiles, groupDecl.autoExcludeServerSideMods, CREATION_EXECUTOR);
     }
 
     public boolean generateNew(ModpackContent content) {
@@ -43,16 +47,16 @@ public class ModpackExecutor {
         return generated;
     }
 
-    public boolean generateNew() {
-        ModpackContent content = init();
+    public boolean generateNew(String groupId) {
+        ModpackContent content = init(groupId);
         if (content == null) return false;
         boolean generated = content.create();
         modpacks.put(content.getModpackName(), content);
         return generated;
     }
 
-    public boolean loadLast() {
-        ModpackContent content = init();
+    public boolean loadLast(String groupId) {
+        ModpackContent content = init(groupId);
         if (content == null) return false;
         boolean generated = content.loadPreviousContent();
         modpacks.put(content.getModpackName(), content);

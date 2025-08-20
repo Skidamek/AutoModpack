@@ -26,7 +26,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModpackUtils {
 
-    public static boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+    public static boolean isUpdate(Jsons.ModpackGroupFields serverModpackContent, Path modpackDir) {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             throw new IllegalArgumentException("Server modpack content list is null");
         }
@@ -36,13 +36,13 @@ public class ModpackUtils {
         var optionalClientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
         if (optionalClientModpackContentFile.isPresent() && Files.exists(optionalClientModpackContentFile.get())) {
 
-            Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
+            Jsons.ModpackGroupFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
             if (clientModpackContent == null) {
                 return true;
             }
 
             LOGGER.info("Checking files...");
-            for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : serverModpackContent.list) {
+            for (Jsons.ModpackGroupFields.ModpackContentItem modpackContentField : serverModpackContent.list) {
                 String file = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
@@ -63,7 +63,7 @@ public class ModpackUtils {
             }
 
             // Server also might have deleted some files
-            for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : clientModpackContent.list) {
+            for (Jsons.ModpackGroupFields.ModpackContentItem modpackContentField : clientModpackContent.list) {
                 var serverItemOpt = serverModpackContent.list.stream().filter(item -> item.file.equals(modpackContentField.file)).findFirst();
                 if (serverItemOpt.isEmpty()) {
                     LOGGER.info("File does not exist on server {}", modpackContentField.file);
@@ -78,11 +78,11 @@ public class ModpackUtils {
         }
     }
 
-    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
+    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackGroupFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
         boolean needsRestart = false;
 
         // correct the files locations
-        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
+        for (Jsons.ModpackGroupFields.ModpackContentItem contentItem : serverModpackContent.list) {
             String formattedFile = contentItem.file;
             Path modpackFile = CustomFileUtils.getPath(modpackDir, formattedFile);
             Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
@@ -132,10 +132,10 @@ public class ModpackUtils {
         return needsRestart;
     }
 
-    public static boolean removeRestModsNotToCopy(Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy, Set<Path> modsToKeep) {
+    public static boolean removeRestModsNotToCopy(Jsons.ModpackGroupFields serverModpackContent, Set<String> filesNotToCopy, Set<Path> modsToKeep) {
         boolean needsRestart = false;
 
-        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
+        for (Jsons.ModpackGroupFields.ModpackContentItem contentItem : serverModpackContent.list) {
             String formattedFile = contentItem.file;
             Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
             boolean isMod = "mod".equals(contentItem.type);
@@ -300,14 +300,14 @@ public class ModpackUtils {
         }
     }
 
-    public static Path renameModpackDir(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+    public static Path renameModpackDir(Jsons.ModpackGroupFields serverModpackContent, Path modpackDir) {
         if (clientConfig.installedModpacks == null || clientConfig.selectedModpack == null || clientConfig.selectedModpack.isBlank()) {
             return modpackDir;
         }
 
         String installedModpackName = clientConfig.selectedModpack;
         Jsons.ModpackAddresses installedModpackAddresses = clientConfig.installedModpacks.get(installedModpackName);
-        String serverModpackName = serverModpackContent.modpackName;
+        String serverModpackName = serverModpackContent.groupName;
 
         if (installedModpackAddresses != null && !serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
 
@@ -365,7 +365,7 @@ public class ModpackUtils {
             // Save current editable files
             Path selectedModpackDir = modpacksDir.resolve(selectedModpack);
             Path selectedModpackContentFile = selectedModpackDir.resolve(hostModpackContentFile.getFileName());
-            Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(selectedModpackContentFile);
+            Jsons.ModpackGroupFields modpackContent = ConfigTools.loadModpackContent(selectedModpackContentFile);
             if (modpackContent != null) {
                 Set<String> editableFiles = getEditableFiles(modpackContent.list);
                 ModpackUtils.preserveEditableFiles(selectedModpackDir, editableFiles, newDownloadedFiles);
@@ -374,7 +374,7 @@ public class ModpackUtils {
 
         // Copy editable files from modpack to select
         Path modpackContentFile = modpackDirToSelect.resolve(hostModpackContentFile.getFileName());
-        Jsons.ModpackContentFields modpackContentToSelect = ConfigTools.loadModpackContent(modpackContentFile);
+        Jsons.ModpackGroupFields modpackContentToSelect = ConfigTools.loadModpackContent(modpackContentFile);
         if (modpackContentToSelect != null) {
             Set<String> editableFiles = getEditableFiles(modpackContentToSelect.list);
             ModpackUtils.copyPreviousEditableFiles(modpackDirToSelect, editableFiles, newDownloadedFiles);
@@ -441,19 +441,19 @@ public class ModpackUtils {
         return modpackDir;
     }
 
-    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, boolean allowAskingUser) {
+    public static Optional<Jsons.ModpackGroupFields> requestServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, boolean allowAskingUser) {
         return fetchModpackContent(modpackAddresses, secret,
                 (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
                 "Fetched", allowAskingUser);
     }
 
-    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, byte[][] fileHashes, boolean allowAskingUser) {
+    public static Optional<Jsons.ModpackGroupFields> refreshServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, byte[][] fileHashes, boolean allowAskingUser) {
         return fetchModpackContent(modpackAddresses, secret,
                 (client) -> client.requestRefresh(fileHashes, modpackContentTempFile),
                 "Re-fetched", allowAskingUser);
     }
 
-    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
+    private static Optional<Jsons.ModpackGroupFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
         if (secret == null)
             return Optional.empty();
         if (modpackAddresses.isAnyEmpty())
@@ -551,8 +551,8 @@ public class ModpackUtils {
     }
 
     // check if modpackContent is valid/isn't malicious
-    public static boolean potentiallyMalicious(Jsons.ModpackContentFields serverModpackContent) {
-        String modpackName = serverModpackContent.modpackName;
+    public static boolean potentiallyMalicious(Jsons.ModpackGroupFields serverModpackContent) {
+        String modpackName = serverModpackContent.groupName;
         if (modpackName.contains("../") || modpackName.contains("/..")) {
             LOGGER.error("Modpack content is invalid, it contains /../ in modpack name");
             return true;
@@ -612,10 +612,10 @@ public class ModpackUtils {
         }
     }
 
-    static Set<String> getEditableFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> modpackContentItems) {
+    static Set<String> getEditableFiles(Set<Jsons.ModpackGroupFields.ModpackContentItem> modpackContentItems) {
         Set<String> editableFiles = new HashSet<>();
 
-        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : modpackContentItems) {
+        for (Jsons.ModpackGroupFields.ModpackContentItem modpackContentItem : modpackContentItems) {
             if (modpackContentItem.editable) {
                 editableFiles.add(modpackContentItem.file);
             }

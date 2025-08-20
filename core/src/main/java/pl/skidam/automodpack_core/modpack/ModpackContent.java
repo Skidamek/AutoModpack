@@ -15,17 +15,19 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class ModpackContent {
-    public final Set<Jsons.ModpackContentFields.ModpackContentItem> list = Collections.synchronizedSet(new HashSet<>());
+    public final Set<Jsons.ModpackGroupFields.ModpackContentItem> list = Collections.synchronizedSet(new HashSet<>());
     public final ObservableMap<String, Path> pathsMap = new ObservableMap<>();
     private final String MODPACK_NAME;
     private final WildCards SYNCED_FILES_CARDS;
     private final WildCards EDITABLE_CARDS;
     private final WildCards FORCE_COPY_FILES_TO_STANDARD_LOCATION;
+    private final boolean AUTO_EXCLUDE_UNNECESSARY_FILES;
+    private final boolean AUTO_EXCLUDE_SERVER_SIDE_MODS;
     private final Path MODPACK_DIR;
     private final ThreadPoolExecutor CREATION_EXECUTOR;
     private final Map<String, String> sha1MurmurMapPreviousContent = new HashMap<>();
 
-    public ModpackContent(String modpackName, Path cwd, Path modpackDir, List<String> syncedFiles, List<String> allowEditsInFiles, List<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR) {
+    public ModpackContent(String modpackName, Path cwd, Path modpackDir, List<String> syncedFiles, List<String> allowEditsInFiles, List<String> forceCopyFilesToStandardLocation, boolean autoExcludeUnnecessaryFiles, boolean autoExcludeServerSideMods, ThreadPoolExecutor CREATION_EXECUTOR) {
         this.MODPACK_NAME = modpackName;
         this.MODPACK_DIR = modpackDir;
         Set<Path> directoriesToSearch = new HashSet<>(2);
@@ -38,11 +40,17 @@ public class ModpackContent {
         }
         this.EDITABLE_CARDS = new WildCards(allowEditsInFiles, directoriesToSearch);
         this.FORCE_COPY_FILES_TO_STANDARD_LOCATION = new WildCards(forceCopyFilesToStandardLocation, directoriesToSearch);
+        this.AUTO_EXCLUDE_UNNECESSARY_FILES = autoExcludeUnnecessaryFiles;
+        this.AUTO_EXCLUDE_SERVER_SIDE_MODS = autoExcludeServerSideMods;
         this.CREATION_EXECUTOR = CREATION_EXECUTOR;
     }
 
     public String getModpackName() {
         return MODPACK_NAME;
+    }
+
+    public Path getModpackContentFile() {
+        return MODPACK_DIR.resolve(hostModpackContentFile.getFileName().toString());
     }
 
     public boolean create() {
@@ -99,7 +107,7 @@ public class ModpackContent {
         return true;
     }
 
-    public Optional<Jsons.ModpackContentFields> getPreviousContent() {
+    public Optional<Jsons.ModpackGroupFields> getPreviousContent() {
         var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(MODPACK_DIR);
         return optionalModpackContentFile.map(ConfigTools::loadModpackContent);
     }
@@ -108,12 +116,12 @@ public class ModpackContent {
     public boolean loadPreviousContent() {
         var optionalModpackContent = getPreviousContent();
         if (optionalModpackContent.isEmpty()) return false;
-        Jsons.ModpackContentFields modpackContent = optionalModpackContent.get();
+        Jsons.ModpackGroupFields modpackContent = optionalModpackContent.get();
 
         synchronized (list) {
             list.addAll(modpackContent.list);
 
-            for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : list) {
+            for (Jsons.ModpackGroupFields.ModpackContentItem modpackContentItem : list) {
                 Path file = CustomFileUtils.getPath(MODPACK_DIR, modpackContentItem.file);
                 if (!Files.exists(file)) file = CustomFileUtils.getPathFromCWD(modpackContentItem.file);
                 if (!Files.exists(file)) {
@@ -138,18 +146,31 @@ public class ModpackContent {
     // This is important to make it synchronized otherwise it could corrupt the file and crash
     public synchronized void saveModpackContent() {
         synchronized (list) {
-            Jsons.ModpackContentFields modpackContent = new Jsons.ModpackContentFields(list);
-
+            Jsons.ModpackGroupFields modpackContent = new Jsons.ModpackGroupFields(list);
+            modpackContent.groupName = MODPACK_NAME;
+            
+            // Set version information and server pack permission
             modpackContent.automodpackVersion = AM_VERSION;
             modpackContent.mcVersion = MC_VERSION;
             modpackContent.loaderVersion = LOADER_VERSION;
             modpackContent.loader = LOADER;
             modpackContent.modpackName = MODPACK_NAME;
-            //add enableFullServerPack in ModpackContent to Check if Server give Permission to Server Pack
             modpackContent.enableFullServerPack = serverConfig.enableFullServerPack;
 
+            ConfigTools.saveModpackContent(getModpackContentFile(), modpackContent);
 
-            ConfigTools.saveModpackContent(hostModpackContentFile, modpackContent);
+            synchronized (hostModpackContentFile) {
+                Jsons.ModpackContentMasterFields masterContent = ConfigTools.load(hostModpackContentFile, Jsons.ModpackContentMasterFields.class);
+                if (masterContent == null) {
+                    masterContent = new Jsons.ModpackContentMasterFields();
+                }
+
+                masterContent.groups.removeIf(group -> group.groupName.equals(MODPACK_NAME));
+                masterContent.groups.add(modpackContent);
+                
+                // Save the master content file
+                ConfigTools.save(hostModpackContentFile, masterContent);
+            }
         }
     }
 
@@ -166,7 +187,7 @@ public class ModpackContent {
 
     private void generate(Path file) {
         try {
-            Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file);
+            Jsons.ModpackGroupFields.ModpackContentItem item = generateContent(file);
             if (item != null) {
                 LOGGER.info("generated content for {}", item.file);
                 synchronized (list) {
@@ -193,7 +214,7 @@ public class ModpackContent {
         String modpackFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
 
         synchronized (list) {
-            for (Jsons.ModpackContentFields.ModpackContentItem item : this.list) {
+            for (Jsons.ModpackGroupFields.ModpackContentItem item : this.list) {
                 if (item.file.equals(modpackFile)) {
                     this.pathsMap.remove(item.sha1);
                     this.list.remove(item);
@@ -216,13 +237,8 @@ public class ModpackContent {
         return isInner;
     }
 
-    private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file) throws Exception {
+    private Jsons.ModpackGroupFields.ModpackContentItem generateContent(final Path file) throws Exception {
         if (!Files.isRegularFile(file)) return null;
-
-        if (serverConfig == null) {
-            LOGGER.error("Server config is null!");
-            return null;
-        }
 
         if (isInnerFile(file)) {
             return null;
@@ -237,7 +253,7 @@ public class ModpackContent {
 
         final String size = String.valueOf(Files.size(file));
 
-        if (serverConfig.autoExcludeUnnecessaryFiles) {
+        if (AUTO_EXCLUDE_UNNECESSARY_FILES) {
             if (size.equals("0")) {
                 LOGGER.info("Skipping file {} because it is empty", formattedFile);
                 return null;
@@ -268,7 +284,7 @@ public class ModpackContent {
 
         if (FileInspection.isMod(file)) {
             type = "mod";
-            if (serverConfig.autoExcludeServerSideMods && Objects.equals(FileInspection.getModEnvironment(file), LoaderManagerService.EnvironmentType.SERVER)) {
+            if (AUTO_EXCLUDE_SERVER_SIDE_MODS && Objects.equals(FileInspection.getModEnvironment(file), LoaderManagerService.EnvironmentType.SERVER)) {
                 LOGGER.info("File {} is server mod! Skipping...", formattedFile);
                 return null;
             }
@@ -313,7 +329,7 @@ public class ModpackContent {
             LOGGER.info("File {} is forced to copy to standard location!", formattedFile);
         }
 
-        return new Jsons.ModpackContentFields.ModpackContentItem(formattedFile, size, type, isEditable, forcedToCopy, sha1, murmur);
+        return new Jsons.ModpackGroupFields.ModpackContentItem(formattedFile, size, type, isEditable, forcedToCopy, sha1, murmur);
 
     }
 }

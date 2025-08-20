@@ -8,8 +8,9 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.stream.ChunkedFile;
 import io.netty.util.CharsetUtil;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
-import pl.skidam.automodpack_core.protocol.netty.message.EchoMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.PackMetaRequestMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.FileRequestMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.RefreshRequestMessage;
@@ -48,19 +49,18 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         }
 
         switch (msg.getType()) {
-            case ECHO_TYPE:
-                EchoMessage echoMsg = (EchoMessage) msg;
-                ByteBuf echoBuf = Unpooled.buffer(1 + 1 + msg.getSecret().length + echoMsg.getData().length);
-                echoBuf.writeByte(clientProtocolVersion);
-                echoBuf.writeByte(ECHO_TYPE);
-                echoBuf.writeBytes(echoMsg.getSecret());
-                echoBuf.writeBytes(echoMsg.getData());
-                ctx.writeAndFlush(echoBuf);
-                ctx.channel().close();
+            case PACK_META_REQUEST_TYPE:
+                PackMetaRequestMessage metaRequest = (PackMetaRequestMessage) msg;
+                sendPackMeta(ctx, metaRequest.getData());
                 break;
             case FILE_REQUEST_TYPE:
                 FileRequestMessage fileRequest = (FileRequestMessage) msg;
-                sendFile(ctx, fileRequest.getFileHash());
+                Path filePath = resolveFile(fileRequest.getFileHash());
+                if (filePath == null) {
+                    sendError(ctx, (byte) 1, "File not found");
+                } else {
+                    sendFile(ctx, filePath);
+                }
                 break;
             case REFRESH_REQUEST_TYPE:
                 RefreshRequestMessage refreshRequest = (RefreshRequestMessage) msg;
@@ -108,7 +108,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         LOGGER.info("Sending new modpack-content.json");
 
         // Sends new json
-        sendFile(context, new byte[0]);
+        sendPackMeta(context, new byte[0]);
     }
 
 
@@ -130,16 +130,40 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         return valid;
     }
 
-    private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) throws IOException {
-        final String sha1 = new String(bsha1, CharsetUtil.UTF_8);
-        final Optional<Path> optionalPath = resolvePath(sha1);
+    private void sendPackMeta(ChannelHandlerContext ctx, byte[] data) throws IOException {
+        final String groupId = new String(data, CharsetUtil.UTF_8);
+        Jsons.GroupDeclaration requestedGroup = null;
+        if (!groupId.isBlank()) {
+            requestedGroup = serverConfig.groups.getOrDefault(groupId, null);
+        }
 
-        if (optionalPath.isEmpty() || !Files.exists(optionalPath.get())) {
-            sendError(ctx, (byte) 1, "File not found");
+        if (requestedGroup == null) {
+            sendError(ctx, PROTOCOL_VERSION, "Group not found: " + groupId);
             return;
         }
 
-        final Path path = optionalPath.get();
+        ModpackContent modpackContent = modpackExecutor.modpacks.get(requestedGroup.groupName);
+        Path hostModpackContentFile = modpackContent.getModpackContentFile();
+        if (hostModpackContentFile == null || !Files.exists(hostModpackContentFile)) {
+            sendError(ctx, PROTOCOL_VERSION, "Modpack content file not found for group: " + groupId);
+            return;
+        }
+
+        sendFile(ctx, hostModpackContentFile);
+    }
+
+    private Path resolveFile(byte[] bsha1) {
+        final String sha1 = new String(bsha1, CharsetUtil.UTF_8);
+        final Optional<Path> optionalPath = resolvePath(sha1);
+
+        if (optionalPath.isPresent() && Files.exists(optionalPath.get())) {
+            return optionalPath.get();
+        }
+
+        return null;
+    }
+
+    private void sendFile(ChannelHandlerContext ctx, Path path) throws IOException {
         final long fileSize = Files.size(path);
 
         // Send file response header: version, FILE_RESPONSE type, then file size (8 bytes)

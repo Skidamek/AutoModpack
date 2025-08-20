@@ -14,8 +14,7 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Optional;
+
 import net.minecraft.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -101,7 +100,7 @@ public class ChangelogScreen extends VersionedScreen {
         drawSummaryOfChanges(matrices);
     }
 
-    private Jsons.ModpackContentFields modpackContent = null;
+    private Jsons.ModpackGroupFields modpackContent = null;
 
     private void drawSummaryOfChanges(VersionedMatrices matrices) {
 
