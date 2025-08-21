@@ -2,13 +2,12 @@ package pl.skidam.automodpack.client.ui.versioned;
 
 import java.util.concurrent.Executor;
 
-//try to create an util for more versions?
 public class VersionedUtil {
-    public static Executor getMainWorkerExecutor() {
-        /*? if >=1.18 {*/
-        return net.minecraft.Util.getMainWorkerExecutor();
+    public static java.util.concurrent.Executor getMainWorkerExecutor() {
+        /*? if >=1.19 {*/
+        return net.minecraft.Util.backgroundExecutor();
         /*?} else {*/
-        /*return net.minecraft.util.Util.getMainWorkerExecutor();*/
+        return net.minecraft.util.Util.getMainWorkerExecutor();
         /*?}*/
     }
 }

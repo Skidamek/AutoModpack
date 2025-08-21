@@ -76,12 +76,15 @@ public class DataC2SPacket {
 
             LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 
+            // Create modpackAddresses object first
+            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
+
             Boolean needsDisconnecting = null;
             FriendlyByteBuf response = new FriendlyByteBuf(Unpooled.buffer());
 
-
+            // Now use modpackAddresses
             Path modpackDir = ModpackUtils.getModpackPath(modpackAddresses, modpackName);
-            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
+
             var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, true);
 
             if (optionalServerModpackContent.isPresent()) {

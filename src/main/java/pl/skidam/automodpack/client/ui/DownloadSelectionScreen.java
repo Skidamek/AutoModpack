@@ -30,11 +30,17 @@ public class DownloadSelectionScreen extends VersionedScreen {
     @Override
     protected void init() {
         super.init();
-        assert this.client != null;
+        assert this.getClient() != null;
 
+        /*? if >=1.19.3 {*/
         this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 150, 120, 20, VersionedText.translatable("automodpack.ds.cancel"), button -> {
-            this.client.setScreen(parent.getMinecraftScreen());
+            this.getClient().setScreen(this.parent);
         }));
+        /*?} else {*/
+        this.addButton(buttonWidget(this.width / 2, this.height / 2 + 150, 120, 20, VersionedText.translatable("automodpack.ds.cancel"), button -> {
+            this.getClient().setScreen(this.parent);
+        }));
+        /*?}*/
 
         //buttons from Selectionmanager
         String currentSelected = SelectionManager.getSelectedPack();
@@ -48,37 +54,48 @@ public class DownloadSelectionScreen extends VersionedScreen {
             // between buttons
             int y = dynamicY + (i * 25);
 
-            var displayText = VersionedText.literal(modpack);
-            if (modpack.equalsIgnoreCase(currentSelected)) {
-                displayText = VersionedText.green(modpack);
-            } else {
-                displayText = VersionedText.bold(modpack);
-            }
+            var displayText = modpack.equalsIgnoreCase(currentSelected)
+                    ? VersionedText.green(modpack)
+                    : VersionedText.bold(modpack);
 
+            /*? if >=1.19.3 {*/
             this.addDrawableChild(buttonWidget(this.width / 2, y, 140, 20, displayText, button -> {
                 //select and start
                 SelectionManager.setSelectedPack(modpack);
                 VersionedUtil.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
             }));
+            /*?} else {*/
+            this.addButton(buttonWidget(this.width / 2, y, 140, 20, displayText, button -> {
+                //select and start
+                SelectionManager.setSelectedPack(modpack);
+                VersionedUtil.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
+            }));
+            /*?}*/
             i++;
         }
 
         //Full Serverpack Button if Modpack has permission from server
         if (serverConfig != null && serverConfig.enableFullServerPack) {
+            /*? if >=1.19.3 {*/
             this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, VersionedText.red(VersionedText.translatable("automodpack.ds.fullserverpack").getString()), button -> {
                 SelectionManager.setSelectedPack("fullserver");
                 VersionedUtil.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
             }));
+            /*?} else {*/
+            this.addButton(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, VersionedText.red(VersionedText.translatable("automodpack.ds.fullserverpack").getString()), button -> {
+                SelectionManager.setSelectedPack("fullserver");
+                VersionedUtil.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
+            }));
+            /*?}*/
         }
     }
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        //ADDE
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.ds.selected", VersionedText.green(VersionedText.bold(SelectionManager.getSelectedPack()).getString())),this.width / 2, this.height / 2 - 15, 0xAAAAAA);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.bold(VersionedText.translatable("automodpack.ds").getString()), this.width / 2, this.height / 2 - 60, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.ds.description"), this.width / 2, this.height / 2 - 35, 16777215);
-        drawCenteredTextWithShadow(matrices, this.textRenderer, VersionedText.translatable("automodpack.ds.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);
+        drawCenteredTextWithShadow(matrices, this.getTextRenderer(), VersionedText.translatable("automodpack.ds.selected", VersionedText.green(VersionedText.bold(SelectionManager.getSelectedPack()).getString())), this.width / 2, this.height / 2 - 15, 0xAAAAAA);
+        drawCenteredTextWithShadow(matrices, this.getTextRenderer(), VersionedText.bold(VersionedText.translatable("automodpack.ds").getString()), this.width / 2, this.height / 2 - 60, 16777215);
+        drawCenteredTextWithShadow(matrices, this.getTextRenderer(), VersionedText.translatable("automodpack.ds.description"), this.width / 2, this.height / 2 - 35, 16777215);
+        drawCenteredTextWithShadow(matrices, this.getTextRenderer(), VersionedText.translatable("automodpack.ds.secDescription"), this.width / 2, this.height / 2 - 25, 16777215);
     }
 
     @Override
