@@ -32,15 +32,9 @@ public class DownloadSelectionScreen extends VersionedScreen {
         super.init();
         assert this.getClient() != null;
 
-        /*? if >=1.19.3 {*/
         this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 150, 120, 20, VersionedText.translatable("automodpack.ds.cancel"), button -> {
             this.getClient().setScreen(this.parent);
         }));
-        /*?} else {*/
-        this.addButton(buttonWidget(this.width / 2, this.height / 2 + 150, 120, 20, VersionedText.translatable("automodpack.ds.cancel"), button -> {
-            this.getClient().setScreen(this.parent);
-        }));
-        /*?}*/
 
         //buttons from Selectionmanager
         String currentSelected = SelectionManager.getSelectedPack();
@@ -54,39 +48,27 @@ public class DownloadSelectionScreen extends VersionedScreen {
             // between buttons
             int y = dynamicY + (i * 25);
 
-            var displayText = modpack.equalsIgnoreCase(currentSelected)
-                    ? VersionedText.green(modpack)
-                    : VersionedText.bold(modpack);
+            var displayText = VersionedText.literal(modpack);
+            if (modpack.equalsIgnoreCase(currentSelected)) {
+                displayText = VersionedText.green(modpack);
+            } else {
+                displayText = VersionedText.bold(modpack);
+            }
 
-            /*? if >=1.19.3 {*/
             this.addDrawableChild(buttonWidget(this.width / 2, y, 140, 20, displayText, button -> {
                 //select and start
                 SelectionManager.setSelectedPack(modpack);
                 VersionedUtil.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
             }));
-            /*?} else {*/
-            this.addButton(buttonWidget(this.width / 2, y, 140, 20, displayText, button -> {
-                //select and start
-                SelectionManager.setSelectedPack(modpack);
-                VersionedUtil.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
-            }));
-            /*?}*/
             i++;
         }
 
         //Full Serverpack Button if Modpack has permission from server
         if (serverConfig != null && serverConfig.enableFullServerPack) {
-            /*? if >=1.19.3 {*/
             this.addDrawableChild(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, VersionedText.red(VersionedText.translatable("automodpack.ds.fullserverpack").getString()), button -> {
                 SelectionManager.setSelectedPack("fullserver");
                 VersionedUtil.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
             }));
-            /*?} else {*/
-            this.addButton(buttonWidget(this.width / 2, this.height / 2 + 175, 160, 20, VersionedText.red(VersionedText.translatable("automodpack.ds.fullserverpack").getString()), button -> {
-                SelectionManager.setSelectedPack("fullserver");
-                VersionedUtil.getMainWorkerExecutor().execute(modpackUpdaterInstance::startUpdate);
-            }));
-            /*?}*/
         }
     }
 

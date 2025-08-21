@@ -65,6 +65,11 @@ public class VersionedScreen extends Screen {
         }
         super.addChild(child);
     }
+    *//*?} elif <1.19.3 {*/
+    public void addDrawableChild(Button button) {
+        this.addButton(button);
+    }
+    /*?}*/
 
     /*? if >=1.20 {*/
     public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
