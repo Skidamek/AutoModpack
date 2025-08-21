@@ -163,7 +163,7 @@ public class CustomFileUtils {
     }
 
 
-    public static void deleteDummyFiles(Path directory, Set<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
+    public static void deleteDummyFiles(Path directory, Set<Jsons.ModpackGroupFields.ModpackContentItem> ignoreList) {
         if (directory == null || ignoreList == null) {
             return;
         }
@@ -180,14 +180,14 @@ public class CustomFileUtils {
         }
     }
 
-    private static boolean shouldIgnore(Path file, Set<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
+    private static boolean shouldIgnore(Path file, Set<Jsons.ModpackGroupFields.ModpackContentItem> ignoreList) {
         if (ignoreList == null) {
             return false;
         }
 
-        String modpackFile = CustomFileUtils.formatPath(file, Objects.requireNonNullElse(selectedModpackDir, hostContentModpackDir));
+        String modpackFile = CustomFileUtils.formatPath(file, Objects.requireNonNullElse(selectedModpackDir, mainHostContentModpackDir));
 
-        for (Jsons.ModpackContentFields.ModpackContentItem item : ignoreList) {
+        for (Jsons.ModpackGroupFields.ModpackContentItem item : ignoreList) {
             if (item.file.equals(modpackFile)) {
                 return true;
             }

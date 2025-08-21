@@ -12,6 +12,7 @@ import pl.skidam.automodpack_loader_core.utils.*;
 
 import java.io.IOException;
 import java.net.ConnectException;
+import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
 import java.util.*;
@@ -24,31 +25,41 @@ import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 // TODO: clean up this mess
 public class ModpackUpdater {
     public Changelogs changelogs = new Changelogs();
+    public SelectionManager selectionManager;
     public DownloadManager downloadManager;
     public FetchManager fetchManager;
     public long totalBytesToDownload = 0;
     public boolean fullDownload = false;
-    private Jsons.ModpackContentFields serverModpackContent;
+    private Jsons.ModpackGroupFields serverModpackContent;
     private String modpackContentJson;
-    public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
+    public Map<Jsons.ModpackGroupFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
     private Jsons.ModpackAddresses modpackAddresses;
+    private InetSocketAddress modpackAddress;
     private Secrets.Secret modpackSecret;
     private Path modpackDir;
     private Path modpackContentFile;
 
-
+    //if name is null... i hope it is right
     public String getModpackName() {
+        if (serverModpackContent == null) {
+            LOGGER.warn("name was initialized before server modpack content.");
+            return "unknown Modpack";
+        }
         return serverModpackContent.modpackName;
     }
-
-    public void prepareUpdate(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
+  
+    public void prepareUpdate(Jsons.ModpackGroupFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret) {
         this.serverModpackContent = modpackContent;
         this.modpackAddresses = modpackAddresses;
+        this.modpackAddress = modpackAddresses.hostAddress;
         this.modpackSecret = secret;
-        this.modpackDir = modpackPath;
+        this.modpackDir = ModpackUtils.getModpackPath(modpackAddresses, modpackContent.modpackName);
 
-        if (this.modpackAddresses.isAnyEmpty() || modpackPath.toString().isEmpty()) {
+        // check out of selected Modpack
+        SelectionManager.setSelectedPack(serverModpackContent.modpackName);
+
+        if (modpackAddress == null || modpackDir.toString().isEmpty()) {
             throw new IllegalArgumentException("Address or modpackPath is null or empty");
         }
 
@@ -83,12 +94,18 @@ public class ModpackUpdater {
                 }
             } else if (!preload) {
                 fullDownload = true;
-                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
+                new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this, null);
                 return;
             }
 
             LOGGER.warn("Modpack update found");
             startUpdate();
+            /* should be cleaned after update
+            startHighUpdate();
+            startLowUpdate();
+            startServerUpdate();
+
+             */
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
         }
@@ -143,9 +160,18 @@ public class ModpackUpdater {
         LOGGER.info("Modpack is already loaded");
     }
 
+    /* Delete soon this one
     // TODO split it into different methods, its too long
+    // Todo HighUpdate main folder rename in high end folder for Client (complete Folder from Automodpack folders (main))
+    public void startHighUpdate() {}
+    // Todo LowUpdate low folder adding and only Download low client folder
+    public void startLowUpdate() {}
+    // TODO Download all files, also the files whats declared in automodpack-server and server sided files.
+    public void startServerUpdate() {}
+    */
     public void startUpdate() {
-
+        modpackDir = ModpackUtils.getModpackPath(modpackAddresses, serverModpackContent.modpackName);
+        LOGGER.info("Using modpack directory: {}", modpackDir);
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");
             return;
@@ -159,7 +185,7 @@ public class ModpackUpdater {
             modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
             modpackContentFile = modpackDir.resolve(modpackContentFile.getFileName());
 
-            Iterator<Jsons.ModpackContentFields.ModpackContentItem> iterator = serverModpackContent.list.iterator();
+            Iterator<Jsons.ModpackGroupFields.ModpackContentItem> iterator = serverModpackContent.list.iterator();
 
             // CLEAN UP THE LIST
 
@@ -167,7 +193,7 @@ public class ModpackUpdater {
             int skippedEditableFiles = 0;
 
             while (iterator.hasNext()) {
-                Jsons.ModpackContentFields.ModpackContentItem modpackContentField = iterator.next();
+                Jsons.ModpackGroupFields.ModpackContentItem modpackContentField = iterator.next();
                 String file = modpackContentField.file;
                 String serverSHA1 = modpackContentField.sha1;
 
@@ -208,7 +234,7 @@ public class ModpackUpdater {
 
             List<FetchManager.FetchData> fetchDatas = new LinkedList<>();
 
-            for (Jsons.ModpackContentFields.ModpackContentItem field : serverModpackContent.list) {
+            for (Jsons.ModpackGroupFields.ModpackContentItem field : serverModpackContent.list) {
 
                 totalBytesToDownload += Long.parseLong(field.size);
 
@@ -418,7 +444,7 @@ public class ModpackUpdater {
         } catch (IllegalArgumentException e) {
             LOGGER.error("Failed to save client secret", e);
         }
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+        Jsons.ModpackGroupFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
             throw new IllegalStateException("Failed to load modpack content"); // Something gone very wrong...
@@ -511,11 +537,11 @@ public class ModpackUpdater {
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory
-    private Set<String> getFilesNotToCopy(Set<Jsons.ModpackContentFields.ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
+    private Set<String> getFilesNotToCopy(Set<Jsons.ModpackGroupFields.ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
         Set<String> filesNotToCopy = new HashSet<>();
 
         // Make list of files which we do not copy to the running directory
-        for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentItems) {
+        for (Jsons.ModpackGroupFields.ModpackContentItem item : modpackContentItems) {
             if (item.forceCopy) {
                 continue;
             }
@@ -535,7 +561,7 @@ public class ModpackUpdater {
         return filesNotToCopy;
     }
 
-    private boolean deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent) throws IOException {
+    private boolean deleteNonModpackFiles(Jsons.ModpackGroupFields modpackContent) throws IOException {
         List<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).toList();
         List<Path> pathList;
         try (Stream<Path> pathStream = Files.walk(modpackDir)) {

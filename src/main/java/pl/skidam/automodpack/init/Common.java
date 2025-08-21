@@ -5,6 +5,7 @@ import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
+import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
@@ -19,21 +20,33 @@ public class Common {
     public static MinecraftServer server = null;
 
     public static void serverInit() {
-        if (serverConfig.generateModpackOnStart) {
-            LOGGER.info("Generating modpack...");
-            long genStart = System.currentTimeMillis();
-            if (modpackExecutor.generateNew()) {
-                LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+        for (String groupId : serverConfig.groups.keySet()) {
+            var groupDecl = serverConfig.groups.get(groupId);
+            if (groupDecl.generateModpackOnStart) {
+                LOGGER.info("Generating modpack...");
+                long genStart = System.currentTimeMillis();
+                if (modpackExecutor.generateNew(groupId)) {
+                    LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+                } else {
+                    LOGGER.error("Failed to generate modpack!");
+                }
             } else {
-                LOGGER.error("Failed to generate modpack!");
+                LOGGER.info("Loading last modpack...");
+                long genStart = System.currentTimeMillis();
+                if (modpackExecutor.loadLast(groupId)) {
+                    LOGGER.info("Modpack loaded! took " + (System.currentTimeMillis() - genStart) + "ms");
+                } else {
+                    LOGGER.error("Failed to load modpack!");
+                }
             }
-        } else {
-            LOGGER.info("Loading last modpack...");
+        }
+        if (serverConfig.enableFullServerPack) {
+            LOGGER.info("Generating FullServerModpack...");
             long genStart = System.currentTimeMillis();
-            if (modpackExecutor.loadLast()) {
-                LOGGER.info("Modpack loaded! took " + (System.currentTimeMillis() - genStart) + "ms");
+            if (fullpacks.generateNew()) {
+                LOGGER.info("FullServerModpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
             } else {
-                LOGGER.error("Failed to load modpack!");
+                LOGGER.error("Failed to generate fullservermodpack!");
             }
         }
 
@@ -43,7 +56,10 @@ public class Common {
     public static void init() {
         GAME_CALL = new GameCall();
         hostServer = new NettyServer();
+
         modpackExecutor = new ModpackExecutor();
+        fullpacks = new FullServerPack(modpackExecutor);
+
     }
 
     public static void afterSetupServer() {
@@ -60,7 +76,9 @@ public class Common {
         }
 
         hostServer.stop();
+
         modpackExecutor.stop();
+        fullpacks.shutdownExecutor();
     }
 
     public static ResourceLocation id(String path) {

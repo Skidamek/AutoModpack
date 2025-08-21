@@ -114,7 +114,7 @@ public class Commands {
 
     private static int reload(CommandContext<CommandSourceStack> context) {
         Util.backgroundExecutor().execute(() -> {
-            var tempServerConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+            var tempServerConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
             if (tempServerConfig != null) {
                 serverConfig = tempServerConfig;
                 send(context, "AutoModpack server config reloaded!", ChatFormatting.GREEN, true);
@@ -208,7 +208,19 @@ public class Commands {
             }
             send(context, "Generating Modpack...", ChatFormatting.YELLOW, true);
             long start = System.currentTimeMillis();
-            if (modpackExecutor.generateNew()) {
+
+            // generate every group
+            boolean allGenerated = true;
+            for (String groupId : serverConfig.groups.keySet()) {
+                if (!modpackExecutor.generateNew(groupId)) {
+                    allGenerated = false;
+                    send(context, "Failed to generate modpack for group: " + groupId, ChatFormatting.RED, true);
+                } else {
+                    send(context, "Modpack generated for group: " + groupId, ChatFormatting.GREEN, true);
+                }
+            }
+
+            if (allGenerated) {
                 send(context, "Modpack generated! took " + (System.currentTimeMillis() - start) + "ms", ChatFormatting.GREEN, true);
             } else {
                 send(context, "Modpack generation failed! Check logs for more info.", ChatFormatting.RED, true);
