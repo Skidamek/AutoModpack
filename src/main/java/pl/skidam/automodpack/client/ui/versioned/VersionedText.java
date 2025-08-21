@@ -28,4 +28,22 @@ public class VersionedText {
 		return Component.literal(string);
 	}
 	/*?}*/
+
+    public static MutableComponent green(String text) {
+        /*? if >=1.19 {*/
+        /*return literal(text).withStyle(net.minecraft.ChatFormatting.GREEN);*//*?} else {*/
+        /*return literal(text).formatted(net.minecraft.util.Formatting.GREEN);*//*?}*/
+    }
+
+    public static MutableComponent bold(String text) {
+        /*? if >=1.19 {*/
+        /*return literal(text).withStyle(net.minecraft.ChatFormatting.BOLD);*//*?} else {*/
+        /*return literal(text).formatted(net.minecraft.util.Formatting.BOLD);*//*?}*/
+    }
+
+    public static MutableComponent red(String text) {
+        /*? if >=1.19 {*/
+        /*return literal(text).withStyle(net.minecraft.ChatFormatting.RED);*//*?} else {*/
+        /*return literal(text).formatted(net.minecraft.util.Formatting.RED);*//*?}*/
+    }
 }
