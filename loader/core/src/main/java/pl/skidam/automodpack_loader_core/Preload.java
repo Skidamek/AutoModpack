@@ -17,6 +17,7 @@ import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.zip.ZipEntry;
@@ -41,7 +42,6 @@ public class Preload {
     }
 
     private void updateAll() {
-
         var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(clientConfig.selectedModpack);
 
         if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER || optionalSelectedModpackDir.isEmpty()) {
@@ -69,26 +69,61 @@ public class Preload {
 
             Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress, requiresMagic);
             var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
-            var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+
+            // Laden Sie den vorhandenen Modpack-Inhalt
+            Jsons.ModpackContentMasterFields latestModpackContent = ConfigTools.load(selectedModpackDir.resolve(hostModpackContentFile.getFileName()), Jsons.ModpackContentMasterFields.class);
 
             // Use the latest modpack content if available
             if (optionalLatestModpackContent.isPresent()) {
-                latestModpackContent = optionalLatestModpackContent.get();
+                Jsons.ModpackGroupFields serverGroupContent = optionalLatestModpackContent.get();
+
+                // Erstellen Sie ein MasterContent-Objekt aus der Gruppenantwort
+                Jsons.ModpackContentMasterFields serverMasterContent = new Jsons.ModpackContentMasterFields();
+                serverMasterContent.groups = Set.of(serverGroupContent);
+                serverMasterContent.automodpackVersion = serverGroupContent.automodpackVersion;
+                serverMasterContent.loader = serverGroupContent.loader;
+                serverMasterContent.loaderVersion = serverGroupContent.loaderVersion;
+                serverMasterContent.mcVersion = serverGroupContent.mcVersion;
+                serverMasterContent.enableFullServerPack = serverGroupContent.enableFullServerPack;
 
                 // Update AutoModpack to server version only if we can get newest modpack content
-                if (SelfUpdater.update(latestModpackContent)) {
+                if (SelfUpdater.update(serverMasterContent)) {
                     return;
+                }
+
+                // Aktualisieren Sie den lokalen Inhalt mit dem Server-Inhalt
+                latestModpackContent = serverMasterContent;
+            }
+
+            // Extract all content items from all groups for deleteDummyFiles
+            Set<Jsons.ModpackGroupFields.ModpackContentItem> allContentItems = null;
+            if (latestModpackContent != null && latestModpackContent.groups != null) {
+                allContentItems = new HashSet<>();
+                for (Jsons.ModpackGroupFields group : latestModpackContent.groups) {
+                    if (group.list != null) {
+                        allContentItems.addAll(group.list);
+                    }
                 }
             }
 
             // Delete dummy files
-            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
+            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), allContentItems);
+
+            // Find the main group for ModpackUpdater
+            Jsons.ModpackGroupFields mainGroup = null;
+            if (latestModpackContent != null && latestModpackContent.groups != null) {
+                for (Jsons.ModpackGroupFields group : latestModpackContent.groups) {
+                    if ("main".equals(group.groupName)) {
+                        mainGroup = group;
+                        break;
+                    }
+                }
+            }
 
             // Update modpack
-            new ModpackUpdater().prepareUpdate(latestModpackContent, modpackAddresses, secret);
+            new ModpackUpdater().prepareUpdate(mainGroup, modpackAddresses, secret);
         }
     }
-
 
     private void initializeGlobalVariables() {
         // Initialize global variables
@@ -129,12 +164,10 @@ public class Preload {
                         clientConfigV1.DO_NOT_CHANGE_IT = 2;
                         clientConfigV1.installedModpacks = null;
                     }
-
                     ConfigTools.save(clientConfigFile, clientConfigV1);
                     LOGGER.info("Updated client config version to {}", clientConfigVersion.DO_NOT_CHANGE_IT);
                 }
             }
-
             clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV2.class);
         } else {
             // TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
@@ -168,20 +201,17 @@ public class Preload {
                         serverConfigV2.portToSend = serverConfigV1.hostPort;
                     }
                 }
-
                 ConfigTools.save(serverConfigFile, serverConfigV2);
                 LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
             }
 
             if (serverConfigVersion.DO_NOT_CHANGE_IT == 2) {
-                // Update the configs schemes to not crash the game if loaded with old config!
                 var serverConfigV2 = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
                 var serverConfigV3 = ConfigTools.softLoad(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
                 if (serverConfigV2 != null && serverConfigV3 != null) {
                     serverConfigVersion.DO_NOT_CHANGE_IT = 3;
                     serverConfigV3.DO_NOT_CHANGE_IT = 3;
 
-                    // copy all modpack fields from v2 to main modpack v3
                     serverConfigV3.groups.get("main").groupName = serverConfigV2.modpackName;
                     serverConfigV3.groups.get("main").generateModpackOnStart = serverConfigV2.generateModpackOnStart;
                     serverConfigV3.groups.get("main").autoExcludeUnnecessaryFiles = serverConfigV2.autoExcludeUnnecessaryFiles;
@@ -195,7 +225,6 @@ public class Preload {
                 }
             }
         }
-
         // load server config
         serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
 
@@ -207,15 +236,14 @@ public class Preload {
                 serverConfig.acceptedLoaders.add(LOADER);
             }
 
-            // Check modpack name and fix it if needed, because it will be used for naming a folder on client
             for (String groupId : serverConfig.groups.keySet()) {
+                // Check modpack name and fix it if needed, because it will be used for naming a folder on client
                 if (!groupId.isEmpty() && FileInspection.isInValidFileName(groupId)) {
                     serverConfig.groups.put(FileInspection.fixFileName(groupId), serverConfig.groups.get(groupId));
                     serverConfig.groups.remove(groupId);
                     LOGGER.info("Changed modpack name to {}", groupId);
                 }
             }
-
             // Save changes
             ConfigTools.save(serverConfigFile, serverConfig);
         }
@@ -229,7 +257,6 @@ public class Preload {
             if (clientConfig.selectedModpack == null) {
                 clientConfig.selectedModpack = "";
             }
-
             // Save changes
             ConfigTools.save(clientConfigFile, clientConfig);
         }
@@ -248,7 +275,7 @@ public class Preload {
                 if (os.contains("win")) {
                     Files.setAttribute(privateDir, "dos:hidden", true);
                 } else if (os.contains("nix") || os.contains("nux") || os.contains("aix") || os.contains("mac")) {
-                    Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------"); // Corresponds to 0700
+                    Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwx------");
                     Files.setPosixFilePermissions(privateDir, perms);
                 }
             } catch (UnsupportedOperationException | IOException e) {
@@ -257,7 +284,6 @@ public class Preload {
         } catch (IOException e) {
             LOGGER.error("Failed to create private directory", e);
         }
-
 
         if (serverConfig == null || clientConfig == null) {
             throw new RuntimeException("Failed to load config!");

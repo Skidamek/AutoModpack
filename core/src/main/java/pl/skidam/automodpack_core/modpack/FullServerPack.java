@@ -1,9 +1,13 @@
 package pl.skidam.automodpack_core.modpack;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,9 +32,22 @@ public class FullServerPack {
             return null;
         }
 
+        // Load config if Fullpack is enabled
+        Path serverConfigFile = CustomFileUtils.getPathFromCWD("automodpack/automodpack-server.json");
+        if (!Files.exists(serverConfigFile)) {
+            LOGGER.error("Server config file not found!");
+            return null;
+        }
+
+        Jsons.ServerConfigFieldsV3 serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
+        if (serverConfig == null || !serverConfig.enableFullServerPack) {
+            LOGGER.info("FullServerPack is disabled.");
+            return null;
+        }
+
         try {
-            if (!Files.exists(hostContentModpackDir)) {
-                Files.createDirectories(hostContentModpackDir);
+            if (!Files.exists(hostModpackDir)) {
+                Files.createDirectories(hostModpackDir);
             }
         } catch (IOException e) {
             LOGGER.error("Failed to create modpack directory", e);
@@ -38,7 +55,8 @@ public class FullServerPack {
             return null;
         }
 
-        return new FullServerPackContent(serverConfig.modpackName, hostContentModpackDir, executor.getExecutor());
+        // Use a fixed name for the full server pack
+        return new FullServerPackContent("FullServerPack", hostModpackDir, executor.getExecutor());
     }
 
     public boolean generateNew(FullServerPackContent content) {

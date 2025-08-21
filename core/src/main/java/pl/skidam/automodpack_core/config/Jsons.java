@@ -123,7 +123,7 @@ public class Jsons {
     }
 
     public static class GroupDeclaration {
-        public String groupName = "";
+        public String groupName = ""; //Also Modpack Name?
         public boolean generateModpackOnStart = true;
         public List<String> syncedFiles = List.of();
         public List<String> allowEditsInFiles = List.of();
@@ -139,6 +139,7 @@ public class Jsons {
 
     public static GroupDeclaration mainGroupDeclaration() {
         GroupDeclaration decl = new GroupDeclaration();
+        decl.groupName = "main";
         decl.required = true;
         decl.checkByDefault = true;
         decl.syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
@@ -146,11 +147,19 @@ public class Jsons {
         return decl;
     }
 
+    public static GroupDeclaration hostGroupDeclaration() {
+        GroupDeclaration decl = new GroupDeclaration();
+        decl.groupName = "host"; //also modpackname?
+        return decl;
+    }
+
     public static class ServerConfigFieldsV3 {
         public int DO_NOT_CHANGE_IT = 3; // file version
         public boolean modpackHost = true;
+        public boolean enableFullServerPack = false;
         public Map<String, GroupDeclaration> groups = Map.of(
-                "main", mainGroupDeclaration()
+                "main", mainGroupDeclaration(),
+                "host", hostGroupDeclaration()
         );
         public boolean requireAutoModpackOnClient = true;
         public boolean nagUnModdedClients = true;
@@ -203,19 +212,13 @@ public class Jsons {
     }
 
     public static class ModpackGroupFields {
-        public String groupName = "";
-        public Set<ModpackContentItem> list;
-
-        public ModpackGroupFields(Set<ModpackContentItem> list) {
-            this.list = list;
-        }
-
-        public ModpackGroupFields() {
-            this.list = Set.of();
-        }
-
-    public static class ModpackGroupFields {
-        public String groupName = "";
+        public String groupName = ""; //also modpack name?
+        public String automodpackVersion = "";
+        public String loader = "";
+        public String loaderVersion = "";
+        public String mcVersion = "";
+        public String modpackName = "";
+        public boolean enableFullServerPack = false;
         public Set<ModpackContentItem> list;
 
         public ModpackGroupFields(Set<ModpackContentItem> list) {
@@ -251,6 +254,7 @@ public class Jsons {
             }
         }
     }
+
     public static class FullServerPackContentFields {
         public String modpackName = "";
         public String mcVersion = "";
@@ -290,4 +294,3 @@ public class Jsons {
         }
     }
 }
-

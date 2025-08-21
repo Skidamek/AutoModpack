@@ -2,15 +2,21 @@ package pl.skidam.automodpack_core;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.FullServerPackContent;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.utils.CustomFileUtils;
 
 import java.nio.file.Path;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class Server {
+
+    //hostmodpack folder
+    private static final Path hostContentModpackDir = CustomFileUtils.getPathFromCWD("automodpack/host-modpack");
+
 
     // TODO Finish this class that it will be able to host the server without mod
     public static void main(String[] args) {
@@ -74,9 +80,10 @@ public class Server {
         //LOGGER.info("Starting server on port {}", serverConfig.bindPort);
 
         FullServerPack fullserverpack = new FullServerPack(modpackExecutor);
-        FullServerPackContent fullServerPackContent = new FullServerPackContent(serverConfig.modpackName, hostContentModpackDir, fullserverpack.executor.getExecutor());
-        boolean fullpackgenerated = fullserverpack.generateNew(fullServerPackContent);
 
+        String modpackName = serverConfig.groups.get("host").groupName;
+        FullServerPackContent fullServerPackContent = new FullServerPackContent(modpackName, hostContentModpackDir, fullserverpack.executor.getExecutor());
+        boolean fullpackgenerated = fullserverpack.generateNew(fullServerPackContent);
 
         if (fullpackgenerated) {
             LOGGER.info("FullServerPack generated!");
@@ -86,7 +93,15 @@ public class Server {
 
         modpackExecutor.stop();
         fullserverpack.shutdownExecutor();
-        LOGGER.info("Starting server on port {}", serverConfig.hostPort);
+        //port from Config
+        Jsons.GroupDeclaration hostGroup = serverConfig.groups.get("host");
+        if (hostGroup == null) {
+            LOGGER.error("Host group not found in server config!");
+            return;
+        }
+
+        int port = serverConfig.bindPort;
+        LOGGER.info("Starting server on port {}", port);
 
         server.start();
         // wait for server to stop

@@ -33,7 +33,6 @@ public class FullServerPackContent {
         return MODPACK_NAME;
     }
 
-
     public boolean create() {
         LOGGER.info("FullServerPackContent.create() is called");
         try {
@@ -45,8 +44,9 @@ public class FullServerPackContent {
                 return false;
             }
 
-            Jsons.ServerConfigFields serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFields.class);
-            if (serverConfig == null || !serverConfig.enableFullServerPack) {
+            // Use the latest version of server config
+            Jsons.ServerConfigFieldsV3 serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
+            if (serverConfig == null || !serverConfig.modpackHost) {
                 LOGGER.info("FullServerPack creation is disabled or config invalid.");
                 return false;
             }
@@ -54,7 +54,9 @@ public class FullServerPackContent {
             List<Path> filesToInclude = new ArrayList<>();
 
             //check synced files but not excluded, because we will get all files
-            List<String> syncedFilePaths = serverConfig.syncedFiles != null ? serverConfig.syncedFiles : new ArrayList<>();
+            Jsons.GroupDeclaration mainGroup = serverConfig.groups.get("main");
+            List<String> syncedFilePaths = mainGroup != null ? mainGroup.syncedFiles : new ArrayList<>();
+
             for (String relativePath : syncedFilePaths) {
                 Path path = CustomFileUtils.getPathFromCWD(relativePath);
                 if (!Files.exists(path) || Files.isDirectory(path)) continue;
@@ -148,9 +150,8 @@ public class FullServerPackContent {
         }
     }
 
-    private List<Path> collectFiles(Jsons.ServerConfigFields serverConfig) {
+    private List<Path> collectFiles(Jsons.ServerConfigFieldsV3 serverConfig) {
         List<Path> filesToInclude = new ArrayList<>();
-
         return filesToInclude;
     }
 
@@ -233,16 +234,14 @@ public class FullServerPackContent {
             LOGGER.info("start generating server pack content file");
             Path automodpackserverConfig = CustomFileUtils.getPathFromCWD("automodpack/automodpack-server.json");
 
-            //if file is deleted from user, stop
             if (!Files.exists(automodpackserverConfig)) {
                 LOGGER.info("automodpack-server.json is missing? did you delete the file?");
                 return;
             }
 
-            //load config
-            Jsons.ServerConfigFields serverConfig = ConfigTools.load(automodpackserverConfig, Jsons.ServerConfigFields.class);
-            //if config null or false, stop
-            if (serverConfig == null || !serverConfig.enableFullServerPack) {
+            // Use the latest version of server config (V3)
+            Jsons.ServerConfigFieldsV3 serverConfig = ConfigTools.load(automodpackserverConfig, Jsons.ServerConfigFieldsV3.class);
+            if (serverConfig == null || !serverConfig.modpackHost) {
                 LOGGER.info("Fullserverpack creation on default disabled.");
                 return;
             }
@@ -250,7 +249,8 @@ public class FullServerPackContent {
             List<Path> filesToInclude = new ArrayList<>();
 
             //check synced files
-            List<String> syncedFilePaths = serverConfig.syncedFiles != null ? serverConfig.syncedFiles : new ArrayList<>();
+            Jsons.GroupDeclaration mainGroup = serverConfig.groups.get("main");
+            List<String> syncedFilePaths = mainGroup != null ? mainGroup.syncedFiles : new ArrayList<>();
 
             for (String relativePath : syncedFilePaths) {
                 Path path = CustomFileUtils.getPathFromCWD(relativePath);
