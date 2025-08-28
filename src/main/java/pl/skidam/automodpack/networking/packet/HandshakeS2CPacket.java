@@ -118,8 +118,11 @@ public class HandshakeS2CPacket {
 
             LOGGER.info("Sending {} modpack host address: {}:{}", profile.getName(), addressToSend, portToSend);
 
-            DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
-            String packetContentJson = dataPacket.toJson();
+            String mainGroupName = "main"; // Standardwert
+            if (serverConfig.groups != null && serverConfig.groups.containsKey("main")) {
+                mainGroupName = serverConfig.groups.get("main").groupName;
+            }
+            DataPacket dataPacket = new DataPacket(addressToSend, portToSend, mainGroupName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);           String packetContentJson = dataPacket.toJson();
 
             FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());
             outBuf.writeUtf(packetContentJson, Short.MAX_VALUE);

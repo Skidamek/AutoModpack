@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
@@ -63,6 +64,11 @@ public class ScreenImpl implements ScreenService {
     }
 
     @Override
+    public void downloadselection(Object... args) {
+        Screens.downloadselection(args[0], args[1]);
+    }
+
+    @Override
     public Optional<String> getScreenString() {
         Screen screen = Screens.getScreen();
         return Optional.of(screen.getTitle().getString().toLowerCase());
@@ -113,6 +119,9 @@ public class ScreenImpl implements ScreenService {
 
         public static void menu() {
 //            Screens.setScreen(new MenuScreen());
+        }
+        public static void downloadselection(Object parent, Object modpackUpdaterInstance) {
+            Screens.setScreen(new DownloadSelectionScreen((VersionedScreen) parent, (ModpackUpdater) modpackUpdaterInstance));
         }
 
         public static void validation(Object parent, Object serverFingerprint, Object validatedCallback,

@@ -2,16 +2,21 @@ package pl.skidam.automodpack_core;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.FullServerPackContent;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
-import pl.skidam.automodpack_core.modpack.ModpackContent;
+import pl.skidam.automodpack_core.modpack.FullServerPack;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.utils.CustomFileUtils;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class Server {
+
+    //hostmodpack folder
+    private static final Path hostContentModpackDir = CustomFileUtils.getPathFromCWD("automodpack/host-modpack");
+
 
     // TODO Finish this class that it will be able to host the server without mod
     public static void main(String[] args) {
@@ -31,13 +36,12 @@ public class Server {
 
         modpackDir.toFile().mkdirs();
 
-        hostModpackContentFile = modpackDir.resolve("automodpack-content.json");
+//        hostModpackContentFile = modpackDir.resolve("automodpack-content.json");
         serverConfigFile = modpackDir.resolve("automodpack-server.json");
         serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
-        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
         if (serverConfig != null) {
-            serverConfig.syncedFiles = new ArrayList<>();
             serverConfig.validateSecrets = false;
             ConfigTools.save(serverConfigFile, serverConfig);
 
@@ -60,18 +64,45 @@ public class Server {
         mainModpackDir.toFile().mkdirs();
 
         ModpackExecutor modpackExecutor = new ModpackExecutor();
-        ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, modpackExecutor.getExecutor());
-        boolean generated = modpackExecutor.generateNew(modpackContent);
+//        ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, modpackExecutor.getExecutor());
+//        boolean generated = modpackExecutor.generateNew(modpackContent);
 
-        if (generated) {
-            LOGGER.info("Modpack generated!");
+//        if (generated) {
+//            LOGGER.info("Modpack generated!");
+//        } else {
+//            LOGGER.error("Failed to generate modpack!");
+//        }
+
+        //beta modpack Executor 
+        //modpackExecutor.stop();
+
+        // change hostPort to bindPort?
+        //LOGGER.info("Starting server on port {}", serverConfig.bindPort);
+
+        FullServerPack fullserverpack = new FullServerPack(modpackExecutor);
+
+        String modpackName = serverConfig.groups.get("host").groupName;
+        FullServerPackContent fullServerPackContent = new FullServerPackContent(modpackName, hostContentModpackDir, fullserverpack.executor.getExecutor());
+        boolean fullpackgenerated = fullserverpack.generateNew(fullServerPackContent);
+
+        if (fullpackgenerated) {
+            LOGGER.info("FullServerPack generated!");
         } else {
-            LOGGER.error("Failed to generate modpack!");
+            LOGGER.error("Failed to generate serverpack!");
         }
 
         modpackExecutor.stop();
+        fullserverpack.shutdownExecutor();
+        //port from Config
+        Jsons.GroupDeclaration hostGroup = serverConfig.groups.get("host");
+        if (hostGroup == null) {
+            LOGGER.error("Host group not found in server config!");
+            return;
+        }
 
-        LOGGER.info("Starting server on port {}", serverConfig.bindPort);
+        int port = serverConfig.bindPort;
+        LOGGER.info("Starting server on port {}", port);
+
         server.start();
         // wait for server to stop
         while (server.isRunning()) {
