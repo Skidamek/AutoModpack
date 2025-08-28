@@ -43,7 +43,7 @@ dependencies {
         include(modImplementation(fabricApi.module("fabric-command-api-v2", property("deps.fabric-api") as String))!!) // TODO transitive false
     }
 
-    include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${property("deps.mixin-extras")}")!!)!!)
+//    include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${property("deps.mixin-extras")}")!!)!!)
 }
 
 java {

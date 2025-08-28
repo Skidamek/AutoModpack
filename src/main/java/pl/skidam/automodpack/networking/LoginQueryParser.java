@@ -50,7 +50,9 @@ public class LoginQueryParser {
 				this.channelName = loginRequestPayload.id();
 			}
 			/*?}*/
-		} else {
+		}
+
+        if (this.buf == null) {
 			success = false;
             LOGGER.error("Invalid packet type: {}", packet.getClass().getName());
 		}

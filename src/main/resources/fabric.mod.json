@@ -25,7 +25,6 @@
   ],
   "accessWidener" : "automodpack.accesswidener",
   "depends": {
-    "minecraft": "${minecraft}",
-    "mixinextras": ">=0.3.5"
+    "minecraft": "${minecraft}"
   }
 }

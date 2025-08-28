@@ -23,7 +23,7 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":loader-core"))
 
-    compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.2+1.20.1")
+    compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.6+1.20.1")
 }
 
 tasks {

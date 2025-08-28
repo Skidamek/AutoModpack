@@ -1,29 +1,33 @@
 package pl.skidam.automodpack.mixin.core;
 
-import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import net.fabricmc.fabric.impl.networking.server.ServerLoginNetworkAddon;
+import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.networking.LoginNetworkingIDs;
-
-import java.util.Map;
 
 @Pseudo
 @Mixin(value = ServerLoginNetworkAddon.class, remap = false)
 public class FabricLoginMixin {
 
-    @WrapWithCondition(
+    @Inject(
             method = "registerOutgoingPacket",
-            at = @At(value = "INVOKE", target = "Ljava/util/Map;put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;")
+            at = @At(value = "HEAD"),
+            cancellable = true
     )
-    private boolean dontRemoveAutoModpackChannels(Map instance, Object key, Object value) {
-        if (value instanceof ResourceLocation id) {
-            // If AutoModpack id, return false
-            return LoginNetworkingIDs.getByKey(id) == null;
+    private void dontRemoveAutoModpackChannels(ClientboundCustomQueryPacket packet, CallbackInfo ci) {
+        /*? if <1.20.2 {*/
+        /*ResourceLocation id = packet.getIdentifier();
+        *//*?} else {*/
+        ResourceLocation id = packet.payload().id();
+        /*?}*/
+        // Cancel if it's one of our channels
+        if (LoginNetworkingIDs.getByKey(id) != null) {
+            ci.cancel();
         }
-
-        return true;
     }
 }
