@@ -7,19 +7,24 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 
-/*? if >=1.21.2 {*/
+/*? if >=1.21.2 {*//*
 import net.minecraft.client.renderer.RenderType;
 import java.util.function.Function;
-/*?}*/
+*//*?}*/
 
-/*? if >=1.21.6 {*/
+/*? if >=1.21.6 {*//*
 import net.minecraft.client.renderer.RenderPipelines;
-/*?}*/
+*//*?}*/
 
 /*? if <1.20 {*/
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+/*? if <1.21.6 {*/
 import net.minecraft.client.gui.GuiComponent;
+/*?} else { */
+// Ab 1.21.6 wurde GuiComponent entfernt
+import net.minecraft.client.gui.GuiGraphics;
+/*?} */
 /*?} else {*/
 import net.minecraft.client.gui.GuiGraphics;
 /*?}*/
@@ -35,21 +40,17 @@ public class VersionedScreen extends Screen {
     public void render(PoseStack matrix, int mouseX, int mouseY, float delta) {
         VersionedMatrices matrices = new VersionedMatrices();
         matrices.set(matrix);
-
         super.render(matrix, mouseX, mouseY, delta);
-
         versionedRender(matrices, mouseX, mouseY, delta);
     }
     /*?} else {*/
     @Override
     public void render(GuiGraphics matrix, int mouseX, int mouseY, float delta) {
         VersionedMatrices matrices = new VersionedMatrices(matrix);
-
         super.render(matrix, mouseX, mouseY, delta);
-
         versionedRender(matrices, mouseX, mouseY, delta);
     }
-    /*?}*/
+    /*?} */
 
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) { }
 
@@ -67,24 +68,35 @@ public class VersionedScreen extends Screen {
 
     public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
         /*? if >=1.20 {*/
-        return Button.builder(message, onPress).pos(x, y).size(width, height).build();
-        /*?} else if >=1.19.4 {*/
         return Button.builder(message, onPress).bounds(x, y, width, height).build();
+        /*?} else if >=1.19.3 {*/
+        // Für Minecraft 1.19.3 und 1.19.4: Erstelle eine anonyme Button-Unterklasse
+        return new Button(x, y, width, height, message, onPress, button -> Component.empty()) {
+            // Zusätzliche Methodenüberschreibungen falls nötig
+        };
         /*?} else {*/
         return new Button(x, y, width, height, message, onPress);
         /*?}*/
     }
 
     public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+        /*? if >=1.20 {*/
         /*? if >=1.21.6 {*/
-        matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+        matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+        /*?} elif >=1.21.3 {*/
+        matrices.getContext().blit((resourceLocation) -> RenderType.gui(), textureID, x, y, (float)u, (float)v, width, height, textureWidth, textureHeight);
         /*?} elif >=1.21.2 {*/
         matrices.getContext().blit(RenderType::guiTextured, textureID, x, y, (float)u, (float)v, width, height, textureWidth, textureHeight);
-        /*?} elif >=1.20 {*/
+        /*?} else {*/
         matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+        /*?}*/
         /*?} else {*/
         RenderSystem.setShaderTexture(0, textureID);
+        /*? if <1.21.6 {*/
         GuiComponent.blit(matrices.getContext(), x, y, u, v, width, height, textureWidth, textureHeight);
+        /*?} else {*/
+        matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+        /*?}*/
         /*?}*/
     }
 
