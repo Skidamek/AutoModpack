@@ -8,7 +8,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 
 /*? if >=1.21.2 {*/
-import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.renderer.RenderType;
 import java.util.function.Function;
 /*?}*/
 
@@ -79,9 +79,7 @@ public class VersionedScreen extends Screen {
         /*? if >=1.21.6 {*/
         matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
         /*?} elif >=1.21.2 {*/
-        matrices.getContext().blit(RenderLayer::guiTextured, textureID, x, y, (float)u, (float)v, width, height, textureWidth, textureHeight);
-        /*?} elif >=1.21 {*/
-        matrices.getContext().blit(RenderLayer::guiTextured, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
+        matrices.getContext().blit(RenderType::guiTextured, textureID, x, y, (float)u, (float)v, width, height, textureWidth, textureHeight);
         /*?} elif >=1.20 {*/
         matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);
         /*?} else {*/

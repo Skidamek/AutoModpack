@@ -18,6 +18,19 @@ public class VersionedMatrices {
         return context;
     }
 
+    /*? if >=1.21.6 {*/
+    public void pushPose() {
+        context.pose().pushMatrix();
+    }
+
+    public void popPose() {
+        context.pose().popMatrix();
+    }
+
+    public void scale(float x, float y, float z) {
+        context.pose().scale(x, y); // In 1.21.6 nimmt scale nur x und y
+    }
+    /*?} else {*/
     public void pushPose() {
         context.pose().pushPose();
     }
@@ -29,6 +42,7 @@ public class VersionedMatrices {
     public void scale(float x, float y, float z) {
         context.pose().scale(x, y, z);
     }
+    /*?}*/
     /*?} else {*/
     private PoseStack context;
 
