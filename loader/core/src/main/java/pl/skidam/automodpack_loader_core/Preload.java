@@ -84,8 +84,10 @@ public class Preload {
             // Delete dummy files
             CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
 
-            // Update modpack
-            new ModpackUpdater().prepareUpdate(latestModpackContent, modpackAddresses, secret, selectedModpackDir);
+            if (clientConfig.updateSelectedModpackOnLaunch) {
+                // Update modpack
+                new ModpackUpdater().prepareUpdate(latestModpackContent, modpackAddresses, secret, selectedModpackDir);
+            }
         }
     }
 
