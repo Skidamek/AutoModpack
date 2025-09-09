@@ -31,7 +31,7 @@ public class SelfUpdater {
         return update(null);
     }
 
-    public static boolean update(Jsons.ModpackContentFields serverModpackContent) {
+    public static boolean update(Jsons.ModpackContentMasterFields serverModpackContentMaster) {
 
         if (LOADER_MANAGER.isDevelopmentEnvironment()) return false;
         if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {
@@ -43,15 +43,15 @@ public class SelfUpdater {
         boolean gettingServerVersion = false;
 
         // Check if server version is available
-        if (serverModpackContent != null && serverModpackContent.automodpackVersion != null) {
-            modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
+        if (serverModpackContentMaster != null && serverModpackContentMaster.automodpackVersion != null) {
+            modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContentMaster.automodpackVersion, serverModpackContentMaster.mcVersion));
             gettingServerVersion = true;
         } else {
             modrinthAPIList = ModrinthAPI.getModInfosFromID(AUTOMODPACK_ID);
         }
 
         if (gettingServerVersion) {
-            LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
+            LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContentMaster.automodpackVersion);
         } else if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) {
             LOGGER.info("AutoModpack self-updater is disabled in client config.");
             return false;

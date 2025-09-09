@@ -48,7 +48,7 @@ class ModpackTest {
                 "ModpackContentItems(file=/mods/server-mod-1.20.jar, size=1, type=other, editable=false, sha1=86f7e437faa5a7fce15d1ddcb9eaeaea377667b8, murmur=null)"
         );
 
-        ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new ArrayList<>(), new ArrayList<>(editable), new ArrayList<>(), new ModpackExecutor().getExecutor());
+        ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new ArrayList<>(), new ArrayList<>(editable), new ArrayList<>(), false, false, new ModpackExecutor().getExecutor());
         content.create();
 
         boolean correct = true;

@@ -1,13 +1,13 @@
 package pl.skidam.automodpack_core.protocol.netty.message;
 
-import static pl.skidam.automodpack_core.protocol.NetUtils.ECHO_TYPE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
-public class EchoMessage extends ProtocolMessage {
+public class PackMetaRequestMessage extends ProtocolMessage {
     private final int dataLength;
     private final byte[] data;
 
-    public EchoMessage(byte version, byte[] secret, byte[] data) {
-        super(version, ECHO_TYPE, secret);
+    public PackMetaRequestMessage(byte version, byte[] secret, byte[] data) {
+        super(version, PACK_META_REQUEST_TYPE, secret);
         this.dataLength = data.length;
         this.data = data;
     }
