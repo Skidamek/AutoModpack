@@ -1,23 +1,23 @@
 {
-    "automodpack.restart.full": "Модпак был загружен!",
+    "automodpack.restart.full": "Модпак был установлен!",
     "automodpack.restart.update": "Обновление Модпака установлено!",
     "automodpack.restart.select": "Серверный модпак выбран!",
     "automodpack.restart.automodpack": "Версия Automodpack обновлена до требуемой сервером!",
-    "automodpack.restart.description": "Чтобы завершить обновление модпака, нужно перезапустить игру.",
-    "automodpack.restart.secDescription": "Вы хотите совершить перезапуск прямо сейчас?",
+    "automodpack.restart.description": "Для завершения обновления перезапустите игру.",
+    "automodpack.restart.secDescription": "Перезапустить игру сейчас?",
     "automodpack.restart.confirm": "Закрыть игру",
     "automodpack.restart.cancel": "Вернуться в меню",
 
     "automodpack.delete": "Удалить Модпак",
     "automodpack.delete.description": "Вы потеряете все файлы из загруженного модпака.",
-    "automodpack.delete.secDescription": "Чтобы завершить удаление модпака, нужно перезапустить игру.",
+    "automodpack.delete.secDescription": "Для завершения удаления перезапустите игру.",
     "automodpack.delete.thiDescription": "Вы точно хотите удалить модпак?",
     "automodpack.delete.confirm": "Удалить и выйти",
     "automodpack.delete.cancel": "Вернуться в меню",
 
     "automodpack.danger": "Этот сервер предоставляет модпак!",
-    "automodpack.danger.description": "Вы точно хотите его скачать?",
-    "automodpack.danger.secDescription": "Если не доверяете серверу, НЕ скачивайте!",
+    "automodpack.danger.description": "Скачать модпак сервера?",
+    "automodpack.danger.secDescription": "Перед установкой, убедитесь, что доверяете серверу!",
     "automodpack.danger.confirm": "Скачать",
     "automodpack.danger.cancel": "Вернуться в меню",
 
@@ -31,7 +31,7 @@
     "automodpack.download.noFiles": "Нет файлов для скачивания!",
 
     "automodpack.redownload": "Переустановить Модпак",
-    "automodpack.redownload.description": "Это может исправить проблемы с модпаком.",
+    "automodpack.redownload.description": "Это возможно исправит проблемы с модпаком.",
 
     "automodpack.error": "Что-то пошло не так!",
     "automodpack.error.files": "Не удалось скачать некоторые файлы.",
@@ -49,7 +49,7 @@
     "automodpack.validation.failed": "Верификация не удалась",
 
     "automodpack.retry": "Попробуйте снова",
-    "automodpack.select": "Выбери Модпак",
+    "automodpack.select": "Выберите Модпак",
     "automodpack.yes": "Да",
     "automodpack.no": "Нет",
     "automodpack.cancel": "Отмена",
