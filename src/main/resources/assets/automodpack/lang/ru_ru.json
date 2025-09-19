@@ -1,10 +1,10 @@
 {
-    "automodpack.restart.full": "Модпак был установлен!",
+    "automodpack.restart.full": "Модпак установлен!",
     "automodpack.restart.update": "Обновление Модпака установлено!",
     "automodpack.restart.select": "Серверный модпак выбран!",
     "automodpack.restart.automodpack": "Версия Automodpack обновлена до требуемой сервером!",
     "automodpack.restart.description": "Для завершения обновления перезапустите игру.",
-    "automodpack.restart.secDescription": "Перезапустить игру сейчас?",
+    "automodpack.restart.secDescription": "Перезапустить игру?",
     "automodpack.restart.confirm": "Закрыть игру",
     "automodpack.restart.cancel": "Вернуться в меню",
 
@@ -15,7 +15,7 @@
     "automodpack.delete.confirm": "Удалить и выйти",
     "automodpack.delete.cancel": "Вернуться в меню",
 
-    "automodpack.danger": "Этот сервер предоставляет модпак!",
+    "automodpack.danger": "Сервер предоставляет модпак!",
     "automodpack.danger.description": "Скачать модпак сервера?",
     "automodpack.danger.secDescription": "Перед установкой, убедитесь, что доверяете серверу!",
     "automodpack.danger.confirm": "Скачать",
