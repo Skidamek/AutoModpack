@@ -1,35 +1,169 @@
+# AutoModpack Quick Start Guide
+
 So you want to start using AutoModpack? Great! Let's get you started.
+
+> **For more detailed information:**
+>
+> * Read the [Modpack Creation page](technicals/modpack-creation) to learn how to manage your modpack.
+> * Read the [Configuration page](configuration/server-config) to learn how to customize AutoModpack for your needs.
 
 ## Installation
 
-1. **Download AutoModpack**: Get the latest version of AutoModpack for your minecraft version from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack).
-2. **Install AutoModpack**: Place the downloaded mod into your `mods` folder of your minecraft instance.
-3. **Start your server**: Launch your minecraft server with AutoModpack installed. This will generate the initial modpack metadata.
+1. **Download AutoModpack**: Get the latest version of AutoModpack for your Minecraft version from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack).
+2. **Install AutoModpack**: Place the downloaded mod into your `mods` folder of your Minecraft instance.
+3. **Start your server**: Launch your Minecraft server with AutoModpack installed. This will generate the initial modpack metadata.
 
-Now you are in most cases ready to go, at this point, its recommended to try connecting to your server with just the automodpack installed on the client and see if everything works.
+<aside class="recommendation">
+    <strong>Pro Tip:</strong> It is recommended to connect to your server with just AutoModpack installed on the client first to ensure everything works.
+</aside>
+
+---
 
 ## First Connection
-On first connection you will be prompted to verify the server's certificate fingerprint. This is a security measure to ensure that you are connecting to the correct server and not a malicious one. Read more about [certificate verification](technicals/certificate).
-After successful verification, AutoModpack will asks you to confirm the modpack installation. Confirm and modpack should be downloaded and installed automatically.
 
-Now restart your game and your servers' modpack should be loaded and you should be able to connect to your server again but this time spawning in the overworld!
+On first connection, you will be prompted to verify the server's certificate fingerprint. This ensures you are connecting to the correct server and not a malicious one. Read more about [certificate verification](technicals/certificate).
 
-<Callout>
-If you don't see your modpack mods in the mods folder, don't worry. Mods won't be installed to your standard mods folder, they will be installed in the `~/.minecraft/automodpack/modapcks/{your-modpack}/mods/` folder instead. There are some [good reasons for that](technicals/file-structure).
-</Callout>
+After verification, AutoModpack will ask you to confirm the modpack installation. Confirm it, and the modpack will download and install automatically.
+
+Restart your game. Your server's modpack should now be loaded, and you should be able to connect, spawning in the overworld.
+
+<aside class="info-callout">
+    <strong>Note:</strong> If you don't see your modpack mods in the `mods` folder, they are installed in `~/.minecraft/automodpack/modpacks/{your-modpack}/mods/`. This is intentional to keep mod updates clean.
+</aside>
+
+---
+
+## Server Setup & Configuration
+
+### Server Config File
+
+**Location:** `~/automodpack/automodpack-server.json`
+
+**Example Configuration:**
+
+```json
+{
+  "modpackHost": true,
+  "generateModpackOnStart": true,
+  "syncedFiles": [
+    "/mods/*.jar",
+    "/resourcepacks/*",
+    "/config/**",
+    "/shaderpacks/*",
+    "!/config/fancymenu/user_variables.db"
+  ],
+  "allowEditsInFiles": [
+    "/options.txt"
+  ],
+  "forceCopyFilesToStandardLocation": [],
+  "autoExcludeServerSideMods": true,
+  "requireAutoModpackOnClient": true
+}
+```
+
+<div class="config-explanation">
+
+**Key Notes / Explanation:**
+
+* **`syncedFiles`**: Files/folders synced to clients. Supports `*` and recursive `**`. Prefix with `!` to exclude files/folders.
+* **`allowEditsInFiles`**: Files clients can edit. Editable files are downloaded only once and won't update automatically.
+
+  * **Example:** To always update FancyMenu configs, remove `/config/**` from `allowEditsInFiles`.
+* **`forceCopyFilesToStandardLocation`**: Forces clients to load files into standard folders (use carefully).
+* **`modpackHost`**: Enables server hosting of the modpack.
+* **`generateModpackOnStart`**: Regenerates modpack metadata on server start.
+* **`requireAutoModpackOnClient`**: Enforces client installation.
+* **`autoExcludeServerSideMods`**: Automatically excludes server-side mods.
+
+</div>
+
+### Splitting Mods for Server and Client
+
+* **Client-side mods**: `root/automodpack/host-modpack/main/mods` (e.g., visual enhancements).
+* **Server-side mods (synced)**: Standard `mods` folder; synced automatically to clients.
+* **Excluding server-only mods example**:
+
+```json
+"syncedFiles": [
+  "/mods/*.jar",
+  "!/mods/lithostitched-fabric*.jar"
+]
+```
+
+---
+
+## Client Setup & Configuration
+
+1. Download Minecraft and Fabric Launcher (e.g., 1.20.1).
+2. Install AutoModpack in the launcher's mods folder.
+3. Launch Minecraft with Fabric and connect to the server. AutoModpack will:
+
+   * Download synced mods, configs, resource packs, and shaderpacks.
+   * Apply them in the correct folder: `~/.minecraft/automodpack/modpacks/{modpack}/mods`
+4. Add server fingerprint if prompted.
+5. Restart Minecraft to finalize modpack load.
+
+### Client Config File
+
+**Location:** `/automodpack/automodpack-client.json`
+
+**Example Configuration:**
+
+```json
+{
+  "selectedModpack": "MyServerModpack",
+  "installedModpacks": ["MyServerModpack"],
+  "selfUpdater": false
+}
+```
+
+<div class="config-explanation">
+
+**Key Notes / Explanation:**
+
+* **`selectedModpack`**: Folder name of the modpack to play.
+* **`installedModpacks`**: Lists installed modpacks on the client.
+* **`selfUpdater`**: Enables/disables automatic updates (does not affect server syncing).
+
+> Normally, players do not need to edit this file manually. AutoModpack handles syncing automatically.
+
+</div>
+
+---
+
+## Maintaining Updates
+
+* Avoid marking files as editable if they must stay in sync.
+* Changes to synced files on the server propagate to clients on next connection.
+* For configs like FancyMenu or CustomNPCs:
+
+  * Include them in `syncedFiles`.
+  * Exclude them from `allowEditsInFiles` to ensure clients always get updates.
+
+**Example:**
+
+```json
+"syncedFiles": [
+  "/config/fancymenu/**",
+  "/config/CustomNpcs.cfg"
+],
+"allowEditsInFiles": [
+  "/options.txt"
+]
+```
+
+---
 
 ## Troubleshooting
-If you encounter any issues at this point, here are some common troubleshooting steps:
-- Make sure you are using the same version of AutoModpack on both server and client.
-- Ensure that your server is running and accessible without AutoModpack.
-- Check the server logs there might be some nudge about what went wrong.
-- Read the [faq page](faq) for common questions and answers.
 
-If you are still having issues, join our [Discord server](https://discord.gg/hS6aMyeA9P) and create a post in the `#support` channel, we will try to help!
+<aside class="warning-callout">
+    <strong>Important:</strong>
+    <ul>
+        <li>Ensure the same version of AutoModpack is used on both server and client.</li>
+        <li>Make sure your server runs and is accessible without AutoModpack.</li>
+        <li>Check server logs for hints.</li>
+        <li>Read the <a href="faq">FAQ page</a> for common questions.</li>
+    </ul>
+</aside>
 
-## Next Steps
-
-Now that you have AutoModpack installed and working, you can start customizing your modpack. Here are some things you can do next:
-
-- Read the [modpack creation page](technicals/modpack-creation) to learn how to manage your modpack.
-- Read the [configuration page](configuration/server-config) to learn how to configure AutoModpack to your needs.
+If issues persist, join our [Discord server](https://discord.gg/hS6aMyeA9P) and post in the `#support` channel.
