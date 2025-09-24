@@ -3,19 +3,16 @@
 So you want to start using AutoModpack? Great! Let's get you started.
 
 > **For more detailed information:**
->
-> * Read the [Modpack Creation page](technicals/modpack-creation) to learn how to manage your modpack.
-> * Read the [Configuration page](configuration/server-config) to learn how to customize AutoModpack for your needs.
+> - Read the [Modpack Creation page](technicals/modpack-creation) to learn how to manage your modpack
+> - Read the [Configuration page](configuration/server-config) to learn how to customize AutoModpack for your needs
 
 ## Installation
 
-1. **Download AutoModpack**: Get the latest version of AutoModpack for your Minecraft version from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack).
-2. **Install AutoModpack**: Place the downloaded mod into your `mods` folder of your Minecraft instance.
-3. **Start your server**: Launch your Minecraft server with AutoModpack installed. This will generate the initial modpack metadata.
+1. **Download AutoModpack**: Get the latest version of AutoModpack for your Minecraft version from [Modrinth](https://modrinth.com/mod/automodpack) or [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack)
+2. **Install AutoModpack**: Place the downloaded mod into your `mods` folder of your Minecraft instance
+3. **Start your server**: Launch your Minecraft server with AutoModpack installed. This will generate the initial modpack metadata
 
-<aside class="recommendation">
-    <strong>Pro Tip:</strong> It is recommended to connect to your server with just AutoModpack installed on the client first to ensure everything works.
-</aside>
+> **Pro Tip:** It is recommended to connect to your server with just AutoModpack installed on the client first to ensure everything works.
 
 ---
 
@@ -27,9 +24,7 @@ After verification, AutoModpack will ask you to confirm the modpack installation
 
 Restart your game. Your server's modpack should now be loaded, and you should be able to connect, spawning in the overworld.
 
-<aside class="info-callout">
-    <strong>Note:</strong> If you don't see your modpack mods in the `mods` folder, they are installed in `~/.minecraft/automodpack/modpacks/{your-modpack}/mods/`. This is intentional to keep mod updates clean.
-</aside>
+> **Note:** If you don't see your modpack mods in the `mods` folder, they are installed in `~/.minecraft/automodpack/modpacks/{your-modpack}/mods/`. This is intentional to keep mod updates clean.
 
 ---
 
@@ -40,7 +35,6 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 **Location:** `~/automodpack/automodpack-server.json`
 
 **Example Configuration:**
-
 ```json
 {
   "modpackHost": true,
@@ -61,109 +55,77 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 }
 ```
 
-<div class="config-explanation">
+**Key Configuration Options:**
 
-**Key Notes / Explanation:**
-
-* **`syncedFiles`**: Files/folders synced to clients. Supports `*` and recursive `**`. Prefix with `!` to exclude files/folders.
-* **`allowEditsInFiles`**: Files clients can edit. Editable files are downloaded only once and won't update automatically.
-
-  * **Example:** To always update FancyMenu configs, remove `/config/**` from `allowEditsInFiles`.
-* **`forceCopyFilesToStandardLocation`**: Forces clients to load files into standard folders (use carefully).
-* **`modpackHost`**: Enables server hosting of the modpack.
-* **`generateModpackOnStart`**: Regenerates modpack metadata on server start.
-* **`requireAutoModpackOnClient`**: Enforces client installation.
-* **`autoExcludeServerSideMods`**: Automatically excludes server-side mods.
-
-</div>
+- **`syncedFiles`**: List of files and folders to sync to clients. Use `*` for wildcards and `**` for recursive matching. Prefix with `!` to exclude
+- **`allowEditsInFiles`**: Files that clients can edit locally. These files are downloaded once and not updated automatically
+  - **Example:** To always update FancyMenu configs, remove `/config/**` from `allowEditsInFiles`
+  - **⚠️ Warning:** Removing `/config/**` will make ALL config files non-editable. If you only want specific config folders to be always updated, use exclusions instead:
+    ```json
+    "syncedFiles": [
+      "/config/**",
+      "!/config/fancymenu/**"
+    ],
+    "allowEditsInFiles": [
+      "/config/fancymenu/**"
+    ]
+    ```
+- **`forceCopyFilesToStandardLocation`**: Use with caution. Forces files to be copied to the standard Minecraft folders (breaks seamless updates)
+- **Other options**: See the [full configuration page](configuration/server-config) for detailed explanations of all settings
 
 ### Splitting Mods for Server and Client
 
-* **Client-side mods**: `root/automodpack/host-modpack/main/mods` (e.g., visual enhancements).
-* **Server-side mods (synced)**: Standard `mods` folder; synced automatically to clients.
-* **Excluding server-only mods example**:
-
-```json
-"syncedFiles": [
-  "/mods/*.jar",
-  "!/mods/lithostitched-fabric*.jar"
-]
-```
+- **Client-side mods**: Place in `~/automodpack/host-modpack/main/mods` (e.g., visual enhancements)
+- **Server-side mods (synced)**: Place in the standard `mods` folder; they will be synced to clients
+- **Excluding server-only mods example**:
+  ```json
+  "syncedFiles": [
+    "/mods/*.jar",
+    "!/mods/lithostitched-fabric*.jar"
+  ]
+  ```
 
 ---
 
 ## Client Setup & Configuration
 
-1. Download Minecraft and Fabric Launcher (e.g., 1.20.1).
-2. Install AutoModpack in the launcher's mods folder.
-3. Launch Minecraft with Fabric and connect to the server. AutoModpack will:
+AutoModpack automatically manages client configuration. When you connect to a server, AutoModpack will:
 
-   * Download synced mods, configs, resource packs, and shaderpacks.
-   * Apply them in the correct folder: `~/.minecraft/automodpack/modpacks/{modpack}/mods`
-4. Add server fingerprint if prompted.
-5. Restart Minecraft to finalize modpack load.
+- Download the modpack (mods, configs, resource packs, etc.) to `~/.minecraft/automodpack/modpacks/{modpack}/`
+- Prompt you to verify the server's certificate fingerprint (first time only)
+- Ask for confirmation to install the modpack
 
-### Client Config File
+After installation, restart Minecraft to load the modpack.
 
-**Location:** `/automodpack/automodpack-client.json`
-
-**Example Configuration:**
-
-```json
-{
-  "selectedModpack": "MyServerModpack",
-  "installedModpacks": ["MyServerModpack"],
-  "selfUpdater": false
-}
-```
-
-<div class="config-explanation">
-
-**Key Notes / Explanation:**
-
-* **`selectedModpack`**: Folder name of the modpack to play.
-* **`installedModpacks`**: Lists installed modpacks on the client.
-* **`selfUpdater`**: Enables/disables automatic updates (does not affect server syncing).
-
-> Normally, players do not need to edit this file manually. AutoModpack handles syncing automatically.
-
-</div>
+> **Note:** The client config file (`~/automodpack/automodpack-client.json`) is managed automatically. You normally don't need to edit it manually. For advanced configuration, see the [client config page](configuration/client-config).
 
 ---
 
 ## Maintaining Updates
 
-* Avoid marking files as editable if they must stay in sync.
-* Changes to synced files on the server propagate to clients on next connection.
-* For configs like FancyMenu or CustomNPCs:
+- Files listed in `allowEditsInFiles` are only downloaded once and not updated. Use this for files that players should be able to customize
+- For files that must always be in sync (e.g., specific configs), ensure they are in `syncedFiles` and not in `allowEditsInFiles`
 
-  * Include them in `syncedFiles`.
-  * Exclude them from `allowEditsInFiles` to ensure clients always get updates.
-
-**Example:**
-
+**Example for FancyMenu configs:**
 ```json
 "syncedFiles": [
-  "/config/fancymenu/**",
-  "/config/CustomNpcs.cfg"
+  "/config/fancymenu/**"
 ],
 "allowEditsInFiles": [
   "/options.txt"
 ]
 ```
 
+This ensures FancyMenu configs are always updated, while players can still edit their options.
+
 ---
 
 ## Troubleshooting
 
-<aside class="warning-callout">
-    <strong>Important:</strong>
-    <ul>
-        <li>Ensure the same version of AutoModpack is used on both server and client.</li>
-        <li>Make sure your server runs and is accessible without AutoModpack.</li>
-        <li>Check server logs for hints.</li>
-        <li>Read the <a href="faq">FAQ page</a> for common questions.</li>
-    </ul>
-</aside>
+> **Important:**
+> - Ensure the same version of AutoModpack is used on both server and client
+> - Make sure your server runs and is accessible without AutoModpack
+> - Check server logs for hints
+> - Read the [FAQ page](faq) for common questions
 
 If issues persist, join our [Discord server](https://discord.gg/hS6aMyeA9P) and post in the `#support` channel.
