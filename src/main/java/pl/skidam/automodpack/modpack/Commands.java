@@ -101,11 +101,11 @@ public class Commands {
                 if (playerSecretPair == null) continue;
 
                 String playerId = playerSecretPair.getKey();
-                GameProfile profile = GameHelpers.getPlayerProfile(playerId);
+                var profile = GameHelpers.getPlayerProfile(playerId);
 
                 long connNum = connections.values().stream().filter(secret::equals).count();
 
-                send(context, String.format("Player: %s (%s) is downloading modpack using %d connections", profile.getName(), playerId, connNum), ChatFormatting.GREEN, false);
+                send(context, String.format("Player: %s (%s) is downloading modpack using %d connections", GameHelpers.getPlayerName(profile), playerId, connNum), ChatFormatting.GREEN, false);
             }
         });
 

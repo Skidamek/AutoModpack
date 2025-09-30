@@ -13,7 +13,7 @@ public class GameCall implements GameCallService {
 
     @Override
     public boolean isPlayerAuthorized(SocketAddress address, String id) {
-        GameProfile profile = GameHelpers.getPlayerProfile(id);
+        var profile = GameHelpers.getPlayerProfile(id);
 
         if (server == null) {
             LOGGER.error("Server is null?");

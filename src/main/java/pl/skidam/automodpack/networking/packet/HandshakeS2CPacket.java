@@ -31,13 +31,13 @@ public class HandshakeS2CPacket {
         Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
-        String playerName = profile.getName();
+        String playerName = GameHelpers.getPlayerName(profile);
 
         if (playerName == null) {
             throw new IllegalStateException("Player name is null");
         }
 
-        if (profile.getId() == null) {
+        if (GameHelpers.getPlayerUUID(profile) == null) {
 //            if (server.isOnlineMode()) { This may happen with mods like 'easyauth', its possible to have an offline mode player join an online server
 //                throw new IllegalStateException("Player: " + playerName + " doesn't have UUID");
 //            }
@@ -72,7 +72,7 @@ public class HandshakeS2CPacket {
 
     public static void handleHandshake(Connection connection, GameProfile profile, int minecraftServerPort, FriendlyByteBuf buf, PacketSender packetSender) {
         try {
-            LOGGER.info("{} has installed AutoModpack.", profile.getName());
+            LOGGER.info("{} has installed AutoModpack.", GameHelpers.getPlayerName(profile));
 
             String clientResponse = buf.readUtf(Short.MAX_VALUE);
             HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
@@ -96,7 +96,7 @@ public class HandshakeS2CPacket {
             }
 
             if (!hostServer.isRunning()) {
-                LOGGER.info("Host server is not running. Modpack will not be sent to {}", profile.getName());
+                LOGGER.info("Host server is not running. Modpack will not be sent to {}", GameHelpers.getPlayerName(profile));
                 return;
             }
 
@@ -110,13 +110,13 @@ public class HandshakeS2CPacket {
             // now we know player is authenticated, packets are encrypted and player is whitelisted
             // regenerate unique secret
             Secrets.Secret secret = Secrets.generateSecret();
-            SecretsStore.saveHostSecret(profile.getId().toString(), secret);
+            SecretsStore.saveHostSecret(GameHelpers.getPlayerUUID(profile).toString(), secret);
 
             String addressToSend = serverConfig.addressToSend;
             int portToSend = serverConfig.portToSend;
             boolean requiresMagic = serverConfig.bindPort == -1;
 
-            LOGGER.info("Sending {} modpack host address: {}:{}", profile.getName(), addressToSend, portToSend);
+            LOGGER.info("Sending {} modpack host address: {}:{}", GameHelpers.getPlayerName(profile), addressToSend, portToSend);
 
             DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
             String packetContentJson = dataPacket.toJson();
@@ -125,7 +125,7 @@ public class HandshakeS2CPacket {
             outBuf.writeUtf(packetContentJson, Short.MAX_VALUE);
             packetSender.sendPacket(DATA, outBuf);
         } catch (Exception e) {
-            LOGGER.error("Error while handling handshake for {}", profile.getName(), e);
+            LOGGER.error("Error while handling handshake for {}", GameHelpers.getPlayerName(profile), e);
         }
     }
 

@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import org.jetbrains.annotations.NotNull;
 import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -35,12 +36,10 @@ public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
 		this.bigFont = bigFont;
 	}
 
-	/*? if >=1.17 {*/
 	@Override
-	public Component getNarration() {
+	public @NotNull Component getNarration() {
 		return text;
 	}
-	/*?}*/
 
 	@Override
 	/*? if <1.20 {*/
@@ -98,4 +97,9 @@ public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
 	public boolean mouseReleased(double mouseX, double mouseY, int button) {
 		return false;
 	}
+
+    @Override
+    public void renderContent(GuiGraphics guiGraphics, int i, int j, boolean bl, float f) {
+
+    }
 }
