@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import net.minecraft.ChatFormatting;
@@ -15,6 +16,9 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.utils.SpeedMeter;
 
+import static pl.skidam.automodpack_core.GlobalVariables.clientConfig;
+import static pl.skidam.automodpack_core.GlobalVariables.clientConfigFile;
+
 public class DownloadScreen extends VersionedScreen {
 
     private static final ResourceLocation PROGRESS_BAR_EMPTY_TEXTURE = Common.id("gui/progress-bar-empty.png");
@@ -25,6 +29,7 @@ public class DownloadScreen extends VersionedScreen {
     private final String header;
     private static long ticks = 0;
     private Button cancelButton;
+    private Button muteMusicButton;
 
     private String lastStage = "-1";
     private int lastPercentage = -1;
@@ -44,6 +49,7 @@ public class DownloadScreen extends VersionedScreen {
         initWidgets();
 
         this.addRenderableWidget(cancelButton);
+        this.addRenderableWidget(muteMusicButton);
 
         Util.backgroundExecutor().execute(() -> {
             while (downloadManager != null && downloadManager.isRunning()) {
@@ -60,8 +66,30 @@ public class DownloadScreen extends VersionedScreen {
                 button -> {
                     cancelButton.active = false;
                     cancelDownload();
+                    AudioManager.stopMusic();
                 }
         );
+
+        // TODO use icon instead of text
+        muteMusicButton = VersionedScreen.buttonWidget(
+                this.width - 40,
+                this.height - 40,
+                30,
+                20,
+                VersionedText.literal("Music"),
+                button -> {
+                    if (AudioManager.isMusicPlaying()) {
+                        AudioManager.stopMusic();
+                        clientConfig.downloadMusic = false;
+                    } else {
+                        AudioManager.playMusic();
+                        clientConfig.downloadMusic = true;
+                    }
+                    ConfigTools.save(clientConfigFile, clientConfig);
+                }
+        );
+
+        muteMusicButton.visible = false;
     }
 
     private Component getStage() {
@@ -130,11 +158,15 @@ public class DownloadScreen extends VersionedScreen {
             return;
         }
 
-        if (AudioManager.isMusicPlaying()) {
+        if (muteMusicButton.visible) {
             return;
         }
 
-        AudioManager.playMusic();
+        if (clientConfig.downloadMusic) {
+            AudioManager.playMusic();
+        }
+
+        muteMusicButton.visible = true;
     }
 
 
@@ -167,6 +199,12 @@ public class DownloadScreen extends VersionedScreen {
             cancelButton.active = true;
         } else {
             cancelButton.active = false;
+        }
+
+        if (AudioManager.isMusicPlaying()) {
+            muteMusicButton.setMessage(VersionedText.literal("Mute"));
+        } else {
+            muteMusicButton.setMessage(VersionedText.literal("Unmute"));
         }
     }
 
