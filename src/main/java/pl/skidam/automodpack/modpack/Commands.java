@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.modpack;
 
-import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
@@ -64,7 +63,7 @@ public class Commands {
         );
 
         dispatcher.register(
-                literal("amp")
+                literal("am")
                         .executes(Commands::about)
                         .redirect(automodpackNode)
         );
