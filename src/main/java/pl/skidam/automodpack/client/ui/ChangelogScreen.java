@@ -135,19 +135,9 @@ public class ChangelogScreen extends VersionedScreen {
             formattedChanges = filteredChangelogs;
         }
 
-        // remove method is only available in 1.17+
-/*? if >=1.17 {*/
         this.removeWidget(this.listEntryWidget);
-        this.removeWidget(this.backButton);
-        this.removeWidget(this.openMainPageButton);
-/*?}*/
-
         this.listEntryWidget = new ListEntryWidget(formattedChanges, this.minecraft, this.width, this.height, 48, this.height - 50, 20); // 38
-
         this.addRenderableWidget(this.listEntryWidget);
-        this.addRenderableWidget(this.searchField);
-        this.addRenderableWidget(this.backButton);
-        this.addRenderableWidget(this.openMainPageButton);
     }
 
     private Map<String, String> reFormatChanges() {
