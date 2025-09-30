@@ -3,6 +3,8 @@ package pl.skidam.automodpack_loader_core_neoforge;
 import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.fml.loading.moddiscovery.AbstractJarFileModLocator;
 import net.neoforged.fml.loading.moddiscovery.ModDiscoverer;
+import net.neoforged.fml.loading.progress.ProgressMeter;
+import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.locating.IDependencyLocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,7 +44,10 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
             LOGGER.error("Error sorting FML dependency locators", t);
         }
 
+        ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
         new Preload();
+        progress.complete();
+
         return ModpackLoader.modsToLoad.stream();
     }
 }
