@@ -9,6 +9,10 @@ import pl.skidam.automodpack.client.ui.TextColors;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 
+/*? if >= 1.21.9 {*/
+import net.minecraft.client.input.MouseButtonEvent;
+/*?}*/
+
 /*? if >=1.20 {*/
 import net.minecraft.client.gui.GuiGraphics;
 /*?} else {*/
@@ -41,20 +45,35 @@ public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
 		return text;
 	}
 
-	@Override
-	/*? if <1.20 {*/
-    /*public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+    /*? if >= 1.21.9 {*/
+    @Override
+    public void renderContent(GuiGraphics GuiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+        VersionedMatrices versionedMatrices = new VersionedMatrices(GuiGraphics);
+        int x = this.getX();
+        int y = this.getY();
+        versionedRender(versionedMatrices, x, y, GuiGraphics.guiWidth(), this.getHeight());
+    }
+    /*?} else {*/
+	/*@Override
+    /^? if <1.20 {^/
+    /^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 		VersionedMatrices versionedMatrices = new VersionedMatrices();
-    *//*?} else {*/
+    ^//^?} else {^/
 	public void render(GuiGraphics GuiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 		VersionedMatrices versionedMatrices = new VersionedMatrices(GuiGraphics);
-	/*?}*/
-		versionedRender(versionedMatrices, index, y, x, entryWidth, entryHeight, mouseX, mouseY, hovered, tickDelta);
+	/^?}^/
+		versionedRender(versionedMatrices, x, y, entryWidth, entryHeight);
 	}
-	public void versionedRender(VersionedMatrices versionedMatrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+    *//*?}*/
+
+	public void versionedRender(VersionedMatrices versionedMatrices, int x, int y, int entryWidth, int entryHeight) {
 		versionedMatrices.pushPose();
 
-		int centeredX = x + entryWidth / 2;
+        /*? if >= 1.21.9 {*/
+		int centeredX = entryWidth / 2;
+        /*?} else {*/
+        /*int centeredX = x + entryWidth / 2;
+        *//*?}*/
 		int centeredY = y + entryHeight / 2;
 		if (bigFont) {
 			float scale = 1.5f;
@@ -88,18 +107,23 @@ public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
 		return mainPageUrl;
 	}
 
-	@Override
+    /*? if >= 1.21.9 {*/
+    @Override
+    public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean bl) {
+        return !bigFont;
+    }
+    /*?} else {*/
+    /*@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
 		return !bigFont;
 	}
+    *//*?}*/
 
-	@Override
+
+    /*? if < 1.21.9 {*/
+	/*@Override
 	public boolean mouseReleased(double mouseX, double mouseY, int button) {
 		return false;
 	}
-
-    @Override
-    public void renderContent(GuiGraphics guiGraphics, int i, int j, boolean bl, float f) {
-
-    }
+    *//*?}*/
 }

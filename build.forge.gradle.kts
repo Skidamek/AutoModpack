@@ -28,9 +28,7 @@ dependencies {
     implementation(project(":loader-core"))
 
     compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.6+1.20.1")
-//    compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${property("deps.mixin-extras")}")!!)
-//    implementation(jarJar("io.github.llamalad7:mixinextras-forge:${property("deps.mixin-extras")}")!!)
-    annotationProcessor("org.spongepowered:mixin:0.8.5:processor") // required to generate refmaps
+    annotationProcessor("org.spongepowered:mixin:0.8.5:processor") // Required to generate refmaps
 }
 
 mixin { // Add mixins

@@ -21,13 +21,11 @@ stonecutter.parameters {
     replacements {
         string {
             direction = eval(current.version, ">=1.20.2")
-            phase = "FIRST"
             replace("ServerboundCustomQueryPacket", "ServerboundCustomQueryAnswerPacket")
         }
 
         string {
             direction = eval(current.version, ">=1.20.2")
-            phase = "FIRST"
             replace(".SystemToastIds.", ".SystemToastId.")
         }
     }
