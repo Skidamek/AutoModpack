@@ -24,9 +24,9 @@ dependencies {
     compileOnly("org.apache.logging.log4j:log4j-core:2.8.1")
 
     implementation("org.tomlj:tomlj:1.1.1")
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.80")
-    implementation("com.github.luben:zstd-jni:1.5.7-3")
-    implementation("org.apache.httpcomponents.client5:httpclient5:5.5")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.82")
+    implementation("com.github.luben:zstd-jni:1.5.7-4")
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
 }
 
 tasks {

@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack.modpack.GameHelpers;
 
 /*? if >1.20.3 {*/
 import net.minecraft.server.network.CommonListenerCookie;
@@ -36,7 +37,7 @@ public class PlayerManagerMixin {
 private void onPlayerConnect(Connection netManager, ServerPlayer player, CallbackInfo ci) {
 *//*?}*/
         GameProfile profile = player.getGameProfile();
-        String playerName = profile.getName();
+        String playerName = GameHelpers.getPlayerName(profile);
 
         if (!Common.players.containsKey(playerName)) {
 //            LOGGER.error("{} isn't in the players map.", playerName); it should not happen but if it does then doesn't matter that much. Its only a nag message. see #292

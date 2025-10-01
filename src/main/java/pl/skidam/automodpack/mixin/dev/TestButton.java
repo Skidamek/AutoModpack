@@ -33,11 +33,7 @@ public class TestButton extends Screen {
             return;
         }
 
-/*? if >=1.17 {*/
         this.addRenderableWidget(
-/*?} else {*//*
-   this.addButton(
-*//*?}*/
                 VersionedScreen.buttonWidget(
                         this.width / 2 - 124,
                         90,

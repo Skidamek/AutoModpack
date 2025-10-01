@@ -27,23 +27,26 @@ dependencies {
 
     modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric-loader")}")
 
-    // TODO transitive false
     setOf(
         "api-base", // Required by modules below
-        "resource-loader-v0", // Required for translatable texts
         "registry-sync-v0", // Required for custom sounds
-        "networking-api-v1" // Required by registry sync module
+        "networking-api-v1", // Required by registry sync module
+        "resource-loader-v0" // Required for translatable texts
     ).forEach {
         include(modImplementation(fabricApi.module("fabric-$it", property("deps.fabric-api") as String))!!)
     }
 
+    // Required for commands
     if (stonecutter.eval(stonecutter.current.version, "<1.19.2")) {
-        include(modImplementation(fabricApi.module("fabric-command-api-v1", property("deps.fabric-api") as String))!!) // TODO transitive false
+        include(modImplementation(fabricApi.module("fabric-command-api-v1", property("deps.fabric-api") as String))!!)
     } else {
-        include(modImplementation(fabricApi.module("fabric-command-api-v2", property("deps.fabric-api") as String))!!) // TODO transitive false
+        include(modImplementation(fabricApi.module("fabric-command-api-v2", property("deps.fabric-api") as String))!!)
     }
 
-//    include(implementation(annotationProcessor("io.github.llamalad7:mixinextras-fabric:${property("deps.mixin-extras")}")!!)!!)
+    // Required for translatable texts in 1.21.9+ for some reason i need both v0 and v1?
+    if (stonecutter.eval(stonecutter.current.version, ">=1.21.9")) {
+        include(modImplementation(fabricApi.module("fabric-resource-loader-v1", property("deps.fabric-api") as String))!!)
+    }
 }
 
 java {
@@ -62,6 +65,12 @@ java {
 tasks {
     processResources {
         exclude("**/neoforge.mods.toml", "**/mods.toml", "**/accesstransformer.cfg")
+        if (stonecutter.eval(stonecutter.current.version, ">=1.21.9")) {
+            exclude("**/pack.mcmeta")
+            rename("new-pack.mcmeta", "pack.mcmeta")
+        } else {
+            exclude("**/new-pack.mcmeta")
+        }
     }
 
     register<Copy>("buildAndCollect") {

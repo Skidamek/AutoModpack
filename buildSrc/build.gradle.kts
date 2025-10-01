@@ -1,6 +1,6 @@
 plugins {
     `kotlin-dsl`
-    kotlin("jvm") version "2.1.21"
+    kotlin("jvm") version "2.2.20"
 }
 
 repositories {
@@ -9,5 +9,5 @@ repositories {
 }
 
 dependencies {
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.1") // For JSON parsing e.g. in build.forge.gradle.kts
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.20.0") // For JSON parsing e.g. in build.forge.gradle.kts
 }

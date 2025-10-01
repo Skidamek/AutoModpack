@@ -19,47 +19,47 @@ public class ScreenImpl implements ScreenService {
 
     @Override
     public void download(Object... args) {
-        Screens.download(args[0], args[1]);
+        Minecraft.getInstance().execute(() -> Screens.download(args[0], args[1]));
     }
 
     @Override
     public void fetch(Object... args) {
-        Screens.fetch(args[0]);
+        Minecraft.getInstance().execute(() -> Screens.fetch(args[0]));
     }
 
     @Override
     public void changelog(Object... args) {
-        Screens.changelog(args[0], args[1], args[2]);
+        Minecraft.getInstance().execute(() -> Screens.changelog(args[0], args[1], args[2]));
     }
 
     @Override
     public void restart(Object... args) {
-        Screens.restart(args[0], args[1], args[2]);
+        Minecraft.getInstance().execute(() -> Screens.restart(args[0], args[1], args[2]));
     }
 
     @Override
     public void danger(Object... args) {
-        Screens.danger(args[0], args[1]);
+        Minecraft.getInstance().execute(() -> Screens.danger(args[0], args[1]));
     }
 
     @Override
     public void error(String... args) {
-        Screens.error(args);
+        Minecraft.getInstance().execute(() -> Screens.error(args));
     }
 
     @Override
     public void menu(Object... args) {
-        Screens.menu();
+        Minecraft.getInstance().execute(Screens::menu);
     }
 
     @Override
     public void title(Object... args) {
-        Screens.title();
+        Minecraft.getInstance().execute(Screens::title);
     }
 
     @Override
     public void validation(Object... args) {
-        Screens.validation(args[0], args[1], args[2], args[3]);
+        Minecraft.getInstance().execute(() -> Screens.validation(args[0], args[1], args[2], args[3]));
     }
 
     @Override

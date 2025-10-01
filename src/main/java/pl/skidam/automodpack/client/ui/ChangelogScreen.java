@@ -14,8 +14,6 @@ import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Optional;
 import net.minecraft.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -135,19 +133,9 @@ public class ChangelogScreen extends VersionedScreen {
             formattedChanges = filteredChangelogs;
         }
 
-        // remove method is only available in 1.17+
-/*? if >=1.17 {*/
         this.removeWidget(this.listEntryWidget);
-        this.removeWidget(this.backButton);
-        this.removeWidget(this.openMainPageButton);
-/*?}*/
-
         this.listEntryWidget = new ListEntryWidget(formattedChanges, this.minecraft, this.width, this.height, 48, this.height - 50, 20); // 38
-
         this.addRenderableWidget(this.listEntryWidget);
-        this.addRenderableWidget(this.searchField);
-        this.addRenderableWidget(this.backButton);
-        this.addRenderableWidget(this.openMainPageButton);
     }
 
     private Map<String, String> reFormatChanges() {

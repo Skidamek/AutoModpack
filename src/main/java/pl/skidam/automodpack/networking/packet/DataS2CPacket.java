@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
+import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -31,13 +32,13 @@ public class DataS2CPacket {
             String clientHasUpdate = buf.readUtf(Short.MAX_VALUE);
 
             if ("true".equals(clientHasUpdate)) { // disconnect
-                LOGGER.warn("{} has not installed modpack. Certificate fingerprint: {}", profile.getName(), hostServer.getCertificateFingerprint());
+                LOGGER.warn("{} has not installed modpack. Certificate fingerprint: {}", GameHelpers.getPlayerName(profile), hostServer.getCertificateFingerprint());
                 Component reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
                 Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
                 connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
             } else if ("false".equals(clientHasUpdate)) {
-                LOGGER.info("{} has installed whole modpack", profile.getName());
+                LOGGER.info("{} has installed whole modpack", GameHelpers.getPlayerName(profile));
             } else {
                 Component reason = VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
                 Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
