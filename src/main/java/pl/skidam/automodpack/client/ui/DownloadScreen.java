@@ -21,15 +21,17 @@ import static pl.skidam.automodpack_core.GlobalVariables.clientConfigFile;
 
 public class DownloadScreen extends VersionedScreen {
 
-    private static final ResourceLocation PROGRESS_BAR_EMPTY_TEXTURE = Common.id("gui/progress-bar-empty.png");
-    private static final ResourceLocation PROGRESS_BAR_FULL_TEXTURE = Common.id("gui/progress-bar-full.png");
+    private static final ResourceLocation PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/progress-bar-empty.png");
+    private static final ResourceLocation PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/progress-bar-full.png");
     private static final int PROGRESS_BAR_WIDTH = 250;
     private static final int PROGRESS_BAR_HEIGHT = 20;
     private final DownloadManager downloadManager;
     private final String header;
-    private static long ticks = 0;
+    private long ticks = 0;
+    private boolean musicStarted = false;
     private Button cancelButton;
     private Button muteMusicButton;
+    private Button playMusicButton;
 
     private String lastStage = "-1";
     private int lastPercentage = -1;
@@ -48,9 +50,6 @@ public class DownloadScreen extends VersionedScreen {
 
         initWidgets();
 
-        this.addRenderableWidget(cancelButton);
-        this.addRenderableWidget(muteMusicButton);
-
         Util.backgroundExecutor().execute(() -> {
             while (downloadManager != null && downloadManager.isRunning()) {
                 lastStage = downloadManager.getStage();
@@ -62,34 +61,38 @@ public class DownloadScreen extends VersionedScreen {
     }
 
     private void initWidgets() {
-        cancelButton = buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.translatable("automodpack.cancel"),
+        cancelButton = addRenderableWidget(buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.translatable("automodpack.cancel"),
                 button -> {
                     cancelButton.active = false;
                     cancelDownload();
                     AudioManager.stopMusic();
                 }
-        );
+        ));
 
-        // TODO use icon instead of text
-        muteMusicButton = VersionedScreen.buttonWidget(
-                this.width - 40,
-                this.height - 40,
-                30,
+        /*? if >= 1.20.2 {*/
+        muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(
                 20,
-                VersionedText.literal("Music"),
                 button -> {
-                    if (AudioManager.isMusicPlaying()) {
-                        AudioManager.stopMusic();
-                        clientConfig.downloadMusic = false;
-                    } else {
-                        AudioManager.playMusic();
-                        clientConfig.downloadMusic = true;
-                    }
+                    AudioManager.stopMusic();
+                    clientConfig.playMusic = false;
                     ConfigTools.save(clientConfigFile, clientConfig);
-                }
-        );
+                },
+                "music-note"
+        ));
 
-        muteMusicButton.visible = false;
+        playMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(
+                20,
+                button -> {
+                    AudioManager.playMusic();
+                    clientConfig.playMusic = true;
+                    ConfigTools.save(clientConfigFile, clientConfig);
+                },
+                "mute-music-note"
+        ));
+
+        muteMusicButton.setPosition(this.width - 40, this.height - 40);
+        playMusicButton.setPosition(this.width - 40, this.height - 40);
+        /*?}*/
     }
 
     private Component getStage() {
@@ -153,20 +156,28 @@ public class DownloadScreen extends VersionedScreen {
     }
 
     private void checkAndStartMusic() {
-        if (ticks <= 30) {
-            ticks++;
+        if (ticks++ <= 30) {
+            /*? if >= 1.20.2 {*/
+            muteMusicButton.active = false;
+            playMusicButton.active = false;
+            /*?}*/
             return;
         }
 
-        if (muteMusicButton.visible) {
+        /*? if >= 1.20.2 {*/
+        muteMusicButton.active = true;
+        playMusicButton.active = true;
+        /*?}*/
+
+        if (musicStarted) {
             return;
         }
 
-        if (clientConfig.downloadMusic) {
+        if (clientConfig.playMusic) {
             AudioManager.playMusic();
         }
 
-        muteMusicButton.visible = true;
+        musicStarted = true;
     }
 
 
@@ -184,7 +195,6 @@ public class DownloadScreen extends VersionedScreen {
             drawCenteredTextWithShadow(matrices, this.font, stage, this.width / 2, this.height / 2 - 10, TextColors.WHITE);
             drawCenteredTextWithShadow(matrices, this.font, eta, this.width / 2, this.height / 2 + 10, TextColors.WHITE);
 
-
             // Render progress bar
             int progressX = this.width / 2 - PROGRESS_BAR_WIDTH / 2;
             int progressY = this.height / 2 + 30;
@@ -195,17 +205,22 @@ public class DownloadScreen extends VersionedScreen {
             drawCenteredTextWithShadow(matrices, this.font, percentage, this.width / 2, this.height / 2 + 36, TextColors.WHITE);
             drawCenteredTextWithShadow(matrices, this.font, speed, this.width / 2, this.height / 2 + 60, TextColors.WHITE);
 
-            checkAndStartMusic();
             cancelButton.active = true;
         } else {
             cancelButton.active = false;
         }
 
-        if (AudioManager.isMusicPlaying()) {
-            muteMusicButton.setMessage(VersionedText.literal("Mute"));
+        checkAndStartMusic();
+        /*? if >= 1.20.2 {*/
+        if (playMusicButton.active && muteMusicButton.active) {
+            boolean musicPlaying = AudioManager.isMusicPlaying();
+            muteMusicButton.visible = musicPlaying;
+            playMusicButton.visible = !musicPlaying;
         } else {
-            muteMusicButton.setMessage(VersionedText.literal("Unmute"));
+            muteMusicButton.visible = clientConfig.playMusic;
+            playMusicButton.visible = !clientConfig.playMusic;
         }
+        /*?}*/
     }
 
     @Override

@@ -30,7 +30,7 @@ public class Jsons {
         public boolean updateSelectedModpackOnLaunch = true;
         public boolean selfUpdater = false;
         public boolean syncLoaderVersion = false;
-        public boolean downloadMusic = false;
+        public boolean playMusic = true;
     }
 
     public static class ModpackAddresses {

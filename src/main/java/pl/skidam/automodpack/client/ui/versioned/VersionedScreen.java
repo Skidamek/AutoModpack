@@ -2,6 +2,10 @@ package pl.skidam.automodpack.client.ui.versioned;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.Button;
+/*? if >= 1.20.2 {*/
+import pl.skidam.automodpack.init.Common;
+import net.minecraft.client.gui.components.SpriteIconButton;
+/*?}*/
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -88,9 +92,15 @@ public class VersionedScreen extends Screen {
 	public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
 		return Button.builder(message, onPress).pos(x, y).size(width, height).build();
 	}
-	/*?}*/
+    /*?}*/
 
-	/*? if <=1.20 {*/
+    /*? if >= 1.20.2 {*/
+    public static Button iconButtonWidget(int width, Button.OnPress onPress, String spritePath) {
+        return SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), 8, 8).width(width).build();
+    }
+    /*?}*/
+
+    /*? if <=1.20 {*/
 	/*public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/^? if <=1.16.5 {^/
 		/^Minecraft.getInstance().getTextureManager().bindTexture(textureID);
