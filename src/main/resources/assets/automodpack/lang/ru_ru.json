@@ -31,7 +31,7 @@
     "automodpack.download.noFiles": "Нет файлов для скачивания!",
 
     "automodpack.redownload": "Переустановить Модпак",
-    "automodpack.redownload.description": "Это возможно исправит проблемы с модпаком.",
+    "automodpack.redownload.description": "Это может исправить проблемы с модпаком.",
 
     "automodpack.error": "Что-то пошло не так!",
     "automodpack.error.files": "Не удалось скачать некоторые файлы.",
