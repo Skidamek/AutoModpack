@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.protocol;
+package pl.skidam.automodpack_core.protocol.client.backends;
 
 import com.github.luben.zstd.Zstd;
 import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
@@ -19,6 +19,8 @@ import java.util.function.Function;
 import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.protocol.CustomizableTrustManager;
+import pl.skidam.automodpack_core.protocol.client.Client;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
@@ -29,7 +31,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
  * waiting for the AMOK reply, and then upgrading the same socket to TLSv1.3.
  * Subsequent protocol messages are framed and compressed (using Zstd).
  */
-public class DownloadClient implements AutoCloseable {
+public class DownloadClient implements Client {
     private final List<Connection> connections = new ArrayList<>();
     private InetSocketAddress address = null;
 
@@ -43,7 +45,7 @@ public class DownloadClient implements AutoCloseable {
      * @param poolSize              the number of connections
      * @param trustedByUserCallback the callback to determine whether a certificate should be trusted
      */
-    public DownloadClient(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
+    private DownloadClient(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
         KeyStore keyStore;
         if (poolSize < 1) {
             throw new IllegalArgumentException("Pool size must be greater than 0");
@@ -143,6 +145,7 @@ public class DownloadClient implements AutoCloseable {
      * Downloads a file identified by its SHA-1 hash to the given destination.
      * Returns a CompletableFuture that completes when the download finishes.
      */
+    @Override
     public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
         Connection conn = getFreeConnection();
         return conn.sendDownloadFile(fileHash, destination, chunkCallback);
@@ -151,6 +154,7 @@ public class DownloadClient implements AutoCloseable {
     /**
      * Sends a refresh request with the given file hashes.
      */
+    @Override
     public CompletableFuture<Path> requestRefresh(byte[][] fileHashes, Path destination) {
         Connection conn = getFreeConnection();
         return conn.sendRefreshRequest(fileHashes, destination);

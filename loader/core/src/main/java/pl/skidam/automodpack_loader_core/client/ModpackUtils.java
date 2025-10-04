@@ -3,8 +3,10 @@ package pl.skidam.automodpack_loader_core.client;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.client.Client;
+import pl.skidam.automodpack_core.protocol.client.backends.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.client.backends.HypertextClient;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -424,13 +426,14 @@ public class ModpackUtils {
                 "Re-fetched", allowAskingUser);
     }
 
-    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
+    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<Client, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
         if (secret == null)
             return Optional.empty();
         if (modpackAddresses.isAnyEmpty())
             throw new IllegalArgumentException("Modpack addresses are empty!");
 
-        try (DownloadClient client = DownloadClient.tryCreate(modpackAddresses, secret.secretBytes(), 1, userValidationCallback(modpackAddresses.hostAddress, allowAskingUser))) {
+//        try (Client client = DownloadClient.tryCreate(modpackAddresses, secret.secretBytes(), 1, userValidationCallback(modpackAddresses.hostAddress, allowAskingUser))) {
+        try (Client client = HypertextClient.tryCreate(modpackAddresses, null, (cert) -> true)) {
             if (client == null) return Optional.empty();
             var future = operation.apply(client);
             Path path = future.get();
@@ -453,7 +456,8 @@ public class ModpackUtils {
         if (modpackAddresses.isAnyEmpty())
             throw new IllegalArgumentException("Modpack addresses are empty!");
 
-        try (DownloadClient client = DownloadClient.tryCreate(modpackAddresses, null, 1, null)) {
+//        try (Client client = DownloadClient.tryCreate(modpackAddresses, null, 1, null)) {
+        try (Client client = HypertextClient.tryCreate(modpackAddresses, null, (cert) -> true)) {
             return client != null;
         } catch (Exception e) {
             LOGGER.error("Error while pinging AutoModpack host server", e);

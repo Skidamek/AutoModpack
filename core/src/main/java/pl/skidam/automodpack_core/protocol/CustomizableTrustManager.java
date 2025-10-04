@@ -19,7 +19,7 @@ import java.util.function.Consumer;
  * {@link KeyStore}, and verifies other certificates using the default key store. In order to enable recovering the
  * peer certificate chain from a failed handshake, a callback is called before each verification process.
  */
-class CustomizableTrustManager extends X509ExtendedTrustManager {
+public class CustomizableTrustManager extends X509ExtendedTrustManager {
     private final X509ExtendedTrustManager defaultTrustManager;
     private final X509ExtendedTrustManager trustedCertificatesTrustManager;
     private final Consumer<X509Certificate[]> onValidating;

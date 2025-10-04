@@ -4,7 +4,9 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.client.Client;
+import pl.skidam.automodpack_core.protocol.client.backends.DownloadClient;
+import pl.skidam.automodpack_core.protocol.client.backends.HypertextClient;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -233,8 +235,9 @@ public class ModpackUpdater {
             if (wholeQueue > 0) {
                 LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
-                DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(),
-                        Math.min(wholeQueue, 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+//                Client downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(),
+//                        Math.min(wholeQueue, 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+                Client downloadClient = HypertextClient.tryCreate(modpackAddresses, serverModpackContent, (cert) -> true);
                 if (downloadClient == null) {
                     return;
                 }
@@ -327,7 +330,8 @@ public class ModpackUpdater {
                         // filter list to only the failed downloads
                         var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
 
-                        downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+//                        downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+                        downloadClient = HypertextClient.tryCreate(modpackAddresses, serverModpackContent, (cert) -> true);
                         if (downloadClient == null) {
                             return;
                         }

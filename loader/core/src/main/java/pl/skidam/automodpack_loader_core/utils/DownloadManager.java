@@ -1,9 +1,10 @@
 package pl.skidam.automodpack_loader_core.utils;
 
+import pl.skidam.automodpack_core.protocol.client.Client;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.client.backends.DownloadClient;
 
 import java.io.*;
 import java.net.*;
@@ -21,7 +22,7 @@ public class DownloadManager {
     private static final int MAX_DOWNLOAD_ATTEMPTS = 2; // its actually 3, but we start from 0
     private static final int BUFFER_SIZE = 128 * 1024;
     private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
-    private DownloadClient downloadClient = null;
+    private Client downloadClient = null;
     private boolean cancelled = false;
     private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
     public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
@@ -37,7 +38,7 @@ public class DownloadManager {
     }
     // TODO: make caching system which detects if the same file was downloaded before and if so copy it instead of downloading again
 
-    public void attachDownloadClient(DownloadClient downloadClient) {
+    public void attachDownloadClient(Client downloadClient) {
          this.downloadClient = downloadClient;
     }
 
