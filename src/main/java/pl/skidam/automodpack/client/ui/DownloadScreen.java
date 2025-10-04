@@ -69,8 +69,11 @@ public class DownloadScreen extends VersionedScreen {
                 }
         ));
 
-        /*? if >= 1.20.2 {*/
+        int x = this.width - 40;
+        int y = this.height - 40;
+
         muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(
+                x, y,
                 20,
                 button -> {
                     AudioManager.stopMusic();
@@ -81,6 +84,7 @@ public class DownloadScreen extends VersionedScreen {
         ));
 
         playMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(
+                x, y,
                 20,
                 button -> {
                     AudioManager.playMusic();
@@ -89,10 +93,6 @@ public class DownloadScreen extends VersionedScreen {
                 },
                 "mute-music-note"
         ));
-
-        muteMusicButton.setPosition(this.width - 40, this.height - 40);
-        playMusicButton.setPosition(this.width - 40, this.height - 40);
-        /*?}*/
     }
 
     private Component getStage() {
@@ -157,17 +157,13 @@ public class DownloadScreen extends VersionedScreen {
 
     private void checkAndStartMusic() {
         if (ticks++ <= 30) {
-            /*? if >= 1.20.2 {*/
             muteMusicButton.active = false;
             playMusicButton.active = false;
-            /*?}*/
             return;
         }
 
-        /*? if >= 1.20.2 {*/
         muteMusicButton.active = true;
         playMusicButton.active = true;
-        /*?}*/
 
         if (musicStarted) {
             return;
@@ -211,7 +207,6 @@ public class DownloadScreen extends VersionedScreen {
         }
 
         checkAndStartMusic();
-        /*? if >= 1.20.2 {*/
         if (playMusicButton.active && muteMusicButton.active) {
             boolean musicPlaying = AudioManager.isMusicPlaying();
             muteMusicButton.visible = musicPlaying;
@@ -220,7 +215,6 @@ public class DownloadScreen extends VersionedScreen {
             muteMusicButton.visible = clientConfig.playMusic;
             playMusicButton.visible = !clientConfig.playMusic;
         }
-        /*?}*/
     }
 
     @Override

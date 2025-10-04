@@ -3,8 +3,9 @@ package pl.skidam.automodpack.client.ui.versioned;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.Button;
 /*? if >= 1.20.2 {*/
-import pl.skidam.automodpack.init.Common;
 import net.minecraft.client.gui.components.SpriteIconButton;
+/*?} else {*/
+/*import net.minecraft.client.gui.components.ImageButton;
 /*?}*/
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -25,6 +26,8 @@ import net.minecraft.client.gui.GuiComponent;
 *//*?} else {*/
 import net.minecraft.client.gui.GuiGraphics;
 /*?}*/
+
+import pl.skidam.automodpack.init.Common;
 
 public class VersionedScreen extends Screen {
 
@@ -95,10 +98,16 @@ public class VersionedScreen extends Screen {
     /*?}*/
 
     /*? if >= 1.20.2 {*/
-    public static Button iconButtonWidget(int width, Button.OnPress onPress, String spritePath) {
-        return SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), 8, 8).width(width).build();
+    public static Button iconButtonWidget(int x, int y, int width, Button.OnPress onPress, String spritePath) {
+        Button button = SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), 8, 8).width(width).build();
+        button.setPosition(x, y);
+        return button;
     }
-    /*?}*/
+    /*?} else {*/
+    /*public static Button iconButtonWidget(int x, int y, int width, Button.OnPress onPress, String spritePath) {
+        return new ImageButton(x, y, width, width, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), width, width, onPress);
+    }
+    *//*?}*/
 
     /*? if <=1.20 {*/
 	/*public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
