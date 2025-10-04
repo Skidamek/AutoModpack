@@ -63,7 +63,7 @@ public class Commands {
         );
 
         dispatcher.register(
-                literal("am")
+                literal("amp")
                         .executes(Commands::about)
                         .redirect(automodpackNode)
         );
