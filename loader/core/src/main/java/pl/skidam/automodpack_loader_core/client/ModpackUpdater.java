@@ -29,7 +29,7 @@ public class ModpackUpdater {
     public long totalBytesToDownload = 0;
     public boolean fullDownload = false;
     private Jsons.ModpackContentFields serverModpackContent;
-    private String modpackContentJson;
+    private String serverModpackContentJson;
     public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
     private Jsons.ModpackAddresses modpackAddresses;
@@ -62,7 +62,7 @@ public class ModpackUpdater {
             }
 
             // Prepare for modpack update
-            modpackContentJson = GSON.toJson(serverModpackContent);
+            serverModpackContentJson = GSON.toJson(serverModpackContent);
 
             // Create directories if they don't exist
             if (!Files.exists(modpackDir)) {
@@ -77,11 +77,11 @@ public class ModpackUpdater {
                 // Check if an update is needed
                 if (!ModpackUtils.isUpdate(serverModpackContent, modpackDir)) {
                     LOGGER.info("Modpack is up to date");
-                    Files.writeString(modpackContentFile, modpackContentJson);
+                    Files.writeString(modpackContentFile, serverModpackContentJson);
                     CheckAndLoadModpack();
                     return;
                 }
-            } else if (!preload) {
+            } else if (!preload) { // New modpack detected
                 fullDownload = true;
                 new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
                 return;
@@ -322,7 +322,7 @@ public class ModpackUpdater {
                         // or fail and then show the error
 
                         var refreshedContent = refreshedContentOptional.get();
-                        this.modpackContentJson = GSON.toJson(refreshedContent);
+                        this.serverModpackContentJson = GSON.toJson(refreshedContent);
 
                         // filter list to only the failed downloads
                         var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
@@ -375,7 +375,7 @@ public class ModpackUpdater {
             LOGGER.info("Done, saving {}", modpackContentFile);
 
             // Downloads completed
-            Files.writeString(modpackContentFile, modpackContentJson);
+            Files.writeString(modpackContentFile, serverModpackContentJson);
 
             Path cwd = Path.of(System.getProperty("user.dir"));
             CustomFileUtils.deleteDummyFiles(cwd, serverModpackContent.list);
@@ -410,6 +410,7 @@ public class ModpackUpdater {
         }
     }
 
+    // this is run every time we check for modpack update
     // returns true if restart is required
     private boolean applyModpack() throws Exception {
         ModpackUtils.selectModpack(modpackDir, modpackAddresses, newDownloadedFiles);

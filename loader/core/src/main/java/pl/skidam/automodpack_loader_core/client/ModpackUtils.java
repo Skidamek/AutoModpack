@@ -30,7 +30,6 @@ public class ModpackUtils {
             throw new IllegalArgumentException("Server modpack content list is null");
         }
 
-
         // get client modpack content
         var optionalClientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
         if (optionalClientModpackContentFile.isPresent() && Files.exists(optionalClientModpackContentFile.get())) {
