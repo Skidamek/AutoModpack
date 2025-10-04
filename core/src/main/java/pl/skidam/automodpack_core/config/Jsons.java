@@ -116,9 +116,9 @@ public class Jsons {
     }
 
     public static class ServerCoreConfigFields {
-        public String automodpackVersion = "4.0.0-beta37"; // TODO: dont hardcode it
-        public String loader = "fabric";
-        public String loaderVersion = "0.16.14";
+        public String automodpackVersion = "4.0.0-beta38"; // TODO: dont hardcode it
+        public String loader = "neoforge";
+        public String loaderVersion = "21.1.209";
         public String mcVersion = "1.21.1";
     }
 
