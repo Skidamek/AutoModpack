@@ -201,14 +201,14 @@ public class ModpackUtils {
 
     // Checks if in standard mods folder are any mods that are in modpack
     // Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
-    public static Map<FileInspection.Mod, FileInspection.Mod> getDupeMods(Path modpackDir, Set<String> ignoredMods, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList) {
+    public static Map<FileInspection.Mod, FileInspection.Mod> getDupeMods(Path modpackDir, Set<String> ignoredMods, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList, Set<String> forceCopyFiles) {
         final Map<FileInspection.Mod, FileInspection.Mod> duplicates = new HashMap<>();
 
         for (FileInspection.Mod modpackMod : modpackModList) {
             FileInspection.Mod standardMod = standardModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
             if (standardMod != null) {
                 String formattedFile = CustomFileUtils.formatPath(modpackMod.modPath(), modpackDir);
-                if (ignoredMods.contains(formattedFile))
+                if (ignoredMods.contains(formattedFile) || forceCopyFiles.contains(formattedFile))
                     continue;
 
                 duplicates.put(modpackMod, standardMod);
@@ -224,7 +224,7 @@ public class ModpackUtils {
     // If the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it and modpack get updated - basically having these mods separately allows for seamless updates
     // If you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
     public static RemoveDupeModsResult removeDupeMods(Path modpackDir, Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList, Set<String> ignoredMods, Set<String> workaroundMods, Set<String> forceCopyFiles) throws IOException {
-        var dupeMods = ModpackUtils.getDupeMods(modpackDir, ignoredMods, standardModList, modpackModList);
+        var dupeMods = ModpackUtils.getDupeMods(modpackDir, ignoredMods, standardModList, modpackModList, forceCopyFiles);
 
         if (dupeMods.isEmpty()) {
             return new RemoveDupeModsResult(false, Set.of());
