@@ -47,8 +47,6 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
 
         new Preload();
 
-        ModpackLoader.modsToLoad.forEach(path -> LOGGER.info("Adding mod: {}", path.getFileName()));
-
         // we would need to force load there e.g. connector mod and its locators to loader
         // and in the lazy mod locator load its dependency locator
 
