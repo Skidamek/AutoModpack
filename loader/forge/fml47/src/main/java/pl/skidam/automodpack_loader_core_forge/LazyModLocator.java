@@ -53,7 +53,7 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
             return Path.of(jarLocation.toURI());
         });
 
-        final String depName = "automodpack-mod.jar";
+        final String depName = "META-INF/jarjar/automodpack-mod.jar";
 
         final Path pathInModFile = SELF_PATH.resolve(depName);
         final URI filePathUri = new URI("jij:" + pathInModFile.toAbsolutePath().toUri().getRawSchemeSpecificPart()).normalize();

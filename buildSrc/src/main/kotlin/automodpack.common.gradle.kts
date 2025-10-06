@@ -48,7 +48,7 @@ tasks.named("build") {
             dependsOn(":loader-fabric-core:build", ":loader-fabric-15:build", ":loader-fabric-16:build")
         }
         project.name.contains("neoforge") -> {
-            dependsOn(":loader-neoforge-fml2:build", ":loader-neoforge-fml4:build")
+            dependsOn(":loader-neoforge-fml2:build", ":loader-neoforge-fml4:build", ":loader-neoforge-fml10:build")
         }
         project.name.contains("forge") -> {
             dependsOn(":loader-forge-fml40:build", ":loader-forge-fml47:build")
@@ -94,7 +94,8 @@ tasks.register("mergeJar") {
         } else if (jarToMerge.name.contains("neoforge")) {
             loaderModule = when (minecraftVersionStr) {
                 "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.19.2", "1.18.2" -> "neoforge-fml2"
-                else -> "neoforge-fml4"
+                "1.21.6", "1.21.5", "1.21.4", "1.21.3", "1.21.1" -> "neoforge-fml4"
+                else -> "neoforge-fml10"
             }
         } else if (jarToMerge.name.contains("forge")) {
             loaderModule = if (minecraftVersionStr == "1.18.2") {
@@ -113,7 +114,7 @@ tasks.register("mergeJar") {
 
         val finalJar = File("$mergedDir/${jarToMerge.name}")
         loaderFile.copyTo(finalJar, overwrite = true)
-        appendFileToZip(finalJar, jarToMerge, "automodpack-mod.jar")
+        appendFileToZip(finalJar, jarToMerge, "META-INF/jarjar/automodpack-mod.jar")
 
         println("Merged: ${jarToMerge.name} into: ${finalJar.name} from: ${loaderFile.name} Took: ${System.currentTimeMillis() - time}ms")
     }

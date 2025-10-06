@@ -1,8 +1,6 @@
 package pl.skidam.automodpack_loader_core_forge;
 
 import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileModLocator;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_loader_core.Preload;
 import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
 
@@ -12,9 +10,10 @@ import java.util.stream.Stream;
 
 @SuppressWarnings("unused")
 public class EarlyModLocator extends AbstractJarFileModLocator {
-    public static Logger LOGGER = LogManager.getLogger("AutoModpack/BootStrap");
+
     @Override
     public void initArguments(Map<String, ?> arguments) { }
+
     @Override
     public String name() {
         return "automodpack_bootstrap";

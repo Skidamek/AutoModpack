@@ -1,0 +1,12 @@
+{
+  "jars": [
+    {
+      "identifier": {
+        "group": "pl.skidam",
+        "artifact": "automodpack"
+      },
+      "path": "META-INF/jarjar/automodpack-mod.jar",
+      "isObfuscated": false
+    }
+  ]
+}

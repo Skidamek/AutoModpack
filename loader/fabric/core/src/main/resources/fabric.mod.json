@@ -27,7 +27,7 @@
   },
   "jars": [
     {
-      "file": "automodpack-mod.jar"
+      "file": "META-INF/jarjar/automodpack-mod.jar"
     }
   ]
 }

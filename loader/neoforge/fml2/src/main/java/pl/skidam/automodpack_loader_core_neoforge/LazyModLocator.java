@@ -39,18 +39,14 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
     @Override
     public void initArguments(Map<String, ?> arguments) { }
 
-    // TODO i dont think we need this, since we are lunching on AbstractJarFileModLocator
-    //  meaning that we are already before jij so if we use normal jij we should get the same result (even with update, if path and name wont change... which shouldn't)
-    //  without that much mess...
     // Code based on connector's https://github.com/Sinytra/Connector/blob/0514fec8f189b88c5cec54dc5632fbcee13d56dc/src/main/java/dev/su5ed/sinytra/connector/locator/EmbeddedDependencies.java#L88
-    // We don't want to use regular JiJ mechanic because we need to get current mod metadata for update check and that wouldn't guarantee that it's already loaded to loader.
     private IModFile getMainMod() throws IOException, URISyntaxException {
         final Path SELF_PATH = uncheck(() -> {
             URL jarLocation = LazyModLocator.class.getProtectionDomain().getCodeSource().getLocation();
             return Path.of(jarLocation.toURI());
         });
 
-        final String depName = "automodpack-mod.jar";
+        final String depName = "META-INF/jarjar/automodpack-mod.jar";
 
         final Path pathInModFile = SELF_PATH.resolve(depName);
         final URI filePathUri = new URI("jij:" + pathInModFile.toAbsolutePath().toUri().getRawSchemeSpecificPart()).normalize();

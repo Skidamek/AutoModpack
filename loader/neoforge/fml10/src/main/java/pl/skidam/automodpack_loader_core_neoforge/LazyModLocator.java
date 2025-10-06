@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
-import cpw.mods.jarhandling.SecureJar;
+import net.neoforged.fml.classloading.SecureJar;
 import net.neoforged.fml.loading.moddiscovery.locators.JarInJarDependencyLocator;
 import net.neoforged.fml.loading.moddiscovery.readers.JarModsDotTomlModFileReader;
 import net.neoforged.neoforgespi.locating.*;
@@ -26,4 +26,5 @@ public class LazyModLocator implements IDependencyLocator {
     public int getPriority() {
         return IModFileCandidateLocator.LOWEST_SYSTEM_PRIORITY;
     }
+
 }

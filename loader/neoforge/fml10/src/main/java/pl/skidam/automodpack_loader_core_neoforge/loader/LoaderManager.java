@@ -1,10 +1,11 @@
-package pl.skidam.automodpack_loader_core_forge.loader;
+package pl.skidam.automodpack_loader_core_neoforge.loader;
 
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.loading.FMLLoader;
-import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
-import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
-import net.minecraftforge.forgespi.language.IModInfo;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.fml.loading.FMLLoader;
+import net.neoforged.fml.loading.LoadingModList;
+import net.neoforged.fml.loading.moddiscovery.ModFileInfo;
+import net.neoforged.fml.loading.moddiscovery.ModInfo;
+import net.neoforged.neoforgespi.language.IModInfo;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -14,32 +15,39 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import static pl.skidam.automodpack_core.GlobalVariables.preload;
+import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 @SuppressWarnings("unused")
 public class LoaderManager implements LoaderManagerService {
 
     @Override
     public ModPlatform getPlatformType() {
-        return ModPlatform.FORGE;
+        return ModPlatform.NEOFORGE;
     }
 
     @Override
     public boolean isModLoaded(String modId) {
-        return FMLLoader.getLoadingModList().getModFileById(modId) != null;
+        LoadingModList loadingModList;
+        try {
+            loadingModList= FMLLoader.getCurrent().getLoadingModList();
+        } catch (IllegalStateException e) {
+            return false;
+        }
+        return loadingModList.getModFileById(modId) != null;
     }
 
     private Collection<FileInspection.Mod> modList = new ArrayList<>();
     private int lastLoadingModListSize = -1;
 
+    // Does it even still make sense to have this? FileInspection class should do everything anyway
     @Override
     public Collection<FileInspection.Mod> getModList() {
 
-        if (preload) {
+        if (preload) { // always empty on preload
             return modList;
         }
 
-        List<ModInfo> modInfo = FMLLoader.getLoadingModList().getMods();
+        List<ModInfo> modInfo = FMLLoader.getCurrent().getLoadingModList().getMods();
 
         if (!modList.isEmpty() && lastLoadingModListSize == modInfo.size()) {
             // return cached
@@ -60,7 +68,7 @@ public class LoaderManager implements LoaderManagerService {
                 if (hash == null)
                     continue;
 
-                List<String> dependencies = info.getDependencies().stream().filter(IModInfo.ModVersion::isMandatory).map(IModInfo.ModVersion::getModId).toList();
+                List<String> dependencies = info.getDependencies().stream().filter(d -> d.getType() == IModInfo.DependencyType.REQUIRED).map(IModInfo.ModVersion::getModId).toList();
                 FileInspection.Mod mod = new FileInspection.Mod(
                         modID,
                         hash,
@@ -79,7 +87,7 @@ public class LoaderManager implements LoaderManagerService {
 
     @Override
     public String getLoaderVersion() {
-        return FMLLoader.versionInfo().forgeVersion();
+        return FMLLoader.getCurrent().getVersionInfo().neoForgeVersion();
     }
 
     private Path getModPath(String modId) {
@@ -88,11 +96,11 @@ public class LoaderManager implements LoaderManagerService {
         }
 
         if (isModLoaded(modId)) {
-            ModFileInfo modInfo = FMLLoader.getLoadingModList().getModFileById(modId);
+            ModFileInfo modInfo = FMLLoader.getCurrent().getLoadingModList().getModFileById(modId);
 
             List<IModInfo> mods = modInfo.getMods();
             if (!mods.isEmpty()) {
-                return mods.get(0).getOwningFile().getFile().getFilePath().toAbsolutePath();
+                return mods.getFirst().getOwningFile().getFile().getFilePath().toAbsolutePath();
             }
         }
 
@@ -101,7 +109,7 @@ public class LoaderManager implements LoaderManagerService {
 
     @Override
     public EnvironmentType getEnvironmentType() {
-        if (FMLLoader.getDist() == Dist.CLIENT) {
+        if (FMLLoader.getCurrent().getDist() == Dist.CLIENT) {
             return EnvironmentType.CLIENT;
         } else {
             return EnvironmentType.SERVER;
@@ -112,13 +120,13 @@ public class LoaderManager implements LoaderManagerService {
     public String getModVersion(String modId) {
         if (preload) {
             if (modId.equals("minecraft")) {
-                return FMLLoader.versionInfo().mcVersion();
+                return FMLLoader.getCurrent().getVersionInfo().mcVersion();
             }
 
             return null;
         }
 
-        ModInfo modInfo = FMLLoader.getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
+        ModInfo modInfo = FMLLoader.getCurrent().getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
 
         if (modInfo == null) {
             return null;
@@ -129,6 +137,6 @@ public class LoaderManager implements LoaderManagerService {
 
     @Override
     public boolean isDevelopmentEnvironment() {
-        return !FMLLoader.isProduction();
+        return !FMLLoader.getCurrent().isProduction();
     }
 }

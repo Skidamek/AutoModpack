@@ -2,14 +2,12 @@ package pl.skidam.automodpack_loader_core_forge.loader;
 
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.loading.FMLLoader;
-import net.minecraftforge.fml.loading.moddiscovery.ModFile;
 import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
 import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 import net.minecraftforge.forgespi.language.IModInfo;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_loader_core_forge.mods.LoadedMods;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -89,27 +87,13 @@ public class LoaderManager implements LoaderManagerService {
             return null;
         }
 
-        try {
-            if (preload) {
-                Collection<ModFile> modFiles = LoadedMods.INSTANCE.candidateMods;
-                for (var modFile : modFiles) {
-                    if (modFile.getModFileInfo() == null || modFile.getModInfos().isEmpty()) {
-                        continue;
-                    }
-                    if (modFile.getModInfos().get(0).getModId().equals(modId)) {
-                        return modFile.getModInfos().get(0).getOwningFile().getFile().getFilePath().toAbsolutePath();
-                    }
-                }
+        if (isModLoaded(modId)) {
+            ModFileInfo modInfo = FMLLoader.getLoadingModList().getModFileById(modId);
 
-            } else if (isModLoaded(modId)) {
-                ModFileInfo modInfo = FMLLoader.getLoadingModList().getModFileById(modId);
-
-                List<IModInfo> mods = modInfo.getMods();
-                if (!mods.isEmpty()) {
-                    return mods.get(0).getOwningFile().getFile().getFilePath().toAbsolutePath();
-                }
+            List<IModInfo> mods = modInfo.getMods();
+            if (!mods.isEmpty()) {
+                return mods.get(0).getOwningFile().getFile().getFilePath().toAbsolutePath();
             }
-        } catch (Exception ignored) {
         }
 
         return null;
@@ -129,17 +113,6 @@ public class LoaderManager implements LoaderManagerService {
         if (preload) {
             if (modId.equals("minecraft")) {
                 return FMLLoader.versionInfo().mcVersion();
-            }
-
-            Collection<ModFile> modFiles = LoadedMods.INSTANCE.candidateMods;
-
-            for (var modFile : modFiles) {
-                if (modFile.getModFileInfo() == null || modFile.getModInfos().isEmpty()) {
-                    continue;
-                }
-                if (modFile.getModInfos().get(0).getModId().equals(modId)) {
-                    return modFile.getModInfos().get(0).getVersion().toString();
-                }
             }
 
             return null;
