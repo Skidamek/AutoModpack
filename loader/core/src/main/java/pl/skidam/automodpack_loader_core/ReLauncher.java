@@ -2,6 +2,7 @@ package pl.skidam.automodpack_loader_core;
 
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_loader_core.compat.crashassistant.ProcessSignalIO;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
@@ -52,6 +53,8 @@ public class ReLauncher {
         if (updateType != null && new ScreenManager().getScreenString().isPresent()) {
             new ScreenManager().restart(modpackDir, updateType, changelogs);
         } else if (preload) {
+            ProcessSignalIO.post("normal_stop"); // let crash assistant know
+
             Semaphore semaphore = null;
             final Thread shutdownHook = new Thread(() -> runCallbacks(callbacks));
             Runtime.getRuntime().addShutdownHook(shutdownHook);
