@@ -9,7 +9,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
-@Debug(export = true)
 @Mixin(value = ServerLoginPacketListenerImpl.class, priority = 300)
 public abstract class ServerLoginNetworkHandlerMixin  {
 
@@ -39,16 +38,11 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             ci.cancel(); // We have handled it, cancel vanilla behavior
         }
 
-        // Discard the rest of the data to prevent memory leaks
         /*? if >=1.20.2 {*/
         if (packet.payload() instanceof LoginResponsePayload response && response.data() != null) {
             response.data().skipBytes(response.data().readableBytes());
         }
-        /*?} else {*/
-        /*if (packet.getData() != null) {
-            packet.getData().skipBytes(packet.getData().readableBytes());
-        }
-        *//*?}*/
+        /*?}*/
     }
 
     @Inject(
