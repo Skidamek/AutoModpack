@@ -8,7 +8,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -39,24 +38,26 @@ public class SelfUpdater {
             return false;
         }
 
-        List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
-        boolean gettingServerVersion = false;
+        boolean gettingServerVersion = serverModpackContent != null && serverModpackContent.automodpackVersion != null;
 
-        // Check if server version is available
-        if (serverModpackContent != null && serverModpackContent.automodpackVersion != null) {
-            modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
-            gettingServerVersion = true;
-        } else {
-            modrinthAPIList = ModrinthAPI.getModInfosFromID(AUTOMODPACK_ID);
-        }
-
-        if (gettingServerVersion) {
-            LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
-        } else if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) {
+        if (!gettingServerVersion && LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) {
             LOGGER.info("AutoModpack self-updater is disabled in client config.");
             return false;
+        }
+
+        List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
+
+        if (gettingServerVersion) {
+            if (serverModpackContent.automodpackVersion.equals(AM_VERSION)) {
+                LOGGER.info("AutoModpack is up-to-date with server version: {}", serverModpackContent.automodpackVersion);
+                return false;
+            }
+
+            LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
+            modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
         } else {
             LOGGER.info("Checking if AutoModpack is up-to-date...");
+            modrinthAPIList = ModrinthAPI.getModInfosFromID(AUTOMODPACK_ID);
         }
 
         String message = "Couldn't get latest version of AutoModpack from Modrinth API. Likely automodpack isn't updated to your version of minecraft yet...";
