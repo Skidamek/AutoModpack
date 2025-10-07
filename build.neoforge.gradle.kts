@@ -19,11 +19,15 @@ neoForge {
     }
 }
 
+repositories {
+    maven("https://maven.su5ed.dev/releases") { name = "FFAPI" }
+}
+
 dependencies {
     implementation(project(":core"))
     implementation(project(":loader-core"))
 
-    compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.6+1.20.1")
+    implementation("org.sinytra.forgified-fabric-api:forgified-fabric-api:0.115.6+2.1.4+1.21.1")
 }
 
 tasks {
