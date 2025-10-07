@@ -44,12 +44,9 @@ public class ModpackExecutor {
     }
 
     public boolean generateNew() {
-        LOGGER.info("generateNew called");
         ModpackContent content = init();
-        LOGGER.info("ModpackContent initialized");
         if (content == null) return false;
         boolean generated = content.create();
-        LOGGER.info("ModpackContent create() returned: {}", generated);
         modpacks.put(content.getModpackName(), content);
         return generated;
     }

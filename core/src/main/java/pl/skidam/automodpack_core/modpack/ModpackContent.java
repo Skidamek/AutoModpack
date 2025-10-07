@@ -48,11 +48,8 @@ public class ModpackContent {
     public boolean create() {
         try {
             SYNCED_FILES_CARDS.match();
-            LOGGER.info("synced files matched: {}", SYNCED_FILES_CARDS.getWildcardMatches().size());
             EDITABLE_CARDS.match();
-            LOGGER.info("editable files matched: {}", EDITABLE_CARDS.getWildcardMatches().size());
             FORCE_COPY_FILES_TO_STANDARD_LOCATION.match();
-            LOGGER.info("force copy files matched: {}", FORCE_COPY_FILES_TO_STANDARD_LOCATION.getWildcardMatches().size());
             WildCards.clearDiscoveredDirectories();
 
             pathsMap.clear();
