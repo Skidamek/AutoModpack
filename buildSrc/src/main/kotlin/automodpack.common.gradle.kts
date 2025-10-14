@@ -116,6 +116,13 @@ tasks.register("mergeJar") {
         loaderFile.copyTo(finalJar, overwrite = true)
         appendFileToZip(finalJar, jarToMerge, "META-INF/jarjar/automodpack-mod.jar")
 
+        // Find zstd-jni-*.jar in "libs/" and append it as zstd-jni.jar to the final jar
+        val libsDir = File("${rootProject.projectDir}/libs")
+        val zstdFile = libsDir.listFiles()
+            ?.firstOrNull { file -> file.isFile && file.name.startsWith("zstd-jni-") && file.name.endsWith(".jar") }
+            ?: error("No zstd-jni-*.jar found in libs directory! ${libsDir.absolutePath}")
+        appendFileToZip(finalJar, zstdFile, "META-INF/jarjar/zstd-jni.jar")
+
         println("Merged: ${jarToMerge.name} into: ${finalJar.name} from: ${loaderFile.name} Took: ${System.currentTimeMillis() - time}ms")
     }
 }

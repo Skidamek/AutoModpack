@@ -27,7 +27,6 @@ dependencies {
 
     implementation("org.tomlj:tomlj:1.1.1")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.82")
-    implementation("com.github.luben:zstd-jni:1.5.7-4")
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
 
     compileOnly("net.fabricmc:fabric-loader:${property("deps.fabric")}")
@@ -53,7 +52,7 @@ tasks.named<ShadowJar>("shadowJar") {
     // Include the tomlj dependency in the shadow jar
     configurations = listOf(project.configurations.getByName("shadowImplementation"))
 
-    val reloc = "am_libs"
+    val reloc = "amp_libs"
     relocate("org.antlr", "${reloc}.org.antlr")
     relocate("org.tomlj", "${reloc}.org.tomlj")
     relocate("org.apache.hc", "${reloc}.org.apache.hc")

@@ -1,8 +1,8 @@
 package pl.skidam.automodpack_core.protocol;
 
-import com.github.luben.zstd.Zstd;
-import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
-import javax.net.ssl.*;
+import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.protocol.NetUtils.*;
+
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -17,11 +17,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
-
+import javax.net.ssl.*;
+import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import pl.skidam.automodpack_core.config.Jsons;
-
-import static pl.skidam.automodpack_core.GlobalVariables.*;
-import static pl.skidam.automodpack_core.protocol.NetUtils.*;
+import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
+import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /**
  * A DownloadClient that creates a pool of connections.
@@ -30,6 +31,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
  * Subsequent protocol messages are framed and compressed (using Zstd).
  */
 public class DownloadClient implements AutoCloseable {
+
     private final List<Connection> connections = new ArrayList<>();
     private InetSocketAddress address = null;
 
@@ -174,13 +176,16 @@ public class DownloadClient implements AutoCloseable {
  * It first performs a plain-text handshake then upgrades the same socket to TLS.
  */
 class PreValidationConnection {
+
     private final SSLSocket socket;
     private final X509Certificate unvalidatedCertificate;
+    private byte negotiatedProtocolVersion = PROTOCOL_VERSION_2;
+    private byte negotiatedCompressionType = COMPRESSION_NONE;
 
     /**
      * Creates a new connection by first opening a plain TCP socket,
      * sending the AMMC magic, waiting for the AMOK reply, and then upgrading to TLS.
-     * 
+     *
      * @param modpackAddresses the object containing host and server addresses
      * @param keyStore         the keystore containing trusted certificates
      */
@@ -195,14 +200,29 @@ class PreValidationConnection {
                 DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
                 DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
 
-                // Step 2. Send the handshake (AMMC magic) over the plain socket.
+                byte desiredProtocolVersion = PROTOCOL_VERSION_2;
+                byte desiredCompression = PlatformUtils.isAndroid() ? COMPRESSION_GZIP : COMPRESSION_ZSTD;
+
+                // Step 2. Send the handshake (AMMC magic + protocol version) over the plain socket.
                 plainOut.writeInt(MAGIC_AMMC);
+                plainOut.writeByte(desiredProtocolVersion); // Client supports v2
+                plainOut.writeByte(desiredCompression);
                 plainOut.flush();
 
-                // Step 3. Wait for the server’s reply (AMOK magic).
+                // Step 3. Wait for the server's reply (AMOK magic).
                 int handshakeResponse = plainIn.readInt();
                 if (handshakeResponse != MAGIC_AMOK) {
                     throw new IOException("Invalid response from server: " + handshakeResponse);
+                }
+
+                // Step 4. Read negotiated protocol version and compression type (v2+ servers send this)
+                if (plainIn.available() >= 2) {
+                    negotiatedProtocolVersion = plainIn.readByte();
+                    negotiatedCompressionType = plainIn.readByte();
+                } else {
+                    // Old server (v1) - doesn't send version/compression info
+                    negotiatedProtocolVersion = PROTOCOL_VERSION_1;
+                    negotiatedCompressionType = COMPRESSION_ZSTD;
                 }
             } catch (IOException e) {
                 LOGGER.error("AutoModpack magic handshake failed", e);
@@ -286,6 +306,14 @@ class PreValidationConnection {
         return unvalidatedCertificate;
     }
 
+    public byte getNegotiatedProtocolVersion() {
+        return negotiatedProtocolVersion;
+    }
+
+    public byte getNegotiatedCompressionType() {
+        return negotiatedCompressionType;
+    }
+
     /**
      * Creates an SSLContext that trusts the certificates in {@code trustedCertificates}, and verifies certificates
      * using the default key store otherwise.
@@ -313,12 +341,14 @@ class PreValidationConnection {
 
 /**
  * A helper class representing a single connection.
- * Outbound messages are compressed with Zstd and framed; inbound frames are decompressed and processed.
+ * Outbound messages are compressed and framed; inbound frames are decompressed and processed.
+ * The compression codec is lazily loaded only when compression is actually used.
  */
 class Connection implements AutoCloseable {
-    private static final byte PROTOCOL_VERSION = 1;
 
-    private final boolean useCompression;
+    private final byte protocolVersion;
+    private final byte compressionType;
+    private CompressionCodec compressionCodec;
     private final byte[] secretBytes;
     private final SSLSocket socket;
     private final DataInputStream in;
@@ -335,19 +365,20 @@ class Connection implements AutoCloseable {
      * handshake of the {@link PreValidationConnection} has failed.
      */
     public Connection(PreValidationConnection preValidationConnection, byte[] secretBytes) throws IOException {
-//        useCompression = !AddressHelpers.isLocal(address);
         if (preValidationConnection.getSocket() == null || preValidationConnection.getSocket().isClosed()) {
             throw new SSLHandshakeException("Server certificate is not valid, connection got closed");
         }
         this.socket = preValidationConnection.getSocket();
-        this.useCompression = true;
+        this.protocolVersion = preValidationConnection.getNegotiatedProtocolVersion();
+        this.compressionType = preValidationConnection.getNegotiatedCompressionType();
+        this.compressionCodec = null;
         this.secretBytes = secretBytes;
 
         try {
             // Now use the SSL socket for further communication.
             this.in = new DataInputStream(this.socket.getInputStream());
             this.out = new DataOutputStream(this.socket.getOutputStream());
-            LOGGER.debug("Connection established with: {}", this.socket.getInetAddress().getHostAddress());
+            LOGGER.debug("Connection established with: {} using protocol v{} with {} compression", this.socket.getInetAddress().getHostAddress(), protocolVersion, compressionType);
         } catch (IOException e) {
             throw new IOException("Failed to establish connection", e);
         }
@@ -359,6 +390,19 @@ class Connection implements AutoCloseable {
 
     public void setBusy(boolean value) {
         busy.set(value);
+    }
+
+    /**
+     * Gets the compression codec, loading it lazily on first access.
+     * This ensures codec classes are only loaded when compression is actually used.
+     *
+     * @return the compression codec
+     */
+    private CompressionCodec getCodec() {
+        if (compressionCodec == null) {
+            compressionCodec = CompressionFactory.getCodec(compressionType);
+        }
+        return compressionCodec;
     }
 
     /**
@@ -376,7 +420,7 @@ class Connection implements AutoCloseable {
                 // [protocolVersion][FILE_REQUEST_TYPE][secret][int: fileHash.length][fileHash]
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 DataOutputStream dos = new DataOutputStream(baos);
-                dos.writeByte(PROTOCOL_VERSION);
+                dos.writeByte(protocolVersion);
                 dos.writeByte(FILE_REQUEST_TYPE);
                 dos.write(secretBytes);
                 dos.writeInt(fileHash.length);
@@ -407,7 +451,7 @@ class Connection implements AutoCloseable {
                 // [int: fileHashLength] then each file hash.
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 DataOutputStream dos = new DataOutputStream(baos);
-                dos.writeByte(PROTOCOL_VERSION);
+                dos.writeByte(protocolVersion);
                 dos.writeByte(REFRESH_REQUEST_TYPE);
                 dos.write(secretBytes);
                 dos.writeInt(fileHashes.length);
@@ -450,7 +494,7 @@ class Connection implements AutoCloseable {
     }
 
     /**
-     * Compresses (if enabled) and writes a protocol message using Zstd in chunks.
+     * Compresses (if enabled) and writes a protocol message using the negotiated compression algorithm in chunks.
      * Each chunk is framed individually.
      * Framing without compression: [int: chunkLength][chunk payload].
      * Framing with compression: [int: compressedChunkLength][int: originalChunkLength][compressed chunk payload].
@@ -461,52 +505,34 @@ class Connection implements AutoCloseable {
             int bytesToSend = Math.min(payload.length - offset, CHUNK_SIZE);
             byte[] chunk = new byte[bytesToSend];
             System.arraycopy(payload, offset, chunk, 0, bytesToSend);
-
-            if (!useCompression) {
-                out.writeInt(chunk.length);
-                out.write(chunk);
-            } else {
-                byte[] compressedChunk = Zstd.compress(chunk);
-                out.writeInt(compressedChunk.length);
-                out.writeInt(chunk.length);
-                out.write(compressedChunk);
-            }
+            byte[] compressedChunk = getCodec().compress(chunk);
+            out.writeInt(compressedChunk.length);
+            out.writeInt(chunk.length);
+            out.write(compressedChunk);
             offset += bytesToSend;
         }
         out.flush();
     }
 
     /**
-     * Reads one framed protocol message, decompressing it.
+     * Reads one framed protocol message, decompressing it with the negotiated compression algorithm.
      */
     private byte[] readProtocolMessageFrame() throws IOException {
-        if (!useCompression) {
-            int originalLength = in.readInt();
-            byte[] data = new byte[originalLength];
-            in.readFully(data);
-            return data;
-        } else {
-            int compressedLength = in.readInt();
-            int originalLength = in.readInt();
+        int compressedLength = in.readInt();
+        int originalLength = in.readInt();
 
-            if (compressedLength < 0 || originalLength < 0) {
-                throw new IllegalArgumentException("Invalid compressed or original length");
-            }
-
-            if (originalLength > CHUNK_SIZE) {
-                throw new IllegalArgumentException("Original length exceeds maximum packet size");
-            }
-
-            byte[] compressed = new byte[compressedLength];
-            in.readFully(compressed);
-            byte[] decompressed = Zstd.decompress(compressed, originalLength);
-
-            if (decompressed.length != originalLength) {
-                throw new IOException("Decompressed length does not match original length");
-            }
-
-            return decompressed;
+        if (compressedLength < 0 || originalLength < 0) {
+            throw new IllegalArgumentException("Invalid compressed or original length");
         }
+
+        if (originalLength > CHUNK_SIZE) {
+            throw new IllegalArgumentException("Original length exceeds maximum packet size");
+        }
+
+        byte[] compressed = new byte[compressedLength];
+        in.readFully(compressed);
+
+        return getCodec().decompress(compressed, originalLength);
     }
 
     /**
@@ -567,8 +593,7 @@ class Connection implements AutoCloseable {
                 byte eotType = eotIn.readByte();
 
                 if (ver != version || eotType != END_OF_TRANSMISSION) {
-                    throw new IOException("Invalid end-of-transmission marker. Expected version " + version +
-                            " and type " + END_OF_TRANSMISSION + ", got version " + ver + " and type " + eotType);
+                    throw new IOException("Invalid end-of-transmission marker. Expected version " + version + " and type " + END_OF_TRANSMISSION + ", got version " + ver + " and type " + eotType);
                 }
             }
 

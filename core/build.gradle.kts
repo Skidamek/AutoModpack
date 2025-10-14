@@ -20,7 +20,6 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     compileOnly("io.netty:netty-all:4.1.118.Final")
     implementation("org.bouncycastle:bcpkix-jdk18on:1.82")
-    implementation("com.github.luben:zstd-jni:1.5.7-4")
     implementation("org.tomlj:tomlj:1.1.1")
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
     testImplementation("org.junit.jupiter:junit-jupiter:6.0.0")

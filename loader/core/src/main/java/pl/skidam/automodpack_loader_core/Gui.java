@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_loader_core;
 
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -12,7 +13,6 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 
@@ -151,12 +151,8 @@ public class Gui {
         System.exit(0);
     }
 
-    private static boolean hasMacOs() {
-        return System.getProperty("os.name").toLowerCase(Locale.ENGLISH).contains("mac");
-    }
-
     private static boolean hasAwtSupport() {
-        if (hasMacOs()) {
+        if (PlatformUtils.isMac()) {
             // check for JAVA_STARTED_ON_FIRST_THREAD_<pid> which is set if -XstartOnFirstThread is used
             // -XstartOnFirstThread is incompatible with AWT (force enables embedded mode)
             for (String key : System.getenv().keySet()) {

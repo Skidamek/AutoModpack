@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.protocol.netty;
 
+import static pl.skidam.automodpack_core.GlobalVariables.*;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.epoll.Epoll;
@@ -12,24 +14,23 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
-import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.ObservableMap;
-
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.*;
-
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
+import pl.skidam.automodpack_core.utils.ObservableMap;
 
 public class NettyServer {
-    public static final AttributeKey<Boolean> USE_COMPRESSION = AttributeKey.valueOf("useCompression");
+
+    public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("compressionType");
+    public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("protocolVersion");
     private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
     private MultithreadEventLoopGroup eventLoopGroup;

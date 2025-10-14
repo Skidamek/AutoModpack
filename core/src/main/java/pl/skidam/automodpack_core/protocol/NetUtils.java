@@ -28,6 +28,15 @@ public class NetUtils {
     public static final int MAGIC_AMMC = 0x414D4D43;
     public static final int MAGIC_AMOK = 0x414D4F4B;
 
+    // Protocol versions
+    public static final byte PROTOCOL_VERSION_1 = 0x01;
+    public static final byte PROTOCOL_VERSION_2 = 0x02;
+
+    // Compression types
+    public static final byte COMPRESSION_NONE = 0x00;
+    public static final byte COMPRESSION_ZSTD = 0x01;
+    public static final byte COMPRESSION_GZIP = 0x02;
+
     public static final byte ECHO_TYPE = 0x00;
     public static final byte FILE_REQUEST_TYPE = 0x01;
     public static final byte FILE_RESPONSE_TYPE = 0x02;
