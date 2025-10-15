@@ -36,13 +36,13 @@ public abstract class ServerLoginNetworkHandlerMixin  {
         // Handle queries
         if (this.automodpack$addon.handle(packet)) {
             ci.cancel(); // We have handled it, cancel vanilla behavior
+        } else {
+            /*? if >=1.20.2 {*/
+            if (packet.payload() instanceof LoginResponsePayload response && response.data() != null) {
+                response.data().skipBytes(response.data().readableBytes());
+            }
+            /*?}*/
         }
-
-        /*? if >=1.20.2 {*/
-        if (packet.payload() instanceof LoginResponsePayload response && response.data() != null) {
-            response.data().skipBytes(response.data().readableBytes());
-        }
-        /*?}*/
     }
 
     @Inject(
