@@ -9,6 +9,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+
 @Mixin(value = ServerLoginPacketListenerImpl.class, priority = 300)
 public abstract class ServerLoginNetworkHandlerMixin  {
 
@@ -37,9 +39,13 @@ public abstract class ServerLoginNetworkHandlerMixin  {
         if (this.automodpack$addon.handle(packet)) {
             ci.cancel(); // We have handled it, cancel vanilla behavior
         } else {
+            // Catch unhandled AutoModpack `LoginResponsePayload` packets - it generally shouldn't happen, but just in case and also fabric api does it too...
             /*? if >=1.20.2 {*/
-            if (packet.payload() instanceof LoginResponsePayload response && response.data() != null) {
-                response.data().skipBytes(response.data().readableBytes());
+            if (packet.payload() instanceof LoginResponsePayload response) {
+                if (response.data() != null) {
+                    response.data().skipBytes(response.data().readableBytes());
+                }
+                LOGGER.debug("Unhandled LoginResponsePayload in ServerLoginPacketListenerImpl with id: {}", response.id());
             }
             /*?}*/
         }
