@@ -269,6 +269,11 @@ public class ModpackContent {
                 LOGGER.info("File {} is server mod! Skipping...", formattedFile);
                 return null;
             }
+            // Exclude AutoModpack itself
+            var modId = FileInspection.getModID(file);
+            if ((MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId) || MOD_ID.equals(modId)) {
+                return null;
+            }
         } else if (formattedFile.contains("/config/")) {
             type = "config";
         } else if (formattedFile.contains("/shaderpacks/")) {
@@ -279,11 +284,6 @@ public class ModpackContent {
             type = "mc_options";
         } else {
             type = "other";
-        }
-
-        // Exclude automodpack mod
-        if (type.equals("mod") && (MOD_ID + "_bootstrap").equals(FileInspection.getModID(file))) {
-            return null;
         }
 
         String sha1 = CustomFileUtils.getHash(file);
