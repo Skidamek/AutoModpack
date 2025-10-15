@@ -30,12 +30,11 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             return;
         }
 
-        // TODO: move the protocol and compression negotiations after TLS is established
-        //  and also make chunk size negotiable
+        // TODO: make chunk size negotiable
         int magic = in.getInt(0);
         if (magic == MAGIC_AMMC) {
             // Server should always support AMMC protocol (magic packets) (preferred way to connect, required for hosting on Minecraft port and good for backwards compatibility)
-            byte negotiatedVersion = PROTOCOL_VERSION_2; // Default to v2
+            byte negotiatedProtocolVersion = PROTOCOL_VERSION_2; // Default to v2
             byte negotiatedCompressionType = COMPRESSION_ZSTD; // Default to Zstd
 
             // Check if client sent protocol version (v2+ clients send 5 bytes: magic + version)
@@ -45,7 +44,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                 byte clientCompressionType = in.readByte();
 
                 // Negotiate protocol version (prefer v2 if both support it)
-                negotiatedVersion = (clientProtocolVersion >= PROTOCOL_VERSION_2) ? PROTOCOL_VERSION_2 : PROTOCOL_VERSION_1;
+                negotiatedProtocolVersion = (clientProtocolVersion >= PROTOCOL_VERSION_2) ? PROTOCOL_VERSION_2 : PROTOCOL_VERSION_1;
                 
                 // Check if we support the client's compression type
                 if (clientCompressionType == COMPRESSION_ZSTD || clientCompressionType == COMPRESSION_GZIP || clientCompressionType == COMPRESSION_NONE) {
@@ -56,16 +55,15 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                     }
                 }
 
-
                 // Send acknowledgment with negotiated version and compression type
                 ByteBuf response = ctx.alloc().buffer(6);
                 response.writeInt(MAGIC_AMOK);
-                response.writeByte(negotiatedVersion);
+                response.writeByte(negotiatedProtocolVersion);
                 response.writeByte(negotiatedCompressionType);
                 ctx.writeAndFlush(response);
 
                 // Store negotiated values in channel attributes
-                ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).set(negotiatedVersion);
+                ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).set(negotiatedProtocolVersion);
                 ctx.pipeline().channel().attr(NettyServer.COMPRESSION_TYPE).set(negotiatedCompressionType);
             } else {
                 // Old client (v1) - consume the 4-byte magic packet
@@ -76,10 +74,10 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                 response.writeInt(MAGIC_AMOK);
                 ctx.writeAndFlush(response);
 
-                negotiatedVersion = PROTOCOL_VERSION_1;
+                negotiatedProtocolVersion = PROTOCOL_VERSION_1;
 
                 // Store v1 values in channel attributes
-                ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).set(negotiatedVersion);
+                ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).set(negotiatedProtocolVersion);
                 ctx.pipeline().channel().attr(NettyServer.COMPRESSION_TYPE).set(negotiatedCompressionType);
             }
 
@@ -87,7 +85,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             var handlers = ctx.pipeline().toMap();
             handlers.forEach((name, handler) -> ctx.pipeline().remove(handler));
 
-            LOGGER.debug("New connection, negotiated version: {}, negotiated compression: {}", negotiatedVersion, negotiatedCompressionType);
+            LOGGER.debug("New connection, negotiated version: {}, negotiated compression: {}", negotiatedProtocolVersion, negotiatedCompressionType);
 
             setupPipeline(ctx, negotiatedCompressionType);
         } else if (sslCtx == null || serverConfig.bindPort != -1) {

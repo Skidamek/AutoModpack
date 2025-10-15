@@ -217,8 +217,19 @@ class PreValidationConnection {
 
                 // Step 4. Read negotiated protocol version and compression type (v2+ servers send this)
                 if (plainIn.available() >= 2) {
-                    negotiatedProtocolVersion = plainIn.readByte();
-                    negotiatedCompressionType = plainIn.readByte();
+                    byte serverProtocolVersion = plainIn.readByte();
+                    byte serverCompressionType = plainIn.readByte();
+
+                    if (serverProtocolVersion != PROTOCOL_VERSION_1 && serverProtocolVersion != PROTOCOL_VERSION_2) {
+                        throw new IOException("Unsupported protocol version from server: " + serverProtocolVersion);
+                    }
+
+                    if (serverCompressionType != COMPRESSION_NONE && serverCompressionType != COMPRESSION_ZSTD && serverCompressionType != COMPRESSION_GZIP) {
+                        throw new IOException("Unsupported compression type from server: " + serverCompressionType);
+                    }
+
+                    negotiatedProtocolVersion = serverProtocolVersion;
+                    negotiatedCompressionType = serverCompressionType;
                 } else {
                     // Old server (v1) - doesn't send version/compression info
                     negotiatedProtocolVersion = PROTOCOL_VERSION_1;
