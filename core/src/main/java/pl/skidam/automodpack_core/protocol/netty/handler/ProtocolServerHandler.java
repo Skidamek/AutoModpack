@@ -34,8 +34,10 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
         int magic = in.getInt(0);
         if (magic == MAGIC_AMMC) {
             // Server should always support AMMC protocol (magic packets) (preferred way to connect, required for hosting on Minecraft port and good for backwards compatibility)
-            byte negotiatedProtocolVersion = PROTOCOL_VERSION_2; // Default to v2
-            byte negotiatedCompressionType = COMPRESSION_ZSTD; // Default to Zstd
+            byte negotiatedProtocolVersion;
+            byte negotiatedCompressionType;
+
+            LOGGER.debug("Received AMMC magic packet from client, readable bytes: {}", in.readableBytes());
 
             // Check if client sent protocol version (v2+ clients send 5 bytes: magic + version)
             if (in.readableBytes() >= 6) {
@@ -43,16 +45,18 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                 byte clientProtocolVersion = in.readByte();
                 byte clientCompressionType = in.readByte();
 
+                LOGGER.debug("Client protocol version: {}, Client compression type: {}", clientProtocolVersion, clientCompressionType);
+
                 // Negotiate protocol version (prefer v2 if both support it)
                 negotiatedProtocolVersion = (clientProtocolVersion >= PROTOCOL_VERSION_2) ? PROTOCOL_VERSION_2 : PROTOCOL_VERSION_1;
                 
                 // Check if we support the client's compression type
-                if (clientCompressionType == COMPRESSION_ZSTD || clientCompressionType == COMPRESSION_GZIP || clientCompressionType == COMPRESSION_NONE) {
-                    if (PlatformUtils.isAndroid() && clientCompressionType == COMPRESSION_ZSTD) {
-                        negotiatedCompressionType = COMPRESSION_GZIP; // Default to Gzip on Android
-                    } else {
-                        negotiatedCompressionType = clientCompressionType;
-                    }
+                if (PlatformUtils.isAndroid() && clientCompressionType == COMPRESSION_ZSTD) { // Zstd unsupported on Android
+                    negotiatedCompressionType = COMPRESSION_GZIP; // Default to Gzip on Android
+                } else if (clientCompressionType == COMPRESSION_ZSTD || clientCompressionType == COMPRESSION_GZIP || clientCompressionType == COMPRESSION_NONE) {
+                    negotiatedCompressionType = clientCompressionType;
+                } else {
+                    negotiatedCompressionType = COMPRESSION_ZSTD; // Default to Zstd if unsupported
                 }
 
                 // Send acknowledgment with negotiated version and compression type
@@ -62,37 +66,39 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
                 response.writeByte(negotiatedCompressionType);
                 ctx.writeAndFlush(response);
 
-                // Store negotiated values in channel attributes
-                ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).set(negotiatedProtocolVersion);
-                ctx.pipeline().channel().attr(NettyServer.COMPRESSION_TYPE).set(negotiatedCompressionType);
+                LOGGER.debug("Negotiated protocol version: {}, Negotiated compression type: {}", negotiatedProtocolVersion, negotiatedCompressionType);
             } else {
                 // Old client (v1) - consume the 4-byte magic packet
                 in.skipBytes(4);
+
+                negotiatedProtocolVersion = PROTOCOL_VERSION_1;
+                negotiatedCompressionType = COMPRESSION_ZSTD;
 
                 // Send old-style acknowledgment (just magic)
                 ByteBuf response = ctx.alloc().buffer(4);
                 response.writeInt(MAGIC_AMOK);
                 ctx.writeAndFlush(response);
 
-                negotiatedProtocolVersion = PROTOCOL_VERSION_1;
-
-                // Store v1 values in channel attributes
-                ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).set(negotiatedProtocolVersion);
-                ctx.pipeline().channel().attr(NettyServer.COMPRESSION_TYPE).set(negotiatedCompressionType);
+                LOGGER.debug("Old v1 client detected, defaulting to protocol version: {}, compression type: {}", negotiatedProtocolVersion, negotiatedCompressionType);
             }
+
+            // Store negotiated values in channel attributes
+            ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).set(negotiatedProtocolVersion);
+            ctx.pipeline().channel().attr(NettyServer.COMPRESSION_TYPE).set(negotiatedCompressionType);
 
             // Remove all existing handlers from the pipeline
             var handlers = ctx.pipeline().toMap();
             handlers.forEach((name, handler) -> ctx.pipeline().remove(handler));
 
             LOGGER.debug("New connection, negotiated version: {}, negotiated compression: {}", negotiatedProtocolVersion, negotiatedCompressionType);
-
             setupPipeline(ctx, negotiatedCompressionType);
         } else if (sslCtx == null || serverConfig.bindPort != -1) {
             // However if there's no magic packet and we don't use internal TLS or we are hosting on a separate port, we have to try to connect anyway, for use with reverse proxy setups
             // Default to v1 for reverse proxy setups
             ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).set(PROTOCOL_VERSION_1);
             ctx.pipeline().channel().attr(NettyServer.COMPRESSION_TYPE).set(COMPRESSION_ZSTD);
+
+            LOGGER.debug("No AMMC magic packet received, defaulting to protocol version: {}, compression type: {}", PROTOCOL_VERSION_1, COMPRESSION_ZSTD);
             setupPipeline(ctx, COMPRESSION_ZSTD);
         }
 
@@ -108,6 +114,9 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
         ctx.pipeline().addLast("traffic-shaper", TrafficShaper.trafficShaper.getTrafficShapingHandler());
         if (sslCtx != null) { // If SSL context is provided, add TLS handler
             ctx.pipeline().addLast("tls", sslCtx.newHandler(ctx.alloc()));
+            LOGGER.debug("Added TLS handler to the pipeline");
+        } else {
+            LOGGER.debug("No TLS handler added to the pipeline");
         }
 
         // get the compression codec

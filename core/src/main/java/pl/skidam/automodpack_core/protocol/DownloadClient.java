@@ -199,6 +199,8 @@ class PreValidationConnection {
         if (!modpackAddresses.requiresMagic) {
             negotiatedProtocolVersion = PROTOCOL_VERSION_2;
             negotiatedCompressionType = COMPRESSION_ZSTD;
+
+            LOGGER.debug("Skipping AutoModpack magic handshake as per configuration");
         } else {
             try {
                 DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
@@ -213,11 +215,15 @@ class PreValidationConnection {
                 plainOut.writeByte(desiredCompression);
                 plainOut.flush();
 
+                LOGGER.debug("Sent AutoModpack magic handshake to {} - magic: {} desiredProtocolVersion: {} desiredCompression: {}", resolvedHostAddress, MAGIC_AMMC, desiredProtocolVersion, desiredCompression);
+
                 // Step 3. Wait for the server's reply (AMOK magic).
                 int handshakeResponse = plainIn.readInt();
                 if (handshakeResponse != MAGIC_AMOK) {
                     throw new IOException("Invalid response from server: " + handshakeResponse);
                 }
+
+                LOGGER.debug("Received AutoModpack magic handshake response from {} - readable bytes {}", resolvedHostAddress, plainIn.available());
 
                 // Step 4. Read negotiated protocol version and compression type (v2+ servers send this)
                 if (plainIn.available() >= 2) {
@@ -234,10 +240,14 @@ class PreValidationConnection {
 
                     negotiatedProtocolVersion = serverProtocolVersion;
                     negotiatedCompressionType = serverCompressionType;
+
+                    LOGGER.debug("Negotiated AutoModpack protocol version: {}, compression type: {} with {}", negotiatedProtocolVersion, negotiatedCompressionType, resolvedHostAddress);
                 } else {
                     // Old server (v1) - doesn't send version/compression info
                     negotiatedProtocolVersion = PROTOCOL_VERSION_1;
                     negotiatedCompressionType = COMPRESSION_ZSTD;
+
+                    LOGGER.debug("Old server detected, defaulting AutoModpack protocol version to: {}, compression type: {} with {}", negotiatedProtocolVersion, negotiatedCompressionType, resolvedHostAddress);
                 }
             } catch (IOException e) {
                 LOGGER.error("AutoModpack magic handshake failed", e);
