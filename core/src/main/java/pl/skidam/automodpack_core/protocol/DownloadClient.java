@@ -121,6 +121,7 @@ public class DownloadClient implements AutoCloseable {
             return new DownloadClient(modpackAddresses, secretBytes, poolSize, trustedByUserCallback);
         } catch (IOException e) {
             LOGGER.error("Failed to create a download client. Error: {}", e.getMessage());
+            LOGGER.debug(e);
             return null;
         }
     }
@@ -179,8 +180,8 @@ class PreValidationConnection {
 
     private final SSLSocket socket;
     private final X509Certificate unvalidatedCertificate;
-    private byte negotiatedProtocolVersion = PROTOCOL_VERSION_2;
-    private byte negotiatedCompressionType = COMPRESSION_ZSTD;
+    private byte negotiatedProtocolVersion;
+    private byte negotiatedCompressionType;
 
     /**
      * Creates a new connection by first opening a plain TCP socket,
@@ -195,7 +196,10 @@ class PreValidationConnection {
         plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
         plainSocket.setSoTimeout(10000);
 
-        if (modpackAddresses.requiresMagic) {
+        if (!modpackAddresses.requiresMagic) {
+            negotiatedProtocolVersion = PROTOCOL_VERSION_2;
+            negotiatedCompressionType = COMPRESSION_ZSTD;
+        } else {
             try {
                 DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
                 DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
