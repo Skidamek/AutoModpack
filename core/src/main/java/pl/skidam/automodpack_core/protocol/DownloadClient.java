@@ -180,7 +180,7 @@ class PreValidationConnection {
     private final SSLSocket socket;
     private final X509Certificate unvalidatedCertificate;
     private byte negotiatedProtocolVersion = PROTOCOL_VERSION_2;
-    private byte negotiatedCompressionType = COMPRESSION_NONE;
+    private byte negotiatedCompressionType = COMPRESSION_ZSTD;
 
     /**
      * Creates a new connection by first opening a plain TCP socket,
