@@ -4,10 +4,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
 import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.protocol.netty.message.EchoMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.FileRequestMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.FileResponseMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.RefreshRequestMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.request.FileResponseMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
 
 import java.util.List;
 

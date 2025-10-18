@@ -4,6 +4,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 import pl.skidam.automodpack_core.protocol.netty.message.*;
+import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.request.FileResponseMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
 
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 

@@ -180,8 +180,6 @@ class PreValidationConnection {
 
     private final SSLSocket socket;
     private final X509Certificate unvalidatedCertificate;
-    private byte negotiatedProtocolVersion;
-    private byte negotiatedCompressionType;
 
     /**
      * Creates a new connection by first opening a plain TCP socket,
@@ -196,26 +194,16 @@ class PreValidationConnection {
         plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
         plainSocket.setSoTimeout(10000);
 
-        if (!modpackAddresses.requiresMagic) {
-            negotiatedProtocolVersion = PROTOCOL_VERSION_2;
-            negotiatedCompressionType = COMPRESSION_ZSTD;
-
-            LOGGER.debug("Skipping AutoModpack magic handshake as per configuration");
-        } else {
+        if (modpackAddresses.requiresMagic) {
             try {
                 DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
                 DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
 
-                byte desiredProtocolVersion = PROTOCOL_VERSION_2;
-                byte desiredCompression = PlatformUtils.isAndroid() ? COMPRESSION_GZIP : COMPRESSION_ZSTD;
-
-                // Step 2. Send the handshake (AMMC magic + protocol version) over the plain socket.
+                // Step 2. Send the handshake (AMMC magic) over the plain socket.
                 plainOut.writeInt(MAGIC_AMMC);
-                plainOut.writeByte(desiredProtocolVersion); // Client supports v2
-                plainOut.writeByte(desiredCompression);
                 plainOut.flush();
 
-                LOGGER.debug("Sent AutoModpack magic handshake to {} - magic: {} desiredProtocolVersion: {} desiredCompression: {}", resolvedHostAddress, MAGIC_AMMC, desiredProtocolVersion, desiredCompression);
+                LOGGER.debug("Sent AutoModpack magic handshake to {} - magic: {}", resolvedHostAddress, MAGIC_AMMC);
 
                 // Step 3. Wait for the server's reply (AMOK magic).
                 int handshakeResponse = plainIn.readInt();
@@ -224,31 +212,6 @@ class PreValidationConnection {
                 }
 
                 LOGGER.debug("Received AutoModpack magic handshake response from {} - readable bytes {}", resolvedHostAddress, plainIn.available());
-
-                // Step 4. Read negotiated protocol version and compression type (v2+ servers send this)
-                if (plainIn.available() >= 2) {
-                    byte serverProtocolVersion = plainIn.readByte();
-                    byte serverCompressionType = plainIn.readByte();
-
-                    if (serverProtocolVersion != PROTOCOL_VERSION_1 && serverProtocolVersion != PROTOCOL_VERSION_2) {
-                        throw new IOException("Unsupported protocol version from server: " + serverProtocolVersion);
-                    }
-
-                    if (serverCompressionType != COMPRESSION_NONE && serverCompressionType != COMPRESSION_ZSTD && serverCompressionType != COMPRESSION_GZIP) {
-                        throw new IOException("Unsupported compression type from server: " + serverCompressionType);
-                    }
-
-                    negotiatedProtocolVersion = serverProtocolVersion;
-                    negotiatedCompressionType = serverCompressionType;
-
-                    LOGGER.debug("Negotiated AutoModpack protocol version: {}, compression type: {} with {}", negotiatedProtocolVersion, negotiatedCompressionType, resolvedHostAddress);
-                } else {
-                    // Old server (v1) - doesn't send version/compression info
-                    negotiatedProtocolVersion = PROTOCOL_VERSION_1;
-                    negotiatedCompressionType = COMPRESSION_ZSTD;
-
-                    LOGGER.debug("Old server detected, defaulting AutoModpack protocol version to: {}, compression type: {} with {}", negotiatedProtocolVersion, negotiatedCompressionType, resolvedHostAddress);
-                }
             } catch (IOException e) {
                 LOGGER.error("AutoModpack magic handshake failed", e);
                 plainSocket.close();
@@ -331,14 +294,6 @@ class PreValidationConnection {
         return unvalidatedCertificate;
     }
 
-    public byte getNegotiatedProtocolVersion() {
-        return negotiatedProtocolVersion;
-    }
-
-    public byte getNegotiatedCompressionType() {
-        return negotiatedCompressionType;
-    }
-
     /**
      * Creates an SSLContext that trusts the certificates in {@code trustedCertificates}, and verifies certificates
      * using the default key store otherwise.
@@ -371,8 +326,9 @@ class PreValidationConnection {
  */
 class Connection implements AutoCloseable {
 
-    private final byte protocolVersion;
-    private final byte compressionType;
+    private byte protocolVersion = PROTOCOL_VERSION;
+    private byte compressionType = COMPRESSION_ZSTD;
+    private int chunkSize = DEFAULT_CHUNK_SIZE;
     private CompressionCodec compressionCodec;
     private final byte[] secretBytes;
     private final SSLSocket socket;
@@ -394,8 +350,6 @@ class Connection implements AutoCloseable {
             throw new SSLHandshakeException("Server certificate is not valid, connection got closed");
         }
         this.socket = preValidationConnection.getSocket();
-        this.protocolVersion = preValidationConnection.getNegotiatedProtocolVersion();
-        this.compressionType = preValidationConnection.getNegotiatedCompressionType();
         this.compressionCodec = null;
         this.secretBytes = secretBytes;
 
@@ -403,9 +357,19 @@ class Connection implements AutoCloseable {
             // Now use the SSL socket for further communication.
             this.in = new DataInputStream(this.socket.getInputStream());
             this.out = new DataOutputStream(this.socket.getOutputStream());
-            LOGGER.debug("Connection established with: {} using protocol v{} with {} compression", this.socket.getInetAddress().getHostAddress(), protocolVersion, compressionType);
+            LOGGER.debug("Connection established with: {}", this.socket.getInetAddress().getHostAddress());
         } catch (IOException e) {
             throw new IOException("Failed to establish connection", e);
+        }
+
+        try {
+            var desiredCompression = PlatformUtils.isAndroid() ? COMPRESSION_GZIP : COMPRESSION_ZSTD;
+            sendCompressionConfig(desiredCompression);
+            sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
+            sendEchoConfig();
+            LOGGER.debug("Connection configuration completed, protocolVersion: {} compression: {}, chunk size: {}", this.protocolVersion, this.compressionType, this.chunkSize);
+        } catch (IOException e) {
+            LOGGER.error("Failed to exchange configuration details, using defaults", e);
         }
     }
 
@@ -527,7 +491,7 @@ class Connection implements AutoCloseable {
     private void writeProtocolMessage(byte[] payload) throws IOException {
         int offset = 0;
         while (offset < payload.length) {
-            int bytesToSend = Math.min(payload.length - offset, CHUNK_SIZE);
+            int bytesToSend = Math.min(payload.length - offset, this.chunkSize);
             byte[] chunk = new byte[bytesToSend];
             System.arraycopy(payload, offset, chunk, 0, bytesToSend);
             byte[] compressedChunk = getCodec().compress(chunk);
@@ -550,7 +514,7 @@ class Connection implements AutoCloseable {
             throw new IllegalArgumentException("Invalid compressed or original length");
         }
 
-        if (originalLength > CHUNK_SIZE) {
+        if (originalLength > this.chunkSize) {
             throw new IllegalArgumentException("Original length exceeds maximum packet size");
         }
 
@@ -624,6 +588,102 @@ class Connection implements AutoCloseable {
 
             return destination;
         }
+    }
+
+    /**
+     * Sends the configuration packet to negotiate compression.
+     */
+    public void sendCompressionConfig(byte desiredCompression) throws IOException {
+        // Build Configuration message:
+        // [protocolVersion][CONFIGURATION_COMPRESSION_TYPE][desiredCompression]
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(baos);
+        dos.writeByte(protocolVersion);
+        dos.writeByte(CONFIGURATION_COMPRESSION_TYPE);
+        dos.writeByte(desiredCompression);
+        dos.flush();
+        byte[] payload = baos.toByteArray();
+
+        // Send uncompressed
+        out.write(payload);
+        out.flush();
+
+        LOGGER.debug("Sent compression config with desired compression: {}", desiredCompression);
+
+        // Read response
+        byte version = in.readByte();
+        LOGGER.debug("Received compression config response with protocol version: {}", version);
+        byte type = in.readByte();
+        if (type != CONFIGURATION_COMPRESSION_TYPE) {
+            throw new IOException("Unexpected response type: " + type);
+        }
+
+        byte negotiatedCompression = in.readByte();
+
+        if (negotiatedCompression != COMPRESSION_NONE && negotiatedCompression != COMPRESSION_ZSTD && negotiatedCompression != COMPRESSION_GZIP) {
+            throw new IOException("Unsupported compression type negotiated: " + negotiatedCompression);
+        }
+
+        LOGGER.debug("Negotiated compression type: {}", negotiatedCompression);
+
+        this.compressionType = negotiatedCompression;
+    }
+
+    /**
+     * Sends the configuration packet to negotiate chunk size.
+     */
+    public void sendChunkSizeConfig(int desiredChunkSize) throws IOException {
+        // Build Configuration message:
+        // [protocolVersion][CONFIGURATION_CHUNK_SIZE_TYPE][desiredChunkSize]
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(baos);
+        dos.writeByte(protocolVersion);
+        dos.writeByte(CONFIGURATION_CHUNK_SIZE_TYPE);
+        dos.writeInt(desiredChunkSize);
+        dos.flush();
+        byte[] payload = baos.toByteArray();
+
+        // Send uncompressed
+        out.write(payload);
+        out.flush();
+
+        LOGGER.debug("Sent chunk size config with desired chunk size: {}", desiredChunkSize);
+
+        // Read response
+        byte version = in.readByte();
+        LOGGER.debug("Received chunk size config response with protocol version: {}", version);
+        byte type = in.readByte();
+        if (type != CONFIGURATION_CHUNK_SIZE_TYPE) {
+            throw new IOException("Unexpected response type: " + type);
+        }
+
+        int negotiatedChunkSize = in.readInt();
+
+        if (negotiatedChunkSize < MIN_CHUNK_SIZE || negotiatedChunkSize > MAX_CHUNK_SIZE) {
+            throw new IOException("Negotiated chunk size out of bounds: " + negotiatedChunkSize);
+        }
+
+        LOGGER.debug("Negotiated chunk size: {}", negotiatedChunkSize);
+
+        this.chunkSize = negotiatedChunkSize;
+    }
+
+    /**
+     * Sends an echo configuration message.
+     */
+    public void sendEchoConfig() throws IOException {
+        // Build Configuration message:
+        // [protocolVersion][CONFIGURATION_ECHO_TYPE]
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(baos);
+        dos.writeByte(protocolVersion);
+        dos.writeByte(CONFIGURATION_ECHO_TYPE);
+        dos.flush();
+        byte[] payload = baos.toByteArray();
+
+        // Send uncompressed
+        out.write(payload);
+        out.flush();
     }
 
     /**

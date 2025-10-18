@@ -30,6 +30,7 @@ import pl.skidam.automodpack_core.utils.ObservableMap;
 public class NettyServer {
 
     public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("compressionType");
+    public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("chunkSize");
     public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("protocolVersion");
     private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
@@ -151,7 +152,7 @@ public class NettyServer {
 
             serverChannel = new ServerBootstrap()
                     .channel(socketChannelClass)
-                    .childOption(ChannelOption.SO_KEEPALIVE, true)
+                    .childOption(ChannelOption.TCP_NODELAY, true)
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel ch) {

@@ -24,25 +24,36 @@ import java.util.HexFormat;
 
 public class NetUtils {
 
-    public static final int CHUNK_SIZE = 131072; // 128 KB - good for zstd
+    // Magic numbers
     public static final int MAGIC_AMMC = 0x414D4D43;
     public static final int MAGIC_AMOK = 0x414D4F4B;
 
     // Protocol versions
-    public static final byte PROTOCOL_VERSION_1 = 0x01;
-    public static final byte PROTOCOL_VERSION_2 = 0x02;
+    public static final byte PROTOCOL_VERSION = 0x01;
 
     // Compression types
     public static final byte COMPRESSION_NONE = 0x00;
     public static final byte COMPRESSION_ZSTD = 0x01;
     public static final byte COMPRESSION_GZIP = 0x02;
 
+    // Message types and configuration message types should not overlap
+    // Message types
     public static final byte ECHO_TYPE = 0x00;
     public static final byte FILE_REQUEST_TYPE = 0x01;
     public static final byte FILE_RESPONSE_TYPE = 0x02;
     public static final byte REFRESH_REQUEST_TYPE = 0x03;
     public static final byte END_OF_TRANSMISSION = 0x04;
     public static final byte ERROR = 0x05;
+
+    // Configuration message types
+    public static final byte CONFIGURATION_ECHO_TYPE = 0x40;
+    public static final byte CONFIGURATION_COMPRESSION_TYPE = 0x41;
+    public static final byte CONFIGURATION_CHUNK_SIZE_TYPE = 0x42;
+
+    // Chunk size
+    public static final int DEFAULT_CHUNK_SIZE = 128 * 1024; // 128 KB
+    public static final int MIN_CHUNK_SIZE = 8 * 1024; // 8 KB
+    public static final int MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
 
     public static String getFingerprint(X509Certificate cert) throws CertificateEncodingException {
         byte[] certificate = cert.getEncoded();

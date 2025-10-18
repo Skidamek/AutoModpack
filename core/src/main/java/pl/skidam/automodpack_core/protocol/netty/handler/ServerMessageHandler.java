@@ -2,7 +2,6 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
-import static pl.skidam.automodpack_core.protocol.NetUtils.CHUNK_SIZE;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -11,14 +10,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.stream.ChunkedFile;
 import io.netty.util.CharsetUtil;
-import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.modpack.ModpackContent;
-import pl.skidam.automodpack_core.protocol.netty.NettyServer;
-import pl.skidam.automodpack_core.protocol.netty.message.EchoMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.FileRequestMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.RefreshRequestMessage;
-
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.SocketAddress;
@@ -26,10 +17,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.modpack.ModpackContent;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
+import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
 
-public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
+public class ServerMessageHandler
+    extends SimpleChannelInboundHandler<ProtocolMessage> {
 
     private final Map<byte[], String> secretLookup = new HashMap<>();
+    private byte protocolVersion;
+    private int chunkSize;
 
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) {
@@ -46,6 +47,10 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
             sendError(ctx, clientProtocolVersion, "Authentication failed");
             return;
         }
+
+        // reassign channel attributes
+        this.protocolVersion = ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).get();
+        this.chunkSize = ctx.pipeline().channel().attr(NettyServer.CHUNK_SIZE).get();
 
         switch (msg.getType()) {
             case ECHO_TYPE:
@@ -111,7 +116,6 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         sendFile(context, new byte[0]);
     }
 
-
     private boolean validateSecret(ChannelHandlerContext ctx, SocketAddress address, byte[] secret) {
         String decodedSecret = secretLookup.get(secret);
         boolean addConnection = false;
@@ -134,11 +138,8 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         final String sha1 = new String(bsha1, CharsetUtil.UTF_8);
         final Optional<Path> optionalPath = resolvePath(sha1);
 
-        // Get protocol version from channel attributes
-        byte protocolVersion = ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).get();
-
         if (optionalPath.isEmpty() || !Files.exists(optionalPath.get())) {
-            sendError(ctx, protocolVersion, "File not found");
+            sendError(ctx, this.protocolVersion, "File not found");
             return;
         }
 
@@ -147,7 +148,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
         // Send file response header: version, FILE_RESPONSE type, then file size (8 bytes)
         ByteBuf responseHeader = Unpooled.buffer(1 + 1 + 8);
-        responseHeader.writeByte(protocolVersion);
+        responseHeader.writeByte(this.protocolVersion);
         responseHeader.writeByte(FILE_RESPONSE_TYPE);
         responseHeader.writeLong(fileSize);
         ctx.writeAndFlush(responseHeader);
@@ -159,13 +160,13 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
         try {
             RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
-            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), CHUNK_SIZE);
+            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), this.chunkSize);
             ctx.writeAndFlush(chunkedFile).addListener((ChannelFutureListener) future -> {
                 try {
                     if (future.isSuccess()) {
                         sendEOT(ctx);
                     } else {
-                        sendError(ctx, protocolVersion, "File transfer error: " + future.cause().getMessage());
+                        sendError(ctx, this.protocolVersion, "File transfer error: " + future.cause().getMessage());
                     }
                 } finally { // Always close resources
                     try {
@@ -177,7 +178,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
                 }
             });
         } catch (IOException e) {
-            sendError(ctx, protocolVersion, "File transfer error: " + e.getMessage());
+            sendError(ctx, this.protocolVersion, "File transfer error: " + e.getMessage());
         }
     }
 
@@ -201,9 +202,8 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
     }
 
     private void sendEOT(ChannelHandlerContext ctx) {
-        byte protocolVersion = ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).get();
         ByteBuf eot = Unpooled.buffer(2);
-        eot.writeByte(protocolVersion);
+        eot.writeByte(this.protocolVersion);
         eot.writeByte(END_OF_TRANSMISSION);
         ctx.writeAndFlush(eot);
     }

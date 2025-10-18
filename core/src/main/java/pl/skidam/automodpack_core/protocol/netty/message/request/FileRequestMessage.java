@@ -1,4 +1,6 @@
-package pl.skidam.automodpack_core.protocol.netty.message;
+package pl.skidam.automodpack_core.protocol.netty.message.request;
+
+import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 
 import static pl.skidam.automodpack_core.protocol.NetUtils.FILE_REQUEST_TYPE;
 
