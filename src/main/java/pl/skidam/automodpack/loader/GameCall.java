@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.loader;
 
-import com.mojang.authlib.GameProfile;
 import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack_core.loader.GameCallService;
 

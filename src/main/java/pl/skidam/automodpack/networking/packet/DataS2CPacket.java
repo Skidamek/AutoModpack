@@ -18,12 +18,16 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class DataS2CPacket {
 
     public static void receive(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
+        if (!understood) {
+            return;
+        }
+
+        loginSynchronizer.waitFor(server.submit(() -> handlePacket(handler, buf)));
+    }
+
+    private static void handlePacket(ServerLoginPacketListenerImpl handler, FriendlyByteBuf buf) {
         try {
             GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
-
-            if (!understood) {
-                return;
-            }
 
             if (buf.readableBytes() == 0) {
                 return;

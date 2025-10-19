@@ -28,6 +28,10 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class HandshakeS2CPacket {
 
     public static void receive(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf, ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
+        loginSynchronizer.waitFor(server.submit(() -> handlePacket(handler, understood, buf, sender)));
+    }
+
+    private static void handlePacket(ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf, PacketSender sender) {
         Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 
         GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
@@ -65,12 +69,11 @@ public class HandshakeS2CPacket {
             }
         } else {
             Common.players.put(playerName, true);
-            GameProfile finalProfile = profile;
-            loginSynchronizer.waitFor(server.submit(() -> handleHandshake(connection, finalProfile, server.getPort(), buf, sender)));
+            handleHandshake(connection, profile, buf, sender);
         }
     }
 
-    public static void handleHandshake(Connection connection, GameProfile profile, int minecraftServerPort, FriendlyByteBuf buf, PacketSender packetSender) {
+    private static void handleHandshake(Connection connection, GameProfile profile, FriendlyByteBuf buf, PacketSender sender) {
         try {
             LOGGER.info("{} has installed AutoModpack.", GameHelpers.getPlayerName(profile));
 
@@ -123,15 +126,14 @@ public class HandshakeS2CPacket {
 
             FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());
             outBuf.writeUtf(packetContentJson, Short.MAX_VALUE);
-            packetSender.sendPacket(DATA, outBuf);
+            sender.sendPacket(DATA, outBuf);
         } catch (Exception e) {
             LOGGER.error("Error while handling handshake for {}", GameHelpers.getPlayerName(profile), e);
         }
     }
 
 
-    public static boolean isClientVersionHigher(String clientVersion) {
-
+    private static boolean isClientVersionHigher(String clientVersion) {
         String versionPattern = "\\d+\\.\\d+\\.\\d+";
         if (!clientVersion.matches(versionPattern)) {
             return false;
