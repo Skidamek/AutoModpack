@@ -1,5 +1,7 @@
 package pl.skidam.automodpack_core.auth;
 
+import pl.skidam.automodpack_core.utils.TimedSet;
+
 import java.net.SocketAddress;
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -50,8 +52,14 @@ public class Secrets {
         return new Secret(secret, timestamp);
     }
 
+    // Cache of recently validated secrets to avoid repeated lookups for performance
+    private static final TimedSet<String> cachedValidSecrets = new TimedSet<>(3500);
+
     public static boolean isSecretValid(String secretStr, SocketAddress address) {
         if (!serverConfig.validateSecrets)
+            return true;
+
+        if (cachedValidSecrets.contains(secretStr))
             return true;
 
         var playerSecretPair = SecretsStore.getHostSecret(secretStr);
@@ -73,6 +81,8 @@ public class Secrets {
 
         if (!valid)
             return false;
+
+        cachedValidSecrets.add(secretStr);
 
         return true;
     }
