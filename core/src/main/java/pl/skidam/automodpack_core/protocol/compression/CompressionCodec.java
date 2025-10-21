@@ -8,6 +8,8 @@ import java.io.IOException;
  */
 public interface CompressionCodec {
 
+    boolean isInitialized();
+
     /**
      * Compresses the input data.
      *

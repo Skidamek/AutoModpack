@@ -2,10 +2,6 @@ package pl.skidam.automodpack_core.protocol.compression;
 
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
-/**
- * Factory for creating compression codecs with lazy loading.
- * Codec classes are only loaded into the classloader when they're actually needed.
- */
 public class CompressionFactory {
 
     /**

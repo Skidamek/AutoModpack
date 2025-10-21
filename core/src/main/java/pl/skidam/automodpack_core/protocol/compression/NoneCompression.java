@@ -9,6 +9,11 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_NONE;
 public class NoneCompression implements CompressionCodec {
 
     @Override
+    public boolean isInitialized() {
+        return true;
+    }
+
+    @Override
     public byte[] compress(byte[] input) {
         return input;
     }

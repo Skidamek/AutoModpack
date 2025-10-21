@@ -22,7 +22,6 @@ import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
-import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /**
  * A DownloadClient that creates a pool of connections.
@@ -329,7 +328,6 @@ class Connection implements AutoCloseable {
     private byte protocolVersion = PROTOCOL_VERSION;
     private byte compressionType = COMPRESSION_ZSTD;
     private int chunkSize = DEFAULT_CHUNK_SIZE;
-    private CompressionCodec compressionCodec;
     private final byte[] secretBytes;
     private final SSLSocket socket;
     private final DataInputStream in;
@@ -350,7 +348,6 @@ class Connection implements AutoCloseable {
             throw new SSLHandshakeException("Server certificate is not valid, connection got closed");
         }
         this.socket = preValidationConnection.getSocket();
-        this.compressionCodec = null;
         this.secretBytes = secretBytes;
 
         try {
@@ -363,9 +360,12 @@ class Connection implements AutoCloseable {
         }
 
         try {
-            var desiredCompression = PlatformUtils.isAndroid() ? COMPRESSION_GZIP : COMPRESSION_ZSTD;
-            sendCompressionConfig(desiredCompression);
-            sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
+            if (!getCompressionCodec().isInitialized()) {
+                LOGGER.warn("Desired compression codec failed to initialize, falling back to Gzip");
+                this.compressionType = COMPRESSION_GZIP;
+            }
+            this.compressionType = sendCompressionConfig(compressionType);
+            this.chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
             sendEchoConfig();
             LOGGER.debug("Connection configuration completed, protocolVersion: {} compression: {}, chunk size: {}", this.protocolVersion, this.compressionType, this.chunkSize);
         } catch (IOException e) {
@@ -381,17 +381,8 @@ class Connection implements AutoCloseable {
         busy.set(value);
     }
 
-    /**
-     * Gets the compression codec, loading it lazily on first access.
-     * This ensures codec classes are only loaded when compression is actually used.
-     *
-     * @return the compression codec
-     */
-    private CompressionCodec getCodec() {
-        if (compressionCodec == null) {
-            compressionCodec = CompressionFactory.getCodec(compressionType);
-        }
-        return compressionCodec;
+    private CompressionCodec getCompressionCodec() {
+        return CompressionFactory.getCodec(compressionType);
     }
 
     /**
@@ -494,7 +485,7 @@ class Connection implements AutoCloseable {
             int bytesToSend = Math.min(payload.length - offset, this.chunkSize);
             byte[] chunk = new byte[bytesToSend];
             System.arraycopy(payload, offset, chunk, 0, bytesToSend);
-            byte[] compressedChunk = getCodec().compress(chunk);
+            byte[] compressedChunk = getCompressionCodec().compress(chunk);
             out.writeInt(compressedChunk.length);
             out.writeInt(chunk.length);
             out.write(compressedChunk);
@@ -521,7 +512,7 @@ class Connection implements AutoCloseable {
         byte[] compressed = new byte[compressedLength];
         in.readFully(compressed);
 
-        return getCodec().decompress(compressed, originalLength);
+        return getCompressionCodec().decompress(compressed, originalLength);
     }
 
     /**
@@ -593,7 +584,7 @@ class Connection implements AutoCloseable {
     /**
      * Sends the configuration packet to negotiate compression.
      */
-    public void sendCompressionConfig(byte desiredCompression) throws IOException {
+    public byte sendCompressionConfig(byte desiredCompression) throws IOException {
         // Build Configuration message:
         // [protocolVersion][CONFIGURATION_COMPRESSION_TYPE][desiredCompression]
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -626,13 +617,13 @@ class Connection implements AutoCloseable {
 
         LOGGER.debug("Negotiated compression type: {}", negotiatedCompression);
 
-        this.compressionType = negotiatedCompression;
+        return negotiatedCompression;
     }
 
     /**
      * Sends the configuration packet to negotiate chunk size.
      */
-    public void sendChunkSizeConfig(int desiredChunkSize) throws IOException {
+    public int sendChunkSizeConfig(int desiredChunkSize) throws IOException {
         // Build Configuration message:
         // [protocolVersion][CONFIGURATION_CHUNK_SIZE_TYPE][desiredChunkSize]
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -665,11 +656,11 @@ class Connection implements AutoCloseable {
 
         LOGGER.debug("Negotiated chunk size: {}", negotiatedChunkSize);
 
-        this.chunkSize = negotiatedChunkSize;
+        return negotiatedChunkSize;
     }
 
     /**
-     * Sends an echo configuration message.
+     * Sends an echo configuration message, this closes the configuration phase.
      */
     public void sendEchoConfig() throws IOException {
         // Build Configuration message:

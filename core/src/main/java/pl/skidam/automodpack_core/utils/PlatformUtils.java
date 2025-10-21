@@ -18,6 +18,7 @@ public class PlatformUtils {
         return macCache = false;
     }
 
+    // This, fails to detect Android launchers like pojav etc.
     public static boolean isAndroid() {
         if (androidCache != null) return androidCache;
 

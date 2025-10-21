@@ -14,6 +14,11 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_GZIP;
 public class GzipCompression implements CompressionCodec {
 
     @Override
+    public boolean isInitialized() {
+        return true;
+    }
+
+    @Override
     public byte[] compress(byte[] input) throws IOException {
         try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
              GZIPOutputStream gzipOutputStream = new GZIPOutputStream(byteArrayOutputStream)) {

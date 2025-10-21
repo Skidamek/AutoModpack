@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_ZSTD;
 
 /**
@@ -19,8 +20,9 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_ZSTD;
  */
 public class ZstdCompression implements CompressionCodec {
 
-    private static final MethodHandle compressMethodHandle;
-    private static final MethodHandle decompressMethodHandle;
+    private static MethodHandle compressMethodHandle;
+    private static MethodHandle decompressMethodHandle;
+    private static boolean initialized = true;
 
     static {
         try {
@@ -42,8 +44,14 @@ public class ZstdCompression implements CompressionCodec {
             compressMethodHandle = MethodHandles.lookup().unreflect(compressMethod);
             decompressMethodHandle = MethodHandles.lookup().unreflect(decompressMethod);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize embedded zstd-jni", e);
+            initialized = false;
+            LOGGER.error("Failed to initialize embedded zstd-jni", e);
         }
+    }
+
+    @Override
+    public boolean isInitialized() {
+        return initialized;
     }
 
     @Override
