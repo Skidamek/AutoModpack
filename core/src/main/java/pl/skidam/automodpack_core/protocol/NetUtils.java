@@ -26,6 +26,7 @@ public class NetUtils {
 
     // Magic numbers
     public static final int MAGIC_AMMC = 0x414D4D43;
+    public static final int MAGIC_AMMH = 0x414D4D48;
     public static final int MAGIC_AMOK = 0x414D4F4B;
 
     // Protocol versions

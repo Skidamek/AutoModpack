@@ -6,6 +6,7 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.*;
 import java.security.cert.CertificateException;
@@ -193,16 +194,21 @@ class PreValidationConnection {
         plainSocket.connect(resolvedHostAddress, 10000); // To create socket, we need to pass a resolved socket address
         plainSocket.setSoTimeout(10000);
 
+        // TODO: try both AMMC and AMMH magic for backwards compatibility
         if (modpackAddresses.requiresMagic) {
             try {
                 DataOutputStream plainOut = new DataOutputStream(plainSocket.getOutputStream());
                 DataInputStream plainIn = new DataInputStream(plainSocket.getInputStream());
 
-                // Step 2. Send the handshake (AMMC magic) over the plain socket.
-                plainOut.writeInt(MAGIC_AMMC);
+                String hostname = resolvedHostAddress.getHostString();
+                byte[] hostBytes = hostname.getBytes(StandardCharsets.UTF_8);
+
+                plainOut.writeInt(MAGIC_AMMH);
+                plainOut.writeShort(hostBytes.length);
+                plainOut.write(hostBytes);
                 plainOut.flush();
 
-                LOGGER.debug("Sent AutoModpack magic handshake to {} - magic: {}", resolvedHostAddress, MAGIC_AMMC);
+                LOGGER.debug("Sent AutoModpack magic handshake to {} - magic: {}", resolvedHostAddress, MAGIC_AMMH);
 
                 // Step 3. Wait for the server's reply (AMOK magic).
                 int handshakeResponse = plainIn.readInt();
