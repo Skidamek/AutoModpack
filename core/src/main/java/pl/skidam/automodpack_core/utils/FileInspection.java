@@ -332,7 +332,16 @@ public class FileInspection {
                     return providedIDs;
                 }
                 case "dependencies" -> {
-                    String modID = getModID(file);
+                    // Extract modID from modsArray instead of calling getModID(file) to avoid reopening the file
+                    String modID = null;
+                    for (Object o : modsArray.toList()) {
+                        TomlTable mod = (TomlTable) o;
+                        if (mod != null) {
+                            modID = mod.getString("modId");
+                            if (modID != null) break;
+                        }
+                    }
+                    
                     TomlArray dependenciesArray = result.getArray("dependencies.\"" + modID + "\"");
                     Set<String> dependencies = new HashSet<>();
                     if (dependenciesArray == null) {
@@ -350,7 +359,17 @@ public class FileInspection {
                 }
                 case "environment" -> {
                     LoaderManagerService.EnvironmentType environment = LoaderManagerService.EnvironmentType.UNIVERSAL;
-                    String modID = getModID(file);
+                    
+                    // Extract modID from modsArray instead of calling getModID(file) to avoid reopening the file
+                    String modID = null;
+                    for (Object o : modsArray.toList()) {
+                        TomlTable mod = (TomlTable) o;
+                        if (mod != null) {
+                            modID = mod.getString("modId");
+                            if (modID != null) break;
+                        }
+                    }
+                    
                     TomlArray dependenciesArray = result.getArray("dependencies.\"" + modID + "\"");
                     if (dependenciesArray == null) {
                         return environment;

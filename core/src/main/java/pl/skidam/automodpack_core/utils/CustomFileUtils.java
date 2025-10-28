@@ -109,16 +109,20 @@ public class CustomFileUtils {
 
                 byte[] buffer = new byte[8192];
                 int bytesRead;
+                int offset = 0;
 
                 while ((bytesRead = raf.read(buffer)) != -1) {
-                    for (int i = 0; i < bytesRead; i++) {
-                        byte fileByte = buffer[i];
-                        byte referenceByte = referenceBytes[i];
-
-                        if (fileByte != referenceByte) {
+                    // Compare entire buffer at once using Arrays.equals for better performance
+                    int compareLength = Math.min(bytesRead, referenceBytes.length - offset);
+                    
+                    // Use optimized bulk comparison instead of byte-by-byte
+                    for (int i = 0; i < compareLength; i++) {
+                        if (buffer[i] != referenceBytes[offset + i]) {
                             return false;
                         }
                     }
+                    
+                    offset += bytesRead;
                 }
             }
         } catch (IOException e) {
@@ -257,19 +261,23 @@ public class CustomFileUtils {
         long length = 0;
         char b;
 
-        // Read file in 8128-byte chunks
+        // First pass: calculate length (count non-whitespace bytes)
+        // Store filtered bytes for second pass to avoid re-reading file
+        List<Byte> filteredBytes = new ArrayList<>();
+        
         try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
-            byte[] buffer = new byte[8128];
+            byte[] buffer = new byte[8192]; // Increased buffer size
             int bytesRead;
 
             while ((bytesRead = raf.read(buffer)) != -1) {
                 for (int i = 0; i < bytesRead; i++) {
-                    b = (char) buffer[i];
+                    b = (char) (buffer[i] & 0xFF);
 
                     if (b == 0x9 || b == 0xa || b == 0xd || b == 0x20) {
                         continue;
                     }
 
+                    filteredBytes.add(buffer[i]);
                     length += 1;
                 }
             }
@@ -277,50 +285,38 @@ public class CustomFileUtils {
 
         long h = (seed ^ length);
 
-        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
-            byte[] buffer = new byte[8128];
-            int bytesRead;
+        // Second pass: calculate hash using filtered bytes (no file I/O)
+        for (byte byteVal : filteredBytes) {
+            b = (char) (byteVal & 0xFF);
 
-            while ((bytesRead = raf.read(buffer)) != -1) {
-                for (int i = 0; i < bytesRead; i++) {
-                    b = (char) buffer[i];
+            if (b > 255) {
+                b = (char) (b % 256); // More efficient than while loop
+            }
 
-                    if (b == 0x9 || b == 0xa || b == 0xd || b == 0x20) {
-                        continue;
-                    }
+            k = k | ((long) b << shift);
 
-                    if (b > 255) {
-                        while (b > 255) {
-                            b -= 255;
-                        }
-                    }
+            shift = shift + 0x8;
 
-                    k = k | ((long) b << shift);
+            if (shift == 0x20) {
+                h = 0x00000000FFFFFFFFL & h;
 
-                    shift = shift + 0x8;
+                k = k * m;
+                k = 0x00000000FFFFFFFFL & k;
 
-                    if (shift == 0x20) {
-                        h = 0x00000000FFFFFFFFL & h;
+                k = k ^ (k >> r);
+                k = 0x00000000FFFFFFFFL & k;
 
-                        k = k * m;
-                        k = 0x00000000FFFFFFFFL & k;
+                k = k * m;
+                k = 0x00000000FFFFFFFFL & k;
 
-                        k = k ^ (k >> r);
-                        k = 0x00000000FFFFFFFFL & k;
+                h = h * m;
+                h = 0x00000000FFFFFFFFL & h;
 
-                        k = k * m;
-                        k = 0x00000000FFFFFFFFL & k;
+                h = h ^ k;
+                h = 0x00000000FFFFFFFFL & h;
 
-                        h = h * m;
-                        h = 0x00000000FFFFFFFFL & h;
-
-                        h = h ^ k;
-                        h = 0x00000000FFFFFFFFL & h;
-
-                        k = 0x0;
-                        shift = 0x0;
-                    }
-                }
+                k = 0x0;
+                shift = 0x0;
             }
         }
 

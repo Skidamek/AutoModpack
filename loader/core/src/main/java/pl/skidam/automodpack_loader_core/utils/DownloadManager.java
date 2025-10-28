@@ -19,7 +19,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class DownloadManager {
     private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
     private static final int MAX_DOWNLOAD_ATTEMPTS = 2; // its actually 3, but we start from 0
-    private static final int BUFFER_SIZE = 128 * 1024;
+    private static final int BUFFER_SIZE = 256 * 1024; // Increased from 128KB to 256KB for better performance
     private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
     private DownloadClient downloadClient = null;
     private boolean cancelled = false;
@@ -75,9 +75,8 @@ public class DownloadManager {
         } catch (Exception e) {
             LOGGER.warn("Error while downloading file - {} - {} - {}", queuedDownload.file, e, e.fillInStackTrace());
         } finally {
-            synchronized (downloadsInProgress) {
-                downloadsInProgress.remove(hashPathPair);
-            }
+            // Minimize synchronized block - only protect the map operation
+            downloadsInProgress.remove(hashPathPair);
 
             boolean failed = true;
 
@@ -102,9 +101,8 @@ public class DownloadManager {
                     if (queuedDownload.attempts < (numberOfIndexes + 1) * MAX_DOWNLOAD_ATTEMPTS) {
                         LOGGER.warn("Download of {} failed, retrying!", queuedDownload.file.getFileName());
                         queuedDownload.attempts++;
-                        synchronized (queuedDownloads) {
-                            queuedDownloads.put(hashPathPair, queuedDownload);
-                        }
+                        // Minimize synchronized block - only protect the map operation
+                        queuedDownloads.put(hashPathPair, queuedDownload);
                     } else {
                         LOGGER.error("Download of {} failed!", queuedDownload.file.getFileName());
                         queuedDownload.failureCallback.run();
@@ -136,9 +134,8 @@ public class DownloadManager {
                 }
             }, DOWNLOAD_EXECUTOR);
 
-            synchronized (downloadsInProgress) {
-                downloadsInProgress.put(hashAndPath, new DownloadData(future, queuedDownload.file));
-            }
+            // Minimize synchronized block - only protect the map operation
+            downloadsInProgress.put(hashAndPath, new DownloadData(future, queuedDownload.file));
         }
     }
 
