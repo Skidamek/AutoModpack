@@ -540,7 +540,10 @@ public class ModpackUpdater {
     }
 
     private boolean deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent) throws IOException {
-        List<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).toList();
+        // Use HashSet for O(1) lookup instead of List with O(n) lookup
+        Set<String> modpackFiles = modpackContent.list.stream()
+                .map(modpackContentField -> modpackContentField.file)
+                .collect(java.util.stream.Collectors.toSet());
         List<Path> pathList;
         try (Stream<Path> pathStream = Files.walk(modpackDir)) {
             pathList = pathStream.toList();
