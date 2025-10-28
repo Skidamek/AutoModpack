@@ -36,6 +36,7 @@ public class ModpackUpdater {
     private Secrets.Secret modpackSecret;
     private Path modpackDir;
     private Path modpackContentFile;
+    private final Map<Path, String> hashCache = new HashMap<>(); // Cache for file hashes to avoid redundant calculations
 
 
     public String getModpackName() {
@@ -114,7 +115,7 @@ public class ModpackUpdater {
 
             try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
                 standardModsHashes = standardModsStream
-                        .map(CustomFileUtils::getHash)
+                        .map(mod -> hashCache.computeIfAbsent(mod, CustomFileUtils::getHash))
                         .filter(Objects::nonNull)
                         .toList();
             }
@@ -124,7 +125,7 @@ public class ModpackUpdater {
                 try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
                     modpackMods = modpackModsStream
                             .filter(mod -> {
-                                String modHash = CustomFileUtils.getHash(mod);
+                                String modHash = hashCache.computeIfAbsent(mod, CustomFileUtils::getHash);
 
                                 // if its in standard mods directory, we dont want to load it again
                                 boolean isUnique = standardModsHashes.stream().noneMatch(hash -> hash.equals(modHash));
@@ -188,7 +189,9 @@ public class ModpackUpdater {
                     continue;
                 }
 
-                if (Objects.equals(serverSHA1, CustomFileUtils.getHash(path))) {
+                // Use cached hash if available to avoid redundant calculations
+                String fileHash = hashCache.computeIfAbsent(path, CustomFileUtils::getHash);
+                if (Objects.equals(serverSHA1, fileHash)) {
                     skippedDownloadedFiles++;
                     iterator.remove();
                 }

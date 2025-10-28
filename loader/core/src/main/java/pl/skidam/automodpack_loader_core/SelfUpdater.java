@@ -273,13 +273,27 @@ public class SelfUpdater {
         try (JarFile jarFile = new JarFile(jarFilePath.toFile());
              JarOutputStream tempJarOutputStream = new JarOutputStream(Files.newOutputStream(tempJarPath))) {
 
+            // Use buffered output for better performance
+            byte[] buffer = new byte[8192];
+            
             // Copy original JAR entries to the temp JAR
             jarFile.stream().forEach(entry -> {
                 try {
                     JarEntry newEntry = new JarEntry(entry.getName());
+                    // Preserve entry metadata for better compatibility
+                    newEntry.setTime(entry.getTime());
+                    if (entry.getMethod() == JarEntry.STORED) {
+                        newEntry.setSize(entry.getSize());
+                        newEntry.setCrc(entry.getCrc());
+                        newEntry.setMethod(JarEntry.STORED);
+                    }
                     tempJarOutputStream.putNextEntry(newEntry);
                     try (InputStream entryInputStream = jarFile.getInputStream(entry)) {
-                        entryInputStream.transferTo(tempJarOutputStream);
+                        // Use buffered copy for better performance
+                        int bytesRead;
+                        while ((bytesRead = entryInputStream.read(buffer)) != -1) {
+                            tempJarOutputStream.write(buffer, 0, bytesRead);
+                        }
                     }
                     tempJarOutputStream.closeEntry();
                 } catch (IOException e) {
@@ -292,7 +306,11 @@ public class SelfUpdater {
             if (txtInputStreamOpt.isPresent()) {
                 JarEntry newTxtEntry = new JarEntry(clientConfigFileOverrideResource);
                 tempJarOutputStream.putNextEntry(newTxtEntry);
-                txtInputStreamOpt.get().transferTo(tempJarOutputStream);
+                // Use buffered copy for better performance
+                int bytesRead;
+                while ((bytesRead = txtInputStreamOpt.get().read(buffer)) != -1) {
+                    tempJarOutputStream.write(buffer, 0, bytesRead);
+                }
                 tempJarOutputStream.closeEntry();
             }
         }
