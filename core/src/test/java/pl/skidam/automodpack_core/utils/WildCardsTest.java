@@ -39,7 +39,7 @@ class WildCardsTest {
                 "/thisfiledoesnotexist.txt",
                 "/shaders/*",
                 "!/shaders/notashader.zip",
-                "/foo/**",
+                "/f*/**",
                 "/directory/*/*"
         );
         wildCards = new WildCards(wildcards, Set.of(testFilesDir));
@@ -66,11 +66,6 @@ class WildCardsTest {
                 testFilesDir.resolve("directory/which/file.json"),
                 testFilesDir.resolve("directory/who/file.json")
         );
-
-        System.out.println();
-        System.out.println();
-        System.out.println();
-        System.out.println();
     }
 
     private void createTestFiles() throws IOException {
@@ -156,7 +151,6 @@ class WildCardsTest {
         assertEquals(correctResult.size(), wildCards.getWildcardMatches().size());
     }
 
-    // TODO split this to more specific tests
     @Test
     void shouldReturnCorrectMatches() {
         boolean correct = true;

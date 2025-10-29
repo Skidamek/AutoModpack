@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -29,33 +28,23 @@ public class WildCards {
         START_DIRECTORIES = startDirectories;
     }
 
-    private static final Map<Path, Set<Path>> discoveredDirectories = new HashMap<>();
+    private final Map<Path, Set<Path>> discoveredDirectories = new HashMap<>();
     
     // Cache for formatted paths to avoid recomputation
     private final Map<Path, String> formattedPathCache = new HashMap<>();
     
     // Cache for split path components
     private final Map<String, String[]> pathComponentsCache = new HashMap<>();
-    
-    // Parsed rule structure
-    private static class ParsedRule {
-        final String originalRule;
-        final String[] components;  // Path split into components
-        final boolean isRecursive;   // If rule ends with /**
-        
-        ParsedRule(String originalRule, String[] components, boolean isRecursive) {
-            this.originalRule = originalRule;
-            this.components = components;
-            this.isRecursive = isRecursive;
-        }
-    }
+
+    /**
+     * Parsed rule structure
+     * @param components  Path split into components
+     * @param isRecursive If rule ends with /**
+     */
+    private record ParsedRule(String originalRule, String[] components, boolean isRecursive) { }
     
     private final List<ParsedRule> whiteListRules = new ArrayList<>();
     private final List<ParsedRule> blackListRules = new ArrayList<>();
-
-    public static void clearDiscoveredDirectories() {
-        discoveredDirectories.clear();
-    }
 
     public void match() {
         try {
@@ -80,7 +69,7 @@ public class WildCards {
                     walkAndMatch(startDirectory);
                 }
 
-                matchBlackRules(startDirectory);
+                matchBlackRules();
             }
         } catch (Exception e) {
             LOGGER.error("Failed to walk directories: {}", START_DIRECTORIES, e);
@@ -131,7 +120,7 @@ public class WildCards {
     /**
      * Walk directory and match files against rules
      */
-    private void walkAndMatch(Path startDirectory) throws IOException {
+    private void walkAndMatch(Path startDirectory) {
         Set<Path> discoveredFiles = new HashSet<>();
         
         try (Stream<Path> paths = Files.walk(startDirectory)) {
@@ -164,7 +153,7 @@ public class WildCards {
         }
     }
 
-    private void matchBlackRules(Path startDirectory) {
+    private void matchBlackRules() {
         Set<String> pathsToRemove = new HashSet<>();
 
         for (Map.Entry<String, Path> entry : new HashMap<>(wildcardMatches).entrySet()) {
@@ -213,10 +202,10 @@ public class WildCards {
      * Check if path components match a rule
      * Supports multiple wildcards per component
      * Examples:
-     * - "/config/b*" matches "/config/bar"
-     * - "/config/*" matches "/config/anything"  
-     * - "/config/ */*/*.txt" matches "/config/bar/fool/config.txt"
-     * - "/foo/**" matches any file under "/foo"
+     * - {@code "/config/b*"} matches {@code "/config/bar"}
+     * - {@code "/config/*"} matches {@code "/config/anything"}
+     * - {@code "/config/*//*/*.txt"} matches {@code "/config/bar/fool/config.txt"}
+     * - {@code "/foo/**"} matches any file under {@code "/foo"}
      */
     private boolean matchesRule(String[] pathComponents, ParsedRule rule) {
         String[] ruleComponents = rule.components;

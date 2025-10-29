@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -31,9 +32,9 @@ class WildCardsPerformanceTest {
         Files.createDirectories(configDir);
         Files.createDirectories(shadersDir);
         Files.createDirectories(otherDir);
-        
+
         // Create many files in each directory
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 1000; i++) {
             Files.createFile(modsDir.resolve("mod-" + i + ".jar"));
             Files.createFile(configDir.resolve("config-" + i + ".json"));
             Files.createFile(shadersDir.resolve("shader-" + i + ".zip"));
@@ -42,8 +43,8 @@ class WildCardsPerformanceTest {
         
         // Test with rules that only target specific directories
         var wildcards = List.of(
-                "/mods/*.jar",
-                "/config/*.json"
+                "/m*s/*.jar",
+                "/**/*.json"
         );
         
         WildCards wildCards = new WildCards(wildcards, Set.of(tempDir));
@@ -57,11 +58,9 @@ class WildCardsPerformanceTest {
         System.out.println("Smart directory walking took: " + durationMs + " ms");
         System.out.println("Found " + wildCards.getWildcardMatches().size() + " matches");
         
-        // Should find 100 mods + 100 configs = 200 files
-        assertTrue(wildCards.getWildcardMatches().size() == 200, 
-                "Expected 200 matches, got " + wildCards.getWildcardMatches().size());
-        
-        // The optimization should make this reasonably fast even with many files
+        // Should find 1000 mods + 1000 configs = 2000 files
+        assertEquals(2000, wildCards.getWildcardMatches().size(), "Expected 2000 matches, got " + wildCards.getWildcardMatches().size());
+
         // This is more of a smoke test than a hard performance requirement
         assertTrue(durationMs < 5000, 
                 "Smart directory walking took too long: " + durationMs + " ms");
@@ -73,7 +72,7 @@ class WildCardsPerformanceTest {
         Path testDir = tempDir.resolve("test");
         Files.createDirectories(testDir);
         
-        for (int i = 0; i < 50; i++) {
+        for (int i = 0; i < 500; i++) {
             Files.createFile(testDir.resolve("file-" + i + ".txt"));
         }
         
@@ -96,8 +95,8 @@ class WildCardsPerformanceTest {
         System.out.println("Found " + wildCards.getWildcardMatches().size() + " matches");
         
         // Should exclude files matching the blacklist patterns
-        assertTrue(wildCards.getWildcardMatches().size() < 50, 
-                "Expected fewer than 50 matches due to blacklist");
+        assertTrue(wildCards.getWildcardMatches().size() < 500,
+                "Expected fewer than 500 matches due to blacklist");
         
         // Caching should make this fast
         assertTrue(durationMs < 2000, 

@@ -3,6 +3,8 @@ package pl.skidam.automodpack_core.modpack;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.config.Jsons;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -94,14 +96,20 @@ class ModpackTest {
                 "ModpackContentItems(file=/mods/server-mod-1.20.jar, size=1, type=other, editable=false, sha1=86f7e437faa5a7fce15d1ddcb9eaeaea377667b8, murmur=null)"
         );
 
+        GlobalVariables.serverConfig = new Jsons.ServerConfigFieldsV2();
+        GlobalVariables.serverConfig.autoExcludeUnnecessaryFiles = false;
+
         ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new ArrayList<>(), new ArrayList<>(editable), new ArrayList<>(), new ModpackExecutor().getExecutor());
         content.create();
 
         boolean correct = true;
 
         System.out.println();
-        System.out.println();
-        System.out.println();
+
+        if (content.list.size() != correctResults.size()) {
+            System.out.println("Incorrect number of items! Expected " + correctResults.size() + " but got " + content.list.size());
+            correct = false;
+        }
 
         for (var item : content.list) {
             if (correctResults.contains(item.toString())) {
