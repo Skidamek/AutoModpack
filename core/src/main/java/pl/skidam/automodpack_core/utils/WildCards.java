@@ -44,8 +44,7 @@ public class WildCards {
      * @param minDepth    Minimum directory depth required
      * @param maxDepth    Maximum directory depth (-1 for unlimited)
      */
-    private record ParsedRule(String originalRule, String[] components, boolean isRecursive, 
-                              int minDepth, int maxDepth) {
+    private record ParsedRule(String originalRule, String[] components, boolean isRecursive, int minDepth, int maxDepth) {
         ParsedRule(String originalRule, String[] components, boolean isRecursive) {
             this(originalRule, components, isRecursive, 
                  components.length, 
@@ -69,13 +68,15 @@ public class WildCards {
                 if (!alreadyDiscovered.isEmpty()) {
                     for (Path node : alreadyDiscovered) {
                         try {
+                            if (!Files.isRegularFile(node)) {
+                                continue;
+                            }
                             matchWhiteRules(node, startDirectory);
                         } catch (Exception e) {
                             LOGGER.error("Error processing file: {} From already discovered directory: {}", node, startDirectory, e);
                         }
                     }
                 } else {
-                    // Smart walk with aggressive pruning for minimal I/O
                     smartWalk(startDirectory);
                 }
 
@@ -103,19 +104,12 @@ public class WildCards {
             if (isRecursive) {
                 cleanRule = cleanRule.substring(0, cleanRule.length() - 3); // Remove /**
             }
-            
-            // Split into components, removing empty strings and leading slash
-            String[] components = cleanRule.split("/");
-            List<String> componentList = new ArrayList<>();
-            for (String comp : components) {
-                if (!comp.isEmpty()) {
-                    componentList.add(comp);
-                }
-            }
-            
+
+            String[] components = splitPathIntoComponents(cleanRule);
+
             ParsedRule parsedRule = new ParsedRule(
                 rule,
-                componentList.toArray(new String[0]),
+                components,
                 isRecursive
             );
             
@@ -126,7 +120,7 @@ public class WildCards {
             }
         }
     }
-    
+
     /**
      * Smart directory walking with aggressive pruning
      * Only traverses directories that could contain matches
@@ -150,28 +144,24 @@ public class WildCards {
     private void smartWalkRecursive(Path current, Path startDirectory, String[] currentComponents, Set<Path> discoveredFiles) {
         // Early pruning: check if current path could lead to matches
         if (!couldMatchAnyRule(currentComponents)) {
-            return; // Prune this entire branch - saves massive I/O
+            return; // Prune this entire branch
         }
         
         try (Stream<Path> entries = Files.list(current)) {
             entries.forEach(entry -> {
-                try {
-                    String entryName = entry.getFileName().toString();
-                    
-                    if (Files.isDirectory(entry)) {
-                        // Build path for subdirectory
-                        String[] newComponents = Arrays.copyOf(currentComponents, currentComponents.length + 1);
-                        newComponents[currentComponents.length] = entryName;
-                        
-                        // Recursively walk subdirectory (with pruning)
-                        smartWalkRecursive(entry, startDirectory, newComponents, discoveredFiles);
-                    } else if (Files.isRegularFile(entry)) {
-                        // Match file against whitelist rules
-                        discoveredFiles.add(entry);
-                        matchWhiteRules(entry, startDirectory);
-                    }
-                } catch (IOException e) {
-                    LOGGER.error("Error processing entry: {}", entry, e);
+                String entryName = entry.getFileName().toString();
+
+                if (Files.isDirectory(entry)) {
+                    // Build path for subdirectory
+                    String[] newComponents = Arrays.copyOf(currentComponents, currentComponents.length + 1);
+                    newComponents[currentComponents.length] = entryName;
+
+                    // Recursively walk subdirectory (with pruning)
+                    smartWalkRecursive(entry, startDirectory, newComponents, discoveredFiles);
+                } else if (Files.isRegularFile(entry)) {
+                    // Match file against whitelist rules
+                    discoveredFiles.add(entry);
+                    matchWhiteRules(entry, startDirectory);
                 }
             });
         } catch (IOException e) {
@@ -296,7 +286,7 @@ public class WildCards {
      * Examples:
      * - {@code "/config/b*"} matches {@code "/config/bar"}
      * - {@code "/config/*"} matches {@code "/config/anything"}
-     * - {@code "/config/*/*/*.txt"} matches {@code "/config/bar/fool/config.txt"}
+     * - {@code "/config/*//*/*.txt"} matches {@code "/config/bar/fool/config.txt"}
      * - {@code "/foo/**"} matches any file under {@code "/foo"}
      */
     private boolean matchesRule(String[] pathComponents, ParsedRule rule) {
