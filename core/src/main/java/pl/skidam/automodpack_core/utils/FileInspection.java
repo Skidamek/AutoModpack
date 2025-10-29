@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -91,16 +92,9 @@ public class FileInspection {
             // - file:/path/to/file.jar -> /path/to/file.jar
             
             if (uriString.startsWith("jar:")) {
-                // Remove jar: prefix
+                // Remove jar: prefix and find JAR separator
                 uriString = uriString.substring(4);
-                // Find the separator between JAR path and entry path (! or #)
-                int separatorIndex = uriString.indexOf("!/");
-                if (separatorIndex == -1) {
-                    separatorIndex = uriString.indexOf("!#");
-                }
-                if (separatorIndex != -1) {
-                    uriString = uriString.substring(0, separatorIndex);
-                }
+                uriString = removeJarSeparator(uriString);
             } else if (uriString.startsWith("union:")) {
                 // Remove union: prefix
                 uriString = uriString.substring(6);
@@ -118,31 +112,15 @@ public class FileInspection {
                     decodedPath = tempPath.toString();
                 } else {
                     // For non-file URIs or if scheme is null, manually decode
-                    decodedPath = java.net.URLDecoder.decode(uriString, "UTF-8");
+                    decodedPath = java.net.URLDecoder.decode(uriString, StandardCharsets.UTF_8);
                 }
             } catch (Exception e) {
                 // If URI parsing fails, try manual URL decoding
-                decodedPath = java.net.URLDecoder.decode(uriString, "UTF-8");
+                decodedPath = java.net.URLDecoder.decode(uriString, StandardCharsets.UTF_8);
             }
             
-            // Now safely remove JAR entry separators (! and #) from the END
-            // We look for patterns like "file.jar!/" or "file.jar#/" at the end
-            int lastExclamation = decodedPath.lastIndexOf("!/");
-            int lastHash = decodedPath.lastIndexOf("#/");
-            int separatorPos = -1;
-            
-            if (lastExclamation != -1 && lastHash != -1) {
-                // Both exist, take the last one
-                separatorPos = Math.max(lastExclamation, lastHash);
-            } else if (lastExclamation != -1) {
-                separatorPos = lastExclamation;
-            } else if (lastHash != -1) {
-                separatorPos = lastHash;
-            }
-            
-            if (separatorPos != -1) {
-                decodedPath = decodedPath.substring(0, separatorPos);
-            }
+            // Remove JAR entry separators from the end
+            decodedPath = removeJarSeparator(decodedPath);
             
             // Handle Windows drive letters (remove leading slash if path starts with /C:/ or similar)
             if (System.getProperty("os.name").toLowerCase().contains("win")) {
@@ -158,6 +136,36 @@ public class FileInspection {
         } catch (Exception e) {
             throw new RuntimeException("Failed to determine JAR location", e);
         }
+    }
+
+    /**
+     * Removes JAR entry separator patterns (! and #) from the end of a path string.
+     * JAR separators like "file.jar!/" or "file.jar#/" indicate internal JAR entries.
+     * This method finds and removes such separators from the end of the path.
+     *
+     * @param path the path string to process
+     * @return the path with JAR separators removed from the end
+     */
+    private static String removeJarSeparator(String path) {
+        // Find separators like "!/" or "#/" at the end
+        int lastExclamation = path.lastIndexOf("!/");
+        int lastHash = path.lastIndexOf("#/");
+        int separatorPos = -1;
+        
+        if (lastExclamation != -1 && lastHash != -1) {
+            // Both exist, take the last one
+            separatorPos = Math.max(lastExclamation, lastHash);
+        } else if (lastExclamation != -1) {
+            separatorPos = lastExclamation;
+        } else if (lastHash != -1) {
+            separatorPos = lastHash;
+        }
+        
+        if (separatorPos != -1) {
+            return path.substring(0, separatorPos);
+        }
+        
+        return path;
     }
 
     private static final Set<String> services = Set.of(
