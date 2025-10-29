@@ -77,34 +77,86 @@ public class FileInspection {
         return null;
     }
 
-    public static Path getThizJar() { // CodeSource class not wonky on forge...
+    public static Path getThizJar() {
         try {
-            // TODO find better way to parse that path
             URI uri = FileInspection.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-            // Example: union:/home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar%2354!/
-            // Format it into proper path like: /home/skidam/.var/app/org.prismlauncher.PrismLauncher/data/PrismLauncher/instances/1.18.2/.minecraft/mods/automodpack-forge-4.0.0-beta0-1.18.2.jar
-
-            String path = uri.getPath();
-            int index = path.indexOf('!');
-            if (index != -1) {
-                path = path.substring(0, index);
+            
+            // Handle special URI schemes used by mod loaders (e.g., union:, jar:, etc.)
+            String uriString = uri.toString();
+            
+            // Remove jar: or union: prefixes and extract the file path
+            // Examples:
+            // - jar:file:/path/to/file.jar!/entry -> file:/path/to/file.jar
+            // - union:/path/to/file.jar%2354!/ -> /path/to/file.jar (with URL decoding)
+            // - file:/path/to/file.jar -> /path/to/file.jar
+            
+            if (uriString.startsWith("jar:")) {
+                // Remove jar: prefix
+                uriString = uriString.substring(4);
+                // Find the separator between JAR path and entry path (! or #)
+                int separatorIndex = uriString.indexOf("!/");
+                if (separatorIndex == -1) {
+                    separatorIndex = uriString.indexOf("!#");
+                }
+                if (separatorIndex != -1) {
+                    uriString = uriString.substring(0, separatorIndex);
+                }
+            } else if (uriString.startsWith("union:")) {
+                // Remove union: prefix
+                uriString = uriString.substring(6);
             }
-
-            index = path.indexOf('#');
-            if (index != -1) {
-                path = path.substring(0, index);
+            
+            // URL-decode the path to handle special characters like %23 (#) and %21 (!)
+            // Must be done BEFORE removing JAR separators to avoid removing actual # or ! from path
+            String decodedPath;
+            try {
+                // Try to parse as URI first to handle file: scheme properly
+                URI tempUri = new URI(uriString);
+                if ("file".equals(tempUri.getScheme())) {
+                    // Use Path.of(URI) for proper decoding of file: URIs
+                    Path tempPath = Path.of(tempUri);
+                    decodedPath = tempPath.toString();
+                } else {
+                    // For non-file URIs or if scheme is null, manually decode
+                    decodedPath = java.net.URLDecoder.decode(uriString, "UTF-8");
+                }
+            } catch (Exception e) {
+                // If URI parsing fails, try manual URL decoding
+                decodedPath = java.net.URLDecoder.decode(uriString, "UTF-8");
             }
-
-            // check for windows
+            
+            // Now safely remove JAR entry separators (! and #) from the END
+            // We look for patterns like "file.jar!/" or "file.jar#/" at the end
+            int lastExclamation = decodedPath.lastIndexOf("!/");
+            int lastHash = decodedPath.lastIndexOf("#/");
+            int separatorPos = -1;
+            
+            if (lastExclamation != -1 && lastHash != -1) {
+                // Both exist, take the last one
+                separatorPos = Math.max(lastExclamation, lastHash);
+            } else if (lastExclamation != -1) {
+                separatorPos = lastExclamation;
+            } else if (lastHash != -1) {
+                separatorPos = lastHash;
+            }
+            
+            if (separatorPos != -1) {
+                decodedPath = decodedPath.substring(0, separatorPos);
+            }
+            
+            // Handle Windows drive letters (remove leading slash if path starts with /C:/ or similar)
             if (System.getProperty("os.name").toLowerCase().contains("win")) {
-                if (path.startsWith("/")) {
-                    path = path.substring(1);
+                if (decodedPath.length() >= 3 && 
+                    decodedPath.charAt(0) == '/' && 
+                    Character.isLetter(decodedPath.charAt(1)) && 
+                    decodedPath.charAt(2) == ':') {
+                    decodedPath = decodedPath.substring(1);
                 }
             }
-
-            return Path.of(path).toAbsolutePath().normalize();
+            
+            return Path.of(decodedPath).toAbsolutePath().normalize();
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Failed to determine JAR location", e);
         }
     }
 
