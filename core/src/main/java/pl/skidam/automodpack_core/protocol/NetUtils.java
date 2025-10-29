@@ -52,7 +52,7 @@ public class NetUtils {
     public static final byte CONFIGURATION_CHUNK_SIZE_TYPE = 0x42;
 
     // Chunk size
-    public static final int DEFAULT_CHUNK_SIZE = 128 * 1024; // 128 KB
+    public static final int DEFAULT_CHUNK_SIZE = 256 * 1024; // 256 KB
     public static final int MIN_CHUNK_SIZE = 8 * 1024; // 8 KB
     public static final int MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
 

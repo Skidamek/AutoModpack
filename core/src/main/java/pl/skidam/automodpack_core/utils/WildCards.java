@@ -29,13 +29,16 @@ public class WildCards {
         START_DIRECTORIES = startDirectories;
     }
 
-    private final Map<Path, Set<Path>> discoveredDirectories = new HashMap<>();
-    
-    // Cache for formatted paths to avoid recomputation
-    private final Map<Path, String> formattedPathCache = new HashMap<>();
-    
-    // Cache for split path components
-    private final Map<String, String[]> pathComponentsCache = new HashMap<>();
+    // Cache to avoid recomputation
+    private static final Map<Path, Set<Path>> discoveredDirectoriesCache = new HashMap<>();
+    private static final Map<Path, String> formattedPathCache = new HashMap<>();
+    private static final Map<String, String[]> pathComponentsCache = new HashMap<>();
+
+    public static void clearCache() {
+        discoveredDirectoriesCache.clear();
+        formattedPathCache.clear();
+        pathComponentsCache.clear();
+    }
 
     /**
      * Parsed rule structure with depth information for pruning
@@ -53,7 +56,21 @@ public class WildCards {
     private final List<ParsedRule> whiteListRules = new ArrayList<>();
     private final List<ParsedRule> blackListRules = new ArrayList<>();
 
+    /**
+     * If clearCache is false, make sure to call WildCards.clearCache() later manually
+     */
+    public void match(boolean clearCache) {
+        innerMatch();
+        if (clearCache) {
+            clearCache();
+        }
+    }
+
     public void match() {
+        match(true);
+    }
+
+    private void innerMatch() {
         try {
             if (RULES == null || RULES.isEmpty()) {
                 return;
@@ -62,7 +79,7 @@ public class WildCards {
             parseRules(RULES);
 
             for (Path startDirectory : START_DIRECTORIES) {
-                Set<Path> alreadyDiscovered = discoveredDirectories.getOrDefault(startDirectory, Set.of());
+                Set<Path> alreadyDiscovered = discoveredDirectoriesCache.getOrDefault(startDirectory, Set.of());
                 if (!alreadyDiscovered.isEmpty()) {
                     for (Path node : alreadyDiscovered) {
                         try {
@@ -127,7 +144,7 @@ public class WildCards {
     private void smartWalk(Path startDirectory) {
         Set<Path> discoveredFiles = new HashSet<>();
         smartWalkRecursive(startDirectory, startDirectory, new String[0], discoveredFiles);
-        discoveredDirectories.put(startDirectory, discoveredFiles);
+        discoveredDirectoriesCache.put(startDirectory, discoveredFiles);
     }
     
     /**

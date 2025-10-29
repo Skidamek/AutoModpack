@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core.utils;
 
+import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -19,7 +20,6 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 public class DownloadManager {
     private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
     private static final int MAX_DOWNLOAD_ATTEMPTS = 2; // its actually 3, but we start from 0
-    private static final int BUFFER_SIZE = 128 * 1024;
     private final ExecutorService DOWNLOAD_EXECUTOR = Executors.newFixedThreadPool(MAX_DOWNLOADS_IN_PROGRESS, new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build());
     private DownloadClient downloadClient = null;
     private boolean cancelled = false;
@@ -75,10 +75,7 @@ public class DownloadManager {
         } catch (Exception e) {
             LOGGER.warn("Error while downloading file - {} - {} - {}", queuedDownload.file, e, e.fillInStackTrace());
         } finally {
-            synchronized (downloadsInProgress) {
-                downloadsInProgress.remove(hashPathPair);
-            }
-
+            downloadsInProgress.remove(hashPathPair);
             boolean failed = true;
 
             if (Files.exists(queuedDownload.file)) {
@@ -102,9 +99,7 @@ public class DownloadManager {
                     if (queuedDownload.attempts < (numberOfIndexes + 1) * MAX_DOWNLOAD_ATTEMPTS) {
                         LOGGER.warn("Download of {} failed, retrying!", queuedDownload.file.getFileName());
                         queuedDownload.attempts++;
-                        synchronized (queuedDownloads) {
-                            queuedDownloads.put(hashPathPair, queuedDownload);
-                        }
+                        queuedDownloads.put(hashPathPair, queuedDownload);
                     } else {
                         LOGGER.error("Download of {} failed!", queuedDownload.file.getFileName());
                         queuedDownload.failureCallback.run();
@@ -136,9 +131,7 @@ public class DownloadManager {
                 }
             }, DOWNLOAD_EXECUTOR);
 
-            synchronized (downloadsInProgress) {
-                downloadsInProgress.put(hashAndPath, new DownloadData(future, queuedDownload.file));
-            }
+            downloadsInProgress.put(hashAndPath, new DownloadData(future, queuedDownload.file));
         }
     }
 
@@ -179,11 +172,11 @@ public class DownloadManager {
         URLConnection connection = getHttpConnection(url);
 
         try (OutputStream outputStream = new FileOutputStream(outFile.toFile());
-             InputStream rawInputStream = new BufferedInputStream(connection.getInputStream(), BUFFER_SIZE);
+             InputStream rawInputStream = new BufferedInputStream(connection.getInputStream(), NetUtils.DEFAULT_CHUNK_SIZE);
              InputStream inputStream = ("gzip".equals(connection.getHeaderField("Content-Encoding"))) ?
                      new GZIPInputStream(rawInputStream) : rawInputStream) {
 
-            byte[] buffer = new byte[BUFFER_SIZE];
+            byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
             int bytesRead;
             while ((bytesRead = inputStream.read(buffer)) != -1) {
                 bytesDownloaded += bytesRead;

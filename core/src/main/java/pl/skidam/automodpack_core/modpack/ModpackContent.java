@@ -47,9 +47,10 @@ public class ModpackContent {
 
     public boolean create() {
         try {
-            SYNCED_FILES_CARDS.match();
-            EDITABLE_CARDS.match();
-            FORCE_COPY_FILES_TO_STANDARD_LOCATION.match();
+            SYNCED_FILES_CARDS.match(false);
+            EDITABLE_CARDS.match(false);
+            FORCE_COPY_FILES_TO_STANDARD_LOCATION.match(false);
+            WildCards.clearCache();
 
             pathsMap.clear();
             sha1MurmurMapPreviousContent.clear();

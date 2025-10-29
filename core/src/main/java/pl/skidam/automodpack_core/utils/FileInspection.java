@@ -332,9 +332,21 @@ public class FileInspection {
                     return providedIDs;
                 }
                 case "dependencies" -> {
-                    String modID = getModID(file);
-                    TomlArray dependenciesArray = result.getArray("dependencies.\"" + modID + "\"");
                     Set<String> dependencies = new HashSet<>();
+
+                    String modID = null;
+                    for (Object o : modsArray.toList()) {
+                        TomlTable mod = (TomlTable) o;
+                        if (mod != null) {
+                            modID = mod.getString("modId");
+                        }
+                    }
+
+                    if (modID == null) {
+                        return dependencies;
+                    }
+
+                    TomlArray dependenciesArray = result.getArray("dependencies.\"" + modID + "\"");
                     if (dependenciesArray == null) {
                         return dependencies;
                     }
@@ -346,11 +358,24 @@ public class FileInspection {
                         if (depId == null) continue;
                         dependencies.add(depId);
                     }
+
                     return dependencies;
                 }
                 case "environment" -> {
                     LoaderManagerService.EnvironmentType environment = LoaderManagerService.EnvironmentType.UNIVERSAL;
-                    String modID = getModID(file);
+
+                    String modID = null;
+                    for (Object o : modsArray.toList()) {
+                        TomlTable mod = (TomlTable) o;
+                        if (mod != null) {
+                            modID = mod.getString("modId");
+                        }
+                    }
+
+                    if (modID == null) {
+                        return environment;
+                    }
+
                     TomlArray dependenciesArray = result.getArray("dependencies.\"" + modID + "\"");
                     if (dependenciesArray == null) {
                         return environment;
