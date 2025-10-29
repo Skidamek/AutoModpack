@@ -41,3 +41,6 @@ output/
 /core/automodpack/
 
 dupes
+
+# test resources (now using @TempDir)
+core/src/test/resources/testFiles/
