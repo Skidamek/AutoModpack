@@ -50,7 +50,6 @@ public class ModpackContent {
             SYNCED_FILES_CARDS.match();
             EDITABLE_CARDS.match();
             FORCE_COPY_FILES_TO_STANDARD_LOCATION.match();
-            WildCards.clearDiscoveredDirectories();
 
             pathsMap.clear();
             sha1MurmurMapPreviousContent.clear();
