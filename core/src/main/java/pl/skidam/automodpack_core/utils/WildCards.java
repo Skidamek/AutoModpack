@@ -140,22 +140,18 @@ public class WildCards {
         
         // Determine which directories need to be walked
         Set<Path> directoriesToWalk = new HashSet<>();
-        boolean needsFullWalk = false;
         
         for (Map.Entry<String, List<String>> entry : composedWhiteRules.entrySet()) {
             String ruleDirectory = entry.getKey();
             List<String> rulePaths = entry.getValue();
             
-            // Check if we need full walk (/** patterns)
+            // Check if any rule needs recursive walk
+            boolean needsRecursiveWalk = false;
             for (String rulePath : rulePaths) {
                 if (rulePath.equals("/**")) {
-                    needsFullWalk = true;
+                    needsRecursiveWalk = true;
                     break;
                 }
-            }
-            
-            if (needsFullWalk) {
-                break;
             }
             
             // If rule directory contains wildcards, we need to walk parent directories
@@ -184,8 +180,8 @@ public class WildCards {
         }
         
         // Perform the walk
-        if (needsFullWalk || directoriesToWalk.isEmpty()) {
-            // Fall back to full walk
+        if (directoriesToWalk.isEmpty()) {
+            // If no specific directories were identified, do a full walk
             try (Stream<Path> paths = Files.walk(startDirectory)) {
                 paths.filter(Files::isRegularFile)
                         .forEach(node -> {
