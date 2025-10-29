@@ -30,6 +30,24 @@ public class WildCards {
     }
 
     private static final Map<Path, Set<Path>> discoveredDirectories = new HashMap<>();
+    
+    // Cache for formatted paths to avoid recomputation
+    private final Map<Path, String> formattedPathCache = new HashMap<>();
+    
+    // Cache for parsed wildcard patterns
+    private static class WildcardPattern {
+        final String prefix;
+        final String suffix;
+        final int layerCount;
+        
+        WildcardPattern(String prefix, String suffix, int layerCount) {
+            this.prefix = prefix;
+            this.suffix = suffix;
+            this.layerCount = layerCount;
+        }
+    }
+    
+    private final Map<String, WildcardPattern> wildcardPatternCache = new HashMap<>();
 
     public static void clearDiscoveredDirectories() {
         discoveredDirectories.clear();
@@ -44,6 +62,10 @@ public class WildCards {
             separateRules(RULES);
             Map<String, List<String>> composedWhiteRules = composeRules(whiteListRules);
             Map<String, List<String>> composedBlackRules = composeRules(blackListRules);
+            
+            // Pre-compute wildcard patterns for faster matching
+            precomputeWildcardPatterns(composedWhiteRules);
+            precomputeWildcardPatterns(composedBlackRules);
 
             for (Path startDirectory : START_DIRECTORIES) {
                 Set<Path> alreadyDiscovered = discoveredDirectories.getOrDefault(startDirectory, Set.of());
@@ -56,27 +78,140 @@ public class WildCards {
                         }
                     }
                 } else {
-                    try (Stream<Path> paths = Files.walk(startDirectory)) {
-                        try { // Fixes some wierd edge cases
-                            paths.filter(Files::isRegularFile)
-                                    .forEach(node -> {
-                                        if (!discoveredDirectories.containsKey(startDirectory)) {
-                                            discoveredDirectories.put(startDirectory, new HashSet<>());
-                                        }
-                                        discoveredDirectories.get(startDirectory).add(node);
-                                        matchWhiteRules(node, startDirectory, composedWhiteRules);
-                                    });
-                        } catch (Exception e) {
-                            LOGGER.error("Error processing files in directory: {}", startDirectory, e);
-                        }
-                    }
+                    // Smart directory walking: only walk directories that match rules
+                    walkSmartly(startDirectory, composedWhiteRules);
                 }
 
                 matchBlackRules(startDirectory, composedBlackRules);
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOGGER.error("Failed to walk directories: {}", START_DIRECTORIES, e);
         }
+    }
+    
+    /**
+     * Pre-compute wildcard patterns to avoid repeated parsing during matching
+     */
+    private void precomputeWildcardPatterns(Map<String, List<String>> rules) {
+        for (Map.Entry<String, List<String>> entry : rules.entrySet()) {
+            String ruleDirectory = entry.getKey();
+            if (ruleDirectory.contains("*")) {
+                parseWildcardPattern(ruleDirectory);
+            }
+            
+            for (String rulePath : entry.getValue()) {
+                if (rulePath.contains("*")) {
+                    parseWildcardPattern(rulePath);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Parse and cache wildcard pattern
+     */
+    private WildcardPattern parseWildcardPattern(String pattern) {
+        return wildcardPatternCache.computeIfAbsent(pattern, p -> {
+            int wildcardIndex = p.indexOf("*");
+            if (wildcardIndex == -1) {
+                return null;
+            }
+            
+            // Only one * in the rule path is allowed
+            if (p.indexOf("*", wildcardIndex + 1) != -1) {
+                LOGGER.error("Only one * in the rule path is allowed: {}", p);
+                return null;
+            }
+            
+            String[] parts = p.split("\\*", 2);
+            String prefix = parts[0];
+            String suffix = parts.length > 1 ? parts[1] : "";
+            int layerCount = p.split("/").length;
+            
+            return new WildcardPattern(prefix, suffix, layerCount);
+        });
+    }
+    
+    /**
+     * Smart directory walking: only walk directories that could match rules
+     */
+    private void walkSmartly(Path startDirectory, Map<String, List<String>> composedWhiteRules) throws IOException {
+        Set<Path> discoveredFiles = new HashSet<>();
+        
+        // Determine which directories need to be walked
+        Set<Path> directoriesToWalk = new HashSet<>();
+        boolean needsFullWalk = false;
+        
+        for (Map.Entry<String, List<String>> entry : composedWhiteRules.entrySet()) {
+            String ruleDirectory = entry.getKey();
+            List<String> rulePaths = entry.getValue();
+            
+            // Check if we need full walk (/** patterns)
+            for (String rulePath : rulePaths) {
+                if (rulePath.equals("/**")) {
+                    needsFullWalk = true;
+                    break;
+                }
+            }
+            
+            if (needsFullWalk) {
+                break;
+            }
+            
+            // If rule directory contains wildcards, we need to walk parent directories
+            if (ruleDirectory.contains("*")) {
+                // Find the non-wildcard prefix to determine where to start walking
+                int wildcardIndex = ruleDirectory.indexOf("*");
+                int lastSlash = ruleDirectory.lastIndexOf("/", wildcardIndex);
+                String baseDir = lastSlash > 0 ? ruleDirectory.substring(0, lastSlash) : "";
+                // Remove leading "/" from baseDir for path resolution
+                if (baseDir.startsWith("/")) {
+                    baseDir = baseDir.substring(1);
+                }
+                Path targetDir = baseDir.isEmpty() ? startDirectory : startDirectory.resolve(baseDir);
+                if (Files.exists(targetDir) && Files.isDirectory(targetDir)) {
+                    directoriesToWalk.add(targetDir);
+                }
+            } else {
+                // For exact directory matches, only walk that specific directory
+                // Remove leading "/" from ruleDirectory for path resolution
+                String cleanRuleDir = ruleDirectory.startsWith("/") ? ruleDirectory.substring(1) : ruleDirectory;
+                Path targetDir = cleanRuleDir.isEmpty() ? startDirectory : startDirectory.resolve(cleanRuleDir);
+                if (Files.exists(targetDir) && Files.isDirectory(targetDir)) {
+                    directoriesToWalk.add(targetDir);
+                }
+            }
+        }
+        
+        // Perform the walk
+        if (needsFullWalk || directoriesToWalk.isEmpty()) {
+            // Fall back to full walk
+            try (Stream<Path> paths = Files.walk(startDirectory)) {
+                paths.filter(Files::isRegularFile)
+                        .forEach(node -> {
+                            discoveredFiles.add(node);
+                            matchWhiteRules(node, startDirectory, composedWhiteRules);
+                        });
+            } catch (Exception e) {
+                LOGGER.error("Error processing files in directory: {}", startDirectory, e);
+            }
+        } else {
+            // Walk only specific directories
+            for (Path targetDir : directoriesToWalk) {
+                try (Stream<Path> paths = Files.walk(targetDir)) {
+                    paths.filter(Files::isRegularFile)
+                            .forEach(node -> {
+                                discoveredFiles.add(node);
+                                matchWhiteRules(node, startDirectory, composedWhiteRules);
+                            });
+                } catch (Exception e) {
+                    LOGGER.error("Error processing files in directory: {}", targetDir, e);
+                }
+            }
+        }
+        
+        // Cache discovered files
+        discoveredDirectories.put(startDirectory, discoveredFiles);
     }
 
     private Map<String, List<String>> composeRules(List<String> rules) {
@@ -146,7 +281,9 @@ public class WildCards {
 
 
     private String matchesRules(Path node, Path startDirectory, Map<String, List<String>> rules) {
-        final String formattedPath = formatPath(node, startDirectory);
+        // Cache formatted path to avoid repeated computation
+        final String formattedPath = formattedPathCache.computeIfAbsent(node, 
+            n -> formatPath(n, startDirectory));
 
         int lastSlashIndex = formattedPath.lastIndexOf("/");
         if (lastSlashIndex == -1) {
@@ -174,7 +311,7 @@ public class WildCards {
 //                HERE - It should also remove the README.txt file from subdirectoriy of the server_scripts
 //                --- Matched Paths ---
 //                /kubejs/server_scripts/01_unification/README.txt
-                if (wildcardMatch(directoryPart, ruleDirectory)) {
+                if (wildcardMatchCached(directoryPart, ruleDirectory)) {
                     directoryMatch = true;
                     directoryStrictMatch = true;
                 }
@@ -198,7 +335,7 @@ public class WildCards {
                             continue;
                         }
 
-                        if (wildcardMatch(fileNamePart, rulePath)) {
+                        if (wildcardMatchCached(fileNamePart, rulePath)) {
                             return formattedPath;
                         }
                     } else if (rulePath.equals(fileNamePart)) { // Exact match
@@ -210,38 +347,28 @@ public class WildCards {
 
         return null;
     }
-
-    private boolean wildcardMatch(String target, String rule) {
+    
+    /**
+     * Optimized wildcard matching using cached patterns
+     */
+    private boolean wildcardMatchCached(String target, String rule) {
         if (target.equals(rule)) {
             return true;
         }
-
-        // Only one * in the rule path is allowed
-        if (rule.indexOf("*") != rule.lastIndexOf("*")) {
-            LOGGER.error("Only one * in the rule path is allowed: {}", rule);
-            return false;
+        
+        WildcardPattern pattern = wildcardPatternCache.get(rule);
+        if (pattern == null) {
+            pattern = parseWildcardPattern(rule);
+            if (pattern == null) {
+                return false;
+            }
         }
-
+        
         int targetLayers = target.split("/").length;
-        int ruleLayers = rule.split("/").length;
-
-        if (targetLayers != ruleLayers) {
+        if (targetLayers != pattern.layerCount) {
             return false;
         }
-
-        String[] ruleParts = rule.split("\\*");
-        String partOne;
-        String partTwo = "";
-        if (ruleParts.length == 1) {
-            partOne = ruleParts[0];
-        } else if (ruleParts.length == 2) {
-            partOne = ruleParts[0];
-            partTwo = ruleParts[1];
-        } else {
-            LOGGER.error("Invalid rule path: {}", rule);
-            return false;
-        }
-
-        return target.startsWith(partOne) && target.endsWith(partTwo);
+        
+        return target.startsWith(pattern.prefix) && target.endsWith(pattern.suffix);
     }
 }
