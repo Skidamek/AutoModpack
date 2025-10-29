@@ -64,12 +64,11 @@ class ModpackTest {
 
     @Test
     void modpackTest() {
-        String testFilesDirStr = testFilesDir.toString().replace("\\", "/");
-
+        // Use relative paths for editable rules (relative to testFilesDir)
         var editable = List.of(
-                "/" + testFilesDirStr + "/file.txt",
-                "/" + testFilesDirStr + "/config/*",
-                "!/" + testFilesDirStr + "/config/config-mod.json5"
+                "/file.txt",
+                "/config/*",
+                "!/config/config-mod.json5"
         );
 
         editable.forEach(System.out::println);
