@@ -140,18 +140,36 @@ public class FileInspection {
 
     /**
      * Removes JAR entry separator patterns (! and #) from the end of a path string.
-     * JAR separators like "file.jar!/" or "file.jar#/" indicate internal JAR entries.
+     * JAR separators like "file.jar!/", "file.jar#/" or "file.jar#54!/" indicate internal JAR entries.
      * This method finds and removes such separators from the end of the path.
      *
      * @param path the path string to process
      * @return the path with JAR separators removed from the end
      */
     private static String removeJarSeparator(String path) {
-        // Find separators like "!/" or "#/" at the end
+        // Strategy: Look for patterns at the end that indicate JAR entry paths
+        // Valid patterns: "!/", "#/" or ".jar#...!/" (where #...!/ is the separator after .jar extension)
+        
         int lastExclamation = path.lastIndexOf("!/");
         int lastHash = path.lastIndexOf("#/");
-        int separatorPos = -1;
         
+        // Check if path has pattern like "file.jar#54!/"
+        // The # after .jar extension is part of the JAR entry separator
+        if (lastExclamation != -1) {
+            // Look for a # between the last .jar and the !/
+            int jarExtPos = path.lastIndexOf(".jar", lastExclamation);
+            if (jarExtPos != -1) {
+                int hashAfterJar = path.indexOf("#", jarExtPos + 4); // +4 to skip past ".jar"
+                if (hashAfterJar != -1 && hashAfterJar < lastExclamation) {
+                    // Found pattern: .jar#...!/
+                    // Remove from the # onwards (the # is part of the separator)
+                    return path.substring(0, hashAfterJar);
+                }
+            }
+        }
+        
+        // Standard cases: remove from "!/" or "#/"
+        int separatorPos = -1;
         if (lastExclamation != -1 && lastHash != -1) {
             // Both exist, take the last one
             separatorPos = Math.max(lastExclamation, lastHash);
