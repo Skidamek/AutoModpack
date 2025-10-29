@@ -26,7 +26,6 @@ public class FingerprintVerificationScreen extends VersionedScreen {
     private Button backButton;
     private Button verifyButton;
     private Button skipButton;
-    private Button copyButton;
 
     public FingerprintVerificationScreen(Screen parent, String serverFingerprint, Runnable validatedCallback,
                             Runnable canceledCallback) {
@@ -50,7 +49,6 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         this.addRenderableWidget(this.backButton);
         this.addRenderableWidget(this.verifyButton);
         this.addRenderableWidget(this.skipButton);
-        this.addRenderableWidget(this.copyButton);
         this.setInitialFocus(this.textField);
     }
 
@@ -100,15 +98,6 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                     assert this.minecraft != null;
                     this.minecraft.setScreen(new SkipVerificationScreen(this, this.parent, 
                             this.validatedCallback, this.canceledCallback));
-                });
-
-        // Copy fingerprint button
-        this.copyButton = buttonWidget(this.width / 2 + 160, this.height / 2 - 45, 60, 16,
-                VersionedText.translatable("automodpack.validation.copy"),
-                button -> {
-                    assert this.minecraft != null;
-                    this.minecraft.keyboardHandler.setClipboard(serverFingerprint);
-                    button.setMessage(VersionedText.translatable("automodpack.validation.copied").withStyle(ChatFormatting.GREEN));
                 });
     }
 

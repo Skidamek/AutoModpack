@@ -48,8 +48,6 @@
   "automodpack.validation.checkbox": "I have verified this fingerprint is correct",
   "automodpack.validation.verify": "Verify",
   "automodpack.validation.skip": "Skip Verification",
-  "automodpack.validation.copy": "Copy",
-  "automodpack.validation.copied": "Copied!",
   "automodpack.validation.failed": "Verification failed - Fingerprint does not match",
   "automodpack.validation.skip.title": "⚠ Security Warning ⚠",
   "automodpack.validation.skip.warning1": "You are about to skip certificate verification.",
