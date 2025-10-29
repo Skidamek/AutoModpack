@@ -39,6 +39,7 @@
   "automodpack.cancel": "Відміна",
   "automodpack.back": "Назад",
   "automodpack.wait": "Почекайте будь ласка...",
+
   "automodpack.validation.title": "Security Verification Required",
   "automodpack.validation.description": "This server's certificate fingerprint needs to be verified before downloading.",
   "automodpack.validation.fingerprint.label": "Server Certificate Fingerprint:",
@@ -49,6 +50,7 @@
   "automodpack.validation.verify": "Verify",
   "automodpack.validation.skip": "Skip Verification",
   "automodpack.validation.failed": "Verification failed - Fingerprint does not match",
+
   "automodpack.validation.skip.title": "⚠ Security Warning ⚠",
   "automodpack.validation.skip.warning1": "You are about to skip certificate verification.",
   "automodpack.validation.skip.warning2": "This means you are connecting without verifying the server's identity.",
