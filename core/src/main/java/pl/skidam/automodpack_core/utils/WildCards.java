@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.utils;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -37,11 +38,20 @@ public class WildCards {
     private final Map<String, String[]> pathComponentsCache = new HashMap<>();
 
     /**
-     * Parsed rule structure
+     * Parsed rule structure with depth information for pruning
      * @param components  Path split into components
      * @param isRecursive If rule ends with /**
+     * @param minDepth    Minimum directory depth required
+     * @param maxDepth    Maximum directory depth (-1 for unlimited)
      */
-    private record ParsedRule(String originalRule, String[] components, boolean isRecursive) { }
+    private record ParsedRule(String originalRule, String[] components, boolean isRecursive, 
+                              int minDepth, int maxDepth) {
+        ParsedRule(String originalRule, String[] components, boolean isRecursive) {
+            this(originalRule, components, isRecursive, 
+                 components.length, 
+                 isRecursive ? -1 : components.length);
+        }
+    }
     
     private final List<ParsedRule> whiteListRules = new ArrayList<>();
     private final List<ParsedRule> blackListRules = new ArrayList<>();
@@ -65,8 +75,8 @@ public class WildCards {
                         }
                     }
                 } else {
-                    // Walk directories and match
-                    walkAndMatch(startDirectory);
+                    // Smart walk with aggressive pruning for minimal I/O
+                    smartWalk(startDirectory);
                 }
 
                 matchBlackRules();
@@ -118,23 +128,105 @@ public class WildCards {
     }
     
     /**
-     * Walk directory and match files against rules
+     * Smart directory walking with aggressive pruning
+     * Only traverses directories that could contain matches
+     * Dramatically reduces I/O operations: O(matching paths) instead of O(all files)
      */
-    private void walkAndMatch(Path startDirectory) {
+    private void smartWalk(Path startDirectory) {
         Set<Path> discoveredFiles = new HashSet<>();
-        
-        try (Stream<Path> paths = Files.walk(startDirectory)) {
-            paths.filter(Files::isRegularFile)
-                    .forEach(node -> {
-                        discoveredFiles.add(node);
-                        matchWhiteRules(node, startDirectory);
-                    });
-        } catch (Exception e) {
-            LOGGER.error("Error processing files in directory: {}", startDirectory, e);
+        smartWalkRecursive(startDirectory, startDirectory, new String[0], discoveredFiles);
+        discoveredDirectories.put(startDirectory, discoveredFiles);
+    }
+    
+    /**
+     * Recursive directory walk with early pruning
+     * Stops traversing branches that cannot possibly contain matches
+     * 
+     * @param current Current directory
+     * @param startDirectory Root directory
+     * @param currentComponents Path components from root to current directory
+     * @param discoveredFiles Accumulator for matching files
+     */
+    private void smartWalkRecursive(Path current, Path startDirectory, String[] currentComponents, Set<Path> discoveredFiles) {
+        // Early pruning: check if current path could lead to matches
+        if (!couldMatchAnyRule(currentComponents)) {
+            return; // Prune this entire branch - saves massive I/O
         }
         
-        // Cache discovered files
-        discoveredDirectories.put(startDirectory, discoveredFiles);
+        try (Stream<Path> entries = Files.list(current)) {
+            entries.forEach(entry -> {
+                try {
+                    String entryName = entry.getFileName().toString();
+                    
+                    if (Files.isDirectory(entry)) {
+                        // Build path for subdirectory
+                        String[] newComponents = Arrays.copyOf(currentComponents, currentComponents.length + 1);
+                        newComponents[currentComponents.length] = entryName;
+                        
+                        // Recursively walk subdirectory (with pruning)
+                        smartWalkRecursive(entry, startDirectory, newComponents, discoveredFiles);
+                    } else if (Files.isRegularFile(entry)) {
+                        // Match file against whitelist rules
+                        discoveredFiles.add(entry);
+                        matchWhiteRules(entry, startDirectory);
+                    }
+                } catch (IOException e) {
+                    LOGGER.error("Error processing entry: {}", entry, e);
+                }
+            });
+        } catch (IOException e) {
+            LOGGER.error("Error listing directory: {}", current, e);
+        }
+    }
+    
+    /**
+     * Check if a directory path could possibly lead to rule matches
+     * This is the key optimization - prunes directories early
+     * 
+     * @param dirComponents Directory path components
+     * @return true if any rule could match files in or under this directory
+     */
+    private boolean couldMatchAnyRule(String[] dirComponents) {
+        // Root directory always could match
+        if (dirComponents.length == 0) {
+            return true;
+        }
+        
+        // Check against all whitelist rules
+        for (ParsedRule rule : whiteListRules) {
+            if (couldMatchRule(dirComponents, rule)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if directory path is compatible with a specific rule
+     * Used for early pruning to minimize I/O
+     * 
+     * @param dirComponents Directory path components
+     * @param rule Rule to check against
+     * @return true if this directory could contain files matching the rule
+     */
+    private boolean couldMatchRule(String[] dirComponents, ParsedRule rule) {
+        // If we're already deeper than non-recursive rule allows, prune
+        if (rule.maxDepth != -1 && dirComponents.length >= rule.maxDepth) {
+            return false;
+        }
+        
+        // Check if directory path matches the rule prefix
+        // We check up to min(dirDepth, ruleDepth-1) because last component is the filename
+        int checkDepth = Math.min(dirComponents.length, rule.components.length - 1);
+        
+        for (int i = 0; i < checkDepth; i++) {
+            if (!matchComponent(dirComponents[i], rule.components[i])) {
+                return false; // This directory doesn't match rule path
+            }
+        }
+        
+        return true; // Directory is compatible with rule
     }
 
     private void matchWhiteRules(Path node, Path startDirectory) {
@@ -204,7 +296,7 @@ public class WildCards {
      * Examples:
      * - {@code "/config/b*"} matches {@code "/config/bar"}
      * - {@code "/config/*"} matches {@code "/config/anything"}
-     * - {@code "/config/*//*/*.txt"} matches {@code "/config/bar/fool/config.txt"}
+     * - {@code "/config/*/*/*.txt"} matches {@code "/config/bar/fool/config.txt"}
      * - {@code "/foo/**"} matches any file under {@code "/foo"}
      */
     private boolean matchesRule(String[] pathComponents, ParsedRule rule) {
