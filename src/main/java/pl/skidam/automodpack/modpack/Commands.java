@@ -15,6 +15,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
+import pl.skidam.automodpack_core.config.ConfigUtils;
 
 import static net.minecraft.commands.Commands.literal;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -114,6 +115,7 @@ public class Commands {
     private static int reload(CommandContext<CommandSourceStack> context) {
         Util.backgroundExecutor().execute(() -> {
             var tempServerConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+            ConfigUtils.normalizeServerConfig(true);
             if (tempServerConfig != null) {
                 serverConfig = tempServerConfig;
                 send(context, "AutoModpack server config reloaded!", ChatFormatting.GREEN, true);

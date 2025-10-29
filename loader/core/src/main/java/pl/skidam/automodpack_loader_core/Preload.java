@@ -3,6 +3,7 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -192,6 +193,8 @@ public class Preload {
                 serverConfig.modpackName = FileInspection.fixFileName(serverConfig.modpackName);
                 LOGGER.info("Changed modpack name to {}", serverConfig.modpackName);
             }
+
+            ConfigUtils.normalizeServerConfig();
 
             // Save changes
             ConfigTools.save(serverConfigFile, serverConfig);
