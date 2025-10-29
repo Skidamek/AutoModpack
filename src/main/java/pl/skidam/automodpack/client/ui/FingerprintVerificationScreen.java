@@ -22,7 +22,9 @@ public class FingerprintVerificationScreen extends VersionedScreen {
             VersionedText.translatable("automodpack.validation.failed"), 
             VersionedText.translatable("automodpack.retry"));
     private EditBox textField;
+    /*? if >= 1.19.4 {*/
     private Checkbox checkboxVerify;
+    /*?}*/
     private Button backButton;
     private Button verifyButton;
     private Button skipButton;
@@ -66,7 +68,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 
         // Checkbox to verify without typing
         /*? if >= 1.19.4 {*/
-        this.checkboxVerify = /*? if >= 1.20 {*/ Checkbox.builder(
+        this.checkboxVerify = /*? if >= 1.20.4 {*/ Checkbox.builder(
                 VersionedText.translatable("automodpack.validation.checkbox"), this.font)
                 .pos(this.width / 2 - 150, this.height / 2 + 45)
                 .build(); /*?} else {*/
