@@ -7,57 +7,52 @@
   "automodpack.restart.secDescription": "D'ye wish to restart now, ye scurvy dog?",
   "automodpack.restart.confirm": "Aye, close the game",
   "automodpack.restart.cancel": "Nay, back to the game",
+
   "automodpack.delete": "Scuttle the Modpack",
   "automodpack.delete.description": "Ye'll lose all yer booty from the downloaded modpack, arggh.",
   "automodpack.delete.secDescription": "Ye'll need to restart the game.",
   "automodpack.delete.thiDescription": "Are ye sure ye wish to scuttle it, swab?",
   "automodpack.delete.confirm": "Scuttle and quit",
   "automodpack.delete.cancel": "Back to the game",
+
   "automodpack.danger": "This server provides an external modpack, weigh anchor!",
   "automodpack.danger.description": "D'ye wish to download it?",
   "automodpack.danger.secDescription": "It might be risky! DO NOT download if ye trust not the server captains!",
   "automodpack.danger.confirm": "Download",
   "automodpack.danger.cancel": "Don't download",
+
   "automodpack.changelog.view": "View the log of changes",
   "automodpack.changelog.noChanges": "No changes found, alas.",
   "automodpack.changelog.openPage": "Open the project's page",
+
   "automodpack.download.calculating": "Calculating, arrr...",
   "automodpack.download.eta": "Time remaining: %s",
   "automodpack.download.downloading": "Downloading:",
   "automodpack.download.noFiles": "No files to download, blast it!",
+
   "automodpack.redownload": "Redownload the Modpack",
   "automodpack.redownload.description": "It may fix issues with the modpack, savvy.",
+
   "automodpack.error": "Something went wrong, by the kraken!",
   "automodpack.error.files": "Failed to download some files, blow me down.",
   "automodpack.error.critical": "A critical error whilst downloading the modpack!",
   "automodpack.error.logs": "Check for more details in the logs, arrr.",
+
   "automodpack.fetch": "Fetchin' direct links from Modrinth and CurseForge...",
   "automodpack.fetch.found": "Found %s direct links, landlubber.",
-  "automodpack.validation.failed": "Verification failed - Fingerprint does not match",
+
+  "automodpack.validation.text": "Ye be connectin' to an unknown AutoModpack host, beware!",
+  "automodpack.validation.description": "Pray verify the server's certificate mark",
+  "automodpack.validation.secDescription": "Request the mark from yer server administrator if ye have it not",
+  "automodpack.validation.thiDescription": "This security check prevents meddlin' with connections whilst downloading",
+  "automodpack.validation.run": "Verify",
+  "automodpack.validation.failed": "Verification failed, shiver me timbers!",
+
   "automodpack.retry": "Try again, ye dog!",
   "automodpack.select": "Select the Modpack",
   "automodpack.yes": "Aye",
   "automodpack.no": "Nay",
   "automodpack.cancel": "Abandon Ship",
   "automodpack.back": "Heave Ho Back",
-  "automodpack.wait": "Pray wait, matey...",
-
-  "automodpack.validation.title": "Security Verification Required",
-  "automodpack.validation.description": "This server's certificate fingerprint needs to be verified before downloading.",
-  "automodpack.validation.fingerprint.label": "Server Certificate Fingerprint:",
-  "automodpack.validation.fingerprint.hint": "Type the fingerprint here...",
-  "automodpack.validation.instruction": "Please confirm the fingerprint with your server administrator.",
-  "automodpack.validation.confirm.text": "To confirm, type the fingerprint above in the box below:",
-  "automodpack.validation.checkbox": "I have verified this fingerprint is correct",
-  "automodpack.validation.verify": "Verify",
-  "automodpack.validation.skip": "Skip Verification",
-
-  "automodpack.validation.skip.title": "⚠ Security Warning ⚠",
-  "automodpack.validation.skip.warning1": "You are about to skip certificate verification.",
-  "automodpack.validation.skip.warning2": "This means you are connecting without verifying the server's identity.",
-  "automodpack.validation.skip.warning3": "Your connection could be intercepted or modified by a third party!",
-  "automodpack.validation.skip.instruction": "Only proceed if you fully trust this server.",
-  "automodpack.validation.skip.confirm.text": "Type the following in the box below to proceed:",
-  "automodpack.validation.skip.confirm": "Connect Anyway",
-  "automodpack.validation.skip.failed": "Text does not match - Please type exactly as shown"
+  "automodpack.wait": "Pray wait, matey..."
 }
