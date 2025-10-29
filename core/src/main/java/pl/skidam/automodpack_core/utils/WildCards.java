@@ -32,6 +32,8 @@ public class WildCards {
     private static final Map<Path, Set<Path>> discoveredDirectories = new HashMap<>();
     
     // Cache for formatted paths to avoid recomputation
+    // These caches are instance-level and bounded by the number of files processed in a single match() operation
+    // They are garbage collected when the WildCards instance is no longer in use
     private final Map<Path, String> formattedPathCache = new HashMap<>();
     
     // Cache for parsed wildcard patterns
