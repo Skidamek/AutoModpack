@@ -47,7 +47,35 @@ public class WildCards {
         }
     }
     
+    // Cache for split paths to avoid repeated substring operations
+    private static class PathParts {
+        final String directoryPart;
+        final String fileNamePart;
+        
+        PathParts(String directoryPart, String fileNamePart) {
+            this.directoryPart = directoryPart;
+            this.fileNamePart = fileNamePart;
+        }
+    }
+    
+    private final Map<String, PathParts> pathPartsCache = new HashMap<>();
     private final Map<String, WildcardPattern> wildcardPatternCache = new HashMap<>();
+    
+    /**
+     * Cache-aware path splitting
+     */
+    private PathParts splitPath(String formattedPath) {
+        return pathPartsCache.computeIfAbsent(formattedPath, fp -> {
+            int lastSlashIndex = fp.lastIndexOf("/");
+            if (lastSlashIndex == -1) {
+                return null;
+            }
+            return new PathParts(
+                fp.substring(0, lastSlashIndex),
+                fp.substring(lastSlashIndex)
+            );
+        });
+    }
 
     public static void clearDiscoveredDirectories() {
         discoveredDirectories.clear();
@@ -281,13 +309,13 @@ public class WildCards {
         final String formattedPath = formattedPathCache.computeIfAbsent(node, 
             n -> formatPath(n, startDirectory));
 
-        int lastSlashIndex = formattedPath.lastIndexOf("/");
-        if (lastSlashIndex == -1) {
+        PathParts parts = splitPath(formattedPath);
+        if (parts == null) {
             return null; // No directory part
         }
 
-        String directoryPart = formattedPath.substring(0, lastSlashIndex);
-        String fileNamePart = formattedPath.substring(lastSlashIndex);
+        String directoryPart = parts.directoryPart;
+        String fileNamePart = parts.fileNamePart;
 
         // Iterate through the rules and check directory matches
         for (Map.Entry<String, List<String>> entry : rules.entrySet()) {
