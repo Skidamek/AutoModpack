@@ -32,52 +32,26 @@ public class WildCards {
     private static final Map<Path, Set<Path>> discoveredDirectories = new HashMap<>();
     
     // Cache for formatted paths to avoid recomputation
-    // These caches are instance-level and bounded by the number of files processed in a single match() operation
-    // They are garbage collected when the WildCards instance is no longer in use
     private final Map<Path, String> formattedPathCache = new HashMap<>();
     
-    // Cache for parsed wildcard patterns
-    private static class WildcardPattern {
-        final String prefix;
-        final String suffix;
-        final int layerCount;
+    // Cache for split path components
+    private final Map<String, String[]> pathComponentsCache = new HashMap<>();
+    
+    // Parsed rule structure
+    private static class ParsedRule {
+        final String originalRule;
+        final String[] components;  // Path split into components
+        final boolean isRecursive;   // If rule ends with /**
         
-        WildcardPattern(String prefix, String suffix, int layerCount) {
-            this.prefix = prefix;
-            this.suffix = suffix;
-            this.layerCount = layerCount;
+        ParsedRule(String originalRule, String[] components, boolean isRecursive) {
+            this.originalRule = originalRule;
+            this.components = components;
+            this.isRecursive = isRecursive;
         }
     }
     
-    // Cache for split paths to avoid repeated substring operations
-    private static class PathParts {
-        final String directoryPart;
-        final String fileNamePart;
-        
-        PathParts(String directoryPart, String fileNamePart) {
-            this.directoryPart = directoryPart;
-            this.fileNamePart = fileNamePart;
-        }
-    }
-    
-    private final Map<String, PathParts> pathPartsCache = new HashMap<>();
-    private final Map<String, WildcardPattern> wildcardPatternCache = new HashMap<>();
-    
-    /**
-     * Cache-aware path splitting
-     */
-    private PathParts splitPath(String formattedPath) {
-        return pathPartsCache.computeIfAbsent(formattedPath, fp -> {
-            int lastSlashIndex = fp.lastIndexOf("/");
-            if (lastSlashIndex == -1) {
-                return null;
-            }
-            return new PathParts(
-                fp.substring(0, lastSlashIndex),
-                fp.substring(lastSlashIndex)
-            );
-        });
-    }
+    private final List<ParsedRule> whiteListRules = new ArrayList<>();
+    private final List<ParsedRule> blackListRules = new ArrayList<>();
 
     public static void clearDiscoveredDirectories() {
         discoveredDirectories.clear();
@@ -89,30 +63,24 @@ public class WildCards {
                 return;
             }
 
-            separateRules(RULES);
-            Map<String, List<String>> composedWhiteRules = composeRules(whiteListRules);
-            Map<String, List<String>> composedBlackRules = composeRules(blackListRules);
-            
-            // Pre-compute wildcard patterns for faster matching
-            precomputeWildcardPatterns(composedWhiteRules);
-            precomputeWildcardPatterns(composedBlackRules);
+            parseRules(RULES);
 
             for (Path startDirectory : START_DIRECTORIES) {
                 Set<Path> alreadyDiscovered = discoveredDirectories.getOrDefault(startDirectory, Set.of());
                 if (!alreadyDiscovered.isEmpty()) {
                     for (Path node : alreadyDiscovered) {
                         try {
-                            matchWhiteRules(node, startDirectory, composedWhiteRules);
+                            matchWhiteRules(node, startDirectory);
                         } catch (Exception e) {
                             LOGGER.error("Error processing file: {} From already discovered directory: {}", node, startDirectory, e);
                         }
                     }
                 } else {
-                    // Smart directory walking: only walk directories that match rules
-                    walkSmartly(startDirectory, composedWhiteRules);
+                    // Walk directories and match
+                    walkAndMatch(startDirectory);
                 }
 
-                matchBlackRules(startDirectory, composedBlackRules);
+                matchBlackRules(startDirectory);
             }
         } catch (Exception e) {
             LOGGER.error("Failed to walk directories: {}", START_DIRECTORIES, e);
@@ -120,183 +88,94 @@ public class WildCards {
     }
     
     /**
-     * Pre-compute wildcard patterns to avoid repeated parsing during matching
+     * Parse rules into structured format for efficient matching
      */
-    private void precomputeWildcardPatterns(Map<String, List<String>> rules) {
-        for (Map.Entry<String, List<String>> entry : rules.entrySet()) {
-            String ruleDirectory = entry.getKey();
-            if (ruleDirectory.contains("*")) {
-                parseWildcardPattern(ruleDirectory);
+    private void parseRules(List<String> rules) {
+        for (String rule : rules) {
+            if (rule == null || rule.isBlank()) {
+                continue;
+            }
+
+            boolean isBlacklist = rule.startsWith("!");
+            String cleanRule = isBlacklist ? rule.substring(1) : rule;
+            
+            // Check if it's a recursive rule (ends with /**)
+            boolean isRecursive = cleanRule.endsWith("/**");
+            if (isRecursive) {
+                cleanRule = cleanRule.substring(0, cleanRule.length() - 3); // Remove /**
             }
             
-            for (String rulePath : entry.getValue()) {
-                if (rulePath.contains("*")) {
-                    parseWildcardPattern(rulePath);
+            // Split into components, removing empty strings and leading slash
+            String[] components = cleanRule.split("/");
+            List<String> componentList = new ArrayList<>();
+            for (String comp : components) {
+                if (!comp.isEmpty()) {
+                    componentList.add(comp);
                 }
+            }
+            
+            ParsedRule parsedRule = new ParsedRule(
+                rule,
+                componentList.toArray(new String[0]),
+                isRecursive
+            );
+            
+            if (isBlacklist) {
+                blackListRules.add(parsedRule);
+            } else {
+                whiteListRules.add(parsedRule);
             }
         }
     }
     
     /**
-     * Parse and cache wildcard pattern
+     * Walk directory and match files against rules
      */
-    private WildcardPattern parseWildcardPattern(String pattern) {
-        return wildcardPatternCache.computeIfAbsent(pattern, p -> {
-            int wildcardIndex = p.indexOf("*");
-            if (wildcardIndex == -1) {
-                return null;
-            }
-            
-            // Only one * in the rule path is allowed
-            if (p.indexOf("*", wildcardIndex + 1) != -1) {
-                LOGGER.error("Only one * in the rule path is allowed: {}", p);
-                return null;
-            }
-            
-            String[] parts = p.split("\\*", 2);
-            String prefix = parts[0];
-            String suffix = parts.length > 1 ? parts[1] : "";
-            int layerCount = p.split("/").length;
-            
-            return new WildcardPattern(prefix, suffix, layerCount);
-        });
-    }
-    
-    /**
-     * Smart directory walking: only walk directories that could match rules
-     */
-    private void walkSmartly(Path startDirectory, Map<String, List<String>> composedWhiteRules) throws IOException {
+    private void walkAndMatch(Path startDirectory) throws IOException {
         Set<Path> discoveredFiles = new HashSet<>();
         
-        // Determine which directories need to be walked
-        Set<Path> directoriesToWalk = new HashSet<>();
-        
-        for (Map.Entry<String, List<String>> entry : composedWhiteRules.entrySet()) {
-            String ruleDirectory = entry.getKey();
-            List<String> rulePaths = entry.getValue();
-            
-            // Check if any rule needs recursive walk
-            boolean needsRecursiveWalk = false;
-            for (String rulePath : rulePaths) {
-                if (rulePath.equals("/**")) {
-                    needsRecursiveWalk = true;
-                    break;
-                }
-            }
-            
-            // If rule directory contains wildcards, we need to walk parent directories
-            if (ruleDirectory.contains("*")) {
-                // Find the non-wildcard prefix to determine where to start walking
-                int wildcardIndex = ruleDirectory.indexOf("*");
-                int lastSlash = ruleDirectory.lastIndexOf("/", wildcardIndex);
-                String baseDir = lastSlash > 0 ? ruleDirectory.substring(0, lastSlash) : "";
-                // Remove leading "/" from baseDir for path resolution
-                if (baseDir.startsWith("/")) {
-                    baseDir = baseDir.substring(1);
-                }
-                Path targetDir = baseDir.isEmpty() ? startDirectory : startDirectory.resolve(baseDir);
-                if (Files.exists(targetDir) && Files.isDirectory(targetDir)) {
-                    directoriesToWalk.add(targetDir);
-                }
-            } else {
-                // For exact directory matches, only walk that specific directory
-                // Remove leading "/" from ruleDirectory for path resolution
-                String cleanRuleDir = ruleDirectory.startsWith("/") ? ruleDirectory.substring(1) : ruleDirectory;
-                Path targetDir = cleanRuleDir.isEmpty() ? startDirectory : startDirectory.resolve(cleanRuleDir);
-                if (Files.exists(targetDir) && Files.isDirectory(targetDir)) {
-                    directoriesToWalk.add(targetDir);
-                }
-            }
-        }
-        
-        // Perform the walk
-        if (directoriesToWalk.isEmpty()) {
-            // If no specific directories were identified, do a full walk
-            try (Stream<Path> paths = Files.walk(startDirectory)) {
-                paths.filter(Files::isRegularFile)
-                        .forEach(node -> {
-                            discoveredFiles.add(node);
-                            matchWhiteRules(node, startDirectory, composedWhiteRules);
-                        });
-            } catch (Exception e) {
-                LOGGER.error("Error processing files in directory: {}", startDirectory, e);
-            }
-        } else {
-            // Walk only specific directories
-            for (Path targetDir : directoriesToWalk) {
-                try (Stream<Path> paths = Files.walk(targetDir)) {
-                    paths.filter(Files::isRegularFile)
-                            .forEach(node -> {
-                                discoveredFiles.add(node);
-                                matchWhiteRules(node, startDirectory, composedWhiteRules);
-                            });
-                } catch (Exception e) {
-                    LOGGER.error("Error processing files in directory: {}", targetDir, e);
-                }
-            }
+        try (Stream<Path> paths = Files.walk(startDirectory)) {
+            paths.filter(Files::isRegularFile)
+                    .forEach(node -> {
+                        discoveredFiles.add(node);
+                        matchWhiteRules(node, startDirectory);
+                    });
+        } catch (Exception e) {
+            LOGGER.error("Error processing files in directory: {}", startDirectory, e);
         }
         
         // Cache discovered files
         discoveredDirectories.put(startDirectory, discoveredFiles);
     }
 
-    private Map<String, List<String>> composeRules(List<String> rules) {
-        Map<String, List<String>> directoryRulePathsMap = new HashMap<>(rules.size());
-
-        for (String rule : rules) {
-            if (rule == null || rule.isBlank()) {
-                continue;
-            }
-
-            int lastSlashIndex = rule.lastIndexOf("/");
-            if (lastSlashIndex == -1) {
-                continue;
-            }
-
-            String directoryPart = rule.substring(0, lastSlashIndex);
-            String rulePath = rule.substring(lastSlashIndex);
-
-            if (directoryPart.contains("*")) {
-                LOGGER.warn("Wildcards in directories are experimental! Use with caution.");
-            }
-
-            directoryRulePathsMap.computeIfAbsent(directoryPart, k -> new ArrayList<>()).add(rulePath);
+    private void matchWhiteRules(Path node, Path startDirectory) {
+        String formattedPath = getFormattedPath(node, startDirectory);
+        if (formattedPath == null) {
+            return;
         }
-
-        return directoryRulePathsMap;
-    }
-
-    private final List<String> whiteListRules = new ArrayList<>();
-    private final List<String> blackListRules = new ArrayList<>();
-
-    private void separateRules(List<String> rules) {
-        for (String rule : rules) {
-            if (rule == null || rule.isBlank()) {
-                continue;
-            }
-
-            if (rule.startsWith("!")) {
-                blackListRules.add(rule.substring(1));
-            } else {
-                whiteListRules.add(rule);
+        
+        String[] pathComponents = splitPathIntoComponents(formattedPath);
+        
+        for (ParsedRule rule : whiteListRules) {
+            if (matchesRule(pathComponents, rule)) {
+                wildcardMatches.put(formattedPath, node);
+                break; // File matched, no need to check other rules
             }
         }
     }
 
-    private void matchWhiteRules(Path node, Path startDirectory, Map<String, List<String>> composedWhiteRules) {
-        String formattedPath = matchesRules(node, startDirectory, composedWhiteRules);
-        if (formattedPath != null) {
-            wildcardMatches.put(formattedPath, node);
-        }
-    }
-
-    private void matchBlackRules(Path startDirectory, Map<String, List<String>> composedBlackRules) {
+    private void matchBlackRules(Path startDirectory) {
         Set<String> pathsToRemove = new HashSet<>();
 
-        for (Path node : getWildcardMatches().values()) {
-            String formattedPath = matchesRules(node, startDirectory, composedBlackRules);
-            if (formattedPath != null) {
-                pathsToRemove.add(formattedPath);
+        for (Map.Entry<String, Path> entry : new HashMap<>(wildcardMatches).entrySet()) {
+            String formattedPath = entry.getKey();
+            String[] pathComponents = splitPathIntoComponents(formattedPath);
+            
+            for (ParsedRule rule : blackListRules) {
+                if (matchesRule(pathComponents, rule)) {
+                    pathsToRemove.add(formattedPath);
+                    break;
+                }
             }
         }
 
@@ -304,97 +183,132 @@ public class WildCards {
             wildcardMatches.remove(path);
         }
     }
-
-
-    private String matchesRules(Path node, Path startDirectory, Map<String, List<String>> rules) {
-        // Cache formatted path to avoid repeated computation
-        final String formattedPath = formattedPathCache.computeIfAbsent(node, 
+    
+    /**
+     * Get formatted path with caching
+     */
+    private String getFormattedPath(Path node, Path startDirectory) {
+        return formattedPathCache.computeIfAbsent(node, 
             n -> formatPath(n, startDirectory));
-
-        PathParts parts = splitPath(formattedPath);
-        if (parts == null) {
-            return null; // No directory part
-        }
-
-        String directoryPart = parts.directoryPart;
-        String fileNamePart = parts.fileNamePart;
-
-        // Iterate through the rules and check directory matches
-        for (Map.Entry<String, List<String>> entry : rules.entrySet()) {
-            String ruleDirectory = entry.getKey();
-            List<String> rulePaths = entry.getValue();
-
-            boolean directoryMatch = directoryPart.startsWith(ruleDirectory);
-            boolean directoryStrictMatch = directoryPart.equals(ruleDirectory);
-
-            // Resolve wildcard in the directory part
-            if (ruleDirectory.contains("*")) {
-                // TODO: fix edge-cases
-//                Wildcards:
-//                /kubejs/**
-//                !/kubejs/server*/**
-//                Removing path: /kubejs/server_scripts/README.txt
-//                HERE - It should also remove the README.txt file from subdirectoriy of the server_scripts
-//                --- Matched Paths ---
-//                /kubejs/server_scripts/01_unification/README.txt
-                if (wildcardMatchCached(directoryPart, ruleDirectory)) {
-                    directoryMatch = true;
-                    directoryStrictMatch = true;
-                }
-            }
-
-            // Check if the directory part matches the rule
-            if (directoryMatch) {
-                for (String rulePath : rulePaths) {
-                    if (rulePath.equals("/**")) {
-                        // Match all files in the directory
-                        return formattedPath;
-                    } else if (rulePath.equals("/*") || rulePath.equals("/")) {
-                        if (!directoryStrictMatch) {
-                            continue;
-                        }
-
-                        // Match any file in the directory
-                        return formattedPath;
-                    } else if (rulePath.contains("*")) {
-                        if (!directoryStrictMatch) {
-                            continue;
-                        }
-
-                        if (wildcardMatchCached(fileNamePart, rulePath)) {
-                            return formattedPath;
-                        }
-                    } else if (rulePath.equals(fileNamePart)) { // Exact match
-                        return formattedPath;
-                    }
-                }
-            }
-        }
-
-        return null;
     }
     
     /**
-     * Optimized wildcard matching using cached patterns
+     * Split path into components with caching
+     * e.g., "/config/bar/fool/config.txt" -> ["config", "bar", "fool", "config.txt"]
      */
-    private boolean wildcardMatchCached(String target, String rule) {
-        if (target.equals(rule)) {
-            return true;
+    private String[] splitPathIntoComponents(String formattedPath) {
+        return pathComponentsCache.computeIfAbsent(formattedPath, path -> {
+            String[] components = path.split("/");
+            List<String> componentList = new ArrayList<>();
+            for (String comp : components) {
+                if (!comp.isEmpty()) {
+                    componentList.add(comp);
+                }
+            }
+            return componentList.toArray(new String[0]);
+        });
+    }
+
+    /**
+     * Check if path components match a rule
+     * Supports multiple wildcards per component
+     * Examples:
+     * - "/config/b*" matches "/config/bar"
+     * - "/config/*" matches "/config/anything"  
+     * - "/config/ */*/*.txt" matches "/config/bar/fool/config.txt"
+     * - "/foo/**" matches any file under "/foo"
+     */
+    private boolean matchesRule(String[] pathComponents, ParsedRule rule) {
+        String[] ruleComponents = rule.components;
+        
+        // Handle recursive rules (**) 
+        if (rule.isRecursive) {
+            // Rule must be a prefix of the path
+            if (pathComponents.length < ruleComponents.length) {
+                return false;
+            }
+            
+            // Check if rule components match the beginning of path
+            for (int i = 0; i < ruleComponents.length; i++) {
+                if (!matchComponent(pathComponents[i], ruleComponents[i])) {
+                    return false;
+                }
+            }
+            return true; // Matches - rule is a prefix and /** allows any subdirectories
         }
         
-        WildcardPattern pattern = wildcardPatternCache.get(rule);
-        if (pattern == null) {
-            pattern = parseWildcardPattern(rule);
-            if (pattern == null) {
+        // Non-recursive: exact component count match required
+        if (pathComponents.length != ruleComponents.length) {
+            return false;
+        }
+        
+        // Match each component
+        for (int i = 0; i < ruleComponents.length; i++) {
+            if (!matchComponent(pathComponents[i], ruleComponents[i])) {
                 return false;
             }
         }
         
-        int targetLayers = target.split("/").length;
-        if (targetLayers != pattern.layerCount) {
+        return true;
+    }
+    
+    /**
+     * Match a single path component against a rule component
+     * Supports multiple wildcards in a component
+     * Examples:
+     * - "config*" matches "config.txt", "config-mod.json"
+     * - "b*r" matches "bar", "beer"
+     * - "*" matches anything
+     * - "a*b*c" matches "abc", "aXbYc"
+     */
+    private boolean matchComponent(String pathComponent, String ruleComponent) {
+        // Exact match
+        if (pathComponent.equals(ruleComponent)) {
+            return true;
+        }
+        
+        // No wildcard - must be exact match
+        if (!ruleComponent.contains("*")) {
             return false;
         }
         
-        return target.startsWith(pattern.prefix) && target.endsWith(pattern.suffix);
+        // Single wildcard that matches everything
+        if (ruleComponent.equals("*")) {
+            return true;
+        }
+        
+        // Multiple wildcards - split and match segments
+        String[] segments = ruleComponent.split("\\*", -1);
+        
+        int pos = 0;
+        for (int i = 0; i < segments.length; i++) {
+            String segment = segments[i];
+            
+            if (i == 0) {
+                // First segment - must match at start
+                if (!pathComponent.startsWith(segment)) {
+                    return false;
+                }
+                pos = segment.length();
+            } else if (i == segments.length - 1) {
+                // Last segment - must match at end
+                if (!pathComponent.endsWith(segment)) {
+                    return false;
+                }
+                // Check that we haven't already passed this position
+                if (pos > pathComponent.length() - segment.length()) {
+                    return false;
+                }
+            } else {
+                // Middle segment - must appear after current position
+                int index = pathComponent.indexOf(segment, pos);
+                if (index == -1) {
+                    return false;
+                }
+                pos = index + segment.length();
+            }
+        }
+        
+        return true;
     }
 }
