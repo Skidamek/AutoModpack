@@ -43,6 +43,7 @@ public class DangerScreen extends VersionedScreen {
         drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.danger").withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 60, TextColors.WHITE);
         drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.danger.description"), this.width / 2, this.height / 2 - 35, TextColors.WHITE);
         drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.danger.secDescription"), this.width / 2, this.height / 2 - 25, TextColors.WHITE);
+        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.danger.thiDescription"), this.width / 2, this.height / 2 - 15, TextColors.WHITE);
     }
 
     @Override

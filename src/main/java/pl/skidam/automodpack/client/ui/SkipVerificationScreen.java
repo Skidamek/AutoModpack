@@ -147,14 +147,14 @@ public class SkipVerificationScreen extends VersionedScreen {
                 VersionedText.translatable("automodpack.validation.skip.instruction"),
                 this.width / 2, this.height / 2 - 35, TextColors.WHITE);
 
+        // Confirmation prompt
+        drawCenteredTextWithShadow(matrices, this.font,
+                VersionedText.translatable("automodpack.validation.skip.confirm.text"),
+                this.width / 2, this.height / 2 - 10, TextColors.WHITE);
+
         // Required text to type (displayed prominently)
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC),
-                this.width / 2, this.height / 2 - 10, TextColors.WHITE);
-
-        // Confirmation prompt
-        drawCenteredTextWithShadow(matrices, this.font, 
-                VersionedText.translatable("automodpack.validation.skip.confirm.text"),
                 this.width / 2, this.height / 2 - 10 + lineHeight, TextColors.WHITE);
     }
 
