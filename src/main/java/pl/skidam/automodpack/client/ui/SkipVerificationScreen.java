@@ -20,7 +20,7 @@ public class SkipVerificationScreen extends VersionedScreen {
     private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE, 
             VersionedText.translatable("automodpack.validation.skip.failed"), 
             VersionedText.translatable("automodpack.retry"));
-    private static final String REQUIRED_TEXT = "I accept the risk and will connect anyway.";
+    private static final String REQUIRED_TEXT = "I accept the risk";
     private static final int TIMER_SECONDS = 10;
     private EditBox textField;
     private Button backButton;
@@ -58,8 +58,8 @@ public class SkipVerificationScreen extends VersionedScreen {
         );
         this.textField.setMaxLength(128);
 
-        // Back button (returns to fingerprint verification screen)
-        this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 50, 150, 20,
+        // Back button (returns to fingerprint verification screen) - same Y position as verification screen
+        this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 150, 20,
                 VersionedText.translatable("automodpack.back"),
                 button -> {
                     assert this.minecraft != null;
@@ -67,9 +67,9 @@ public class SkipVerificationScreen extends VersionedScreen {
                 }
         );
 
-        // Confirm skip button (initially disabled, unlocks after timer)
+        // Confirm skip button (initially disabled, unlocks after timer) - same Y position as verification screen
         // Button text will be updated dynamically in tick()
-        this.confirmButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20,
+        this.confirmButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 80, 150, 20,
                 VersionedText.translatable("automodpack.validation.skip.confirm"),
                 button -> confirmSkip());
         this.confirmButton.active = false;
@@ -140,7 +140,7 @@ public class SkipVerificationScreen extends VersionedScreen {
         // Warning message line 1
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.warning1"),
-                this.width / 2, this.height / 2 - 65, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 65, TextColors.LIGHT_GRAY);
 
         // Warning message line 2
         drawCenteredTextWithShadow(matrices, this.font, 
@@ -150,12 +150,12 @@ public class SkipVerificationScreen extends VersionedScreen {
         // Instructions
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.instruction"),
-                this.width / 2, this.height / 2 - 35, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 35, TextColors.LIGHT_GRAY);
 
         // Required text to type (displayed prominently)
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC),
-                this.width / 2, this.height / 2 - 10, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 10, TextColors.LIGHT_GRAY);
 
         // Confirmation prompt
         drawCenteredTextWithShadow(matrices, this.font, 

@@ -127,12 +127,12 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         // Description line 1
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.description1"),
-                this.width / 2, this.height / 2 - 75, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 75, TextColors.LIGHT_GRAY);
 
         // Description line 2
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.description2"),
-                this.width / 2, this.height / 2 - 75 + lineHeight, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 75 + lineHeight, TextColors.LIGHT_GRAY);
 
         // Server fingerprint label
         drawCenteredTextWithShadow(matrices, this.font, 

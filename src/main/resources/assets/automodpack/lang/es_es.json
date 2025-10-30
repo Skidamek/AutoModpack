@@ -33,7 +33,7 @@
   "automodpack.error.logs": "Revisa los logs para más detalles.",
   "automodpack.fetch": "Obteniendo URLs directas desde Modrinth y CurseForge...",
   "automodpack.fetch.found": "Encontradas %s urls directas.",
-  "automodpack.validation.failed": "¡No coincide!",
+  "automodpack.validation.failed": "¡No coincide! Alguien puede estar suplantando al servidor.",
   "automodpack.retry": "Intentar de nuevo",
   "automodpack.select": "Seleccionar Modpack",
   "automodpack.yes": "Sí",
@@ -44,7 +44,7 @@
   "automodpack.validation.title": "Verificación de certificado",
   "automodpack.validation.fingerprint.label": "Huella del servidor:",
   "automodpack.validation.fingerprint.hint": "Pegar huella aquí...",
-  "automodpack.validation.instruction": "Obtener la huella con /automodpack host fingerprint",
+  "automodpack.validation.instruction": "Operadores: usen /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Pega la huella para verificar:",
   "automodpack.validation.checkbox": "He verificado que esta huella es correcta",
   "automodpack.validation.verify": "Verificar",
@@ -56,6 +56,6 @@
   "automodpack.validation.skip.confirm.text": "Escribe esto para confirmar:",
   "automodpack.validation.skip.confirm": "Omitir",
   "automodpack.validation.skip.failed": "Texto incorrecto",
-  "automodpack.validation.description1": "Esto previene ataques man-in-the-middle durante la descarga.",
-  "automodpack.validation.description2": "Copia la huella desde tu consola del servidor y pégala aquí."
+  "automodpack.validation.description1": "Previene ataques man-in-the-middle. Verificación única.",
+  "automodpack.validation.description2": "La huella es igual para todos. Pregunta a tu operador."
 }

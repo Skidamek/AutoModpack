@@ -33,7 +33,7 @@
   "automodpack.error.logs": "Vérifiez les logs pour plus de détails",
   "automodpack.fetch": "Récupération des url directes depuis Modrinth et CurseForge...",
   "automodpack.fetch.found": "%s url directes trouvées.",
-  "automodpack.validation.failed": "Pas de correspondance!",
+  "automodpack.validation.failed": "Pas de correspondance! Quelqu'un usurpe peut-être le serveur.",
   "automodpack.retry": "Réessayer",
   "automodpack.select": "Séléctionner le modpack",
   "automodpack.yes": "Oui",
@@ -44,7 +44,7 @@
   "automodpack.validation.title": "Vérification de certificat",
   "automodpack.validation.fingerprint.label": "Empreinte du serveur:",
   "automodpack.validation.fingerprint.hint": "Coller l'empreinte ici...",
-  "automodpack.validation.instruction": "Obtenir l'empreinte avec /automodpack host fingerprint",
+  "automodpack.validation.instruction": "Opérateurs: utilisez /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Coller l'empreinte pour vérifier:",
   "automodpack.validation.checkbox": "J'ai vérifié que cette empreinte est correcte",
   "automodpack.validation.verify": "Vérifier",
@@ -56,6 +56,6 @@
   "automodpack.validation.skip.confirm.text": "Tapez ceci pour confirmer:",
   "automodpack.validation.skip.confirm": "Ignorer",
   "automodpack.validation.skip.failed": "Mauvais texte",
-  "automodpack.validation.description1": "Ceci empêche les attaques man-in-the-middle pendant le téléchargement.",
-  "automodpack.validation.description2": "Copiez l'empreinte depuis votre console serveur et collez-la ici."
+  "automodpack.validation.description1": "Empêche les attaques man-in-the-middle. Vérification unique.",
+  "automodpack.validation.description2": "L'empreinte est la même pour tous. Demandez à votre opérateur."
 }

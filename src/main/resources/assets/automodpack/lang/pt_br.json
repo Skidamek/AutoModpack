@@ -33,7 +33,7 @@
   "automodpack.error.logs": "Verifique os logs para mais detalhes.",
   "automodpack.fetch": "Buscando URLs diretas do Modrinth e CurseForge...",
   "automodpack.fetch.found": "Encontradas %s URLs diretas.",
-  "automodpack.validation.failed": "Não corresponde!",
+  "automodpack.validation.failed": "Não corresponde! Alguém pode estar se passando pelo servidor.",
   "automodpack.retry": "Tentar novamente",
   "automodpack.select": "Selecionar Modpack",
   "automodpack.yes": "Sim",
@@ -44,7 +44,7 @@
   "automodpack.validation.title": "Verificação de certificado",
   "automodpack.validation.fingerprint.label": "Impressão digital do servidor:",
   "automodpack.validation.fingerprint.hint": "Colar impressão digital aqui...",
-  "automodpack.validation.instruction": "Obter a impressão com /automodpack host fingerprint",
+  "automodpack.validation.instruction": "Operadores: use /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Cole a impressão para verificar:",
   "automodpack.validation.checkbox": "Verifiquei que esta impressão está correta",
   "automodpack.validation.verify": "Verificar",
@@ -56,6 +56,6 @@
   "automodpack.validation.skip.confirm.text": "Digite isto para confirmar:",
   "automodpack.validation.skip.confirm": "Pular",
   "automodpack.validation.skip.failed": "Texto errado",
-  "automodpack.validation.description1": "Isso previne ataques man-in-the-middle durante o download.",
-  "automodpack.validation.description2": "Copie a impressão digital do console do servidor e cole aqui."
+  "automodpack.validation.description1": "Previne ataques man-in-the-middle. Verificação única.",
+  "automodpack.validation.description2": "A impressão é a mesma para todos. Pergunte ao seu operador."
 }

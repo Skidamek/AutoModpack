@@ -33,7 +33,7 @@
   "automodpack.error.logs": "Sprawdź więcej szczegółów w dziennikach.",
   "automodpack.fetch": "Pobieranie bezpośrednich adresów URL z Modrinth i CurseForge...",
   "automodpack.fetch.found": "Znaleziono %s bezpośrednich adresów URL.",
-  "automodpack.validation.failed": "Nie pasuje!",
+  "automodpack.validation.failed": "Nie pasuje! Ktoś może podszywać się pod serwer.",
   "automodpack.retry": "Spróbuj ponownie",
   "automodpack.select": "Wybierz modpack",
   "automodpack.yes": "Tak",
@@ -44,7 +44,7 @@
   "automodpack.validation.title": "Weryfikacja certyfikatu",
   "automodpack.validation.fingerprint.label": "Odcisk serwera:",
   "automodpack.validation.fingerprint.hint": "Wklej odcisk tutaj...",
-  "automodpack.validation.instruction": "Uzyskaj odcisk za pomocą /automodpack host fingerprint",
+  "automodpack.validation.instruction": "Operatorzy: użyj /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Wklej odcisk aby zweryfikować:",
   "automodpack.validation.checkbox": "Zweryfikowałem, że ten odcisk jest poprawny",
   "automodpack.validation.verify": "Zweryfikuj",
@@ -56,6 +56,6 @@
   "automodpack.validation.skip.confirm.text": "Wpisz to aby potwierdzić:",
   "automodpack.validation.skip.confirm": "Pomiń",
   "automodpack.validation.skip.failed": "Zły tekst",
-  "automodpack.validation.description1": "To zapobiega atakom man-in-the-middle podczas pobierania.",
-  "automodpack.validation.description2": "Skopiuj odcisk z konsoli serwera i wklej go tutaj."
+  "automodpack.validation.description1": "Zapobiega atakom man-in-the-middle. Jednorazowa weryfikacja.",
+  "automodpack.validation.description2": "Odcisk jest taki sam dla wszystkich. Zapytaj operatora serwera."
 }

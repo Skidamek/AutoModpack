@@ -33,7 +33,7 @@
   "automodpack.error.logs": "Подробности в логах.",
   "automodpack.fetch": "Получение прямых URL-адресов из Modrinth и CurseForge...",
   "automodpack.fetch.found": "Найдено %s прямых URL-адресов.",
-  "automodpack.validation.failed": "Не совпадает!",
+  "automodpack.validation.failed": "Не совпадает! Кто-то может выдавать себя за сервер.",
   "automodpack.retry": "Попробуйте снова",
   "automodpack.select": "Выберите Модпак",
   "automodpack.yes": "Да",
@@ -44,7 +44,7 @@
   "automodpack.validation.title": "Проверка сертификата",
   "automodpack.validation.fingerprint.label": "Отпечаток сервера:",
   "automodpack.validation.fingerprint.hint": "Вставить отпечаток здесь...",
-  "automodpack.validation.instruction": "Получить отпечаток с помощью /automodpack host fingerprint",
+  "automodpack.validation.instruction": "Операторы: используйте /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Вставьте отпечаток для проверки:",
   "automodpack.validation.checkbox": "Я проверил, что этот отпечаток правильный",
   "automodpack.validation.verify": "Проверить",
@@ -56,6 +56,6 @@
   "automodpack.validation.skip.confirm.text": "Введите это для подтверждения:",
   "automodpack.validation.skip.confirm": "Пропустить",
   "automodpack.validation.skip.failed": "Неправильный текст",
-  "automodpack.validation.description1": "Это предотвращает атаки man-in-the-middle при загрузке.",
-  "automodpack.validation.description2": "Скопируйте отпечаток из консоли сервера и вставьте его сюда."
+  "automodpack.validation.description1": "Предотвращает атаки man-in-the-middle. Одноразовая проверка.",
+  "automodpack.validation.description2": "Отпечаток одинаков для всех. Спросите у оператора сервера."
 }

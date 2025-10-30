@@ -33,7 +33,7 @@
   "automodpack.error.logs": "Weitere Details finden Sie in den Log.",
   "automodpack.fetch": "Hole direkte URLs von Modrinth und CurseForge...",
   "automodpack.fetch.found": "Es wurden %s direkte URLs gefunden.",
-  "automodpack.validation.failed": "Stimmt nicht überein!",
+  "automodpack.validation.failed": "Stimmt nicht! Jemand gibt sich möglicherweise als Server aus.",
   "automodpack.retry": "Erneut versuchen",
   "automodpack.select": "Modpack auswählen",
   "automodpack.yes": "Ja",
@@ -44,7 +44,7 @@
   "automodpack.validation.title": "Zertifikatsprüfung",
   "automodpack.validation.fingerprint.label": "Server-Fingerabdruck:",
   "automodpack.validation.fingerprint.hint": "Fingerabdruck hier einfügen...",
-  "automodpack.validation.instruction": "Fingerabdruck mit /automodpack host fingerprint abrufen",
+  "automodpack.validation.instruction": "Serverbetreiber: /automodpack host fingerprint verwenden",
   "automodpack.validation.confirm.text": "Fingerabdruck zum Verifizieren einfügen:",
   "automodpack.validation.checkbox": "Ich habe diesen Fingerabdruck überprüft",
   "automodpack.validation.verify": "Prüfen",
@@ -56,6 +56,6 @@
   "automodpack.validation.skip.confirm.text": "Dies eingeben zum Bestätigen:",
   "automodpack.validation.skip.confirm": "Überspringen",
   "automodpack.validation.skip.failed": "Falscher Text",
-  "automodpack.validation.description1": "Dies verhindert Man-in-the-Middle-Angriffe beim Download.",
-  "automodpack.validation.description2": "Kopieren Sie den Fingerabdruck aus Ihrer Serverkonsole und fügen Sie ihn hier ein."
+  "automodpack.validation.description1": "Verhindert Man-in-the-Middle-Angriffe. Einmalige Prüfung.",
+  "automodpack.validation.description2": "Fingerabdruck ist für alle gleich. Fragen Sie Ihren Serverbetreiber."
 }
