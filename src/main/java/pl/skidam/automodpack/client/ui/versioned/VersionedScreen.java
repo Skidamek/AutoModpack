@@ -12,6 +12,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 
+/*? if >= 1.21.9 {*/
+import net.minecraft.client.input.KeyEvent;
+/*?}*/
+
 /*? if >=1.21.6 {*/
 import net.minecraft.client.renderer.RenderPipelines;
 /*?} else if >=1.21.2 {*/
@@ -130,4 +134,27 @@ public class VersionedScreen extends Screen {
 		*//*?}*/
 	}
 	/*?}*/
+
+    /*? if >= 1.21.9 {*/
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        return onKeyPress(event.key(), event.scancode(), event.modifiers());
+    }
+
+    // use this method in code
+    public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
+        KeyEvent event = new KeyEvent(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
+    }
+    /*?} else {*/
+    /*@Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        return onKeyPress(keyCode, scanCode, modifiers);
+    }
+
+    // use this method in code
+    public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    *//*?}*/
 }

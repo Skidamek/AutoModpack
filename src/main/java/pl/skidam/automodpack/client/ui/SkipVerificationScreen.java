@@ -15,9 +15,7 @@ public class SkipVerificationScreen extends VersionedScreen {
     private final Screen verificationScreen;
     private final Screen parent;
     private final Runnable validatedCallback;
-    private final Runnable canceledCallback;
-    private boolean validated = false;
-    private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE, 
+    private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE,
             VersionedText.translatable("automodpack.validation.skip.failed"), 
             VersionedText.translatable("automodpack.retry"));
     private static final String REQUIRED_TEXT = "I accept the risk";
@@ -27,13 +25,11 @@ public class SkipVerificationScreen extends VersionedScreen {
     private Button confirmButton;
     private int ticksRemaining;
 
-    public SkipVerificationScreen(Screen verificationScreen, Screen parent, Runnable validatedCallback,
-                            Runnable canceledCallback) {
+    public SkipVerificationScreen(Screen verificationScreen, Screen parent, Runnable validatedCallback) {
         super(VersionedText.literal("SkipVerificationScreen"));
         this.verificationScreen = verificationScreen;
         this.parent = parent;
         this.validatedCallback = validatedCallback;
-        this.canceledCallback = canceledCallback;
         this.ticksRemaining = TIMER_SECONDS * 20; // 20 ticks per second
     }
 
@@ -95,7 +91,6 @@ public class SkipVerificationScreen extends VersionedScreen {
         
         if (input.equals(REQUIRED_TEXT)) {
             confirmButton.active = false;
-            this.validated = true;
             if (this.minecraft != null) {
                 this.minecraft.setScreen(parent);
             }
@@ -160,19 +155,18 @@ public class SkipVerificationScreen extends VersionedScreen {
         // Confirmation prompt
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.confirm.text"),
-                this.width / 2, this.height / 2 + 3, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 10 + lineHeight, TextColors.WHITE);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // Enter key (GLFW_KEY_ENTER = 257)
-        if (keyCode == 257) {
+    public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
             if (confirmButton.active) {
-                confirmButton.onPress();
+                confirmSkip();
                 return true;
             }
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.onKeyPress(keyCode, scanCode, modifiers);
     }
 
     @Override

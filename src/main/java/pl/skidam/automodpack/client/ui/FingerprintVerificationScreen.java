@@ -25,8 +25,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
     private Button verifyButton;
     private Button skipButton;
 
-    public FingerprintVerificationScreen(Screen parent, String serverFingerprint, Runnable validatedCallback,
-                            Runnable canceledCallback) {
+    public FingerprintVerificationScreen(Screen parent, String serverFingerprint, Runnable validatedCallback, Runnable canceledCallback) {
         super(VersionedText.literal("FingerprintVerificationScreen"));
         this.parent = parent;
         this.serverFingerprint = serverFingerprint;
@@ -72,8 +71,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                 VersionedText.translatable("automodpack.validation.skip"),
                 button -> {
                     assert this.minecraft != null;
-                    this.minecraft.setScreen(new SkipVerificationScreen(this, this.parent, 
-                            this.validatedCallback, this.canceledCallback));
+                    this.minecraft.setScreen(new SkipVerificationScreen(this, this.parent, this.validatedCallback));
                 });
 
         // Verify button (right - primary action, bold)
@@ -149,19 +147,18 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         // Confirmation text
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.confirm.text"),
-                this.width / 2, this.height / 2, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 15 + lineHeight, TextColors.WHITE);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // Enter key (GLFW_KEY_ENTER = 257)
-        if (keyCode == 257) {
+    public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
             if (verifyButton.active) {
-                verifyButton.onPress();
+                verifyFingerprint();
                 return true;
             }
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.onKeyPress(keyCode, scanCode, modifiers);
     }
 
     @Override

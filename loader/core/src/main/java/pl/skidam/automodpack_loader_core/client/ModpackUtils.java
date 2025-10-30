@@ -509,8 +509,7 @@ public class ModpackUtils {
             latch.countDown();
         };
         Runnable cancelCallback = latch::countDown;
-        new ScreenManager().validation(screen.get(), fingerprint, trustCallback,
-                cancelCallback);
+        new ScreenManager().validation(screen.get(), fingerprint, trustCallback, cancelCallback);
         try {
             latch.await();
         } catch (InterruptedException e) {
