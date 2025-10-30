@@ -164,6 +164,18 @@ public class SkipVerificationScreen extends VersionedScreen {
     }
 
     @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Enter key (GLFW_KEY_ENTER = 257)
+        if (keyCode == 257) {
+            if (confirmButton.active) {
+                confirmButton.onPress();
+                return true;
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
     public boolean shouldCloseOnEsc() {
         return false;
     }

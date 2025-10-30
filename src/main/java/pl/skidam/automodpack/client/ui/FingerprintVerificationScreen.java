@@ -153,6 +153,18 @@ public class FingerprintVerificationScreen extends VersionedScreen {
     }
 
     @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Enter key (GLFW_KEY_ENTER = 257)
+        if (keyCode == 257) {
+            if (verifyButton.active) {
+                verifyButton.onPress();
+                return true;
+            }
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
     public boolean shouldCloseOnEsc() {
         return false;
     }
