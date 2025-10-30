@@ -7,42 +7,33 @@
   "automodpack.restart.secDescription": "您要現在重新啟動嗎？",
   "automodpack.restart.confirm": "是，關閉遊戲",
   "automodpack.restart.cancel": "否，返回遊戲",
-
   "automodpack.delete": "刪除模組包",
   "automodpack.delete.description": "您將會失去已下載模組包中的所有內容。",
   "automodpack.delete.secDescription": "您需要重新啟動遊戲。",
   "automodpack.delete.thiDescription": "您確定要刪除它嗎？",
   "automodpack.delete.confirm": "刪除並退出",
   "automodpack.delete.cancel": "返回遊戲",
-
   "automodpack.danger": "此伺服器提供外部模組包！",
   "automodpack.danger.description": "您要下載它嗎？",
   "automodpack.danger.secDescription": "這可能有風險！如果您不信任伺服器擁有者，請勿下載！",
   "automodpack.danger.confirm": "下載",
   "automodpack.danger.cancel": "不要下載",
-
   "automodpack.changelog.view": "檢視更新日誌",
   "automodpack.changelog.noChanges": "找不到變更。",
   "automodpack.changelog.openPage": "開啟專案頁面",
-
   "automodpack.download.calculating": "計算中…",
   "automodpack.download.eta": "剩餘時間：%s",
   "automodpack.download.downloading": "下載中：",
   "automodpack.download.noFiles": "沒有要下載的檔案！",
-
   "automodpack.redownload": "重新下載模組包",
   "automodpack.redownload.description": "它可能會修復模組包的問題。",
-
   "automodpack.error": "發生錯誤！",
   "automodpack.error.files": "下載某些檔案失敗。",
   "automodpack.error.critical": "下載模組包時發生嚴重錯誤。",
   "automodpack.error.logs": "查看記錄檔以獲取更多詳細資訊。",
-
   "automodpack.fetch": "從 Modrinth 和 CurseForge 擷取直接網址…",
   "automodpack.fetch.found": "找到了 %s 個直接網址。",
-
   "automodpack.select": "選擇模組包",
-
   "automodpack.yes": "是",
   "automodpack.no": "否",
   "automodpack.cancel": "取消",

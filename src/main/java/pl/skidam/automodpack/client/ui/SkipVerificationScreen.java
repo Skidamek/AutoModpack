@@ -21,9 +21,11 @@ public class SkipVerificationScreen extends VersionedScreen {
             VersionedText.translatable("automodpack.validation.skip.failed"), 
             VersionedText.translatable("automodpack.retry"));
     private static final String REQUIRED_TEXT = "I accept the risk and will connect anyway.";
+    private static final int TIMER_SECONDS = 10;
     private EditBox textField;
     private Button backButton;
     private Button confirmButton;
+    private int ticksRemaining;
 
     public SkipVerificationScreen(Screen verificationScreen, Screen parent, Runnable validatedCallback,
                             Runnable canceledCallback) {
@@ -32,6 +34,7 @@ public class SkipVerificationScreen extends VersionedScreen {
         this.parent = parent;
         this.validatedCallback = validatedCallback;
         this.canceledCallback = canceledCallback;
+        this.ticksRemaining = TIMER_SECONDS * 20; // 20 ticks per second
     }
 
     @Override
@@ -64,10 +67,11 @@ public class SkipVerificationScreen extends VersionedScreen {
                 }
         );
 
-        // Confirm skip button
+        // Confirm skip button (initially disabled, unlocks after timer)
         this.confirmButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20,
                 VersionedText.translatable("automodpack.validation.skip.confirm").withStyle(ChatFormatting.BOLD),
                 button -> confirmSkip());
+        this.confirmButton.active = false;
     }
 
     private void confirmSkip() {
@@ -90,6 +94,21 @@ public class SkipVerificationScreen extends VersionedScreen {
                 *//*?}*/
             }
         }
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (ticksRemaining > 0) {
+            ticksRemaining--;
+            if (ticksRemaining == 0) {
+                confirmButton.active = true;
+            }
+        }
+    }
+
+    private int getRemainingSeconds() {
+        return (ticksRemaining + 19) / 20; // Round up
     }
 
     @Override
@@ -128,6 +147,14 @@ public class SkipVerificationScreen extends VersionedScreen {
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.confirm.text"),
                 this.width / 2, this.height / 2 + 3, TextColors.LIGHT_GRAY);
+
+        // Timer display
+        if (ticksRemaining > 0) {
+            int seconds = getRemainingSeconds();
+            drawCenteredTextWithShadow(matrices, this.font,
+                    VersionedText.literal("(" + seconds + "s)"),
+                    this.width / 2, this.height / 2 + 58, TextColors.LIGHT_GRAY);
+        }
     }
 
     @Override

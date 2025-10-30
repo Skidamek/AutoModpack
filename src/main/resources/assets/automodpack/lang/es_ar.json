@@ -41,7 +41,6 @@
   "automodpack.cancel": "Cancelar",
   "automodpack.back": "Atrás",
   "automodpack.wait": "Por favor, espere...",
-
   "automodpack.validation.title": "Security Verification Required",
   "automodpack.validation.description": "This server's certificate fingerprint needs to be verified before downloading.",
   "automodpack.validation.fingerprint.label": "Server Certificate Fingerprint:",
@@ -51,7 +50,6 @@
   "automodpack.validation.checkbox": "I have verified this fingerprint is correct",
   "automodpack.validation.verify": "Verify",
   "automodpack.validation.skip": "Skip Verification",
-
   "automodpack.validation.skip.title": "⚠ Security Warning ⚠",
   "automodpack.validation.skip.warning1": "You are about to skip certificate verification.",
   "automodpack.validation.skip.warning2": "This means you are connecting without verifying the server's identity.",

@@ -59,7 +59,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         this.textField.setHint(VersionedText.translatable("automodpack.validation.fingerprint.hint"));
         /*?}*/
 
-        // Back button
+        // Back button (left)
         this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 100, 20,
                 VersionedText.translatable("automodpack.back"),
                 button -> {
@@ -70,19 +70,19 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                 }
         );
 
-        // Verify button
-        this.verifyButton = buttonWidget(this.width / 2 - 50, this.height / 2 + 80, 100, 20,
-                VersionedText.translatable("automodpack.validation.verify"),
-                button -> verifyFingerprint());
-
-        // Skip verification button
-        this.skipButton = buttonWidget(this.width / 2 + 55, this.height / 2 + 80, 100, 20,
+        // Skip verification button (middle)
+        this.skipButton = buttonWidget(this.width / 2 - 50, this.height / 2 + 80, 100, 20,
                 VersionedText.translatable("automodpack.validation.skip"),
                 button -> {
                     assert this.minecraft != null;
                     this.minecraft.setScreen(new SkipVerificationScreen(this, this.parent, 
                             this.validatedCallback, this.canceledCallback));
                 });
+
+        // Verify button (right - primary action)
+        this.verifyButton = buttonWidget(this.width / 2 + 55, this.height / 2 + 80, 100, 20,
+                VersionedText.translatable("automodpack.validation.verify"),
+                button -> verifyFingerprint());
     }
 
     private void verifyFingerprint() {
@@ -132,10 +132,10 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                 VersionedText.translatable("automodpack.validation.fingerprint.label"),
                 this.width / 2, this.height / 2 - 55, TextColors.LIGHT_GRAY);
 
-        // Server fingerprint value (concatenated, bold)
+        // Server fingerprint value (concatenated, gray, not bold - intentionally harder to read)
         drawCenteredTextWithShadow(matrices, this.font, 
-                VersionedText.literal(getConcatenatedFingerprint()).withStyle(ChatFormatting.BOLD),
-                this.width / 2, this.height / 2 - 43, TextColors.WHITE);
+                VersionedText.literal(getConcatenatedFingerprint()),
+                this.width / 2, this.height / 2 - 43, TextColors.LIGHT_GRAY);
 
         // Instructions
         drawCenteredTextWithShadow(matrices, this.font, 
