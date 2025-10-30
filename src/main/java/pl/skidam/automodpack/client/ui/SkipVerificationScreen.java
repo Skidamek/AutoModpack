@@ -66,7 +66,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 
         // Confirm skip button
         this.confirmButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20,
-                VersionedText.translatable("automodpack.validation.skip.confirm").withStyle(ChatFormatting.BOLD, ChatFormatting.RED),
+                VersionedText.translatable("automodpack.validation.skip.confirm").withStyle(ChatFormatting.BOLD),
                 button -> confirmSkip());
     }
 
@@ -96,8 +96,8 @@ public class SkipVerificationScreen extends VersionedScreen {
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
         // Warning title
         drawCenteredTextWithShadow(matrices, this.font, 
-                VersionedText.translatable("automodpack.validation.skip.title").withStyle(ChatFormatting.BOLD, ChatFormatting.RED),
-                this.width / 2, this.height / 2 - 85, TextColors.WHITE);
+                VersionedText.translatable("automodpack.validation.skip.title").withStyle(ChatFormatting.BOLD),
+                this.width / 2, this.height / 2 - 85, TextColors.LIGHT_RED);
 
         // Warning message line 1
         drawCenteredTextWithShadow(matrices, this.font, 
@@ -121,7 +121,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 
         // Required text to type (displayed prominently)
         drawCenteredTextWithShadow(matrices, this.font, 
-                VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC, ChatFormatting.YELLOW),
+                VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC),
                 this.width / 2, this.height / 2 - 10, TextColors.WHITE);
 
         // Confirmation prompt
