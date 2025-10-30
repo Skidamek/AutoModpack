@@ -140,7 +140,7 @@ public class SkipVerificationScreen extends VersionedScreen {
         // Warning message line 1
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.warning1"),
-                this.width / 2, this.height / 2 - 65, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 - 65, TextColors.WHITE);
 
         // Warning message line 2
         drawCenteredTextWithShadow(matrices, this.font, 
@@ -150,17 +150,17 @@ public class SkipVerificationScreen extends VersionedScreen {
         // Instructions
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.instruction"),
-                this.width / 2, this.height / 2 - 35, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 - 35, TextColors.WHITE);
 
         // Required text to type (displayed prominently)
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC),
-                this.width / 2, this.height / 2 - 10, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 - 10, TextColors.WHITE);
 
         // Confirmation prompt
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.confirm.text"),
-                this.width / 2, this.height / 2 + 3, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 + 3, TextColors.WHITE);
     }
 
     @Override

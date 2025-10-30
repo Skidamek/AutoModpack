@@ -55,9 +55,6 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                 VersionedText.literal("")
         );
         this.textField.setMaxLength(64);
-        /*? if >= 1.19.4 {*/
-        this.textField.setHint(VersionedText.translatable("automodpack.validation.fingerprint.hint"));
-        /*?}*/
 
         // Back button (left)
         this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 100, 20,
@@ -127,17 +124,17 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         // Description line 1
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.description1"),
-                this.width / 2, this.height / 2 - 75, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 - 75, TextColors.WHITE);
 
         // Description line 2
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.description2"),
-                this.width / 2, this.height / 2 - 75 + lineHeight, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 - 75 + lineHeight, TextColors.WHITE);
 
         // Server fingerprint label
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.fingerprint.label"),
-                this.width / 2, this.height / 2 - 45, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 - 45, TextColors.WHITE);
 
         // Server fingerprint value (concatenated, gray, not bold - intentionally harder to read)
         drawCenteredTextWithShadow(matrices, this.font, 
@@ -147,12 +144,12 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         // Instructions
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.instruction"),
-                this.width / 2, this.height / 2 - 15, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 - 15, TextColors.WHITE);
 
         // Confirmation text
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.confirm.text"),
-                this.width / 2, this.height / 2, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2, TextColors.WHITE);
     }
 
     @Override
