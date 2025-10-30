@@ -157,13 +157,17 @@ public class CustomFileUtils {
         formattedFile =  formattedFile.replace(File.separator, "/");
 
         // Its probably useless, but just in case
-        if (!formattedFile.startsWith("/")) {
-            formattedFile = "/" + formattedFile;
-        }
+        formattedFile = prefixSlash(formattedFile);
 
         return formattedFile;
     }
 
+    public static String prefixSlash(String path) {
+        if (!path.isEmpty() && path.charAt(0) == '/') {
+            return path;
+        }
+        return "/" + path;
+    }
 
     public static void deleteDummyFiles(Path directory, Set<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
         if (directory == null || ignoreList == null) {
