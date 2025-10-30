@@ -34,7 +34,6 @@
   "automodpack.fetch": "Fetchin' direct links from Modrinth and CurseForge...",
   "automodpack.fetch.found": "Found %s direct links, landlubber.",
   "automodpack.validation.text": "Ye be connectin' to an unknown AutoModpack host, beware!",
-  "automodpack.validation.description": "Pray verify the server's certificate mark",
   "automodpack.validation.secDescription": "Request the mark from yer server administrator if ye have it not",
   "automodpack.validation.thiDescription": "This security check prevents meddlin' with connections whilst downloading",
   "automodpack.validation.run": "Verify",

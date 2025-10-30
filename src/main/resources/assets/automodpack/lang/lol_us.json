@@ -34,7 +34,6 @@
   "automodpack.fetch": "Fetchin' direct urlz from Modrinth and CurseForge... iz workin'!",
   "automodpack.fetch.found": "Found %s direkt urlz! So many!",
   "automodpack.validation.text": "U r konnektin to a AutoModpak host u dun kno! Iz it safe?",
-  "automodpack.validation.description": "Plz check teh server's sertyfikat fingrprint. Iz important!",
   "automodpack.validation.secDescription": "Ask teh server peeple for teh fingrprint if u dun haz it. Be brave!",
   "automodpack.validation.thiDescription": "Dis iz to stop bad peeple from messin' with ur konnektunz while u download teh modpak!",
   "automodpack.validation.run": "Verifee it nao!",

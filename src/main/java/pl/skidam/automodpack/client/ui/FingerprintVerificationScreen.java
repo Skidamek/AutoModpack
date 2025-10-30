@@ -50,8 +50,8 @@ public class FingerprintVerificationScreen extends VersionedScreen {
     public void initWidgets() {
         assert this.minecraft != null;
         
-        // Text field for fingerprint input
-        this.textField = new EditBox(this.font, this.width / 2 - 150, this.height / 2 + 15, 300, 20,
+        // Text field for fingerprint input (same size as skip screen)
+        this.textField = new EditBox(this.font, this.width / 2 - 170, this.height / 2 + 15, 340, 20,
                 VersionedText.literal("")
         );
         this.textField.setMaxLength(64);
@@ -79,9 +79,9 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                             this.validatedCallback, this.canceledCallback));
                 });
 
-        // Verify button (right - primary action)
+        // Verify button (right - primary action, bold)
         this.verifyButton = buttonWidget(this.width / 2 + 55, this.height / 2 + 80, 100, 20,
-                VersionedText.translatable("automodpack.validation.verify"),
+                VersionedText.translatable("automodpack.validation.verify").withStyle(ChatFormatting.BOLD),
                 button -> verifyFingerprint());
     }
 
@@ -117,25 +117,32 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+        int lineHeight = 12; // Consistent line spacing
+        
         // Title
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.title").withStyle(ChatFormatting.BOLD),
                 this.width / 2, this.height / 2 - 95, TextColors.WHITE);
 
-        // Description
+        // Description line 1
         drawCenteredTextWithShadow(matrices, this.font, 
-                VersionedText.translatable("automodpack.validation.description"),
+                VersionedText.translatable("automodpack.validation.description1"),
                 this.width / 2, this.height / 2 - 75, TextColors.WHITE);
+
+        // Description line 2
+        drawCenteredTextWithShadow(matrices, this.font, 
+                VersionedText.translatable("automodpack.validation.description2"),
+                this.width / 2, this.height / 2 - 75 + lineHeight, TextColors.WHITE);
 
         // Server fingerprint label
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.fingerprint.label"),
-                this.width / 2, this.height / 2 - 55, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 - 45, TextColors.LIGHT_GRAY);
 
         // Server fingerprint value (concatenated, gray, not bold - intentionally harder to read)
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.literal(getConcatenatedFingerprint()),
-                this.width / 2, this.height / 2 - 43, TextColors.LIGHT_GRAY);
+                this.width / 2, this.height / 2 - 45 + lineHeight, TextColors.LIGHT_GRAY);
 
         // Instructions
         drawCenteredTextWithShadow(matrices, this.font, 

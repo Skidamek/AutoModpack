@@ -34,7 +34,6 @@
   "automodpack.fetch": "Zciepujymy adresi URL z Modrinth i CurseForge...",
   "automodpack.fetch.found": "Znaleziono %s adresi URL.",
   "automodpack.validation.text": "Łónczysz sie z takym, co niy wiesz, co to za AutoModpack",
-  "automodpack.validation.description": "Sprawdź sztympel cyrtyfikatu serwera",
   "automodpack.validation.secDescription": "Poproś administratora serwera ó sztympel, jak go niy mosz",
   "automodpack.validation.thiDescription": "To je coby sie nikt niy wciepwoł, kej sie zciepujecie",
   "automodpack.validation.run": "Sprawdź",

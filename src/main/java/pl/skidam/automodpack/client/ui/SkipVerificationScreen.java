@@ -68,10 +68,26 @@ public class SkipVerificationScreen extends VersionedScreen {
         );
 
         // Confirm skip button (initially disabled, unlocks after timer)
+        // Button text will be updated dynamically in tick()
         this.confirmButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 50, 150, 20,
-                VersionedText.translatable("automodpack.validation.skip.confirm").withStyle(ChatFormatting.BOLD),
+                VersionedText.translatable("automodpack.validation.skip.confirm"),
                 button -> confirmSkip());
         this.confirmButton.active = false;
+        updateButtonText();
+    }
+    
+    private void updateButtonText() {
+        if (ticksRemaining > 0) {
+            int seconds = getRemainingSeconds();
+            this.confirmButton.setMessage(
+                VersionedText.translatable("automodpack.validation.skip.confirm")
+                    .append(VersionedText.literal(" (" + seconds + "s)"))
+            );
+        } else {
+            this.confirmButton.setMessage(
+                VersionedText.translatable("automodpack.validation.skip.confirm")
+            );
+        }
     }
 
     private void confirmSkip() {
@@ -101,6 +117,7 @@ public class SkipVerificationScreen extends VersionedScreen {
         super.tick();
         if (ticksRemaining > 0) {
             ticksRemaining--;
+            updateButtonText();
             if (ticksRemaining == 0) {
                 confirmButton.active = true;
             }
@@ -113,6 +130,8 @@ public class SkipVerificationScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+        int lineHeight = 12; // Consistent line spacing
+        
         // Warning title
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.title").withStyle(ChatFormatting.BOLD),
@@ -126,17 +145,12 @@ public class SkipVerificationScreen extends VersionedScreen {
         // Warning message line 2
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.warning2"),
-                this.width / 2, this.height / 2 - 55, TextColors.LIGHT_RED);
-
-        // Warning message line 3
-        drawCenteredTextWithShadow(matrices, this.font, 
-                VersionedText.translatable("automodpack.validation.skip.warning3"),
-                this.width / 2, this.height / 2 - 45, TextColors.LIGHT_RED);
+                this.width / 2, this.height / 2 - 65 + lineHeight, TextColors.LIGHT_RED);
 
         // Instructions
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.instruction"),
-                this.width / 2, this.height / 2 - 25, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 35, TextColors.WHITE);
 
         // Required text to type (displayed prominently)
         drawCenteredTextWithShadow(matrices, this.font, 
@@ -147,14 +161,6 @@ public class SkipVerificationScreen extends VersionedScreen {
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.confirm.text"),
                 this.width / 2, this.height / 2 + 3, TextColors.LIGHT_GRAY);
-
-        // Timer display
-        if (ticksRemaining > 0) {
-            int seconds = getRemainingSeconds();
-            drawCenteredTextWithShadow(matrices, this.font,
-                    VersionedText.literal("(" + seconds + "s)"),
-                    this.width / 2, this.height / 2 + 58, TextColors.LIGHT_GRAY);
-        }
     }
 
     @Override
