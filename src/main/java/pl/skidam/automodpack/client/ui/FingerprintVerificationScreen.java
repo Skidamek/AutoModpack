@@ -4,7 +4,6 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.screens.Screen;
@@ -88,7 +87,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                 button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
                 "link");
 
-        wikiButton.setTooltip(Tooltip.create(VersionedText.translatable("automodpack.learnmore")));
+        setTooltip(wikiButton, VersionedText.translatable("automodpack.learnmore"));
     }
 
     private void verifyFingerprint() {

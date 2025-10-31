@@ -23,6 +23,10 @@ import net.minecraft.client.renderer.RenderPipelines;
 import java.util.function.Function;
 *//*?}*/
 
+/*? if > 1.19.2 {*/
+import net.minecraft.client.gui.components.Tooltip;
+/*?}*/
+
 /*? if <1.20 {*/
 /*import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -110,6 +114,16 @@ public class VersionedScreen extends Screen {
     /*?} else {*/
     /*public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
         return new ImageButton(x, y, buttonWidth, buttonWidth, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), buttonWidth, buttonWidth, onPress);
+    }
+    *//*?}*/
+
+    /*? > 1.19.2 {*/
+    public static void setTooltip(Button button, Component tooltip) {
+        button.setTooltip(Tooltip.create(tooltip));
+    }
+    /*?} else {*/
+    /*public static void setTooltip(Button button, Component tooltip) {
+        button.setMessage(tooltip);
     }
     *//*?}*/
 
