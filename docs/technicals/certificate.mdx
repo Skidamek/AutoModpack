@@ -1,12 +1,9 @@
 ### How to verify the certificate fingerprint?
-To verify, simply **copy the fingerprint from your server console to the game.** This is a one-time verification, meaning you won't need to repeat it after the initial connection. This process helps prevent security threats like [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). The fingerprint is the same for everyone on your server and it never changes, its recommended to share it with players ahead of time.
+To verify, simply **copy the fingerprint from your server console to the game.** This is a one-time verification, meaning you won't need to repeat it after the initial connection. This process helps prevent security threats like [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). **The fingerprint is the same for everyone on your server and it never changes, its recommended to share it with players ahead of time.**
 
-If you can't find the fingerprint in the console, you can retrieve it at any time using the `/automodpack host fingerprint` [command](../commands/commands).
+If you can't find the fingerprint in the console, you can retrieve it at any time using the **`/automodpack host fingerprint` [command](../commands/commands)**.
 
-However please do not think of it like a password to the modpack, its not a password or any secret, its a public verifiable piece of server certificate, **anyone could download** your modpack without previous knowledge of such fingerprint e.g. by bypassing this check with `I AM INCREDIBLY STUPID`. (don't do it)
-<Callout>
-To provide modpack for only authorized/whitelisted players, use `validateSecrets` option in the [server config](../configuration/server-config) (its enabled by default).
-</Callout>
+However please do not think of it like a password to the modpack, its not a password or any secret, its a public verifiable piece of server certificate, **anyone could download** your modpack without previous knowledge of such fingerprint.
 
 If you don't want players to explicitly verify the certificate manually and you own a domain (required), you can provide your own CA signed certificate.
 
