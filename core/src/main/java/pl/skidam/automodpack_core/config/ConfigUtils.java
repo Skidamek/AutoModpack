@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
-import static pl.skidam.automodpack_core.utils.CustomFileUtils.prefixSlash;
 
 public class ConfigUtils {
 
@@ -55,5 +54,27 @@ public class ConfigUtils {
         serverConfig.syncedFiles = fixedSyncedFiles;
         serverConfig.allowEditsInFiles = fixedAllowEditsInFiles;
         serverConfig.forceCopyFilesToStandardLocation = fixedForceCopyFilesToStandardLocation;
+    }
+
+    public static String prefixSlash(String path) {
+        if (path == null) {
+            return null;
+        }
+        if (path.isEmpty()) {
+            return path;
+        }
+        if (path.startsWith("/!/")) {
+            return path.substring(1);
+        }
+        if (path.startsWith("/")) {
+            return path;
+        }
+        if (path.startsWith("!/")) {
+            return path;
+        }
+        if (path.charAt(0) == '!') {
+            return "!/" + path.substring(1);
+        }
+        return "/" + path;
     }
 }
