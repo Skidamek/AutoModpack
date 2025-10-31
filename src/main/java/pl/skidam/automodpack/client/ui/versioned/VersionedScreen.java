@@ -12,12 +12,20 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 
+/*? if >= 1.21.9 {*/
+import net.minecraft.client.input.KeyEvent;
+/*?}*/
+
 /*? if >=1.21.6 {*/
 import net.minecraft.client.renderer.RenderPipelines;
 /*?} else if >=1.21.2 {*/
 /*import net.minecraft.client.renderer.RenderType;
 import java.util.function.Function;
 *//*?}*/
+
+/*? if > 1.19.2 {*/
+import net.minecraft.client.gui.components.Tooltip;
+/*?}*/
 
 /*? if <1.20 {*/
 /*import com.mojang.blaze3d.systems.RenderSystem;
@@ -98,14 +106,24 @@ public class VersionedScreen extends Screen {
     /*?}*/
 
     /*? if >= 1.20.2 {*/
-    public static Button iconButtonWidget(int x, int y, int width, Button.OnPress onPress, String spritePath) {
-        Button button = SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), 8, 8).width(width).build();
+    public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
+        Button button = SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), spriteWidth, spriteWidth).size(buttonWidth, buttonWidth).build();
         button.setPosition(x, y);
         return button;
     }
     /*?} else {*/
-    /*public static Button iconButtonWidget(int x, int y, int width, Button.OnPress onPress, String spritePath) {
-        return new ImageButton(x, y, width, width, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), width, width, onPress);
+    /*public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
+        return new ImageButton(x, y, buttonWidth, buttonWidth, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), buttonWidth, buttonWidth, onPress);
+    }
+    *//*?}*/
+
+    /*? > 1.19.2 {*/
+    public static void setTooltip(Button button, Component tooltip) {
+        button.setTooltip(Tooltip.create(tooltip));
+    }
+    /*?} else {*/
+    /*public static void setTooltip(Button button, Component tooltip) {
+        button.setMessage(tooltip);
     }
     *//*?}*/
 
@@ -130,4 +148,27 @@ public class VersionedScreen extends Screen {
 		*//*?}*/
 	}
 	/*?}*/
+
+    /*? if >= 1.21.9 {*/
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        return onKeyPress(event.key(), event.scancode(), event.modifiers());
+    }
+
+    // use this method in code
+    public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
+        KeyEvent event = new KeyEvent(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
+    }
+    /*?} else {*/
+    /*@Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        return onKeyPress(keyCode, scanCode, modifiers);
+    }
+
+    // use this method in code
+    public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    *//*?}*/
 }

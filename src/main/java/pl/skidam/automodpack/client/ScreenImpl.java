@@ -115,10 +115,8 @@ public class ScreenImpl implements ScreenService {
 //            Screens.setScreen(new MenuScreen());
         }
 
-        public static void validation(Object parent, Object serverFingerprint, Object validatedCallback,
-                                      Object canceledCallback) {
-            Screens.setScreen(new ValidationScreen((Screen) parent, (String) serverFingerprint,
-                    (Runnable) validatedCallback, (Runnable) canceledCallback));
+        public static void validation(Object parent, Object serverFingerprint, Object validatedCallback, Object canceledCallback) {
+            Screens.setScreen(new FingerprintVerificationScreen((Screen) parent, (String) serverFingerprint, (Runnable) validatedCallback, (Runnable) canceledCallback));
         }
     }
 }

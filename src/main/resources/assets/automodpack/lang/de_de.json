@@ -1,23 +1,17 @@
 {
   "automodpack.restart.full": "Das Modpack wurde heruntergeladen!",
-  "automodpack.restart.update": "Es wurde ein Update für das Modpack heruntergeladen!",
-  "automodpack.restart.select": "Vom Server benötigtes Modpack wurde ausgewählt!",
-  "automodpack.restart.automodpack": "AutoModpack wurde auf die vom Server benötigte Version aktualisiert!",
-  "automodpack.restart.description": "Um den Vorgang abzuschließen, musst du das Spiel neu starten.",
+  "automodpack.restart.update": "Ein Update für das Modpack wurde heruntergeladen!",
+  "automodpack.restart.select": "Das vom Server benötigte Modpack wurde ausgewählt!",
+  "automodpack.restart.automodpack": "AutoModpack auf die vom Server benötigte Version aktualisiert!",
+  "automodpack.restart.description": "Um zu spielen, musst du das Spiel neu starten.",
   "automodpack.restart.secDescription": "Möchtest du jetzt neu starten?",
   "automodpack.restart.confirm": "Ja, Spiel schließen",
   "automodpack.restart.cancel": "Nein, zurück zum Spiel",
 
-  "automodpack.delete": "Modpack löschen",
-  "automodpack.delete.description": "Du verlierst alle Inhalte des heruntergeladenen Modpacks.",
-  "automodpack.delete.secDescription": "Du musst das Spiel neu starten.",
-  "automodpack.delete.thiDescription": "Bist du sicher, dass du es löschen möchtest?",
-  "automodpack.delete.confirm": "Löschen und beenden",
-  "automodpack.delete.cancel": "Zurück zum Spiel",
-
   "automodpack.danger": "Dieser Server bietet ein externes Modpack an!",
   "automodpack.danger.description": "Möchtest du es herunterladen?",
   "automodpack.danger.secDescription": "Es könnte riskant sein! Lade es NICHT herunter, wenn du den Server-Betreibern nicht vertraust!",
+  "automodpack.danger.thiDescription": "Bösartige Server können Mods mit Schadsoftware bereitstellen",
   "automodpack.danger.confirm": "Herunterladen",
   "automodpack.danger.cancel": "Nicht herunterladen",
 
@@ -25,28 +19,36 @@
   "automodpack.changelog.noChanges": "Keine Änderungen gefunden.",
   "automodpack.changelog.openPage": "Projektseite öffnen",
 
-  "automodpack.download.calculating": "Berechnung läuft...",
+  "automodpack.download.calculating": "Berechne...",
   "automodpack.download.eta": "Verbleibende Zeit: %s",
-  "automodpack.download.downloading": "Herunterladen:",
+  "automodpack.download.downloading": "Lade herunter:",
   "automodpack.download.noFiles": "Keine Dateien zum Herunterladen!",
 
   "automodpack.redownload": "Modpack erneut herunterladen",
-  "automodpack.redownload.description": "Das kann Probleme mit dem Modpack beheben.",
+  "automodpack.redownload.description": "Dies kann Probleme mit dem Modpack beheben.",
 
   "automodpack.error": "Etwas ist schiefgegangen!",
-  "automodpack.error.files": "Fehler beim Herunterladen einiger Dateien.",
+  "automodpack.error.files": "Einige Dateien konnten nicht heruntergeladen werden.",
   "automodpack.error.critical": "Kritischer Fehler beim Herunterladen des Modpacks.",
-  "automodpack.error.logs": "Weitere Details finden Sie in den Log.",
+  "automodpack.error.logs": "Weitere Details findest du in den Logs.",
 
   "automodpack.fetch": "Hole direkte URLs von Modrinth und CurseForge...",
-  "automodpack.fetch.found": "Es wurden %s direkte URLs gefunden.",
+  "automodpack.fetch.found": "%s direkte URLs gefunden.",
 
-  "automodpack.validation.text": "Du verbindest dich mit einem unbekannten AutoModpack-Host.",
-  "automodpack.validation.description": "Verifiziere bitte den Fingerabdruck des Serverzertifikats.",
-  "automodpack.validation.secDescription": "Bitte deinen Serveradministrator um den Fingerabdruck, wenn du ihn nicht hast.",
-  "automodpack.validation.thiDescription": "Diese Überprüfung verhindert, dass die Downloadverbindung manipuliert wird.",
-  "automodpack.validation.run": "Verifizieren",
-  "automodpack.validation.failed": "Verifikation fehlgeschlagen",
+  "automodpack.validation.title": "Zertifikatsverifizierung",
+  "automodpack.validation.description1": "Verhindert Man-in-the-Middle-Angriffe. Einmalige Prüfung.",
+  "automodpack.validation.description2": "Fingerabdruck ist für alle gleich. Frage deinen Serverbetreiber.",
+  "automodpack.validation.fingerprint.label": "Server-Fingerabdruck (gekürzt):",
+  "automodpack.validation.confirm.text": "Vollständigen Fingerabdruck zum Verifizieren einfügen:",
+  "automodpack.validation.verify": "Verifizieren",
+  "automodpack.validation.failed": "Stimmt nicht überein! Jemand gibt sich möglicherweise als Server aus.",
+
+  "automodpack.validation.skip.title": "Sicherheitsrisiko",
+  "automodpack.validation.skip.warning1": "Ohne Verifizierung können Angreifer bösartige Mods einschleusen.",
+  "automodpack.validation.skip.warning2": "Mods können auf deine Dateien zugreifen und beliebigen Code ausführen.",
+  "automodpack.validation.skip.instruction": "Überspringe dies nur, wenn du weißt, was du tust.",
+  "automodpack.validation.skip.confirm.text": "Gib die obige Phrase ein, um zu bestätigen:",
+  "automodpack.validation.skip.failed": "Falscher Text",
 
   "automodpack.retry": "Erneut versuchen",
   "automodpack.select": "Modpack auswählen",
@@ -54,5 +56,7 @@
   "automodpack.no": "Nein",
   "automodpack.cancel": "Abbrechen",
   "automodpack.back": "Zurück",
-  "automodpack.wait": "Bitte warten..."
+  "automodpack.wait": "Bitte warten...",
+  "automodpack.skip": "Überspringen",
+  "automodpack.learnmore": "Mehr erfahren"
 }

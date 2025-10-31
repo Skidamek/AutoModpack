@@ -1,27 +1,21 @@
 {
   "automodpack.restart.full": "O Modpack foi descarregado!",
-  "automodpack.restart.update": "Uma atualização foi descarregada para o Modpack!",
+  "automodpack.restart.update": "Foi descarregada uma atualização para o Modpack!",
   "automodpack.restart.select": "O Modpack requerido pelo servidor foi selecionado!",
-  "automodpack.restart.automodpack": "Versão do AutoModpack atualizada para a requerida pelo servidor!",
+  "automodpack.restart.automodpack": "Versão atualizada do mod AutoModpack para a requerida pelo servidor!",
   "automodpack.restart.description": "Para jogar, tens de reiniciar o jogo.",
   "automodpack.restart.secDescription": "Queres reiniciar agora?",
   "automodpack.restart.confirm": "Sim, fechar o jogo",
   "automodpack.restart.cancel": "Não, voltar ao jogo",
 
-  "automodpack.delete": "Eliminar Modpack",
-  "automodpack.delete.description": "Vais perder todos os conteúdos do modpack descarregado.",
-  "automodpack.delete.secDescription": "Terás de reiniciar o jogo.",
-  "automodpack.delete.thiDescription": "Tens a certeza de que queres eliminá-lo?",
-  "automodpack.delete.confirm": "Eliminar e sair",
-  "automodpack.delete.cancel": "Voltar ao jogo",
-
   "automodpack.danger": "Este servidor fornece um modpack externo!",
   "automodpack.danger.description": "Queres descarregá-lo?",
   "automodpack.danger.secDescription": "Pode ser arriscado! NÃO descarregues se não confiares nos administradores do servidor!",
+  "automodpack.danger.thiDescription": "Servidores maliciosos podem fornecer mods com malware",
   "automodpack.danger.confirm": "Descarregar",
   "automodpack.danger.cancel": "Não descarregar",
 
-  "automodpack.changelog.view": "Ver alterações",
+  "automodpack.changelog.view": "Ver changelogs",
   "automodpack.changelog.noChanges": "Nenhuma alteração encontrada.",
   "automodpack.changelog.openPage": "Abrir página do projeto",
 
@@ -41,12 +35,20 @@
   "automodpack.fetch": "A obter URLs diretas do Modrinth e CurseForge...",
   "automodpack.fetch.found": "Foram encontradas %s URLs diretas.",
 
-  "automodpack.validation.text": "Estás a ligar-te a um host AutoModpack desconhecido",
-  "automodpack.validation.description": "Por favor, verifica a impressão digital do certificado do servidor",
-  "automodpack.validation.secDescription": "Solicita a impressão digital ao administrador do servidor, se não a tiveres",
-  "automodpack.validation.thiDescription": "Esta medida de segurança evita a manipulação da conexão durante o download",
-  "automodpack.validation.run": "Verificar",
-  "automodpack.validation.failed": "Falha na verificação",
+  "automodpack.validation.title": "Verificação de Certificado",
+  "automodpack.validation.description1": "Protege-te de ataques man-in-the-middle.",
+  "automodpack.validation.description2": "É uma verificação única. Pergunta ao teu operador de servidor.",
+  "automodpack.validation.fingerprint.label": "Impressão digital do servidor (abreviada):",
+  "automodpack.validation.confirm.text": "Cola a impressão completa para verificar:",
+  "automodpack.validation.verify": "Verificar",
+  "automodpack.validation.failed": "Incompatibilidade! Alguém pode estar a fazer-se passar pelo servidor.",
+
+  "automodpack.validation.skip.title": "Risco de Segurança",
+  "automodpack.validation.skip.warning1": "Sem verificação, atacantes podem injetar mods maliciosos.",
+  "automodpack.validation.skip.warning2": "Mods podem aceder aos teus ficheiros e executar código arbitrário.",
+  "automodpack.validation.skip.instruction": "Ignora apenas se souberes o que estás a fazer.",
+  "automodpack.validation.skip.confirm.text": "Escreve a frase abaixo para confirmar:",
+  "automodpack.validation.skip.failed": "Texto errado",
 
   "automodpack.retry": "Tentar novamente",
   "automodpack.select": "Selecionar Modpack",
@@ -54,5 +56,7 @@
   "automodpack.no": "Não",
   "automodpack.cancel": "Cancelar",
   "automodpack.back": "Voltar",
-  "automodpack.wait": "Por favor, aguarda..."
+  "automodpack.wait": "Por favor, aguarda...",
+  "automodpack.skip": "Ignorar",
+  "automodpack.learnmore": "Saber mais"
 }
