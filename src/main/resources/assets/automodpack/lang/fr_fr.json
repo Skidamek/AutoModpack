@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "%s URLs directes trouvées.",
 
   "automodpack.validation.title": "Vérification de Certificat",
-  "automodpack.validation.description1": "Empêche les attaques man-in-the-middle. Vérification unique.",
-  "automodpack.validation.description2": "L'empreinte est identique pour tout le monde. Demandez à votre opérateur de serveur.",
+  "automodpack.validation.description1": "Vous protège des attaques man-in-the-middle.",
+  "automodpack.validation.description2": "C'est une vérification unique. Demandez à votre opérateur de serveur.",
   "automodpack.validation.fingerprint.label": "Empreinte du serveur (raccourcie) :",
-  "automodpack.validation.instruction": "Opérateurs de serveur : utilisez /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Collez l'empreinte complète pour vérifier :",
   "automodpack.validation.verify": "Vérifier",
-  "automodpack.validation.skip": "Ignorer",
   "automodpack.validation.failed": "Incompatibilité ! Quelqu'un pourrait usurper l'identité du serveur.",
 
   "automodpack.validation.skip.title": "Risque de Sécurité",
   "automodpack.validation.skip.warning1": "Sans vérification, les attaquants peuvent injecter des mods malveillants.",
   "automodpack.validation.skip.warning2": "Les mods peuvent accéder à vos fichiers et exécuter du code arbitraire.",
   "automodpack.validation.skip.instruction": "N'ignorez que si vous savez ce que vous faites.",
-  "automodpack.validation.skip.confirm.text": "Tapez la phrase ci-dessus pour confirmer :",
-  "automodpack.validation.skip.confirm": "Ignorer",
+  "automodpack.validation.skip.confirm.text": "Tapez la phrase ci-dessous pour confirmer :",
   "automodpack.validation.skip.failed": "Texte incorrect",
 
   "automodpack.retry": "Réessayer",
@@ -59,5 +56,7 @@
   "automodpack.no": "Non",
   "automodpack.cancel": "Annuler",
   "automodpack.back": "Retour",
-  "automodpack.wait": "Veuillez patienter..."
+  "automodpack.wait": "Veuillez patienter...",
+  "automodpack.skip": "Ignorer",
+  "automodpack.learnmore": "En savoir plus"
 }

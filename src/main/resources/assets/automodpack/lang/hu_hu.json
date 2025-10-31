@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "%s közvetlen URL találva.",
 
   "automodpack.validation.title": "Tanúsítvány Ellenőrzés",
-  "automodpack.validation.description1": "Megakadályozza a man-in-the-middle támadásokat. Egyszeri ellenőrzés.",
-  "automodpack.validation.description2": "Az ujjlenyomat mindenki számára azonos. Kérdezd meg a szerver kezelőjét.",
+  "automodpack.validation.description1": "Megvéd téged a man-in-the-middle támadásoktól.",
+  "automodpack.validation.description2": "Ez egy egyszeri ellenőrzés. Kérdezd meg a szerver kezelőjét.",
   "automodpack.validation.fingerprint.label": "Szerver ujjlenyomat (rövidített):",
-  "automodpack.validation.instruction": "Szerver kezelők: használjátok a /automodpack host fingerprint parancsot",
   "automodpack.validation.confirm.text": "Illeszd be a teljes ujjlenyomatot az ellenőrzéshez:",
   "automodpack.validation.verify": "Ellenőrzés",
-  "automodpack.validation.skip": "Kihagyás",
   "automodpack.validation.failed": "Eltérés! Valaki megszemélyesítheti a szervert.",
 
   "automodpack.validation.skip.title": "Biztonsági Kockázat",
   "automodpack.validation.skip.warning1": "Ellenőrzés nélkül a támadók rosszindulatú modokat injektálhatnak.",
   "automodpack.validation.skip.warning2": "A modok hozzáférhetnek a fájljaidhoz és tetszőleges kódot futtathatnak.",
   "automodpack.validation.skip.instruction": "Csak akkor hagyd ki, ha tudod, mit csinálsz.",
-  "automodpack.validation.skip.confirm.text": "Írd be a fenti kifejezést a megerősítéshez:",
-  "automodpack.validation.skip.confirm": "Kihagyás",
+  "automodpack.validation.skip.confirm.text": "Írd be az alábbi kifejezést a megerősítéshez:",
   "automodpack.validation.skip.failed": "Rossz szöveg",
 
   "automodpack.retry": "Próbáld újra",
@@ -59,5 +56,7 @@
   "automodpack.no": "Nem",
   "automodpack.cancel": "Mégsem",
   "automodpack.back": "Vissza",
-  "automodpack.wait": "Kérlek várj..."
+  "automodpack.wait": "Kérlek várj...",
+  "automodpack.skip": "Kihagyás",
+  "automodpack.learnmore": "Tudj meg többet"
 }

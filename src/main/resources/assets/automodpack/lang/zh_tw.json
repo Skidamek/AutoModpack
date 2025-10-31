@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "找到了 %s 個直接網址。",
 
   "automodpack.validation.title": "憑證驗證",
-  "automodpack.validation.description1": "防止中間人攻擊。一次性檢查。",
-  "automodpack.validation.description2": "指紋對所有人都相同。詢問您的伺服器運營者。",
+  "automodpack.validation.description1": "保護您免受中間人攻擊。",
+  "automodpack.validation.description2": "這是一次性檢查。詢問您的伺服器運營者。",
   "automodpack.validation.fingerprint.label": "伺服器指紋（簡短）：",
-  "automodpack.validation.instruction": "伺服器運營者：使用 /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "貼上完整指紋以驗證：",
   "automodpack.validation.verify": "驗證",
-  "automodpack.validation.skip": "略過",
   "automodpack.validation.failed": "不相符！有人可能正在冒充伺服器。",
 
   "automodpack.validation.skip.title": "安全風險",
   "automodpack.validation.skip.warning1": "未驗證時，攻擊者可注入惡意模組。",
   "automodpack.validation.skip.warning2": "模組可存取您的檔案並執行任意程式碼。",
   "automodpack.validation.skip.instruction": "僅在您知道自己在做什麼時略過。",
-  "automodpack.validation.skip.confirm.text": "輸入上述短語以確認：",
-  "automodpack.validation.skip.confirm": "略過",
+  "automodpack.validation.skip.confirm.text": "輸入下述短語以確認：",
   "automodpack.validation.skip.failed": "文字錯誤",
 
   "automodpack.retry": "重試",
@@ -59,5 +56,7 @@
   "automodpack.no": "否",
   "automodpack.cancel": "取消",
   "automodpack.back": "返回",
-  "automodpack.wait": "請稍候…"
+  "automodpack.wait": "請稍候…",
+  "automodpack.skip": "略過",
+  "automodpack.learnmore": "瞭解更多"
 }

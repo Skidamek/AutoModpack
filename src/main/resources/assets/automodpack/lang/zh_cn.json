@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "找到%s个直接URL。",
 
   "automodpack.validation.title": "证书验证",
-  "automodpack.validation.description1": "防止中间人攻击。一次性检查。",
-  "automodpack.validation.description2": "指纹对所有人都相同。询问您的服务器运营者。",
+  "automodpack.validation.description1": "保护您免受中间人攻击。",
+  "automodpack.validation.description2": "这是一次性检查。询问您的服务器运营者。",
   "automodpack.validation.fingerprint.label": "服务器指纹（简短）：",
-  "automodpack.validation.instruction": "服务器运营者：使用 /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "粘贴完整指纹以验证：",
   "automodpack.validation.verify": "验证",
-  "automodpack.validation.skip": "跳过",
   "automodpack.validation.failed": "不匹配！有人可能在冒充服务器。",
 
   "automodpack.validation.skip.title": "安全风险",
   "automodpack.validation.skip.warning1": "未验证时，攻击者可注入恶意模组。",
   "automodpack.validation.skip.warning2": "模组可访问您的文件并执行任意代码。",
   "automodpack.validation.skip.instruction": "仅在您知道自己在做什么时跳过。",
-  "automodpack.validation.skip.confirm.text": "输入上述短语以确认：",
-  "automodpack.validation.skip.confirm": "跳过",
+  "automodpack.validation.skip.confirm.text": "输入下述短语以确认：",
   "automodpack.validation.skip.failed": "文本错误",
 
   "automodpack.retry": "重试",
@@ -59,5 +56,7 @@
   "automodpack.no": "否",
   "automodpack.cancel": "取消",
   "automodpack.back": "返回",
-  "automodpack.wait": "请稍候..."
+  "automodpack.wait": "请稍候...",
+  "automodpack.skip": "跳过",
+  "automodpack.learnmore": "了解更多"
 }

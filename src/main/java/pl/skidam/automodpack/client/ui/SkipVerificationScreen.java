@@ -4,6 +4,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.screens.Screen;
@@ -51,13 +52,11 @@ public class SkipVerificationScreen extends VersionedScreen {
     public void initWidgets() {
         assert this.minecraft != null;
         
-        // Text field for risk acceptance
         this.textField = new EditBox(this.font, this.width / 2 - 170, this.height / 2 + 15, 340, 20,
                 VersionedText.literal("")
         );
         this.textField.setMaxLength(128);
 
-        // Back button (returns to fingerprint verification screen) - same Y position as verification screen
         this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 150, 20,
                 VersionedText.translatable("automodpack.back"),
                 button -> {
@@ -66,31 +65,25 @@ public class SkipVerificationScreen extends VersionedScreen {
                 }
         );
 
-        // Confirm skip button (initially disabled, unlocks after timer) - same Y position as verification screen
-        // Button text will be updated dynamically in tick()
         this.confirmButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 80, 150, 20,
-                VersionedText.translatable("automodpack.validation.skip.confirm"),
+                VersionedText.translatable("automodpack.skip"),
                 button -> confirmSkip());
         this.confirmButton.active = false;
         updateButtonText();
 
-        // Wiki button (icon button aligned to the right of text field)
-        this.wikiButton = iconButtonWidget(this.width / 2 + 150, this.height / 2 + 15, 20,
-                button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/installation/certificate-verification"),
-                "icon/link");
+        this.wikiButton = iconButtonWidget(this.width / 2 + 22 + 150, this.height / 2 + 15, 20, 16,
+                button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
+                "link");
+
+        wikiButton.setTooltip(Tooltip.create(VersionedText.translatable("automodpack.learnmore")));
     }
     
     private void updateButtonText() {
         if (ticksRemaining > 0) {
             int seconds = getRemainingSeconds();
-            this.confirmButton.setMessage(
-                VersionedText.translatable("automodpack.validation.skip.confirm")
-                    .append(VersionedText.literal(" (" + seconds + "s)"))
-            );
+            this.confirmButton.setMessage(VersionedText.translatable("automodpack.skip").append(VersionedText.literal(" (" + seconds + "s)")));
         } else {
-            this.confirmButton.setMessage(
-                VersionedText.translatable("automodpack.validation.skip.confirm")
-            );
+            this.confirmButton.setMessage(VersionedText.translatable("automodpack.skip"));
         }
     }
 
@@ -161,14 +154,14 @@ public class SkipVerificationScreen extends VersionedScreen {
                 this.width / 2, this.height / 2 - 10, TextColors.WHITE);
 
         // Required text to type (displayed prominently)
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredTextWithShadow(matrices, this.font,
                 VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC),
                 this.width / 2, this.height / 2 - 10 + lineHeight, TextColors.WHITE);
     }
 
     @Override
     public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
+        if (textField.isFocused() && keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
             if (confirmButton.active) {
                 confirmSkip();
                 return true;

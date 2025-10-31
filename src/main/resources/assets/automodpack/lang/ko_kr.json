@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "%s개의 직접 URL을 찾았습니다.",
 
   "automodpack.validation.title": "인증서 검증",
-  "automodpack.validation.description1": "중간자 공격을 방지합니다. 일회성 검사입니다.",
-  "automodpack.validation.description2": "지문은 모두에게 동일합니다. 서버 운영자에게 문의하세요.",
+  "automodpack.validation.description1": "중간자 공격으로부터 당신을 보호합니다.",
+  "automodpack.validation.description2": "일회성 검사입니다. 서버 운영자에게 문의하세요.",
   "automodpack.validation.fingerprint.label": "서버 지문 (축약됨):",
-  "automodpack.validation.instruction": "서버 운영자: /automodpack host fingerprint를 사용하세요",
   "automodpack.validation.confirm.text": "확인하려면 전체 지문을 붙여넣으세요:",
   "automodpack.validation.verify": "검증",
-  "automodpack.validation.skip": "건너뛰기",
   "automodpack.validation.failed": "불일치! 누군가 서버를 사칭하고 있을 수 있습니다.",
 
   "automodpack.validation.skip.title": "보안 위험",
   "automodpack.validation.skip.warning1": "검증하지 않으면 공격자가 악성 모드를 주입할 수 있습니다.",
   "automodpack.validation.skip.warning2": "모드는 파일에 접근하고 임의의 코드를 실행할 수 있습니다.",
   "automodpack.validation.skip.instruction": "무엇을 하는지 아는 경우에만 건너뛰세요.",
-  "automodpack.validation.skip.confirm.text": "확인하려면 위의 문구를 입력하세요:",
-  "automodpack.validation.skip.confirm": "건너뛰기",
+  "automodpack.validation.skip.confirm.text": "확인하려면 아래 문구를 입력하세요:",
   "automodpack.validation.skip.failed": "잘못된 텍스트",
 
   "automodpack.retry": "다시 시도",
@@ -59,5 +56,7 @@
   "automodpack.no": "아니오",
   "automodpack.cancel": "취소",
   "automodpack.back": "뒤로",
-  "automodpack.wait": "잠시만 기다려 주세요..."
+  "automodpack.wait": "잠시만 기다려 주세요...",
+  "automodpack.skip": "건너뛰기",
+  "automodpack.learnmore": "더 알아보기"
 }

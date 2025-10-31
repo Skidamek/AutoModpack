@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "Znaleziono %s adresi URL.",
 
   "automodpack.validation.title": "Weryfikacyjo Certyfikatu",
-  "automodpack.validation.description1": "Chrōnio przed atakóma man-in-the-middle. Jednorazowo sprawdzynie.",
-  "automodpack.validation.description2": "Sztympel je taki som dlo wszyjskich. Spytej sie admina serwera.",
+  "automodpack.validation.description1": "Chrōnio cie před atakóma man-in-the-middle.",
+  "automodpack.validation.description2": "To je jednorazowo sprawdzynie. Spytej sie admina serwera.",
   "automodpack.validation.fingerprint.label": "Sztympel serwera (skrócóny):",
-  "automodpack.validation.instruction": "Administratorzi serwera: używejcie /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Wklej cołki sztympel, coby zweryfikować:",
   "automodpack.validation.verify": "Zweryfikuj",
-  "automodpack.validation.skip": "Ómiń",
   "automodpack.validation.failed": "Niy pasuje! Chtos może udować serwer.",
 
   "automodpack.validation.skip.title": "Ryzyko Bezpieczyństwa",
   "automodpack.validation.skip.warning1": "Bez weryfikacyje atakujóńcy mogóm wciepnóńć złe mody.",
   "automodpack.validation.skip.warning2": "Mody mogóm mieć dostynp do twoich zbiorów i gynyrować kod.",
   "automodpack.validation.skip.instruction": "Ómiń, ino jak wiysz, co robisz.",
-  "automodpack.validation.skip.confirm.text": "Wpisz frazã ze wiyrchu, coby potwierdzić:",
-  "automodpack.validation.skip.confirm": "Ómiń",
+  "automodpack.validation.skip.confirm.text": "Wpisz frazã ze spodku, coby potwierdzić:",
   "automodpack.validation.skip.failed": "Zły tekst",
 
   "automodpack.retry": "Spróbuj jeszcze roz",
@@ -59,5 +56,7 @@
   "automodpack.no": "Niy",
   "automodpack.cancel": "Ódwołej",
   "automodpack.back": "Wróć",
-  "automodpack.wait": "Proszym poczekać..."
+  "automodpack.wait": "Proszym poczekać...",
+  "automodpack.skip": "Ómiń",
+  "automodpack.learnmore": "Dowiydzcie sie wiyncyj"
 }

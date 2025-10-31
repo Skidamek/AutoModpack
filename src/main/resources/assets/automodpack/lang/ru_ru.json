@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "Найдено %s прямых URL-адресов.",
 
   "automodpack.validation.title": "Проверка Сертификата",
-  "automodpack.validation.description1": "Предотвращает атаки man-in-the-middle. Однократная проверка.",
-  "automodpack.validation.description2": "Отпечаток одинаков для всех. Спросите у оператора сервера.",
+  "automodpack.validation.description1": "Защищает вас от атак man-in-the-middle.",
+  "automodpack.validation.description2": "Это однократная проверка. Спросите у оператора сервера.",
   "automodpack.validation.fingerprint.label": "Отпечаток сервера (сокращённый):",
-  "automodpack.validation.instruction": "Операторы сервера: используйте /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Вставьте полный отпечаток для проверки:",
   "automodpack.validation.verify": "Проверить",
-  "automodpack.validation.skip": "Пропустить",
   "automodpack.validation.failed": "Несовпадение! Кто-то может выдавать себя за сервер.",
 
   "automodpack.validation.skip.title": "Риск Безопасности",
   "automodpack.validation.skip.warning1": "Без проверки атакующие могут внедрить вредоносные моды.",
   "automodpack.validation.skip.warning2": "Моды могут получить доступ к вашим файлам и выполнить произвольный код.",
   "automodpack.validation.skip.instruction": "Пропускайте только если знаете, что делаете.",
-  "automodpack.validation.skip.confirm.text": "Введите фразу выше для подтверждения:",
-  "automodpack.validation.skip.confirm": "Пропустить",
+  "automodpack.validation.skip.confirm.text": "Введите фразу ниже для подтверждения:",
   "automodpack.validation.skip.failed": "Неправильный текст",
 
   "automodpack.retry": "Попробовать снова",
@@ -59,5 +56,7 @@
   "automodpack.no": "Нет",
   "automodpack.cancel": "Отмена",
   "automodpack.back": "Назад",
-  "automodpack.wait": "Пожалуйста, подождите..."
+  "automodpack.wait": "Пожалуйста, подождите...",
+  "automodpack.skip": "Пропустить",
+  "automodpack.learnmore": "Узнать больше"
 }

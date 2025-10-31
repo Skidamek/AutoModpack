@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "Знайдено %s прямих URL-адрес.",
 
   "automodpack.validation.title": "Перевірка Сертифіката",
-  "automodpack.validation.description1": "Запобігає атакам типу man-in-the-middle. Одноразова перевірка.",
-  "automodpack.validation.description2": "Відбиток однаковий для всіх. Запитайте у оператора сервера.",
+  "automodpack.validation.description1": "Захищає вас від атак типу man-in-the-middle.",
+  "automodpack.validation.description2": "Це одноразова перевірка. Запитайте у оператора сервера.",
   "automodpack.validation.fingerprint.label": "Відбиток сервера (скорочений):",
-  "automodpack.validation.instruction": "Оператори сервера: використовуйте /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Вставте повний відбиток для перевірки:",
   "automodpack.validation.verify": "Перевірити",
-  "automodpack.validation.skip": "Пропустити",
   "automodpack.validation.failed": "Невідповідність! Хтось може видавати себе за сервер.",
 
   "automodpack.validation.skip.title": "Ризик Безпеки",
   "automodpack.validation.skip.warning1": "Без перевірки зловмисники можуть впровадити шкідливі моди.",
   "automodpack.validation.skip.warning2": "Моди можуть отримати доступ до ваших файлів і виконати довільний код.",
   "automodpack.validation.skip.instruction": "Пропускайте лише якщо знаєте, що робите.",
-  "automodpack.validation.skip.confirm.text": "Введіть фразу вище для підтвердження:",
-  "automodpack.validation.skip.confirm": "Пропустити",
+  "automodpack.validation.skip.confirm.text": "Введіть фразу нижче для підтвердження:",
   "automodpack.validation.skip.failed": "Неправильний текст",
 
   "automodpack.retry": "Спробувати знову",
@@ -59,5 +56,7 @@
   "automodpack.no": "Ні",
   "automodpack.cancel": "Скасувати",
   "automodpack.back": "Назад",
-  "automodpack.wait": "Будь ласка, зачекайте..."
+  "automodpack.wait": "Будь ласка, зачекайте...",
+  "automodpack.skip": "Пропустити",
+  "automodpack.learnmore": "Дізнатися більше"
 }

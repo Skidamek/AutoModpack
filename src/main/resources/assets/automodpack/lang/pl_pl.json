@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "Znaleziono %s bezpośrednich adresów URL.",
 
   "automodpack.validation.title": "Weryfikacja Certyfikatu",
-  "automodpack.validation.description1": "Zapobiega atakom man-in-the-middle. Jednorazowa weryfikacja.",
-  "automodpack.validation.description2": "Odcisk jest taki sam dla wszystkich. Zapytaj operatora serwera.",
+  "automodpack.validation.description1": "Zabezpiecza cię przed atakami man-in-the-middle.",
+  "automodpack.validation.description2": "To jednorazowa weryfikacja. Zapytaj operatora serwera.",
   "automodpack.validation.fingerprint.label": "Odcisk serwera (skrócony):",
-  "automodpack.validation.instruction": "Operatorzy serwera: użyjcie /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Wklej pełny odcisk, aby zweryfikować:",
   "automodpack.validation.verify": "Zweryfikuj",
-  "automodpack.validation.skip": "Pomiń",
   "automodpack.validation.failed": "Niezgodność! Ktoś może podszywać się pod serwer.",
 
   "automodpack.validation.skip.title": "Ryzyko Bezpieczeństwa",
   "automodpack.validation.skip.warning1": "Bez weryfikacji atakujący mogą wstrzyknąć złośliwe mody.",
   "automodpack.validation.skip.warning2": "Mody mogą uzyskać dostęp do twoich plików i wykonać dowolny kod.",
   "automodpack.validation.skip.instruction": "Pomiń tylko, jeśli wiesz, co robisz.",
-  "automodpack.validation.skip.confirm.text": "Wpisz powyższą frazę, aby potwierdzić:",
-  "automodpack.validation.skip.confirm": "Pomiń",
+  "automodpack.validation.skip.confirm.text": "Wpisz poniższą frazę, aby potwierdzić:",
   "automodpack.validation.skip.failed": "Nieprawidłowy tekst",
 
   "automodpack.retry": "Spróbuj ponownie",
@@ -59,5 +56,7 @@
   "automodpack.no": "Nie",
   "automodpack.cancel": "Anuluj",
   "automodpack.back": "Wstecz",
-  "automodpack.wait": "Proszę czekać..."
+  "automodpack.wait": "Proszę czekać...",
+  "automodpack.skip": "Pomiń",
+  "automodpack.learnmore": "Dowiedz się więcej"
 }

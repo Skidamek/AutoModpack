@@ -4,6 +4,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.components.toasts.Toast;
 import net.minecraft.client.gui.screens.Screen;
@@ -71,7 +72,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 
         // Skip verification button (middle)
         this.skipButton = buttonWidget(this.width / 2 - 50, this.height / 2 + 80, 100, 20,
-                VersionedText.translatable("automodpack.validation.skip"),
+                VersionedText.translatable("automodpack.skip"),
                 button -> {
                     assert this.minecraft != null;
                     this.minecraft.setScreen(new SkipVerificationScreen(this, this.parent, this.validatedCallback));
@@ -83,9 +84,11 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                 button -> verifyFingerprint());
 
         // Wiki button (icon button aligned to the right of text field)
-        this.wikiButton = iconButtonWidget(this.width / 2 + 150, this.height / 2 + 15, 20,
-                button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/installation/certificate-verification"),
-                "icon/link");
+        this.wikiButton = iconButtonWidget(this.width / 2 + 22 + 150, this.height / 2 + 15, 20, 16,
+                button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
+                "link");
+
+        wikiButton.setTooltip(Tooltip.create(VersionedText.translatable("automodpack.learnmore")));
     }
 
     private void verifyFingerprint() {
@@ -125,32 +128,27 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         // Title
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.title").withStyle(ChatFormatting.BOLD),
-                this.width / 2, this.height / 2 - 95, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 85, TextColors.WHITE);
 
         // Description line 1
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.description1"),
-                this.width / 2, this.height / 2 - 75, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 65, TextColors.WHITE);
 
         // Description line 2
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.description2"),
-                this.width / 2, this.height / 2 - 75 + lineHeight, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 65 + lineHeight, TextColors.WHITE);
 
         // Server fingerprint label
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.fingerprint.label"),
-                this.width / 2, this.height / 2 - 45, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 35, TextColors.WHITE);
 
         // Server fingerprint value (concatenated, gray, not bold - intentionally harder to read)
         drawCenteredTextWithShadow(matrices, this.font, 
                 VersionedText.literal(getConcatenatedFingerprint()),
-                this.width / 2, this.height / 2 - 45 + lineHeight, TextColors.LIGHT_GRAY);
-
-        // Instructions
-        drawCenteredTextWithShadow(matrices, this.font, 
-                VersionedText.translatable("automodpack.validation.instruction"),
-                this.width / 2, this.height / 2 - 15, TextColors.WHITE);
+                this.width / 2, this.height / 2 - 35 + lineHeight, TextColors.LIGHT_GRAY);
 
         // Confirmation text
         drawCenteredTextWithShadow(matrices, this.font, 
@@ -160,7 +158,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 
     @Override
     public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
+        if (textField.isFocused() && keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
             if (verifyButton.active) {
                 verifyFingerprint();
                 return true;

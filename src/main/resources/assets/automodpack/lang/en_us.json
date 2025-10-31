@@ -36,13 +36,11 @@
   "automodpack.fetch.found": "Found %s direct url's.",
 
   "automodpack.validation.title": "Certificate Verification",
-  "automodpack.validation.description1": "Prevents man-in-the-middle attacks. One-time check.",
-  "automodpack.validation.description2": "Fingerprint is same for everyone. Ask your server operator.",
+  "automodpack.validation.description1": "Secures you from man-in-the-middle attacks.",
+  "automodpack.validation.description2": "It's a one-time check. Ask your server operator.",
   "automodpack.validation.fingerprint.label": "Server fingerprint (shortened):",
-  "automodpack.validation.instruction": "Server operators: use /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Paste the full fingerprint to verify:",
   "automodpack.validation.verify": "Verify",
-  "automodpack.validation.skip": "Skip",
   "automodpack.validation.failed": "Mismatch! Someone may be impersonating the server.",
 
   "automodpack.validation.skip.title": "Security Risk",
@@ -50,7 +48,6 @@
   "automodpack.validation.skip.warning2": "Mods can access your files and run arbitrary code.",
   "automodpack.validation.skip.instruction": "Skip only if you know what you are doing.",
   "automodpack.validation.skip.confirm.text": "Type the phrase below to confirm:",
-  "automodpack.validation.skip.confirm": "Skip",
   "automodpack.validation.skip.failed": "Wrong text",
 
   "automodpack.retry": "Try again",
@@ -59,5 +56,7 @@
   "automodpack.no": "No",
   "automodpack.cancel": "Cancel",
   "automodpack.back": "Back",
-  "automodpack.wait": "Please wait..."
+  "automodpack.wait": "Please wait...",
+  "automodpack.skip": "Skip",
+  "automodpack.learnmore": "Learn more"
 }

@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "˙s,lɹn ʇɔǝɹıp s% punoℲ",
 
   "automodpack.validation.title": "uoıʇɐɔıɟıɹǝɅ ǝʇɐɔıɟıʇɹǝƆ",
-  "automodpack.validation.description1": "˙ʞɔǝɥɔ ǝɯıʇ-ǝuO ˙sʞɔɐʇʇɐ ǝlppıɯ-ǝɥʇ-uı-uɐɯ sʇuǝʌǝɹԀ",
-  "automodpack.validation.description2": "˙ɹoʇɐɹǝdo ɹǝʌɹǝs ɹnoʎ ʞs∀ ˙ǝuoʎɹǝʌǝ ɹoɟ ǝɯɐs sı ʇuıɹdɹǝƃuıℲ",
+  "automodpack.validation.description1": "˙sʞɔɐʇʇɐ ǝlppıɯ-ǝɥʇ-uı-uɐɯ ɯoɹɟ noʎ sǝɹnɔǝS",
+  "automodpack.validation.description2": "˙ɹoʇɐɹǝdo ɹǝʌɹǝs ɹnoʎ ʞs∀ ˙ʞɔǝɥɔ ǝɯıʇ-ǝuo ɐ s,ʇI",
   "automodpack.validation.fingerprint.label": ":(pǝuǝʇɹoɥs) ʇuıɹdɹǝƃuıɟ ɹǝʌɹǝS",
-  "automodpack.validation.instruction": "ʇuıɹdɹǝƃuıɟ ʇsoɥ ʞɔɐdpoɯoʇnɐ/ ǝsn :sɹoʇɐɹǝdo ɹǝʌɹǝS",
   "automodpack.validation.confirm.text": ":ʎɟıɹǝʌ oʇ ʇuıɹdɹǝƃuıɟ llnɟ ǝɥʇ ǝʇsɐԀ",
   "automodpack.validation.verify": "ʎɟıɹǝɅ",
-  "automodpack.validation.skip": "dıʞS",
   "automodpack.validation.failed": "¡ɹǝʌɹǝs ǝɥʇ ƃuıʇɐuosɹǝdɯı ǝq ʎɐɯ ǝuoǝɯos ¡ɥɔʇɐɯsıɯ",
 
   "automodpack.validation.skip.title": "ʞsıɹ ʎʇıɹnɔǝS",
   "automodpack.validation.skip.warning1": "˙spoɯ snoıɔılɐɯ ʇɔǝɾuı uɐɔ sɹǝʞɔɐʇʇɐ 'uoıʇɐɔıɟıɹǝʌ ʇnoɥʇıM",
   "automodpack.validation.skip.warning2": "˙ǝpoɔ ʎɹɐɹʇıqɹɐ unɹ puɐ sǝlıɟ ɹnoʎ ssǝɔɔɐ uɐɔ spoɯ",
   "automodpack.validation.skip.instruction": "˙ƃuıop ǝɹɐ noʎ ʇɐɥʍ ʍouʞ noʎ ɟı ʎluo dıʞS",
-  "automodpack.validation.skip.confirm.text": ":ɯɹıɟuoɔ oʇ ǝsɐɹɥd ǝʌoqɐ ǝɥʇ ǝdʎ⊥",
-  "automodpack.validation.skip.confirm": "dıʞS",
+  "automodpack.validation.skip.confirm.text": ":ɯɹıɟuoɔ oʇ ǝsɐɹɥd ʍolǝq ǝɥʇ ǝdʎ⊥",
   "automodpack.validation.skip.failed": "ʇxǝʇ ƃuoɹM",
 
   "automodpack.retry": "uıɐƃɐ ʎɹ⊥",
@@ -59,5 +56,7 @@
   "automodpack.no": "oN",
   "automodpack.cancel": "lǝɔuɐƆ",
   "automodpack.back": "ʞɔɐᙠ",
-  "automodpack.wait": "˙˙˙ʇıɐʍ ǝsɐǝlԀ"
+  "automodpack.wait": "˙˙˙ʇıɐʍ ǝsɐǝlԀ",
+  "automodpack.skip": "dıʞS",
+  "automodpack.learnmore": "ǝɹoɯ uɹɐǝ˥"
 }

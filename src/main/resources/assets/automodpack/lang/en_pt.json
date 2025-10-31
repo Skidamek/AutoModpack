@@ -39,10 +39,8 @@
   "automodpack.validation.description1": "Prevents man-in-the-middle attacks. One-time check, aye.",
   "automodpack.validation.description2": "Fingerprint be same for everyone. Ask yer server operator.",
   "automodpack.validation.fingerprint.label": "Server fingerprint (shortened):",
-  "automodpack.validation.instruction": "Server operators: use /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Paste the full fingerprint to verify, savvy:",
   "automodpack.validation.verify": "Verify",
-  "automodpack.validation.skip": "Skip",
   "automodpack.validation.failed": "Mismatch! Someone may be impersonatin' the server, arrr!",
 
   "automodpack.validation.skip.title": "Security Risk, beware!",
@@ -50,7 +48,6 @@
   "automodpack.validation.skip.warning2": "Mods can access yer files and run arbitrary code.",
   "automodpack.validation.skip.instruction": "Skip only if ye know what ye be doin', matey.",
   "automodpack.validation.skip.confirm.text": "Type the above phrase to confirm:",
-  "automodpack.validation.skip.confirm": "Skip",
   "automodpack.validation.skip.failed": "Wrong text, ye landlubber",
 
   "automodpack.retry": "Try again, ye dog!",
@@ -59,5 +56,7 @@
   "automodpack.no": "Nay",
   "automodpack.cancel": "Cancel",
   "automodpack.back": "Back",
-  "automodpack.wait": "Please wait, matey..."
+  "automodpack.wait": "Please wait, matey...",
+  "automodpack.skip": "Skip",
+  "automodpack.learnmore": "Learn more"
 }

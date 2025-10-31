@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "Encontradas %s URLs diretas.",
 
   "automodpack.validation.title": "Verificação de Certificado",
-  "automodpack.validation.description1": "Previne ataques man-in-the-middle. Verificação única.",
-  "automodpack.validation.description2": "A impressão digital é a mesma para todos. Pergunte ao seu operador de servidor.",
+  "automodpack.validation.description1": "Protege você de ataques man-in-the-middle.",
+  "automodpack.validation.description2": "É uma verificação única. Pergunte ao seu operador de servidor.",
   "automodpack.validation.fingerprint.label": "Impressão digital do servidor (abreviada):",
-  "automodpack.validation.instruction": "Operadores de servidor: use /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Cole a impressão completa para verificar:",
   "automodpack.validation.verify": "Verificar",
-  "automodpack.validation.skip": "Pular",
   "automodpack.validation.failed": "Incompatibilidade! Alguém pode estar se passando pelo servidor.",
 
   "automodpack.validation.skip.title": "Risco de Segurança",
   "automodpack.validation.skip.warning1": "Sem verificação, atacantes podem injetar mods maliciosos.",
   "automodpack.validation.skip.warning2": "Mods podem acessar seus arquivos e executar código arbitrário.",
   "automodpack.validation.skip.instruction": "Pule apenas se souber o que está fazendo.",
-  "automodpack.validation.skip.confirm.text": "Digite a frase acima para confirmar:",
-  "automodpack.validation.skip.confirm": "Pular",
+  "automodpack.validation.skip.confirm.text": "Digite a frase abaixo para confirmar:",
   "automodpack.validation.skip.failed": "Texto errado",
 
   "automodpack.retry": "Tentar novamente",
@@ -59,5 +56,7 @@
   "automodpack.no": "Não",
   "automodpack.cancel": "Cancelar",
   "automodpack.back": "Voltar",
-  "automodpack.wait": "Por favor, aguarde..."
+  "automodpack.wait": "Por favor, aguarde...",
+  "automodpack.skip": "Pular",
+  "automodpack.learnmore": "Saiba mais"
 }

@@ -28,11 +28,12 @@ public class FetchScreen extends VersionedScreen {
     }
 
     private void initWidgets() {
-        cancelButton = buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.translatable("automodpack.cancel"),
-                button -> {
-                    cancelButton.active = false;
-                    cancelFetch();
-                }
+        cancelButton = buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20,
+            VersionedText.translatable("automodpack.cancel"),
+            button -> {
+                cancelButton.active = false;
+                cancelFetch();
+            }
         );
     }
 
@@ -45,14 +46,43 @@ public class FetchScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
+        int lineHeight = 12; // Consistent line spacing
+
         if (fetchManager == null) {
             cancelButton.active = false;
         }
 
-        // Fetching direct url's from Modrinth and CurseForge.
-        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.fetch").withStyle(ChatFormatting.BOLD), this.width / 2, this.height / 2 - 60, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.wait"), this.width / 2, this.height / 2 - 48, TextColors.WHITE);
-        drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.fetch.found", getFetchesDone()), this.width / 2, this.height / 2 - 30, TextColors.WHITE);
+        // Title
+        drawCenteredTextWithShadow(
+            matrices,
+            this.font,
+            VersionedText.translatable("automodpack.fetch").withStyle(
+                ChatFormatting.BOLD
+            ),
+            this.width / 2,
+            this.height / 2 - 60,
+            TextColors.WHITE
+        );
+
+        // Please wait message
+        drawCenteredTextWithShadow(
+            matrices,
+            this.font,
+            VersionedText.translatable("automodpack.wait"),
+            this.width / 2,
+            this.height / 2 - 60 + lineHeight * 2,
+            TextColors.WHITE
+        );
+
+        // Found count
+        drawCenteredTextWithShadow(
+            matrices,
+            this.font,
+            VersionedText.translatable("automodpack.fetch.found", getFetchesDone()),
+            this.width / 2,
+            this.height / 2 - 60 + lineHeight * 4,
+            TextColors.WHITE
+        );
     }
 
     @Override
@@ -67,7 +97,6 @@ public class FetchScreen extends VersionedScreen {
             }
 
             new ScreenManager().title();
-
         } catch (Exception e) {
             e.printStackTrace();
         }

@@ -102,14 +102,14 @@ public class VersionedScreen extends Screen {
     /*?}*/
 
     /*? if >= 1.20.2 {*/
-    public static Button iconButtonWidget(int x, int y, int width, Button.OnPress onPress, String spritePath) {
-        Button button = SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), 8, 8).width(width).build();
+    public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
+        Button button = SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), spriteWidth, spriteWidth).size(buttonWidth, buttonWidth).build();
         button.setPosition(x, y);
         return button;
     }
     /*?} else {*/
-    /*public static Button iconButtonWidget(int x, int y, int width, Button.OnPress onPress, String spritePath) {
-        return new ImageButton(x, y, width, width, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), width, width, onPress);
+    /*public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
+        return new ImageButton(x, y, buttonWidth, buttonWidth, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), buttonWidth, buttonWidth, onPress);
     }
     *//*?}*/
 

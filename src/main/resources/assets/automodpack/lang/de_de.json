@@ -39,10 +39,8 @@
   "automodpack.validation.description1": "Verhindert Man-in-the-Middle-Angriffe. Einmalige Prüfung.",
   "automodpack.validation.description2": "Fingerabdruck ist für alle gleich. Frage deinen Serverbetreiber.",
   "automodpack.validation.fingerprint.label": "Server-Fingerabdruck (gekürzt):",
-  "automodpack.validation.instruction": "Serverbetreiber: /automodpack host fingerprint verwenden",
   "automodpack.validation.confirm.text": "Vollständigen Fingerabdruck zum Verifizieren einfügen:",
   "automodpack.validation.verify": "Verifizieren",
-  "automodpack.validation.skip": "Überspringen",
   "automodpack.validation.failed": "Stimmt nicht überein! Jemand gibt sich möglicherweise als Server aus.",
 
   "automodpack.validation.skip.title": "Sicherheitsrisiko",
@@ -50,7 +48,6 @@
   "automodpack.validation.skip.warning2": "Mods können auf deine Dateien zugreifen und beliebigen Code ausführen.",
   "automodpack.validation.skip.instruction": "Überspringe dies nur, wenn du weißt, was du tust.",
   "automodpack.validation.skip.confirm.text": "Gib die obige Phrase ein, um zu bestätigen:",
-  "automodpack.validation.skip.confirm": "Überspringen",
   "automodpack.validation.skip.failed": "Falscher Text",
 
   "automodpack.retry": "Erneut versuchen",
@@ -59,5 +56,7 @@
   "automodpack.no": "Nein",
   "automodpack.cancel": "Abbrechen",
   "automodpack.back": "Zurück",
-  "automodpack.wait": "Bitte warten..."
+  "automodpack.wait": "Bitte warten...",
+  "automodpack.skip": "Überspringen",
+  "automodpack.learnmore": "Mehr erfahren"
 }

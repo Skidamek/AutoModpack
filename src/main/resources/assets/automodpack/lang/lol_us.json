@@ -36,21 +36,18 @@
   "automodpack.fetch.found": "Found %s direkt url'z! So many!",
 
   "automodpack.validation.title": "Certifikat Verifyin' Tiem",
-  "automodpack.validation.description1": "Stops bad peepul from messin. One tiem check.",
-  "automodpack.validation.description2": "Fingerprint iz saem for everybuddy. Ask ur server boss.",
+  "automodpack.validation.description1": "Protekts u from bad peepul in teh middel.",
+  "automodpack.validation.description2": "Iz one tiem check. Ask ur server boss.",
   "automodpack.validation.fingerprint.label": "Server fingerprint (smol):",
-  "automodpack.validation.instruction": "Server peepul: use /automodpack host fingerprint",
   "automodpack.validation.confirm.text": "Paste teh full fingerprint to check it:",
   "automodpack.validation.verify": "Verifee it nao!",
-  "automodpack.validation.skip": "Skip",
   "automodpack.validation.failed": "No match! Sumone mite be fakin teh server!",
 
   "automodpack.validation.skip.title": "Sekurity危險 (dangur)!",
   "automodpack.validation.skip.warning1": "Without checkin, bad guyz can put bad modz in.",
   "automodpack.validation.skip.warning2": "Modz can touch ur filez an run bad codez.",
   "automodpack.validation.skip.instruction": "Only skip if u know wut ur doin, mkay?",
-  "automodpack.validation.skip.confirm.text": "Type teh phrase above to say u sure:",
-  "automodpack.validation.skip.confirm": "Skip",
+  "automodpack.validation.skip.confirm.text": "Type teh phrase below to say u sure:",
   "automodpack.validation.skip.failed": "Wrong text, try again!",
 
   "automodpack.retry": "Try again! Maybe it work dis time!",
@@ -59,5 +56,7 @@
   "automodpack.no": "Noes!",
   "automodpack.cancel": "Cancel nao!",
   "automodpack.back": "Go bak!",
-  "automodpack.wait": "Plz wait... im doin' stuff..."
+  "automodpack.wait": "Plz wait... im doin' stuff...",
+  "automodpack.skip": "Skip",
+  "automodpack.learnmore": "Learn moar"
 }
