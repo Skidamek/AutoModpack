@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -23,6 +24,7 @@ public class SkipVerificationScreen extends VersionedScreen {
     private EditBox textField;
     private Button backButton;
     private Button confirmButton;
+    private Button wikiButton;
     private int ticksRemaining;
 
     public SkipVerificationScreen(Screen verificationScreen, Screen parent, Runnable validatedCallback) {
@@ -42,6 +44,7 @@ public class SkipVerificationScreen extends VersionedScreen {
         this.addRenderableWidget(this.textField);
         this.addRenderableWidget(this.backButton);
         this.addRenderableWidget(this.confirmButton);
+        this.addRenderableWidget(this.wikiButton);
         this.setInitialFocus(this.textField);
     }
 
@@ -70,6 +73,11 @@ public class SkipVerificationScreen extends VersionedScreen {
                 button -> confirmSkip());
         this.confirmButton.active = false;
         updateButtonText();
+
+        // Wiki button (icon button aligned to the right of text field)
+        this.wikiButton = iconButtonWidget(this.width / 2 + 150, this.height / 2 + 15, 20,
+                button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/installation/certificate-verification"),
+                "icon/link");
     }
     
     private void updateButtonText() {

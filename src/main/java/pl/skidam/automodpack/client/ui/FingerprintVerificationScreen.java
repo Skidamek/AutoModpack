@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.toasts.SystemToast;
@@ -24,6 +25,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
     private Button backButton;
     private Button verifyButton;
     private Button skipButton;
+    private Button wikiButton;
 
     public FingerprintVerificationScreen(Screen parent, String serverFingerprint, Runnable validatedCallback, Runnable canceledCallback) {
         super(VersionedText.literal("FingerprintVerificationScreen"));
@@ -43,6 +45,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         this.addRenderableWidget(this.backButton);
         this.addRenderableWidget(this.verifyButton);
         this.addRenderableWidget(this.skipButton);
+        this.addRenderableWidget(this.wikiButton);
         this.setInitialFocus(this.textField);
     }
 
@@ -78,6 +81,11 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         this.verifyButton = buttonWidget(this.width / 2 + 55, this.height / 2 + 80, 100, 20,
                 VersionedText.translatable("automodpack.validation.verify").withStyle(ChatFormatting.BOLD),
                 button -> verifyFingerprint());
+
+        // Wiki button (icon button aligned to the right of text field)
+        this.wikiButton = iconButtonWidget(this.width / 2 + 150, this.height / 2 + 15, 20,
+                button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/installation/certificate-verification"),
+                "icon/link");
     }
 
     private void verifyFingerprint() {
