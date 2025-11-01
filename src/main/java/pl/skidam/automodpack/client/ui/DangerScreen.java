@@ -31,7 +31,7 @@ public class DangerScreen extends VersionedScreen {
 
         this.addRenderableWidget(
             buttonWidget(
-                this.width / 2 - 115,
+                this.width / 2 + 15,
                 this.height / 2 + 50,
                 120,
                 20,
@@ -44,7 +44,7 @@ public class DangerScreen extends VersionedScreen {
 
         this.addRenderableWidget(
             buttonWidget(
-                this.width / 2 + 15,
+                this.width / 2 - 115,
                 this.height / 2 + 50,
                 120,
                 20,
