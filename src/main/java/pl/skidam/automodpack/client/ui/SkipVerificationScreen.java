@@ -56,7 +56,7 @@ public class SkipVerificationScreen extends VersionedScreen {
         );
         this.textField.setMaxLength(128);
 
-        this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 150, 20,
+        this.backButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 80, 150, 20,
                 VersionedText.translatable("automodpack.back"),
                 button -> {
                     assert this.minecraft != null;
@@ -64,7 +64,7 @@ public class SkipVerificationScreen extends VersionedScreen {
                 }
         );
 
-        this.confirmButton = buttonWidget(this.width / 2 + 5, this.height / 2 + 80, 150, 20,
+        this.confirmButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 150, 20,
                 VersionedText.translatable("automodpack.skip"),
                 button -> confirmSkip());
         this.confirmButton.active = false;

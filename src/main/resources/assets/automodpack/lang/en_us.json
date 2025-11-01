@@ -10,7 +10,7 @@
 
   "automodpack.danger": "This server provides an external modpack!",
   "automodpack.danger.description": "Do you want to download it?",
-  "automodpack.danger.secDescription": "It might be risky! Do NOT download if don't trust the server owners!",
+  "automodpack.danger.secDescription": "It might be risky! Do not download if don't trust the server owners!",
   "automodpack.danger.thiDescription": "Malicious servers can provide mods with malware",
   "automodpack.danger.confirm": "Download",
   "automodpack.danger.cancel": "Don't download",
@@ -36,9 +36,9 @@
   "automodpack.fetch.found": "Found %s direct url's.",
 
   "automodpack.validation.title": "Certificate Verification",
-  "automodpack.validation.description1": "Secures you from man-in-the-middle attacks.",
-  "automodpack.validation.description2": "It's a one-time check. Ask your server operator.",
-  "automodpack.validation.fingerprint.label": "Server fingerprint (shortened):",
+  "automodpack.validation.description1": "This is a safety measure to prevent attacks from the server",
+  "automodpack.validation.description2": "You only need to input it once, it's same for everyone.",
+  "automodpack.validation.fingerprint.label": "This is the trimmed fingerprint for this server:",
   "automodpack.validation.confirm.text": "Paste the full fingerprint to verify:",
   "automodpack.validation.verify": "Verify",
   "automodpack.validation.failed": "Mismatch! Someone may be impersonating the server.",
