@@ -58,8 +58,21 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         );
         this.textField.setMaxLength(64);
 
-        // Back button (left)
-        this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 100, 20,
+        // Skip button (left, indicates misc action)
+        this.skipButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 100, 20,
+                VersionedText.translatable("automodpack.skip"),
+                button -> {
+                    assert this.minecraft != null;
+                    this.minecraft.setScreen(new SkipVerificationScreen(this, this.parent, this.validatedCallback));
+                });
+
+        // Verify button (middle - primary action, bold, confirmation)
+        this.verifyButton = buttonWidget(this.width / 2, - 50, this.height / 2 + 80, 100, 20,
+                VersionedText.translatable("automodpack.validation.verify").withStyle(ChatFormatting.BOLD),
+                button -> verifyFingerprint());
+
+        // Back button (right, like everywhere else in minecraft)
+        this.backButton = buttonWidget(this.width / 2 + 55, this.height / 2 + 80, 100, 20,
                 VersionedText.translatable("automodpack.back"),
                 button -> {
                     this.minecraft.setScreen(parent);
@@ -68,20 +81,6 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                     }
                 }
         );
-
-        // Skip verification button (middle)
-        this.skipButton = buttonWidget(this.width / 2 - 50, this.height / 2 + 80, 100, 20,
-                VersionedText.translatable("automodpack.skip"),
-                button -> {
-                    assert this.minecraft != null;
-                    this.minecraft.setScreen(new SkipVerificationScreen(this, this.parent, this.validatedCallback));
-                });
-
-        // Verify button (right - primary action, bold)
-        this.verifyButton = buttonWidget(this.width / 2 + 55, this.height / 2 + 80, 100, 20,
-                VersionedText.translatable("automodpack.validation.verify").withStyle(ChatFormatting.BOLD),
-                button -> verifyFingerprint());
-
         // Wiki button (icon button aligned to the right of text field)
         this.wikiButton = iconButtonWidget(this.width / 2 + 22 + 150, this.height / 2 + 15, 20, 16,
                 button -> Util.getPlatform().openUri("https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate"),
