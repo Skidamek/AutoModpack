@@ -36,9 +36,9 @@
   "automodpack.fetch.found": "Found %s direct url's.",
 
   "automodpack.validation.title": "Certificate Verification",
-  "automodpack.validation.description1": "Secures you from man-in-the-middle attacks.",
-  "automodpack.validation.description2": "It's a one-time check. Ask your server operator.",
-  "automodpack.validation.fingerprint.label": "Server fingerprint (shortened):",
+  "automodpack.validation.description1": "This is a safety measure to prevent attacks from the server",
+  "automodpack.validation.description2": "You only need to input it once, it's same for everyone.",
+  "automodpack.validation.fingerprint.label": "The server fingerprint may look like this:",
   "automodpack.validation.confirm.text": "Paste the full fingerprint to verify:",
   "automodpack.validation.verify": "Verify",
   "automodpack.validation.failed": "Mismatch! Someone may be impersonating the server.",
