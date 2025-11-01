@@ -67,7 +67,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                 });
 
         // Verify button (middle - primary action, bold, confirmation)
-        this.verifyButton = buttonWidget(this.width / 2, - 50, this.height / 2 + 80, 100, 20,
+        this.verifyButton = buttonWidget(this.width / 2 - 50, this.height / 2 + 80, 100, 20,
                 VersionedText.translatable("automodpack.validation.verify").withStyle(ChatFormatting.BOLD),
                 button -> verifyFingerprint());
 
