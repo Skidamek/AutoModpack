@@ -13,7 +13,7 @@ wiki {
     }
 }
 
-stonecutter active "1.21.9-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "1.21.10-fabric" /* [SC] DO NOT EDIT */
 
 stonecutter.parameters {
     constants.match(node.metadata.project.substringAfterLast('-'), "fabric", "neoforge", "forge")
