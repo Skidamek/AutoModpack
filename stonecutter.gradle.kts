@@ -1,8 +1,8 @@
 plugins {
     id("dev.kikugie.stonecutter")
     kotlin("jvm") version "2.2.20" apply false
-    id("fabric-loom") version "1.12-SNAPSHOT" apply false
-    id("net.neoforged.moddev") version "2.0.115" apply false
+    id("fabric-loom") version "1.13-SNAPSHOT" apply false
+    id("net.neoforged.moddev") version "2.0.116" apply false
     id("com.gradleup.shadow") version "9.2.2" apply false
     id("org.moddedmc.wiki.toolkit") version "0.3.2"
 }
