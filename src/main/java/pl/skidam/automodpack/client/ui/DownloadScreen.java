@@ -22,8 +22,8 @@ import pl.skidam.automodpack_loader_core.utils.SpeedMeter;
 public class DownloadScreen extends VersionedScreen {
 
     // thank you mojang for textures, i am sorry that i have to bundle them myself but i dont want to deal with atlas textures on multiversion setup
-    private static final ResourceLocation PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/boss_bar/green_background.png");
-    private static final ResourceLocation PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/sprites/boss_bar/green_progress.png");
+    private static final ResourceLocation PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/green_background.png");
+    private static final ResourceLocation PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/sprites/green_progress.png");
     private static final int PROGRESS_BAR_WIDTH = 182;
     private static final int PROGRESS_BAR_HEIGHT = 5;
     private final DownloadManager downloadManager;
