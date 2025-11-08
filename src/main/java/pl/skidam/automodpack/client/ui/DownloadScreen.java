@@ -21,10 +21,11 @@ import pl.skidam.automodpack_loader_core.utils.SpeedMeter;
 
 public class DownloadScreen extends VersionedScreen {
 
-    private static final ResourceLocation PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/progress-bar-empty.png");
-    private static final ResourceLocation PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/progress-bar-full.png");
-    private static final int PROGRESS_BAR_WIDTH = 250;
-    private static final int PROGRESS_BAR_HEIGHT = 20;
+    // thank you mojang for textures, i am sorry that i have to bundle them myself but i dont want to deal with atlas textures on multiversion setup
+    private static final ResourceLocation PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/boss_bar/green_background.png");
+    private static final ResourceLocation PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/sprites/boss_bar/green_progress.png");
+    private static final int PROGRESS_BAR_WIDTH = 182;
+    private static final int PROGRESS_BAR_HEIGHT = 5;
     private final DownloadManager downloadManager;
     private final String header;
     private long ticks = 0;
@@ -243,12 +244,10 @@ public class DownloadScreen extends VersionedScreen {
         );
 
         if (downloadManager != null && downloadManager.isRunning()) {
-            MutableComponent percentage =
-                (MutableComponent) this.getPercentage();
+//            MutableComponent percentage = (MutableComponent) this.getPercentage();
             MutableComponent stage = (MutableComponent) this.getStage();
             MutableComponent eta = (MutableComponent) this.getTotalETA();
-            MutableComponent speed =
-                (MutableComponent) this.getTotalDownloadSpeed();
+            MutableComponent speed = (MutableComponent) this.getTotalDownloadSpeed();
 
             // Stage
             drawCenteredTextWithShadow(
@@ -270,22 +269,25 @@ public class DownloadScreen extends VersionedScreen {
                 TextColors.WHITE
             );
 
-            // Render progress bar
-            int progressX = this.width / 2 - PROGRESS_BAR_WIDTH / 2;
-            int progressY = this.height / 2 + 30;
+            // scale it to make it ~250px instead of 182px
+            float scaleBar = 1.35F;
 
-            drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, progressX, progressY, 0, 0, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
-            drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, progressX, progressY, 0, 0, (int) (PROGRESS_BAR_WIDTH * getDownloadScale()), PROGRESS_BAR_HEIGHT, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT);
+            int barWidth = PROGRESS_BAR_WIDTH;
+            int barHeight = PROGRESS_BAR_HEIGHT;
+            int barFilledWidth = (int) (barWidth * getDownloadScale());
+            int barYPos = this.height / 2 + 36;
+            float barDrawX = (this.width - barWidth * scaleBar) / 2.0F / scaleBar;
+            float barDrawY = barYPos / scaleBar;
+            int barScreenX = Math.round(barDrawX);
+            int barScreenY = Math.round(barDrawY);
 
-            // Percentage
-            drawCenteredTextWithShadow(
-                matrices,
-                this.font,
-                percentage,
-                this.width / 2,
-                this.height / 2 + 36,
-                TextColors.WHITE
-            );
+            matrices.pushPose();
+            matrices.scale(scaleBar, scaleBar, scaleBar);
+
+            drawTexture(PROGRESS_BAR_EMPTY_TEXTURE, matrices, barScreenX, barScreenY, 0, 0, barWidth, barHeight, barWidth, barHeight);
+            drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, barScreenX, barScreenY, 0, 0, Math.min(barFilledWidth, barWidth), barHeight, barWidth, barHeight);
+
+            matrices.popPose();
 
             // Speed
             drawCenteredTextWithShadow(
