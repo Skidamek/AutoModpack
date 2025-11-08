@@ -75,6 +75,7 @@ public class SelfUpdater {
                 continue;
             }
 
+            // TODO implement correct semver parser
             // Version scheme: major.minor.patch[-betaX]
             String fileVersion = automodpack.fileVersion();
 
@@ -159,17 +160,18 @@ public class SelfUpdater {
             remoteBeta = Integer.parseInt(remoteVersionSplit[1]);
         }
 
+        // TODO implement correct semver parser
         // Removes '-betaX' if exists
         // Removes '.' - dots - to then parse it as number
         String REMOTE_VERSION = remoteVersionSplit[0].replace(".", "");
 
-        // Don't allow downgrades pass 4.0.0-beta38
-        if (Integer.parseInt(REMOTE_VERSION) >= 400 && (!remoteIsBeta || remoteBeta >= 38)) {
-            return true;
+        // Don't allow downgrades pass 4.0.0
+        if (Integer.parseInt(REMOTE_VERSION) < 400 || (Integer.parseInt(REMOTE_VERSION) == 400 && remoteIsBeta)) {
+            LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged and disabled from auto-server-syncing. To protect against potential security vulnerabilities, please use a newer version.", automodpack.fileVersion());
+            return false;
         }
 
-        LOGGER.error("Downgrading AutoModpack to version {} is strongly discouraged and disabled from auto-server-syncing. To protect against potential security vulnerabilities, please use a newer version.", automodpack.fileVersion());
-        return false;
+        return true;
     }
 
     public static void installModVersion(ModrinthAPI automodpack) {
