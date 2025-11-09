@@ -44,9 +44,8 @@ public class ConfigurationHandler extends ChannelInboundHandlerAdapter {
 
                 // Negotiate compression type
                 byte negotiatedCompressionType;
-                if (PlatformUtils.isAndroid() && clientCompressionType == COMPRESSION_ZSTD) {
-                    negotiatedCompressionType = COMPRESSION_GZIP; // Zstd unsupported on Android
-                    LOGGER.warn("Client requested Zstd compression but we don't support it; falling back to Gzip.");
+                if (clientCompressionType == COMPRESSION_ZSTD && !PlatformUtils.canUseZstd()) {
+                    negotiatedCompressionType = COMPRESSION_GZIP;
                 } else if (clientCompressionType == COMPRESSION_ZSTD || clientCompressionType == COMPRESSION_GZIP || clientCompressionType == COMPRESSION_NONE) {
                     negotiatedCompressionType = clientCompressionType;
                 } else {

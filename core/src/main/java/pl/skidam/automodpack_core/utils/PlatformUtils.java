@@ -1,11 +1,17 @@
 package pl.skidam.automodpack_core.utils;
 
+import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
+import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
+
 import java.util.Locale;
+
+import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_ZSTD;
 
 public class PlatformUtils {
 
     private static Boolean macCache;
-    private static Boolean androidCache;
+    private static Boolean zstdWorks;
 
     public static boolean isMac() {
         if (macCache != null) return macCache;
@@ -18,20 +24,17 @@ public class PlatformUtils {
         return macCache = false;
     }
 
-    // This, fails to detect Android launchers like pojav etc.
-    public static boolean isAndroid() {
-        if (androidCache != null) return androidCache;
-
-        String runtime = System.getProperty("java.runtime.name");
-        if (runtime != null && runtime.toLowerCase(Locale.ENGLISH).contains("android")) {
-            return androidCache = true;
-        }
+    public static boolean canUseZstd() {
+        if (zstdWorks != null) return zstdWorks;
 
         try {
-            Class.forName("android.os.Build");
-            return androidCache = true;
-        } catch (ClassNotFoundException ignored) { }
+            CompressionCodec compressionCodec = CompressionFactory.getCodec(COMPRESSION_ZSTD);
+            zstdWorks = compressionCodec.isInitialized();
+        } catch (Throwable e) {
+            zstdWorks = false;
+            LOGGER.warn("Desired compression codec failed to initialize, falling back to Gzip");
+        }
 
-        return androidCache = false;
+        return zstdWorks;
     }
 }

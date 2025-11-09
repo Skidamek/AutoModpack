@@ -23,6 +23,7 @@ import org.apache.hc.client5.http.ssl.DefaultHostnameVerifier;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /**
  * A DownloadClient that creates a pool of connections.
@@ -366,8 +367,7 @@ class Connection implements AutoCloseable {
         }
 
         try {
-            if (!getCompressionCodec().isInitialized()) {
-                LOGGER.warn("Desired compression codec failed to initialize, falling back to Gzip");
+            if (!PlatformUtils.canUseZstd()) {
                 this.compressionType = COMPRESSION_GZIP;
             }
             this.compressionType = sendCompressionConfig(compressionType);

@@ -45,7 +45,7 @@ public class ZstdCompression implements CompressionCodec {
             decompressMethodHandle = MethodHandles.lookup().unreflect(decompressMethod);
         } catch (Throwable e) {
             initialized = false;
-            LOGGER.error("Failed to initialize embedded zstd-jni", e);
+            LOGGER.debug("Failed to initialize embedded zstd-jni", e);
         }
     }
 
