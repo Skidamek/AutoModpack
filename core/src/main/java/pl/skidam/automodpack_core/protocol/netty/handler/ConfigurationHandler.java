@@ -44,12 +44,10 @@ public class ConfigurationHandler extends ChannelInboundHandlerAdapter {
 
                 // Negotiate compression type
                 byte negotiatedCompressionType;
-                if (clientCompressionType == COMPRESSION_ZSTD && !PlatformUtils.canUseZstd()) {
-                    negotiatedCompressionType = COMPRESSION_GZIP;
-                } else if (clientCompressionType == COMPRESSION_ZSTD || clientCompressionType == COMPRESSION_GZIP || clientCompressionType == COMPRESSION_NONE) {
+                if (clientCompressionType == COMPRESSION_GZIP || clientCompressionType == COMPRESSION_NONE) {
                     negotiatedCompressionType = clientCompressionType;
                 } else {
-                    negotiatedCompressionType = COMPRESSION_ZSTD; // Default to Zstd if unsupported
+                    negotiatedCompressionType = PlatformUtils.canUseZstd() ? COMPRESSION_ZSTD : COMPRESSION_GZIP;
                 }
 
                 // Update channel attributes
