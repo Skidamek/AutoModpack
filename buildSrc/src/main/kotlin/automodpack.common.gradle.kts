@@ -94,7 +94,7 @@ tasks.register("mergeJar") {
         } else if (jarToMerge.name.contains("neoforge")) {
             loaderModule = when (minecraftVersionStr) {
                 "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.19.2", "1.18.2" -> "neoforge-fml2"
-                "1.21.6", "1.21.5", "1.21.4", "1.21.3", "1.21.1" -> "neoforge-fml4"
+                "1.21.8", "1.21.5", "1.21.4", "1.21.3", "1.21.1" -> "neoforge-fml4"
                 else -> "neoforge-fml10"
             }
         } else if (jarToMerge.name.contains("forge")) {
