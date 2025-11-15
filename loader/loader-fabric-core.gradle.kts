@@ -2,12 +2,13 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
     java
+    id("automodpack.utils")
     id("com.gradleup.shadow")
 }
 
 base {
     archivesName = property("mod.id") as String + "-" + project.name
-    version =  property("mod_version") as String
+    version = property("mod_version") as String
     group = property("mod.group") as String
 }
 
@@ -32,6 +33,7 @@ dependencies {
     compileOnly("net.fabricmc:fabric-loader:${property("deps.fabric")}")
 }
 
+
 configurations {
     create("shadowImplementation") {
         extendsFrom(configurations.getByName("implementation"))
@@ -41,6 +43,7 @@ configurations {
 
 // TODO: make it less messy
 tasks.named<ShadowJar>("shadowJar") {
+    dependsOn(tasks.named("processResources"))
     archiveClassifier.set("")
 
     from(project(":core").sourceSets.main.get().output)

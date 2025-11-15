@@ -18,7 +18,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
-@Mod(MOD_ID)
+@Mod(MOD_ID + "_mod")
 public class NeoForgeInit {
     public NeoForgeInit(IEventBus eventBus) {
          preload = false;
@@ -41,9 +41,9 @@ public class NeoForgeInit {
     }
 
 /^? if >1.20.5 {^/
-   @EventBusSubscriber(modid = MOD_ID)
+   @EventBusSubscriber(modid = MOD_ID + "_mod")
 /^?} else {^/
-   /^@Mod.EventBusSubscriber(modid = MOD_ID)
+   /^@Mod.EventBusSubscriber(modid = MOD_ID + "_mod")
 ^//^?}^/
     public static class events {
         @SubscribeEvent

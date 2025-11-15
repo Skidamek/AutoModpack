@@ -24,22 +24,6 @@ repositories {
     maven("https://maven.fabricmc.net/")
 }
 
-tasks.named<ProcessResources>("processResources") {
-    fun prop(name: String) = project.property(name) as String
-
-    val props = HashMap<String, String>().apply {
-        this["version"] = prop("mod_version")
-        this["minecraft"] = prop("meta.minecraft")
-        this["id"] = prop("mod.id")
-        this["name"] = prop("mod_name")
-        this["description"] = prop("mod.description")
-    }
-
-    filesMatching(listOf("pack.mcmeta", "fabric.mod.json", "META-INF/neoforge.mods.toml", "META-INF/mods.toml")) {
-        expand(props)
-    }
-}
-
 tasks.named("build") {
     // We need to build the loader modules first, so that we can merge the jars later
     dependsOn(":core:build", ":loader-core:build")

@@ -1,26 +1,16 @@
 {
   "schemaVersion": 1,
-  "id": "automodpack_bootstrap",
-  "version": "1.0.0",
-  "name": "AutoModpack bootstrap",
+  "id": "automodpack",
+  "version": "${version}",
+  "name": "AutoModpack",
   "description": "",
-  "authors": [
-    "Skidam"
-  ],
+  "authors": ["Skidam"],
   "icon": "icon.png",
-  "contact": {
-  },
+  "contact": {},
   "license": "LGPL-3.0-or-later",
   "environment": "*",
-  "custom": {
-    "modmenu": {
-      "badges": [
-        "library"
-      ]
-    }
-  },
   "depends": {
-    "automodpack": "*"
+    "automodpack_mod": "*"
   },
   "languageAdapters": {
     "automodpack_preload": "pl.skidam.automodpack_loader_core.FabricLanguageAdapter"

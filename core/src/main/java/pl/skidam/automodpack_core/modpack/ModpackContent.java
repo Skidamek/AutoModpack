@@ -271,7 +271,7 @@ public class ModpackContent {
             }
             // Exclude AutoModpack itself
             var modId = FileInspection.getModID(file);
-            if ((MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId) || MOD_ID.equals(modId)) {
+            if ((MOD_ID + "_bootstrap").equals(modId) || (MOD_ID + "-bootstrap").equals(modId) || (MOD_ID + "_mod").equals(modId) || MOD_ID.equals(modId)) {
                 return null;
             }
         } else if (formattedFile.contains("/config/")) {

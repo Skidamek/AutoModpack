@@ -15,7 +15,7 @@ import net.minecraftforge.fml.common.Mod;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
-@Mod(MOD_ID)
+@Mod(MOD_ID + "_mod")
 public class ForgeInit {
 
     public ForgeInit() {
@@ -38,7 +38,7 @@ public class ForgeInit {
         LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
     }
 
-    @Mod.EventBusSubscriber(modid = MOD_ID)
+    @Mod.EventBusSubscriber(modid = MOD_ID + "_mod")
     public static class events {
         @SubscribeEvent
         public static void onCommandsRegister(RegisterCommandsEvent event) {

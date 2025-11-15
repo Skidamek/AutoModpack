@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode
 plugins {
     kotlin("jvm")
     id("automodpack.common")
+    id("automodpack.utils")
     id("net.neoforged.moddev.legacyforge")
 }
 
@@ -54,17 +55,16 @@ tasks {
 
     processResources {
         exclude("**/fabric.mod.json", "**/automodpack.accesswidener")
+        if (stonecutter.eval(stonecutter.current.version, ">=1.21.9")) {
+            exclude("**/pack.mcmeta")
+            rename("new-pack.mcmeta", "pack.mcmeta")
+        } else {
+            exclude("**/new-pack.mcmeta")
+        }
     }
 
     named("createMinecraftArtifacts") {
         dependsOn("stonecutterGenerate")
-    }
-
-    register<Copy>("buildAndCollect") {
-        group = "build"
-        from(jar.map { it.archiveFile })
-        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod_version")}"))
-        dependsOn("build")
     }
 }
 

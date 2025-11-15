@@ -48,7 +48,7 @@ public class FabricLanguageAdapter implements LanguageAdapter {
 
     @Override
     public <T> T create(ModContainer mod, String value, Class<T> type) {
-        throw new UnsupportedOperationException("AutoModpack bootstrap");
+        throw new UnsupportedOperationException("AutoModpack");
     }
 
     // Proxy is necessary to be able to add/remove mods there

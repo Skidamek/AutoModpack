@@ -3,6 +3,7 @@
 plugins {
     kotlin("jvm")
     id("automodpack.common")
+    id("automodpack.utils")
     id("fabric-loom")
 }
 
@@ -71,12 +72,5 @@ tasks {
         } else {
             exclude("**/new-pack.mcmeta")
         }
-    }
-
-    register<Copy>("buildAndCollect") {
-        group = "build"
-        from(remapJar.map { it.archiveFile })
-        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod_version")}"))
-        dependsOn("build")
     }
 }

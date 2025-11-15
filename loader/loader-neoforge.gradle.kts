@@ -2,13 +2,14 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
     java
+    id("automodpack.utils")
     id("net.neoforged.moddev")
     id("com.gradleup.shadow")
 }
 
 base {
     archivesName = property("mod.id") as String + "-" + project.name
-    version =  property("mod_version") as String
+    version = property("mod_version") as String
     group = property("mod.group") as String
 }
 
@@ -28,19 +29,6 @@ dependencies {
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
 }
 
-tasks {
-    processResources {
-        exclude("**/fabric.mod.json", "**/automodpack.accesswidener")
-    }
-
-    register<Copy>("buildAndCollect") {
-        group = "build"
-        from(jar.map { it.archiveFile })
-        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod_version")}"))
-        dependsOn("build")
-    }
-}
-
 configurations {
     create("shadowImplementation") {
         extendsFrom(configurations.getByName("implementation"))
@@ -49,6 +37,7 @@ configurations {
 }
 
 tasks.named<ShadowJar>("shadowJar") {
+    dependsOn(tasks.named("processResources"))
     archiveClassifier.set("")
 
     from(project(":core").sourceSets.main.get().output)
@@ -76,12 +65,9 @@ tasks.named<ShadowJar>("shadowJar") {
     exclude("pl/skidam/automodpack_loader_core/mods/ModpackLoader.class")
     exclude("log4j2.xml")
 
-    manifest {
-        attributes["AutoModpack-Version"] = version
-    }
-
     mergeServiceFiles()
 }
+
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21

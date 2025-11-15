@@ -11,7 +11,7 @@ import java.nio.file.Path;
 
 public class GlobalVariables {
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
-    public static final String MOD_ID = "automodpack";
+    public static final String MOD_ID = "automodpack"; // For real its "automodpack_mod" but we use this for resource locations etc.
     public static Boolean DEBUG = false;
     public static Boolean preload;
     public static String MC_VERSION;

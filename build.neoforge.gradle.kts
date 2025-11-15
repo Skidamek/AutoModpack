@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm")
     id("automodpack.common")
+    id("automodpack.utils")
     id("net.neoforged.moddev")
 }
 
@@ -43,13 +44,6 @@ tasks {
 
     named("createMinecraftArtifacts") {
         dependsOn("stonecutterGenerate")
-    }
-
-    register<Copy>("buildAndCollect") {
-        group = "build"
-        from(jar.map { it.archiveFile })
-        into(rootProject.layout.buildDirectory.file("libs/${project.property("mod_version")}"))
-        dependsOn("build")
     }
 }
 

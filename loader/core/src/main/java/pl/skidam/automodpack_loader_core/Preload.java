@@ -99,11 +99,10 @@ public class Preload {
         LOADER_MANAGER = new LoaderManager();
         MODPACK_LOADER = new ModpackLoader();
         MC_VERSION = LOADER_MANAGER.getModVersion("minecraft");
-        // Can't get via automodpack version though loader methods since this mod isn't loaded yet... At least on forge...
-        AM_VERSION = ManifestReader.getAutoModpackVersion();
         LOADER_VERSION = LOADER_MANAGER.getLoaderVersion();
         LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
         THIZ_JAR = FileInspection.getThizJar();
+        AM_VERSION = FileInspection.getModVersion(THIZ_JAR);
         MODS_DIR = THIZ_JAR.getParent();
 
         // Get "overrides-automodpack-client.json" zipfile from the AUTOMODPACK_JAR
