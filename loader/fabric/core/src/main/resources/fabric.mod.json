@@ -9,6 +9,13 @@
   "contact": {},
   "license": "LGPL-3.0-or-later",
   "environment": "*",
+  "custom": {
+    "modmenu": {
+      "badges": [
+        "library"
+      ]
+    }
+  },
   "depends": {
     "automodpack_mod": "*"
   },
