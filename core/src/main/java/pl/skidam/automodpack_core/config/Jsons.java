@@ -29,6 +29,7 @@ public class Jsons {
         public Map<String, ModpackAddresses> installedModpacks; // modpack name, <modpack host address, minecraft server address>
         public boolean updateSelectedModpackOnLaunch = true;
         public boolean selfUpdater = false;
+        public boolean syncAutoModpackVersion = true;
         public boolean syncLoaderVersion = false;
         public boolean playMusic = true;
     }

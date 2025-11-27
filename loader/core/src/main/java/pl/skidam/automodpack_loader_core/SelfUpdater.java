@@ -53,6 +53,11 @@ public class SelfUpdater {
                 return false;
             }
 
+            if (!clientConfig.syncAutoModpackVersion) {
+                LOGGER.warn("AutoModpack version syncing is disabled in client config. Cannot sync to server version: {}", serverModpackContent.automodpackVersion);
+                return false;
+            }
+
             LOGGER.info("Syncing AutoModpack to server version: {}", serverModpackContent.automodpackVersion);
             modrinthAPIList.add(ModrinthAPI.getModSpecificVersion(AUTOMODPACK_ID, serverModpackContent.automodpackVersion, serverModpackContent.mcVersion));
         } else {
