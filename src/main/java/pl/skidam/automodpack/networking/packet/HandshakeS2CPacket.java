@@ -98,7 +98,7 @@ public class HandshakeS2CPacket {
                 return;
             }
 
-            if (!hostServer.isRunning()) {
+            if (!hostServer.isRunning() && serverConfig.portToSend == -1) {
                 LOGGER.info("Host server is not running. Modpack will not be sent to {}", GameHelpers.getPlayerName(profile));
                 return;
             }
@@ -117,7 +117,7 @@ public class HandshakeS2CPacket {
 
             String addressToSend = serverConfig.addressToSend;
             int portToSend = serverConfig.portToSend;
-            boolean requiresMagic = serverConfig.bindPort == -1;
+            boolean requiresMagic = serverConfig.bindPort == -1; // TODO: consider adding `&& hostServer.isRunning()`
 
             LOGGER.info("Sending {} modpack host address: {}:{}", GameHelpers.getPlayerName(profile), addressToSend, portToSend);
 
