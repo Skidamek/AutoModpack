@@ -68,7 +68,10 @@ public class HandshakeC2SPacket {
             return;
         }
 
-        ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
-        SelfUpdater.installModVersion(automodpack);
+        // Disconnect and install only if the update is valid
+        if (SelfUpdater.validUpdate(automodpack)) {
+            ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
+            SelfUpdater.installModVersion(automodpack);
+        }
     }
 }

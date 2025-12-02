@@ -141,6 +141,11 @@ public class SelfUpdater {
                 break; // Break, we are using the latest version, all previous if's get us to this point meaning otherwise we would update to this version, but we are already using it.
             }
 
+            // Important to leave it here
+            if (!validUpdate(automodpack)) {
+                return false;
+            }
+
             LOGGER.info("Update found! Updating to the {} version: {}", gettingServerVersion ? "server" : "latest", automodpack.fileVersion());
 
             // We got correct version
@@ -180,10 +185,6 @@ public class SelfUpdater {
     }
 
     public static void installModVersion(ModrinthAPI automodpack) {
-        if (!validUpdate(automodpack)) {
-            return;
-        }
-
         Path automodpackUpdateJar = automodpackDir.resolve(automodpack.fileName());
         Path newAutomodpackJar;
 
