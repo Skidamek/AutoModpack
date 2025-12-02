@@ -117,10 +117,10 @@ public class Jsons {
     }
 
     public static class ServerCoreConfigFields {
-        public String automodpackVersion = "4.0.0-beta37"; // TODO: dont hardcode it
-        public String loader = "fabric";
-        public String loaderVersion = "0.16.14";
-        public String mcVersion = "1.21.1";
+        public String automodpackVersion = "";
+        public String loader = "";
+        public String loaderVersion = "";
+        public String mcVersion = "";
     }
 
     public static class SecretsFields {
