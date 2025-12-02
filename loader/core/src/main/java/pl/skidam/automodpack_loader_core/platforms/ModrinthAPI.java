@@ -17,11 +17,16 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 
 
     public static List<ModrinthAPI> getModInfosFromID(String modrinthID) {
+        if (modrinthID == null) {
+            return null;
+        }
+
+        if (modrinthID.isBlank()) {
+            return null;
+        }
 
         String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
-
         String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + MC_VERSION + "\"]";
-
         requestUrl = requestUrl.replaceAll("\"", "%22"); // so important!
 
         List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
@@ -60,11 +65,16 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 
 
     public static ModrinthAPI getModSpecificVersion(String modrinthID, String modVersion, String mcVersion) {
+        if (modrinthID == null || modVersion == null || mcVersion == null) {
+            return null;
+        }
+
+        if (modrinthID.isBlank() || modVersion.isBlank() || mcVersion.isBlank()) {
+            return null;
+        }
 
         String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
-
         String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + mcVersion + "\"]";
-
         requestUrl = requestUrl.replaceAll("\"", "%22"); // important!
 
         try {
@@ -131,7 +141,6 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
         }
 
         String modrinthID = JSONObject.get("project_id").getAsString();
-
         String fileVersion = JSONObject.get("version_number").getAsString();
         String releaseType = JSONObject.get("version_type").getAsString();
 

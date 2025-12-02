@@ -31,14 +31,13 @@ public class SelfUpdater {
     }
 
     public static boolean update(Jsons.ModpackContentFields serverModpackContent) {
-
         if (LOADER_MANAGER.isDevelopmentEnvironment()) return false;
         if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {
             LOGGER.info("AutoModpack self-updater is disabled in server config.");
             return false;
         }
 
-        boolean gettingServerVersion = serverModpackContent != null && serverModpackContent.automodpackVersion != null;
+        boolean gettingServerVersion = serverModpackContent != null && serverModpackContent.automodpackVersion != null && !serverModpackContent.automodpackVersion.isBlank();
 
         if (!gettingServerVersion && LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT && !clientConfig.selfUpdater) {
             LOGGER.info("AutoModpack self-updater is disabled in client config.");
