@@ -545,7 +545,7 @@ public class FileInspection {
                         case "server" -> LoaderManagerService.EnvironmentType.SERVER;
                         default -> LoaderManagerService.EnvironmentType.UNIVERSAL;
                     };
-                } else if (json.has("quilt_loader") && json.get("minecraft").getAsJsonObject().has("environment")) {
+                } else if (json.has("quilt_loader") && json.has("minecraft") && json.get("minecraft").getAsJsonObject().has("environment")) {
                     String environment = json.get("minecraft").getAsJsonObject().get("environment").getAsString();
                     if (environment == null) return LoaderManagerService.EnvironmentType.UNIVERSAL;
                     return switch (environment.toLowerCase()) {
