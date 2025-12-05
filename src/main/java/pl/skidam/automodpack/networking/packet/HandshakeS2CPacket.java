@@ -117,7 +117,7 @@ public class HandshakeS2CPacket {
 
             String addressToSend = serverConfig.addressToSend;
             int portToSend = serverConfig.portToSend;
-            boolean requiresMagic = serverConfig.bindPort == -1; // TODO: consider adding `&& hostServer.isRunning()`
+            boolean requiresMagic = (serverConfig.bindPort == -1 && hostServer.isRunning()) || serverConfig.requireMagicPackets;
 
             LOGGER.info("Sending {} modpack host address: {}:{}", GameHelpers.getPlayerName(profile), addressToSend, portToSend);
 

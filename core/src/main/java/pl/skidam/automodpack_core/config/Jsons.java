@@ -108,6 +108,7 @@ public class Jsons {
         public String addressToSend = "";
         public int portToSend = -1;
         public boolean disableInternalTLS = false;
+        public boolean requireMagicPackets = false;
         public boolean updateIpsOnEveryStart = false;
         public int bandwidthLimit = 0;
         public boolean validateSecrets = true;
