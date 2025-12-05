@@ -24,7 +24,16 @@ public class ConfigUtils {
         Pattern pattern = Pattern.compile(prefixPattern);
 
         for (var file : serverConfig.syncedFiles) {
-            if (pattern.matcher(file).find()) {
+            if (file == null) {
+                LOGGER.warn("Ignored null entry in syncedFiles.");
+                continue;
+            }
+            var trimmed = file.trim();
+            if (trimmed.isEmpty()) {
+                LOGGER.warn("Ignored empty entry in syncedFiles.");
+                continue;
+            }
+            if (pattern.matcher(trimmed).find()) {
                 LOGGER.info("Removed redundant syncedFiles entry '{}': paths under '/automodpack/host-modpack/' are implicitly synced.", file);
             } else {
                 fixedSyncedFiles.add(prefixSlash(file));
@@ -32,20 +41,34 @@ public class ConfigUtils {
         }
 
         for (var file : serverConfig.allowEditsInFiles) {
-            var matcher = pattern.matcher(file);
-            var fixed = file;
-            if (matcher.find()) {
-                fixed = matcher.replaceFirst("");
+            if (file == null) {
+                LOGGER.warn("Ignored null entry in allowEditsInFiles.");
+                continue;
+            }
+            var trimmed = file.trim();
+            if (trimmed.isEmpty()) {
+                LOGGER.warn("Ignored empty entry in allowEditsInFiles.");
+                continue;
+            }
+            var fixed = pattern.matcher(trimmed).replaceFirst("");
+            if (!fixed.equals(trimmed)) {
                 LOGGER.info("Normalized allowEditsInFiles entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", file, fixed);
             }
             fixedAllowEditsInFiles.add(prefixSlash(fixed));
         }
 
         for (var file : serverConfig.forceCopyFilesToStandardLocation) {
-            var matcher = pattern.matcher(file);
-            var fixed = file;
-            if (matcher.find()) {
-                fixed = matcher.replaceFirst("");
+            if (file == null) {
+                LOGGER.warn("Ignored null entry in forceCopyFilesToStandardLocation.");
+                continue;
+            }
+            var trimmed = file.trim();
+            if (trimmed.isEmpty()) {
+                LOGGER.warn("Ignored empty entry in forceCopyFilesToStandardLocation.");
+                continue;
+            }
+            var fixed = pattern.matcher(trimmed).replaceFirst("");
+            if (!fixed.equals(trimmed)) {
                 LOGGER.info("Normalized forceCopyFilesToStandardLocation entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", file, fixed);
             }
             fixedForceCopyFilesToStandardLocation.add(prefixSlash(fixed));
