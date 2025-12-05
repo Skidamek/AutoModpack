@@ -20,6 +20,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -30,50 +31,64 @@ public class ModpackUtils {
             throw new IllegalArgumentException("Server modpack content list is null");
         }
 
-        // get client modpack content
         var optionalClientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
-        if (optionalClientModpackContentFile.isPresent() && Files.exists(optionalClientModpackContentFile.get())) {
+        if (optionalClientModpackContentFile.isEmpty() || !Files.exists(optionalClientModpackContentFile.get())) {
+            return true;
+        }
 
-            Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
-            if (clientModpackContent == null) {
+        Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
+        if (clientModpackContent == null) {
+            return true;
+        }
+
+        LOGGER.info("Indexing file system...");
+
+        Set<Path> existingFileTree;
+        try (var stream = Files.walk(modpackDir)) {
+            existingFileTree = stream.collect(Collectors.toSet());
+        } catch (IOException e) {
+            LOGGER.error("Failed to walk directory", e);
+            return true;
+        }
+
+        LOGGER.info("Verifying content against server list...");
+
+        boolean hasMismatches = serverModpackContent.list.parallelStream().anyMatch(modpackContentField -> {
+            Path path = CustomFileUtils.getPath(modpackDir, modpackContentField.file);
+
+            if (!existingFileTree.contains(path)) {
+                LOGGER.info("Missing file: {}", modpackContentField.file);
                 return true;
             }
 
-            LOGGER.info("Checking files...");
-            for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : serverModpackContent.list) {
-                String file = modpackContentField.file;
-                String serverSHA1 = modpackContentField.sha1;
+            if (modpackContentField.editable) return false;
 
-                Path path = CustomFileUtils.getPath(modpackDir, file);
-
-                if (Files.exists(path)) {
-                    if (modpackContentField.editable) continue;
-                } else {
-                    Path standardPath = CustomFileUtils.getPathFromCWD(file);
-                    LOGGER.info("File does not exist {} - {}", standardPath, file);
-                    return true;
-                }
-
-                if (!Objects.equals(serverSHA1, CustomFileUtils.getHash(path))) {
-                    LOGGER.info("File does not match hash {} - {}", path, file);
-                    return true;
-                }
+            String diskHash = CustomFileUtils.getHash(path);
+            if (!Objects.equals(modpackContentField.sha1, diskHash)) {
+                LOGGER.info("Hash mismatch: {}", modpackContentField.file);
+                return true;
             }
-
-            // Server also might have deleted some files
-            for (Jsons.ModpackContentFields.ModpackContentItem modpackContentField : clientModpackContent.list) {
-                var serverItemOpt = serverModpackContent.list.stream().filter(item -> item.file.equals(modpackContentField.file)).findFirst();
-                if (serverItemOpt.isEmpty()) {
-                    LOGGER.info("File does not exist on server {}", modpackContentField.file);
-                    return true;
-                }
-            }
-
-            LOGGER.info("{} is up to date!", modpackDir);
             return false;
-        } else {
-            return true;
+        });
+
+        if (hasMismatches) return true;
+
+        Set<String> serverFileSet = serverModpackContent.list.stream()
+                .map(item -> item.file)
+                .collect(Collectors.toSet());
+
+        LOGGER.info("Checking for deleted files...");
+
+        // We use a simple loop here because it's purely in-memory string comparison (very fast)
+        for (Jsons.ModpackContentFields.ModpackContentItem clientItem : clientModpackContent.list) {
+            if (!serverFileSet.contains(clientItem.file)) {
+                LOGGER.info("File marked for deletion (not on server): {}", clientItem.file);
+                return true;
+            }
         }
+
+        LOGGER.info("{} is up to date!", modpackDir);
+        return false;
     }
 
     public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
@@ -275,7 +290,7 @@ public class ModpackUtils {
                 if (!Objects.equals(modpackMod.hash(), standardMod.hash())) {
                     LOGGER.warn("Changing duplicated mod {} - {} to modpack version - {}", modId, standardMod.modVersion(), modpackMod.modVersion());
                     CustomFileUtils.executeOrder66(standardModPath);
-                    CustomFileUtils.copyFile(modpackModPath, newStandardModPath);
+                    CustomFileUtils.copyFile(modpackModPath, newStandardModPath); // TODO make sure we dont copy an empty invalid file there
                     requiresRestart = true;
                 }
             } else if (!isWorkaround && !isForceCopy) {
