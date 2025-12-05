@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Performance test to verify WildCards optimizations
  */
-class WildCardsPerformanceTest {
+class FileTreeScannerPerformanceTest {
 
     @TempDir
     Path tempDir;
@@ -46,20 +46,20 @@ class WildCardsPerformanceTest {
                 "/m*s/*.jar",
                 "/**/*.json"
         );
-        
-        WildCards wildCards = new WildCards(wildcards, Set.of(tempDir));
+
+        FileTreeScanner fileTreeScanner = new FileTreeScanner(wildcards, Set.of(tempDir));
         
         long startTime = System.nanoTime();
-        wildCards.match();
+        fileTreeScanner.scan();
         long endTime = System.nanoTime();
         
         long durationMs = (endTime - startTime) / 1_000_000;
         
         System.out.println("Smart directory walking took: " + durationMs + " ms");
-        System.out.println("Found " + wildCards.getWildcardMatches().size() + " matches");
+        System.out.println("Found " + fileTreeScanner.getMatchedPaths().size() + " matches");
         
         // Should find 1000 mods + 1000 configs = 2000 files
-        assertEquals(2000, wildCards.getWildcardMatches().size(), "Expected 2000 matches, got " + wildCards.getWildcardMatches().size());
+        assertEquals(2000, fileTreeScanner.getMatchedPaths().size(), "Expected 2000 matches, got " + fileTreeScanner.getMatchedPaths().size());
 
         // This is more of a smoke test than a hard performance requirement
         assertTrue(durationMs < 5000, 
@@ -82,20 +82,20 @@ class WildCardsPerformanceTest {
                 "!/test/file-1*.txt",
                 "!/test/file-2*.txt"
         );
-        
-        WildCards wildCards = new WildCards(wildcards, Set.of(tempDir));
+
+        FileTreeScanner fileTreeScanner = new FileTreeScanner(wildcards, Set.of(tempDir));
         
         long startTime = System.nanoTime();
-        wildCards.match();
+        fileTreeScanner.scan();
         long endTime = System.nanoTime();
         
         long durationMs = (endTime - startTime) / 1_000_000;
         
         System.out.println("Cached formatted paths took: " + durationMs + " ms");
-        System.out.println("Found " + wildCards.getWildcardMatches().size() + " matches");
+        System.out.println("Found " + fileTreeScanner.getMatchedPaths().size() + " matches");
         
         // Should exclude files matching the blacklist patterns
-        assertTrue(wildCards.getWildcardMatches().size() < 500,
+        assertTrue(fileTreeScanner.getMatchedPaths().size() < 500,
                 "Expected fewer than 500 matches due to blacklist");
         
         // Caching should make this fast
