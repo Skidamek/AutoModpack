@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
+import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_loader_core.SelfUpdater;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 
@@ -68,8 +69,10 @@ public class HandshakeC2SPacket {
             return;
         }
 
+        SemanticVersion semver = SemanticVersion.parse(automodpack.fileVersion());
+
         // Disconnect and install only if the update is valid
-        if (SelfUpdater.validUpdate(automodpack)) {
+        if (SelfUpdater.validUpdate(semver)) {
             ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
             SelfUpdater.installModVersion(automodpack);
         }
