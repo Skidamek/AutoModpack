@@ -42,6 +42,7 @@ public class ModpackUtils {
         }
 
         LOGGER.info("Indexing file system...");
+        var start = System.currentTimeMillis();
 
         Set<Path> existingFileTree;
         try (var stream = Files.walk(modpackDir)) {
@@ -87,7 +88,8 @@ public class ModpackUtils {
             }
         }
 
-        LOGGER.info("{} is up to date!", modpackDir);
+        var end = System.currentTimeMillis();
+        LOGGER.info("{} is up to date! Took {} ms", modpackDir, end - start);
         return false;
     }
 
@@ -347,33 +349,45 @@ public class ModpackUtils {
 
     // Returns true if value changed
     public static boolean selectModpack(Path modpackDirToSelect, Jsons.ModpackAddresses modpackAddresses, Set<String> newDownloadedFiles) {
-        final String modpackToSelect = modpackDirToSelect.getFileName().toString();
-        String selectedModpack = clientConfig.selectedModpack;
+        String newName = modpackDirToSelect.getFileName().toString();
+        String oldName = clientConfig.selectedModpack;
 
-        if (selectedModpack != null && !selectedModpack.isBlank()) {
-            // Save current editable files
-            Path selectedModpackDir = modpacksDir.resolve(selectedModpack);
-            Path selectedModpackContentFile = selectedModpackDir.resolve(hostModpackContentFile.getFileName());
-            Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(selectedModpackContentFile);
-            if (modpackContent != null) {
-                Set<String> editableFiles = getEditableFiles(modpackContent.list);
-                ModpackUtils.preserveEditableFiles(selectedModpackDir, editableFiles, newDownloadedFiles);
-            }
+        // If nothing changed, update list only and return early to avoid I/O.
+        if (Objects.equals(newName, oldName)) {
+            ModpackUtils.addModpackToList(newName, modpackAddresses);
+            return false;
         }
 
-        // Copy editable files from modpack to select
-        Path modpackContentFile = modpackDirToSelect.resolve(hostModpackContentFile.getFileName());
-        Jsons.ModpackContentFields modpackContentToSelect = ConfigTools.loadModpackContent(modpackContentFile);
-        if (modpackContentToSelect != null) {
-            Set<String> editableFiles = getEditableFiles(modpackContentToSelect.list);
-            ModpackUtils.copyPreviousEditableFiles(modpackDirToSelect, editableFiles, newDownloadedFiles);
+        LOGGER.info("Preserving editable files from old modpack and copying to new modpack...");
+
+        // 1. Preserve files from the OLD modpack (if it existed)
+        if (oldName != null && !oldName.isBlank()) {
+            processEditableFiles(modpacksDir.resolve(oldName), (dir, files) ->
+                    ModpackUtils.preserveEditableFiles(dir, files, newDownloadedFiles));
         }
 
-        clientConfig.selectedModpack = modpackToSelect;
+        // 2. Restore/Copy files to the NEW modpack
+        processEditableFiles(modpackDirToSelect, (dir, files) ->
+                ModpackUtils.copyPreviousEditableFiles(dir, files, newDownloadedFiles));
+
+        // 3. Update Configuration and Save
+        clientConfig.selectedModpack = newName;
         ConfigTools.save(clientConfigFile, clientConfig);
-        ModpackUtils.addModpackToList(modpackToSelect, modpackAddresses);
+        ModpackUtils.addModpackToList(newName, modpackAddresses);
 
-        return !Objects.equals(modpackToSelect, selectedModpack);
+        LOGGER.info("Selected modpack: {}", newName);
+
+        return true;
+    }
+
+    private static void processEditableFiles(Path modpackDir, java.util.function.BiConsumer<Path, Set<String>> action) {
+        Path contentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
+        Jsons.ModpackContentFields content = ConfigTools.loadModpackContent(contentFile);
+
+        if (content != null) {
+            Set<String> editableFiles = getEditableFiles(content.list);
+            action.accept(modpackDir, editableFiles);
+        }
     }
 
     public static void removeModpackFromList(String modpackName) {
