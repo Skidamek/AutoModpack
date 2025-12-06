@@ -36,6 +36,8 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             int magic = in.getInt(in.readerIndex());
             if (isMagic(magic)) {
                 handleMagicPacket(ctx, in, magic);
+            } else if (ctx.channel().pipeline().get(this.getClass()) != null) {
+                ctx.channel().pipeline().remove(this);
             }
             return;
         }
