@@ -12,121 +12,62 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * An implementation of {@link X509ExtendedTrustManager} that uses a trusts all certificates in a provided
- * {@link KeyStore}, and verifies other certificates using the default key store. In order to enable recovering the
- * peer certificate chain from a failed handshake, a callback is called before each verification process.
- */
-class CustomizableTrustManager extends X509ExtendedTrustManager {
+public class CustomizableTrustManager extends X509ExtendedTrustManager {
+
     private final X509ExtendedTrustManager defaultTrustManager;
-    private final X509ExtendedTrustManager trustedCertificatesTrustManager;
+    private final X509ExtendedTrustManager customTrustManager;
     private final Consumer<X509Certificate[]> onValidating;
+    private final X509Certificate[] cachedAcceptedIssuers;
+
+    public CustomizableTrustManager(KeyStore customStore, Consumer<X509Certificate[]> onValidating) throws KeyStoreException {
+        this.defaultTrustManager = createTrustManager(null);
+        this.customTrustManager = (customStore != null && customStore.size() > 0) ? createTrustManager(customStore) : null;
+        this.onValidating = onValidating;
+
+        // Pre-calculate merged issuers to avoid overhead on every handshake
+        List<X509Certificate> issuers = new ArrayList<>(Arrays.asList(defaultTrustManager.getAcceptedIssuers()));
+        if (this.customTrustManager != null) {
+            issuers.addAll(Arrays.asList(this.customTrustManager.getAcceptedIssuers()));
+        }
+        this.cachedAcceptedIssuers = issuers.toArray(new X509Certificate[0]);
+    }
 
     /**
-     * Creates a new {@link CustomizableTrustManager} that trusts all certificates in the provided {@link KeyStore},
-     * and verifies other certificates using the default key store.
-     *
-     * @param trustedCertificates a {@link KeyStore} containing certificates to be trusted
-     * @param onValidating        a callback that is run for every certificate chain before verification
-     * @throws KeyStoreException if the provided {@link KeyStore} could not be used to initialize a {@link TrustManager}
+     * Factory helper to reduce code duplication when initializing trust managers.
      */
-    public CustomizableTrustManager(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating) throws KeyStoreException {
-        TrustManagerFactory trustManagerFactory;
+    private static X509ExtendedTrustManager createTrustManager(KeyStore keyStore) throws KeyStoreException {
         try {
-            trustManagerFactory = TrustManagerFactory
-                    .getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(keyStore);
+            for (TrustManager tm : tmf.getTrustManagers()) {
+                if (tm instanceof X509ExtendedTrustManager) {
+                    return (X509ExtendedTrustManager) tm;
+                }
+            }
+            throw new IllegalStateException("No X509ExtendedTrustManager found");
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("Failed to create a TrustManagerFactory with the default algorithm.", e);
-        }
-        try {
-            trustManagerFactory.init((KeyStore) null);
-        } catch (KeyStoreException e) {
-            throw new RuntimeException("Failed to initialize a TrustManagerFactory.", e);
-        }
-
-        this.defaultTrustManager = getX509ExtendedTrustManager(trustManagerFactory);
-        X509ExtendedTrustManager trustedCertificatesTrustManager = null;
-        if (trustedCertificates.size() > 0) {
-            try {
-                trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            } catch (NoSuchAlgorithmException e) {
-                throw new RuntimeException("Failed to create a TrustManagerFactory with the default algorithm.", e);
-            }
-            trustManagerFactory.init(trustedCertificates);
-
-            trustedCertificatesTrustManager = getX509ExtendedTrustManager(trustManagerFactory);
-        }
-        this.trustedCertificatesTrustManager = trustedCertificatesTrustManager;
-        this.onValidating = onValidating;
-    }
-
-    private static X509ExtendedTrustManager getX509ExtendedTrustManager(TrustManagerFactory trustManagerFactory) {
-        X509ExtendedTrustManager trustedCertificatesTrustManager = null;
-        for (TrustManager trustManager : trustManagerFactory.getTrustManagers()) {
-            if (trustManager instanceof X509ExtendedTrustManager) {
-                trustedCertificatesTrustManager = (X509ExtendedTrustManager) trustManager;
-                break;
-            }
-        }
-        if (trustedCertificatesTrustManager == null) {
-            throw new RuntimeException("Failed to create an extended trust manager.");
-        }
-        return trustedCertificatesTrustManager;
-    }
-
-    private X509Certificate[] mergeCertificates() {
-        ArrayList<X509Certificate> resultingCerts
-                = new ArrayList<>(Arrays.asList(defaultTrustManager.getAcceptedIssuers()));
-        if (trustedCertificatesTrustManager != null) {
-            resultingCerts.addAll(Arrays.asList(trustedCertificatesTrustManager.getAcceptedIssuers()));
-        }
-        return resultingCerts.toArray(new X509Certificate[0]);
-    }
-
-    @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        onValidating.accept(chain);
-        try {
-            defaultTrustManager.checkClientTrusted(chain, authType);
-        } catch (CertificateException e) {
-            if (trustedCertificatesTrustManager != null) {
-                trustedCertificatesTrustManager.checkClientTrusted(chain, authType);
-            } else {
-                throw e;
-            }
-        }
-    }
-
-    @Override
-    public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-        onValidating.accept(chain);
-        try {
-            defaultTrustManager.checkServerTrusted(chain, authType);
-        } catch (CertificateException e) {
-            if (trustedCertificatesTrustManager != null) {
-                trustedCertificatesTrustManager.checkServerTrusted(chain, authType);
-            } else {
-                throw e;
-            }
+            throw new RuntimeException("Default algorithm unavailable", e);
         }
     }
 
     @Override
     public X509Certificate[] getAcceptedIssuers() {
-        return mergeCertificates();
+        return cachedAcceptedIssuers;
     }
 
+    // --- Server Trust Checks (Client-Side Logic) ---
+
     @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType, Socket checkedSocket)
-            throws CertificateException {
+    public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        if (onValidating != null) onValidating.accept(chain);
         try {
-            defaultTrustManager.checkClientTrusted(chain, authType, checkedSocket);
+            defaultTrustManager.checkServerTrusted(chain, authType);
         } catch (CertificateException e) {
-            if (trustedCertificatesTrustManager != null) {
-                // Skip address check if certificate is trusted
-                trustedCertificatesTrustManager.checkClientTrusted(chain, authType);
+            if (customTrustManager != null) {
+                customTrustManager.checkServerTrusted(chain, authType);
             } else {
                 throw e;
             }
@@ -134,15 +75,16 @@ class CustomizableTrustManager extends X509ExtendedTrustManager {
     }
 
     @Override
-    public void checkServerTrusted(X509Certificate[] chain, String authType, Socket checkedSocket)
-            throws CertificateException {
-        onValidating.accept(chain);
+    public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket) throws CertificateException {
+        if (onValidating != null) onValidating.accept(chain);
         try {
-            defaultTrustManager.checkServerTrusted(chain, authType, checkedSocket);
+            // Primary check: Includes standard PKIX path validation AND Hostname Verification (if Endpoint ID is HTTPS)
+            defaultTrustManager.checkServerTrusted(chain, authType, socket);
         } catch (CertificateException e) {
-            if (trustedCertificatesTrustManager != null) {
-                // Skip address check if certificate is trusted
-                trustedCertificatesTrustManager.checkServerTrusted(chain, authType);
+            // Fallback: If user explicitly trusted this cert, verify the signature but BYPASS Hostname Verification.
+            // We intentionally drop the 'socket' parameter here to allow connecting to IPs that don't match the Cert CN.
+            if (customTrustManager != null) {
+                customTrustManager.checkServerTrusted(chain, authType);
             } else {
                 throw e;
             }
@@ -150,14 +92,30 @@ class CustomizableTrustManager extends X509ExtendedTrustManager {
     }
 
     @Override
-    public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
-            throws CertificateException {
+    public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine) throws CertificateException {
+        if (onValidating != null) onValidating.accept(chain);
         try {
-            defaultTrustManager.checkClientTrusted(chain, authType, sslEngine);
+            defaultTrustManager.checkServerTrusted(chain, authType, engine);
         } catch (CertificateException e) {
-            if (trustedCertificatesTrustManager != null) {
-                // Skip address check if certificate is trusted
-                trustedCertificatesTrustManager.checkClientTrusted(chain, authType);
+            // Fallback: Bypass Hostname Verification for custom store (see Socket overload)
+            if (customTrustManager != null) {
+                customTrustManager.checkServerTrusted(chain, authType);
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    // --- Client Trust Checks (Server-Side Logic - unused in this context) ---
+
+    @Override
+    public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+        if (onValidating != null) onValidating.accept(chain);
+        try {
+            defaultTrustManager.checkClientTrusted(chain, authType);
+        } catch (CertificateException e) {
+            if (customTrustManager != null) {
+                customTrustManager.checkClientTrusted(chain, authType);
             } else {
                 throw e;
             }
@@ -165,15 +123,27 @@ class CustomizableTrustManager extends X509ExtendedTrustManager {
     }
 
     @Override
-    public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
-            throws CertificateException {
-        onValidating.accept(chain);
+    public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) throws CertificateException {
+        if (onValidating != null) onValidating.accept(chain);
         try {
-            defaultTrustManager.checkServerTrusted(chain, authType, sslEngine);
+            defaultTrustManager.checkClientTrusted(chain, authType, socket);
         } catch (CertificateException e) {
-            if (trustedCertificatesTrustManager != null) {
-                // Skip address check if certificate is trusted
-                trustedCertificatesTrustManager.checkServerTrusted(chain, authType);
+            if (customTrustManager != null) {
+                customTrustManager.checkClientTrusted(chain, authType);
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    @Override
+    public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) throws CertificateException {
+        if (onValidating != null) onValidating.accept(chain);
+        try {
+            defaultTrustManager.checkClientTrusted(chain, authType, engine);
+        } catch (CertificateException e) {
+            if (customTrustManager != null) {
+                customTrustManager.checkClientTrusted(chain, authType);
             } else {
                 throw e;
             }

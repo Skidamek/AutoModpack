@@ -112,6 +112,7 @@ public class NettyServer {
                                 "TLS_AES_128_GCM_SHA256",
                                 "TLS_AES_256_GCM_SHA384",
                                 "TLS_CHACHA20_POLY1305_SHA256"))
+                        .sessionTimeout(1800)
                         .build();
 
                 // generate sha256 from cert as a fingerprint

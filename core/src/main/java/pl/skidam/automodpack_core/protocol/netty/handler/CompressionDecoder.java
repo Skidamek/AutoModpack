@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
-import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -31,13 +30,17 @@ public class CompressionDecoder extends ByteToMessageDecoder {
         int compressedLength = in.readInt();
         int originalLength = in.readInt();
 
+        // Define a safety buffer. Compression usually shrinks data, but headers can add overhead.
+        var chunkSize = ctx.channel().attr(NettyServer.CHUNK_SIZE).get();
+        int maxAllowedSize = chunkSize + 8192;
+
         // Validate lengths
-        if (compressedLength < 0 || originalLength < 0) {
-            throw new IllegalArgumentException("Invalid compressed or original length");
+        if (compressedLength < 0 || compressedLength > maxAllowedSize) {
+            throw new IllegalArgumentException("Frame compressed length (" + compressedLength + ") exceeds limit (" + maxAllowedSize + ")");
         }
 
-        if (compressedLength > NetUtils.MAX_CHUNK_SIZE || originalLength > NetUtils.MAX_CHUNK_SIZE) {
-            throw new IllegalArgumentException("Original length exceeds maximum packet size");
+        if (originalLength < 0 || originalLength > chunkSize) {
+            throw new IllegalArgumentException("Frame original length (" + originalLength + ") exceeds chunk size (" + chunkSize + ")");
         }
 
         // Check if we have enough data
