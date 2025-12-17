@@ -56,7 +56,7 @@ val mergedJarWrapper = tasks.register<Jar>("mergedJarWrapper") {
     destinationDirectory.set(File(mergedDirPath))
 }
 
-val optimizedMergedJar = jarOptimizer.register(mergedJarWrapper, "pl.skidam")
+val optimizedMergedJar = jarOptimizer.register(mergedJarWrapper, "pl.skidam", "amp_libs.org.bouncycastle.jcajce.provider.asymmetric")
 
 tasks.register("optimizeMergedJar") {
     dependsOn(optimizedMergedJar)
