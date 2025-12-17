@@ -13,14 +13,14 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public class LoginQueryParser {
 	public Packet<?> packet;
 	public boolean success = true;
 	public int queryId;
 	public FriendlyByteBuf buf;
-	public ResourceLocation channelName;
+	public Identifier channelName;
 
 	public LoginQueryParser(Packet<?> packet) {
 		if (packet instanceof ClientboundCustomQueryPacket packetS2C) {

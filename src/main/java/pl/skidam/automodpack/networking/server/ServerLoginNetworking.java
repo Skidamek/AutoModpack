@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.networking.server;
 
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import pl.skidam.automodpack.networking.PacketSender;
@@ -14,7 +14,7 @@ import java.util.concurrent.Future;
 // credits to fabric api
 public class ServerLoginNetworking {
 
-    private static final Map<ResourceLocation, LoginQueryResponseHandler> handlers = new HashMap<>();
+    private static final Map<Identifier, LoginQueryResponseHandler> handlers = new HashMap<>();
 
     /**
      * Registers a handler to a query response channel.
@@ -23,14 +23,14 @@ public class ServerLoginNetworking {
      * @param channelName the id of the channel
      * @param handler the handler
      */
-    public static void registerGlobalReceiver(ResourceLocation channelName, LoginQueryResponseHandler handler) {
+    public static void registerGlobalReceiver(Identifier channelName, LoginQueryResponseHandler handler) {
         Objects.requireNonNull(channelName, "Channel name cannot be null");
         Objects.requireNonNull(handler, "Channel handler cannot be null");
 
         handlers.put(channelName, handler);
     }
 
-    public static LoginQueryResponseHandler getHandler(ResourceLocation channelName) {
+    public static LoginQueryResponseHandler getHandler(Identifier channelName) {
         return handlers.get(channelName);
     }
 

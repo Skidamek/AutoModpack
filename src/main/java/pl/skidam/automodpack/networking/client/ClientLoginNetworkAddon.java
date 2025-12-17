@@ -10,7 +10,7 @@ import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
@@ -36,7 +36,7 @@ public class ClientLoginNetworkAddon {
         return false;
     }
 
-    private boolean handlePacket(int queryId, ResourceLocation channelName, FriendlyByteBuf payload) {
+    private boolean handlePacket(int queryId, Identifier channelName, FriendlyByteBuf payload) {
         @Nullable ClientLoginNetworking.LoginQueryRequestHandler handler = ClientLoginNetworking.getHandler(channelName);
 
         if (handler == null) {

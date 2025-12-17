@@ -4,11 +4,11 @@ import static pl.skidam.automodpack_core.GlobalVariables.clientConfig;
 import static pl.skidam.automodpack_core.GlobalVariables.clientConfigFile;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -22,8 +22,8 @@ import pl.skidam.automodpack_loader_core.utils.SpeedMeter;
 public class DownloadScreen extends VersionedScreen {
 
     // thank you mojang for textures, i am sorry that i have to bundle them myself but i dont want to deal with atlas textures on multiversion setup
-    private static final ResourceLocation PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/green_background.png");
-    private static final ResourceLocation PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/sprites/green_progress.png");
+    private static final Identifier PROGRESS_BAR_EMPTY_TEXTURE = Common.id("textures/gui/sprites/green_background.png");
+    private static final Identifier PROGRESS_BAR_FULL_TEXTURE = Common.id("textures/gui/sprites/green_progress.png");
     private static final int PROGRESS_BAR_WIDTH = 182;
     private static final int PROGRESS_BAR_HEIGHT = 5;
     private final DownloadManager downloadManager;

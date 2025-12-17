@@ -5,7 +5,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
 import net.minecraft.network.protocol.login.custom.CustomQueryAnswerPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -29,7 +29,7 @@ public class LoginQueryResponseC2SPacketMixin {
 
     @Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
     private static void readResponse(int queryId, FriendlyByteBuf buf, CallbackInfoReturnable<CustomQueryAnswerPayload> cir) {
-        ResourceLocation automodpackID = LoginNetworkingIDs.getByValue(queryId);
+        Identifier automodpackID = LoginNetworkingIDs.getByValue(queryId);
         if (automodpackID == null) {
             return;
         }

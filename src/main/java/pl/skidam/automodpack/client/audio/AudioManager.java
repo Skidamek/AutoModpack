@@ -9,7 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import pl.skidam.automodpack.init.Common;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.sounds.SoundManager;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundEvent;
 /*? if neoforge {*/
 /*import net.neoforged.bus.api.IEventBus;
@@ -33,7 +33,7 @@ public class AudioManager {
     private static SoundManager soundManager;
     private static boolean playing = false;
 
-    private static final ResourceLocation WAITING_MUSIC_ID = Common.id("waiting_music");
+    private static final Identifier WAITING_MUSIC_ID = Common.id("waiting_music");
 
     /*? if >= 1.19.3 {*/
     public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.createVariableRangeEvent(WAITING_MUSIC_ID);
@@ -66,7 +66,7 @@ public class AudioManager {
     }
 
     private SoundEvent register() {
-        ResourceLocation id = Common.id("waiting_music");
+        Identifier id = Common.id("waiting_music");
 /*? if >=1.19.3 {*/
         Registry<SoundEvent> register = BuiltInRegistries.SOUND_EVENT;
          /*?} else {*/

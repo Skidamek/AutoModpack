@@ -10,7 +10,7 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;
 import java.util.Optional;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;

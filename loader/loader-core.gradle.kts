@@ -1,5 +1,5 @@
 plugins {
-    java
+    kotlin("jvm")
 }
 
 base {

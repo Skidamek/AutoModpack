@@ -1,7 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
-    java
+    kotlin("jvm")
     id("automodpack.utils")
     id("com.gradleup.shadow")
 }
@@ -27,7 +27,7 @@ dependencies {
     compileOnly("org.apache.logging.log4j:log4j-core:2.8.1")
 
     implementation("org.tomlj:tomlj:1.1.1")
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.82")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.83")
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
 
     compileOnly("net.fabricmc:fabric-loader:${property("deps.fabric")}")
@@ -52,7 +52,6 @@ tasks.named<ShadowJar>("shadowJar") {
     from(project(":loader-fabric-15").sourceSets.main.get().output)
     from(project(":loader-fabric-16").sourceSets.main.get().output)
 
-    // Include the tomlj dependency in the shadow jar
     configurations = listOf(project.configurations.getByName("shadowImplementation"))
 
     val reloc = "amp_libs"
@@ -61,7 +60,6 @@ tasks.named<ShadowJar>("shadowJar") {
     relocate("org.apache.hc", "${reloc}.org.apache.hc")
     relocate("org.checkerframework", "${reloc}.org.checkerframework")
     relocate("org.slf4j", "${reloc}.org.slf4j")
-//    relocate("com.github.luben", "${reloc}.com.github.luben") // cant relocate - natives
     relocate("org.bouncycastle", "${reloc}.org.bouncycastle")
 
     relocate("pl.skidam.automodpack_loader_core_fabric", "pl.skidam.automodpack_loader_core")
@@ -72,11 +70,8 @@ tasks.named<ShadowJar>("shadowJar") {
     exclude("pl/skidam/automodpack_loader_core_fabric/FabricLanguageAdapter.class")
     exclude("pl/skidam/automodpack_loader_core_fabric/FabricLoaderImplAccessor.class")
 
+    exclude("kotlin/**")
     exclude("log4j2.xml")
-
-    manifest {
-        attributes["AutoModpack-Version"] = version
-    }
 
     mergeServiceFiles()
 }

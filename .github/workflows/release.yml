@@ -65,7 +65,7 @@ jobs:
       matrix: ${{ fromJson(needs.matrix_prep.outputs.matrix) }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Display context
         run: |
@@ -143,7 +143,7 @@ jobs:
           done
 
       - name: Prepare changelog
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         id: changelog
         with:
           script: return process.env.CHANGELOG

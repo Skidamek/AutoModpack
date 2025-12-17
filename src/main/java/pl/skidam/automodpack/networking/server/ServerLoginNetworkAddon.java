@@ -5,7 +5,7 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import org.jetbrains.annotations.Nullable;
@@ -29,7 +29,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
     private final Connection connection;
     private final MinecraftServer server;
     private final Collection<Future<?>> synchronizers = new ConcurrentLinkedQueue<>();
-    public final Map<Integer, ResourceLocation> channels = new ConcurrentHashMap<>();
+    public final Map<Integer, Identifier> channels = new ConcurrentHashMap<>();
     private boolean firstTick = true;
 
     public ServerLoginNetworkAddon(ServerLoginPacketListenerImpl serverLoginNetworkHandler) {
@@ -78,7 +78,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
 
     private boolean handle(int queryId, @Nullable FriendlyByteBuf originalBuf) {
 
-        ResourceLocation channel = this.channels.remove(queryId);
+        Identifier channel = this.channels.remove(queryId);
 
         if (channel == null) {
             // Not an AutoModpack packet.
@@ -105,7 +105,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
     }
 
     @Override
-    public ClientboundCustomQueryPacket createPacket(ResourceLocation channelName, FriendlyByteBuf buf) {
+    public ClientboundCustomQueryPacket createPacket(Identifier channelName, FriendlyByteBuf buf) {
         Integer queryId = LoginNetworkingIDs.getByKey(channelName);
 
         if (queryId == null) {

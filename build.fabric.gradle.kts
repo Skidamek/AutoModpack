@@ -20,11 +20,7 @@ dependencies {
     implementation(project(":loader-core"))
 
     minecraft("com.mojang:minecraft:${property("deps.minecraft")}")
-    mappings(loom.layered {
-        officialMojangMappings()
-        if (hasProperty("deps.parchment"))
-            parchment("org.parchmentmc.data:parchment-${property("deps.parchment")}@zip")
-    })
+    mappings(loom.officialMojangMappings())
 
     modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric-loader")}")
 
@@ -38,20 +34,24 @@ dependencies {
     }
 
     // Required for commands
-    if (stonecutter.eval(stonecutter.current.version, "<1.19.2")) {
+    if (sc.current.parsed < "1.19.2") {
         include(modImplementation(fabricApi.module("fabric-command-api-v1", property("deps.fabric-api") as String))!!)
     } else {
         include(modImplementation(fabricApi.module("fabric-command-api-v2", property("deps.fabric-api") as String))!!)
     }
 
     // Required for translatable texts in 1.21.9+ for some reason i need both v0 and v1?
-    if (stonecutter.eval(stonecutter.current.version, ">=1.21.9")) {
+    if (sc.current.parsed >= "1.21.9") {
         include(modImplementation(fabricApi.module("fabric-resource-loader-v1", property("deps.fabric-api") as String))!!)
     }
 }
 
 java {
-    if (stonecutter.eval(stonecutter.current.version, ">=1.20.5")) {
+    if (sc.current.parsed >= "26.1") {
+        sourceCompatibility = JavaVersion.VERSION_25
+        targetCompatibility = JavaVersion.VERSION_25
+        toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+    } else if (sc.current.parsed >= "1.20.5") {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
@@ -66,7 +66,7 @@ java {
 tasks {
     processResources {
         exclude("**/neoforge.mods.toml", "**/mods.toml", "**/accesstransformer.cfg")
-        if (stonecutter.eval(stonecutter.current.version, ">=1.21.9")) {
+        if (sc.current.parsed >= "1.21.9") {
             exclude("**/pack.mcmeta")
             rename("new-pack.mcmeta", "pack.mcmeta")
         } else {

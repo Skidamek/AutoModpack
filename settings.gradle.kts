@@ -12,7 +12,7 @@ pluginManagement {
 plugins {
     // For some reason, this plugin is crucial - do not remove
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-    id("dev.kikugie.stonecutter") version "0.7+"
+    id("dev.kikugie.stonecutter") version "0.8-beta.2"
 }
 
 include(":core")
@@ -44,6 +44,7 @@ stonecutter {
             .forEach { version("$version-$it", version).buildscript = "build.$it.gradle.kts" }
 
         // Configure your targets here!
+        match("1.21.11", "fabric", "neoforge")
         match("1.21.10", "fabric", "neoforge")
         match("1.21.8", "fabric", "neoforge")
         match("1.21.5", "fabric", "neoforge")

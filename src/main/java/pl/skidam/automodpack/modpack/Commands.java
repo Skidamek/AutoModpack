@@ -3,6 +3,10 @@ package pl.skidam.automodpack.modpack;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
+/*? if >= 1.21.11 {*/
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
+/*?}*/
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.SecretsStore;
@@ -10,7 +14,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.HoverEvent;
@@ -27,37 +31,37 @@ public class Commands {
                 literal("automodpack")
                         .executes(Commands::about)
                         .then(literal("generate")
-                                .requires((source) -> source.hasPermission(3))
+                                .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                 .executes(Commands::generateModpack)
                         )
                         .then(literal("host")
-                                .requires((source) -> source.hasPermission(3))
+                                .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                 .executes(Commands::modpackHostAbout)
                                 .then(literal("start")
-                                        .requires((source) -> source.hasPermission(3))
+                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::startModpackHost)
                                 )
                                 .then(literal("stop")
-                                        .requires((source) -> source.hasPermission(3))
+                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::stopModpackHost)
                                 )
                                 .then(literal("restart")
-                                        .requires((source) -> source.hasPermission(3))
+                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::restartModpackHost)
                                 )
                                 .then(literal("connections")
-                                        .requires((source) -> source.hasPermission(3))
+                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::connections)
                                 )
                                 .then(literal("fingerprint")
-                                        .requires((source) -> source.hasPermission(3))
+                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::fingerprint)
                                 )
                         )
                         .then(literal("config")
-                                .requires((source) -> source.hasPermission(3))
+                                .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                 .then(literal("reload")
-                                        .requires((source) -> source.hasPermission(3))
+                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::reload)
                                 )
                         )

@@ -7,12 +7,12 @@ import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 // credits to fabric api
 public class ClientLoginNetworking {
 
-    private static final Map<ResourceLocation, LoginQueryRequestHandler> handlers = new HashMap<>();
+    private static final Map<Identifier, LoginQueryRequestHandler> handlers = new HashMap<>();
 
     /**
      * Registers a handler to a query request channel.
@@ -21,14 +21,14 @@ public class ClientLoginNetworking {
      * @param channelName the id of the channel
      * @param handler the handler
      */
-    public static void registerGlobalReceiver(ResourceLocation channelName, LoginQueryRequestHandler handler) {
+    public static void registerGlobalReceiver(Identifier channelName, LoginQueryRequestHandler handler) {
         Objects.requireNonNull(channelName, "Channel name cannot be null");
         Objects.requireNonNull(handler, "Channel handler cannot be null");
 
         handlers.put(channelName, handler);
     }
 
-    public static LoginQueryRequestHandler getHandler(ResourceLocation channelName) {
+    public static LoginQueryRequestHandler getHandler(Identifier channelName) {
         return handlers.get(channelName);
     }
 

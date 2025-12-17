@@ -2,7 +2,7 @@ package pl.skidam.automodpack.networking;
 
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import pl.skidam.automodpack.networking.client.ClientLoginNetworking;
@@ -19,8 +19,8 @@ import java.net.InetSocketAddress;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModPackets {
-    public static final ResourceLocation HANDSHAKE = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.HANDSHAKE);
-    public static final ResourceLocation DATA = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.DATA);
+    public static final Identifier HANDSHAKE = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.HANDSHAKE);
+    public static final Identifier DATA = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.DATA);
 
     private static InetSocketAddress originalServerAddress;
 

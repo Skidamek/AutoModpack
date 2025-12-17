@@ -10,13 +10,10 @@ group = "${property("mod.group")}"
 base.archivesName.set("${property("mod_name")}-mc${property("deps.minecraft")}-neoforge".lowercase())
 
 neoForge {
-    version = property("deps.neoforge") as String
     validateAccessTransformers = true
-
-    if (hasProperty("deps.parchment")) parchment {
-        val (mc, ver) = (property("deps.parchment") as String).split(':')
-        mappingsVersion = ver
-        minecraftVersion = mc
+    enable {
+        version = property("deps.neoforge") as String
+        isDisableRecompilation = true
     }
 }
 
@@ -34,7 +31,7 @@ dependencies {
 tasks {
     processResources {
         exclude("**/fabric.mod.json", "**/automodpack.accesswidener", "**/forge.mods.toml")
-        if (stonecutter.eval(stonecutter.current.version, ">=1.21.9")) {
+        if (sc.current.parsed >= "1.21.9") {
             exclude("**/pack.mcmeta")
             rename("new-pack.mcmeta", "pack.mcmeta")
         } else {
@@ -48,8 +45,14 @@ tasks {
 }
 
 java {
-    withSourcesJar()
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    if (sc.current.parsed >= "26.1") {
+        sourceCompatibility = JavaVersion.VERSION_25
+        targetCompatibility = JavaVersion.VERSION_25
+        toolchain.languageVersion.set(JavaLanguageVersion.of(25))
+    } else {
+        withSourcesJar()
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+        toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    }
 }

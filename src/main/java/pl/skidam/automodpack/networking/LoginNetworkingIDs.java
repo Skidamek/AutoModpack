@@ -4,7 +4,7 @@ import pl.skidam.automodpack.init.Common;
 
 import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 public enum LoginNetworkingIDs {
     // AutoModpack login query id's
@@ -21,11 +21,11 @@ public enum LoginNetworkingIDs {
         return value;
     }
 
-    public static ResourceLocation getResourceLocation(LoginNetworkingIDs ID) {
+    public static Identifier getResourceLocation(LoginNetworkingIDs ID) {
         return Common.id(ID.toString().toLowerCase());
     }
 
-    public static Integer getByKey(ResourceLocation key) {
+    public static Integer getByKey(Identifier key) {
         if (key.getNamespace().equalsIgnoreCase(MOD_ID)) {
             for (var ID : LoginNetworkingIDs.values()) {
                 if (ID.name().equalsIgnoreCase(key.getPath())) {
@@ -36,7 +36,7 @@ public enum LoginNetworkingIDs {
         return null;
     }
 
-    public static ResourceLocation getByValue(int value) {
+    public static Identifier getByValue(int value) {
         for (var ID : LoginNetworkingIDs.values()) {
             if (ID.getValue() == value) {
                 return getResourceLocation(ID);

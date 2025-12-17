@@ -1,7 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
-    java
+    kotlin("jvm")
     id("com.gradleup.shadow")
 }
 
@@ -15,15 +15,22 @@ repositories {
     mavenCentral()
 }
 
+val deps = listOf(
+    "io.netty:netty-all:4.2.8.Final",
+    "org.apache.logging.log4j:log4j-core:2.25.2",
+    "com.google.code.gson:gson:2.13.2",
+    "org.bouncycastle:bcpkix-jdk18on:1.82",
+    "org.apache.httpcomponents.client5:httpclient5:5.5.1",
+    "org.tomlj:tomlj:1.1.1"
+)
+
 dependencies {
-    implementation("org.apache.logging.log4j:log4j-core:2.19.0")
-    implementation("com.google.code.gson:gson:2.10.1")
-    implementation("io.netty:netty-all:4.1.118.Final")
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.82")
-    implementation("org.tomlj:tomlj:1.1.1")
-    implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
-    testImplementation("org.junit.jupiter:junit-jupiter:6.0.0")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.0")
+    // minecraft/loaders uses these, so we cant just implement them because it wont resolve in gradle
+    deps.forEach { compileOnly(it) }
+    deps.forEach { testImplementation(it) }
+
+    testImplementation("org.junit.jupiter:junit-jupiter:6.0.1")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.1")
 }
 
 java {
@@ -45,7 +52,8 @@ tasks.named<Test>("test") {
 // Configure the ShadowJar task
 tasks.named<ShadowJar>("shadowJar") {
     archiveBaseName.set("automodpack-server")
-    configurations = listOf(project.configurations.runtimeClasspath.get())
+    configurations = listOf(project.configurations.compileClasspath.get())
+
     manifest {
         attributes(
             "Main-Class" to "pl.skidam.automodpack_core.Server"

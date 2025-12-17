@@ -1,7 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
-    java
+    kotlin("jvm")
     id("automodpack.utils")
     id("net.neoforged.moddev")
     id("com.gradleup.shadow")
@@ -14,7 +14,10 @@ base {
 }
 
 neoForge {
-    version = property("deps.neoforge") as String
+    enable {
+        version = property("deps.neoforge") as String
+        isDisableRecompilation = true
+    }
 }
 
 dependencies {
@@ -25,7 +28,7 @@ dependencies {
     compileOnly("org.apache.logging.log4j:log4j-core:2.8.1")
 
     implementation("org.tomlj:tomlj:1.1.1")
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.82")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.83")
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
 }
 
@@ -43,7 +46,6 @@ tasks.named<ShadowJar>("shadowJar") {
     from(project(":core").sourceSets.main.get().output)
     from(project(":loader-core").sourceSets.main.get().output)
 
-    // Include the tomlj dependency in the shadow jar
     configurations = listOf(project.configurations.getByName("shadowImplementation"))
 
     val reloc = "amp_libs"
@@ -52,17 +54,14 @@ tasks.named<ShadowJar>("shadowJar") {
     relocate("org.apache.hc", "${reloc}.org.apache.hc")
     relocate("org.checkerframework", "${reloc}.org.checkerframework")
     relocate("org.slf4j", "${reloc}.org.slf4j")
-//    relocate("com.github.luben", "${reloc}.com.github.luben") // cant relocate - natives
     relocate("org.bouncycastle", "${reloc}.org.bouncycastle")
 
-    if (project.name.contains("neoforge")) {
-        relocate("pl.skidam.automodpack_loader_core_neoforge", "pl.skidam.automodpack_loader_core")
-    } else {
-        relocate("pl.skidam.automodpack_loader_core_forge", "pl.skidam.automodpack_loader_core")
-    }
+    relocate("pl.skidam.automodpack_loader_core_neoforge", "pl.skidam.automodpack_loader_core")
 
     exclude("pl/skidam/automodpack_loader_core/loader/LoaderManager.class")
     exclude("pl/skidam/automodpack_loader_core/mods/ModpackLoader.class")
+
+    exclude("kotlin/**")
     exclude("log4j2.xml")
 
     mergeServiceFiles()

@@ -1,6 +1,6 @@
 package pl.skidam.automodpack.init;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
@@ -63,10 +63,12 @@ public class Common {
         modpackExecutor.stop();
     }
 
-    public static ResourceLocation id(String path) {
-        /*? if >1.19.1 {*/
-        return ResourceLocation.tryBuild(MOD_ID, path);
-        /*?} else {*/
+    public static Identifier id(String path) {
+        /*? if >=1.21.11 {*/
+        return Identifier.tryBuild(MOD_ID, path);
+        /*?} else if >=1.19.2 {*/
+        /*return ResourceLocation.tryBuild(MOD_ID, path);
+        *//*?} else {*/
         /*return new ResourceLocation(MOD_ID, path);
         *//*?}*/
     }
