@@ -26,6 +26,11 @@ abstract class MergeJarTask : DefaultTask() {
     @get:Internal
     abstract val buildDirectory: DirectoryProperty
 
+    // A computed hash string that acts as the trigger for up-to-date checks.
+    // If this string changes, Gradle reruns the task.
+    @get:Input
+    abstract val inputHash: Property<String>
+
     @get:OutputFile
     abstract val outputJar: RegularFileProperty
 
@@ -35,9 +40,7 @@ abstract class MergeJarTask : DefaultTask() {
         mergedDir.mkdirs()
 
         val buildDirLibs = buildDirectory.get().dir("libs").asFile
-        val jarToMerge = buildDirLibs.listFiles()
-            ?.firstOrNull { file -> file.isFile && !file.name.endsWith("-sources.jar") && file.name.endsWith(".jar") }
-            ?: error("No jar found to merge in build/libs directory! ${buildDirLibs.absolutePath}")
+        val jarToMerge = getMergedJarPath(buildDirLibs)
 
         val time = System.currentTimeMillis()
         println("Found $jarToMerge to merge. Merging...")
@@ -56,7 +59,6 @@ abstract class MergeJarTask : DefaultTask() {
 
         val finalJar = File(mergedDir, jarToMerge.name)
 
-        // Merge jars inline to avoid script reference issues
         val seen = mutableSetOf<String>()
         ZipOutputStream(FileOutputStream(finalJar).buffered()).use { zipStream ->
             ZipInputStream(FileInputStream(loaderFile).buffered()).use { baseStream ->
@@ -70,18 +72,18 @@ abstract class MergeJarTask : DefaultTask() {
                     }
             }
 
-            // Add mod jar
+            // Add mod jar.
             zipStream.putNextEntry(ZipEntry("META-INF/jarjar/automodpack-mod.jar"))
             FileInputStream(jarToMerge).buffered().use { it.copyTo(zipStream) }
             zipStream.closeEntry()
 
-            // Add zstd jar
+            // Add zstd jar.
             zipStream.putNextEntry(ZipEntry("META-INF/jarjar/zstd-jni.jar"))
             FileInputStream(zstdFile).buffered().use { it.copyTo(zipStream) }
             zipStream.closeEntry()
         }
 
         outputJar.get().asFile.writeText(finalJar.absolutePath)
-        println("Merged: ${jarToMerge.name} into: ${finalJar.name} from: ${loaderFile.name} Took: ${System.currentTimeMillis() - time}ms")
+        println("Merged: ${jarToMerge.name} and ${zstdFile.name} from: ${loaderFile.name} into: ${finalJar.name} Took: ${System.currentTimeMillis() - time}ms")
     }
 }

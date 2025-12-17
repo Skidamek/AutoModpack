@@ -1,3 +1,6 @@
+import java.security.MessageDigest
+import java.math.BigInteger
+
 plugins {
     idea
     id("dev.luna5ama.jar-optimizer")
@@ -15,16 +18,11 @@ repositories {
 }
 
 tasks.named("build") {
-    dependsOn(":core:build", ":loader-core:build")
-
-    val loaderModule = getLoaderModuleName(project.name)
-    dependsOn(":loader-" + loaderModule + ":build")
-    when (loaderModule) { // special case
-        "fabric-core" -> {
-            dependsOn(":loader-fabric-15:build", ":loader-fabric-16:build")
-        }
+    val taksToRun = mutableListOf<String>()
+    for (module in getAllDependentLoaderModules(project.name)) {
+        taksToRun.add(":$module:build")
     }
-
+    dependsOn(taksToRun)
     finalizedBy(tasks.named("mergeJar"))
 }
 
@@ -46,7 +44,39 @@ val mergeJarTask = tasks.register<MergeJarTask>("mergeJar") {
     this.rootProjectPath.set(project.rootProject.projectDir.absolutePath)
     this.libsPath.set(project.rootProject.projectDir.absolutePath + "/libs")
     this.buildDirectory.set(layout.buildDirectory)
-    outputJar.set(layout.buildDirectory.file("merged-jar-path.txt"))
+    this.outputJar.set(layout.buildDirectory.file("merged-jar-path.txt"))
+
+    val filesToHash = mutableListOf<Any>()
+    for (module in getAllDependentLoaderModules(project.name)) {
+        val modLoaderJar = rootProject.project(module).tasks.named("jar")
+        filesToHash.add(modLoaderJar)
+    }
+
+    // Compute the actual hash of the content of all input jars.
+    // We use a provider so this is calculated just before task execution, ensuring files exist.
+    this.inputHash.set(provider {
+        val outputFile = File(mergedDirPath.get(), getMergedJarPath(buildDirectory.get().dir("libs").asFile).name)
+        if (!outputFile.exists()) { // Return a random hash if the output file doesn't exist yet. We need to have something.
+            return@provider BigInteger(1, MessageDigest.getInstance("MD5").digest(System.currentTimeMillis().toString().toByteArray())).toString(16)
+        }
+        val filesToHash = files(filesToHash)
+        val digest = MessageDigest.getInstance("MD5") // Using MD5 just for speed
+
+        filesToHash.files.sortedBy { it.name }.forEach { file ->
+            if (file.exists()) {
+                file.inputStream().use { input ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead = input.read(buffer)
+                    while (bytesRead != -1) {
+                        digest.update(buffer, 0, bytesRead)
+                        bytesRead = input.read(buffer)
+                    }
+                }
+            }
+        }
+        BigInteger(1, digest.digest()).toString(16)
+    })
+
     finalizedBy(tasks.named("optimizeMergedJar"))
 }
 
