@@ -550,26 +550,47 @@ public class ModpackUtils {
         return accepted.get();
     }
 
-    // check if modpackContent is valid/isn't malicious
     public static boolean potentiallyMalicious(Jsons.ModpackContentFields serverModpackContent) {
-        String modpackName = serverModpackContent.modpackName;
-        if (modpackName.contains("../") || modpackName.contains("/..")) {
-            LOGGER.error("Modpack content is invalid, it contains /../ in modpack name");
+        if (isUnsafePath(serverModpackContent.modpackName, true)) {
+            LOGGER.error("Modpack content is invalid: modpack name '{}' is unsafe/malicious", serverModpackContent.modpackName);
             return true;
         }
 
-        for (var modpackContentItem : serverModpackContent.list) {
-            String file = modpackContentItem.file.replace("\\", "/");
-            if (file.contains("../") || file.contains("/..")) {
-                LOGGER.error("Modpack content is invalid, it contains /../ in file name of {}", file);
-                return true;
-            }
+        if (serverModpackContent.list == null || serverModpackContent.list.isEmpty()) {
+            return false;
+        }
 
-            String sha1 = modpackContentItem.sha1;
-            if (sha1 == null || sha1.equals("null")) {
-                LOGGER.error("Modpack content is invalid, it contains null sha1 in file of {}", file);
+        return serverModpackContent.list.parallelStream().anyMatch(item -> {
+            if (isUnsafePath(item.file, false)) {
+                LOGGER.error("Modpack content is invalid: file path '{}' is unsafe/malicious", item.file);
                 return true;
             }
+            return false;
+        });
+    }
+
+    private static boolean isUnsafePath(String rawPath, boolean blankIsFine) {
+        if (rawPath == null) return true;
+
+        if (!blankIsFine && rawPath.isBlank()) return true;
+
+        // Null Byte Check
+        if (rawPath.indexOf('\0') != -1) return true;
+
+        // Most files are just "mods/fabric-api.jar", so they hit this and return false immediately
+        if (!rawPath.contains("..")) {
+            return false;
+        }
+
+        // We must distinguish between malicious "../" and valid names like "super..mario.jar"
+        String normalized = rawPath.replace('\\', '/');
+
+        // Edge case
+        if (normalized.equals("..") || normalized.equals(".")) return true;
+
+        String[] segments = normalized.split("/");
+        for (String segment : segments) {
+            if (segment.equals("..")) return true; // Directory traversal
         }
 
         return false;
