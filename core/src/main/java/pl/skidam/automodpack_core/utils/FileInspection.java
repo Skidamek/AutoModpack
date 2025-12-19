@@ -14,22 +14,32 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipException;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class FileInspection {
 
+    private static final Gson GSON = new Gson();
+    private static final String LOADER = GlobalVariables.LOADER;
+
     public static boolean isMod(Path file) {
-        return getModID(file) != null || hasSpecificServices(file);
+        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
+            return false;
+        }
+
+        try (FileSystem fs = FileSystems.newFileSystem(file)) {
+            return getModID(fs) != null || hasSpecificServices(fs);
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     public record Mod(String modID, String hash, Collection<String> providesIDs, String modVersion, Path modPath, LoaderManagerService.EnvironmentType environmentType, Collection<String> dependencies) {}
@@ -58,132 +68,29 @@ public class FileInspection {
             }
         }
 
-        String modId = FileInspection.getModID(file);
-        if (modId != null) { // If mod id is null dont need to check for other info
-            String modVersion = FileInspection.getModVersion(file);
-            LoaderManagerService.EnvironmentType environmentType = FileInspection.getModEnvironment(file);
-            Set<String> dependencies = FileInspection.getModDependencies(file);
-            Set<String> providesIDs = FileInspection.getAllProvidedIDs(file);
+        // Open FS once for all metadata extractions
+        try (FileSystem fs = FileSystems.newFileSystem(file)) {
+            String modId = (String) getModInfo(fs, "modId");
 
-            if (modVersion != null && dependencies != null) {
-                var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
-                modCache.put(hashPathPair, mod);
-                return mod;
+            if (modId != null) {
+                String modVersion = (String) getModInfo(fs, "version");
+                LoaderManagerService.EnvironmentType environmentType = (LoaderManagerService.EnvironmentType) getModInfo(fs, "environment");
+                Set<String> dependencies = getModDependencies(fs);
+                Set<String> providesIDs = getProvidedIDs(fs);
+
+                if (modVersion != null && dependencies != null) {
+                    var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
+                    modCache.put(hashPathPair, mod);
+                    return mod;
+                }
+
+                LOGGER.error("Not enough mod information for file: {} modId: {}, modVersion: {}, dependencies: {}", file, modId, modVersion, dependencies);
             }
-
-            LOGGER.error("Not enough mod information for file: {} modId: {}, modVersion: {}, dependencies: {}", file, modId, modVersion, dependencies);
+        } catch (IOException e) {
+            LOGGER.debug("Failed to get mod info for file: {}", file);
         }
 
-        LOGGER.debug("Failed to get mod info for file: {}", file);
         return null;
-    }
-
-    public static Path getThizJar() {
-        try {
-            URI uri = FileInspection.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-            
-            // Handle special URI schemes used by mod loaders (e.g., union:, jar:, etc.)
-            String uriString = uri.toString();
-            
-            // Remove jar: or union: prefixes and extract the file path
-            // Examples:
-            // - jar:file:/path/to/file.jar!/entry -> file:/path/to/file.jar
-            // - union:/path/to/file.jar%2354!/ -> /path/to/file.jar (with URL decoding)
-            // - file:/path/to/file.jar -> /path/to/file.jar
-            
-            if (uriString.startsWith("jar:")) {
-                // Remove jar: prefix and find JAR separator
-                uriString = uriString.substring(4);
-                uriString = removeJarSeparator(uriString);
-            } else if (uriString.startsWith("union:")) {
-                // Remove union: prefix
-                uriString = uriString.substring(6);
-            }
-            
-            // URL-decode the path to handle special characters like %23 (#) and %21 (!)
-            // Must be done BEFORE removing JAR separators to avoid removing actual # or ! from path
-            String decodedPath;
-            try {
-                // Try to parse as URI first to handle file: scheme properly
-                URI tempUri = new URI(uriString);
-                if ("file".equals(tempUri.getScheme())) {
-                    // Use Path.of(URI) for proper decoding of file: URIs
-                    Path tempPath = Path.of(tempUri);
-                    decodedPath = tempPath.toString();
-                } else {
-                    // For non-file URIs or if scheme is null, manually decode
-                    decodedPath = java.net.URLDecoder.decode(uriString, StandardCharsets.UTF_8);
-                }
-            } catch (Exception e) {
-                // If URI parsing fails, try manual URL decoding
-                decodedPath = java.net.URLDecoder.decode(uriString, StandardCharsets.UTF_8);
-            }
-            
-            // Remove JAR entry separators from the end
-            decodedPath = removeJarSeparator(decodedPath);
-            
-            // Handle Windows drive letters (remove leading slash if path starts with /C:/ or similar)
-            if (System.getProperty("os.name").toLowerCase().contains("win")) {
-                if (decodedPath.length() >= 3 && 
-                    decodedPath.charAt(0) == '/' && 
-                    Character.isLetter(decodedPath.charAt(1)) && 
-                    decodedPath.charAt(2) == ':') {
-                    decodedPath = decodedPath.substring(1);
-                }
-            }
-            
-            return Path.of(decodedPath).toAbsolutePath().normalize();
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to determine JAR location", e);
-        }
-    }
-
-    /**
-     * Removes JAR entry separator patterns (! and #) from the end of a path string.
-     * JAR separators like "file.jar!/", "file.jar#/" or "file.jar#54!/" indicate internal JAR entries.
-     * This method finds and removes such separators from the end of the path.
-     *
-     * @param path the path string to process
-     * @return the path with JAR separators removed from the end
-     */
-    private static String removeJarSeparator(String path) {
-        // Strategy: Look for patterns at the end that indicate JAR entry paths
-        // Valid patterns: "!/", "#/" or ".jar#...!/" (where #...!/ is the separator after .jar extension)
-        
-        int lastExclamation = path.lastIndexOf("!/");
-        int lastHash = path.lastIndexOf("#/");
-        
-        // Check if path has pattern like "file.jar#54!/"
-        // The # after .jar extension is part of the JAR entry separator
-        if (lastExclamation != -1) {
-            // Look for a # between the last .jar and the !/
-            int jarExtPos = path.lastIndexOf(".jar", lastExclamation);
-            if (jarExtPos != -1) {
-                int hashAfterJar = path.indexOf("#", jarExtPos + 4); // +4 to skip past ".jar"
-                if (hashAfterJar != -1 && hashAfterJar < lastExclamation) {
-                    // Found pattern: .jar#...!/
-                    // Remove from the # onwards (the # is part of the separator)
-                    return path.substring(0, hashAfterJar);
-                }
-            }
-        }
-        
-        // Standard cases: remove from "!/" or "#/"
-        int separatorPos = -1;
-        if (lastExclamation != -1 && lastHash != -1) {
-            // Both exist, take the last one
-            separatorPos = Math.max(lastExclamation, lastHash);
-        } else if (lastExclamation != -1) {
-            separatorPos = lastExclamation;
-        } else if (lastHash != -1) {
-            separatorPos = lastHash;
-        }
-        
-        if (separatorPos != -1) {
-            return path.substring(0, separatorPos);
-        }
-        
-        return path;
     }
 
     private static final Set<String> services = Set.of(
@@ -198,112 +105,118 @@ public class FileInspection {
     );
 
     // Checks for neo/forge mod locators
-    // TODO: check nested jars recursively if needed
-    public static boolean hasSpecificServices(Path file) {
-        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
-            return false;
-        }
-
-        try (ZipFile zipFile = new ZipFile(file.toFile())) {
-            // Direct lookup for known service entries
-            for (String service : services) {
-                ZipEntry entry = zipFile.getEntry(service);
-                if (entry != null) {
-                    return true;
-                }
-            }
-
-            String jarjarPrefix = "META-INF/jarjar/";
-            ZipEntry jarjarEntry = zipFile.getEntry(jarjarPrefix);
-            if (jarjarEntry == null) {
-                return false;
-            }
-
-            // Check nested JARs in META-INF/jarjar/
-            for (ZipEntry entry : Collections.list(zipFile.entries())) {
-                String entryName = entry.getName();
-
-                if (!entry.isDirectory() && entryName.startsWith(jarjarPrefix) && entryName.endsWith(".jar")) {
-                    try (InputStream inputStream = zipFile.getInputStream(entry);
-                         ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
-
-                        ZipEntry nestedEntry;
-                        while ((nestedEntry = zipInputStream.getNextEntry()) != null) {
-                            if (services.contains(nestedEntry.getName())) {
-                                return true;
-                            }
-                        }
-                    } catch (IOException e) {
-                        LOGGER.error("Error reading nested JAR in {}: {}", file, e.getMessage());
-                    }
-                }
-            }
-        } catch (IOException e) {
-            LOGGER.error("Error examining JAR file {}: {}", file, e.getMessage());
-        }
-
-        return false;
-    }
-
     public static boolean isModCompatible(Path file) {
         if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
             return false;
         }
 
-        try (ZipFile zipFile = new ZipFile(file.toFile())) {
-            String loader = GlobalVariables.LOADER;
-            String entryName = switch (loader) {
-                case "fabric" -> "fabric.mod.json";
-                case "quilt" -> "quilt.mod.json";
-                case "forge" -> "META-INF/mods.toml";
+        try (FileSystem fs = FileSystems.newFileSystem(file)) {
+            String entryPathString = switch (LOADER) {
                 case "neoforge" -> "META-INF/neoforge.mods.toml";
+                case "fabric" -> "fabric.mod.json";
+                case "forge" -> "META-INF/mods.toml";
+                case "quilt" -> "quilt.mod.json";
                 default -> null;
             };
 
-            if (loader.equals("forge") || loader.equals("neoforge")) {
-                if (hasSpecificServices(file)) {
+            if (entryPathString != null && Files.exists(fs.getPath(entryPathString))) {
+                return true;
+            }
+
+            if ("forge".equals(LOADER) || "neoforge".equals(LOADER)) {
+                if (hasSpecificServices(fs)) {
                     return true;
                 }
             }
 
-            return entryName != null && zipFile.getEntry(entryName) != null;
         } catch (IOException e) {
-            e.printStackTrace();
+            // Ignore
         }
 
         return false;
     }
 
+    public static boolean hasSpecificServices(Path file) {
+        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
+            return false;
+        }
 
-    public static ZipEntry getMetadataEntry(ZipFile zipFile) {
-        var currentLoader = GlobalVariables.LOADER;
+        try (FileSystem fs = FileSystems.newFileSystem(file)) {
+            return hasSpecificServices(fs);
+        } catch (IOException e) {
+            LOGGER.error("Error reading file {}: {}", file, e.getMessage());
+        }
+        return false;
+    }
 
-        // first get preferred metadata for current loader if exits
-        ZipEntry entry = switch (currentLoader) {
-            case "fabric" -> zipFile.getEntry("fabric.mod.json");
-            case "quilt" -> zipFile.getEntry("quilt.mod.json");
-            case "forge" -> zipFile.getEntry("META-INF/mods.toml");
-            case "neoforge" -> zipFile.getEntry("META-INF/neoforge.mods.toml");
+    public static boolean hasSpecificServices(FileSystem fs) {
+        // Direct Service Lookup (Fast)
+        for (String service : services) {
+            if (Files.exists(fs.getPath(service))) {
+                return true;
+            }
+        }
+
+        // Jar-in-Jar Scan (Slower)
+        Path jarJarDir = fs.getPath("META-INF", "jarjar");
+        if (!Files.exists(jarJarDir)) {
+            return false;
+        }
+
+        try (Stream<Path> walk = Files.walk(jarJarDir, 1)) {
+            for (Path nestedJarPath : walk.toList()) {
+                // Skip non-jar entries
+                if (nestedJarPath.equals(jarJarDir) || !nestedJarPath.toString().endsWith(".jar")) {
+                    continue;
+                }
+
+                // Optimization: Use Files.newInputStream directly for nested zip entries
+                try (InputStream inputStream = Files.newInputStream(nestedJarPath);
+                     ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+
+                    ZipEntry nestedEntry;
+                    while ((nestedEntry = zipInputStream.getNextEntry()) != null) {
+                        if (services.contains(nestedEntry.getName())) {
+                            return true;
+                        }
+                    }
+                } catch (IOException e) {
+                    LOGGER.error("Error reading nested JAR in {}: {}", nestedJarPath, e.getMessage());
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error examining JarJar in {}", fs, e);
+        }
+
+        return false;
+    }
+
+    public static Path getMetadataPath(FileSystem fs) {
+        String preferredEntry = switch (LOADER) {
+            case "neoforge" -> "META-INF/neoforge.mods.toml";
+            case "fabric" -> "fabric.mod.json";
+            case "forge" -> "META-INF/mods.toml";
+            case "quilt" -> "quilt.mod.json";
             default -> null;
         };
 
-        if (entry != null) {
-            return entry;
+        if (preferredEntry != null) {
+            Path path = fs.getPath(preferredEntry);
+            if (Files.exists(path)) return path;
         }
 
-        // get any existing
-        String[] entriesToCheck = {
-                "fabric.mod.json",
+        String[] fallbackEntries = {
                 "META-INF/neoforge.mods.toml",
+                "fabric.mod.json",
                 "META-INF/mods.toml",
-                "quilt.mod.json",
+                "quilt.mod.json"
         };
 
-        for (String entryName : entriesToCheck) {
-            entry = zipFile.getEntry(entryName);
-            if (entry != null) {
-                return entry;
-            }
+        for (String entryName : fallbackEntries) {
+            if (entryName.equals(preferredEntry)) continue;
+
+            Path path = fs.getPath(entryName);
+            if (Files.exists(path)) return path;
         }
 
         return null;
@@ -317,57 +230,71 @@ public class FileInspection {
         return (String) getModInfo(file, "modId");
     }
 
-    @SuppressWarnings("unchecked")
-    public static Set<String> getAllProvidedIDs(Path file) {
-        return (Set<String>) getModInfo(file, "provides");
-    }
-
-    @SuppressWarnings("unchecked")
-    public static Set<String> getModDependencies(Path file) {
-        return (Set<String>) getModInfo(file, "dependencies");
-    }
-
     public static LoaderManagerService.EnvironmentType getModEnvironment(Path file) {
         return (LoaderManagerService.EnvironmentType) getModInfo(file, "environment");
     }
 
-    private static Object getModInfo(Path file, String infoType) {
-        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
-            return infoType.equals("version") || infoType.equals("modId") || infoType.equals("environment") ? null : Set.of();
-        }
-
-        try (ZipFile zipFile = new ZipFile(file.toFile())) {
-            ZipEntry entry = getMetadataEntry(zipFile);
-            if (entry == null) {
-                return infoType.equals("version") || infoType.equals("modId") || infoType.equals("environment") ? null : Set.of();
-            }
-
-            Gson gson = new Gson();
-            try (InputStream stream = zipFile.getInputStream(entry);
-                 BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-
-                if (entry.getName().endsWith("mods.toml")) {
-                    return getModInfoFromToml(reader, infoType, file);
-                } else {
-                    return getModInfoFromJson(reader, gson, infoType);
-                }
-            }
-        } catch (ZipException ignored) {
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        return infoType.equals("version") || infoType.equals("modId") || infoType.equals("environment") ? null : Set.of();
+    private static String getModID(FileSystem fs) {
+        return (String) getModInfo(fs, "modId");
     }
 
-    private static Object getModInfoFromToml(BufferedReader reader, String infoType, Path file) {
+    @SuppressWarnings("unchecked")
+    private static Set<String> getProvidedIDs(FileSystem fs) {
+        return (Set<String>) getModInfo(fs, "provides");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> getModDependencies(FileSystem fs) {
+        return (Set<String>) getModInfo(fs, "dependencies");
+    }
+
+    private static boolean isBasicInfo(String infoType) {
+        return "version".equals(infoType) || "modId".equals(infoType) || "environment".equals(infoType);
+    }
+
+    private static Object getModInfo(Path file, String infoType) {
+        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
+            return isBasicInfo(infoType) ? null : Set.of();
+        }
+
+        try (FileSystem fs = FileSystems.newFileSystem(file)) {
+            return getModInfo(fs, infoType);
+        } catch (IOException e) {
+            LOGGER.error("Error reading mod file {}: {}", file, e.getMessage());
+        }
+        return isBasicInfo(infoType) ? null : Set.of();
+    }
+
+    private static Object getModInfo(FileSystem fs, String infoType) {
+        Path metadataPath = getMetadataPath(fs);
+
+        if (metadataPath == null || !Files.exists(metadataPath)) {
+            return isBasicInfo(infoType) ? null : Set.of();
+        }
+
+        try (InputStream stream = Files.newInputStream(metadataPath);
+             BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
+
+            if (metadataPath.getFileName().toString().endsWith("mods.toml")) {
+                return getModInfoFromToml(reader, infoType);
+            } else {
+                return getModInfoFromJson(reader, infoType);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error reading metadata {}: {}", metadataPath, e.getMessage());
+        }
+
+        return isBasicInfo(infoType) ? null : Set.of();
+    }
+
+    private static Object getModInfoFromToml(BufferedReader reader, String infoType) {
         try {
             TomlParseResult result = Toml.parse(reader);
             result.errors().forEach(error -> LOGGER.error(error.toString()));
 
             TomlArray modsArray = result.getArray("mods");
             if (modsArray == null) {
-                return infoType.equals("version") || infoType.equals("modId") || infoType.equals("environment") ? null : Set.of();
+                return isBasicInfo(infoType) ? null : Set.of();
             }
 
             switch (infoType) {
@@ -481,14 +408,14 @@ public class FileInspection {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.error("Error parsing TOML metadata: {}", e.getMessage());
         }
 
         return infoType.equals("version") || infoType.equals("modId") || infoType.equals("environment") ? null : Set.of();
     }
 
-    private static Object getModInfoFromJson(BufferedReader reader, Gson gson, String infoType) {
-        JsonObject json = gson.fromJson(reader, JsonObject.class);
+    private static Object getModInfoFromJson(BufferedReader reader, String infoType) {
+        JsonObject json = GSON.fromJson(reader, JsonObject.class);
 
         switch (infoType) {
             case "version" -> {
@@ -563,7 +490,6 @@ public class FileInspection {
     private static final String forbiddenChars = "\\/:*\"<>|!?&%$;=+";
 
     public static boolean isInValidFileName(String fileName) {
-        // Check for each forbidden character in the file name
         for (char c : forbiddenChars.toCharArray()) {
             if (fileName.indexOf(c) != -1) {
                 return true;
@@ -575,26 +501,15 @@ public class FileInspection {
                 return true;
             }
         }
-
-        // Check if the file name is empty or just contains whitespace
         return fileName.trim().isEmpty();
     }
 
     public static String fixFileName(String fileName) {
-        // Replace forbidden characters with underscores
         for (char c : fileName.toCharArray()) {
-            if (c < 32 || c == 127) {
-                fileName = fileName.replace(c, '-');
-            }
-
-            if (forbiddenChars.indexOf(c) != -1) {
+            if (c < 32 || c == 127 || forbiddenChars.indexOf(c) != -1) {
                 fileName = fileName.replace(c, '-');
             }
         }
-
-        // Remove leading and trailing whitespace
-        fileName = fileName.trim();
-
-        return fileName;
+        return fileName.trim();
     }
 }

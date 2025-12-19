@@ -14,14 +14,13 @@ import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -101,18 +100,21 @@ public class Preload {
         MC_VERSION = LOADER_MANAGER.getModVersion("minecraft");
         LOADER_VERSION = LOADER_MANAGER.getLoaderVersion();
         LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
-        THIZ_JAR = FileInspection.getThizJar();
-        AM_VERSION = FileInspection.getModVersion(THIZ_JAR);
-        MODS_DIR = THIZ_JAR.getParent();
+        THIS_MOD_JAR = JarUtils.getJarPath(this.getClass());
+        AM_VERSION = FileInspection.getModVersion(THIS_MOD_JAR);
+        MODS_DIR = THIS_MOD_JAR.getParent();
 
         // Get "overrides-automodpack-client.json" zipfile from the AUTOMODPACK_JAR
-        try (ZipFile zipFile = new ZipFile(THIZ_JAR.toFile())) {
-            ZipEntry entry = zipFile.getEntry(clientConfigFileOverrideResource);
-            if (entry != null) {
-                clientConfigOverride = new String(zipFile.getInputStream(entry).readAllBytes());
+        try (ZipInputStream zis = new ZipInputStream(new LockFreeInputStream(THIS_MOD_JAR))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.getName().equals(clientConfigFileOverrideResource)) {
+                    clientConfigOverride = new String(zis.readAllBytes(), StandardCharsets.UTF_8);
+                    break;
+                }
             }
         } catch (IOException e) {
-            LOGGER.error("Failed to open the jar file", e);
+            LOGGER.error("Failed to read overrides from jar", e);
         }
     }
 

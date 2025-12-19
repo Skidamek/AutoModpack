@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_loader_core;
 
-import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 import javax.imageio.ImageIO;
@@ -117,7 +117,7 @@ public class Gui {
 
             if (javaPath == null) throw new RuntimeException("can't find java executable in " + javaBinDir);
 
-            Process process = new ProcessBuilder(javaPath.toString(), "-Xmx100M", "-cp", FileInspection.getThizJar().toString(), Gui.class.getName(), "--AM.text=" + text)
+            Process process = new ProcessBuilder(javaPath.toString(), "-Xmx100M", "-cp", GlobalVariables.THIS_MOD_JAR.toString(), Gui.class.getName(), "--AM.text=" + text)
                     .redirectOutput(ProcessBuilder.Redirect.INHERIT)
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
                     .start();
@@ -152,7 +152,7 @@ public class Gui {
     }
 
     private static boolean hasAwtSupport() {
-        if (PlatformUtils.isMac()) {
+        if (PlatformUtils.IS_MAC) {
             // check for JAVA_STARTED_ON_FIRST_THREAD_<pid> which is set if -XstartOnFirstThread is used
             // -XstartOnFirstThread is incompatible with AWT (force enables embedded mode)
             for (String key : System.getenv().keySet()) {

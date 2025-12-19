@@ -3,6 +3,7 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -20,6 +21,8 @@ import java.util.Optional;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -100,7 +103,7 @@ public class SelfUpdater {
             }
 
             // A. Exact Hash Match (Fastest check)
-            if (automodpack.SHA1Hash().equals(CustomFileUtils.getHash(THIZ_JAR))) {
+            if (automodpack.SHA1Hash().equals(CustomFileUtils.getHash(THIS_MOD_JAR))) {
                 LOGGER.info("Already on the target version (Hash match): {}", AM_VERSION);
                 return false;
             }
@@ -181,13 +184,13 @@ public class SelfUpdater {
 
             addOverridesToJar(automodpackUpdateJar);
 
-            newAutomodpackJar = THIZ_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
+            newAutomodpackJar = THIS_MOD_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
 
             var updateType = UpdateType.AUTOMODPACK;
             var relauncher = new ReLauncher(updateType);
 
             Runnable callback = () -> {
-                CustomFileUtils.executeOrder66(THIZ_JAR);
+                CustomFileUtils.executeOrder66(THIS_MOD_JAR);
                 LOGGER.info("Successfully updated AutoModpack! Restarting...");
             };
 
@@ -201,12 +204,16 @@ public class SelfUpdater {
     }
 
     public static Optional<InputStream> getJarEntryInputStream(Path jarFilePath, String entryName) throws IOException {
-        try (JarFile jarFile = new JarFile(jarFilePath.toFile())) {
-            JarEntry jarEntry = jarFile.getJarEntry(entryName);
-            if (jarEntry != null) {
-                return Optional.of(jarFile.getInputStream(jarEntry));
+        try (InputStream fileStream = new LockFreeInputStream(jarFilePath);
+            ZipInputStream zipStream = new ZipInputStream(fileStream)) {
+            ZipEntry entry;
+            while ((entry = zipStream.getNextEntry()) != null) {
+                if (entry.getName().equals(entryName)) {
+                    return Optional.of(zipStream);
+                }
             }
         }
+
         return Optional.empty();
     }
 
@@ -215,7 +222,7 @@ public class SelfUpdater {
             return;
         }
 
-        if (!Files.isRegularFile(jarFilePath) || !Files.isRegularFile(THIZ_JAR)) {
+        if (!Files.isRegularFile(jarFilePath) || !Files.isRegularFile(THIS_MOD_JAR)) {
             LOGGER.error("Jar file of updated AutoModpack not found!");
             return;
         }
@@ -238,7 +245,7 @@ public class SelfUpdater {
                 }
             });
 
-            Optional<InputStream> txtInputStreamOpt = getJarEntryInputStream(THIZ_JAR, clientConfigFileOverrideResource);
+            Optional<InputStream> txtInputStreamOpt = getJarEntryInputStream(THIS_MOD_JAR, clientConfigFileOverrideResource);
             if (txtInputStreamOpt.isPresent()) {
                 JarEntry newTxtEntry = new JarEntry(clientConfigFileOverrideResource);
                 tempJarOutputStream.putNextEntry(newTxtEntry);

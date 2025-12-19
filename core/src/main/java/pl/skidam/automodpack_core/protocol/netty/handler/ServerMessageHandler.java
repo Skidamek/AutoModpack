@@ -8,11 +8,11 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.stream.ChunkedFile;
+import io.netty.handler.stream.ChunkedNioStream;
 import io.netty.util.CharsetUtil;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.net.SocketAddress;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -24,6 +24,7 @@ import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
+import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 
 public class ServerMessageHandler
     extends SimpleChannelInboundHandler<ProtocolMessage> {
@@ -159,9 +160,10 @@ public class ServerMessageHandler
         }
 
         try {
-            RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r");
-            ChunkedFile chunkedFile = new ChunkedFile(raf, 0, raf.length(), this.chunkSize);
-            ctx.writeAndFlush(chunkedFile).addListener((ChannelFutureListener) future -> {
+            ReadableByteChannel channel = LockFreeInputStream.openChannel(path);
+            ChunkedNioStream chunkedStream = new ChunkedNioStream(channel, this.chunkSize);
+
+            ctx.writeAndFlush(chunkedStream).addListener((ChannelFutureListener) future -> {
                 try {
                     if (future.isSuccess()) {
                         sendEOT(ctx);
@@ -170,10 +172,9 @@ public class ServerMessageHandler
                     }
                 } finally { // Always close resources
                     try {
-                        chunkedFile.close();
-                        raf.close();
-                    } catch (IOException e) {
-                        LOGGER.error("Error closing file resources", e);
+                        chunkedStream.close();
+                    } catch (Exception e) {
+                        LOGGER.error("Error closing stream resources", e);
                     }
                 }
             });

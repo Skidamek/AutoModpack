@@ -21,7 +21,7 @@ public class GlobalVariables {
     public static LoaderManagerService LOADER_MANAGER = new NullLoaderManager();
     public static ModpackLoaderService MODPACK_LOADER = new NullModpackLoader();
     public static GameCallService GAME_CALL = new NullGameCall();
-    public static Path THIZ_JAR;
+    public static Path THIS_MOD_JAR;
     public static Path MODS_DIR;
     public static ModpackExecutor modpackExecutor;
     public static NettyServer hostServer;

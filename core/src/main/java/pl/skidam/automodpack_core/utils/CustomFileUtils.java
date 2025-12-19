@@ -2,12 +2,12 @@ package pl.skidam.automodpack_core.utils;
 
 import pl.skidam.automodpack_core.config.Jsons;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.stream.Stream;
@@ -66,23 +66,22 @@ public class CustomFileUtils {
         return origin.resolve(path).normalize();
     }
 
-    // our implementation of Files.copy, thanks to usage of RandomAccessFile we can copy files that are in use
+    public static boolean isFilePhysical(Path path) {
+        return path.getFileSystem() == FileSystems.getDefault();
+    }
+
     public static void copyFile(Path source, Path destination) throws IOException {
         setupFilePaths(destination);
 
-        try (RandomAccessFile sourceFile = new RandomAccessFile(source.toFile(), "r");
-             FileOutputStream destinationFile = new FileOutputStream(destination.toFile())) {
+        try (InputStream is = new LockFreeInputStream(source);
+             OutputStream os = Files.newOutputStream(destination,
+                     StandardOpenOption.CREATE,
+                     StandardOpenOption.TRUNCATE_EXISTING,
+                     StandardOpenOption.WRITE)) {
 
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = sourceFile.read(buffer)) != -1) {
-                destinationFile.write(buffer, 0, bytesRead);
-            }
-
-            destinationFile.flush();
+            is.transferTo(os);
         } catch (IOException e) {
-            e.printStackTrace();
-//            throw new IOException("Failed to copy file: " + source + " to: " + destination, e);
+            LOGGER.error("Failed to copy a file from {} to {}", source, destination);
         }
     }
 
@@ -99,36 +98,24 @@ public class CustomFileUtils {
 
     private static boolean compareFilesByteByByte(Path path, byte[] referenceBytes) {
         try {
-            long fileSize = Files.size(path);
-
-            if (fileSize != referenceBytes.length) {
+            if (Files.size(path) != referenceBytes.length) {
                 return false;
             }
 
-            try (RandomAccessFile raf = new RandomAccessFile(path.toFile(), "r")) {
-
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                int offset = 0;
-
-                while ((bytesRead = raf.read(buffer)) != -1) {
-                    int compareLength = Math.min(bytesRead, referenceBytes.length - offset);
-                    
-                    for (int i = 0; i < compareLength; i++) {
-                        if (buffer[i] != referenceBytes[offset + i]) {
-                            return false;
-                        }
+            try (InputStream is = new BufferedInputStream(new LockFreeInputStream(path))) {
+                int b;
+                int i = 0;
+                while ((b = is.read()) != -1) {
+                    if (b != (referenceBytes[i++] & 0xFF)) { // & 0xFF ensures unsigned comparison
+                        return false;
                     }
-                    
-                    offset += bytesRead;
                 }
+                return true;
             }
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            LOGGER.error("Error comparing file byte by byte: {}", path, e);
             return false;
         }
-
-        return true;
     }
 
     // Formats path to be relative to the modpack directory - modpack-content format
@@ -212,39 +199,19 @@ public class CustomFileUtils {
         }
     }
 
-    public static String getHash(Path file) {
+    public static String getHash(Path path) {
         try {
-            if (!Files.isRegularFile(file)) return null;
-
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
-                byte[] buffer = new byte[8192];
-                int bytesRead;
-                while ((bytesRead = raf.read(buffer)) != -1) {
-                    digest.update(buffer, 0, bytesRead);
-                }
+
+            try (InputStream is = new BufferedInputStream(new LockFreeInputStream(path));
+                 DigestInputStream dis = new DigestInputStream(is, digest)) {
+                dis.transferTo(OutputStream.nullOutputStream()); // black hole :p
             }
+
             byte[] hash = digest.digest();
             return HexFormat.of().formatHex(hash);
-        } catch (UnsupportedOperationException e) {
-            try { // yes... its awful
-                MessageDigest digest = MessageDigest.getInstance("SHA-1");
-                try (var is = Files.newInputStream(file)) {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = is.read(buffer)) != -1) {
-                        digest.update(buffer, 0, bytesRead);
-                    }
-                }
-
-                byte[] hash = digest.digest();
-                return HexFormat.of().formatHex(hash);
-            } catch (Exception ex) {
-                e.printStackTrace();
-                ex.printStackTrace();
-            }
         } catch (Exception e) {
-            LOGGER.error("Failed to get hash of file: {}", file, e);
+            LOGGER.error("Failed to get hash for path: {}", path, e);
         }
         return null;
     }
@@ -254,38 +221,32 @@ public class CustomFileUtils {
             return null;
         }
 
+        long length = 0;
+
+        ByteArrayOutputStream filteredStream = new ByteArrayOutputStream();
+        try (InputStream is = new BufferedInputStream(new LockFreeInputStream(file))) {
+            int b;
+            while ((b = is.read()) != -1) {
+                // Filter whitespace: Tab (0x9), LF (0xA), CR (0xD), Space (0x20)
+                if (b == 0x9 || b == 0xa || b == 0xd || b == 0x20) {
+                    continue;
+                }
+
+                filteredStream.write(b);
+                length++;
+            }
+        }
+
+        // magic values
         final int m = 0x5bd1e995;
         final int r = 24;
         long k = 0x0L;
         int seed = 1;
         int shift = 0x0;
-
-        long length = 0;
         char b;
-
-        // First pass: calculate length (count non-whitespace bytes)
-        // Store filtered bytes for second pass to avoid re-reading file
-        List<Byte> filteredBytes = new ArrayList<>();
-        
-        try (RandomAccessFile raf = new RandomAccessFile(file.toFile(), "r")) {
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-
-            while ((bytesRead = raf.read(buffer)) != -1) {
-                for (int i = 0; i < bytesRead; i++) {
-                    b = (char) (buffer[i] & 0xFF);
-
-                    if (b == 0x9 || b == 0xa || b == 0xd || b == 0x20) {
-                        continue;
-                    }
-
-                    filteredBytes.add(buffer[i]);
-                    length += 1;
-                }
-            }
-        }
-
         long h = (seed ^ length);
+
+        byte[] filteredBytes = filteredStream.toByteArray();
 
         // Second pass: calculate hash using filtered bytes (no file I/O)
         for (byte byteVal : filteredBytes) {

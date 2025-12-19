@@ -7,6 +7,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 
 import java.io.InputStream;
 import java.math.BigInteger;
@@ -106,7 +107,7 @@ public class NetUtils {
 
     public static X509Certificate loadCertificate(Path path) throws Exception {
         if (!Files.exists(path)) return null;
-        try (InputStream in = Files.newInputStream(path)) {
+        try (InputStream in = new LockFreeInputStream(path)) {
             CertificateFactory cf = CertificateFactory.getInstance("X.509");
             return (X509Certificate) cf.generateCertificate(in);
         }

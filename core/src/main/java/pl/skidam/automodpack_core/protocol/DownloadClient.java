@@ -7,7 +7,9 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.*;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -469,7 +471,11 @@ class Connection implements AutoCloseable {
             long expectedFileSize = headerIn.readLong();
             long receivedBytes = 0;
 
-            try (OutputStream fos = new BufferedOutputStream(new FileOutputStream(destination.toFile()))) {
+            try (OutputStream fos = new BufferedOutputStream(Files.newOutputStream(destination,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE))) {
+
                 while (receivedBytes < expectedFileSize) {
                     byte[] dataFrame = readProtocolMessageFrame();
                     int toWrite = Math.min(dataFrame.length, (int) (expectedFileSize - receivedBytes));
