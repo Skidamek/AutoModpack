@@ -27,7 +27,6 @@ public class DangerScreen extends VersionedScreen {
     @Override
     protected void init() {
         super.init();
-        assert this.minecraft != null;
 
         this.addRenderableWidget(
             buttonWidget(
@@ -36,9 +35,7 @@ public class DangerScreen extends VersionedScreen {
                 120,
                 20,
                 VersionedText.translatable("automodpack.danger.cancel"),
-                button -> {
-                    this.minecraft.setScreen(parent);
-                }
+                button -> this.minecraft.setScreen(parent)
             )
         );
 
@@ -51,11 +48,7 @@ public class DangerScreen extends VersionedScreen {
                 VersionedText.translatable(
                     "automodpack.danger.confirm"
                 ).withStyle(ChatFormatting.BOLD),
-                button -> {
-                    Util.backgroundExecutor().execute(
-                        modpackUpdaterInstance::startUpdate
-                    );
-                }
+                button -> Util.backgroundExecutor().execute(modpackUpdaterInstance::startUpdate)
             )
         );
     }
@@ -105,6 +98,15 @@ public class DangerScreen extends VersionedScreen {
             this.height / 2 - 60 + lineHeight * 5,
             TextColors.WHITE
         );
+    }
+
+    @Override
+    public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
+            Util.backgroundExecutor().execute(modpackUpdaterInstance::startUpdate);
+            return true;
+        }
+        return super.onKeyPress(keyCode, scanCode, modifiers);
     }
 
     @Override
