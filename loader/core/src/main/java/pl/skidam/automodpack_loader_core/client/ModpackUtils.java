@@ -195,7 +195,7 @@ public class ModpackUtils {
 
             Path modPath = mod.modPath();
             Path standardModPath = MODS_DIR.resolve(modPath.getFileName());
-            if (!Objects.equals(CustomFileUtils.getHash(standardModPath), mod.hash())) {
+            if (!Files.exists(standardModPath) || !Objects.equals(CustomFileUtils.getHash(standardModPath), mod.hash())) {
                 needsRestart = true;
                 LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
                 CustomFileUtils.copyFile(modPath, standardModPath);

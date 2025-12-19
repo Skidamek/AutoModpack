@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -142,6 +143,9 @@ public class ModpackLoader16 implements ModpackLoaderService {
 
             Path path = mod.getPaths().get(0);
             if (path == null || path.toString().isEmpty())
+                continue;
+
+            if (!Files.exists(path))
                 continue;
 
             String hash = CustomFileUtils.getHash(path);

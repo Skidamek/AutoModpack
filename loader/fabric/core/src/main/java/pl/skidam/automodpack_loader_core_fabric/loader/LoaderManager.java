@@ -10,6 +10,7 @@ import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.nio.file.FileSystem;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
@@ -48,6 +49,9 @@ public class LoaderManager implements LoaderManagerService {
                 String modID = info.getMetadata().getId();
                 Path path = getModPath(modID);
                 if (path == null || path.toString().isEmpty()) // If we cant get the path, we skip the mod, its probably JiJed, we dont need it in the list
+                    continue;
+
+                if (!Files.exists(path))
                     continue;
 
                 String hash = CustomFileUtils.getHash(path);
