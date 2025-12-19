@@ -109,7 +109,8 @@ public class ModpackUtils {
 
             boolean modpackFileExists = Files.exists(modpackFile);
             boolean runFileExists = Files.exists(runFile);
-            boolean runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
+            boolean runFileHashMatch = false;
+            if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
 
             if (runFileHashMatch && !modpackFileExists) {
                 LOGGER.debug("Copying {} file to the modpack directory", formattedFile);
@@ -165,9 +166,10 @@ public class ModpackUtils {
             }
 
             boolean runFileExists = Files.exists(runFile);
-            boolean runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
+            boolean runFileHashMatch = false;
+            if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
 
-            if (runFileHashMatch && runFileExists && isMod && filesNotToCopy.contains(formattedFile)) {
+            if (runFileHashMatch && isMod && filesNotToCopy.contains(formattedFile)) {
                 LOGGER.info("Deleting {} file from standard mods directory", formattedFile);
                 CustomFileUtils.executeOrder66(runFile);
                 needsRestart = true;
