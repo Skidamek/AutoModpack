@@ -20,14 +20,13 @@ import java.util.concurrent.CompletableFuture;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
-import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 
-public class ServerMessageHandler
-    extends SimpleChannelInboundHandler<ProtocolMessage> {
+public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
     private final Map<byte[], String> secretLookup = new HashMap<>();
     private byte protocolVersion;
@@ -85,11 +84,13 @@ public class ServerMessageHandler
         LOGGER.info("Received refresh request for files of hashes: {}", hashes);
         List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
         List<ModpackContent> modpacks = new ArrayList<>();
+
         for (String hash : hashes) {
             final Optional<Path> optionalPath = resolvePath(hash);
             if (optionalPath.isEmpty()) continue;
             Path path = optionalPath.get();
             ModpackContent modpack = null;
+
             for (var content : modpackExecutor.modpacks.values()) {
                 if (!content.pathsMap.getMap().containsKey(hash)) {
                     continue;
@@ -104,7 +105,6 @@ public class ServerMessageHandler
             }
 
             modpacks.add(modpack);
-
             creationFutures.add(modpack.replaceAsync(path));
         }
 
@@ -159,26 +159,29 @@ public class ServerMessageHandler
             return;
         }
 
+        ReadableByteChannel channel = null;
+
         try {
-            ReadableByteChannel channel = LockFreeInputStream.openChannel(path);
+            channel = LockFreeInputStream.openChannel(path);
             ChunkedNioStream chunkedStream = new ChunkedNioStream(channel, this.chunkSize);
 
             ctx.writeAndFlush(chunkedStream).addListener((ChannelFutureListener) future -> {
-                try {
-                    if (future.isSuccess()) {
-                        sendEOT(ctx);
-                    } else {
-                        sendError(ctx, this.protocolVersion, "File transfer error: " + future.cause().getMessage());
-                    }
-                } finally { // Always close resources
-                    try {
-                        chunkedStream.close();
-                    } catch (Exception e) {
-                        LOGGER.error("Error closing stream resources", e);
-                    }
+                if (future.isSuccess()) {
+                    sendEOT(ctx);
+                } else {
+                    Throwable cause = future.cause();
+                    sendError(ctx, this.protocolVersion, "File transfer error: " + (cause != null ? cause.getMessage() : "Unknown"));
                 }
             });
-        } catch (IOException e) {
+
+        } catch (Exception e) {
+            if (channel != null) {
+                try {
+                    channel.close();
+                } catch (IOException ignored) {
+                    // Ignored
+                }
+            }
             sendError(ctx, this.protocolVersion, "File transfer error: " + e.getMessage());
         }
     }
@@ -187,7 +190,6 @@ public class ServerMessageHandler
         if (sha1.isBlank()) {
             return Optional.of(hostModpackContentFile);
         }
-
         return hostServer.getPath(sha1);
     }
 

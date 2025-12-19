@@ -15,8 +15,12 @@ import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 
 public class ProtocolServerHandler extends ByteToMessageDecoder {
 
-    // The first byte of our Magic Integers (0x414D4D48 or 0x414D4D43) is always 0x41 ('A')
-    private static final byte MAGIC_HEADER_BYTE = 0x41;
+    private static final byte[] MAGIC_AMMH_ARRAY = {
+            (byte) (MAGIC_AMMH >>> 24),
+            (byte) (MAGIC_AMMH >>> 16),
+            (byte) (MAGIC_AMMH >>> 8),
+            (byte) MAGIC_AMMH
+    };
 
     private final SslContext sslCtx;
 
@@ -26,97 +30,59 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
-        // We need at least 1 byte to make a decision
-        if (!in.isReadable()) return;
-
-        // Wait for full magic if we are hosting on Minecraft port or if we require magic packets
-        if ((serverConfig.bindPort == -1 && hostServer.isRunning()) || serverConfig.requireMagicPackets) {
-            if (in.readableBytes() < 4) return;
-
-            int magic = in.getInt(in.readerIndex());
-            if (isMagic(magic)) {
-                handleMagicPacket(ctx, in, magic);
-            } else if (ctx.channel().pipeline().get(this.getClass()) != null) {
-                ctx.channel().pipeline().remove(this);
-            }
-            return;
-        }
-
-        // Otherwise, we accept both Magic Packets and Standard Protocol immediately
+        boolean isSharedPort = (serverConfig.bindPort == -1 && hostServer.isRunning());
         int readerIndex = in.readerIndex();
-        byte signatureByte = in.getByte(readerIndex);
+        int readableBytes = in.readableBytes();
 
-        if (signatureByte != MAGIC_HEADER_BYTE) {
-            fallbackToStandardProtocol(ctx, in);
-            return;
+        for (int i = 0; i < MAGIC_AMMH_ARRAY.length; i++) {
+            if (readableBytes <= i) return;
+
+            if (in.getByte(readerIndex + i) != MAGIC_AMMH_ARRAY[i]) {
+                if (isSharedPort) {
+                    // Shared: Pass to next handler (e.g. Minecraft)
+                    ctx.pipeline().remove(this);
+                    ctx.fireChannelRead(in.retain());
+                    in.skipBytes(in.readableBytes());
+                } else {
+                    // Dedicated: Mismatch means Standard Protocol (TLS)
+                    fallbackToStandardProtocol(ctx, in);
+                }
+                return;
+            }
         }
 
-        if (in.readableBytes() < 4) {
-            return;
-        }
-
-        int potentialMagic = in.getInt(readerIndex);
-        if (isMagic(potentialMagic)) {
-            handleMagicPacket(ctx, in, potentialMagic);
-        } else {
-            fallbackToStandardProtocol(ctx, in);
-        }
+        handleMagicPacket(ctx, in);
     }
 
-    private boolean isMagic(int magic) {
-        return magic == MAGIC_AMMH || magic == MAGIC_AMMC;
-    }
+    private void handleMagicPacket(ChannelHandlerContext ctx, ByteBuf in) {
+        if (in.readableBytes() < 6) return;
 
-    private void handleMagicPacket(ChannelHandlerContext ctx, ByteBuf in, int magic) {
-        if (magic == MAGIC_AMMH) {
-            // AMMH requires: Magic (4) + Length (2) + Hostname (N)
-            if (in.readableBytes() < 6) return; // Wait for length
+        in.markReaderIndex();
+        in.skipBytes(4);
+        short hostnameLength = in.readShort();
+        in.resetReaderIndex();
 
-            in.markReaderIndex();
-            in.skipBytes(4);
-            short hostnameLength = in.readShort();
-            in.resetReaderIndex();
+        if (in.readableBytes() < 4 + 2 + hostnameLength) return;
 
-            if (in.readableBytes() < 4 + 2 + hostnameLength) return; // Wait for payload
+        in.skipBytes(6);
+        byte[] hostnameBytes = new byte[hostnameLength];
+        in.readBytes(hostnameBytes);
+        String hostname = new String(hostnameBytes, StandardCharsets.UTF_8);
 
-            // Consume
-            in.skipBytes(6);
-            byte[] hostnameBytes = new byte[hostnameLength];
-            in.readBytes(hostnameBytes);
-            String hostname = new String(hostnameBytes, StandardCharsets.UTF_8);
-
-            LOGGER.debug("Received AMMH handshake. Hostname: {}", hostname);
-            finalizeHandshake(ctx);
-        } else if (magic == MAGIC_AMMC) {
-            in.skipBytes(4); // Consume magic
-            LOGGER.debug("Received AMMC handshake.");
-            finalizeHandshake(ctx);
-        }
+        LOGGER.debug("Received AMMH handshake. Hostname: {}", hostname);
+        finalizeHandshake(ctx);
     }
 
     private void fallbackToStandardProtocol(ChannelHandlerContext ctx, ByteBuf in) {
-        LOGGER.debug("No Magic Packet detected. Falling back to Standard Protocol.");
-
-        // Setup the Standard Pipeline (Config, encoders, etc.)
         setupPipeline(ctx);
-
-        // Remove THIS handler so we don't intercept anymore
         ctx.pipeline().remove(this);
-
-        // We use retain() because fireChannelRead decrements the ref count, but we haven't read from 'in' yet.
         ctx.fireChannelRead(in.retain());
-
-        // Skip bytes in THIS handler's context to satisfy Netty (we passed ownership downstream)
         in.skipBytes(in.readableBytes());
     }
 
     private void finalizeHandshake(ChannelHandlerContext ctx) {
         sendAck(ctx);
-
-        // Clear pipeline of any pre-existing junk
         ctx.pipeline().toMap().forEach((k, v) -> ctx.pipeline().remove(v));
-
-        // Setup fresh pipeline
         setupPipeline(ctx);
     }
 
