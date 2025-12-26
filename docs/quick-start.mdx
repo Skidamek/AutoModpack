@@ -63,11 +63,11 @@ Restart your game. Your server's modpack should now be loaded, and you should be
   - **⚠️ Warning:** Removing `/config/**` will make ALL config files non-editable. If you only want specific config folders to be always updated, use exclusions instead:
     ```json
     "syncedFiles": [
-      "/config/**",
-      "!/config/fancymenu/**"
+      "/config/**"
     ],
     "allowEditsInFiles": [
-      "/config/fancymenu/**"
+      "/config/**",
+      "!/config/fancymenu/**"
     ]
     ```
 - **`forceCopyFilesToStandardLocation`**: Use with caution. Forces files to be copied to the standard Minecraft folders (breaks seamless updates)
