@@ -210,6 +210,7 @@ public class CustomFileUtils {
 
             byte[] hash = digest.digest();
             return HexFormat.of().formatHex(hash);
+        } catch (IOException ignored) { // we don't really care about this exception, file may just not exists or be a directory
         } catch (Exception e) {
             LOGGER.error("Failed to get hash for path: {}", path, e);
         }
