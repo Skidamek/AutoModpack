@@ -1,8 +1,5 @@
 package pl.skidam.automodpack_core.utils;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
-
 import java.io.*;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -16,23 +13,7 @@ import java.util.stream.Stream;
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class CustomFileUtils {
-    // TODO change this dummy byte array to contain also some metadata that we have created it
-    private static final byte[] smallDummyJar = {
-            80, 75, 3, 4, 20, 0, 8, 8, 8, 0, 89, 116, -44, 86, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 20, 0, 4, 0, 77, 69, 84,
-            65, 45, 73, 78, 70, 47, 77, 65, 78, 73, 70, 69, 83, 84, 46, 77,
-            70, -2, -54, 0, 0, -13, 77, -52, -53, 76, 75, 45, 46, -47, 13, 75,
-            45, 42, -50, -52, -49, -77, 82, 48, -44, 51, -32, -27, -30, -27, 2, 0,
-            80, 75, 7, 8, -78, 127, 2, -18, 27, 0, 0, 0, 25, 0, 0, 0,
-            80, 75, 1, 2, 20, 0, 20, 0, 8, 8, 8, 0, 89, 116, -44, 86,
-            -78, 127, 2, -18, 27, 0, 0, 0, 25, 0, 0, 0, 20, 0, 4, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 77, 69,
-            84, 65, 45, 73, 78, 70, 47, 77, 65, 78, 73, 70, 69, 83, 84, 46,
-            77, 70, -2, -54, 0, 0, 80, 75, 5, 6, 0, 0, 0, 0, 1, 0,
-            1, 0, 70, 0, 0, 0, 97, 0, 0, 0, 0, 0,
-    };
 
-    private static final Jsons.ClientDummyFiles clientDummyFiles = ConfigTools.load(clientDummyFilesFile, Jsons.ClientDummyFiles.class);
     private static final Path CWD = Path.of(System.getProperty("user.dir"));
 
     public static void executeOrder66(Path file) {
@@ -46,9 +27,9 @@ public class CustomFileUtils {
         }
 
         if (Files.isRegularFile(file)) {
-            dummyIT(file);
+            ClientCacheUtils.dummyIT(file);
             if (saveDummyFiles) {
-                saveDummyFiles();
+                ClientCacheUtils.saveDummyFiles();
             }
         }
     }
@@ -105,7 +86,7 @@ public class CustomFileUtils {
         }
     }
 
-    private static boolean compareFilesByteByByte(Path path, byte[] referenceBytes) {
+    public static boolean compareFilesByteByByte(Path path, byte[] referenceBytes) {
         try {
             if (Files.size(path) != referenceBytes.length) {
                 return false;
@@ -163,51 +144,6 @@ public class CustomFileUtils {
             return path;
         }
         return "/" + path;
-    }
-
-    public static void deleteDummyFiles() {
-        if (clientDummyFiles == null || clientDummyFiles.files.isEmpty()) {
-            return;
-        }
-
-        var iterator = clientDummyFiles.files.iterator();
-        while (iterator.hasNext()) {
-            try {
-                String filePath = iterator.next();
-                Path file = Path.of(filePath);
-                if (compareFilesByteByByte(file, smallDummyJar)) {
-                    CustomFileUtils.executeOrder66(file, false);
-                }
-                iterator.remove();
-            } catch (Exception e) {
-                LOGGER.error("Failed to delete dummy file", e);
-            }
-        }
-
-        saveDummyFiles();
-    }
-
-    // our trick for not able to just delete file on specific filesystem (windows...)
-    private static void dummyIT(Path file) {
-        try (FileOutputStream fos = new FileOutputStream(file.toFile())) {
-            fos.write(smallDummyJar);
-            fos.flush();
-
-            if (clientDummyFiles == null) {
-                throw new IllegalStateException("clientDummyFiles is null");
-            }
-
-            clientDummyFiles.files.add(file.toAbsolutePath().normalize().toString());
-        } catch (IOException e) {
-            LOGGER.error("Failed to create dummy file: {}", file, e);
-        }
-    }
-
-    public static void saveDummyFiles() {
-        if (clientDummyFiles == null) {
-            return;
-        }
-        ConfigTools.save(clientDummyFilesFile, clientDummyFiles);
     }
 
     public static String getHash(Path path) {
@@ -309,18 +245,6 @@ public class CustomFileUtils {
         h = 0x00000000FFFFFFFFL & h;
 
         return String.valueOf(h);
-    }
-
-
-    public static boolean hashCompare(Path file1, Path file2) {
-        if (!Files.exists(file1) || !Files.exists(file2)) return false;
-
-        String hash1 = getHash(file1);
-        String hash2 = getHash(file2);
-
-        if (hash1 == null || hash2 == null) return false;
-
-        return hash1.equals(hash2);
     }
 
     public static boolean isEmptyDirectory(Path parentPath) throws IOException {

@@ -7,7 +7,7 @@ import net.neoforged.fml.loading.moddiscovery.ModFileInfo;
 import net.neoforged.fml.loading.moddiscovery.ModInfo;
 import net.neoforged.neoforgespi.language.IModInfo;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.ClientCacheUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.nio.file.Files;
@@ -68,7 +68,7 @@ public class LoaderManager implements LoaderManagerService {
                 if (!Files.exists(path))
                     continue;
 
-                String hash = CustomFileUtils.getHash(path);
+                String hash = ClientCacheUtils.computeHashIfNeeded(path);
                 if (hash == null)
                     continue;
 

@@ -13,7 +13,7 @@ import net.fabricmc.loader.impl.metadata.VersionOverrides;
 import net.fabricmc.loader.impl.util.SystemProperties;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.ClientCacheUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
@@ -148,7 +148,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
             if (!Files.exists(path))
                 continue;
 
-            String hash = CustomFileUtils.getHash(path);
+            String hash = ClientCacheUtils.computeHashIfNeeded(path);
             if (hash == null)
                 continue;
 

@@ -20,7 +20,6 @@ import java.util.stream.Stream;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
-import static pl.skidam.automodpack_loader_core.client.ModpackUtils.computeHashIfNeeded;
 
 // TODO: clean up this mess
 public class ModpackUpdater {
@@ -114,6 +113,7 @@ public class ModpackUpdater {
 
         if (requiresRestart) {
             LOGGER.info("Modpack is not loaded");
+            ClientCacheUtils.saveMetadataCache();
             UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
             new ReLauncher(modpackDir, updateType, changelogs).restart(true);
             return;
@@ -121,14 +121,12 @@ public class ModpackUpdater {
 
         // Load the modpack excluding mods from standard mods directory without need to restart the game
         if (preload) {
-            Jsons.LocalMetadata localMetadataCache = ConfigTools.load(clientLocalMetadataFile, Jsons.LocalMetadata.class);
-
             List<String> standardModsHashes;
             List<Path> modpackMods = List.of();
 
             try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
                 standardModsHashes = standardModsStream
-                        .map(mod -> computeHashIfNeeded(mod, localMetadataCache))
+                        .map(ClientCacheUtils::computeHashIfNeeded)
                         .filter(Objects::nonNull)
                         .toList();
             }
@@ -138,7 +136,7 @@ public class ModpackUpdater {
                 try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
                     modpackMods = modpackModsStream
                             .filter(mod -> {
-                                String modHash = computeHashIfNeeded(mod, localMetadataCache);
+                                String modHash = ClientCacheUtils.computeHashIfNeeded(mod);
 
                                 // if its in standard mods directory, we dont want to load it again
                                 boolean isUnique = standardModsHashes.stream().noneMatch(hash -> hash.equals(modHash));
@@ -154,6 +152,7 @@ public class ModpackUpdater {
             return;
         }
 
+        ClientCacheUtils.saveMetadataCache();
         LOGGER.info("Modpack is already loaded");
     }
 
@@ -196,8 +195,6 @@ public class ModpackUpdater {
 
 
             // DOWNLOAD
-
-            Jsons.LocalMetadata localMetadataCache = ConfigTools.load(clientLocalMetadataFile, Jsons.LocalMetadata.class);
 
             newDownloadedFiles.clear();
             int wholeQueue = filesToUpdate.size();
@@ -244,7 +241,7 @@ public class ModpackUpdater {
 
                         changelogs.changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrls);
 
-                        ModpackUtils.updateCache(downloadFile, serverHash, localMetadataCache);
+                        ClientCacheUtils.updateCache(downloadFile, serverHash);
                     };
 
 
@@ -329,7 +326,7 @@ public class ModpackUpdater {
                             Runnable successCallback = () -> {
                                 changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
 
-                                ModpackUtils.updateCache(downloadFile, serverHash, localMetadataCache);
+                                ClientCacheUtils.updateCache(downloadFile, serverHash);
                             };
 
                             downloadManager.download(downloadFile, serverHash, List.of(), successCallback, failureCallback);
@@ -353,9 +350,9 @@ public class ModpackUpdater {
 
             // Downloads completed, save json files
             Files.writeString(modpackContentFile, serverModpackContentJson);
-            ConfigTools.save(clientLocalMetadataFile, localMetadataCache);
 
-            CustomFileUtils.deleteDummyFiles();
+            ClientCacheUtils.saveMetadataCache();
+            ClientCacheUtils.deleteDummyFiles();
 
             if (!failedDownloads.isEmpty()) {
                 StringBuilder failedFiles = new StringBuilder();
@@ -534,7 +531,7 @@ public class ModpackUpdater {
             }
 
             Path runPath = CustomFileUtils.getPathFromCWD(formattedFile);
-            if (CustomFileUtils.hashCompare(path, runPath)) {
+            if (ClientCacheUtils.fastHashCompare(path, runPath)) {
                 LOGGER.info("Deleting {} and {}", path, runPath);
                 parentPaths.add(runPath.getParent());
                 CustomFileUtils.executeOrder66(runPath, false);
@@ -548,7 +545,7 @@ public class ModpackUpdater {
             changelogs.changesDeletedList.put(path.getFileName().toString(), null);
         }
 
-        CustomFileUtils.saveDummyFiles();
+        ClientCacheUtils.saveDummyFiles();
 
         // recursively delete empty directories
         for (Path parentPath : parentPaths) {

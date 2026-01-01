@@ -5,6 +5,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.utils.ClientCacheUtils;
 import pl.skidam.automodpack_core.utils.CustomFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -13,7 +14,6 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import java.io.*;
 import java.net.*;
 import java.nio.file.*;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.*;
@@ -58,8 +58,6 @@ public class ModpackUtils {
             return new UpdateCheckResult(true, serverModpackContent.list);
         }
 
-        Jsons.LocalMetadata localMetadataCache = ConfigTools.load(clientLocalMetadataFile, Jsons.LocalMetadata.class);
-
         LOGGER.info("Verifying content against server list...");
 
         Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = ConcurrentHashMap.newKeySet();
@@ -74,8 +72,7 @@ public class ModpackUtils {
                 return;
             }
 
-            // Cheap cache check - 0 bytes read
-            String cachedHash = getVerifiedCacheHash(serverItemPath, localMetadataCache);
+            String cachedHash = ClientCacheUtils.getVerifiedCacheHash(serverItemPath);
             if (cachedHash != null && cachedHash.equals(serverItem.sha1)) {
                 return; // File is almost certainly up to date
             }
@@ -83,7 +80,7 @@ public class ModpackUtils {
             // Full hash check
             String diskHash = CustomFileUtils.getHash(serverItemPath);
             if (diskHash != null && diskHash.equals(serverItem.sha1)) {
-                updateCache(serverItemPath, diskHash, localMetadataCache);
+                ClientCacheUtils.updateCache(serverItemPath, diskHash);
                 return; // File is definitely up to date
             }
 
@@ -91,7 +88,7 @@ public class ModpackUtils {
             filesToUpdate.add(serverItem);
         });
 
-        ConfigTools.save(clientLocalMetadataFile, localMetadataCache);
+        ClientCacheUtils.saveMetadataCache();
 
         if (!filesToUpdate.isEmpty()) {
             LOGGER.info("Modpack {} requires update! Took {} ms", modpackDir, System.currentTimeMillis() - start);
@@ -115,43 +112,6 @@ public class ModpackUtils {
         return new UpdateCheckResult(false, Set.of());
     }
 
-    public static String getVerifiedCacheHash(Path path, Jsons.LocalMetadata cache) {
-        if (cache == null) return null;
-
-        try {
-            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
-            Jsons.LocalMetadata.FileFingerprint fingerprint = cache.files.get(path.toAbsolutePath().normalize().toString());
-
-            if (fingerprint != null && fingerprint.lastSize == attrs.size() && fingerprint.lastModified == attrs.lastModifiedTime().toMillis()) {
-                return fingerprint.sha1;
-            }
-        } catch (IOException e) {
-            LOGGER.debug("Could not read attributes for {}", path);
-        }
-        return null; // Metadata mismatch or missing cache
-    }
-
-    public static void updateCache(Path path, String hash, Jsons.LocalMetadata cache) {
-        if (cache == null) return;
-        try {
-            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
-            cache.files.put(path.toAbsolutePath().normalize().toString(), new Jsons.LocalMetadata.FileFingerprint(hash, attrs.size(), attrs.lastModifiedTime().toMillis()));
-        } catch (IOException e) {
-            LOGGER.error("Could not update cache for {}", path, e);
-        }
-    }
-
-    public static String computeHashIfNeeded(Path modPath, Jsons.LocalMetadata localMetadataCache) {
-        // Check cache first
-        String cachedHash = getVerifiedCacheHash(modPath, localMetadataCache);
-        if (cachedHash != null) return cachedHash;
-
-        // Fallback to hashing and update cache
-        String diskHash = CustomFileUtils.getHash(modPath);
-        updateCache(modPath, diskHash, localMetadataCache);
-        return diskHash;
-    }
-
     public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
         boolean needsRestart = false;
 
@@ -169,7 +129,7 @@ public class ModpackUtils {
             boolean modpackFileExists = Files.exists(modpackFile);
             boolean runFileExists = Files.exists(runFile);
             boolean runFileHashMatch = false;
-            if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
+            if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, ClientCacheUtils.computeHashIfNeeded(runFile));
 
             if (runFileHashMatch && !modpackFileExists) {
                 LOGGER.debug("Copying {} file to the modpack directory", formattedFile);
@@ -226,7 +186,7 @@ public class ModpackUtils {
 
             boolean runFileExists = Files.exists(runFile);
             boolean runFileHashMatch = false;
-            if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, CustomFileUtils.getHash(runFile));
+            if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, ClientCacheUtils.computeHashIfNeeded(runFile));
 
             if (runFileHashMatch && isMod && filesNotToCopy.contains(formattedFile)) {
                 LOGGER.info("Deleting {} file from standard mods directory", formattedFile);
@@ -254,7 +214,7 @@ public class ModpackUtils {
 
             Path modPath = mod.modPath();
             Path standardModPath = MODS_DIR.resolve(modPath.getFileName());
-            if (!Files.exists(standardModPath) || !Objects.equals(CustomFileUtils.getHash(standardModPath), mod.hash())) {
+            if (!Files.exists(standardModPath) || !Objects.equals(ClientCacheUtils.computeHashIfNeeded(standardModPath), mod.hash())) {
                 needsRestart = true;
                 LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
                 CustomFileUtils.copyFile(modPath, standardModPath);
@@ -363,7 +323,7 @@ public class ModpackUtils {
             }
         }
 
-        CustomFileUtils.saveDummyFiles();
+        ClientCacheUtils.saveDummyFiles();
 
         return new RemoveDupeModsResult(requiresRestart, dependentMods);
     }
@@ -428,17 +388,17 @@ public class ModpackUtils {
 
         LOGGER.info("Preserving editable files from old modpack and copying to new modpack...");
 
-        // 1. Preserve files from the OLD modpack (if it existed)
+        // Preserve files from the OLD modpack (if it existed)
         if (oldName != null && !oldName.isBlank()) {
             processEditableFiles(modpacksDir.resolve(oldName), (dir, files) ->
                     ModpackUtils.preserveEditableFiles(dir, files, newDownloadedFiles));
         }
 
-        // 2. Restore/Copy files to the NEW modpack
+        // Restore/Copy files to the NEW modpack
         processEditableFiles(modpackDirToSelect, (dir, files) ->
                 ModpackUtils.copyPreviousEditableFiles(dir, files, newDownloadedFiles));
 
-        // 3. Update Configuration and Save
+        // Update Configuration and Save
         clientConfig.selectedModpack = newName;
         ConfigTools.save(clientConfigFile, clientConfig);
         ModpackUtils.addModpackToList(newName, modpackAddresses);

@@ -6,7 +6,7 @@ import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.ModDependency;
 import net.fabricmc.loader.api.metadata.ModEnvironment;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.ClientCacheUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.nio.file.FileSystem;
@@ -54,7 +54,7 @@ public class LoaderManager implements LoaderManagerService {
                 if (!Files.exists(path))
                     continue;
 
-                String hash = CustomFileUtils.getHash(path);
+                String hash = ClientCacheUtils.computeHashIfNeeded(path);
                 if (hash == null)
                     continue;
 
