@@ -41,7 +41,6 @@ public class SelfUpdater {
     public static boolean update(Jsons.ModpackContentFields serverModpackContent) {
         if (LOADER_MANAGER.isDevelopmentEnvironment()) return false;
 
-        // --- 1. Environment & Config Checks ---
         if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {
             LOGGER.info("AutoModpack self-updater is disabled in server config.");
             return false;
@@ -54,7 +53,7 @@ public class SelfUpdater {
             return false;
         }
 
-        // --- 2. Identify Current Version ---
+        // Identify Current Version
         SemanticVersion currentVersion;
         try {
             currentVersion = SemanticVersion.parse(AM_VERSION);
@@ -63,7 +62,7 @@ public class SelfUpdater {
             return false;
         }
 
-        // --- 3. Fetch Remote Info ---
+        // Fetch Remote Info
         List<ModrinthAPI> modrinthAPIList = new ArrayList<>();
 
         if (gettingServerVersion) {
@@ -89,7 +88,7 @@ public class SelfUpdater {
             return false;
         }
 
-        // --- 4. Iterate & Validate ---
+        // Iterate & Validate
         for (ModrinthAPI automodpack : modrinthAPIList) {
             if (automodpack == null || automodpack.fileVersion() == null) continue;
 
@@ -102,13 +101,13 @@ public class SelfUpdater {
                 continue; // Skip malformed remote versions
             }
 
-            // A. Exact Hash Match (Fastest check)
+            // Exact Hash Match (Fastest check)
             if (automodpack.SHA1Hash().equals(CustomFileUtils.getHash(THIS_MOD_JAR))) {
                 LOGGER.info("Already on the target version (Hash match): {}", AM_VERSION);
                 return false;
             }
 
-            // B. Version Comparison
+            // Version Comparison
             int comparison = remoteVersion.compareTo(currentVersion);
 
             // If we are NOT forced to sync to server, and remote is older or equal
@@ -122,14 +121,14 @@ public class SelfUpdater {
                 return false;
             }
 
-            // C. Stable -> Beta Protection
+            // Stable -> Beta Protection
             // If checking for updates (not syncing), do not update FROM Stable TO Beta.
             if (!gettingServerVersion && currentVersion.isStable() && !remoteVersion.isStable()) {
                 LOGGER.info("Skipping update: You are on Stable ({}) and latest is Pre-release ({}).", AM_VERSION, rawRemoteVersion);
                 continue; // Skip this beta, keep looking for a newer Stable version in the list
             }
 
-            // D. Safety / Downgrade Check
+            // Safety / Downgrade Check
             if (!validUpdate(remoteVersion)) {
                 // If the specific version requested by server is unsafe, we abort.
                 // If we are just scanning the list, we skip this invalid entry.
@@ -137,7 +136,7 @@ public class SelfUpdater {
                 continue;
             }
 
-            // --- 5. Install ---
+            // Install
             LOGGER.info("Update found! Updating from {} to {}", AM_VERSION, rawRemoteVersion);
             installModVersion(automodpack);
             return true;
