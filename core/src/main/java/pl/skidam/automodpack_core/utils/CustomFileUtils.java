@@ -170,8 +170,8 @@ public class CustomFileUtils {
                 Path file = Path.of(filePath);
                 if (compareFilesByteByByte(file, smallDummyJar)) {
                     CustomFileUtils.executeOrder66(file);
-                    iterator.remove();
                 }
+                iterator.remove();
             } catch (Exception e) {
                 LOGGER.error("Failed to delete dummy file", e);
             }
