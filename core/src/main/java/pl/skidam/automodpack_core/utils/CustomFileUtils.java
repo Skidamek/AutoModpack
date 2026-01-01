@@ -36,6 +36,10 @@ public class CustomFileUtils {
     private static final Path CWD = Path.of(System.getProperty("user.dir"));
 
     public static void executeOrder66(Path file) {
+        executeOrder66(file, true);
+    }
+
+    public static void executeOrder66(Path file, boolean saveDummyFiles) {
         try {
             Files.deleteIfExists(file);
         } catch (IOException ignored) {
@@ -43,6 +47,9 @@ public class CustomFileUtils {
 
         if (Files.isRegularFile(file)) {
             dummyIT(file);
+            if (saveDummyFiles) {
+                saveDummyFiles();
+            }
         }
     }
 
@@ -169,7 +176,7 @@ public class CustomFileUtils {
                 String filePath = iterator.next();
                 Path file = Path.of(filePath);
                 if (compareFilesByteByByte(file, smallDummyJar)) {
-                    CustomFileUtils.executeOrder66(file);
+                    CustomFileUtils.executeOrder66(file, false);
                 }
                 iterator.remove();
             } catch (Exception e) {
@@ -177,11 +184,11 @@ public class CustomFileUtils {
             }
         }
 
-        ConfigTools.save(clientDummyFilesFile, clientDummyFiles);
+        saveDummyFiles();
     }
 
     // our trick for not able to just delete file on specific filesystem (windows...)
-    public static void dummyIT(Path file) {
+    private static void dummyIT(Path file) {
         try (FileOutputStream fos = new FileOutputStream(file.toFile())) {
             fos.write(smallDummyJar);
             fos.flush();
@@ -194,6 +201,13 @@ public class CustomFileUtils {
         } catch (IOException e) {
             LOGGER.error("Failed to create dummy file: {}", file, e);
         }
+    }
+
+    public static void saveDummyFiles() {
+        if (clientDummyFiles == null) {
+            return;
+        }
+        ConfigTools.save(clientDummyFilesFile, clientDummyFiles);
     }
 
     public static String getHash(Path path) {

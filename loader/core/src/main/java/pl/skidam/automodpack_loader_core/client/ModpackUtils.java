@@ -352,16 +352,18 @@ public class ModpackUtils {
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 if (!Objects.equals(modpackMod.hash(), standardMod.hash())) {
                     LOGGER.warn("Changing duplicated mod {} - {} to modpack version - {}", modId, standardMod.modVersion(), modpackMod.modVersion());
-                    CustomFileUtils.executeOrder66(standardModPath);
+                    CustomFileUtils.executeOrder66(standardModPath, false);
                     CustomFileUtils.copyFile(modpackModPath, newStandardModPath); // TODO make sure we dont copy an empty invalid file there
                     requiresRestart = true;
                 }
             } else if (!isWorkaround && !isForceCopy) {
                 LOGGER.warn("Removing {} mod. It is duplicated modpack mod and no other mods are dependent on it!", modId);
-                CustomFileUtils.executeOrder66(standardModPath);
+                CustomFileUtils.executeOrder66(standardModPath, false);
                 requiresRestart = true;
             }
         }
+
+        CustomFileUtils.saveDummyFiles();
 
         return new RemoveDupeModsResult(requiresRestart, dependentMods);
     }

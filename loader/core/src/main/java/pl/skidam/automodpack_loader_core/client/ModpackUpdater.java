@@ -537,16 +537,18 @@ public class ModpackUpdater {
             if (CustomFileUtils.hashCompare(path, runPath)) {
                 LOGGER.info("Deleting {} and {}", path, runPath);
                 parentPaths.add(runPath.getParent());
-                CustomFileUtils.executeOrder66(runPath);
+                CustomFileUtils.executeOrder66(runPath, false);
                 needsRestart = true;
             } else {
                 LOGGER.info("Deleting {}", path);
             }
 
             parentPaths.add(path.getParent());
-            CustomFileUtils.executeOrder66(path);
+            CustomFileUtils.executeOrder66(path, false);
             changelogs.changesDeletedList.put(path.getFileName().toString(), null);
         }
+
+        CustomFileUtils.saveDummyFiles();
 
         // recursively delete empty directories
         for (Path parentPath : parentPaths) {
