@@ -83,24 +83,23 @@ public class ModpackUpdater {
                     fullDownload = true;
                     new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
                 }
-                return; // Exit early for all "new modpack" scenarios
-            }
-
-            // Handle existing modpack content file
-            // Rename the modpack if the name has changed
-            modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
-            modpackContentFile = modpackDir.resolve(modpackContentFile.getFileName());
-
-            if (result == null) {
-                result = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
-            }
-
-            // Update or load the modpack
-            if (result.requiresUpdate()) {
-                startUpdate(result.filesToUpdate());
             } else {
-                Files.writeString(modpackContentFile, serverModpackContentJson);
-                CheckAndLoadModpack();
+                // Handle existing modpack
+                // Rename the modpack if the name has changed
+                modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
+                modpackContentFile = modpackDir.resolve(modpackContentFile.getFileName());
+
+                if (result == null) {
+                    result = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
+                }
+
+                // Update or load the modpack
+                if (result.requiresUpdate()) {
+                    startUpdate(result.filesToUpdate());
+                } else {
+                    Files.writeString(modpackContentFile, serverModpackContentJson);
+                    CheckAndLoadModpack();
+                }
             }
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
@@ -159,7 +158,7 @@ public class ModpackUpdater {
     }
 
     // TODO split it into different methods, its too long
-    public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> fileToUpdate) {
+    public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");
             return;
@@ -178,7 +177,7 @@ public class ModpackUpdater {
             long startFetching = System.currentTimeMillis();
             List<FetchManager.FetchData> fetchDatas = new LinkedList<>();
 
-            for (Jsons.ModpackContentFields.ModpackContentItem serverItem : fileToUpdate) {
+            for (Jsons.ModpackContentFields.ModpackContentItem serverItem : filesToUpdate) {
 
                 totalBytesToDownload += Long.parseLong(serverItem.size);
 
@@ -201,7 +200,7 @@ public class ModpackUpdater {
             Jsons.LocalMetadata localMetadataCache = ConfigTools.load(clientLocalMetadataFile, Jsons.LocalMetadata.class);
 
             newDownloadedFiles.clear();
-            int wholeQueue = fileToUpdate.size();
+            int wholeQueue = filesToUpdate.size();
             if (wholeQueue > 0) {
                 LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
@@ -215,7 +214,7 @@ public class ModpackUpdater {
                 new ScreenManager().download(downloadManager, getModpackName());
                 downloadManager.attachDownloadClient(downloadClient);
 
-                var randomizedList = new LinkedList<>(fileToUpdate);
+                var randomizedList = new LinkedList<>(filesToUpdate);
                 Collections.shuffle(randomizedList);
                 for (var serverItem : randomizedList) {
 
