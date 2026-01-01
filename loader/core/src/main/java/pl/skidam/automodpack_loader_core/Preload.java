@@ -63,7 +63,7 @@ public class Preload {
         // Only selfupdate if no modpack is selected
         if (selectedModpackAddress == null) {
             SelfUpdater.update();
-            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), null);
+            CustomFileUtils.deleteDummyFiles();
         } else {
             Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
@@ -82,7 +82,7 @@ public class Preload {
             }
 
             // Delete dummy files
-            CustomFileUtils.deleteDummyFiles(Path.of(System.getProperty("user.dir")), latestModpackContent == null ? null : latestModpackContent.list);
+            CustomFileUtils.deleteDummyFiles();
 
             if (clientConfig.updateSelectedModpackOnLaunch) {
                 new ModpackUpdater(latestModpackContent, modpackAddresses, secret, selectedModpackDir).processModpackUpdate(null);

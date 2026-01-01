@@ -192,4 +192,9 @@ public class Jsons {
             }
         }
     }
+
+    public static class ClientDummyFiles {
+        // Set of absolute file paths to delete when we can
+        public Set<String> files = ConcurrentHashMap.newKeySet();
+    }
 }

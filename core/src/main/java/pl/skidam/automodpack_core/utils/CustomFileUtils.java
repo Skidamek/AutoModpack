@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.utils;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 
 import java.io.*;
@@ -31,6 +32,7 @@ public class CustomFileUtils {
             1, 0, 70, 0, 0, 0, 97, 0, 0, 0, 0, 0,
     };
 
+    private static final Jsons.ClientDummyFiles clientDummyFiles = ConfigTools.load(clientDummyFilesFile, Jsons.ClientDummyFiles.class);
     private static final Path CWD = Path.of(System.getProperty("user.dir"));
 
     public static void executeOrder66(Path file) {
@@ -156,37 +158,26 @@ public class CustomFileUtils {
         return "/" + path;
     }
 
-    public static void deleteDummyFiles(Path directory, Set<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
-        if (directory == null || ignoreList == null) {
+    public static void deleteDummyFiles() {
+        if (clientDummyFiles == null || clientDummyFiles.files.isEmpty()) {
             return;
         }
 
-        try (Stream<Path> stream = Files.walk(directory)) {
-            stream.filter(path -> !shouldIgnore(path, ignoreList))
-                    .forEach(path -> {
-                        if (compareFilesByteByByte(path, smallDummyJar)) {
-                            CustomFileUtils.executeOrder66(path);
-                        }
-                    });
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private static boolean shouldIgnore(Path file, Set<Jsons.ModpackContentFields.ModpackContentItem> ignoreList) {
-        if (ignoreList == null) {
-            return false;
-        }
-
-        String modpackFile = CustomFileUtils.formatPath(file, Objects.requireNonNullElse(selectedModpackDir, hostContentModpackDir));
-
-        for (Jsons.ModpackContentFields.ModpackContentItem item : ignoreList) {
-            if (item.file.equals(modpackFile)) {
-                return true;
+        var iterator = clientDummyFiles.files.iterator();
+        while (iterator.hasNext()) {
+            try {
+                String filePath = iterator.next();
+                Path file = Path.of(filePath);
+                if (compareFilesByteByByte(file, smallDummyJar)) {
+                    CustomFileUtils.executeOrder66(file);
+                    iterator.remove();
+                }
+            } catch (Exception e) {
+                LOGGER.error("Failed to delete dummy file", e);
             }
         }
 
-        return false;
+        ConfigTools.save(clientDummyFilesFile, clientDummyFiles);
     }
 
     // our trick for not able to just delete file on specific filesystem (windows...)
@@ -194,8 +185,14 @@ public class CustomFileUtils {
         try (FileOutputStream fos = new FileOutputStream(file.toFile())) {
             fos.write(smallDummyJar);
             fos.flush();
+
+            if (clientDummyFiles == null) {
+                throw new IllegalStateException("clientDummyFiles is null");
+            }
+
+            clientDummyFiles.files.add(file.toAbsolutePath().normalize().toString());
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.error("Failed to create dummy file: {}", file, e);
         }
     }
 

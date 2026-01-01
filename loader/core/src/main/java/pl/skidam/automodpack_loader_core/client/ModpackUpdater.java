@@ -30,7 +30,7 @@ public class ModpackUpdater {
     public long totalBytesToDownload = 0;
     public boolean fullDownload = false;
     private Jsons.ModpackContentFields serverModpackContent;
-    private String serverModpackContentJson;
+    private String serverModpackContentJson; // TODO: remove this variable and use serverModpackContent directly
     public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
     private final Jsons.ModpackAddresses modpackAddresses;
@@ -355,8 +355,7 @@ public class ModpackUpdater {
             Files.writeString(modpackContentFile, serverModpackContentJson);
             ConfigTools.save(clientLocalMetadataFile, localMetadataCache);
 
-            Path cwd = Path.of(System.getProperty("user.dir"));
-            CustomFileUtils.deleteDummyFiles(cwd, serverModpackContent.list);
+            CustomFileUtils.deleteDummyFiles();
 
             if (!failedDownloads.isEmpty()) {
                 StringBuilder failedFiles = new StringBuilder();
