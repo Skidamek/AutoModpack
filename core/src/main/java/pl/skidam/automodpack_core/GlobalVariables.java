@@ -37,6 +37,7 @@ public class GlobalVariables {
     public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
     public static Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
     public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
+    public static Path clientLocalMetadataFile = automodpackDir.resolve("automodpack-client-metadata.json");
     public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
     public static final Path privateDir = automodpackDir.resolve(".private");
     public static final Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");

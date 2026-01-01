@@ -17,7 +17,6 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Minecraft;
@@ -84,11 +83,11 @@ public class DataC2SPacket {
             var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, true);
 
             if (optionalServerModpackContent.isPresent()) {
-                boolean update = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
+                ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
-                if (update) {
+                if (updateCheckResult.requiresUpdate()) {
                     disconnectImmediately(handler);
-                    new ModpackUpdater().prepareUpdate(optionalServerModpackContent.get(), modpackAddresses, secret, modpackDir);
+                    new ModpackUpdater(optionalServerModpackContent.get(), modpackAddresses, secret, modpackDir).processModpackUpdate(updateCheckResult);
                     needsDisconnecting = true;
                 } else {
                     boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, modpackAddresses, Set.of());

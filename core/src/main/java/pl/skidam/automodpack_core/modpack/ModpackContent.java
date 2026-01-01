@@ -9,13 +9,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
 
 public class ModpackContent {
-    public final Set<Jsons.ModpackContentFields.ModpackContentItem> list = Collections.synchronizedSet(new HashSet<>());
+    public final Set<Jsons.ModpackContentFields.ModpackContentItem> list = ConcurrentHashMap.newKeySet();
     public final ObservableMap<String, Path> pathsMap = new ObservableMap<>();
     private final String MODPACK_NAME;
     private final FileTreeScanner SYNCED_FILES_CARDS;

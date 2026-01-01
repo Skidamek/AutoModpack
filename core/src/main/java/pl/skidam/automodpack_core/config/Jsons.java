@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @SuppressWarnings("unused")
 public class Jsons {
@@ -170,6 +171,24 @@ public class Jsons {
             @Override
             public String toString() {
                 return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
+            }
+        }
+    }
+
+    // seems kinda too verbose and it may take too much space for large modpack but lets keep it for now
+    public static class LocalMetadata {
+        // Map of File Path -> Fingerprint
+        public Map<String, FileFingerprint> files = new ConcurrentHashMap<>();
+
+        public static class FileFingerprint {
+            public String sha1;
+            public long lastSize;     // Local disk size
+            public long lastModified; // Local disk timestamp
+
+            public FileFingerprint(String sha1, long lastSize, long lastModified) {
+                this.sha1 = sha1;
+                this.lastSize = lastSize;
+                this.lastModified = lastModified;
             }
         }
     }

@@ -13,9 +13,11 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import java.io.*;
 import java.net.*;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -26,19 +28,23 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModpackUtils {
 
-    public static boolean isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+    // Modpack may require update even if theres no files to update, because some files may need to be deleted
+    public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
+
+    // Fast and freindly method to check if the modpack is up to date without modifying anything on disk
+    public static UpdateCheckResult isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             throw new IllegalArgumentException("Server modpack content list is null");
         }
 
         var optionalClientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
         if (optionalClientModpackContentFile.isEmpty() || !Files.exists(optionalClientModpackContentFile.get())) {
-            return true;
+            return new UpdateCheckResult(true, serverModpackContent.list);
         }
 
         Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
         if (clientModpackContent == null) {
-            return true;
+            return new UpdateCheckResult(true, serverModpackContent.list);
         }
 
         LOGGER.info("Indexing file system...");
@@ -49,48 +55,101 @@ public class ModpackUtils {
             existingFileTree = stream.collect(Collectors.toSet());
         } catch (IOException e) {
             LOGGER.error("Failed to walk directory", e);
-            return true;
+            return new UpdateCheckResult(true, serverModpackContent.list);
         }
+
+        Jsons.LocalMetadata localMetadataCache = ConfigTools.load(clientLocalMetadataFile, Jsons.LocalMetadata.class);
 
         LOGGER.info("Verifying content against server list...");
 
-        boolean hasMismatches = serverModpackContent.list.parallelStream().anyMatch(modpackContentField -> {
-            Path path = CustomFileUtils.getPath(modpackDir, modpackContentField.file);
+        Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = ConcurrentHashMap.newKeySet();
 
-            if (!existingFileTree.contains(path)) {
-                LOGGER.info("Missing file: {}", modpackContentField.file);
-                return true;
+        serverModpackContent.list.parallelStream().forEach(serverItem -> {
+            Path serverItemPath = CustomFileUtils.getPath(modpackDir, serverItem.file);
+            if (!existingFileTree.contains(serverItemPath)) {
+                filesToUpdate.add(serverItem); // File is missing
+                return;
+            } else if (serverItem.editable) {
+                LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
+                return;
             }
 
-            if (modpackContentField.editable) return false;
-
-            String diskHash = CustomFileUtils.getHash(path);
-            if (!Objects.equals(modpackContentField.sha1, diskHash)) {
-                LOGGER.info("Hash mismatch: {}", modpackContentField.file);
-                return true;
+            // Cheap cache check - 0 bytes read
+            String cachedHash = getVerifiedCacheHash(serverItemPath, localMetadataCache);
+            if (cachedHash != null && cachedHash.equals(serverItem.sha1)) {
+                return; // File is almost certainly up to date
             }
-            return false;
+
+            // Full hash check
+            String diskHash = CustomFileUtils.getHash(serverItemPath);
+            if (diskHash != null && diskHash.equals(serverItem.sha1)) {
+                updateCache(serverItemPath, diskHash, localMetadataCache);
+                return; // File is definitely up to date
+            }
+
+            // This file needs to be updated
+            filesToUpdate.add(serverItem);
         });
 
-        if (hasMismatches) return true;
+        ConfigTools.save(clientLocalMetadataFile, localMetadataCache);
+
+        if (!filesToUpdate.isEmpty()) {
+            LOGGER.info("Modpack {} requires update! Took {} ms", modpackDir, System.currentTimeMillis() - start);
+            return new UpdateCheckResult(true, filesToUpdate);
+        }
+
+        LOGGER.info("Checking for deleted files...");
 
         Set<String> serverFileSet = serverModpackContent.list.stream()
                 .map(item -> item.file)
                 .collect(Collectors.toSet());
 
-        LOGGER.info("Checking for deleted files...");
-
-        // We use a simple loop here because it's purely in-memory string comparison (very fast)
         for (Jsons.ModpackContentFields.ModpackContentItem clientItem : clientModpackContent.list) {
             if (!serverFileSet.contains(clientItem.file)) {
-                LOGGER.info("File marked for deletion (not on server): {}", clientItem.file);
-                return true;
+                LOGGER.info("Found file marked for deletion (its no longer on server): {}", clientItem.file);
+                return new UpdateCheckResult(true, Set.of());
             }
         }
 
-        var end = System.currentTimeMillis();
-        LOGGER.info("{} is up to date! Took {} ms", modpackDir, end - start);
-        return false;
+        LOGGER.info("Modpack {} is up to date! Took {} ms", modpackDir, System.currentTimeMillis() - start);
+        return new UpdateCheckResult(false, Set.of());
+    }
+
+    public static String getVerifiedCacheHash(Path path, Jsons.LocalMetadata cache) {
+        if (cache == null) return null;
+
+        try {
+            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+            Jsons.LocalMetadata.FileFingerprint fingerprint = cache.files.get(path.toAbsolutePath().normalize().toString());
+
+            if (fingerprint != null && fingerprint.lastSize == attrs.size() && fingerprint.lastModified == attrs.lastModifiedTime().toMillis()) {
+                return fingerprint.sha1;
+            }
+        } catch (IOException e) {
+            LOGGER.debug("Could not read attributes for {}", path);
+        }
+        return null; // Metadata mismatch or missing cache
+    }
+
+    public static void updateCache(Path path, String hash, Jsons.LocalMetadata cache) {
+        if (cache == null) return;
+        try {
+            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
+            cache.files.put(path.toAbsolutePath().normalize().toString(), new Jsons.LocalMetadata.FileFingerprint(hash, attrs.size(), attrs.lastModifiedTime().toMillis()));
+        } catch (IOException e) {
+            LOGGER.error("Could not update cache for {}", path, e);
+        }
+    }
+
+    public static String computeHashIfNeeded(Path modPath, Jsons.LocalMetadata localMetadataCache) {
+        // Check cache first
+        String cachedHash = getVerifiedCacheHash(modPath, localMetadataCache);
+        if (cachedHash != null) return cachedHash;
+
+        // Fallback to hashing and update cache
+        String diskHash = CustomFileUtils.getHash(modPath);
+        updateCache(modPath, diskHash, localMetadataCache);
+        return diskHash;
     }
 
     public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
@@ -318,32 +377,37 @@ public class ModpackUtils {
     }
 
     public static Path renameModpackDir(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
+        String currentName = clientConfig.selectedModpack;
+        String newName = serverModpackContent.modpackName;
+
         if (clientConfig.installedModpacks == null || clientConfig.selectedModpack == null || clientConfig.selectedModpack.isBlank()) {
             return modpackDir;
         }
 
-        String installedModpackName = clientConfig.selectedModpack;
-        Jsons.ModpackAddresses installedModpackAddresses = clientConfig.installedModpacks.get(installedModpackName);
-        String serverModpackName = serverModpackContent.modpackName;
+        if (newName.isEmpty() || newName.equals(currentName)) {
+            return modpackDir;
+        }
 
-        if (installedModpackAddresses != null && !serverModpackName.equals(installedModpackName) && !serverModpackName.isEmpty()) {
+        var installedAddresses = clientConfig.installedModpacks.get(currentName);
+        if (installedAddresses == null) {
+            return modpackDir;
+        }
 
-            Path newModpackDir = modpackDir.getParent().resolve(serverModpackName);
+        Path newModpackDir = modpackDir.getParent().resolve(newName);
 
-            try {
-                Files.move(modpackDir, newModpackDir, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            LOGGER.info("Renaming modpack directory: {} -> {}", modpackDir.getFileName(), newName);
+            Files.move(modpackDir, newModpackDir, StandardCopyOption.REPLACE_EXISTING);
 
-                removeModpackFromList(installedModpackName);
+            removeModpackFromList(currentName);
+            selectModpack(newModpackDir, installedAddresses, Set.of());
 
-                LOGGER.info("Changed modpack name of {} to {}", modpackDir.getFileName().toString(), serverModpackName);
-            } catch (DirectoryNotEmptyException ignored) {
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-            selectModpack(newModpackDir, installedModpackAddresses, Set.of());
-
+            LOGGER.info("Successfully renamed and reselected modpack: {}", newName);
             return newModpackDir;
+        } catch (DirectoryNotEmptyException ignored) {
+            LOGGER.warn("Could not rename: Target directory {} not empty", newName);
+        } catch (IOException e) {
+            LOGGER.error("Failed to rename modpack directory", e);
         }
 
         return modpackDir;
@@ -560,7 +624,7 @@ public class ModpackUtils {
             return false;
         }
 
-        return serverModpackContent.list.parallelStream().anyMatch(item -> {
+        return serverModpackContent.list.stream().anyMatch(item -> {
             if (isUnsafePath(item.file, false)) {
                 LOGGER.error("Modpack content is invalid: file path '{}' is unsafe/malicious", item.file);
                 return true;

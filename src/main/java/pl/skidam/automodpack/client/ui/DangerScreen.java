@@ -48,7 +48,7 @@ public class DangerScreen extends VersionedScreen {
                 VersionedText.translatable(
                     "automodpack.danger.confirm"
                 ).withStyle(ChatFormatting.BOLD),
-                button -> Util.backgroundExecutor().execute(modpackUpdaterInstance::startUpdate)
+                button -> Util.backgroundExecutor().execute(() -> modpackUpdaterInstance.startUpdate(modpackUpdaterInstance.getModpackFileList()))
             )
         );
     }
@@ -103,7 +103,7 @@ public class DangerScreen extends VersionedScreen {
     @Override
     public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
-            Util.backgroundExecutor().execute(modpackUpdaterInstance::startUpdate);
+            Util.backgroundExecutor().execute(() -> modpackUpdaterInstance.startUpdate(modpackUpdaterInstance.getModpackFileList()));
             return true;
         }
         return super.onKeyPress(keyCode, scanCode, modifiers);
