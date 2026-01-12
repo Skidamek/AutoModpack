@@ -38,20 +38,28 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
             if (readableBytes <= i) return;
 
             if (in.getByte(readerIndex + i) != MAGIC_AMMH_ARRAY[i]) {
-                if (isSharedPort) {
-                    // Shared: Pass to next handler (e.g. Minecraft)
-                    ctx.pipeline().remove(this);
-                    ctx.fireChannelRead(in.retain());
-                    in.skipBytes(in.readableBytes());
-                } else {
-                    // Dedicated: Mismatch means Standard Protocol (TLS)
-                    fallbackToStandardProtocol(ctx, in);
+                if (isSharedPort) { // AutoModpack shares port with Minecraft, no magic packet detected, pass to the Minecraft pipeline
+                    // Reset the reader index so we have the full message available. Technically, the reader shouldn't move anyway... But just to be sure, let's reset it for sanity.
+                    in.readerIndex(readerIndex);
+                } else { // Magic packet is not there, but it's a dedicated host, pass to the AutoModpack pipeline anyway
+                    setupPipeline(ctx);
                 }
+
+                // Our job here is done, this handler won't be needed anymore for this connection
+                detachHandler(ctx, in);
                 return;
             }
         }
 
         handleMagicPacket(ctx, in);
+    }
+
+    private void detachHandler(ChannelHandlerContext ctx, ByteBuf in) {
+        // Detach this handler from the pipeline
+        // We must extract BEFORE removing to ensure we don't lose data if it wasn't buffered internally yet.
+        ByteBuf payload = in.readRetainedSlice(in.readableBytes());
+        ctx.pipeline().remove(this);
+        ctx.fireChannelRead(payload);
     }
 
     private void handleMagicPacket(ChannelHandlerContext ctx, ByteBuf in) {
@@ -71,13 +79,6 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 
         LOGGER.debug("Received AMMH handshake. Hostname: {}", hostname);
         finalizeHandshake(ctx);
-    }
-
-    private void fallbackToStandardProtocol(ChannelHandlerContext ctx, ByteBuf in) {
-        setupPipeline(ctx);
-        ctx.pipeline().remove(this);
-        ctx.fireChannelRead(in.retain());
-        in.skipBytes(in.readableBytes());
     }
 
     private void finalizeHandshake(ChannelHandlerContext ctx) {
