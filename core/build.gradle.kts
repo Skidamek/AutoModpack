@@ -16,7 +16,7 @@ repositories {
 }
 
 val deps = listOf(
-    "io.netty:netty-all:4.2.8.Final",
+    "io.netty:netty-all:4.2.9.Final",
     "org.apache.logging.log4j:log4j-core:2.25.2",
     "com.google.code.gson:gson:2.13.2",
     "org.bouncycastle:bcpkix-jdk18on:1.82",

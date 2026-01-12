@@ -6,10 +6,15 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.codec.haproxy.HAProxyMessage;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.ReferenceCountUtil;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+
+import pl.skidam.automodpack_core.protocol.netty.HAProxyDetector;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 
@@ -23,6 +28,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
     };
 
     private final SslContext sslCtx;
+    private boolean proxyCheckFinished = false;
 
     public ProtocolServerHandler(SslContext sslCtx) {
         this.sslCtx = sslCtx;
@@ -30,23 +36,42 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
-        boolean isSharedPort = (serverConfig.bindPort == -1 && hostServer.isRunning());
-        int readerIndex = in.readerIndex();
+        int originalReaderIndex = in.readerIndex();
         int readableBytes = in.readableBytes();
 
-        for (int i = 0; i < MAGIC_AMMH_ARRAY.length; i++) {
-            if (readableBytes <= i) return;
+        // (optional) HAProxy PROXY Protocol detection to retrieve the REAL_REMOTE_ADDR
+        if (!proxyCheckFinished) {
+            HAProxyDetector.MatchResult result = HAProxyDetector.check(in, originalReaderIndex, readableBytes);
+            if (result == HAProxyDetector.MatchResult.MATCHED) {
+                HAProxyMessage msg = HAProxyDetector.decodeAndAdvance(in);
+                handleProxyMessage(ctx, msg);
+                proxyCheckFinished = true;
+            } else if (result == HAProxyDetector.MatchResult.MISMATCH) {
+                handleProxyMessage(ctx, null);
+                proxyCheckFinished = true;
+            } else {
+                return; // Partial match, wait for more
+            }
+        }
 
-            if (in.getByte(readerIndex + i) != MAGIC_AMMH_ARRAY[i]) {
+        // AMMH Magic Detection
+        boolean isSharedPort = (serverConfig.bindPort == -1 && hostServer.isRunning());
+        int ammhReaderIndex = in.readerIndex();
+        int ammhReadable = in.readableBytes();
+
+        for (int i = 0; i < MAGIC_AMMH_ARRAY.length; i++) {
+            if (ammhReadable <= i) return; // Partial match, wait for more
+
+            if (in.getByte(ammhReaderIndex + i) != MAGIC_AMMH_ARRAY[i]) {
                 if (isSharedPort) { // AutoModpack shares port with Minecraft, no magic packet detected, pass to the Minecraft pipeline
-                    // Reset the reader index so we have the full message available. Technically, the reader shouldn't move anyway... But just to be sure, let's reset it for sanity.
-                    in.readerIndex(readerIndex);
+                    // Reset the reader index so we have the full message available.
+                    in.readerIndex(originalReaderIndex);
                 } else { // Magic packet is not there, but it's a dedicated host, pass to the AutoModpack pipeline anyway
                     setupPipeline(ctx);
                 }
 
                 // Our job here is done, this handler won't be needed anymore for this connection
-                detachHandler(ctx, in);
+                detach(ctx, in);
                 return;
             }
         }
@@ -54,7 +79,24 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
         handleMagicPacket(ctx, in);
     }
 
-    private void detachHandler(ChannelHandlerContext ctx, ByteBuf in) {
+    private void handleProxyMessage(ChannelHandlerContext ctx, HAProxyMessage msg) {
+        try {
+            if (msg == null || msg.sourceAddress() == null) {
+                ctx.channel().attr(NettyServer.REAL_REMOTE_ADDR).set(ctx.channel().remoteAddress());
+                LOGGER.debug("No PROXY protocol detected, using remote address as REAL_REMOTE_ADDR");
+            } else {
+                InetSocketAddress realAddress = new InetSocketAddress(msg.sourceAddress(), msg.sourcePort());
+                ctx.channel().attr(NettyServer.REAL_REMOTE_ADDR).set(realAddress);
+                LOGGER.debug("Detected PROXY protocol, using source address {} as REAL_REMOTE_ADDR", realAddress);
+            }
+        } finally {
+            if (msg != null) {
+                ReferenceCountUtil.release(msg);
+            }
+        }
+    }
+
+    private void detach(ChannelHandlerContext ctx, ByteBuf in) {
         // Detach this handler from the pipeline
         // We must extract BEFORE removing to ensure we don't lose data if it wasn't buffered internally yet.
         ByteBuf payload = in.readRetainedSlice(in.readableBytes());

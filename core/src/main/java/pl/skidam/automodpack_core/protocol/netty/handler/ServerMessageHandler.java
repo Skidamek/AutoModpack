@@ -40,7 +40,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ProtocolMessage msg) throws Exception {
         byte clientProtocolVersion = msg.getVersion();
-        SocketAddress address = ctx.channel().remoteAddress();
+        SocketAddress address = ctx.channel().attr(NettyServer.REAL_REMOTE_ADDR).get();
 
         // Validate the secret
         if (!validateSecret(ctx, address, msg.getSecret())) {

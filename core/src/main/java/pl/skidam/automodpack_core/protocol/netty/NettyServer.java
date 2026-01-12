@@ -15,6 +15,7 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -29,6 +30,7 @@ import pl.skidam.automodpack_core.utils.ObservableMap;
 
 public class NettyServer {
 
+    public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
     public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("compressionType");
     public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("chunkSize");
     public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("protocolVersion");
