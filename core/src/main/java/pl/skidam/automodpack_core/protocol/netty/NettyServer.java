@@ -31,9 +31,9 @@ import pl.skidam.automodpack_core.utils.ObservableMap;
 public class NettyServer {
 
     public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
-    public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("compressionType");
-    public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("chunkSize");
-    public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("protocolVersion");
+    public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("COMPRESSION_TYPE");
+    public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
+    public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
     private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
     private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
     private MultithreadEventLoopGroup eventLoopGroup;
