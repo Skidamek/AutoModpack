@@ -8,22 +8,22 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ConfigUtils {
 
-    public static void normalizeServerConfig(boolean saveAfter) {
-        normalizeServerConfig();
+    public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config, boolean saveAfter) {
+        normalizeServerConfig(config);
         if (saveAfter) {
-            ConfigTools.save(serverConfigFile, serverConfig);
+            ConfigTools.save(serverConfigFile, config);
         }
     }
 
-    public static void normalizeServerConfig() {
-        List<String> fixedSyncedFiles = new ArrayList<>(serverConfig.syncedFiles.size());
-        List<String> fixedAllowEditsInFiles = new ArrayList<>(serverConfig.allowEditsInFiles.size());
-        List<String> fixedForceCopyFilesToStandardLocation = new ArrayList<>(serverConfig.forceCopyFilesToStandardLocation.size());
+    public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config) {
+        List<String> fixedSyncedFiles = new ArrayList<>(config.syncedFiles.size());
+        List<String> fixedAllowEditsInFiles = new ArrayList<>(config.allowEditsInFiles.size());
+        List<String> fixedForceCopyFilesToStandardLocation = new ArrayList<>(config.forceCopyFilesToStandardLocation.size());
 
         String prefixPattern = "^/automodpack/host-modpack/[^/]+/";
         Pattern pattern = Pattern.compile(prefixPattern);
 
-        for (var file : serverConfig.syncedFiles) {
+        for (var file : config.syncedFiles) {
             if (file == null) {
                 LOGGER.warn("Ignored null entry in syncedFiles.");
                 continue;
@@ -40,7 +40,7 @@ public class ConfigUtils {
             }
         }
 
-        for (var file : serverConfig.allowEditsInFiles) {
+        for (var file : config.allowEditsInFiles) {
             if (file == null) {
                 LOGGER.warn("Ignored null entry in allowEditsInFiles.");
                 continue;
@@ -57,7 +57,7 @@ public class ConfigUtils {
             fixedAllowEditsInFiles.add(prefixSlash(fixed));
         }
 
-        for (var file : serverConfig.forceCopyFilesToStandardLocation) {
+        for (var file : config.forceCopyFilesToStandardLocation) {
             if (file == null) {
                 LOGGER.warn("Ignored null entry in forceCopyFilesToStandardLocation.");
                 continue;
@@ -74,9 +74,9 @@ public class ConfigUtils {
             fixedForceCopyFilesToStandardLocation.add(prefixSlash(fixed));
         }
 
-        serverConfig.syncedFiles = fixedSyncedFiles;
-        serverConfig.allowEditsInFiles = fixedAllowEditsInFiles;
-        serverConfig.forceCopyFilesToStandardLocation = fixedForceCopyFilesToStandardLocation;
+        config.syncedFiles = fixedSyncedFiles;
+        config.allowEditsInFiles = fixedAllowEditsInFiles;
+        config.forceCopyFilesToStandardLocation = fixedForceCopyFilesToStandardLocation;
     }
 
     public static String prefixSlash(String path) {

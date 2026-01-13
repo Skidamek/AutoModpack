@@ -194,7 +194,7 @@ public class Preload {
                 LOGGER.info("Changed modpack name to {}", serverConfig.modpackName);
             }
 
-            ConfigUtils.normalizeServerConfig();
+            ConfigUtils.normalizeServerConfig(serverConfig);
 
             // Save changes
             ConfigTools.save(serverConfigFile, serverConfig);
