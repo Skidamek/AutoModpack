@@ -483,7 +483,9 @@ public class ModpackUpdater {
         // Remove rest of mods not for standard mods directory
         boolean needsRestart4 = ModpackUtils.removeRestModsNotToCopy(modpackContent, filesNotToCopy, removeDupeModsResult.modsToKeep());
 
-        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3 || needsRestart4;
+        boolean needsRestart5 = ModpackUtils.deleteFilesMarkedForDeletionByTheServer(modpackContent.filesToDeleteOnClient);
+
+        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3 || needsRestart4 || needsRestart5;
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory

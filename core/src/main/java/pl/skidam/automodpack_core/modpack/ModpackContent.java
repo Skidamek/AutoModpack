@@ -145,6 +145,7 @@ public class ModpackContent {
             modpackContent.loaderVersion = LOADER_VERSION;
             modpackContent.loader = LOADER;
             modpackContent.modpackName = MODPACK_NAME;
+            modpackContent.filesToDeleteOnClient = serverConfig.filesToDeleteOnClient;
 
             ConfigTools.saveModpackContent(hostModpackContentFile, modpackContent);
         }

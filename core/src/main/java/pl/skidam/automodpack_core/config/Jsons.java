@@ -97,6 +97,7 @@ public class Jsons {
         public List<String> syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
         public List<String> allowEditsInFiles = List.of("/options.txt", "/config/**");
         public List<String> forceCopyFilesToStandardLocation = List.of();
+        public Map<String, String> filesToDeleteOnClient = Map.of();
         public boolean autoExcludeServerSideMods = true;
         public boolean autoExcludeUnnecessaryFiles = true;
         public boolean requireAutoModpackOnClient = true;
@@ -140,6 +141,7 @@ public class Jsons {
         public String loaderVersion = "";
         public String mcVersion = "";
         public Set<ModpackContentItem> list;
+        public Map<String, String> filesToDeleteOnClient = Map.of();
 
         public ModpackContentFields(Set<ModpackContentItem> list) {
             this.list = list;

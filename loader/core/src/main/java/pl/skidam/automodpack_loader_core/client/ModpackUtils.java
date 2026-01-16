@@ -28,6 +28,49 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class ModpackUtils {
 
+    public static boolean deleteFilesMarkedForDeletionByTheServer(Map<String, String> filesToDeleteOnClient) {
+        AtomicBoolean deletedAnyModFile = new AtomicBoolean(false);
+        for (var entry : filesToDeleteOnClient.entrySet()) {
+            String filePath = entry.getKey();
+            String expectedHash = entry.getValue();
+
+            Path fileInCWD = CustomFileUtils.getPathFromCWD(filePath);
+            if (Files.isRegularFile(fileInCWD)) {
+                String diskHash = ClientCacheUtils.computeHashIfNeeded(fileInCWD);
+                if (Objects.equals(diskHash, expectedHash)) {
+                    boolean isModFile = FileInspection.isMod(fileInCWD);
+                    LOGGER.warn("Deleting file marked for deletion by server: {}", filePath);
+                    CustomFileUtils.executeOrder66(fileInCWD);
+                    if (isModFile) {
+                        deletedAnyModFile.set(true);
+                    }
+                } else {
+                    LOGGER.info("Skipping deletion of {} - hash mismatch (expected: {}, found: {})", filePath, expectedHash, diskHash);
+                }
+            } else {
+                Path parentDir = fileInCWD.getParent();
+                try {
+                    Files.list(parentDir).forEach(path -> {
+                        if (!Files.isRegularFile(path)) return;
+                        String diskHash = ClientCacheUtils.computeHashIfNeeded(path);
+                        if (Objects.equals(diskHash, expectedHash)) {
+                            boolean isModFile = FileInspection.isMod(path);
+                            LOGGER.warn("Deleting file marked for deletion by server: {}", path);
+                            CustomFileUtils.executeOrder66(path);
+                            if (isModFile) {
+                                deletedAnyModFile.set(true);
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    LOGGER.info("Skipping deletion of {} - file does not exist", filePath);
+                }
+            }
+        }
+
+        return deletedAnyModFile.get();
+    }
+
     // Modpack may require update even if theres no files to update, because some files may need to be deleted
     public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
 
