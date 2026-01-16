@@ -36,6 +36,7 @@ dependencies {
     implementation("io.netty:netty-codec-haproxy:4.2.9.Final") {
         isTransitive = false
     }
+    implementation("com.h2database:h2-mvstore:2.4.240")
 }
 
 configurations {
