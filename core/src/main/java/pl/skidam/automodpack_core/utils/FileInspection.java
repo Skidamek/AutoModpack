@@ -10,10 +10,7 @@ import org.tomlj.TomlTable;
 import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -30,25 +27,14 @@ public class FileInspection {
     private static final Gson GSON = new Gson();
     private static final String LOADER = GlobalVariables.LOADER;
 
-    public static boolean isMod(Path file) {
-        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
-            return false;
-        }
+    public record HashPathPair(String hash, Path path) {}
 
-        try (FileSystem fs = FileSystems.newFileSystem(file)) {
-            return getModID(fs) != null || hasSpecificServices(fs);
-        } catch (IOException e) {
-            return false;
-        }
-    }
+    public record Mod(Set<String> IDs, String hash, String version, Path path, Set<String> deps, Set<Mod> nestedMods) {}
+    private record ModMetadata(String modId, String version, Set<String> provides, Set<String> deps, LoaderManagerService.EnvironmentType environment) {}
 
-    public record Mod(String modID, String hash, Collection<String> providesIDs, String modVersion, Path modPath, LoaderManagerService.EnvironmentType environmentType, Collection<String> dependencies) {}
-    public record HashPathPair(String hash, Path path) { }
-    private static final Map<HashPathPair, Mod> modCache = new HashMap<>();
-
+    // TODO read from cache
     public static Mod getMod(Path file) {
-        if (!Files.isRegularFile(file)) return null;
-        if (!file.getFileName().toString().endsWith(".jar")) return null;
+        if (isJarInvalid(file)) return null;
 
         String hash = CustomFileUtils.getHash(file);
         if (hash == null) {
@@ -56,139 +42,264 @@ public class FileInspection {
             return null;
         }
 
-        HashPathPair hashPathPair = new HashPathPair(hash, file);
-        if (modCache.containsKey(hashPathPair)) {
-            return modCache.get(hashPathPair);
-        }
-
-        for (Mod mod : GlobalVariables.LOADER_MANAGER.getModList()) {
-            if (hash.equals(mod.hash)) {
-                modCache.put(hashPathPair, mod);
-                return mod;
-            }
-        }
-
-        // Open FS once for all metadata extractions
         try (FileSystem fs = FileSystems.newFileSystem(file)) {
-            String modId = (String) getModInfo(fs, "modId");
+            ModMetadata meta = getModMetadata(fs);
 
-            if (modId != null) {
-                String modVersion = (String) getModInfo(fs, "version");
-                LoaderManagerService.EnvironmentType environmentType = (LoaderManagerService.EnvironmentType) getModInfo(fs, "environment");
-                Set<String> dependencies = getModDependencies(fs);
-                Set<String> providesIDs = getProvidedIDs(fs);
+            if (meta != null && meta.modId() != null) {
+                Set<String> ids = new HashSet<>(meta.provides());
+                ids.add(meta.modId());
 
-                if (modVersion != null && dependencies != null) {
-                    var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
-                    modCache.put(hashPathPair, mod);
-                    return mod;
+                Set<Mod> nestedMods = scanForNestedMods(fs);
+
+                if (meta.version() != null) {
+                    return new Mod(ids, hash, meta.version(), file, meta.deps(), nestedMods);
                 }
-
-                LOGGER.error("Not enough mod information for file: {} modId: {}, modVersion: {}, dependencies: {}", file, modId, modVersion, dependencies);
+                LOGGER.error("Incomplete mod info for file: {} (ID: {}, Ver: {})", file, meta.modId(), meta.version());
             }
         } catch (IOException e) {
-            LOGGER.debug("Failed to get mod info for file: {}", file);
+            LOGGER.debug("Failed to inspect mod file: {}", file);
         }
-
         return null;
     }
 
-    private static final Set<String> services = Set.of(
-            "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
-            "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
-            "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModLanguageLoader",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
-            "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
-    );
-
-    // Checks for neo/forge mod locators
-    public static boolean isModCompatible(Path file) {
-        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
+    public static boolean isMod(Path file) {
+        if (isJarInvalid(file)) return false;
+        try (FileSystem fs = FileSystems.newFileSystem(file)) {
+            return getModMetadata(fs) != null || hasSpecificServices(fs);
+        } catch (IOException e) {
             return false;
         }
+    }
+
+    public static boolean isModCompatible(Path file) {
+        if (isJarInvalid(file)) return false;
 
         try (FileSystem fs = FileSystems.newFileSystem(file)) {
-            String entryPathString = switch (LOADER) {
-                case "neoforge" -> "META-INF/neoforge.mods.toml";
-                case "fabric" -> "fabric.mod.json";
-                case "forge" -> "META-INF/mods.toml";
-                case "quilt" -> "quilt.mod.json";
-                default -> null;
-            };
-
-            if (entryPathString != null && Files.exists(fs.getPath(entryPathString))) {
-                return true;
-            }
+            Path metaPath = getMetadataPath(fs);
+            if (metaPath != null) return true;
 
             if ("forge".equals(LOADER) || "neoforge".equals(LOADER)) {
-                if (hasSpecificServices(fs)) {
-                    return true;
-                }
+                return hasSpecificServices(fs);
             }
-
         } catch (IOException e) {
-            // Ignore
+            LOGGER.error("Error examining JarJar in {}", e);
         }
-
         return false;
     }
 
-    public static boolean hasSpecificServices(Path file) {
-        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
-            return false;
-        }
+    public static String getModVersion(Path file) {
+        return extractBasicInfo(file, ModMetadata::version);
+    }
 
+    public static String getModID(Path file) {
+        return extractBasicInfo(file, ModMetadata::modId);
+    }
+
+    public static LoaderManagerService.EnvironmentType getModEnvironment(Path file) {
+        return extractBasicInfo(file, ModMetadata::environment);
+    }
+
+    private static boolean isJarInvalid(Path file) {
+        return file == null || !Files.exists(file) || !file.getFileName().toString().endsWith(".jar");
+    }
+
+    private static <T> T extractBasicInfo(Path file, java.util.function.Function<ModMetadata, T> extractor) {
+        if (isJarInvalid(file)) return null;
         try (FileSystem fs = FileSystems.newFileSystem(file)) {
-            return hasSpecificServices(fs);
+            ModMetadata meta = getModMetadata(fs);
+            return meta != null ? extractor.apply(meta) : null;
         } catch (IOException e) {
-            LOGGER.error("Error reading file {}: {}", file, e.getMessage());
+            LOGGER.error("Error reading mod file {}: {}", file, e.getMessage());
         }
-        return false;
+        return null;
     }
 
-    public static boolean hasSpecificServices(FileSystem fs) {
-        // Direct Service Lookup (Fast)
-        for (String service : services) {
-            if (Files.exists(fs.getPath(service))) {
-                return true;
-            }
-        }
-
-        // Jar-in-Jar Scan (Slower)
-        Path jarJarDir = fs.getPath("META-INF", "jarjar");
-        if (!Files.exists(jarJarDir)) {
-            return false;
-        }
-
-        try (Stream<Path> walk = Files.walk(jarJarDir, 1)) {
-            for (Path nestedJarPath : walk.toList()) {
-                // Skip non-jar entries
-                if (nestedJarPath.equals(jarJarDir) || !nestedJarPath.toString().endsWith(".jar")) {
-                    continue;
+    // TODO optimize it by caching and scanning only defined paths
+    private static Set<Mod> scanForNestedMods(FileSystem parentFs) {
+        Set<Mod> nestedMods = new HashSet<>();
+        try (Stream<Path> walk = Files.walk(parentFs.getPath("/"))) {
+            for (Path path : walk.toList()) {
+                if (path.toString().endsWith(".jar") && !path.equals(parentFs.getPath("/"))) {
+                    try (InputStream is = Files.newInputStream(path)) {
+                        Mod nested = readModFromStream(path, is);
+                        if (nested != null) nestedMods.add(nested);
+                    } catch (IOException e) {
+                        LOGGER.debug("Skipping unreadable nested jar: {}", path);
+                    }
                 }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error scanning nested mods: {}", e.getMessage());
+        }
+        return nestedMods;
+    }
 
-                // Optimization: Use Files.newInputStream directly for nested zip entries
-                try (InputStream inputStream = Files.newInputStream(nestedJarPath);
-                     ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
+    /**
+     * Reads a JAR from an InputStream (recursively) without mounting it as a FileSystem.
+     */
+    private static Mod readModFromStream(Path virtualPath, InputStream is) {
+        // ZipInputStream must NOT close the underlying stream if it's a child stream
+        ZipInputStream zis = new ZipInputStream(is);
+        ZipEntry entry;
+        ModMetadata metadata = null;
+        Set<Mod> nestedChildren = new HashSet<>();
 
-                    ZipEntry nestedEntry;
-                    while ((nestedEntry = zipInputStream.getNextEntry()) != null) {
-                        if (services.contains(nestedEntry.getName())) {
-                            return true;
+        try {
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName();
+
+                if (isMetadataFilename(name)) {
+                    // Prevent reader from closing the ZipInputStream
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(new FilterInputStream(zis) {
+                        @Override public void close() {}
+                    }));
+
+                    if (name.endsWith(".toml")) metadata = parseTomlMetadata(reader);
+                    else metadata = parseJsonMetadata(reader);
+                }
+                else if (name.endsWith(".jar")) {
+                    // Wrap ZIS to protect current stream position
+                    Mod child = readModFromStream(virtualPath.resolve(name), new FilterInputStream(zis) {
+                        @Override public void close() {}
+                    });
+                    if (child != null) nestedChildren.add(child);
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.debug("Error processing stream for {}", virtualPath);
+        }
+
+        if (metadata != null && metadata.modId() != null) {
+            Set<String> ids = new HashSet<>(metadata.provides());
+            ids.add(metadata.modId());
+            // Investigate if we need hash or not
+            return new Mod(ids, null, metadata.version(), virtualPath, metadata.deps(), nestedChildren);
+        }
+        return null;
+    }
+
+    private static ModMetadata getModMetadata(FileSystem fs) {
+        Path metaPath = getMetadataPath(fs);
+        if (metaPath == null) return null;
+
+        try (BufferedReader reader = Files.newBufferedReader(metaPath)) {
+            if (metaPath.toString().endsWith(".toml")) {
+                return parseTomlMetadata(reader);
+            } else {
+                return parseJsonMetadata(reader);
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error parsing metadata {}: {}", metaPath, e.getMessage());
+        }
+        return null;
+    }
+
+    private static ModMetadata parseTomlMetadata(BufferedReader reader) {
+        try {
+            TomlParseResult result = Toml.parse(reader);
+            TomlArray mods = result.getArray("mods");
+            if (mods == null || mods.isEmpty()) return null;
+
+            String modId = null;
+            String version = "1";
+            Set<String> provides = new HashSet<>();
+            Set<String> deps = new HashSet<>();
+            LoaderManagerService.EnvironmentType env = LoaderManagerService.EnvironmentType.UNIVERSAL;
+
+            for (int i = 0; i < mods.size(); i++) {
+                TomlTable modTable = mods.getTable(i);
+                if (modTable == null) continue;
+
+                if (modId == null) modId = modTable.getString("modId");
+
+                String v = modTable.getString("version");
+                if (v != null && !v.equals("${file.jarVersion}")) version = v;
+
+                TomlArray prov = modTable.getArray("provides");
+                if (prov != null) {
+                    for (int j = 0; j < prov.size(); j++) provides.add(prov.getString(j));
+                }
+            }
+
+            if (modId != null) {
+                TomlArray depArray = result.getArray("deps.\"" + modId + "\"");
+                if (depArray != null) {
+                    for (int i = 0; i < depArray.size(); i++) {
+                        TomlTable depTable = depArray.getTable(i);
+                        String depId = depTable.getString("modId");
+                        if (depId == null) continue;
+
+                        deps.add(depId);
+
+                        // Determine Environment based on Minecraft/Forge side requirement
+                        if (isPlatformId(depId)) {
+                            String side = depTable.getString("side");
+                            if ("client".equalsIgnoreCase(side)) env = LoaderManagerService.EnvironmentType.CLIENT;
+                            else if ("server".equalsIgnoreCase(side)) env = LoaderManagerService.EnvironmentType.SERVER;
                         }
                     }
-                } catch (IOException e) {
-                    LOGGER.error("Error reading nested JAR in {}: {}", nestedJarPath, e.getMessage());
                 }
             }
-        } catch (IOException e) {
-            LOGGER.error("Error examining JarJar in {}", fs, e);
+            return new ModMetadata(modId, version, provides, deps, env);
+        } catch (Exception e) {
+            LOGGER.error("TOML Parse Error: {}", e.getMessage());
+            return null;
         }
+    }
 
-        return false;
+    private static ModMetadata parseJsonMetadata(BufferedReader reader) {
+        try {
+            JsonObject json = GSON.fromJson(reader, JsonObject.class);
+            JsonObject root = json;
+
+            if (json.has("quilt_loader")) {
+                root = json.getAsJsonObject("quilt_loader");
+            }
+
+            String modId = getJsonString(root, "id");
+            String version = getJsonString(root, "version");
+            Set<String> provides = new HashSet<>();
+            Set<String> deps = new HashSet<>();
+            LoaderManagerService.EnvironmentType env = LoaderManagerService.EnvironmentType.UNIVERSAL;
+
+            if (root.has("provides")) {
+                for (JsonElement e : root.get("provides").getAsJsonArray()) {
+                    if (e.isJsonObject()) provides.add(e.getAsJsonObject().get("id").getAsString());
+                    else provides.add(e.getAsString());
+                }
+            }
+
+            if (root.has("depends")) {
+                JsonElement depends = root.get("depends");
+                if (depends.isJsonObject()) {
+                    deps.addAll(depends.getAsJsonObject().keySet());
+                } else if (depends.isJsonArray()) {
+                    for (JsonElement e : depends.getAsJsonArray()) {
+                        if (e.isJsonObject()) deps.add(e.getAsJsonObject().get("id").getAsString());
+                        else deps.add(e.getAsString());
+                    }
+                }
+            }
+
+            if (root.has("environment")) {
+                String envStr = root.get("environment").getAsString();
+                if ("client".equalsIgnoreCase(envStr)) env = LoaderManagerService.EnvironmentType.CLIENT;
+                else if ("server".equalsIgnoreCase(envStr)) env = LoaderManagerService.EnvironmentType.SERVER;
+            }
+
+            return new ModMetadata(modId, version, provides, deps, env);
+        } catch (Exception e) {
+            LOGGER.error("JSON Parse Error: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private static boolean isPlatformId(String id) {
+        return "minecraft".equals(id) || "neoforge".equals(id) || "forge".equals(id);
+    }
+
+    private static String getJsonString(JsonObject obj, String key) {
+        return obj.has(key) ? obj.get(key).getAsString() : null;
     }
 
     public static Path getMetadataPath(FileSystem fs) {
@@ -201,290 +312,40 @@ public class FileInspection {
         };
 
         if (preferredEntry != null) {
-            Path path = fs.getPath(preferredEntry);
-            if (Files.exists(path)) return path;
+            Path p = fs.getPath(preferredEntry);
+            if (Files.exists(p)) return p;
         }
 
-        String[] fallbackEntries = {
-                "META-INF/neoforge.mods.toml",
-                "fabric.mod.json",
-                "META-INF/mods.toml",
-                "quilt.mod.json"
-        };
-
-        for (String entryName : fallbackEntries) {
-            if (entryName.equals(preferredEntry)) continue;
-
-            Path path = fs.getPath(entryName);
-            if (Files.exists(path)) return path;
+        for (String fallback : List.of("META-INF/neoforge.mods.toml", "fabric.mod.json", "META-INF/mods.toml", "quilt.mod.json")) {
+            if (fallback.equals(preferredEntry)) continue;
+            Path p = fs.getPath(fallback);
+            if (Files.exists(p)) return p;
         }
-
         return null;
     }
 
-    public static String getModVersion(Path file) {
-        return (String) getModInfo(file, "version");
+    private static boolean isMetadataFilename(String name) {
+        return name.endsWith("mods.toml") || name.endsWith("mod.json");
     }
 
-    public static String getModID(Path file) {
-        return (String) getModInfo(file, "modId");
-    }
+    private static final Set<String> KNOWN_SERVICES = Set.of(
+            "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
+            "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
+            "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModLanguageLoader",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
+            "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
+    );
 
-    public static LoaderManagerService.EnvironmentType getModEnvironment(Path file) {
-        return (LoaderManagerService.EnvironmentType) getModInfo(file, "environment");
-    }
-
-    private static String getModID(FileSystem fs) {
-        return (String) getModInfo(fs, "modId");
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Set<String> getProvidedIDs(FileSystem fs) {
-        return (Set<String>) getModInfo(fs, "provides");
-    }
-
-    @SuppressWarnings("unchecked")
-    private static Set<String> getModDependencies(FileSystem fs) {
-        return (Set<String>) getModInfo(fs, "dependencies");
-    }
-
-    private static boolean isBasicInfo(String infoType) {
-        return "version".equals(infoType) || "modId".equals(infoType) || "environment".equals(infoType);
-    }
-
-    private static Object getModInfo(Path file, String infoType) {
-        if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
-            return isBasicInfo(infoType) ? null : Set.of();
+    public static boolean hasSpecificServices(FileSystem fs) {
+        // Fast Check
+        for (String service : KNOWN_SERVICES) {
+            if (Files.exists(fs.getPath(service))) return true;
         }
 
-        try (FileSystem fs = FileSystems.newFileSystem(file)) {
-            return getModInfo(fs, infoType);
-        } catch (IOException e) {
-            LOGGER.error("Error reading mod file {}: {}", file, e.getMessage());
-        }
-        return isBasicInfo(infoType) ? null : Set.of();
-    }
-
-    private static Object getModInfo(FileSystem fs, String infoType) {
-        Path metadataPath = getMetadataPath(fs);
-
-        if (metadataPath == null || !Files.exists(metadataPath)) {
-            return isBasicInfo(infoType) ? null : Set.of();
-        }
-
-        try (InputStream stream = Files.newInputStream(metadataPath);
-             BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
-
-            if (metadataPath.getFileName().toString().endsWith("mods.toml")) {
-                return getModInfoFromToml(reader, infoType);
-            } else {
-                return getModInfoFromJson(reader, infoType);
-            }
-        } catch (IOException e) {
-            LOGGER.error("Error reading metadata {}: {}", metadataPath, e.getMessage());
-        }
-
-        return isBasicInfo(infoType) ? null : Set.of();
-    }
-
-    private static Object getModInfoFromToml(BufferedReader reader, String infoType) {
-        try {
-            TomlParseResult result = Toml.parse(reader);
-            result.errors().forEach(error -> LOGGER.error(error.toString()));
-
-            TomlArray modsArray = result.getArray("mods");
-            if (modsArray == null) {
-                return isBasicInfo(infoType) ? null : Set.of();
-            }
-
-            switch (infoType) {
-                case "version" -> {
-                    String modVersion = null;
-                    for (Object o : modsArray.toList()) {
-                        TomlTable mod = (TomlTable) o;
-                        if (mod != null) {
-                            modVersion = mod.getString("version");
-                        }
-                    }
-                    return modVersion != null ? modVersion : "1";
-                }
-                case "modId" -> {
-                    String modID = null;
-                    for (Object o : modsArray.toList()) {
-                        TomlTable mod = (TomlTable) o;
-                        if (mod != null) {
-                            modID = mod.getString("modId");
-                        }
-                    }
-                    return modID;
-                }
-                case "provides" -> {
-                    Set<String> providedIDs = new HashSet<>();
-                    for (Object o : modsArray.toList()) {
-                        TomlTable mod = (TomlTable) o;
-                        if (mod != null) {
-                            TomlArray providesArray = mod.getArray("provides");
-                            if (providesArray != null) {
-                                for (int j = 0; j < providesArray.size(); j++) {
-                                    String id = providesArray.getString(j);
-                                    if (id != null && !id.isEmpty()) {
-                                        providedIDs.add(id);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    return providedIDs;
-                }
-                case "dependencies" -> {
-                    Set<String> dependencies = new HashSet<>();
-
-                    String modID = null;
-                    for (Object o : modsArray.toList()) {
-                        TomlTable mod = (TomlTable) o;
-                        if (mod != null) {
-                            modID = mod.getString("modId");
-                        }
-                    }
-
-                    if (modID == null) {
-                        return dependencies;
-                    }
-
-                    TomlArray dependenciesArray = result.getArray("dependencies.\"" + modID + "\"");
-                    if (dependenciesArray == null) {
-                        return dependencies;
-                    }
-
-                    for (Object o : dependenciesArray.toList()) {
-                        TomlTable mod = (TomlTable) o;
-                        if (mod == null) continue;
-                        String depId = mod.getString("modId");
-                        if (depId == null) continue;
-                        dependencies.add(depId);
-                    }
-
-                    return dependencies;
-                }
-                case "environment" -> {
-                    LoaderManagerService.EnvironmentType environment = LoaderManagerService.EnvironmentType.UNIVERSAL;
-
-                    String modID = null;
-                    for (Object o : modsArray.toList()) {
-                        TomlTable mod = (TomlTable) o;
-                        if (mod != null) {
-                            modID = mod.getString("modId");
-                        }
-                    }
-
-                    if (modID == null) {
-                        return environment;
-                    }
-
-                    TomlArray dependenciesArray = result.getArray("dependencies.\"" + modID + "\"");
-                    if (dependenciesArray == null) {
-                        return environment;
-                    }
-
-                    for (Object o : dependenciesArray.toList()) {
-                        TomlTable mod = (TomlTable) o;
-                        if (mod == null) continue;
-                        String depId = mod.getString("modId");
-                        if (depId == null) continue; // we only check for minecraft, neoforge and forge
-                        if (!depId.equals("minecraft") && !depId.equals("neoforge") && !depId.equals("forge")) continue;
-                        String depEnv = mod.getString("side");
-                        if (depEnv == null) continue;
-                        switch (depEnv.toLowerCase()) {
-                            case "client" -> environment = LoaderManagerService.EnvironmentType.CLIENT;
-                            case "server" -> environment = LoaderManagerService.EnvironmentType.SERVER;
-                        }
-
-                        if (environment != LoaderManagerService.EnvironmentType.UNIVERSAL) {
-                            return environment;
-                        }
-                    }
-
-                    return environment;
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.error("Error parsing TOML metadata: {}", e.getMessage());
-        }
-
-        return infoType.equals("version") || infoType.equals("modId") || infoType.equals("environment") ? null : Set.of();
-    }
-
-    private static Object getModInfoFromJson(BufferedReader reader, String infoType) {
-        JsonObject json = GSON.fromJson(reader, JsonObject.class);
-
-        switch (infoType) {
-            case "version" -> {
-                if (json.has("version")) {
-                    return json.get("version").getAsString();
-                } else if (json.has("quilt_loader") && json.get("quilt_loader").getAsJsonObject().has("version")) {
-                    return json.get("quilt_loader").getAsJsonObject().get("version").getAsString();
-                }
-            }
-            case "modId" -> {
-                if (json.has("id")) {
-                    return json.get("id").getAsString();
-                } else if (json.has("quilt_loader") && json.get("quilt_loader").getAsJsonObject().has("id")) {
-                    return json.get("quilt_loader").getAsJsonObject().get("id").getAsString();
-                }
-            }
-            case "provides" -> {
-                Set<String> providedIDs = new HashSet<>();
-                if (json.has("provides")) {
-                    for (JsonElement provides : json.get("provides").getAsJsonArray()) {
-                        providedIDs.add(provides.getAsString());
-                    }
-                } else if (json.has("quilt_loader") && json.get("quilt_loader").getAsJsonObject().has("provides")) {
-                    JsonObject quiltLoader = json.get("quilt_loader").getAsJsonObject();
-                    for (JsonElement provides : quiltLoader.get("provides").getAsJsonArray()) {
-                        JsonObject providesObject = provides.getAsJsonObject();
-                        String id = providesObject.get("id").getAsString();
-                        providedIDs.add(id);
-                    }
-                }
-                return providedIDs;
-            }
-            case "dependencies" -> {
-                Set<String> dependencies = new HashSet<>();
-                if (json.has("depends")) {
-                    JsonObject depends = json.get("depends").getAsJsonObject();
-                    if (depends != null) { // Dont use asMap() since its only on gson 2.10^ - forge 1.18
-                        dependencies.addAll(depends.entrySet().stream().map(Map.Entry::getKey).toList());
-                    }
-                } else if (json.has("quilt_loader") && json.get("quilt_loader").getAsJsonObject().has("depends")) {
-                    JsonObject depends = json.get("quilt_loader").getAsJsonObject().get("depends").getAsJsonObject();
-                    if (depends != null) { // Dont use asMap() since its only on gson 2.10^ - forge 1.18
-                        dependencies.addAll(depends.entrySet().stream().map(Map.Entry::getKey).toList());
-                    }
-                }
-                return dependencies;
-            }
-            case "environment" -> {
-                if (json.has("environment")) {
-                    String environment = json.get("environment").getAsString();
-                    if (environment == null) return LoaderManagerService.EnvironmentType.UNIVERSAL;
-                    return switch (environment.toLowerCase()) {
-                        case "client" -> LoaderManagerService.EnvironmentType.CLIENT;
-                        case "server" -> LoaderManagerService.EnvironmentType.SERVER;
-                        default -> LoaderManagerService.EnvironmentType.UNIVERSAL;
-                    };
-                } else if (json.has("quilt_loader") && json.has("minecraft") && json.get("minecraft").getAsJsonObject().has("environment")) {
-                    String environment = json.get("minecraft").getAsJsonObject().get("environment").getAsString();
-                    if (environment == null) return LoaderManagerService.EnvironmentType.UNIVERSAL;
-                    return switch (environment.toLowerCase()) {
-                        case "client" -> LoaderManagerService.EnvironmentType.CLIENT;
-                        case "server" -> LoaderManagerService.EnvironmentType.SERVER;
-                        default -> LoaderManagerService.EnvironmentType.UNIVERSAL;
-                    };
-                }
-            }
-        }
-
-        return infoType.equals("version") || infoType.equals("modId") || infoType.equals("environment") ? null : Set.of();
+        return false;
     }
 
     private static final String forbiddenChars = "\\/:*\"<>|!?&%$;=+";

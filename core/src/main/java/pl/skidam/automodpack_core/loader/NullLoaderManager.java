@@ -1,22 +1,9 @@
 package pl.skidam.automodpack_core.loader;
 
-import pl.skidam.automodpack_core.utils.FileInspection;
-
-import java.util.Collection;
-
+// TODO remove this, wtf is this even for
 public class NullLoaderManager implements LoaderManagerService {
     @Override
     public ModPlatform getPlatformType() {
-        return null;
-    }
-
-    @Override
-    public boolean isModLoaded(String modId) {
-        return false;
-    }
-
-    @Override
-    public Collection<FileInspection.Mod> getModList() {
         return null;
     }
 
