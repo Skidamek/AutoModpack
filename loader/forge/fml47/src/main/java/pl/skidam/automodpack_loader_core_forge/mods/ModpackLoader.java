@@ -31,10 +31,5 @@ public class ModpackLoader implements ModpackLoaderService {
             LOGGER.error("Error while loading modpack", e);
         }
     }
-
-    @Override
-    public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir) {
-        return new ArrayList<>();
-    }
 }
 

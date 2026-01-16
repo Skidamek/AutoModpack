@@ -6,6 +6,7 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.*;
+import pl.skidam.automodpack_core.utils.sort.DependencyOptimizer;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.*;
@@ -419,25 +420,19 @@ public class ModpackUpdater {
             }
         }
 
-        // Prepare modpack, analyze nested mods
-        List<FileInspection.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir);
-
         // delete old deleted files from the server modpack
         boolean needsRestart0 = deleteNonModpackFiles(modpackContent);
 
         Set<String> workaroundMods = new WorkaroundUtil(modpackDir).getWorkaroundMods(modpackContent);
         Set<String> filesNotToCopy = getFilesNotToCopy(modpackContent.list, workaroundMods);
-        boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
-        workaroundMods = new WorkaroundUtil(modpackDir).getWorkaroundMods(modpackContent);
-        filesNotToCopy = getFilesNotToCopy(modpackContent.list, workaroundMods);
 
-        Set<Path> modpackMods = new HashSet<>();
-        Collection<FileInspection.Mod> modpackModList = new ArrayList<>();
+        boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy);
+
+        Set<FileInspection.Mod> modpackModList = new HashSet<>();
         Path modpackModsDir = modpackDir.resolve("mods");
         if (Files.exists(modpackModsDir)) {
             try (Stream<Path> stream = Files.list(modpackModsDir)) {
                 stream.forEach(path -> {
-                    modpackMods.add(path);
                     FileInspection.Mod mod = FileInspection.getMod(path);
                     if (mod != null) {
                         modpackModList.add(mod);
@@ -446,7 +441,7 @@ public class ModpackUpdater {
             }
         }
 
-        Collection<FileInspection.Mod> standardModList = new ArrayList<>();
+        Set<FileInspection.Mod> standardModList = new HashSet<>();
         Path standardModsDir = MODS_DIR;
         if (Files.exists(standardModsDir)) {
             try (Stream<Path> stream = Files.list(standardModsDir)) {
@@ -459,31 +454,35 @@ public class ModpackUpdater {
             }
         }
 
-        // Check if the conflicting mods still exits, they might have been deleted by methods above
-        conflictingNestedMods = conflictingNestedMods.stream()
-                .filter(conflictingMod -> modpackMods.contains(conflictingMod.modPath()))
-                .toList();
+        Set<FileInspection.Mod> optimizedStandardModList = DependencyOptimizer.optimize(standardModList, modpackModList);
+        Map<FileInspection.Mod, FileInspection.Mod> mismatchedVersions = DependencyOptimizer.findMismatchedVersions(optimizedStandardModList, modpackModList);
 
-        if (!conflictingNestedMods.isEmpty()) {
-            LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
+        if (!mismatchedVersions.isEmpty()) {
+            LOGGER.warn("Found mismatched versions: {}", mismatchedVersions);
         }
 
-        boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods, standardModList);
-        Set<String> ignoredFiles = ModpackUtils.getIgnoredFiles(conflictingNestedMods, workaroundMods);
+        boolean needsRestart2 = false;
 
-        Set<String> forceCopyFiles = modpackContent.list.stream()
-                .filter(item -> item.forceCopy)
-                .map(item -> item.file)
-                .collect(Collectors.toSet());
+        for (FileInspection.Mod standardMod : standardModList) {
+            if (!optimizedStandardModList.contains(standardMod)) {
+                LOGGER.info("Removing duplicated mod: {}", standardMod.path());
+                CustomFileUtils.executeOrder66(standardMod.path(), false);
+                changelogs.changesDeletedList.put(standardMod.path().getFileName().toString(), null);
+                needsRestart2 = true;
+            }
+            else {
+                FileInspection.Mod replacement = mismatchedVersions.get(standardMod);
+                if (replacement != null) {
+                    LOGGER.info("Replacing mismatched mod {} with modpack version {}", standardMod.path(), replacement.path());
+                    CustomFileUtils.executeOrder66(standardMod.path(), false);
+                    changelogs.changesDeletedList.put(standardMod.path().getFileName().toString(), null);
+                     CustomFileUtils.copyFile(replacement.path(), standardMod.path().getParent().resolve(replacement.path().getFileName()));
+                    needsRestart2 = true;
+                }
+            }
+        }
 
-        // Remove duplicate mods
-        ModpackUtils.RemoveDupeModsResult removeDupeModsResult = ModpackUtils.removeDupeMods(modpackDir, standardModList, modpackModList, ignoredFiles, workaroundMods, forceCopyFiles);
-        boolean needsRestart3 = removeDupeModsResult.requiresRestart();
-
-        // Remove rest of mods not for standard mods directory
-        boolean needsRestart4 = ModpackUtils.removeRestModsNotToCopy(modpackContent, filesNotToCopy, removeDupeModsResult.modsToKeep());
-
-        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3 || needsRestart4;
+        return needsRestart0 || needsRestart1 || needsRestart2;
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory
