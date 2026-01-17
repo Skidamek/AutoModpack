@@ -1,31 +1,106 @@
-### Server Config File
-`~/automodpack/automodpack-server.json`
+# Server Configuration
 
-| Name                               | Default Value                                                              | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-|------------------------------------|----------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `DO_NOT_CHANGE_IT`                 | `<file version>`                                                           | File version number used for auto conversion old config versions to new ones with automodpack update.                                                                                                                                                                                                                                                                                                                                                                                                             |
-| `modpackName`                      | `""`                                                                       | The name of the server modpack, shows while downloading modpack and that's how modpack directory gets called inside `~/automodpack/modpacks/`.                                                                                                                                                                                                                                                                                                                                                                    |
-| `modpackHost`                      | `true`                                                                     | Starts modpack host server.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| `generateModpackOnStart`           | `true`                                                                     | Automatically regenerate modpack metadata when the server starts.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `syncedFiles`                      | `["/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*"]` | A list of *relative paths* from the root folder of the Minecraft server that will be **synced to the modpack**. Use wildcards like `*` to include multiple files from this directory (e.g., `/mods/*.jar`). Or use `**` (double star) to recursively include all files and subdirectories from a folder (e.g., `/config/**`). Prefix a path with `!` to **exclude** it from syncing. **Note:** This does **not** copy the files; it only defines what will be available on the client side under `~/.minecraft/`. |
-| `allowEditsInFiles`                | `["/options.txt", "/config/**"]`                                           | A list of files that clients are allowed to edit. In other words, files that are downloaded only one time and then ignored from updating. Configuration works exactly the same way `syncedFiles` does.                                                                                                                                                                                                                                                                                                            |
-| `forceCopyFilesToStandardLocation` | `[]`                                                                       | A list of files that client will be forced to load from standard directory. By default most mods are loaded from separate automodpack directory, this list specifies files which will be copied to e.g. standard mods folder. **This will break seamless updates!** Use only when you have really good reason for it. Configuration works exactly the same way `syncedFiles` does.                                                                                                                                |
-| `autoExcludeServerSideMods`        | `true`                                                                     | Automatically excludes server-side mods from the modpack. (Works only if mod developer specified environment type in mod metadata)                                                                                                                                                                                                                                                                                                                                                                                |
-| `autoExcludeUnnecessaryFiles`      | `true`                                                                     | Auto skip files which are: empty, hidden, temporary, disabled or backup.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `requireAutoModpackOnClient`       | `true`                                                                     | Whether or not this mod is optional for clients to join server.                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `nagUnModdedClients`               | `true`                                                                     | If `true` clients without AutoModpack will be nagged with a chat message on join. To work requires `requireAutoModpackOnClient` to be `false`.                                                                                                                                                                                                                                                                                                                                                                    |
-| `nagMessage`                       | `"This server provides dedicated modpack through AutoModpack!"`            | The message that will be displayed to clients without AutoModpack. To work requires `nagUnModdedClients` to be `true`.                                                                                                                                                                                                                                                                                                                                                                                            |
-| `nagClickableMessage`              | `"Click here to get the AutoModpack!"`                                     | The clickable part of the message that will be displayed to clients without AutoModpack. To work requires `nagUnModdedClients` to be `true`.                                                                                                                                                                                                                                                                                                                                                                      |
-| `nagClickableLink`                 | `"https://modrinth.com/project/automodpack"`                               | The link that will be opened when the message is clicked. To work requires `nagUnModdedClients` to be `true`.                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `bindAddress`                      | `""`                                                                       | The address to which the modpack host server binds. Leave this empty to automatically determine a local address (typically `0.0.0.0` or `::0`). When `bindPort` is set to `-1`, this value is **ignored** and the modpack host will be bound to the same address as the Minecraft server, as specified in the `server.properties` file.                                                                                                                                                                           |
-| `bindPort`                         | `-1`                                                                       | The port number on which the modpack host server listens. If set to `-1`, the modpack will be hosted directly on the port of your Minecraft server.                                                                                                                                                                                                                                                                                                                                                               |
-| `addressToSend`                    | `""`                                                                       | The address to the modpack host which will be used by clients to download the modpack. If empty, clients will use the same address they used to connect to the Minecraft server. (Do **not** include the port there, use `portToSend` instead)                                                                                                                                                                                                                                                                    |
-| `portToSend`                       | `-1`                                                                       | The port number that is sent alongside the `addressToSend`. If set to `-1`, clients will use the same port they used to connect to the Minecraft server.                                                                                                                                                                                                                                                                                                                                                          |
-| `disableInternalTLS`               | `false`                                                                    | Disables internal TLS management. If enabled, you must manage TLS externally, e.g. on a reverse proxy. When using this option, you have to use different `bindPort` than `-1` and you should consider setting `bindAddress` to a loopback address (e.g. `127.0.0.1`), so the unencrypted traffic between the modpack host and the reverse proxy isn't leaked.                                                                                                                                                     |
-| `requireMagicPackets`              | `false`                                                                    | Requires clients to establish download connection by exchanging AutoModpack magic packets. Magic packets are always used if `bindPort` is `-1`.                                                                                                                                                                                                                                                                                                                                                                   |
-| `updateIpsOnEveryStart`            | `false`                                                                    | Updates `addressToSend` on every server start. Might be useful if you have dynamic IP address. (Use it only if you really need it!)                                                                                                                                                                                                                                                                                                                                                                               |
-| `bandwidthLimit`                   | `0`                                                                        | Upload limit in Mbps that modpack host server is restricted to. (Value has to be an Integer, `0` - means unlimited)                                                                                                                                                                                                                                                                                                                                                                                               |
-| `validateSecrets`                  | `true`                                                                     | Makes modpack host validate and authorize modpack download attempts using unique secrets.                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `secretLifetime`                   | `336`                                                                      | Time in hours that a player's secret remains valid.                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `selfUpdater`                      | `false`                                                                    | Turn on/off all automodpack updates. This does not affect the mod's activity in installing modpacks.                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `acceptedLoaders`                  | `["<mod loader used by server>"]`                                          | Allows players from different modloaders to connect to your server. (Use with caution, most mods work only on one loader)                                                                                                                                                                                                                                                                                                                                                                                         |
+**File Location:** `~/automodpack/automodpack-server.json`
+
+This configuration file controls the behavior of the AutoModpack server-side component. It handles how files are synced to clients, how the hosting server binds to ports, and security validation.
+
+## General Settings
+
+| Setting                     | Default         | Description                                                                                                                   |
+|-----------------------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------|
+| DO_NOT_CHANGE_IT            | `<version>`     | Internal Use Only. Used to auto-migrate config versions during updates. Do not modify this manually.                          |
+| modpackName                 | `""`            | The display name of the modpack shown during download. This also determines the folder name inside `~/automodpack/modpacks/`. |
+| modpackHost                 | `true`          | Enables or disables the internal host server that serves the modpack.                                                         |
+| generateModpackOnStart      | `true`          | Automatically scans files and regenerates modpack metadata every time the server starts.                                      |
+| autoExcludeServerSideMods   | `true`          | Automatically excludes mods marked as "Server Side Only" in their metadata.                                                   |
+| autoExcludeUnnecessaryFiles | `true`          | Automatically skips syncing files that are empty, hidden, temporary, disabled, or backup files.                               |
+| requireAutoModpackOnClient  | `true`          | If true, players are kicked if they do not have AutoModpack installed.                                                        |
+| acceptedLoaders             | `["<current>"]` | A list of modloaders allowed to connect (e.g., Fabric, Forge). Use with caution; most mods are loader-specific.               |
+| selfUpdater                 | `false`         | Enables AutoModpack to update its own jar file automatically when new version is published on modrinth.                       |
+
+## File Synchronization
+
+These settings control which files are sent to the client and which files the client is allowed to customize.
+
+| Setting                          | Default                                                                    | Description                                                                                                                                                                                       |
+|----------------------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| syncedFiles                      | `["/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*"]` | List of relative paths to sync to the client. Supports wildcards.                                                                                                                                 |
+| allowEditsInFiles                | `["/options.txt", "/config/**"]`                                           | Files clients download once but can edit locally. Updates to these files on the server are ignored by the client. Supports wildcards.                                                             |
+| forceCopyFilesToStandardLocation | `[]`                                                                       | Forces specific files to copy to the standard Minecraft folder instead of the AutoModpack instance folder. Supports wildcards. Avoid using this option when possible, it breaks seamless updates. |
+| nonModpackFilesToDelete          | `[]`                                                                       | List of files to request deletion from the client (e.g., old mods). See Deleting Files below.                                                                                                     |
+
+## Globbing wildcards
+
+For `syncedFiles`, `allowEditsInFiles` and `forceCopyFilesToStandardLocation`, use the following patterns relative to the server root:
+
+- `*` : Matches files in a single directory (e.g., `/mods/*.jar`).
+- `**` : Matches files recursively in all subdirectories (e.g., `/kubejs/**`).
+- `!` : Prefix to exclude a file/folder (e.g., `!/kubejs/server_scripts/**`).
+
+Read more about globbing on the [Globbing Wikipedia article](https://wikipedia.org/wiki/Glob_(programming)#Syntax).
+
+## Deleting Files (nonModpackFilesToDelete)
+
+If you simply want to remove a file from your modpack, don't use this option, instead just delete the file from your server.
+
+This feature allows you to remove specific files from a client's machine which are not part of the modpack being synced. This is useful for cleaning up old mods or files that may conflict with the current modpack.
+
+**Note:** This feature is stricter for security reasons. It requires exact file hashes and does not support wildcards.
+
+### How to Configure
+
+This setting accepts a list of objects containing a path and a SHA1 hash.
+
+- **Exact Match:** The client checks if the file exists at the path and matches the hash. If yes, it is deleted.
+- **Parent Scan:** If the file isn't found at the exact path or only a parent directory is provided, the client scans the directory for any file matching the hash and deletes it.
+
+### Example
+
+```json
+"nonModpackFilesToDelete": {
+  "/mods/lithium-fabric-0.15.1+mc1.21.1.jar": "6038cf136da413753345bf9d48e5798241439894",
+  "/mods/": "97452cfadfde1f8f8c67838643019eabafa58fbb"
+},
+```
+
+## How to get the SHA1 Hash
+
+You must provide the hash for the specific version of the file you want to delete.
+
+### Option 1: Linux Command Line
+
+```bash
+sha1sum path/to/file
+```
+
+### Option 2: Online Tools
+
+You can use a browser-based calculator like [SHA1 File Checksum](https://emn178.github.io/online-tools/sha1_checksum.html).
+
+## Network & Hosting
+
+These settings control how the file server is exposed to the internet.
+
+| Setting               | Default | Description                                                                                            |
+|-----------------------|---------|--------------------------------------------------------------------------------------------------------|
+| bindAddress           | `""`    | The local IP to bind the host to. Empty binds to 0.0.0.0 (all). Ignored if bindPort is -1.             |
+| bindPort              | `-1`    | The port to listen on. -1 uses the Minecraft Server's port (recommended).                              |
+| addressToSend         | `""`    | The public IP/Domain sent to clients to start the download. Empty defaults to the connection address.  |
+| portToSend            | `-1`    | The public port sent to clients. -1 uses the connection port.                                          |
+| bandwidthLimit        | `0`     | Upload speed limit in Mbps (0 = unlimited).                                                            |
+| disableInternalTLS    | `false` | Disables internal TLS. Use this only if you handle SSL via a Reverse Proxy (like Nginx - recommended). |
+| requireMagicPackets   | `false` | Requires a "Magic Packet" handshake to start downloads. Always enabled if bindPort is -1.              |
+| updateIpsOnEveryStart | `false` | Updates addressToSend on startup. Useful for dynamic residential IPs.                                  |
+| validateSecrets       | `true`  | Protects downloads using unique, temporary secrets per user.                                           |
+| secretLifetime        | `336`   | How long (in hours) a download secret remains valid.                                                   |
+
+## Nagging Un-modded Clients
+
+If `requireAutoModpackOnClient` is set to `false`, you can annoy (nag) players who join without the mod installed.
+
+| Setting             | Default            | Description                                     |
+|---------------------|--------------------|-------------------------------------------------|
+| nagUnModdedClients  | `true`             | Enables the chat message for un-modded clients. |
+| nagMessage          | `"This server..."` | The main text of the warning message.           |
+| nagClickableMessage | `"Click here..."`  | The text that can be clicked.                   |
+| nagClickableLink    | URL                | The URL opened when clicking the message.       |
