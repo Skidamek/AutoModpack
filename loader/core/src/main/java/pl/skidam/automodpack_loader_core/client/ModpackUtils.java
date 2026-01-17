@@ -176,6 +176,9 @@ public class ModpackUtils {
                     LOGGER.error("Error while searching for files to delete in directory: {}", parentDir, e);
                 }
             }
+        }
+
+        for (var entry : filesToDeleteOnClient) {
             markTimestampAsEvaluated(entry.timestamp);
         }
 
