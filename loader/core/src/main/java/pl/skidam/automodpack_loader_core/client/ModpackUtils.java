@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core.client;
 
+import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -25,51 +26,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.utils.ClientCacheUtils.*;
 
 public class ModpackUtils {
-
-    public static boolean deleteFilesMarkedForDeletionByTheServer(Map<String, String> filesToDeleteOnClient) {
-        AtomicBoolean deletedAnyModFile = new AtomicBoolean(false);
-        for (var entry : filesToDeleteOnClient.entrySet()) {
-            String filePath = entry.getKey();
-            String expectedHash = entry.getValue();
-
-            Path fileInCWD = CustomFileUtils.getPathFromCWD(filePath);
-            if (Files.isRegularFile(fileInCWD)) {
-                String diskHash = ClientCacheUtils.computeHashIfNeeded(fileInCWD);
-                if (Objects.equals(diskHash, expectedHash)) {
-                    boolean isModFile = FileInspection.isMod(fileInCWD);
-                    LOGGER.warn("Deleting file marked for deletion by server: {}", filePath);
-                    CustomFileUtils.executeOrder66(fileInCWD);
-                    if (isModFile) {
-                        deletedAnyModFile.set(true);
-                    }
-                } else {
-                    LOGGER.info("Skipping deletion of {} - hash mismatch (expected: {}, found: {})", filePath, expectedHash, diskHash);
-                }
-            } else {
-                Path parentDir = fileInCWD.getParent();
-                try {
-                    Files.list(parentDir).forEach(path -> {
-                        if (!Files.isRegularFile(path)) return;
-                        String diskHash = ClientCacheUtils.computeHashIfNeeded(path);
-                        if (Objects.equals(diskHash, expectedHash)) {
-                            boolean isModFile = FileInspection.isMod(path);
-                            LOGGER.warn("Deleting file marked for deletion by server: {}", path);
-                            CustomFileUtils.executeOrder66(path);
-                            if (isModFile) {
-                                deletedAnyModFile.set(true);
-                            }
-                        }
-                    });
-                } catch (Exception e) {
-                    LOGGER.info("Skipping deletion of {} - file does not exist", filePath);
-                }
-            }
-        }
-
-        return deletedAnyModFile.get();
-    }
 
     // Modpack may require update even if theres no files to update, because some files may need to be deleted
     public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
@@ -153,6 +112,76 @@ public class ModpackUtils {
 
         LOGGER.info("Modpack {} is up to date! Took {} ms", modpackDir, System.currentTimeMillis() - start);
         return new UpdateCheckResult(false, Set.of());
+    }
+
+    public static boolean deleteFilesMarkedForDeletionByTheServer(Set<Jsons.ModpackContentFields.FileToDelete> filesToDeleteOnClient) {
+        if (!clientConfig.allowRemoteNonModpackDeletions) {
+            if (!filesToDeleteOnClient.isEmpty()) {
+                LOGGER.warn("Server requested deletion of {} files, but remote deletions are disabled in client config! Consider deleting them manually.", filesToDeleteOnClient.size());
+                for (var entry : filesToDeleteOnClient) {
+                    LOGGER.warn("File marked for deletion: {} (sha1: {})", entry.file, entry.sha1);
+                }
+            }
+            return false;
+        }
+
+        AtomicBoolean deletedAnyModFile = new AtomicBoolean(false);
+        for (var entry : filesToDeleteOnClient) {
+            if (wasThisTimestampEvaluatedBefore(entry.timestamp)) {
+                LOGGER.info("Skipping deletion of {} - already evaluated", entry.file);
+                continue;
+            }
+
+            String filePath = entry.file;
+            String expectedHash = entry.sha1;
+
+
+            // If the matching file path exists, and it is in fact a file, target it directly
+            Path fileInCWD = CustomFileUtils.getPathFromCWD(filePath);
+            if (Files.isRegularFile(fileInCWD)) {
+                LOGGER.info("Found exact file to delete: {}", filePath);
+                String diskHash = ClientCacheUtils.computeHashIfNeeded(fileInCWD);
+                if (diskHash.equalsIgnoreCase(expectedHash)) {
+                    boolean isModFile = FileInspection.isMod(fileInCWD);
+                    LOGGER.warn("Deleting file marked for deletion by server: {}", filePath);
+                    CustomFileUtils.executeOrder66(fileInCWD);
+                    if (isModFile) {
+                        deletedAnyModFile.set(true);
+                    }
+                }
+            } else { // Otherwise, search the (parent) directory for matching files
+                Path parentDir;
+                if (Files.isDirectory(fileInCWD)) {
+                    parentDir = fileInCWD;
+                } else {
+                    parentDir = fileInCWD.getParent();
+                }
+
+                LOGGER.info("Searching directory {} for files to delete matching: {}", parentDir, filePath);
+
+                try (var stream = Files.list(parentDir)) {
+                    stream.forEach(path -> {
+                        if (!Files.isRegularFile(path)) return;
+                        String diskHash = ClientCacheUtils.computeHashIfNeeded(path);
+                        if (diskHash.equalsIgnoreCase(expectedHash)) {
+                            boolean isModFile = FileInspection.isMod(path);
+                            LOGGER.warn("Deleting file marked for deletion by server: {}", path);
+                            CustomFileUtils.executeOrder66(path);
+                            if (isModFile) {
+                                deletedAnyModFile.set(true);
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    LOGGER.error("Error while searching for files to delete in directory: {}", parentDir, e);
+                }
+            }
+            markTimestampAsEvaluated(entry.timestamp);
+        }
+
+        saveDeletedFilesTimestamps();
+
+        return deletedAnyModFile.get();
     }
 
     public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
@@ -629,13 +658,23 @@ public class ModpackUtils {
             return false;
         }
 
-        return serverModpackContent.list.stream().anyMatch(item -> {
+        boolean listInvalid = serverModpackContent.list.stream().anyMatch(item -> {
             if (isUnsafePath(item.file, false)) {
                 LOGGER.error("Modpack content is invalid: file path '{}' is unsafe/malicious", item.file);
                 return true;
             }
             return false;
         });
+
+        boolean nonModpackFilesToDeleteInvalid = serverModpackContent.nonModpackFilesToDelete.stream().anyMatch(item -> {
+            if (isUnsafePath(item.file, false)) {
+                LOGGER.error("Modpack content is invalid: file to delete path '{}' is unsafe/malicious", item.file);
+                return true;
+            }
+            return false;
+        });
+
+        return listInvalid || nonModpackFilesToDeleteInvalid;
     }
 
     private static boolean isUnsafePath(String rawPath, boolean blankIsFine) {
@@ -660,6 +699,10 @@ public class ModpackUtils {
         String[] segments = normalized.split("/");
         for (String segment : segments) {
             if (segment.equals("..")) return true; // Directory traversal
+        }
+
+        if (normalized.startsWith("automodpack/") || normalized.startsWith("/automodpack/")) {
+            return true; // Trying to mess with automodpack internal files
         }
 
         return false;

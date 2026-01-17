@@ -8,6 +8,7 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 
@@ -37,7 +38,7 @@ public class Server {
 
         serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
         if (serverConfig != null) {
-            serverConfig.syncedFiles = new ArrayList<>();
+            serverConfig.syncedFiles = new HashSet<>();
             serverConfig.validateSecrets = false;
             ConfigTools.save(serverConfigFile, serverConfig);
 

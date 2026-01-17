@@ -4,10 +4,7 @@ package pl.skidam.automodpack_core.config;
 import pl.skidam.automodpack_core.auth.Secrets;
 
 import java.net.InetSocketAddress;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @SuppressWarnings("unused")
@@ -33,6 +30,7 @@ public class Jsons {
         public boolean syncAutoModpackVersion = true;
         public boolean syncLoaderVersion = false;
         public boolean playMusic = true;
+        public boolean allowRemoteNonModpackDeletions = true;
     }
 
     public static class ModpackAddresses {
@@ -94,10 +92,10 @@ public class Jsons {
         public String modpackName = "";
         public boolean modpackHost = true;
         public boolean generateModpackOnStart = true;
-        public List<String> syncedFiles = List.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
-        public List<String> allowEditsInFiles = List.of("/options.txt", "/config/**");
-        public List<String> forceCopyFilesToStandardLocation = List.of();
-        public Map<String, String> filesToDeleteOnClient = Map.of();
+        public Set<String> syncedFiles = Set.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
+        public Set<String> allowEditsInFiles = Set.of("/options.txt", "/config/**");
+        public Set<String> forceCopyFilesToStandardLocation = Set.of();
+        public Map<String, String> nonModpackFilesToDelete = Map.of();
         public boolean autoExcludeServerSideMods = true;
         public boolean autoExcludeUnnecessaryFiles = true;
         public boolean requireAutoModpackOnClient = true;
@@ -116,7 +114,17 @@ public class Jsons {
         public boolean validateSecrets = true;
         public long secretLifetime = 336; // 336 hours = 14 days
         public boolean selfUpdater = false;
-        public List<String> acceptedLoaders;
+        public Set<String> acceptedLoaders = new HashSet<>();
+
+        public static class FileToDelete { // Same as in ModpackContentFields.FileToDelete but without timestamp
+            public String file;
+            public String sha1;
+
+            public FileToDelete(String file, String sha1) {
+                this.file = file;
+                this.sha1 = sha1;
+            }
+        }
     }
 
     public static class ServerCoreConfigFields {
@@ -141,7 +149,7 @@ public class Jsons {
         public String loaderVersion = "";
         public String mcVersion = "";
         public Set<ModpackContentItem> list;
-        public Map<String, String> filesToDeleteOnClient = Map.of();
+        public Set<FileToDelete> nonModpackFilesToDelete = Set.of();
 
         public ModpackContentFields(Set<ModpackContentItem> list) {
             this.list = list;
@@ -175,6 +183,18 @@ public class Jsons {
                 return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
             }
         }
+
+        public static class FileToDelete {
+            public String file;
+            public String sha1;
+            public String timestamp;
+
+            public FileToDelete(String file, String sha1, String timestamp) {
+                this.file = file;
+                this.sha1 = sha1;
+                this.timestamp = timestamp;
+            }
+        }
     }
 
     // seems kinda too verbose and it may take too much space for large modpack but lets keep it for now
@@ -198,5 +218,10 @@ public class Jsons {
     public static class ClientDummyFiles {
         // Set of absolute file paths to delete when we can
         public Set<String> files = ConcurrentHashMap.newKeySet();
+    }
+
+    public static class ClientDeletedNonModpackFilesTimestamps {
+        // Set of timestamps of the files to delete
+        public Set<String> timestamps = ConcurrentHashMap.newKeySet();
     }
 }

@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_core.config;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
@@ -16,9 +15,10 @@ public class ConfigUtils {
     }
 
     public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config) {
-        List<String> fixedSyncedFiles = new ArrayList<>(config.syncedFiles.size());
-        List<String> fixedAllowEditsInFiles = new ArrayList<>(config.allowEditsInFiles.size());
-        List<String> fixedForceCopyFilesToStandardLocation = new ArrayList<>(config.forceCopyFilesToStandardLocation.size());
+        Set<String> fixedSyncedFiles = new HashSet<>(config.syncedFiles.size());
+        Set<String> fixedAllowEditsInFiles = new HashSet<>(config.allowEditsInFiles.size());
+        Set<String> fixedForceCopyFilesToStandardLocation = new HashSet<>(config.forceCopyFilesToStandardLocation.size());
+        Map<String, String> fixedNonModpackFilesToDelete = new HashMap<>(config.nonModpackFilesToDelete.size());
 
         String prefixPattern = "^/automodpack/host-modpack/[^/]+/";
         Pattern pattern = Pattern.compile(prefixPattern);
@@ -74,9 +74,29 @@ public class ConfigUtils {
             fixedForceCopyFilesToStandardLocation.add(prefixSlash(fixed));
         }
 
+        for (var entry : config.nonModpackFilesToDelete.entrySet()) {
+            var file = entry.getKey();
+            var hash = entry.getValue();
+            if (file == null) {
+                LOGGER.warn("Ignored null key in nonModpackFilesToDelete.");
+                continue;
+            }
+            var trimmed = file.trim();
+            if (trimmed.isEmpty()) {
+                LOGGER.warn("Ignored empty key in nonModpackFilesToDelete.");
+                continue;
+            }
+            var fixed = pattern.matcher(trimmed).replaceFirst("");
+            if (!fixed.equals(trimmed)) {
+                LOGGER.info("Normalized nonModpackFilesToDelete entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", file, fixed);
+            }
+            fixedNonModpackFilesToDelete.put(prefixSlash(fixed), hash);
+        }
+
         config.syncedFiles = fixedSyncedFiles;
         config.allowEditsInFiles = fixedAllowEditsInFiles;
         config.forceCopyFilesToStandardLocation = fixedForceCopyFilesToStandardLocation;
+        config.nonModpackFilesToDelete = fixedNonModpackFilesToDelete;
     }
 
     public static String prefixSlash(String path) {

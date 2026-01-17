@@ -42,7 +42,7 @@ class FileTreeScannerPerformanceTest {
         }
         
         // Test with rules that only target specific directories
-        var wildcards = List.of(
+        var wildcards = Set.of(
                 "/m*s/*.jar",
                 "/**/*.json"
         );
@@ -77,7 +77,7 @@ class FileTreeScannerPerformanceTest {
         }
         
         // Rules that will cause multiple pattern matching attempts per file
-        var wildcards = List.of(
+        var wildcards = Set.of(
                 "/test/*.txt",
                 "!/test/file-1*.txt",
                 "!/test/file-2*.txt"

@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -99,7 +100,7 @@ class ModpackTest {
         GlobalVariables.serverConfig = new Jsons.ServerConfigFieldsV2();
         GlobalVariables.serverConfig.autoExcludeUnnecessaryFiles = false;
 
-        ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new ArrayList<>(), new ArrayList<>(editable), new ArrayList<>(), new ModpackExecutor().getExecutor());
+        ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable), new HashSet<>(), new ModpackExecutor().getExecutor());
         content.create();
 
         boolean correct = true;

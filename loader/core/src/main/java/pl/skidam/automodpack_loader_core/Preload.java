@@ -183,7 +183,7 @@ public class Preload {
         if (serverConfig != null) {
             // Add current loader to the list
             if (serverConfig.acceptedLoaders == null) {
-                serverConfig.acceptedLoaders = List.of(LOADER);
+                serverConfig.acceptedLoaders = Set.of(LOADER);
             } else if (!serverConfig.acceptedLoaders.contains(LOADER)) {
                 serverConfig.acceptedLoaders.add(LOADER);
             }

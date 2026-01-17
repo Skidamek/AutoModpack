@@ -20,11 +20,11 @@ public class FileTreeScanner {
     private final FileSystem fs;
     private final boolean isCaseInsensitive;
 
-    public FileTreeScanner(List<String> rules, Set<Path> startDirectories) {
+    public FileTreeScanner(Set<String> rules, Set<Path> startDirectories) {
         this(rules, startDirectories, FileSystems.getDefault());
     }
 
-    public FileTreeScanner(List<String> rules, Set<Path> startDirectories, FileSystem fs) {
+    public FileTreeScanner(Set<String> rules, Set<Path> startDirectories, FileSystem fs) {
         this.startDirectories = startDirectories != null ? startDirectories : Set.of();
         this.isCaseInsensitive = FileSystemCapabilities.isCaseInsensitive(fs);
         this.fs = fs;
@@ -157,7 +157,7 @@ public class FileTreeScanner {
     // RULE PARSING & GLOB LOGIC
     // =================================================================================
 
-    private void parseRules(List<String> rawRules) {
+    private void parseRules(Set<String> rawRules) {
         if (rawRules == null) return;
         for (String rule : rawRules) {
             if (rule == null || rule.isBlank()) continue;

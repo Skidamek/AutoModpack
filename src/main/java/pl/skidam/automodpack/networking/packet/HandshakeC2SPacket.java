@@ -8,7 +8,7 @@ import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_loader_core.SelfUpdater;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 
-import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
@@ -33,7 +33,7 @@ public class HandshakeC2SPacket {
 
             updateIfNeededMod(handler, serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
 
-            HandshakePacket clientHandshakePacket = new HandshakePacket(List.of(loader), AM_VERSION, MC_VERSION);
+            HandshakePacket clientHandshakePacket = new HandshakePacket(Set.of(loader), AM_VERSION, MC_VERSION);
             outBuf.writeUtf(clientHandshakePacket.toJson(), Short.MAX_VALUE);
 
             return CompletableFuture.completedFuture(outBuf);

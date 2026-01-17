@@ -2,14 +2,14 @@ package pl.skidam.automodpack.networking.content;
 
 import com.google.gson.Gson;
 
-import java.util.List;
+import java.util.Set;
 
 public class HandshakePacket {
-    public List<String> loaders;
+    public Set<String> loaders;
     public String amVersion;
     public String mcVersion;
 
-    public HandshakePacket(List<String> loaders, String amVersion, String mcVersion) {
+    public HandshakePacket(Set<String> loaders, String amVersion, String mcVersion) {
         this.loaders = loaders;
         this.amVersion = amVersion;
         this.mcVersion = mcVersion;

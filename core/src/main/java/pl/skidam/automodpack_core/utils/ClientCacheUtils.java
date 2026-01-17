@@ -30,6 +30,7 @@ public class ClientCacheUtils {
     };
     private static final Jsons.ClientDummyFiles cacheDummyFiles = ConfigTools.load(clientDummyFilesFile, Jsons.ClientDummyFiles.class);
     private static final Jsons.LocalMetadata clientMetadataCache = ConfigTools.load(clientLocalMetadataFile, Jsons.LocalMetadata.class);
+    private static final Jsons.ClientDeletedNonModpackFilesTimestamps clientDeletedNonModpackFilesTimestamps = ConfigTools.load(clientDeletionTimeStamps, Jsons.ClientDeletedNonModpackFilesTimestamps.class);
 
     // Metadata
 
@@ -144,5 +145,22 @@ public class ClientCacheUtils {
             return;
         }
         ConfigTools.save(clientDummyFilesFile, cacheDummyFiles);
+    }
+
+    public static boolean wasThisTimestampEvaluatedBefore(String timestamp) {
+        if (clientDeletedNonModpackFilesTimestamps == null) return false;
+        return clientDeletedNonModpackFilesTimestamps.timestamps.contains(timestamp);
+    }
+
+    public static void markTimestampAsEvaluated(String timestamp) {
+        if (clientDeletedNonModpackFilesTimestamps == null) return;
+        clientDeletedNonModpackFilesTimestamps.timestamps.add(timestamp);
+    }
+
+    public static void saveDeletedFilesTimestamps() {
+        if (clientDeletedNonModpackFilesTimestamps == null) {
+            return;
+        }
+        ConfigTools.save(clientDeletionTimeStamps, clientDeletedNonModpackFilesTimestamps);
     }
 }

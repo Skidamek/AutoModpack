@@ -11,6 +11,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack_core.GlobalVariables.*;
 import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
@@ -26,7 +27,7 @@ public class ModpackContent {
     private final ThreadPoolExecutor CREATION_EXECUTOR;
     private final Map<String, String> sha1MurmurMapPreviousContent = new HashMap<>();
 
-    public ModpackContent(String modpackName, Path cwd, Path modpackDir, List<String> syncedFiles, List<String> allowEditsInFiles, List<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR) {
+    public ModpackContent(String modpackName, Path cwd, Path modpackDir, Set<String> syncedFiles, Set<String> allowEditsInFiles, Set<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR) {
         this.MODPACK_NAME = modpackName;
         this.MODPACK_DIR = modpackDir;
         Set<Path> directoriesToSearch = new HashSet<>(2);
@@ -47,6 +48,8 @@ public class ModpackContent {
     }
 
     public boolean create() {
+        Set<Jsons.ModpackContentFields.FileToDelete> computedFilesToDelete = new HashSet<>();
+
         try {
             SYNCED_FILES_CARDS.scan();
             EDITABLE_CARDS.scan();
@@ -54,7 +57,26 @@ public class ModpackContent {
 
             pathsMap.clear();
             sha1MurmurMapPreviousContent.clear();
-            getPreviousContent().ifPresent(previousContent -> previousContent.list.forEach(item -> sha1MurmurMapPreviousContent.put(item.sha1, item.murmur)));
+
+            getPreviousContent().ifPresent(previousContent -> {
+                Map<String, Jsons.ModpackContentFields.FileToDelete> oldFilesMap = previousContent.nonModpackFilesToDelete.stream()
+                        .collect(Collectors.toMap(f -> f.file, f -> f, (a, b) -> a));
+
+                if (serverConfig != null && serverConfig.nonModpackFilesToDelete != null) {
+                    for (var fileToDeleteEntry : serverConfig.nonModpackFilesToDelete.entrySet()) {
+                        var file = fileToDeleteEntry.getKey();
+                        var sha1 = fileToDeleteEntry.getValue();
+                        if (oldFilesMap.containsKey(file) && oldFilesMap.get(file).sha1.equalsIgnoreCase(sha1)) {
+                            computedFilesToDelete.add(oldFilesMap.get(file));
+                        } else {
+                            String currentTimestamp = String.valueOf(System.currentTimeMillis());
+                            computedFilesToDelete.add(new Jsons.ModpackContentFields.FileToDelete(file, sha1, currentTimestamp));
+                        }
+                    }
+                }
+
+                previousContent.list.forEach(item -> sha1MurmurMapPreviousContent.put(item.sha1, item.murmur));
+            });
 
             List<CompletableFuture<Void>> creationFutures = Collections.synchronizedList(new ArrayList<>());
 
@@ -81,17 +103,12 @@ public class ModpackContent {
                 LOGGER.warn("Modpack is empty!");
                 return false;
             }
-
-            // Remove duplicates - this could happen only if user would have some really weird `syncedFiles` configuration
-            Set<String> dupeSet = new HashSet<>();
-            list.removeIf(item -> !dupeSet.add(item.file));
-
         } catch (Exception e) {
             LOGGER.error("Error while generating modpack!", e);
             return false;
         }
 
-        saveModpackContent();
+        saveModpackContent(computedFilesToDelete);
         if (hostServer != null) {
             hostServer.addPaths(pathsMap);
         }
@@ -137,6 +154,10 @@ public class ModpackContent {
 
     // This is important to make it synchronized otherwise it could corrupt the file and crash
     public synchronized void saveModpackContent() {
+        saveModpackContent(null);
+    }
+
+    public synchronized void saveModpackContent(Set<Jsons.ModpackContentFields.FileToDelete> filesToDelete) {
         synchronized (list) {
             Jsons.ModpackContentFields modpackContent = new Jsons.ModpackContentFields(list);
 
@@ -145,7 +166,10 @@ public class ModpackContent {
             modpackContent.loaderVersion = LOADER_VERSION;
             modpackContent.loader = LOADER;
             modpackContent.modpackName = MODPACK_NAME;
-            modpackContent.filesToDeleteOnClient = serverConfig.filesToDeleteOnClient;
+
+            if (filesToDelete != null) {
+                modpackContent.nonModpackFilesToDelete = filesToDelete;
+            }
 
             ConfigTools.saveModpackContent(hostModpackContentFile, modpackContent);
         }

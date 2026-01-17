@@ -25,7 +25,7 @@ class ComplexFileTreeScannerTest {
     void setUp() throws IOException {
         expectedMatches = new HashSet<>();
         createComplexFileStructure();
-        List<String> rules = List.of(
+        var rules = Set.of(
                 // 1. Recursive Middle
                 "/app/**/logs/target.log",
 

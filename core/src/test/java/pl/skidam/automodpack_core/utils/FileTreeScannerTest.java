@@ -25,7 +25,7 @@ class FileTreeScannerTest {
     void setUp() throws IOException {
         createTestFileStructure();
 
-        List<String> rules = List.of(
+        var rules = Set.of(
                 "/file.txt",
                 "/config/config*",
                 "/config/mod-config.toml",
