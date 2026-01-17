@@ -1,12 +1,13 @@
 **Yes, you can add *anything* to your modpack.**
 
-#### Two ways of adding content to the modpack.
+## There are two complementing each other ways of adding content to the modpack.
 
 - To re-use already existing files on server use `syncedFiles` read more in [config](../configuration/server-config). As an example with default config it creates modpack containing *every* mod (file ending with .jar) from server `~/mods/` folder.
 
-- To add more files to modpack use separate directory `~/automodpack/host-modpack/main/`.
-For example to add more mods create folder `mods` and place there mods so that will be `~/automodpack/host-modpack/main/mods/`**`your-mod.jar`**.
-Or to add resourcepacks analogically create folder `resourcepacks` and place there resourcepacks so that will be `~/automodpack/host-modpack/main/resourcepacks/`**`your-resourcepack.zip`**.
+- To add more files to modpack without affecting server use separate directory `~/automodpack/host-modpack/main/`.
+For example to add more mods place mods in the `~/automodpack/host-modpack/main/mods/` folder.
+Or to add resource packs analogically place the packs in the `~/automodpack/host-modpack/main/resourcepacks/` folder.
+That scheme applies to any other files you would like to add to the modpack, just copy the folder structure from `~/.minecraft/` and place them into the `main`.
 
 <Callout>
 Do not place in the modpack cache files, like connector's `.connector` directory, its not supposed to be provided within modpack and it break seamless/reboot-less updates.
@@ -15,3 +16,87 @@ Do not place in the modpack cache files, like connector's `.connector` directory
 Both of these methods translate to the `~/.minecraft/` on client side (root directory of minecraft instance).
 
 Remember to regenerate the modpack using `/automodpack generate` (see [commands](../commands/commands))
+
+Syncing everything from default server mods is just default, you can disable it completely (see [config](../configuration/server-config)).
+The `host-modpack` folder is synced implicitly, it doesn't require config, automodpack assumes that if there are files in that directory, you want to send them to clients.
+`syncedFiles` is used only for files outside the `host-modpack` folder.
+
+## Example
+
+Assuming you have the following server file structure:
+
+```
+├── automodpack
+│   ├── automodpack-client.json
+│   ├── automodpack-server.json
+│   └── host-modpack
+│       ├── automodpack-content.json
+│       └── main
+│           ├── config
+│           │   ├── my-super.conf
+│           │   └── shadow.txt
+│           ├── mods
+│           │   ├── fabric-api.jar
+│           │   └── herobrine-mod.jar
+│           ├── options.txt
+│           ├── resourcepacks
+│           └── shaderpacks
+│               └── the-ultimate-shader.zip
+├── best-anime.txt
+├── config
+│   ├── ferritecore.mixin.properties
+│   └── invisible-radio.json
+├── kubejs
+│   ├── client_scripts
+│   │   └── welcome.js
+│   ├── common_scripts
+│   │   └── recipes.js
+│   └── server_scripts
+│       └── datapack_loader.js
+└── mods
+    ├── automodpack.jar
+    ├── fabric-api.jar
+    ├── ferritecore.jar
+    ├── modmenu.jar
+    └── sodium-fabric.jar
+
+```
+
+With a [server config](../configuration/server-config) of:
+
+| Setting                            | Values                                                                     |
+|------------------------------------|----------------------------------------------------------------------------|
+| `syncedFiles`                      | `["/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*"]` |
+| `allowEditsInFiles`                | `["/options.txt", "/config/**"]`                                           |
+| `forceCopyFilesToStandardLocation` | `[]`                                                                       |
+
+
+The resulting modpack on client would contain:
+```
+├── config
+│   ├── my-super.conf (editable)
+│   └── shadow.txt (editable)
+├── kubejs
+│   ├── client_scripts
+│   │   └── welcome.js
+│   └── common_scripts
+│       └── recipes.js
+├── mods
+│   ├── fabric-api.jar (version from host-modpack)
+│   ├── ferritecore.jar
+│   ├── herobrine-mod.jar (from host-modpack)
+│   ├── modmenu.jar
+│   └── sodium-fabric.jar
+├── options.txt (editable)
+├── resourcepacks
+└── shaderpacks
+    └── the-ultimate-shader.zip
+```
+
+As you can see there are files included using both methods, they complement each other these two make up our single modpack bucket/group (currently named `main` - in the future there will be custom grouping available).
+
+AutoModpack is obviously excluded since you need it to download the modpack in the first place, AutoModpack has its own update mechanism. By default, it syncs the version from server independently of your modpack.
+
+In case when two files share the same relative path, files from `host-modpack` are prioritized.
+
+The `allowEditsInFiles` is evaluated last, on top of the modpack so in order for it to work, the files need to exist in the first place. So as you can see even though `config/ferritecore.mixin.properties` and `config/invisible-radio.json` match the wildcard of `"/config/**"` in the `allowEditsInFiles`, they don't exist in the modpack at all since they weren't included by any of the methods.

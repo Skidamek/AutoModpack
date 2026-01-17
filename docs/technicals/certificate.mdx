@@ -1,11 +1,11 @@
 ### How to verify the certificate fingerprint?
-To verify, simply **copy the fingerprint from your server console to the game.** This is a one-time verification, meaning you won't need to repeat it after the initial connection. This process helps prevent security threats like [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). **The fingerprint is the same for everyone on your server and it never changes, its recommended to share it with players ahead of time.**
+To verify, simply **copy the fingerprint from your server console to the game.** This is a one-time verification, meaning you won't need to repeat it after the initial connection. This process helps prevent security threats like [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). **The fingerprint is the same for everyone on your server, and it never changes, it's recommended to share it with players ahead of time.**
 
 If you can't find the fingerprint in the console, you can retrieve it at any time using the **`/automodpack host fingerprint` [command](../commands/commands)**.
 
-However please do not think of it like a password to the modpack, its not a password or any secret, its a public verifiable piece of server certificate, **anyone could download** your modpack without previous knowledge of such fingerprint.
+However, please do not think of it like a password to the modpack, it's not a password or any secret, it's a public verifiable piece of server certificate, **anyone could download** your modpack without previous knowledge of such fingerprint.
 
-If you don't want players to explicitly verify the certificate manually and you own a domain (required), you can provide your own CA signed certificate.
+If you don't want players to explicitly verify the certificate manually, and you own a domain (required), you can provide your own CA signed certificate.
 
 ### How to provide your own CA signed certificate?
 
@@ -29,14 +29,14 @@ Never copy-paste random commands from the internet, always read the documentatio
 
 After obtaining the certificate, the files you need are `fullchain.pem` (the full chain certificate, copy and rename to `cert.crt`) and `privkey.pem` (the private key, copy and rename to `key.pem`).
 
-### Wait but why do I need all this? Its just a modpack for my friends!
+### Wait but why do I need all this? It's just a modpack for my friends!
 
 If someone could easily take control over the automodpack connection, they could download on your (or your friends) computers anything they want.
 Minecraft isn't sandboxed in any way and mods **can run any arbitrary code** so if someone could easily inject some malicious piece of code to any automodpack modpack no matter who the victim is, that would be a huge win for them anyway, they could steal passwords from your browser, accounts to various services or even delete your very important folder with funny cat memes, there are many possibilities.
-That's why i believe it's important to have some security measures.
+That's why we believe it's important to have some security measures.
 
 ### Hmm... ok but nobody knows about my server besides my friends, why should I care?
 
 Even if you think that nobody knows about your server, it may not be true. There are many ways how someone could find out about your server.
-For example there are many minecraft server scanners which scan the entire internet for minecraft servers, and you could be a victim if your server would be found vulnerable and we wouldn't verify the certificate.
+For example there are many minecraft server scanners which scan the entire internet for minecraft servers, and you could be a victim if your server would be found vulnerable, and we wouldn't verify the certificate.
 However nothing we do here stops someone from taking control over your server in different ways, (e.g. gaining access to it via ssh or your server hosting panel) that's why it's very important that you as a server owner take your security seriously and use strong passwords, enable two-factor authentication and keep your server software up to date.

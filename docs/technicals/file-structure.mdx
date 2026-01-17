@@ -1,21 +1,25 @@
-All of the AutoModpack files are kept inside `~/automodpack/` folder.
+All the AutoModpack files are kept inside `~/automodpack/` folder.
 
-### Server
-Modpack is generated from files inside `~/automodpack/host-modpack/main/` and/or `syncedFiles` (read [config](../configuration/server-config)) which translates to `~/.minecraft/` (root minecraft instance) folder on client.
+## Server
+Modpack is generated from files inside `~/automodpack/host-modpack/main/` and/or `syncedFiles` (read [config](../configuration/server-config)) which both translate to `~/.minecraft/` (root minecraft instance) folder on client.
 
 Modpack generation means creation of `~/automodpack/host-modpack/automodpack-content.json` which contains metadata of every single file of the modapck. You **should NOT** touch this file manually, edit config instead.
 
-### Client
+## Client
 All of downloaded modpacks are kept inside `~/automodpack/modpacks/`.
 
-All of the selected modpack files are copied to `~/.minecraft/` besides **mods** (with some exceptions, due to mod loader limitations)
+All the selected modpack files are copied to `~/.minecraft/` besides **mods** (with some exceptions, due to mod loader limitations)
 
 If detected, AutoModpack also tries to get rid of most of if not all of duplicated mods from your standard mods folder in favor of AutoModpack's mods folder.
 <Callout>
 It shouldn't cause any crashes, but if you notice that automodpack removes some dependency causing game to crash, please report it!
 </Callout>
 
-Mods are separated for reasons. Such approach mitigates common drawbacks of placing all modpack mods into the standard mods folder, like:
-- **Mod conflict crashes**: It won't resolve them, but it atleast gives the server owner ability to remotely remove or fix conflicting mods without manual intervention on the client side.
-- **Debugging**: Its easier to see what mods are part of the modpack and what are not. Since clients can add their own mods to the standard mods folder, it's easier to debug when something breaks or conflicts.
-- **Reboots**: If all of the modpack mods were placed into the standard mods folder, it would require a reboot to update the modpack mods. Now it can be done seamlessly on boot without any restart!
+### Why separate mods folder?
+
+Mods are separated for three reasons mostly. Such approach mitigates common drawbacks of placing all modpack mods into the standard mods folder, like:
+1. This way if you (as a modpack/server admin) accidentally make a bad update which would normally make game crash on launch and require manual intervention, you can fix it remotely because modpack is updated before it's loaded, that's not possible to do when all mods are loaded immediately by loader in the default mods folder.
+2. We can update modpack without requiring restart all the time, if there's a pending update while you were not in game, on launch early, automodpack can update modpack and load it afterward thanks to that you don't need to reboot the game to apply updates.
+3. Separation, it's just cleaner this way, you know exactly what mods you have added yourself (client side) and which not - Yeah, there are exceptions due to loader limitations but overall it's cleaner this way.
+
+If you really need to load some mod from the standard mods folder, you can use `forceCopyFilesToStandardLocation` option in server config to force specific mods to be copied to standard mods' folder.

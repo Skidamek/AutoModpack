@@ -6,28 +6,28 @@ This configuration file controls the behavior of the AutoModpack server-side com
 
 ## General Settings
 
-| Setting                     | Default         | Description                                                                                                                   |
-|-----------------------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------|
-| DO_NOT_CHANGE_IT            | `<version>`     | Internal Use Only. Used to auto-migrate config versions during updates. Do not modify this manually.                          |
-| modpackName                 | `""`            | The display name of the modpack shown during download. This also determines the folder name inside `~/automodpack/modpacks/`. |
-| modpackHost                 | `true`          | Enables or disables the internal host server that serves the modpack.                                                         |
-| generateModpackOnStart      | `true`          | Automatically scans files and regenerates modpack metadata every time the server starts.                                      |
-| autoExcludeServerSideMods   | `true`          | Automatically excludes mods marked as "Server Side Only" in their metadata.                                                   |
-| autoExcludeUnnecessaryFiles | `true`          | Automatically skips syncing files that are empty, hidden, temporary, disabled, or backup files.                               |
-| requireAutoModpackOnClient  | `true`          | If true, players are kicked if they do not have AutoModpack installed.                                                        |
-| acceptedLoaders             | `["<current>"]` | A list of modloaders allowed to connect (e.g., Fabric, Forge). Use with caution; most mods are loader-specific.               |
-| selfUpdater                 | `false`         | Enables AutoModpack to update its own jar file automatically when new version is published on modrinth.                       |
+| Setting                       | Default         | Description                                                                                                                             |
+|-------------------------------|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| `DO_NOT_CHANGE_IT`            | `<version>`     | Internal Use Only. Used to auto-migrate config versions during updates. Do not modify this manually.                                    |
+| `modpackName`                 | `""`            | The display name of the modpack shown during download. This also determines the folder name inside `~/automodpack/modpacks/` on client. |
+| `modpackHost`                 | `true`          | Enables or disables the internal host server that serves the modpack.                                                                   |
+| `generateModpackOnStart`      | `true`          | Automatically scans files and regenerates modpack metadata every time the server starts.                                                |
+| `autoExcludeServerSideMods`   | `true`          | Automatically excludes mods marked as "Server Side Only" in their metadata.                                                             |
+| `autoExcludeUnnecessaryFiles` | `true`          | Automatically skips syncing files that are empty, hidden, temporary, disabled, or backup files.                                         |
+| `requireAutoModpackOnClient`  | `true`          | If true, players are kicked if they do not have AutoModpack installed.                                                                  |
+| `acceptedLoaders`             | `["<current>"]` | A list of modloaders allowed to connect (e.g., Fabric, Forge). Use with caution; most mods are loader-specific.                         |
+| `selfUpdater`                 | `false`         | Enables AutoModpack to update its own jar file automatically when new version is published on modrinth.                                 |
 
 ## File Synchronization
 
 These settings control which files are sent to the client and which files the client is allowed to customize.
 
-| Setting                          | Default                                                                    | Description                                                                                                                                                                                       |
-|----------------------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| syncedFiles                      | `["/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*"]` | List of relative paths to sync to the client. Supports wildcards.                                                                                                                                 |
-| allowEditsInFiles                | `["/options.txt", "/config/**"]`                                           | Files clients download once but can edit locally. Updates to these files on the server are ignored by the client. Supports wildcards.                                                             |
-| forceCopyFilesToStandardLocation | `[]`                                                                       | Forces specific files to copy to the standard Minecraft folder instead of the AutoModpack instance folder. Supports wildcards. Avoid using this option when possible, it breaks seamless updates. |
-| nonModpackFilesToDelete          | `[]`                                                                       | List of files to request deletion from the client (e.g., old mods). See Deleting Files below.                                                                                                     |
+| Setting                            | Default                                                                    | Description                                                                                                                                                                                       |
+|------------------------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `syncedFiles`                      | `["/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*"]` | List of relative paths to sync to the client. Supports wildcards.                                                                                                                                 |
+| `allowEditsInFiles`                | `["/options.txt", "/config/**"]`                                           | Files clients download once but can edit locally. Updates to these files on the server are ignored by the client. Supports wildcards.                                                             |
+| `forceCopyFilesToStandardLocation` | `[]`                                                                       | Forces specific files to copy to the standard Minecraft folder instead of the AutoModpack instance folder. Supports wildcards. Avoid using this option when possible, it breaks seamless updates. |
+| `nonModpackFilesToDelete`          | `[]`                                                                       | List of files to request deletion from the client (e.g., old mods). See Deleting Files below.                                                                                                     |
 
 ## Globbing wildcards
 
@@ -41,7 +41,7 @@ Read more about globbing on the [Globbing Wikipedia article](https://wikipedia.o
 
 ## Deleting Files (nonModpackFilesToDelete)
 
-If you simply want to remove a file from your modpack, don't use this option, instead just delete the file from your server.
+If you simply want to remove a file from your modpack, **don't use** this option, instead just delete the file from your server.
 
 This feature allows you to remove specific files from a client's machine which are not part of the modpack being synced. This is useful for cleaning up old mods or files that may conflict with the current modpack.
 
@@ -63,7 +63,8 @@ This setting accepts a list of objects containing a path and a SHA1 hash.
 },
 ```
 
-## How to get the SHA1 Hash
+<details>
+<summary>How to get the SHA1 Hash</summary>
 
 You must provide the hash for the specific version of the file you want to delete.
 
@@ -76,31 +77,32 @@ sha1sum path/to/file
 ### Option 2: Online Tools
 
 You can use a browser-based calculator like [SHA1 File Checksum](https://emn178.github.io/online-tools/sha1_checksum.html).
+</details>
 
 ## Network & Hosting
 
 These settings control how the file server is exposed to the internet.
 
-| Setting               | Default | Description                                                                                            |
-|-----------------------|---------|--------------------------------------------------------------------------------------------------------|
-| bindAddress           | `""`    | The local IP to bind the host to. Empty binds to 0.0.0.0 (all). Ignored if bindPort is -1.             |
-| bindPort              | `-1`    | The port to listen on. -1 uses the Minecraft Server's port (recommended).                              |
-| addressToSend         | `""`    | The public IP/Domain sent to clients to start the download. Empty defaults to the connection address.  |
-| portToSend            | `-1`    | The public port sent to clients. -1 uses the connection port.                                          |
-| bandwidthLimit        | `0`     | Upload speed limit in Mbps (0 = unlimited).                                                            |
-| disableInternalTLS    | `false` | Disables internal TLS. Use this only if you handle SSL via a Reverse Proxy (like Nginx - recommended). |
-| requireMagicPackets   | `false` | Requires a "Magic Packet" handshake to start downloads. Always enabled if bindPort is -1.              |
-| updateIpsOnEveryStart | `false` | Updates addressToSend on startup. Useful for dynamic residential IPs.                                  |
-| validateSecrets       | `true`  | Protects downloads using unique, temporary secrets per user.                                           |
-| secretLifetime        | `336`   | How long (in hours) a download secret remains valid.                                                   |
+| Setting                 | Default | Description                                                                                            |
+|-------------------------|---------|--------------------------------------------------------------------------------------------------------|
+| `bindAddress`           | `""`    | The local IP to bind the host to. Empty binds to 0.0.0.0 or ::0. Ignored if bindPort is -1.            |
+| `bindPort`              | `-1`    | The port to listen on. -1 uses the Minecraft Server's port (recommended).                              |
+| `addressToSend`         | `""`    | The public IP/Domain sent to clients to start the download. Empty defaults to the connection address.  |
+| `portToSend`            | `-1`    | The public port sent to clients. -1 uses the connection port.                                          |
+| `bandwidthLimit`        | `0`     | Upload speed limit in Mbps (0 = unlimited).                                                            |
+| `disableInternalTLS`    | `false` | Disables internal TLS. Use this only if you handle SSL via a Reverse Proxy (like Nginx - recommended). |
+| `requireMagicPackets`   | `false` | Requires a "Magic Packet" handshake to start downloads. Always enabled if bindPort is -1.              |
+| `updateIpsOnEveryStart` | `false` | Updates addressToSend on startup. Useful for dynamic residential IPs.                                  |
+| `validateSecrets`       | `true`  | Protects downloads using unique, temporary secrets per user.                                           |
+| `secretLifetime`        | `336`   | How long (in hours) a download secret remains valid.                                                   |
 
 ## Nagging Un-modded Clients
 
 If `requireAutoModpackOnClient` is set to `false`, you can annoy (nag) players who join without the mod installed.
 
-| Setting             | Default            | Description                                     |
-|---------------------|--------------------|-------------------------------------------------|
-| nagUnModdedClients  | `true`             | Enables the chat message for un-modded clients. |
-| nagMessage          | `"This server..."` | The main text of the warning message.           |
-| nagClickableMessage | `"Click here..."`  | The text that can be clicked.                   |
-| nagClickableLink    | URL                | The URL opened when clicking the message.       |
+| Setting               | Default            | Description                                     |
+|-----------------------|--------------------|-------------------------------------------------|
+| `nagUnModdedClients`  | `true`             | Enables the chat message for un-modded clients. |
+| `nagMessage`          | `"This server..."` | The main text of the warning message.           |
+| `nagClickableMessage` | `"Click here..."`  | The text that can be clicked.                   |
+| `nagClickableLink`    | URL                | The URL opened when clicking the message.       |
