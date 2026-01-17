@@ -20,7 +20,7 @@ public class ConfigUtils {
         Set<String> fixedForceCopyFilesToStandardLocation = new HashSet<>(config.forceCopyFilesToStandardLocation.size());
         Map<String, String> fixedNonModpackFilesToDelete = new HashMap<>(config.nonModpackFilesToDelete.size());
 
-        String prefixPattern = "^/automodpack/host-modpack/[^/]+/";
+        String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";
         Pattern pattern = Pattern.compile(prefixPattern);
 
         for (var file : config.syncedFiles) {
