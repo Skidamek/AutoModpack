@@ -117,8 +117,8 @@ public class Jsons {
         public Set<String> acceptedLoaders = new HashSet<>();
 
         public static class FileToDelete { // Same as in ModpackContentFields.FileToDelete but without timestamp
-            public String file;
-            public String sha1;
+            public final String file;
+            public final String sha1;
 
             public FileToDelete(String file, String sha1) {
                 this.file = file;
@@ -160,13 +160,13 @@ public class Jsons {
         }
 
         public static class ModpackContentItem {
-            public String file;
-            public String size;
-            public String type;
-            public boolean editable;
-            public boolean forceCopy;
-            public String sha1;
-            public String murmur;
+            public final String file;
+            public final String size;
+            public final String type;
+            public final boolean editable;
+            public final boolean forceCopy;
+            public final String sha1;
+            public final String murmur;
 
             public ModpackContentItem(String file, String size, String type, boolean editable, boolean forceCopy, String sha1, String murmur) {
                 this.file = file;
@@ -182,12 +182,25 @@ public class Jsons {
             public String toString() {
                 return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
             }
+
+            @Override
+            public boolean equals(Object obj) {
+                if (this == obj) return true;
+                if (obj == null || getClass() != obj.getClass()) return false;
+                ModpackContentItem that = (ModpackContentItem) obj;
+                return Objects.equals(file, that.file) && Objects.equals(sha1, that.sha1);
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(file, sha1);
+            }
         }
 
         public static class FileToDelete {
-            public String file;
-            public String sha1;
-            public String timestamp;
+            public final String file;
+            public final String sha1;
+            public final String timestamp;
 
             public FileToDelete(String file, String sha1, String timestamp) {
                 this.file = file;
@@ -203,9 +216,9 @@ public class Jsons {
         public Map<String, FileFingerprint> files = new ConcurrentHashMap<>();
 
         public static class FileFingerprint {
-            public String sha1;
-            public long lastSize;     // Local disk size
-            public long lastModified; // Local disk timestamp
+            public final String sha1;
+            public final long lastSize;     // Local disk size
+            public final long lastModified; // Local disk timestamp
 
             public FileFingerprint(String sha1, long lastSize, long lastModified) {
                 this.sha1 = sha1;
