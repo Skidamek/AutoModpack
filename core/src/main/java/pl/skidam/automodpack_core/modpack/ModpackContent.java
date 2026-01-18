@@ -123,12 +123,12 @@ public class ModpackContent {
 
 
     public boolean loadPreviousContent() {
-        var optionalModpackContent = getPreviousContent();
-        if (optionalModpackContent.isEmpty()) return false;
-        Jsons.ModpackContentFields modpackContent = optionalModpackContent.get();
+        var optionalPreviousModpackContent = getPreviousContent();
+        if (optionalPreviousModpackContent.isEmpty()) return false;
+        Jsons.ModpackContentFields previousModpackContent = optionalPreviousModpackContent.get();
 
         synchronized (list) {
-            list.addAll(modpackContent.list);
+            list.addAll(previousModpackContent.list);
 
             for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : list) {
                 Path file = CustomFileUtils.getPath(MODPACK_DIR, modpackContentItem.file);
@@ -147,17 +147,17 @@ public class ModpackContent {
         }
 
         // set all new variables
-        saveModpackContent();
+        saveModpackContent(previousModpackContent.nonModpackFilesToDelete);
 
         return true;
     }
 
     // This is important to make it synchronized otherwise it could corrupt the file and crash
-    public synchronized void saveModpackContent() {
-        saveModpackContent(null);
-    }
+    public synchronized void saveModpackContent(Set<Jsons.ModpackContentFields.FileToDelete> nonModpackFilesToDelete) {
+        if (nonModpackFilesToDelete == null) {
+            throw new IllegalArgumentException("filesToDelete is null");
+        }
 
-    public synchronized void saveModpackContent(Set<Jsons.ModpackContentFields.FileToDelete> filesToDelete) {
         synchronized (list) {
             Jsons.ModpackContentFields modpackContent = new Jsons.ModpackContentFields(list);
 
@@ -166,10 +166,7 @@ public class ModpackContent {
             modpackContent.loaderVersion = LOADER_VERSION;
             modpackContent.loader = LOADER;
             modpackContent.modpackName = MODPACK_NAME;
-
-            if (filesToDelete != null) {
-                modpackContent.nonModpackFilesToDelete = filesToDelete;
-            }
+            modpackContent.nonModpackFilesToDelete = nonModpackFilesToDelete;
 
             ConfigTools.saveModpackContent(hostModpackContentFile, modpackContent);
         }

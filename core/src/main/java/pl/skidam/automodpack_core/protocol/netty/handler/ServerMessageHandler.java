@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
@@ -77,13 +78,13 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
     }
 
     private void refreshModpackFiles(ChannelHandlerContext context, byte[][] FileHashesList) throws IOException {
-        List<String> hashes = new ArrayList<>();
+        Set<String> hashes = new HashSet<>();
         for (byte[] hash : FileHashesList) {
             hashes.add(new String(hash));
         }
         LOGGER.info("Received refresh request for files of hashes: {}", hashes);
-        List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
-        List<ModpackContent> modpacks = new ArrayList<>();
+        Set<CompletableFuture<Void>> creationFutures = new HashSet<>();
+        Set<ModpackContent> modpacks = new HashSet<>();
 
         for (String hash : hashes) {
             final Optional<Path> optionalPath = resolvePath(hash);
@@ -109,7 +110,15 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         }
 
         creationFutures.forEach(CompletableFuture::join);
-        modpacks.forEach(ModpackContent::saveModpackContent);
+        modpacks.forEach(modpackContent -> {
+            var optionalPreviousModpackContent = modpackContent.getPreviousContent();
+            if (optionalPreviousModpackContent.isEmpty()) { // How?
+                LOGGER.error("Could not find previous modpack content for modpack while refreshing it: {}", modpackContent.getModpackName());
+                return;
+            }
+            Jsons.ModpackContentFields previousModpackContent = optionalPreviousModpackContent.get();
+            modpackContent.saveModpackContent(previousModpackContent.nonModpackFilesToDelete);
+        });
 
         LOGGER.info("Sending new modpack-content.json");
 
