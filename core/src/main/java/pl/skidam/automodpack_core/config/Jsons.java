@@ -183,17 +183,18 @@ public class Jsons {
                 return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
             }
 
+            // if the relative file path is the same, we consider the items equal
             @Override
             public boolean equals(Object obj) {
                 if (this == obj) return true;
                 if (obj == null || getClass() != obj.getClass()) return false;
                 ModpackContentItem that = (ModpackContentItem) obj;
-                return Objects.equals(file, that.file) && Objects.equals(sha1, that.sha1);
+                return Objects.equals(file, that.file);
             }
 
             @Override
             public int hashCode() {
-                return Objects.hash(file, sha1);
+                return Objects.hash(file);
             }
         }
 
