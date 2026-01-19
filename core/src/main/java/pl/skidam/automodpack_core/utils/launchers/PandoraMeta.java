@@ -10,9 +10,9 @@ public class PandoraMeta {
 
     public static boolean updateLoaderVersion(String newVersion) {
         return LauncherVersionSwapper.modifyJson(INFO_JSON_PATH, json -> {
-            String currentVersion = json.has("preferred_loader_version")
-                    ? json.get("preferred_loader_version").getAsString()
-                    : null;
+            String currentVersion = json.has("preferred_loader_version") ? json.get("preferred_loader_version").getAsString() : null;
+
+            if (currentVersion == null) return false;
 
             if (!newVersion.equals(currentVersion)) {
                 json.addProperty("preferred_loader_version", newVersion);

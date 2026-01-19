@@ -37,9 +37,11 @@ public class MultiMCMeta {
                 JsonObject component = element.getAsJsonObject();
                 if (component.has("uid") && component.get("uid").getAsString().equals(targetUid)) {
 
-                    String oldVersion = component.has("version") ? component.get("version").getAsString() : "unknown";
+                    String currentVersion = component.has("version") ? component.get("version").getAsString() : null;
 
-                    if (!newVersion.equals(oldVersion)) {
+                    if (currentVersion == null) continue;
+
+                    if (!newVersion.equals(currentVersion)) {
                         component.addProperty("version", newVersion);
 
                         // What's this for?!
