@@ -28,7 +28,7 @@ public class Jsons {
         public boolean updateSelectedModpackOnLaunch = true;
         public boolean selfUpdater = false;
         public boolean syncAutoModpackVersion = true;
-        public boolean syncLoaderVersion = false;
+        public boolean syncLoaderVersion = true;
         public boolean playMusic = true;
         public boolean allowRemoteNonModpackDeletions = true;
     }
