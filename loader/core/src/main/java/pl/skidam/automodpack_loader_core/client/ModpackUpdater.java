@@ -6,6 +6,7 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.*;
+import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.*;
@@ -399,26 +400,6 @@ public class ModpackUpdater {
             throw new IllegalStateException("Failed to load modpack content"); // Something gone very wrong...
         }
 
-        if (clientConfig.syncLoaderVersion && serverModpackContent != null) {
-            // Change loader and minecraft version in launchers like prism, multimc.
-            if (serverModpackContent.loader != null && serverModpackContent.loaderVersion != null) {
-                if (serverModpackContent.loader.equals(LOADER)) { // Server may use different loader than client
-                    var UID = switch (LOADER) {
-                        case "fabric" -> MmcPackMagic.FABRIC_LOADER_UID;
-                        case "quilt" -> MmcPackMagic.QUILT_LOADER_UID;
-                        case "forge" -> MmcPackMagic.FORGE_LOADER_UID;
-                        case "neoforge" -> MmcPackMagic.NEOFORGE_LOADER_UID;
-                        default -> null;
-                    };
-                    MmcPackMagic.changeVersion(UID, serverModpackContent.loaderVersion); // Update loader version
-                }
-            }
-
-            if (serverModpackContent.mcVersion != null) {
-                MmcPackMagic.changeVersion(MmcPackMagic.MINECRAFT_UID, serverModpackContent.mcVersion); // Update minecraft version
-            }
-        }
-
         // Prepare modpack, analyze nested mods
         List<FileInspection.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir);
 
@@ -485,7 +466,9 @@ public class ModpackUpdater {
 
         boolean needsRestart5 = ModpackUtils.deleteFilesMarkedForDeletionByTheServer(modpackContent.nonModpackFilesToDelete);
 
-        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3 || needsRestart4 || needsRestart5;
+        boolean needsRestart6 = LauncherVersionSwapper.swapLoaderVersion(modpackContent.loader, modpackContent.loaderVersion);
+
+        return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3 || needsRestart4 || needsRestart5 || needsRestart6;
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory
