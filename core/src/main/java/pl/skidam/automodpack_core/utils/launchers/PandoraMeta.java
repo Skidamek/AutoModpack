@@ -6,7 +6,7 @@ import java.nio.file.Path;
 
 public class PandoraMeta {
 
-    public static final Path INFO_JSON_PATH = Path.of("../info_v1.json");
+    private static final Path INFO_JSON_PATH = Path.of("../info_v1.json");
 
     public static boolean updateLoaderVersion(String newVersion) {
         return LauncherVersionSwapper.modifyJson(INFO_JSON_PATH, json -> {

@@ -14,6 +14,7 @@ public class GlobalVariables {
     public static final String MOD_ID = "automodpack"; // For real its "automodpack_mod" but we use this for resource locations etc.
     public static Boolean DEBUG = false;
     public static Boolean preload;
+    public static long PRELOAD_TIME;
     public static String MC_VERSION;
     public static String AM_VERSION;
     public static String LOADER_VERSION;

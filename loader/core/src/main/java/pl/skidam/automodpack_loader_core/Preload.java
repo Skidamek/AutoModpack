@@ -94,6 +94,7 @@ public class Preload {
     private void initializeGlobalVariables() {
         // Initialize global variables
         preload = true;
+        PRELOAD_TIME = System.currentTimeMillis();
         LOADER_MANAGER = new LoaderManager();
         MODPACK_LOADER = new ModpackLoader();
         MC_VERSION = LOADER_MANAGER.getModVersion("minecraft");
@@ -184,7 +185,7 @@ public class Preload {
             // Add current loader to the list
             if (serverConfig.acceptedLoaders == null) {
                 serverConfig.acceptedLoaders = Set.of(LOADER);
-            } else if (!serverConfig.acceptedLoaders.contains(LOADER)) {
+            } else {
                 serverConfig.acceptedLoaders.add(LOADER);
             }
 

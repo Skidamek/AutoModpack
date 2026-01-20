@@ -11,8 +11,8 @@ import java.util.Map;
 // MultiMC and forks like Prism and forks of forks like Fjord etc.
 public class MultiMCMeta {
 
-    public static final Path MMC_PACK_PATH = Path.of("../mmc-pack.json");
-
+    private static final long DELAY = 5000;
+    private static final Path MMC_PACK_PATH = Path.of("../mmc-pack.json");
     private static final Map<String, String> LOADER_UID_MAP = Map.of(
             "fabric", "net.fabricmc.fabric-loader",
             "quilt", "org.quiltmc.quilt-loader",
@@ -55,11 +55,15 @@ public class MultiMCMeta {
             }
 
             if (changed) {
-                try { // Hack for prism, it reverts our changes if we write them too fast?!?
-                    GlobalVariables.LOGGER.info("Simulating a 5 sec delay to avoid MultiMC/Prism overwrite issue...");
-                    Thread.sleep(5000);
-                } catch (InterruptedException e) {
-                    GlobalVariables.LOGGER.error("Interrupted while simulating delay", e);
+                var preloadDeltaTime = System.currentTimeMillis() - GlobalVariables.PRELOAD_TIME;
+                var delayRequired = DELAY - preloadDeltaTime;
+                if (delayRequired > 0) {
+                    try { // Hack for prism, it reverts our changes if we write them too quickly after launching the game?!?
+                        GlobalVariables.LOGGER.info("Simulating a {} sec delay to avoid MultiMC/Prism overwrite issue...", delayRequired / 1000);
+                        Thread.sleep(delayRequired);
+                    } catch (InterruptedException e) {
+                        GlobalVariables.LOGGER.error("Interrupted while simulating delay", e);
+                    }
                 }
                 json.add("components", components);
                 GlobalVariables.LOGGER.info("MultiMC/Prism: Updated loader version to {}", newVersion);
