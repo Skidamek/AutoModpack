@@ -139,7 +139,7 @@ public class ModpackUpdater {
                             .filter(mod -> {
                                 String modHash = ClientCacheUtils.computeHashIfNeeded(mod);
 
-                                // if its in standard mods directory, we dont want to load it again
+                                // if its in standard mods directory, we don't want to load it again
                                 boolean isUnique = standardModsHashes.stream().noneMatch(hash -> hash.equals(modHash));
                                 boolean endsWithJar = mod.toString().endsWith(".jar");
                                 boolean isFile = mod.toFile().isFile();
@@ -167,6 +167,10 @@ public class ModpackUpdater {
         new ScreenManager().download(downloadManager, getModpackName());
         long start = System.currentTimeMillis();
 
+        // Don't download files which already exist
+        // The existing files will be copied over in the applyModpack method
+        var finalFilesToUpdate = ModpackUtils.getOnlyNonExistingFiles(filesToUpdate);
+
         try {
             // Rename modpack
             modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
@@ -177,7 +181,7 @@ public class ModpackUpdater {
             long startFetching = System.currentTimeMillis();
             List<FetchManager.FetchData> fetchDatas = new LinkedList<>();
 
-            for (Jsons.ModpackContentFields.ModpackContentItem serverItem : filesToUpdate) {
+            for (Jsons.ModpackContentFields.ModpackContentItem serverItem : finalFilesToUpdate) {
 
                 totalBytesToDownload += Long.parseLong(serverItem.size);
 
@@ -198,7 +202,7 @@ public class ModpackUpdater {
             // DOWNLOAD
 
             newDownloadedFiles.clear();
-            int wholeQueue = filesToUpdate.size();
+            int wholeQueue = finalFilesToUpdate.size();
             if (wholeQueue > 0) {
                 LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
@@ -212,7 +216,7 @@ public class ModpackUpdater {
                 new ScreenManager().download(downloadManager, getModpackName());
                 downloadManager.attachDownloadClient(downloadClient);
 
-                var randomizedList = new LinkedList<>(filesToUpdate);
+                var randomizedList = new ArrayList<>(finalFilesToUpdate);
                 Collections.shuffle(randomizedList);
                 for (var serverItem : randomizedList) {
 
@@ -309,7 +313,7 @@ public class ModpackUpdater {
 
                         // TODO try to fetch again from modrinth and curseforge
 
-                        randomizedList = new LinkedList<>(refreshedFilteredList);
+                        randomizedList = new ArrayList<>(refreshedFilteredList);
                         Collections.shuffle(randomizedList);
                         for (var serverItem : randomizedList) {
 

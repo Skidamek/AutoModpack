@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_loader_core.client;
 
-import pl.skidam.automodpack_core.GlobalVariables;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -30,10 +29,10 @@ import static pl.skidam.automodpack_core.utils.ClientCacheUtils.*;
 
 public class ModpackUtils {
 
-    // Modpack may require update even if theres no files to update, because some files may need to be deleted
+    // Modpack may require update even if there's no files to update, because some files may need to be deleted
     public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
 
-    // Fast and freindly method to check if the modpack is up to date without modifying anything on disk
+    // Fast and friendly method to check if the modpack is up to date without modifying anything on disk
     public static UpdateCheckResult isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         if (serverModpackContent == null || serverModpackContent.list == null) {
             throw new IllegalArgumentException("Server modpack content list is null");
@@ -64,12 +63,12 @@ public class ModpackUtils {
 
         Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = ConcurrentHashMap.newKeySet();
 
-        serverModpackContent.list.parallelStream().forEach(serverItem -> {
+        serverModpackContent.list.forEach(serverItem -> {
             Path serverItemPath = CustomFileUtils.getPath(modpackDir, serverItem.file);
             if (!existingFileTree.contains(serverItemPath)) {
                 filesToUpdate.add(serverItem); // File is missing
                 return;
-            } else if (serverItem.editable) {
+            } else if (serverItem.editable) { // TODO check if this is enough of a check, what if user already had a file but there's provided the same by a new modpack version which wasnt in the modpack before?
                 LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
                 return;
             }
@@ -112,6 +111,37 @@ public class ModpackUtils {
 
         LOGGER.info("Modpack {} is up to date! Took {} ms", modpackDir, System.currentTimeMillis() - start);
         return new UpdateCheckResult(false, Set.of());
+    }
+
+    // TODO check more dirs, preferably with a database of all indexed files by their hashes
+    // This will scan the CWD with CustomFileUtils.getPathFromCWD(modpack.file) and if the file exist with matching hash, it won't be returned in the final set
+    // Used to avoid downloading files that are already present and valid on disk so we can just copy them over instead of downloading them all again
+    public static Set<Jsons.ModpackContentFields.ModpackContentItem> getOnlyNonExistingFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck) {
+        Set<Jsons.ModpackContentFields.ModpackContentItem> nonExistingFiles = new HashSet<>();
+
+        LOGGER.info("Checking for existing files to skip downloading...");
+        var time = System.currentTimeMillis();
+        int filesSkipped = 0;
+
+        for (var entry : filesToCheck) {
+            Path fileInCWD = CustomFileUtils.getPathFromCWD(entry.file);
+            if (Files.isRegularFile(fileInCWD)) {
+                String diskHash = ClientCacheUtils.computeHashIfNeeded(fileInCWD);
+                if (diskHash.equalsIgnoreCase(entry.sha1)) {
+                    LOGGER.debug("File already exists and matches hash, skipping download: {}", entry.file);
+                    filesSkipped++;
+                    continue;
+                }
+            }
+
+            nonExistingFiles.add(entry);
+        }
+
+        ClientCacheUtils.saveMetadataCache();
+
+        LOGGER.info("Finished checking for existing files in CWD, {} files left to download (skipped {} existing). Took {} ms", nonExistingFiles.size(), filesSkipped, System.currentTimeMillis() - time);
+
+        return nonExistingFiles;
     }
 
     public static boolean deleteFilesMarkedForDeletionByTheServer(Set<Jsons.ModpackContentFields.FileToDelete> filesToDeleteOnClient) {

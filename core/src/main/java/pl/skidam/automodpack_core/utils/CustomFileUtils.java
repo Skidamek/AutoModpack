@@ -14,7 +14,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.*;
 
 public class CustomFileUtils {
 
-    private static final Path CWD = Path.of(System.getProperty("user.dir"));
+    public static final Path CWD = Path.of(System.getProperty("user.dir"));
 
     public static void executeOrder66(Path file) {
         executeOrder66(file, true);
