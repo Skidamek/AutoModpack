@@ -7,6 +7,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 /*?}*/
 
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack_core.GlobalVariables;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.resources.Identifier;
@@ -23,7 +24,7 @@ import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
 *//*?} else {*/
 /*? if >=1.19.3 {*/
 import net.minecraft.core.Registry;
- /*?} else {*/
+/*?} else {*/
 /*import net.minecraft.core.Registry;
 *//*?}*/
 /*?}*/
@@ -80,6 +81,10 @@ public class AudioManager {
 
     public static void playMusic() {
         if (playing) return;
+        if (WAITING_MUSIC == null || WAITING_MUSIC.get() == null) {
+            GlobalVariables.LOGGER.error("WAITING_MUSIC is null?!");
+            return;
+        }
         if (SOUND_INSTANCE == null) {
             SOUND_INSTANCE = new CustomSoundInstance(WAITING_MUSIC);
         }
