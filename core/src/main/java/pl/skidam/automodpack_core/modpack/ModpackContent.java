@@ -94,7 +94,9 @@ public class ModpackContent {
             List<CompletableFuture<Jsons.ModpackContentFields.ModpackContentItem>> futures = filesToProcess.entrySet().stream()
                     .map(entry -> CompletableFuture.supplyAsync(() -> {
                         try {
-                            return generateContent(entry.getValue(), entry.getKey());
+                            var contentEntry = generateContent(entry.getValue(), entry.getKey());
+                            LOGGER.debug("Generated modpack content for {}", entry.getValue());
+                            return contentEntry;
                         } catch (Exception e) {
                             LOGGER.error("Error generating content for {}", entry.getValue(), e);
                             return null;
@@ -115,6 +117,8 @@ public class ModpackContent {
             if (list.isEmpty()) {
                 LOGGER.warn("Modpack is empty!");
                 return false;
+            } else {
+                LOGGER.info("Modpack generated with {} files!", list.size());
             }
         } catch (Exception e) {
             LOGGER.error("Error while generating modpack!", e);
