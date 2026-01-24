@@ -4,6 +4,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.*;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,9 +13,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 public class ModpackContent {
     public final Set<Jsons.ModpackContentFields.ModpackContentItem> list = ConcurrentHashMap.newKeySet();
@@ -25,22 +26,24 @@ public class ModpackContent {
     private final FileTreeScanner FORCE_COPY_FILES_TO_STANDARD_LOCATION;
     private final Path MODPACK_DIR;
     private final ThreadPoolExecutor CREATION_EXECUTOR;
+    private final FileMetadataCache metadataCache;
     private final Map<String, String> sha1MurmurMapPreviousContent = new HashMap<>();
 
-    public ModpackContent(String modpackName, Path cwd, Path modpackDir, Set<String> syncedFiles, Set<String> allowEditsInFiles, Set<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR) {
+    public ModpackContent(String modpackName, Path cwd, Path modpackDir, Set<String> syncedFiles, Set<String> allowEditsInFiles, Set<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR, FileMetadataCache metadataCache) {
         this.MODPACK_NAME = modpackName;
         this.MODPACK_DIR = modpackDir;
+        this.CREATION_EXECUTOR = CREATION_EXECUTOR;
+        this.metadataCache = metadataCache;
         Set<Path> directoriesToSearch = new HashSet<>(2);
         if (MODPACK_DIR != null) directoriesToSearch.add(MODPACK_DIR);
         if (cwd != null) {
             directoriesToSearch.add(cwd);
-            this.SYNCED_FILES_CARDS = new FileTreeScanner(syncedFiles, Set.of(cwd)); // Synced files should search only in cwd
+            this.SYNCED_FILES_CARDS = new FileTreeScanner(syncedFiles, Set.of(cwd));
         } else {
             this.SYNCED_FILES_CARDS = new FileTreeScanner(syncedFiles, Set.of());
         }
         this.EDITABLE_CARDS = new FileTreeScanner(allowEditsInFiles, directoriesToSearch);
         this.FORCE_COPY_FILES_TO_STANDARD_LOCATION = new FileTreeScanner(forceCopyFilesToStandardLocation, directoriesToSearch);
-        this.CREATION_EXECUTOR = CREATION_EXECUTOR;
     }
 
     public String getModpackName() {
@@ -78,26 +81,36 @@ public class ModpackContent {
                 previousContent.list.forEach(item -> sha1MurmurMapPreviousContent.put(item.sha1, item.murmur));
             });
 
-            List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
+            Map<String, Path> filesToProcess = new HashMap<>();
 
-            // host-modpack generation
+            SYNCED_FILES_CARDS.getMatchedPaths().values().forEach(path -> filesToProcess.put(SmartFileUtils.formatPath(path, MODPACK_DIR), path));
+
             if (MODPACK_DIR != null) {
-                LOGGER.info("Syncing {}...", MODPACK_DIR.getFileName());
-                try (var pathStream = Files.walk(MODPACK_DIR)) {
-                    creationFutures.addAll(generateAsync(pathStream.toList()));
-
-                    // Wait till finish
-                    creationFutures.forEach((CompletableFuture::join));
-                    creationFutures.clear();
+                try (Stream<Path> stream = Files.walk(MODPACK_DIR)) { // in case there any files with the same relative path, we prefer from MODPACK_DIR, this will override previous entries
+                    stream.forEach(path -> filesToProcess.put(SmartFileUtils.formatPath(path, MODPACK_DIR), path));
                 }
             }
 
-            // synced files generation
-            creationFutures.addAll(generateAsync(SYNCED_FILES_CARDS.getMatchedPaths().values().stream().toList()));
+            List<CompletableFuture<Jsons.ModpackContentFields.ModpackContentItem>> futures = filesToProcess.entrySet().stream()
+                    .map(entry -> CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return generateContent(entry.getValue(), entry.getKey());
+                        } catch (Exception e) {
+                            LOGGER.error("Error generating content for {}", entry.getValue(), e);
+                            return null;
+                        }
+                    }, CREATION_EXECUTOR))
+                    .toList();
 
-            // Wait till finish
-            creationFutures.forEach((CompletableFuture::join));
-            creationFutures.clear();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            for (var future : futures) {
+                Jsons.ModpackContentFields.ModpackContentItem item = future.join();
+                if (item != null) {
+                    list.add(item);
+                    pathsMap.put(item.sha1, SmartFileUtils.getPathFromCWD(item.file));
+                }
+            }
 
             if (list.isEmpty()) {
                 LOGGER.warn("Modpack is empty!");
@@ -110,7 +123,7 @@ public class ModpackContent {
 
         saveModpackContent(computedFilesToDelete);
         if (hostServer != null) {
-            hostServer.addPaths(pathsMap);
+            hostServer.setPaths(pathsMap);
         }
 
         return true;
@@ -120,7 +133,6 @@ public class ModpackContent {
         var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(MODPACK_DIR);
         return optionalModpackContentFile.map(ConfigTools::loadModpackContent);
     }
-
 
     public boolean loadPreviousContent() {
         var optionalPreviousModpackContent = getPreviousContent();
@@ -143,16 +155,14 @@ public class ModpackContent {
         }
 
         if (hostServer != null) {
-            hostServer.addPaths(pathsMap);
+            hostServer.setPaths(pathsMap);
         }
 
-        // set all new variables
         saveModpackContent(previousModpackContent.nonModpackFilesToDelete);
 
         return true;
     }
 
-    // This is important to make it synchronized otherwise it could corrupt the file and crash
     public synchronized void saveModpackContent(Set<Jsons.ModpackContentFields.FileToDelete> nonModpackFilesToDelete) {
         if (nonModpackFilesToDelete == null) {
             throw new IllegalArgumentException("filesToDelete is null");
@@ -172,20 +182,14 @@ public class ModpackContent {
         }
     }
 
-    // For every 6 files we generate content in parallel
-    private List<CompletableFuture<Void>> generateAsync(List<Path> files) {
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        for (int i = 0; i < files.size(); i += 6) {
-            List<Path> subList = files.subList(i, Math.min(files.size(), i + 6));
-            futures.add(CompletableFuture.runAsync(() -> subList.forEach(this::generate), CREATION_EXECUTOR));
-        }
-
-        return futures;
+    public CompletableFuture<Void> replaceAsync(Path file) {
+        return CompletableFuture.runAsync(() -> replace(file), CREATION_EXECUTOR);
     }
 
-    private void generate(Path file) {
+    public void replace(Path file) {
+        remove(file);
         try {
-            Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file);
+            Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file, SmartFileUtils.formatPath(file, MODPACK_DIR));
             if (item != null) {
                 LOGGER.info("generated content for {}", item.file);
                 synchronized (list) {
@@ -194,21 +198,11 @@ public class ModpackContent {
                 pathsMap.put(item.sha1, file);
             }
         } catch (Exception e) {
-            LOGGER.error("Error while generating content for: " + file + " generated from: " + MODPACK_DIR, e);
+            LOGGER.error("Error while replacing content for: " + file, e);
         }
     }
 
-    public CompletableFuture<Void> replaceAsync(Path file) {
-        return CompletableFuture.runAsync(() -> replace(file), CREATION_EXECUTOR);
-    }
-
-    public void replace(Path file) {
-        remove(file);
-        generate(file);
-    }
-
     public void remove(Path file) {
-
         String modpackFile = SmartFileUtils.formatPath(file, MODPACK_DIR);
 
         synchronized (list) {
@@ -223,19 +217,17 @@ public class ModpackContent {
         }
     }
 
-    // check if file is inside automodpack Dir or its sub-dirs, unless it's inside hostModpackDir with exception of hostModpackContentFile
     public static boolean isInnerFile(Path file) {
         Path normalizedFilePath = file.toAbsolutePath().normalize();
-        boolean isInner = normalizedFilePath.startsWith(automodpackDir.toAbsolutePath().normalize()) &&
-                !normalizedFilePath.startsWith(hostModpackDir.toAbsolutePath().normalize());
-        if (!isInner && normalizedFilePath.equals(hostModpackContentFile.toAbsolutePath().normalize())) {
+        boolean isInner = normalizedFilePath.startsWith(automodpackDir.toAbsolutePath().normalize()) && !normalizedFilePath.startsWith(hostModpackDir.toAbsolutePath().normalize());
+        if (!isInner && normalizedFilePath.equals(hostModpackContentFile.toAbsolutePath().normalize())) { // special case, since its inside hostModpackDir
             return true;
         }
 
         return isInner;
     }
 
-    private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file) throws Exception {
+    private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file, final String formattedFile) throws Exception {
         if (!Files.isRegularFile(file)) return null;
 
         if (serverConfig == null) {
@@ -247,9 +239,6 @@ public class ModpackContent {
             return null;
         }
 
-        String formattedFile = SmartFileUtils.formatPath(file, MODPACK_DIR);
-
-        // modpackFile is relative path to ~/.minecraft/ (content format) so if it starts with /automodpack/ we dont want it
         if (formattedFile.startsWith("/automodpack/")) {
             return null;
         }
@@ -308,13 +297,12 @@ public class ModpackContent {
             type = "other";
         }
 
-        String sha1 = SmartFileUtils.getHash(file);
+        String sha1 = metadataCache != null ? metadataCache.getOrComputeHash(file) : SmartFileUtils.getHash(file);
 
         // For CF API
         String murmur = null;
         if (type.equals("mod") || type.equals("shader") || type.equals("resourcepack")) {
-            // get murmur hash from previousContent.list of item with same sha1
-            murmur = sha1MurmurMapPreviousContent.get(sha1);
+            murmur = sha1MurmurMapPreviousContent.get(sha1); // Get from cache
             if (murmur == null) {
                 murmur = SmartFileUtils.getCurseforgeMurmurHash(file);
             }

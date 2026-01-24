@@ -99,7 +99,7 @@ class ModpackTest {
         Constants.serverConfig = new Jsons.ServerConfigFieldsV2();
         Constants.serverConfig.autoExcludeUnnecessaryFiles = false;
 
-        ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable), new HashSet<>(), new ModpackExecutor().getExecutor());
+        ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable), new HashSet<>(), new ModpackExecutor().getExecutor(), null);
         content.create();
 
         boolean correct = true;
