@@ -9,6 +9,7 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -45,11 +46,11 @@ public class FileInspection {
     public record Mod(String modID, String hash, Collection<String> providesIDs, String modVersion, Path modPath, LoaderManagerService.EnvironmentType environmentType, Collection<String> dependencies) {}
     public record HashPathPair(String hash, Path path) { }
 
-    public static Mod getMod(Path file) {
+    public static Mod getMod(Path file, FileMetadataCache cache) {
         if (!Files.isRegularFile(file)) return null;
         if (!file.getFileName().toString().endsWith(".jar")) return null;
 
-        String hash = SmartFileUtils.getHash(file);
+        String hash = cache != null ? cache.getHashOrNull(file) : SmartFileUtils.getHash(file);
         if (hash == null) {
             LOGGER.error("Failed to get hash for file: {}", file);
             return null;

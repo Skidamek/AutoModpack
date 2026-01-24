@@ -450,7 +450,7 @@ public class ModpackUpdater {
             try (Stream<Path> stream = Files.list(modpackModsDir)) {
                 stream.forEach(path -> {
                     modpackMods.add(path);
-                    FileInspection.Mod mod = FileInspection.getMod(path);
+                    FileInspection.Mod mod = FileInspection.getMod(path, cache);
                     if (mod != null) {
                         modpackModList.add(mod);
                     }
@@ -463,7 +463,7 @@ public class ModpackUpdater {
         if (Files.exists(standardModsDir)) {
             try (Stream<Path> stream = Files.list(standardModsDir)) {
                 stream.forEach(path -> {
-                    FileInspection.Mod mod = FileInspection.getMod(path);
+                    FileInspection.Mod mod = FileInspection.getMod(path, cache);
                     if (mod != null) {
                         standardModList.add(mod);
                     }
