@@ -37,7 +37,7 @@ public class NettyServer {
     public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
     public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
     private final Map<Channel, String> connections = new ConcurrentHashMap<>();
-    private final Map<String, Path> paths = new ConcurrentHashMap<>();
+    private Map<String, Path> paths = new ConcurrentHashMap<>();
     private MultithreadEventLoopGroup eventLoopGroup;
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
@@ -64,8 +64,8 @@ public class NettyServer {
         return certificateFingerprint;
     }
 
-    public void addPaths(ObservableMap<String, Path> paths) {
-        this.paths.putAll(paths.getMap());
+    public void setPaths(ObservableMap<String, Path> paths) {
+        this.paths = paths.getMap();
         paths.addOnPutCallback(this.paths::put);
         paths.addOnRemoveCallback(this.paths::remove);
     }

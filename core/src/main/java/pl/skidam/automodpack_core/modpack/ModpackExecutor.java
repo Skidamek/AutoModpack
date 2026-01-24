@@ -1,10 +1,10 @@
 package pl.skidam.automodpack_core.modpack;
 
 import pl.skidam.automodpack_core.utils.*;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -13,6 +13,11 @@ import static pl.skidam.automodpack_core.Constants.*;
 public class ModpackExecutor {
     private final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
     public final Map<String, ModpackContent> modpacks = new ConcurrentHashMap<>();
+    private final FileMetadataCache fileMetadataCache;
+
+    public ModpackExecutor() {
+        this.fileMetadataCache = new FileMetadataCache(hashCacheDBFile);
+    }
 
     private ModpackContent init() {
         if (isGenerating()) {
@@ -29,11 +34,11 @@ public class ModpackExecutor {
                 Files.createDirectory(hostContentModpackDir.resolve("resourcepacks"));
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.error("Failed to create modpack content directory!", e);
+            return null;
         }
 
-        Path cwd = Path.of(System.getProperty("user.dir"));
-        return new ModpackContent(serverConfig.modpackName, cwd, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, CREATION_EXECUTOR);
+        return new ModpackContent(serverConfig.modpackName, SmartFileUtils.CWD, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, CREATION_EXECUTOR, fileMetadataCache);
     }
 
     public boolean generateNew(ModpackContent content) {
@@ -71,5 +76,6 @@ public class ModpackExecutor {
 
     public void stop() {
         CREATION_EXECUTOR.shutdown();
+        fileMetadataCache.close();
     }
 }
