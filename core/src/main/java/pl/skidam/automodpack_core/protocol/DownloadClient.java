@@ -1,11 +1,12 @@
 package pl.skidam.automodpack_core.protocol;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -291,6 +292,10 @@ class Connection implements AutoCloseable {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean busy = new AtomicBoolean(false);
 
+    // Reuse this buffer for reading from socket to avoid allocation per frame.
+    // Size = Default Chunk + Header overhead (approx) + Safety margin
+    private final byte[] networkInputBuffer = new byte[MAX_CHUNK_SIZE + 8192];
+
     public Connection(PreValidationConnection preValidationConnection, byte[] secretBytes) throws IOException {
         if (preValidationConnection.getSocket() == null || preValidationConnection.getSocket().isClosed()) {
             throw new SSLHandshakeException("Server certificate invalid, connection closed");
@@ -439,61 +444,62 @@ class Connection implements AutoCloseable {
             throw new IOException("Frame original length (" + originalLength + ") exceeds chunk size (" + this.chunkSize + ")");
         }
 
-        byte[] compressed = new byte[compressedLength];
-        in.readFully(compressed);
+        if (compressedLength > networkInputBuffer.length) {
+            throw new IOException("Compressed length exceeds buffer capacity");
+        }
 
-        return getCompressionCodec().decompress(compressed, originalLength);
+        in.readFully(networkInputBuffer, 0, compressedLength);
+
+        return getCompressionCodec().decompress(networkInputBuffer, 0, compressedLength, originalLength);
     }
 
     /**
      * Processes the server response stream. Expects Header -> Data Frames -> EOT.
      */
     private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
-        try (DataInputStream headerIn = new DataInputStream(new ByteArrayInputStream(readProtocolMessageFrame()))) {
-            byte version = headerIn.readByte();
-            byte messageType = headerIn.readByte();
+        byte[] headerData = readProtocolMessageFrame();
+        ByteBuffer headerWrap = ByteBuffer.wrap(headerData);
 
-            if (messageType == ERROR) {
-                int errLen = headerIn.readInt();
-                byte[] errBytes = new byte[errLen];
-                headerIn.readFully(errBytes);
-                throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
-            }
+        byte version = headerWrap.get();
+        byte messageType = headerWrap.get();
 
-            if (messageType == END_OF_TRANSMISSION) {
-                return destination;
-            }
+        if (messageType == ERROR) {
+            int errLen = headerWrap.getInt();
+            byte[] errBytes = new byte[errLen];
+            headerWrap.get(errBytes);
+            throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
+        }
 
-            if (messageType != FILE_RESPONSE_TYPE) {
-                throw new IOException("Unexpected message type: " + messageType);
-            }
-
-            long expectedFileSize = headerIn.readLong();
-            long receivedBytes = 0;
-
-            try (OutputStream fos = new BufferedOutputStream(Files.newOutputStream(destination,
-                    StandardOpenOption.CREATE,
-                    StandardOpenOption.TRUNCATE_EXISTING,
-                    StandardOpenOption.WRITE))) {
-
-                while (receivedBytes < expectedFileSize) {
-                    byte[] dataFrame = readProtocolMessageFrame();
-                    int toWrite = Math.min(dataFrame.length, (int) (expectedFileSize - receivedBytes));
-                    fos.write(dataFrame, 0, toWrite);
-                    receivedBytes += toWrite;
-                    if (chunkCallback != null) chunkCallback.accept(toWrite);
-                }
-            }
-
-            try (DataInputStream eotIn = new DataInputStream(new ByteArrayInputStream(readProtocolMessageFrame()))) {
-                byte ver = eotIn.readByte();
-                byte eotType = eotIn.readByte();
-                if (ver != version || eotType != END_OF_TRANSMISSION) {
-                    throw new IOException("Invalid EOT frame");
-                }
-            }
+        if (messageType == END_OF_TRANSMISSION) {
             return destination;
         }
+
+        if (messageType != FILE_RESPONSE_TYPE) {
+            throw new IOException("Unexpected message type: " + messageType);
+        }
+
+        long expectedFileSize = headerWrap.getLong();
+        long receivedBytes = 0;
+
+        try (OutputStream fos = new BufferedOutputStream(Files.newOutputStream(destination,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE))) {
+
+            while (receivedBytes < expectedFileSize) {
+                byte[] dataFrame = readProtocolMessageFrame();
+                int toWrite = Math.min(dataFrame.length, (int) (expectedFileSize - receivedBytes));
+                fos.write(dataFrame, 0, toWrite);
+                receivedBytes += toWrite;
+                if (chunkCallback != null) chunkCallback.accept(toWrite);
+            }
+        }
+
+        byte[] eotData = readProtocolMessageFrame();
+        if (eotData.length < 2 || eotData[0] != version || eotData[1] != END_OF_TRANSMISSION) {
+            throw new IOException("Invalid EOT frame");
+        }
+        return destination;
     }
 
     private byte sendCompressionConfig(byte desiredCompression) throws IOException {

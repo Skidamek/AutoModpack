@@ -7,7 +7,7 @@ import io.netty.handler.ssl.NotSslRecordException;
 
 import javax.net.ssl.SSLHandshakeException;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 /**
  * A fallback error handler that logs caught exceptions. In order to reduce verbosity, TLS handshake errors are printed

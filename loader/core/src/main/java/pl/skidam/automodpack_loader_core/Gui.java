@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_loader_core;
 
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 import javax.imageio.ImageIO;
@@ -117,7 +117,7 @@ public class Gui {
 
             if (javaPath == null) throw new RuntimeException("can't find java executable in " + javaBinDir);
 
-            Process process = new ProcessBuilder(javaPath.toString(), "-Xmx100M", "-cp", GlobalVariables.THIS_MOD_JAR.toString(), Gui.class.getName(), "--AM.text=" + text)
+            Process process = new ProcessBuilder(javaPath.toString(), "-Xmx100M", "-cp", Constants.THIS_MOD_JAR.toString(), Gui.class.getName(), "--AM.text=" + text)
                     .redirectOutput(ProcessBuilder.Redirect.INHERIT)
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
                     .start();

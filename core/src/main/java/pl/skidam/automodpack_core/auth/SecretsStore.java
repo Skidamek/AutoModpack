@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.auth;
 
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 
@@ -52,8 +52,8 @@ public class SecretsStore {
         }
     }
 
-    private static final SecretsCache hostSecrets = new SecretsCache(GlobalVariables.serverSecretsFile);
-    private static final SecretsCache clientSecrets = new SecretsCache(GlobalVariables.clientSecretsFile);
+    private static final SecretsCache hostSecrets = new SecretsCache(Constants.serverSecretsFile);
+    private static final SecretsCache clientSecrets = new SecretsCache(Constants.clientSecretsFile);
 
     public static Map.Entry<String, Secrets.Secret>  getHostSecret(String secret) {
         hostSecrets.load();

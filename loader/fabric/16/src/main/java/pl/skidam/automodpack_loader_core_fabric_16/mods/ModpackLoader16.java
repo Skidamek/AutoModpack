@@ -13,15 +13,15 @@ import net.fabricmc.loader.impl.metadata.VersionOverrides;
 import net.fabricmc.loader.impl.util.SystemProperties;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
-import pl.skidam.automodpack_core.utils.ClientCacheUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_loader_core_fabric.FabricLanguageAdapter;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_loader_core_fabric.FabricLoaderImplAccessor.*;
 
 @SuppressWarnings({"unchecked", "unused"})
@@ -59,7 +59,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
     }
 
     @Override
-    public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir) {
+    public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir, FileMetadataCache cache) {
         Path modpackModsDir = modpackDir.resolve("mods");
         Path standardModsDir = MODS_DIR;
 
@@ -148,7 +148,7 @@ public class ModpackLoader16 implements ModpackLoaderService {
             if (!Files.exists(path))
                 continue;
 
-            String hash = ClientCacheUtils.computeHashIfNeeded(path);
+            String hash = cache.getHashOrNull(path);
             if (hash == null)
                 continue;
 

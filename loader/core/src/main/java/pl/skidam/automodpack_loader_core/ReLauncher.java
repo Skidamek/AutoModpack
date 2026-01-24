@@ -10,7 +10,7 @@ import java.awt.*;
 import java.nio.file.Path;
 import java.util.concurrent.Semaphore;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class ReLauncher {
 

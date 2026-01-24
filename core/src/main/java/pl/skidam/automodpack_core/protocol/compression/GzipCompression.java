@@ -32,7 +32,12 @@ public class GzipCompression implements CompressionCodec {
 
     @Override
     public byte[] decompress(byte[] compressed, int originalLength) throws IOException {
-        try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(compressed);
+        return decompress(compressed, 0, compressed.length, originalLength);
+    }
+
+    @Override
+    public byte[] decompress(byte[] compressedBuffer, int offset, int length, int originalLength) throws IOException {
+        try (ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(compressedBuffer, offset, length);
              GZIPInputStream gzipInputStream = new GZIPInputStream(byteArrayInputStream)) {
 
             byte[] decompressed = new byte[originalLength];

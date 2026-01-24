@@ -3,18 +3,17 @@ package pl.skidam.automodpack_core.modpack;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.Jsons;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static pl.skidam.automodpack_core.GlobalVariables.DEBUG;
+import static pl.skidam.automodpack_core.Constants.DEBUG;
 
 class ModpackTest {
 
@@ -97,8 +96,8 @@ class ModpackTest {
                 "ModpackContentItems(file=/mods/server-mod-1.20.jar, size=1, type=other, editable=false, sha1=86f7e437faa5a7fce15d1ddcb9eaeaea377667b8, murmur=null)"
         );
 
-        GlobalVariables.serverConfig = new Jsons.ServerConfigFieldsV2();
-        GlobalVariables.serverConfig.autoExcludeUnnecessaryFiles = false;
+        Constants.serverConfig = new Jsons.ServerConfigFieldsV2();
+        Constants.serverConfig.autoExcludeUnnecessaryFiles = false;
 
         ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable), new HashSet<>(), new ModpackExecutor().getExecutor());
         content.create();

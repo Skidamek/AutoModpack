@@ -7,7 +7,7 @@ import org.tomlj.Toml;
 import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 
 import java.io.BufferedReader;
@@ -23,12 +23,12 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 public class FileInspection {
 
     private static final Gson GSON = new Gson();
-    private static final String LOADER = GlobalVariables.LOADER;
+    private static final String LOADER = Constants.LOADER;
 
     public static boolean isMod(Path file) {
         if (!file.getFileName().toString().endsWith(".jar") || !Files.exists(file)) {
@@ -44,28 +44,15 @@ public class FileInspection {
 
     public record Mod(String modID, String hash, Collection<String> providesIDs, String modVersion, Path modPath, LoaderManagerService.EnvironmentType environmentType, Collection<String> dependencies) {}
     public record HashPathPair(String hash, Path path) { }
-    private static final Map<HashPathPair, Mod> modCache = new HashMap<>();
 
     public static Mod getMod(Path file) {
         if (!Files.isRegularFile(file)) return null;
         if (!file.getFileName().toString().endsWith(".jar")) return null;
 
-        String hash = CustomFileUtils.getHash(file);
+        String hash = SmartFileUtils.getHash(file);
         if (hash == null) {
             LOGGER.error("Failed to get hash for file: {}", file);
             return null;
-        }
-
-        HashPathPair hashPathPair = new HashPathPair(hash, file);
-        if (modCache.containsKey(hashPathPair)) {
-            return modCache.get(hashPathPair);
-        }
-
-        for (Mod mod : GlobalVariables.LOADER_MANAGER.getModList()) {
-            if (hash.equals(mod.hash)) {
-                modCache.put(hashPathPair, mod);
-                return mod;
-            }
         }
 
         // Open FS once for all metadata extractions
@@ -79,9 +66,7 @@ public class FileInspection {
                 Set<String> providesIDs = getProvidedIDs(fs);
 
                 if (modVersion != null && dependencies != null) {
-                    var mod = new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
-                    modCache.put(hashPathPair, mod);
-                    return mod;
+                    return new Mod(modId, hash, providesIDs, modVersion, file, environmentType, dependencies);
                 }
 
                 LOGGER.error("Not enough mod information for file: {} modId: {}, modVersion: {}, dependencies: {}", file, modId, modVersion, dependencies);

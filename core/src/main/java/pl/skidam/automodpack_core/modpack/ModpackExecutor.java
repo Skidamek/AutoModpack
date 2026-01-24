@@ -8,11 +8,11 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class ModpackExecutor {
     private final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
-    public final Map<String, ModpackContent> modpacks = Collections.synchronizedMap(new HashMap<>());
+    public final Map<String, ModpackContent> modpacks = new ConcurrentHashMap<>();
 
     private ModpackContent init() {
         if (isGenerating()) {

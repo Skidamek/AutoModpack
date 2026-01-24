@@ -12,8 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-import static pl.skidam.automodpack_core.GlobalVariables.AM_VERSION;
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.AM_VERSION;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 @SuppressWarnings("deprecation")
 public class Json {

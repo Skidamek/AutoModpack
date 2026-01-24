@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.protocol.netty;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
@@ -21,6 +21,8 @@ import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
@@ -34,8 +36,8 @@ public class NettyServer {
     public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("COMPRESSION_TYPE");
     public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
     public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
-    private final Map<Channel, String> connections = Collections.synchronizedMap(new HashMap<>());
-    private final Map<String, Path> paths = Collections.synchronizedMap(new HashMap<>());
+    private final Map<Channel, String> connections = new ConcurrentHashMap<>();
+    private final Map<String, Path> paths = new ConcurrentHashMap<>();
     private MultithreadEventLoopGroup eventLoopGroup;
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port

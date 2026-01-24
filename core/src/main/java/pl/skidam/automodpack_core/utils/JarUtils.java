@@ -4,7 +4,7 @@ import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.security.CodeSource;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 public class JarUtils {
 

@@ -12,7 +12,7 @@ import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
 import net.minecraft.resources.Identifier;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 // credits to fabric api
 public class ClientLoginNetworkAddon {

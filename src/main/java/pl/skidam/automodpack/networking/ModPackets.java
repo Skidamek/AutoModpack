@@ -16,7 +16,7 @@ import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 
 import java.net.InetSocketAddress;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class ModPackets {
     public static final Identifier HANDSHAKE = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.HANDSHAKE);
