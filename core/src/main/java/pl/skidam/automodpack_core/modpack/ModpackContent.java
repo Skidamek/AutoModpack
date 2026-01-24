@@ -297,7 +297,7 @@ public class ModpackContent {
             type = "other";
         }
 
-        String sha1 = metadataCache != null ? metadataCache.getOrComputeHash(file) : SmartFileUtils.getHash(file);
+        String sha1 = metadataCache != null ? metadataCache.getHashOrNull(file) : SmartFileUtils.getHash(file);
 
         // For CF API
         String murmur = null;

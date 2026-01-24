@@ -316,7 +316,7 @@ public class ModpackUtils {
                 needsRestart = true;
                 LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
                 SmartFileUtils.copyFile(modPath, standardModPath);
-                var newMod = FileInspection.getMod(standardModPath);
+                var newMod = FileInspection.getMod(standardModPath, cache);
                 if (newMod != null) standardModList.add(newMod); // important
             }
         }
