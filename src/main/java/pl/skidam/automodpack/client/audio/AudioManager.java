@@ -14,12 +14,12 @@ import net.minecraft.sounds.SoundEvent;
 /*? if neoforge {*/
 /*import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
-import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
+import static pl.skidam.automodpack_core.Constants.MOD_ID;
 *//*?} else if forge {*/
 /*import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
-import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
+import static pl.skidam.automodpack_core.Constants.MOD_ID;
 *//*?} else {*/
 /*? if >=1.19.3 {*/
 import net.minecraft.core.Registry;

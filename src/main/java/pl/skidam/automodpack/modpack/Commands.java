@@ -22,7 +22,7 @@ import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 
 import static net.minecraft.commands.Commands.literal;
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class Commands {
 

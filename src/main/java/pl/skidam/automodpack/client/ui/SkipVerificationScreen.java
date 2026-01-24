@@ -10,7 +10,7 @@ import net.minecraft.client.gui.screens.Screen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 
 public class SkipVerificationScreen extends VersionedScreen {
     private final Screen verificationScreen;
@@ -96,7 +96,7 @@ public class SkipVerificationScreen extends VersionedScreen {
             }
             validatedCallback.run();
         } else {
-            GlobalVariables.LOGGER.error("Skip verification text mismatch, try again");
+            Constants.LOGGER.error("Skip verification text mismatch, try again");
             if (this.minecraft != null) {
                 /*? if > 1.21.1 {*/
                 this.minecraft.getToastManager().addToast(failedToast);

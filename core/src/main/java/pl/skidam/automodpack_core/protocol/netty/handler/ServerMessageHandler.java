@@ -1,10 +1,9 @@
 package pl.skidam.automodpack_core.protocol.netty.handler;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -56,7 +55,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         switch (msg.getType()) {
             case ECHO_TYPE:
                 EchoMessage echoMsg = (EchoMessage) msg;
-                ByteBuf echoBuf = Unpooled.buffer(1 + 1 + msg.getSecret().length + echoMsg.getData().length);
+                ByteBuf echoBuf = ctx.alloc().buffer(1 + 1 + msg.getSecret().length + echoMsg.getData().length);
                 echoBuf.writeByte(clientProtocolVersion);
                 echoBuf.writeByte(ECHO_TYPE);
                 echoBuf.writeBytes(echoMsg.getSecret());
@@ -83,7 +82,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
             hashes.add(new String(hash));
         }
         LOGGER.info("Received refresh request for files of hashes: {}", hashes);
-        Set<CompletableFuture<Void>> creationFutures = new HashSet<>();
+        List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
         Set<ModpackContent> modpacks = new HashSet<>();
 
         for (String hash : hashes) {
@@ -156,8 +155,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         final Path path = optionalPath.get();
         final long fileSize = Files.size(path);
 
-        // Send file response header: version, FILE_RESPONSE type, then file size (8 bytes)
-        ByteBuf responseHeader = Unpooled.buffer(1 + 1 + 8);
+        ByteBuf responseHeader = ctx.alloc().buffer(1 + 1 + 8);
         responseHeader.writeByte(this.protocolVersion);
         responseHeader.writeByte(FILE_RESPONSE_TYPE);
         responseHeader.writeLong(fileSize);
@@ -204,7 +202,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
     private void sendError(ChannelHandlerContext ctx, byte version, String errorMessage) {
         byte[] errMsgBytes = errorMessage.getBytes(CharsetUtil.UTF_8);
-        ByteBuf errorBuf = Unpooled.buffer(1 + 1 + 4 + errMsgBytes.length);
+        ByteBuf errorBuf = ctx.alloc().buffer(1 + 1 + 4 + errMsgBytes.length);
         errorBuf.writeByte(version);
         errorBuf.writeByte(ERROR);
         errorBuf.writeInt(errMsgBytes.length);
@@ -214,7 +212,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
     }
 
     private void sendEOT(ChannelHandlerContext ctx) {
-        ByteBuf eot = Unpooled.buffer(2);
+        ByteBuf eot = ctx.alloc().buffer(2);
         eot.writeByte(this.protocolVersion);
         eot.writeByte(END_OF_TRANSMISSION);
         ctx.writeAndFlush(eot);

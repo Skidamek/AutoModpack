@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_loader_core.utils;
 
 import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -15,7 +15,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.zip.GZIPInputStream;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class DownloadManager {
     private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
@@ -38,7 +38,7 @@ public class DownloadManager {
     // TODO: make caching system which detects if the same file was downloaded before and if so copy it instead of downloading again
 
     public void attachDownloadClient(DownloadClient downloadClient) {
-         this.downloadClient = downloadClient;
+        this.downloadClient = downloadClient;
     }
 
     public void download(Path file, String sha1, List<String> urls, Runnable successCallback, Runnable failureCallback) {
@@ -79,7 +79,7 @@ public class DownloadManager {
             boolean failed = true;
 
             if (Files.exists(queuedDownload.file)) {
-                String hash = CustomFileUtils.getHash(queuedDownload.file);
+                String hash = SmartFileUtils.getHash(queuedDownload.file);
 
                 if (Objects.equals(hash, hashPathPair.hash())) {
                     // Runs on success
@@ -93,7 +93,7 @@ public class DownloadManager {
 
             if (failed) {
                 bytesToDownload += queuedDownload.file.toFile().length(); // Add size of the whole file again because we will try to download it again
-                CustomFileUtils.executeOrder66(queuedDownload.file);
+                SmartFileUtils.executeOrder66(queuedDownload.file);
 
                 if (!interrupted) {
                     if (queuedDownload.attempts < (numberOfIndexes + 1) * MAX_DOWNLOAD_ATTEMPTS) {
@@ -139,14 +139,14 @@ public class DownloadManager {
         Path outFile = queuedDownload.file;
 
         if (Files.exists(outFile)) {
-            if (Objects.equals(hashPathPair.hash(), CustomFileUtils.getHash(outFile))) {
+            if (Objects.equals(hashPathPair.hash(), SmartFileUtils.getHash(outFile))) {
                 return;
             } else {
-                CustomFileUtils.executeOrder66(outFile);
+                SmartFileUtils.executeOrder66(outFile);
             }
         }
 
-        CustomFileUtils.setupFilePaths(outFile);
+        SmartFileUtils.setupFilePaths(outFile);
 
         var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), outFile, (bytes) -> {
             bytesDownloaded += bytes;
@@ -160,25 +160,26 @@ public class DownloadManager {
         Path outFile = queuedDownload.file;
 
         if (Files.exists(outFile)) {
-            if (Objects.equals(hashPathPair.hash(), CustomFileUtils.getHash(outFile))) {
+            if (Objects.equals(hashPathPair.hash(), SmartFileUtils.getHash(outFile))) {
                 return;
             } else {
-                CustomFileUtils.executeOrder66(outFile);
+                SmartFileUtils.executeOrder66(outFile);
             }
         }
 
-        CustomFileUtils.setupFilePaths(outFile);
+        SmartFileUtils.setupFilePaths(outFile);
 
         URLConnection connection = getHttpConnection(url);
 
-        try (OutputStream outputStream = new FileOutputStream(outFile.toFile());
-             InputStream rawInputStream = new BufferedInputStream(connection.getInputStream(), NetUtils.DEFAULT_CHUNK_SIZE);
-             InputStream inputStream = ("gzip".equals(connection.getHeaderField("Content-Encoding"))) ?
-                     new GZIPInputStream(rawInputStream) : rawInputStream) {
+        InputStream rawInputStream = connection.getInputStream();
+        InputStream inputStream = ("gzip".equals(connection.getHeaderField("Content-Encoding"))) ? new GZIPInputStream(rawInputStream) : rawInputStream;
+
+        try (OutputStream outputStream = new BufferedOutputStream(new FileOutputStream(outFile.toFile()), 64 * 1024);
+             InputStream is = inputStream) {
 
             byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
             int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
+            while ((bytesRead = is.read(buffer)) != -1) {
                 bytesDownloaded += bytesRead;
                 speedMeter.addDownloadedBytes(bytesRead);
                 outputStream.write(buffer, 0, bytesRead);
@@ -191,7 +192,6 @@ public class DownloadManager {
     }
 
     private URLConnection getHttpConnection(String url) throws IOException {
-
         LOGGER.info("Downloading from {}", url);
 
         URL connectionUrl = new URL(url);
@@ -250,7 +250,7 @@ public class DownloadManager {
         queuedDownloads.clear();
         downloadsInProgress.forEach((url, downloadData) -> {
             downloadData.future.cancel(true);
-            CustomFileUtils.executeOrder66(downloadData.file);
+            SmartFileUtils.executeOrder66(downloadData.file);
         });
 
         // TODO Release the number of occupied permits, not all

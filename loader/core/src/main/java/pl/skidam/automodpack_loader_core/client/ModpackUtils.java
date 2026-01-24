@@ -5,10 +5,11 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.utils.ClientCacheUtils;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 import java.io.*;
@@ -24,8 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
-import static pl.skidam.automodpack_core.utils.ClientCacheUtils.*;
+import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.utils.LegacyClientCacheUtils.*;
 
 public class ModpackUtils {
 
@@ -63,33 +64,26 @@ public class ModpackUtils {
 
         Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = ConcurrentHashMap.newKeySet();
 
-        serverModpackContent.list.forEach(serverItem -> {
-            Path serverItemPath = CustomFileUtils.getPath(modpackDir, serverItem.file);
-            if (!existingFileTree.contains(serverItemPath)) {
-                filesToUpdate.add(serverItem); // File is missing
-                return;
-            } else if (serverItem.editable) { // TODO check if this is enough of a check, what if user already had a file but there's provided the same by a new modpack version which wasnt in the modpack before?
-                LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
-                return;
-            }
+        try (var cache = new FileMetadataCache(hashCacheDBFile)) {
+            serverModpackContent.list.forEach(serverItem -> {
+                Path serverItemPath = SmartFileUtils.getPath(modpackDir, serverItem.file);
+                if (!existingFileTree.contains(serverItemPath)) {
+                    filesToUpdate.add(serverItem); // File is missing
+                    return;
+                } else if (serverItem.editable) { // TODO check if this is enough of a check, what if user already had a file but there's provided the same by a new modpack version which wasnt in the modpack before?
+                    LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
+                    return;
+                }
 
-            String cachedHash = ClientCacheUtils.getVerifiedCacheHash(serverItemPath);
-            if (cachedHash != null && cachedHash.equals(serverItem.sha1)) {
-                return; // File is almost certainly up to date
-            }
+                String hash = cache.getHashOrNull(serverItemPath);
+                if (hash != null && hash.equals(serverItem.sha1)) {
+                    return; // File is up to date
+                }
 
-            // Full hash check
-            String diskHash = CustomFileUtils.getHash(serverItemPath);
-            if (diskHash != null && diskHash.equals(serverItem.sha1)) {
-                ClientCacheUtils.updateCache(serverItemPath, diskHash);
-                return; // File is definitely up to date
-            }
-
-            // This file needs to be updated
-            filesToUpdate.add(serverItem);
-        });
-
-        ClientCacheUtils.saveMetadataCache();
+                // This file needs to be updated
+                filesToUpdate.add(serverItem);
+            });
+        }
 
         if (!filesToUpdate.isEmpty()) {
             LOGGER.info("Modpack {} requires update! Took {} ms", modpackDir, System.currentTimeMillis() - start);
@@ -116,7 +110,7 @@ public class ModpackUtils {
     // TODO check more dirs, preferably with a database of all indexed files by their hashes
     // This will scan the CWD with CustomFileUtils.getPathFromCWD(modpack.file) and if the file exist with matching hash, it won't be returned in the final set
     // Used to avoid downloading files that are already present and valid on disk so we can just copy them over instead of downloading them all again
-    public static Set<Jsons.ModpackContentFields.ModpackContentItem> getOnlyNonExistingFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck) {
+    public static Set<Jsons.ModpackContentFields.ModpackContentItem> getOnlyNonExistingFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck, FileMetadataCache cache) {
         Set<Jsons.ModpackContentFields.ModpackContentItem> nonExistingFiles = new HashSet<>();
 
         LOGGER.info("Checking for existing files to skip downloading...");
@@ -124,9 +118,9 @@ public class ModpackUtils {
         int filesSkipped = 0;
 
         for (var entry : filesToCheck) {
-            Path fileInCWD = CustomFileUtils.getPathFromCWD(entry.file);
+            Path fileInCWD = SmartFileUtils.getPathFromCWD(entry.file);
             if (Files.isRegularFile(fileInCWD)) {
-                String diskHash = ClientCacheUtils.computeHashIfNeeded(fileInCWD);
+                String diskHash = cache.getHashOrNull(fileInCWD);
                 if (diskHash.equalsIgnoreCase(entry.sha1)) {
                     LOGGER.debug("File already exists and matches hash, skipping download: {}", entry.file);
                     filesSkipped++;
@@ -137,14 +131,13 @@ public class ModpackUtils {
             nonExistingFiles.add(entry);
         }
 
-        ClientCacheUtils.saveMetadataCache();
 
         LOGGER.info("Finished checking for existing files in CWD, {} files left to download (skipped {} existing). Took {} ms", nonExistingFiles.size(), filesSkipped, System.currentTimeMillis() - time);
 
         return nonExistingFiles;
     }
 
-    public static boolean deleteFilesMarkedForDeletionByTheServer(Set<Jsons.ModpackContentFields.FileToDelete> filesToDeleteOnClient) {
+    public static boolean deleteFilesMarkedForDeletionByTheServer(Set<Jsons.ModpackContentFields.FileToDelete> filesToDeleteOnClient, FileMetadataCache cache) {
         if (!clientConfig.allowRemoteNonModpackDeletions) {
             if (!filesToDeleteOnClient.isEmpty()) {
                 LOGGER.warn("Server requested deletion of {} files, but remote deletions are disabled in client config! Consider deleting them manually.", filesToDeleteOnClient.size());
@@ -167,14 +160,14 @@ public class ModpackUtils {
 
 
             // If the matching file path exists, and it is in fact a file, target it directly
-            Path fileInCWD = CustomFileUtils.getPathFromCWD(filePath);
+            Path fileInCWD = SmartFileUtils.getPathFromCWD(filePath);
             if (Files.isRegularFile(fileInCWD)) {
                 LOGGER.info("Found exact file to delete: {}", filePath);
-                String diskHash = ClientCacheUtils.computeHashIfNeeded(fileInCWD);
+                String diskHash = cache.getHashOrNull(fileInCWD);
                 if (diskHash.equalsIgnoreCase(expectedHash)) {
                     boolean isModFile = FileInspection.isMod(fileInCWD);
                     LOGGER.warn("Deleting file marked for deletion by server: {}", filePath);
-                    CustomFileUtils.executeOrder66(fileInCWD);
+                    SmartFileUtils.executeOrder66(fileInCWD);
                     if (isModFile) {
                         deletedAnyModFile.set(true);
                     }
@@ -192,11 +185,11 @@ public class ModpackUtils {
                 try (var stream = Files.list(parentDir)) {
                     stream.forEach(path -> {
                         if (!Files.isRegularFile(path)) return;
-                        String diskHash = ClientCacheUtils.computeHashIfNeeded(path);
+                        String diskHash = cache.getHashOrNull(path);
                         if (diskHash.equalsIgnoreCase(expectedHash)) {
                             boolean isModFile = FileInspection.isMod(path);
                             LOGGER.warn("Deleting file marked for deletion by server: {}", path);
-                            CustomFileUtils.executeOrder66(path);
+                            SmartFileUtils.executeOrder66(path);
                             if (isModFile) {
                                 deletedAnyModFile.set(true);
                             }
@@ -217,28 +210,28 @@ public class ModpackUtils {
         return deletedAnyModFile.get();
     }
 
-    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy) throws IOException {
+    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy, FileMetadataCache cache) throws IOException {
         boolean needsRestart = false;
 
         // correct the files locations
         for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
             String formattedFile = contentItem.file;
-            Path modpackFile = CustomFileUtils.getPath(modpackDir, formattedFile);
-            Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
+            Path modpackFile = SmartFileUtils.getPath(modpackDir, formattedFile);
+            Path runFile = SmartFileUtils.getPathFromCWD(formattedFile);
             boolean isMod = "mod".equals(contentItem.type);
 
             if (isMod) { // Make it into standardized mods directory, for support custom launchers
-                runFile = CustomFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
+                runFile = SmartFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
             }
 
             boolean modpackFileExists = Files.exists(modpackFile);
             boolean runFileExists = Files.exists(runFile);
             boolean runFileHashMatch = false;
-            if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, ClientCacheUtils.computeHashIfNeeded(runFile));
+            if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, cache.getHashOrNull(runFile));
 
             if (runFileHashMatch && !modpackFileExists) {
                 LOGGER.debug("Copying {} file to the modpack directory", formattedFile);
-                CustomFileUtils.copyFile(runFile, modpackFile);
+                SmartFileUtils.copyFile(runFile, modpackFile);
                 modpackFileExists = true;
             }
 
@@ -249,7 +242,7 @@ public class ModpackUtils {
             }
 
             if (modpackFileExists && !runFileExists) {
-                CustomFileUtils.copyFile(modpackFile, runFile);
+                SmartFileUtils.copyFile(modpackFile, runFile);
 
                 if (isMod) {
                     needsRestart = true;
@@ -259,7 +252,7 @@ public class ModpackUtils {
                 LOGGER.error("File {} doesn't exist!? If you see this please report this to the automodpack repo and attach this log https://github.com/Skidamek/AutoModpack/issues", formattedFile);
                 Thread.dumpStack();
             } else if (!runFileHashMatch) {
-                CustomFileUtils.copyFile(modpackFile, runFile);
+                SmartFileUtils.copyFile(modpackFile, runFile);
                 if (isMod) {
                     needsRestart = true;
                     LOGGER.warn("Overwriting mod {} file to modpack version", formattedFile);
@@ -272,16 +265,16 @@ public class ModpackUtils {
         return needsRestart;
     }
 
-    public static boolean removeRestModsNotToCopy(Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy, Set<Path> modsToKeep) {
+    public static boolean removeRestModsNotToCopy(Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy, Set<Path> modsToKeep, FileMetadataCache cache) {
         boolean needsRestart = false;
 
         for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
             String formattedFile = contentItem.file;
-            Path runFile = CustomFileUtils.getPathFromCWD(formattedFile);
+            Path runFile = SmartFileUtils.getPathFromCWD(formattedFile);
             boolean isMod = "mod".equals(contentItem.type);
 
             if (isMod) { // Make it into standardized mods directory, for support custom launchers
-                runFile = CustomFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
+                runFile = SmartFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
             }
 
             if (modsToKeep.contains(runFile)) {
@@ -291,11 +284,11 @@ public class ModpackUtils {
 
             boolean runFileExists = Files.exists(runFile);
             boolean runFileHashMatch = false;
-            if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, ClientCacheUtils.computeHashIfNeeded(runFile));
+            if (runFileExists) runFileHashMatch = contentItem.sha1.equalsIgnoreCase(cache.getHashOrNull(runFile));
 
             if (runFileHashMatch && isMod && filesNotToCopy.contains(formattedFile)) {
                 LOGGER.info("Deleting {} file from standard mods directory", formattedFile);
-                CustomFileUtils.executeOrder66(runFile);
+                SmartFileUtils.executeOrder66(runFile);
                 needsRestart = true;
             }
         }
@@ -305,7 +298,7 @@ public class ModpackUtils {
 
     // Copies necessary nested mods from modpack mods to standard mods folder
     // Returns true if requires client restart
-    public static boolean fixNestedMods(List<FileInspection.Mod> conflictingNestedMods, Collection<FileInspection.Mod> standardModList) throws IOException {
+    public static boolean fixNestedMods(List<FileInspection.Mod> conflictingNestedMods, Collection<FileInspection.Mod> standardModList, FileMetadataCache cache) throws IOException {
         if (conflictingNestedMods.isEmpty())
             return false;
 
@@ -313,16 +306,16 @@ public class ModpackUtils {
         boolean needsRestart = false;
 
         for (FileInspection.Mod mod : conflictingNestedMods) {
-            // Check mods provides, if theres some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as well, otherwise loader will crash
+            // Check mods provides, if there's some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as well, otherwise loader will crash
             if (standardModIDs.stream().anyMatch(mod.providesIDs()::contains))
                 continue;
 
             Path modPath = mod.modPath();
             Path standardModPath = MODS_DIR.resolve(modPath.getFileName());
-            if (!Files.exists(standardModPath) || !Objects.equals(ClientCacheUtils.computeHashIfNeeded(standardModPath), mod.hash())) {
+            if (!Files.exists(standardModPath) || !mod.hash().equalsIgnoreCase(cache.getHashOrNull(standardModPath))) {
                 needsRestart = true;
                 LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
-                CustomFileUtils.copyFile(modPath, standardModPath);
+                SmartFileUtils.copyFile(modPath, standardModPath);
                 var newMod = FileInspection.getMod(standardModPath);
                 if (newMod != null) standardModList.add(newMod); // important
             }
@@ -336,7 +329,7 @@ public class ModpackUtils {
         Set<String> newIgnoredFiles = new HashSet<>(workarounds);
 
         for (FileInspection.Mod mod : conflictingNestedMods) {
-            newIgnoredFiles.add(CustomFileUtils.formatPath(mod.modPath(), modpacksDir));
+            newIgnoredFiles.add(SmartFileUtils.formatPath(mod.modPath(), modpacksDir));
         }
 
         return newIgnoredFiles;
@@ -350,7 +343,7 @@ public class ModpackUtils {
         for (FileInspection.Mod modpackMod : modpackModList) {
             FileInspection.Mod standardMod = standardModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
             if (standardMod != null) {
-                String formattedFile = CustomFileUtils.formatPath(modpackMod.modPath(), modpackDir);
+                String formattedFile = SmartFileUtils.formatPath(modpackMod.modPath(), modpackDir);
                 if (ignoredMods.contains(formattedFile) || forceCopyFiles.contains(formattedFile))
                     continue;
 
@@ -400,7 +393,7 @@ public class ModpackUtils {
             Path modpackModPath = modpackMod.modPath();
             Path standardModPath = standardMod.modPath();
             String modId = modpackMod.modID();
-            String formatedPath = CustomFileUtils.formatPath(standardModPath, MODS_DIR.getParent());
+            String formatedPath = SmartFileUtils.formatPath(standardModPath, MODS_DIR.getParent());
             Collection<String> providesIDs = modpackMod.providesIDs();
             List<String> IDs = new ArrayList<>(providesIDs);
             IDs.add(modId);
@@ -417,18 +410,18 @@ public class ModpackUtils {
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 if (!Objects.equals(modpackMod.hash(), standardMod.hash())) {
                     LOGGER.warn("Changing duplicated mod {} - {} to modpack version - {}", modId, standardMod.modVersion(), modpackMod.modVersion());
-                    CustomFileUtils.executeOrder66(standardModPath, false);
-                    CustomFileUtils.copyFile(modpackModPath, newStandardModPath); // TODO make sure we dont copy an empty invalid file there
+                    SmartFileUtils.executeOrder66(standardModPath, false);
+                    SmartFileUtils.copyFile(modpackModPath, newStandardModPath); // TODO make sure we dont copy an empty invalid file there
                     requiresRestart = true;
                 }
             } else if (!isWorkaround && !isForceCopy) {
                 LOGGER.warn("Removing {} mod. It is duplicated modpack mod and no other mods are dependent on it!", modId);
-                CustomFileUtils.executeOrder66(standardModPath, false);
+                SmartFileUtils.executeOrder66(standardModPath, false);
                 requiresRestart = true;
             }
         }
 
-        ClientCacheUtils.saveDummyFiles();
+        LegacyClientCacheUtils.saveDummyFiles();
 
         return new RemoveDupeModsResult(requiresRestart, dependentMods);
     }
@@ -558,7 +551,7 @@ public class ModpackUtils {
             correctedName = FileInspection.fixFileName(strAddress);
         }
 
-        Path modpackDir = CustomFileUtils.getPath(modpacksDir, correctedName);
+        Path modpackDir = SmartFileUtils.getPath(modpacksDir, correctedName);
 
         if (!modpackName.isEmpty()) {
             String nameFromName = modpackName;
@@ -567,7 +560,7 @@ public class ModpackUtils {
                 nameFromName = FileInspection.fixFileName(modpackName);
             }
 
-            modpackDir = CustomFileUtils.getPath(modpacksDir, nameFromName);
+            modpackDir = SmartFileUtils.getPath(modpacksDir, nameFromName);
         }
 
         return modpackDir;
@@ -692,6 +685,10 @@ public class ModpackUtils {
         }
 
         boolean listInvalid = serverModpackContent.list.stream().anyMatch(item -> {
+            if (isHashInvalid(item.sha1)) {
+                LOGGER.error("Modpack content is invalid: file '{}' has invalid sha1 '{}'", item.file, item.sha1);
+                return true;
+            }
             if (isUnsafePath(item.file, false)) {
                 LOGGER.error("Modpack content is invalid: file path '{}' is unsafe/malicious", item.file);
                 return true;
@@ -700,6 +697,10 @@ public class ModpackUtils {
         });
 
         boolean nonModpackFilesToDeleteInvalid = serverModpackContent.nonModpackFilesToDelete.stream().anyMatch(item -> {
+            if (isHashInvalid(item.sha1)) {
+                LOGGER.error("Modpack content is invalid: file '{}' has invalid sha1 '{}'", item.file, item.sha1);
+                return true;
+            }
             if (isUnsafePath(item.file, false)) {
                 LOGGER.error("Modpack content is invalid: file to delete path '{}' is unsafe/malicious", item.file);
                 return true;
@@ -708,6 +709,16 @@ public class ModpackUtils {
         });
 
         return listInvalid || nonModpackFilesToDeleteInvalid;
+    }
+
+    // Assumes sha1 hash
+    private static boolean isHashInvalid(String hash) {
+        if (hash == null || hash.isBlank()) {
+            return true;
+        }
+
+        // SHA-1 hashes are 40 hexadecimal characters
+        return !hash.matches("^[a-fA-F0-9]{40}$");
     }
 
     private static boolean isUnsafePath(String rawPath, boolean blankIsFine) {
@@ -748,10 +759,10 @@ public class ModpackUtils {
 
             // Here, mods can be copied, no problem
 
-            Path path = CustomFileUtils.getPathFromCWD(file);
+            Path path = SmartFileUtils.getPathFromCWD(file);
             if (Files.exists(path)) {
                 try {
-                    CustomFileUtils.copyFile(path, CustomFileUtils.getPath(modpackDir, file));
+                    SmartFileUtils.copyFile(path, SmartFileUtils.getPath(modpackDir, file));
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -767,10 +778,10 @@ public class ModpackUtils {
             if (file.contains("/mods/") && file.endsWith(".jar")) // Don't mess with mods here, it will cause issues
                 continue;
 
-            Path path = CustomFileUtils.getPath(modpackDir, file);
+            Path path = SmartFileUtils.getPath(modpackDir, file);
             if (Files.exists(path)) {
                 try {
-                    CustomFileUtils.copyFile(path, CustomFileUtils.getPathFromCWD(file));
+                    SmartFileUtils.copyFile(path, SmartFileUtils.getPathFromCWD(file));
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

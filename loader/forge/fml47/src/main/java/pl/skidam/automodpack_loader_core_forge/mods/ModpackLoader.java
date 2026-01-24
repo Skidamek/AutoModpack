@@ -2,13 +2,14 @@ package pl.skidam.automodpack_loader_core_forge.mods;
 
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 public class ModpackLoader implements ModpackLoaderService {
     public static String CONNECTOR_MODS_PROPERTY = "connector.additionalModLocations";
@@ -33,7 +34,7 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
-    public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir) {
+    public List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir, FileMetadataCache cache) {
         return new ArrayList<>();
     }
 }

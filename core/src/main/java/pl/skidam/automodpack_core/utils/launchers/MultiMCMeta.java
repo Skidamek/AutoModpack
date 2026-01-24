@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.utils.launchers;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 
 import java.nio.file.Path;
 import java.util.Map;
@@ -55,18 +55,18 @@ public class MultiMCMeta {
             }
 
             if (changed) {
-                var preloadDeltaTime = System.currentTimeMillis() - GlobalVariables.PRELOAD_TIME;
+                var preloadDeltaTime = System.currentTimeMillis() - Constants.PRELOAD_TIME;
                 var delayRequired = DELAY - preloadDeltaTime;
                 if (delayRequired > 0) {
                     try { // Hack for prism, it reverts our changes if we write them too quickly after launching the game?!?
-                        GlobalVariables.LOGGER.info("Simulating a {} sec delay to avoid MultiMC/Prism overwrite issue...", delayRequired / 1000);
+                        Constants.LOGGER.info("Simulating a {} sec delay to avoid MultiMC/Prism overwrite issue...", delayRequired / 1000);
                         Thread.sleep(delayRequired);
                     } catch (InterruptedException e) {
-                        GlobalVariables.LOGGER.error("Interrupted while simulating delay", e);
+                        Constants.LOGGER.error("Interrupted while simulating delay", e);
                     }
                 }
                 json.add("components", components);
-                GlobalVariables.LOGGER.info("MultiMC/Prism: Updated loader version to {}", newVersion);
+                Constants.LOGGER.info("MultiMC/Prism: Updated loader version to {}", newVersion);
             }
 
             return changed;

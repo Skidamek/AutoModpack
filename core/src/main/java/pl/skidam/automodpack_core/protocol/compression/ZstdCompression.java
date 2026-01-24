@@ -11,7 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_ZSTD;
 
 /**
@@ -22,6 +22,7 @@ public class ZstdCompression implements CompressionCodec {
 
     private static MethodHandle compressMethodHandle;
     private static MethodHandle decompressMethodHandle;
+    private static MethodHandle decompressFrameMethodHandle;
     private static boolean initialized = true;
 
     static {
@@ -36,13 +37,15 @@ public class ZstdCompression implements CompressionCodec {
             tempJar.toFile().deleteOnExit();
 
             URLClassLoader loader = new URLClassLoader(new URL[]{tempJar.toUri().toURL()}, ZstdCompression.class.getClassLoader());
-
             Class<?> zstdClass = Class.forName("com.github.luben.zstd.Zstd", true, loader);
+
             Method compressMethod = zstdClass.getMethod("compress", byte[].class);
             Method decompressMethod = zstdClass.getMethod("decompress", byte[].class, int.class);
+            Method decompressFrameMethod = zstdClass.getMethod("decompressFrame", byte[].class, int.class, int.class, int.class);
 
             compressMethodHandle = MethodHandles.lookup().unreflect(compressMethod);
             decompressMethodHandle = MethodHandles.lookup().unreflect(decompressMethod);
+            decompressFrameMethodHandle = MethodHandles.lookup().unreflect(decompressFrameMethod);
         } catch (Throwable e) {
             initialized = false;
             LOGGER.debug("Failed to initialize embedded zstd-jni", e);
@@ -73,6 +76,20 @@ public class ZstdCompression implements CompressionCodec {
             return decompressed;
         } catch (Throwable e) {
             throw new IOException("Zstd decompression failed", e);
+        }
+    }
+
+    @Override
+    public byte[] decompress(byte[] compressedBuffer, int offset, int length, int originalLength) throws IOException {
+        try {
+            // Signature: byte[] src, int srcOffset, int srcSize, int originalSize
+            byte[] decompressed = (byte[]) decompressFrameMethodHandle.invokeExact(compressedBuffer, offset, length, originalLength);
+            if (decompressed.length != originalLength) {
+                throw new IOException("Unexpected decompressed length: " + decompressed.length + " (expected " + originalLength + ")");
+            }
+            return decompressed;
+        } catch (Throwable e) {
+            throw new IOException("Zstd range decompression failed", e);
         }
     }
 

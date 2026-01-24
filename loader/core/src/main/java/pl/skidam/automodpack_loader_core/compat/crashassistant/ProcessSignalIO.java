@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_loader_core.compat.crashassistant;
 
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -56,7 +56,7 @@ public final class ProcessSignalIO {
                     StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE);
         } catch (IOException e) {
-            GlobalVariables.LOGGER.error("Error while saving data to {}", fileName, e);
+            Constants.LOGGER.error("Error while saving data to {}", fileName, e);
         }
     }
 
@@ -88,7 +88,7 @@ public final class ProcessSignalIO {
                     StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE);
         } catch (IOException e) {
-            GlobalVariables.LOGGER.error("Error while saving data to {}", fileName, e);
+            Constants.LOGGER.error("Error while saving data to {}", fileName, e);
         }
     }
 
@@ -115,7 +115,7 @@ public final class ProcessSignalIO {
             String content = new String(bytes, StandardCharsets.UTF_8);
             return Optional.of(content);
         } catch (IOException e) {
-            GlobalVariables.LOGGER.error("Error while reading data from {}", fileName, e);
+            Constants.LOGGER.error("Error while reading data from {}", fileName, e);
             return Optional.empty();
         }
     }
@@ -153,7 +153,7 @@ public final class ProcessSignalIO {
                     StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE);
         } catch (IOException e) {
-            GlobalVariables.LOGGER.error("Error while saving info to {}", fileName, e);
+            Constants.LOGGER.error("Error while saving info to {}", fileName, e);
         }
     }
 
@@ -175,7 +175,7 @@ public final class ProcessSignalIO {
             String content = new String(bytes, StandardCharsets.UTF_8);
             return Optional.of(content);
         } catch (IOException e) {
-            GlobalVariables.LOGGER.error("Error while reading info from {}", fileName, e);
+            Constants.LOGGER.error("Error while reading info from {}", fileName, e);
             return Optional.empty();
         }
     }

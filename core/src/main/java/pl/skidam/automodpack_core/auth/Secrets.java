@@ -6,7 +6,7 @@ import java.net.SocketAddress;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class Secrets {
     public static class Secret { // unfortunately has to be a class instead of record because of older gson version in 1.18 mc

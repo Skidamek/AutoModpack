@@ -13,8 +13,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 public class ModpackContent {
     public final Set<Jsons.ModpackContentFields.ModpackContentItem> list = ConcurrentHashMap.newKeySet();
@@ -78,7 +78,7 @@ public class ModpackContent {
                 previousContent.list.forEach(item -> sha1MurmurMapPreviousContent.put(item.sha1, item.murmur));
             });
 
-            List<CompletableFuture<Void>> creationFutures = Collections.synchronizedList(new ArrayList<>());
+            List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
 
             // host-modpack generation
             if (MODPACK_DIR != null) {
@@ -131,8 +131,8 @@ public class ModpackContent {
             list.addAll(previousModpackContent.list);
 
             for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : list) {
-                Path file = CustomFileUtils.getPath(MODPACK_DIR, modpackContentItem.file);
-                if (!Files.exists(file)) file = CustomFileUtils.getPathFromCWD(modpackContentItem.file);
+                Path file = SmartFileUtils.getPath(MODPACK_DIR, modpackContentItem.file);
+                if (!Files.exists(file)) file = SmartFileUtils.getPathFromCWD(modpackContentItem.file);
                 if (!Files.exists(file)) {
                     LOGGER.warn("File {} does not exist!", file);
                     continue;
@@ -209,7 +209,7 @@ public class ModpackContent {
 
     public void remove(Path file) {
 
-        String modpackFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
+        String modpackFile = SmartFileUtils.formatPath(file, MODPACK_DIR);
 
         synchronized (list) {
             for (Jsons.ModpackContentFields.ModpackContentItem item : this.list) {
@@ -247,7 +247,7 @@ public class ModpackContent {
             return null;
         }
 
-        String formattedFile = CustomFileUtils.formatPath(file, MODPACK_DIR);
+        String formattedFile = SmartFileUtils.formatPath(file, MODPACK_DIR);
 
         // modpackFile is relative path to ~/.minecraft/ (content format) so if it starts with /automodpack/ we dont want it
         if (formattedFile.startsWith("/automodpack/")) {
@@ -308,7 +308,7 @@ public class ModpackContent {
             type = "other";
         }
 
-        String sha1 = CustomFileUtils.getHash(file);
+        String sha1 = SmartFileUtils.getHash(file);
 
         // For CF API
         String murmur = null;
@@ -316,7 +316,7 @@ public class ModpackContent {
             // get murmur hash from previousContent.list of item with same sha1
             murmur = sha1MurmurMapPreviousContent.get(sha1);
             if (murmur == null) {
-                murmur = CustomFileUtils.getCurseforgeMurmurHash(file);
+                murmur = SmartFileUtils.getCurseforgeMurmurHash(file);
             }
         }
 

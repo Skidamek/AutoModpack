@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.protocol.netty.handler;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 import io.netty.buffer.ByteBuf;

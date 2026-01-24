@@ -5,14 +5,13 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.util.*;
 import java.util.stream.Stream;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
-public class CustomFileUtils {
+public class SmartFileUtils {
 
     public static final Path CWD = Path.of(System.getProperty("user.dir"));
 
@@ -27,9 +26,9 @@ public class CustomFileUtils {
         }
 
         if (Files.isRegularFile(file)) {
-            ClientCacheUtils.dummyIT(file);
+            LegacyClientCacheUtils.dummyIT(file);
             if (saveDummyFiles) {
-                ClientCacheUtils.saveDummyFiles();
+                LegacyClientCacheUtils.saveDummyFiles();
             }
         }
     }
@@ -86,24 +85,22 @@ public class CustomFileUtils {
         }
     }
 
-    public static boolean compareFilesByteByByte(Path path, byte[] referenceBytes) {
+    public static boolean compareSmallFile(Path path, byte[] referenceBytes) {
         try {
             if (Files.size(path) != referenceBytes.length) {
                 return false;
             }
 
-            try (InputStream is = new BufferedInputStream(new LockFreeInputStream(path))) {
-                int b;
-                int i = 0;
-                while ((b = is.read()) != -1) {
-                    if (b != (referenceBytes[i++] & 0xFF)) { // & 0xFF ensures unsigned comparison
-                        return false;
-                    }
-                }
-                return true;
+            try (InputStream is = new LockFreeInputStream(path)) {
+                // Java 11+ readNBytes reads exactly X bytes or until EOF.
+                // Since we know the file is small (~200b), reading it into RAM is perfectly fine.
+                byte[] fileContent = is.readNBytes(referenceBytes.length);
+
+                // Vectorized Comparison (AVX optimized in Java 17)
+                return Arrays.equals(fileContent, referenceBytes);
             }
         } catch (Exception e) {
-            LOGGER.error("Error comparing file byte by byte: {}", path, e);
+            LOGGER.error("Error comparing file: {}", path, e);
             return false;
         }
     }
@@ -150,13 +147,15 @@ public class CustomFileUtils {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
 
-            try (InputStream is = new BufferedInputStream(new LockFreeInputStream(path));
-                 DigestInputStream dis = new DigestInputStream(is, digest)) {
-                dis.transferTo(OutputStream.nullOutputStream()); // black hole :p
+            try (InputStream is = new LockFreeInputStream(path)) {
+                byte[] buffer = new byte[64 * 1024];
+                int bytesRead;
+                while ((bytesRead = is.read(buffer)) != -1) {
+                    digest.update(buffer, 0, bytesRead);
+                }
             }
 
-            byte[] hash = digest.digest();
-            return HexFormat.of().formatHex(hash);
+            return HexFormat.of().formatHex(digest.digest());
         } catch (IOException ignored) { // we don't really care about this exception, file may just not exists or be a directory
         } catch (Exception e) {
             LOGGER.error("Failed to get hash for path: {}", path, e);
@@ -164,66 +163,81 @@ public class CustomFileUtils {
         return null;
     }
 
+    // We do double pass to avoid storing whole file in memory
     public static String getCurseforgeMurmurHash(Path file) throws IOException {
         if (!Files.exists(file)) {
             return null;
         }
 
-        long length = 0;
+        // MurmurHash2 Constants
+        final int m = 0x5bd1e995;
+        final int r = 24;
+        final int seed = 1;
 
-        ByteArrayOutputStream filteredStream = new ByteArrayOutputStream();
-        try (InputStream is = new BufferedInputStream(new LockFreeInputStream(file))) {
-            int b;
-            while ((b = is.read()) != -1) {
-                // Filter whitespace: Tab (0x9), LF (0xA), CR (0xD), Space (0x20)
-                if (b == 0x9 || b == 0xa || b == 0xd || b == 0x20) {
-                    continue;
+        // Pass 1
+        // We scan the file just to count non-whitespace bytes
+        long validLength = 0;
+
+        byte[] buffer = new byte[64 * 1024];
+
+        try (InputStream is = new LockFreeInputStream(file)) {
+            int bytesRead;
+            while ((bytesRead = is.read(buffer)) != -1) {
+                for (int i = 0; i < bytesRead; i++) {
+                    byte b = buffer[i];
+                    // Check for whitespace (Tab, LF, CR, Space)
+                    if (b != 0x9 && b != 0xa && b != 0xd && b != 0x20) {
+                        validLength++;
+                    }
                 }
-
-                filteredStream.write(b);
-                length++;
             }
         }
 
-        // magic values
-        final int m = 0x5bd1e995;
-        final int r = 24;
-        long k = 0x0L;
-        int seed = 1;
-        int shift = 0x0;
-        char b;
-        long h = (seed ^ length);
+        // Pass 2
+        // Now we have the length, we can initialize 'h' correctly with Bitwise XOR
+        long h = (seed ^ validLength);
+        long k = 0;
+        int shift = 0;
 
-        byte[] filteredBytes = filteredStream.toByteArray();
+        try (InputStream is = new LockFreeInputStream(file)) {
+            int bytesRead;
+            while ((bytesRead = is.read(buffer)) != -1) {
+                for (int i = 0; i < bytesRead; i++) {
+                    byte b = buffer[i];
 
-        // Second pass: calculate hash using filtered bytes (no file I/O)
-        for (byte byteVal : filteredBytes) {
-            b = (char) (byteVal & 0xFF);
+                    // Same filter logic
+                    if (b == 0x9 || b == 0xa || b == 0xd || b == 0x20) {
+                        continue;
+                    }
 
-            k = k | ((long) b << shift);
+                    // Append byte to current 4-byte chunk 'k'
+                    k = k | ((long) (b & 0xFF) << shift);
+                    shift += 8;
 
-            shift = shift + 0x8;
+                    // If chunk is full (32 bits), mix it into 'h'
+                    if (shift == 32) {
+                        h = 0x00000000FFFFFFFFL & h;
 
-            if (shift == 0x20) {
-                h = 0x00000000FFFFFFFFL & h;
+                        k = k * m;
+                        k = 0x00000000FFFFFFFFL & k;
 
-                k = k * m;
-                k = 0x00000000FFFFFFFFL & k;
+                        k = k ^ (k >> r);
+                        k = 0x00000000FFFFFFFFL & k;
 
-                k = k ^ (k >> r);
-                k = 0x00000000FFFFFFFFL & k;
+                        k = k * m;
+                        k = 0x00000000FFFFFFFFL & k;
 
-                k = k * m;
-                k = 0x00000000FFFFFFFFL & k;
+                        h = h * m;
+                        h = 0x00000000FFFFFFFFL & h;
 
-                h = h * m;
-                h = 0x00000000FFFFFFFFL & h;
+                        h = h ^ k;
+                        h = 0x00000000FFFFFFFFL & h;
 
-                h = h ^ k;
-                h = 0x00000000FFFFFFFFL & h;
-
-                k = 0x0;
-                shift = 0x0;
+                        // Reset chunk
+                        k = 0;
+                        shift = 0;
+                    }
+                }
             }
         }
 

@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
-import static pl.skidam.automodpack_core.GlobalVariables.clientConfig;
-import static pl.skidam.automodpack_core.GlobalVariables.clientConfigFile;
+import static pl.skidam.automodpack_core.Constants.clientConfig;
+import static pl.skidam.automodpack_core.Constants.clientConfigFile;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;

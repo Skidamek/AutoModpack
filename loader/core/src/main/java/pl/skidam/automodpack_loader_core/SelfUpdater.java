@@ -1,7 +1,7 @@
 package pl.skidam.automodpack_loader_core;
 
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
@@ -24,7 +24,7 @@ import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class SelfUpdater {
 
@@ -102,7 +102,7 @@ public class SelfUpdater {
             }
 
             // Exact Hash Match (Fastest check)
-            if (automodpack.SHA1Hash().equals(CustomFileUtils.getHash(THIS_MOD_JAR))) {
+            if (automodpack.SHA1Hash().equals(SmartFileUtils.getHash(THIS_MOD_JAR))) {
                 LOGGER.info("Already on the target version (Hash match): {}", AM_VERSION);
                 return false;
             }
@@ -189,12 +189,12 @@ public class SelfUpdater {
             var relauncher = new ReLauncher(updateType);
 
             Runnable callback = () -> {
-                CustomFileUtils.executeOrder66(THIS_MOD_JAR);
+                SmartFileUtils.executeOrder66(THIS_MOD_JAR);
                 LOGGER.info("Successfully updated AutoModpack! Restarting...");
             };
 
-            CustomFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
-            CustomFileUtils.executeOrder66(automodpackUpdateJar); // Delete temp file
+            SmartFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
+            SmartFileUtils.executeOrder66(automodpackUpdateJar); // Delete temp file
 
             relauncher.restart(true, callback);
         } catch (Exception e) {

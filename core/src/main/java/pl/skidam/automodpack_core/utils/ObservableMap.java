@@ -1,25 +1,26 @@
 package pl.skidam.automodpack_core.utils;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 @SuppressWarnings("unchecked")
 public class ObservableMap<K, V> {
 
-    private final Map<K, V> synchronizedMap;
+    private final ConcurrentHashMap<K, V> synchronizedMap;
     private List<BiConsumer<K, V>> onPutCallbacks = new ArrayList<>();
     private List<BiConsumer<K, V>> onRemoveCallbacks = new ArrayList<>() ;
 
     public ObservableMap() {
-        synchronizedMap = Collections.synchronizedMap(new HashMap<>());
+        synchronizedMap = new ConcurrentHashMap<>();
     }
 
     public ObservableMap(int initialCapacity) {
-        synchronizedMap = Collections.synchronizedMap(new HashMap<>(initialCapacity));
+        synchronizedMap = new ConcurrentHashMap<>(initialCapacity);
     }
 
     public ObservableMap(Map<? extends K, ? extends V> m) {
-        synchronizedMap = Collections.synchronizedMap(new HashMap<>(m));
+        synchronizedMap = new ConcurrentHashMap<>(m);
     }
 
     public synchronized V put(K key, V value) {

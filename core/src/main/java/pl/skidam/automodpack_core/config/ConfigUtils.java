@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.config;
 import java.util.*;
 import java.util.regex.Pattern;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class ConfigUtils {
 

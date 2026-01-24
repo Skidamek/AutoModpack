@@ -11,7 +11,7 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import java.util.HashMap;
 import java.util.Map;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class Common {
 
