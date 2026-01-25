@@ -64,7 +64,7 @@ public class ModpackUpdater {
 
             // Handle the case where serverModpackContent is null
             if (serverModpackContent == null) {
-                try (var cache = new FileMetadataCache(hashCacheDBFile)) {
+                try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
                     CheckAndLoadModpack(cache);
                 }
                 return;
@@ -101,7 +101,7 @@ public class ModpackUpdater {
                     startUpdate(result.filesToUpdate());
                 } else {
                     Files.writeString(modpackContentFile, serverModpackContentJson);
-                    try (var cache = new FileMetadataCache(hashCacheDBFile)) {
+                    try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
                         CheckAndLoadModpack(cache);
                     }
                 }
@@ -177,7 +177,7 @@ public class ModpackUpdater {
         long start = System.currentTimeMillis();
 
 
-        try (var cache = new FileMetadataCache(hashCacheDBFile)) {
+        try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
             // Don't download files which already exist
             // The existing files will be copied over in the applyModpack method
             var finalFilesToUpdate = ModpackUtils.getOnlyNonExistingFiles(filesToUpdate, cache);

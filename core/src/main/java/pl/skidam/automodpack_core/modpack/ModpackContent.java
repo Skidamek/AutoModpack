@@ -26,14 +26,12 @@ public class ModpackContent {
     private final FileTreeScanner FORCE_COPY_FILES_TO_STANDARD_LOCATION;
     private final Path MODPACK_DIR;
     private final ThreadPoolExecutor CREATION_EXECUTOR;
-    private final FileMetadataCache metadataCache;
     private final Map<String, String> sha1MurmurMapPreviousContent = new HashMap<>();
 
-    public ModpackContent(String modpackName, Path cwd, Path modpackDir, Set<String> syncedFiles, Set<String> allowEditsInFiles, Set<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR, FileMetadataCache metadataCache) {
+    public ModpackContent(String modpackName, Path cwd, Path modpackDir, Set<String> syncedFiles, Set<String> allowEditsInFiles, Set<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR) {
         this.MODPACK_NAME = modpackName;
         this.MODPACK_DIR = modpackDir;
         this.CREATION_EXECUTOR = CREATION_EXECUTOR;
-        this.metadataCache = metadataCache;
         Set<Path> directoriesToSearch = new HashSet<>(2);
         if (MODPACK_DIR != null) directoriesToSearch.add(MODPACK_DIR);
         if (cwd != null) {
@@ -50,7 +48,7 @@ public class ModpackContent {
         return MODPACK_NAME;
     }
 
-    public boolean create() {
+    public boolean create(FileMetadataCache cache) {
         Set<Jsons.ModpackContentFields.FileToDelete> computedFilesToDelete = new HashSet<>();
 
         try {
@@ -94,7 +92,7 @@ public class ModpackContent {
             List<CompletableFuture<Jsons.ModpackContentFields.ModpackContentItem>> futures = filesToProcess.entrySet().stream()
                     .map(entry -> CompletableFuture.supplyAsync(() -> {
                         try {
-                            var contentEntry = generateContent(entry.getValue(), entry.getKey());
+                            var contentEntry = generateContent(entry.getValue(), entry.getKey(), cache);
                             LOGGER.debug("Generated modpack content for {}", entry.getValue());
                             return contentEntry;
                         } catch (Exception e) {
@@ -186,14 +184,15 @@ public class ModpackContent {
         }
     }
 
-    public CompletableFuture<Void> replaceAsync(Path file) {
-        return CompletableFuture.runAsync(() -> replace(file), CREATION_EXECUTOR);
+    public CompletableFuture<Void> replaceAsync(Path file, FileMetadataCache cache) {
+        return CompletableFuture.runAsync(() -> replace(file, cache), CREATION_EXECUTOR);
     }
 
-    public void replace(Path file) {
+    public void replace(Path file, FileMetadataCache cache) {
         remove(file);
         try {
-            Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file, SmartFileUtils.formatPath(file, MODPACK_DIR));
+            String modpackFile = SmartFileUtils.formatPath(file, MODPACK_DIR);
+            Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file, modpackFile, cache);
             if (item != null) {
                 LOGGER.info("generated content for {}", item.file);
                 synchronized (list) {
@@ -231,7 +230,7 @@ public class ModpackContent {
         return isInner;
     }
 
-    private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file, final String formattedFile) throws Exception {
+    private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file, final String formattedFile, FileMetadataCache cache) throws Exception {
         if (!Files.isRegularFile(file)) return null;
 
         if (serverConfig == null) {
@@ -301,7 +300,7 @@ public class ModpackContent {
             type = "other";
         }
 
-        String sha1 = metadataCache != null ? metadataCache.getHashOrNull(file) : SmartFileUtils.getHash(file);
+        String sha1 = cache != null ? cache.getHashOrNull(file) : SmartFileUtils.getHash(file);
 
         // For CF API
         String murmur = null;

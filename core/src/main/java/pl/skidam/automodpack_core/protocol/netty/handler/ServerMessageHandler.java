@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
+import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
@@ -85,27 +86,29 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
         Set<ModpackContent> modpacks = new HashSet<>();
 
-        for (String hash : hashes) {
-            final Optional<Path> optionalPath = resolvePath(hash);
-            if (optionalPath.isEmpty()) continue;
-            Path path = optionalPath.get();
-            ModpackContent modpack = null;
+        try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+            for (String hash : hashes) {
+                final Optional<Path> optionalPath = resolvePath(hash);
+                if (optionalPath.isEmpty()) continue;
+                Path path = optionalPath.get();
+                ModpackContent modpack = null;
 
-            for (var content : modpackExecutor.modpacks.values()) {
-                if (!content.pathsMap.getMap().containsKey(hash)) {
+                for (var content : modpackExecutor.modpacks.values()) {
+                    if (!content.pathsMap.getMap().containsKey(hash)) {
+                        continue;
+                    }
+
+                    modpack = content;
+                    break;
+                }
+
+                if (modpack == null) {
                     continue;
                 }
 
-                modpack = content;
-                break;
+                modpacks.add(modpack);
+                creationFutures.add(modpack.replaceAsync(path, cache));
             }
-
-            if (modpack == null) {
-                continue;
-            }
-
-            modpacks.add(modpack);
-            creationFutures.add(modpack.replaceAsync(path));
         }
 
         creationFutures.forEach(CompletableFuture::join);
