@@ -7,6 +7,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -445,43 +446,48 @@ public class ModpackUpdater {
 
         Set<Path> modpackMods = new HashSet<>();
         Collection<FileInspection.Mod> modpackModList = new ArrayList<>();
-        Path modpackModsDir = modpackDir.resolve("mods");
-        if (Files.exists(modpackModsDir)) {
-            try (Stream<Path> stream = Files.list(modpackModsDir)) {
-                stream.forEach(path -> {
-                    modpackMods.add(path);
-                    FileInspection.Mod mod = FileInspection.getMod(path, cache);
-                    if (mod != null) {
-                        modpackModList.add(mod);
-                    }
-                });
-            }
-        }
-
         Collection<FileInspection.Mod> standardModList = new ArrayList<>();
-        Path standardModsDir = MODS_DIR;
-        if (Files.exists(standardModsDir)) {
-            try (Stream<Path> stream = Files.list(standardModsDir)) {
-                stream.forEach(path -> {
-                    FileInspection.Mod mod = FileInspection.getMod(path, cache);
-                    if (mod != null) {
-                        standardModList.add(mod);
-                    }
-                });
+        boolean needsRestart2;
+        Set<String> ignoredFiles;
+
+        try (var modCache = ModFileCache.open(modCacheDBFile)) {
+            Path modpackModsDir = modpackDir.resolve("mods");
+            if (Files.exists(modpackModsDir)) {
+                try (Stream<Path> stream = Files.list(modpackModsDir)) {
+                    stream.forEach(path -> {
+                        modpackMods.add(path);
+                        FileInspection.Mod mod = modCache.getModOrNull(path, cache);
+                        if (mod != null) {
+                            modpackModList.add(mod);
+                        }
+                    });
+                }
             }
+
+            Path standardModsDir = MODS_DIR;
+            if (Files.exists(standardModsDir)) {
+                try (Stream<Path> stream = Files.list(standardModsDir)) {
+                    stream.forEach(path -> {
+                        FileInspection.Mod mod = modCache.getModOrNull(path, cache);
+                        if (mod != null) {
+                            standardModList.add(mod);
+                        }
+                    });
+                }
+            }
+
+            // Check if the conflicting mods still exits, they might have been deleted by methods above
+            conflictingNestedMods = conflictingNestedMods.stream()
+                    .filter(conflictingMod -> modpackMods.contains(conflictingMod.path()))
+                    .toList();
+
+            if (!conflictingNestedMods.isEmpty()) {
+                LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
+            }
+
+            needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods, standardModList, cache, modCache);
+            ignoredFiles = ModpackUtils.getIgnoredFiles(conflictingNestedMods, workaroundMods);
         }
-
-        // Check if the conflicting mods still exits, they might have been deleted by methods above
-        conflictingNestedMods = conflictingNestedMods.stream()
-                .filter(conflictingMod -> modpackMods.contains(conflictingMod.modPath()))
-                .toList();
-
-        if (!conflictingNestedMods.isEmpty()) {
-            LOGGER.warn("Found conflicting nested mods: {}", conflictingNestedMods);
-        }
-
-        boolean needsRestart2 = ModpackUtils.fixNestedMods(conflictingNestedMods, standardModList, cache);
-        Set<String> ignoredFiles = ModpackUtils.getIgnoredFiles(conflictingNestedMods, workaroundMods);
 
         Set<String> forceCopyFiles = modpackContent.list.stream()
                 .filter(item -> item.forceCopy)
