@@ -28,6 +28,7 @@ val deps = listOf(
 dependencies {
     // minecraft/loaders uses these, so we cant just implement them because it wont resolve in gradle
     deps.forEach { compileOnly(it) }
+    deps.forEach { runtimeOnly(it) }
     deps.forEach { testImplementation(it) }
 
     testImplementation("org.junit.jupiter:junit-jupiter:6.0.1")

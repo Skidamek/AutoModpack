@@ -10,6 +10,7 @@ import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 import java.io.*;
@@ -298,25 +299,25 @@ public class ModpackUtils {
 
     // Copies necessary nested mods from modpack mods to standard mods folder
     // Returns true if requires client restart
-    public static boolean fixNestedMods(List<FileInspection.Mod> conflictingNestedMods, Collection<FileInspection.Mod> standardModList, FileMetadataCache cache) throws IOException {
+    public static boolean fixNestedMods(List<FileInspection.Mod> conflictingNestedMods, Collection<FileInspection.Mod> standardModList, FileMetadataCache cache, ModFileCache modCache) throws IOException {
         if (conflictingNestedMods.isEmpty())
             return false;
 
-        final List<String> standardModIDs = standardModList.stream().map(FileInspection.Mod::modID).toList();
+        final List<String> standardModIDs = standardModList.stream().flatMap(mod -> mod.IDs().stream()).toList();
         boolean needsRestart = false;
 
         for (FileInspection.Mod mod : conflictingNestedMods) {
             // Check mods provides, if there's some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as well, otherwise loader will crash
-            if (standardModIDs.stream().anyMatch(mod.providesIDs()::contains))
+            if (standardModIDs.stream().anyMatch(mod.IDs()::contains))
                 continue;
 
-            Path modPath = mod.modPath();
+            Path modPath = mod.path();
             Path standardModPath = MODS_DIR.resolve(modPath.getFileName());
             if (!Files.exists(standardModPath) || !mod.hash().equalsIgnoreCase(cache.getHashOrNull(standardModPath))) {
                 needsRestart = true;
                 LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
                 SmartFileUtils.copyFile(modPath, standardModPath);
-                var newMod = FileInspection.getMod(standardModPath, cache);
+                var newMod = modCache.getModOrNull(standardModPath, cache);
                 if (newMod != null) standardModList.add(newMod); // important
             }
         }
@@ -329,7 +330,7 @@ public class ModpackUtils {
         Set<String> newIgnoredFiles = new HashSet<>(workarounds);
 
         for (FileInspection.Mod mod : conflictingNestedMods) {
-            newIgnoredFiles.add(SmartFileUtils.formatPath(mod.modPath(), modpacksDir));
+            newIgnoredFiles.add(SmartFileUtils.formatPath(mod.path(), modpacksDir));
         }
 
         return newIgnoredFiles;
@@ -341,9 +342,9 @@ public class ModpackUtils {
         final Map<FileInspection.Mod, FileInspection.Mod> duplicates = new HashMap<>();
 
         for (FileInspection.Mod modpackMod : modpackModList) {
-            FileInspection.Mod standardMod = standardModList.stream().filter(mod -> mod.modID().equals(modpackMod.modID())).findFirst().orElse(null); // There might be super rare edge case if client would have for some reason more than one mod with the same mod id
+            FileInspection.Mod standardMod = standardModList.stream().filter(mod -> mod.IDs().stream().anyMatch(modpackMod.IDs()::contains)).findFirst().orElse(null);
             if (standardMod != null) {
-                String formattedFile = SmartFileUtils.formatPath(modpackMod.modPath(), modpackDir);
+                String formattedFile = SmartFileUtils.formatPath(modpackMod.path(), modpackDir);
                 if (ignoredMods.contains(formattedFile) || forceCopyFiles.contains(formattedFile))
                     continue;
 
@@ -378,10 +379,7 @@ public class ModpackUtils {
 
         // Mods may provide more IDs
         Set<String> idsToKeep = new HashSet<>();
-        modsToKeep.forEach(mod -> {
-            idsToKeep.add(mod.modID());
-            idsToKeep.addAll(mod.providesIDs());
-        });
+        modsToKeep.forEach(mod -> idsToKeep.addAll(mod.IDs()));
 
         boolean requiresRestart = false;
         Set<Path> dependentMods = new HashSet<>();
@@ -390,13 +388,11 @@ public class ModpackUtils {
         for (var dupeMod : dupeMods.entrySet()) {
             FileInspection.Mod modpackMod = dupeMod.getKey();
             FileInspection.Mod standardMod = dupeMod.getValue();
-            Path modpackModPath = modpackMod.modPath();
-            Path standardModPath = standardMod.modPath();
-            String modId = modpackMod.modID();
+            Path modpackModPath = modpackMod.path();
+            Path standardModPath = standardMod.path();
             String formatedPath = SmartFileUtils.formatPath(standardModPath, MODS_DIR.getParent());
-            Collection<String> providesIDs = modpackMod.providesIDs();
-            List<String> IDs = new ArrayList<>(providesIDs);
-            IDs.add(modId);
+            List<String> IDs = new ArrayList<>(modpackMod.IDs());
+            String modId = IDs.get(0);
 
             boolean isDependent = IDs.stream().anyMatch(idsToKeep::contains);
             boolean isWorkaround = workaroundMods.contains(formatedPath);
@@ -409,7 +405,7 @@ public class ModpackUtils {
                 // Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
                 // If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is working.
                 if (!Objects.equals(modpackMod.hash(), standardMod.hash())) {
-                    LOGGER.warn("Changing duplicated mod {} - {} to modpack version - {}", modId, standardMod.modVersion(), modpackMod.modVersion());
+                    LOGGER.warn("Changing duplicated mod {} - {} to modpack version - {}", modId, standardMod.version(), modpackMod.version());
                     SmartFileUtils.executeOrder66(standardModPath, false);
                     SmartFileUtils.copyFile(modpackModPath, newStandardModPath); // TODO make sure we dont copy an empty invalid file there
                     requiresRestart = true;
@@ -427,9 +423,9 @@ public class ModpackUtils {
     }
 
     private static void addDependenciesRecursively(FileInspection.Mod mod, Collection<FileInspection.Mod> modList, Set<FileInspection.Mod> modsToKeep) {
-        for (String depId : mod.dependencies()) {
+        for (String depId : mod.deps()) {
             for (FileInspection.Mod modItem : modList) {
-                if ((modItem.modID().equals(depId) || modItem.providesIDs().contains(depId)) && modsToKeep.add(modItem)) {
+                if (modItem.IDs().stream().anyMatch(s -> s.equalsIgnoreCase(depId)) && modsToKeep.add(modItem)) {
                     addDependenciesRecursively(modItem, modList, modsToKeep);
                 }
             }
