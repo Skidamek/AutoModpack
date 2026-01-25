@@ -18,38 +18,32 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 public class FileMetadataCache implements AutoCloseable {
 
     private static final Map<Path, FileMetadataCache> INSTANCES = new HashMap<>();
-    private final AtomicInteger refCount = new AtomicInteger(1);
+    private static final Object GLOBAL_LOCK = new Object();
+
     private final Path dbPath;
-
-    public static synchronized FileMetadataCache open(Path path) {
-        Path absPath = path.toAbsolutePath().normalize();
-        FileMetadataCache existing = INSTANCES.get(absPath);
-
-        if (existing != null) {
-            existing.refCount.incrementAndGet();
-            return existing;
-        }
-
-        FileMetadataCache newCache = new FileMetadataCache(absPath);
-        INSTANCES.put(absPath, newCache);
-        return newCache;
-    }
-
-
     private final MVStore store;
     private final MVMap<String, CachedFile> fileMetadataMap;
-    private final AtomicInteger uncommittedWrites = new AtomicInteger(0);
-    private static final int COMMIT_THRESHOLD = 50;
+    private final AtomicInteger refCount = new AtomicInteger(1);
+
     private final Object[] locks = new Object[64];
 
-    public record CachedFile(
-            String contentHash,
-            long lastModified,
-            long size,
-            String fileKey
-    ) implements Serializable {
-        @java.io.Serial
-        private static final long serialVersionUID = 1L;
+    public record CachedFile(String contentHash, long lastModified, long size, String fileKey) implements Serializable {
+        @java.io.Serial private static final long serialVersionUID = 1L;
+    }
+
+    public static FileMetadataCache open(Path path) {
+        Path absPath = path.toAbsolutePath().normalize();
+        synchronized (GLOBAL_LOCK) {
+            FileMetadataCache existing = INSTANCES.get(absPath);
+            if (existing != null) {
+                existing.refCount.incrementAndGet();
+                return existing;
+            }
+
+            FileMetadataCache newCache = new FileMetadataCache(absPath);
+            INSTANCES.put(absPath, newCache);
+            return newCache;
+        }
     }
 
     private FileMetadataCache(Path dbPath) {
@@ -57,7 +51,6 @@ public class FileMetadataCache implements AutoCloseable {
         this.store = new MVStore.Builder()
                 .fileName(dbPath.toString())
                 .cacheSize(20)
-                .autoCommitDisabled()
                 .open();
 
         this.fileMetadataMap = store.openMap("file_metadata");
@@ -96,17 +89,13 @@ public class FileMetadataCache implements AutoCloseable {
 
             CachedFile newRecord = new CachedFile(newHash, currentTime, currentSize, currentFileKey);
             fileMetadataMap.put(pathKey, newRecord);
-            checkAndCommit();
 
             return newHash;
         }
     }
 
     private boolean isCacheValid(CachedFile cached, long size, long time, String key) {
-        if (cached == null) return false;
-        return cached.size() == size &&
-                cached.lastModified() == time &&
-                cached.fileKey().equals(key);
+        return cached != null && cached.size() == size && cached.lastModified() == time && cached.fileKey().equals(key);
     }
 
     public String getHashOrNull(Path path) {
@@ -141,19 +130,20 @@ public class FileMetadataCache implements AutoCloseable {
 
         CachedFile newRecord = new CachedFile(hash, currentTime, currentSize, currentFileKey);
         fileMetadataMap.put(pathKey, newRecord);
-        checkAndCommit();
     }
 
-    private void checkAndCommit() {
-        if (uncommittedWrites.incrementAndGet() >= COMMIT_THRESHOLD) {
-            uncommittedWrites.set(0);
+    // TODO: Consider running periodically
+    public void cleanup() {
+        synchronized (store) {
+            fileMetadataMap.keySet().removeIf(pathString -> Files.notExists(Path.of(pathString)));
             store.commit();
+            store.compactFile(2000);
         }
     }
 
     @Override
     public void close() {
-        synchronized (FileMetadataCache.class) {
+        synchronized (GLOBAL_LOCK) {
             if (refCount.decrementAndGet() <= 0) {
                 try {
                     if (!store.isClosed()) {
