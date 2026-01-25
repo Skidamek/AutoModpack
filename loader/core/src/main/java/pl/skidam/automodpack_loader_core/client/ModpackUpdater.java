@@ -167,7 +167,6 @@ public class ModpackUpdater {
         LOGGER.info("Modpack is already loaded");
     }
 
-    // TODO split it into different methods, its too long
     public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");
@@ -189,7 +188,7 @@ public class ModpackUpdater {
 
             // FETCH
             long startFetching = System.currentTimeMillis();
-            List<FetchManager.FetchData> fetchDatas = new LinkedList<>();
+            List<FetchManager.FetchData> fetchDatas = new ArrayList<>();
 
             for (Jsons.ModpackContentFields.ModpackContentItem serverItem : finalFilesToUpdate) {
 
@@ -202,11 +201,12 @@ public class ModpackUpdater {
                 }
             }
 
-            fetchManager = new FetchManager(fetchDatas);
-            new ScreenManager().fetch(fetchManager);
-            fetchManager.fetch();
-            LOGGER.info("Finished fetching urls in {}ms", System.currentTimeMillis() - startFetching);
-
+            if (!fetchDatas.isEmpty()) {
+                fetchManager = new FetchManager(fetchDatas);
+                new ScreenManager().fetch(fetchManager);
+                fetchManager.fetch();
+                LOGGER.info("Finished fetching urls in {}ms", System.currentTimeMillis() - startFetching);
+            }
 
             // DOWNLOAD
             try {
