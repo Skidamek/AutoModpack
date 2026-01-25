@@ -64,7 +64,7 @@ public class ModpackUtils {
 
         Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = ConcurrentHashMap.newKeySet();
 
-        try (var cache = new FileMetadataCache(hashCacheDBFile)) {
+        try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
             serverModpackContent.list.forEach(serverItem -> {
                 Path serverItemPath = SmartFileUtils.getPath(modpackDir, serverItem.file);
                 if (!existingFileTree.contains(serverItemPath)) {

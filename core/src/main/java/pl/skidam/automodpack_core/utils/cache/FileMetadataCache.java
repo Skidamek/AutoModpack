@@ -9,17 +9,37 @@ import java.io.Serializable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 public class FileMetadataCache implements AutoCloseable {
 
+    private static final Map<Path, FileMetadataCache> INSTANCES = new HashMap<>();
+    private final AtomicInteger refCount = new AtomicInteger(1);
+    private final Path dbPath;
+
+    public static synchronized FileMetadataCache open(Path path) {
+        Path absPath = path.toAbsolutePath().normalize();
+        FileMetadataCache existing = INSTANCES.get(absPath);
+
+        if (existing != null) {
+            existing.refCount.incrementAndGet();
+            return existing;
+        }
+
+        FileMetadataCache newCache = new FileMetadataCache(absPath);
+        INSTANCES.put(absPath, newCache);
+        return newCache;
+    }
+
+
     private final MVStore store;
     private final MVMap<String, CachedFile> fileMetadataMap;
     private final AtomicInteger uncommittedWrites = new AtomicInteger(0);
     private static final int COMMIT_THRESHOLD = 50;
-
     private final Object[] locks = new Object[64];
 
     public record CachedFile(
@@ -32,7 +52,8 @@ public class FileMetadataCache implements AutoCloseable {
         private static final long serialVersionUID = 1L;
     }
 
-    public FileMetadataCache(Path dbPath) {
+    private FileMetadataCache(Path dbPath) {
+        this.dbPath = dbPath;
         this.store = new MVStore.Builder()
                 .fileName(dbPath.toString())
                 .cacheSize(20)
@@ -130,12 +151,19 @@ public class FileMetadataCache implements AutoCloseable {
         }
     }
 
-
     @Override
     public void close() {
-        if (!store.isClosed()) {
-            store.commit();
-            store.close();
+        synchronized (FileMetadataCache.class) {
+            if (refCount.decrementAndGet() <= 0) {
+                try {
+                    if (!store.isClosed()) {
+                        store.commit();
+                        store.close();
+                    }
+                } finally {
+                    INSTANCES.remove(this.dbPath, this);
+                }
+            }
         }
     }
 }

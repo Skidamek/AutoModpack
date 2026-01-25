@@ -13,15 +13,10 @@ import static pl.skidam.automodpack_core.Constants.*;
 public class ModpackExecutor {
     private final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
     public final Map<String, ModpackContent> modpacks = new ConcurrentHashMap<>();
-    private final FileMetadataCache fileMetadataCache;
-
-    public ModpackExecutor() {
-        this.fileMetadataCache = new FileMetadataCache(hashCacheDBFile);
-    }
 
     private ModpackContent init() {
         if (isGenerating()) {
-            LOGGER.error("Called generate() twice!");
+            LOGGER.error("Called init() while generating!");
             return null;
         }
 
@@ -38,12 +33,15 @@ public class ModpackExecutor {
             return null;
         }
 
-        return new ModpackContent(serverConfig.modpackName, SmartFileUtils.CWD, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, CREATION_EXECUTOR, fileMetadataCache);
+        return new ModpackContent(serverConfig.modpackName, SmartFileUtils.CWD, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, CREATION_EXECUTOR);
     }
 
     public boolean generateNew(ModpackContent content) {
         if (content == null) return false;
-        boolean generated = content.create();
+        boolean generated;
+        try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+            generated = content.create(cache);
+        }
         modpacks.put(content.getModpackName(), content);
         return generated;
     }
@@ -51,7 +49,10 @@ public class ModpackExecutor {
     public boolean generateNew() {
         ModpackContent content = init();
         if (content == null) return false;
-        boolean generated = content.create();
+        boolean generated;
+        try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+            generated = content.create(cache);
+        }
         modpacks.put(content.getModpackName(), content);
         return generated;
     }
@@ -76,6 +77,5 @@ public class ModpackExecutor {
 
     public void stop() {
         CREATION_EXECUTOR.shutdown();
-        fileMetadataCache.close();
     }
 }
