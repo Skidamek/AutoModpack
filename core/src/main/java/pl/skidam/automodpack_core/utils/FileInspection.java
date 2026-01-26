@@ -358,11 +358,51 @@ public class FileInspection {
     );
 
     public static boolean hasSpecificServices(FileSystem fs) {
-        // Fast Check
+        // Fast Check: Look in the root FileSystem
         for (String service : KNOWN_SERVICES) {
-            if (Files.exists(fs.getPath(service))) return true;
+            if (Files.exists(fs.getPath(service))) {
+                return true;
+            }
         }
 
+        // Slow Check: Scan nested JARs in META-INF/jarjar
+        return hasSpecificServicesNested(fs);
+    }
+
+    private static boolean hasSpecificServicesNested(FileSystem fs) {
+        Path jarJarDir = fs.getPath("META-INF", "jarjar");
+
+        if (Files.notExists(jarJarDir)) {
+            return false;
+        }
+
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(jarJarDir, "*.jar")) {
+            for (Path nestedJar : stream) {
+                if (scanNestedJar(nestedJar)) {
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error examining JarJar directory in {}", fs, e);
+        }
+
+        return false;
+    }
+
+    private static boolean scanNestedJar(Path nestedJarPath) {
+        try (InputStream is = Files.newInputStream(nestedJarPath);
+             BufferedInputStream bis = new BufferedInputStream(is);
+             ZipInputStream zip = new ZipInputStream(bis)) {
+
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (KNOWN_SERVICES.contains(entry.getName())) {
+                    return true;
+                }
+            }
+        } catch (IOException e) {
+            LOGGER.error("Error reading nested JAR {}: {}", nestedJarPath, e.getMessage());
+        }
         return false;
     }
 
