@@ -89,11 +89,17 @@ public class ModpackContent {
                 }
             }
 
+            var tempPathMap = new HashMap<>(filesToProcess);
+
             List<CompletableFuture<Jsons.ModpackContentFields.ModpackContentItem>> futures = filesToProcess.entrySet().stream()
                     .map(entry -> CompletableFuture.supplyAsync(() -> {
                         try {
                             var contentEntry = generateContent(entry.getValue(), entry.getKey(), cache);
+                            if (contentEntry == null) {
+                                return null;
+                            }
                             LOGGER.debug("Generated modpack content for {}", entry.getValue());
+                            tempPathMap.put(contentEntry.sha1, entry.getValue());
                             return contentEntry;
                         } catch (Exception e) {
                             LOGGER.error("Error generating content for {}", entry.getValue(), e);
@@ -108,7 +114,7 @@ public class ModpackContent {
                 Jsons.ModpackContentFields.ModpackContentItem item = future.join();
                 if (item != null) {
                     list.add(item);
-                    pathsMap.put(item.sha1, SmartFileUtils.getPathFromCWD(item.file));
+                    pathsMap.put(item.sha1, tempPathMap.get(item.sha1));
                 }
             }
 
