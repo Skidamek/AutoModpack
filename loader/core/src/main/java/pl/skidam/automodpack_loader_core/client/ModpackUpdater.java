@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core.client;
 
+import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -28,7 +29,6 @@ import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 public class ModpackUpdater {
     public Changelogs changelogs = new Changelogs();
     public DownloadManager downloadManager;
-    public FetchManager fetchManager;
     public long totalBytesToDownload = 0;
     public boolean fullDownload = false;
     private Jsons.ModpackContentFields serverModpackContent;
@@ -201,6 +201,8 @@ public class ModpackUpdater {
                 }
             }
 
+            FetchManager fetchManager = null;
+
             if (!fetchDatas.isEmpty()) {
                 fetchManager = new FetchManager(fetchDatas);
                 new ScreenManager().fetch(fetchManager);
@@ -210,7 +212,7 @@ public class ModpackUpdater {
 
             // DOWNLOAD
             try {
-                downloadModpack(finalFilesToUpdate, startFetching, cache);
+                downloadModpack(finalFilesToUpdate, startFetching, fetchManager, cache);
 
                 LOGGER.info("Done, saving {}", modpackContentFile);
 
@@ -253,7 +255,7 @@ public class ModpackUpdater {
         }
     }
 
-    private void downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, FileMetadataCache cache) throws InterruptedException {
+    private void downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager, FileMetadataCache cache) throws InterruptedException {
         int wholeQueue = finalFilesToUpdate.size();
 
         if (wholeQueue == 0) {
@@ -287,7 +289,7 @@ public class ModpackUpdater {
             }
 
             List<String> urls = new ArrayList<>();
-            if (fetchManager.getFetchDatas().containsKey(serverHash)) {
+            if (fetchManager != null && fetchManager.getFetchDatas().containsKey(serverHash)) {
                 urls.addAll(fetchManager.getFetchDatas().get(serverHash).fetchedData().urls());
             }
 
