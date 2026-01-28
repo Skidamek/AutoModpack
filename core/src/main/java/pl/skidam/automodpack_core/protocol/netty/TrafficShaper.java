@@ -5,8 +5,8 @@ import io.netty.handler.traffic.GlobalTrafficShapingHandler;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.Constants.serverConfig;
 
 public class TrafficShaper {
 

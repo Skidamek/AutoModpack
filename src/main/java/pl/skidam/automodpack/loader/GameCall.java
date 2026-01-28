@@ -6,7 +6,7 @@ import pl.skidam.automodpack_core.loader.GameCallService;
 import java.net.SocketAddress;
 
 import static pl.skidam.automodpack.init.Common.server;
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class GameCall implements GameCallService {
 

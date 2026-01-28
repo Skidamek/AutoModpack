@@ -22,7 +22,7 @@ import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class Preload {
 
@@ -30,7 +30,7 @@ public class Preload {
         try {
             long start = System.currentTimeMillis();
             LOGGER.info("Prelaunching AutoModpack...");
-            initializeGlobalVariables();
+            initializeConstants();
             loadConfigs();
             updateAll();
             LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
@@ -41,7 +41,6 @@ public class Preload {
     }
 
     private void updateAll() {
-
         var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(clientConfig.selectedModpack);
 
         if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER || optionalSelectedModpackDir.isEmpty()) {
@@ -63,7 +62,7 @@ public class Preload {
         // Only selfupdate if no modpack is selected
         if (selectedModpackAddress == null) {
             SelfUpdater.update();
-            ClientCacheUtils.deleteDummyFiles();
+            LegacyClientCacheUtils.deleteDummyFiles();
         } else {
             Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
 
@@ -82,7 +81,7 @@ public class Preload {
             }
 
             // Delete dummy files
-            ClientCacheUtils.deleteDummyFiles();
+            LegacyClientCacheUtils.deleteDummyFiles();
 
             if (clientConfig.updateSelectedModpackOnLaunch) {
                 new ModpackUpdater(latestModpackContent, modpackAddresses, secret, selectedModpackDir).processModpackUpdate(null);
@@ -91,7 +90,7 @@ public class Preload {
     }
 
 
-    private void initializeGlobalVariables() {
+    private void initializeConstants() {
         // Initialize global variables
         preload = true;
         PRELOAD_TIME = System.currentTimeMillis();

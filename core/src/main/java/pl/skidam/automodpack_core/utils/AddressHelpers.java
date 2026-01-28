@@ -4,7 +4,7 @@ import java.net.*;
 import java.util.Enumeration;
 import java.util.Objects;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 public class AddressHelpers {
 

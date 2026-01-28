@@ -2,7 +2,7 @@ package pl.skidam.automodpack.networking;
 
 import pl.skidam.automodpack.init.Common;
 
-import static pl.skidam.automodpack_core.GlobalVariables.MOD_ID;
+import static pl.skidam.automodpack_core.Constants.MOD_ID;
 
 import net.minecraft.resources.Identifier;
 

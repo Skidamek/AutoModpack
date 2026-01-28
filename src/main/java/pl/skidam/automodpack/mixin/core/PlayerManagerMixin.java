@@ -24,7 +24,7 @@ import net.minecraft.server.network.CommonListenerCookie;
 import java.net.URI;
 /*?}*/
 
-import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
+import static pl.skidam.automodpack_core.Constants.serverConfig;
 
 @Mixin(PlayerList.class)
 public class PlayerManagerMixin {

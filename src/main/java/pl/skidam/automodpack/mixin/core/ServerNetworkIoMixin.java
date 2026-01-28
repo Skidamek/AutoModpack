@@ -5,10 +5,10 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 @Mixin(targets = "net/minecraft/server/network/ServerConnectionListener$1", priority = 2137)
 public abstract class ServerNetworkIoMixin {
@@ -30,6 +30,6 @@ public abstract class ServerNetworkIoMixin {
             return;
         }
 
-        channel.pipeline().addFirst(MOD_ID, new ProtocolServerHandler(GlobalVariables.hostServer.getSslCtx()));
+        channel.pipeline().addFirst(MOD_ID, new ProtocolServerHandler(Constants.hostServer.getSslCtx()));
     }
 }

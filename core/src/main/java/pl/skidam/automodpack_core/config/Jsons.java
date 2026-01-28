@@ -180,7 +180,7 @@ public class Jsons {
 
             @Override
             public String toString() {
-                return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, sha1=%s, murmur=%s)", file, size, type, editable, sha1, murmur);
+                return String.format("ModpackContentItems(file=%s, size=%s, type=%s, editable=%s, forceCopy=%s, sha1=%s, murmur=%s)", file, size, type, editable, forceCopy, sha1, murmur);
             }
 
             // if the relative file path is the same, we consider the items equal

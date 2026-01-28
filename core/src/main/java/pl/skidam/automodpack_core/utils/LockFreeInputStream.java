@@ -9,7 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
-import static pl.skidam.automodpack_core.utils.CustomFileUtils.isFilePhysical;
+import static pl.skidam.automodpack_core.utils.SmartFileUtils.isFilePhysical;
 
 /**
  * A safe input stream that can read files currently locked or in-use by other processes (like active game logs).

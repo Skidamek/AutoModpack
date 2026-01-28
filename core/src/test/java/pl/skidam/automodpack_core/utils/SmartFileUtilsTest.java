@@ -10,7 +10,7 @@ import java.security.NoSuchAlgorithmException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class CustomFileUtilsTest {
+class SmartFileUtilsTest {
 
     @TempDir
     Path tempDir;
@@ -21,7 +21,7 @@ class CustomFileUtilsTest {
         String content = "test content 2137!";
         Files.writeString(file, content);
 
-        String actualHash = CustomFileUtils.getHash(file);
+        String actualHash = SmartFileUtils.getHash(file);
 
         assertNotNull(actualHash, "Hash should not be null");
         assertEquals("16883d77e42fcb574c70e31cda49b3f955a48be8", actualHash, "getHash should return the correct SHA-1 hash");
@@ -32,7 +32,7 @@ class CustomFileUtilsTest {
         Path file = tempDir.resolve("murmur-test.txt");
         Files.writeString(file, "test content 2137!");
 
-        String actualHash = CustomFileUtils.getCurseforgeMurmurHash(file);
+        String actualHash = SmartFileUtils.getCurseforgeMurmurHash(file);
 
         assertEquals("3151456706", actualHash, "MurmurHash for 'test' should match known constant");
     }
@@ -48,8 +48,8 @@ class CustomFileUtilsTest {
         Files.writeString(cleanFile, cleanContent);
         Files.writeString(messyFile, messyContent);
 
-        String cleanHash = CustomFileUtils.getCurseforgeMurmurHash(cleanFile);
-        String messyHash = CustomFileUtils.getCurseforgeMurmurHash(messyFile);
+        String cleanHash = SmartFileUtils.getCurseforgeMurmurHash(cleanFile);
+        String messyHash = SmartFileUtils.getCurseforgeMurmurHash(messyFile);
 
         assertEquals(cleanHash, messyHash, "Hashes should be identical despite whitespace differences");
         assertEquals("2667173943", messyHash, "Messy file should still hash to the value of 'test'");
@@ -59,7 +59,7 @@ class CustomFileUtilsTest {
     void testGetHash_NonExistentFile() {
         Path missingFile = tempDir.resolve("does-not-exist.txt");
 
-        String result = CustomFileUtils.getHash(missingFile);
+        String result = SmartFileUtils.getHash(missingFile);
         
         assertNull(result, "Should return null for missing file");
     }

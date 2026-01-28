@@ -6,7 +6,7 @@ import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import pl.skidam.automodpack_core.utils.CustomFileUtils;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 
 import java.io.InputStream;
@@ -100,7 +100,7 @@ public class NetUtils {
         String certPem = "-----BEGIN CERTIFICATE-----\n"
                 + formatBase64(Base64.getEncoder().encodeToString(cert.getEncoded()))
                 + "-----END CERTIFICATE-----";
-        CustomFileUtils.setupFilePaths(path);
+        SmartFileUtils.setupFilePaths(path);
         Files.writeString(path, certPem);
     }
 
@@ -117,7 +117,7 @@ public class NetUtils {
         String keyPem = "-----BEGIN PRIVATE KEY-----\n"
                 + formatBase64(Base64.getEncoder().encodeToString(keySpec.getEncoded()))
                 + "-----END PRIVATE KEY-----";
-        CustomFileUtils.setupFilePaths(path);
+        SmartFileUtils.setupFilePaths(path);
         Files.writeString(path, keyPem);
     }
 

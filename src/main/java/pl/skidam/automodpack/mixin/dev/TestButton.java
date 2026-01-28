@@ -9,7 +9,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOADER_MANAGER;
+import static pl.skidam.automodpack_core.Constants.LOADER_MANAGER;
 
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;

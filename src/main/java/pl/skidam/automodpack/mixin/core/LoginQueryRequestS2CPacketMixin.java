@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import pl.skidam.automodpack.networking.PayloadHelper;
 import pl.skidam.automodpack.networking.server.LoginRequestPayload;
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 
 // TODO find better way to do this, its mixin only for 1.20.2 and above
 @Mixin(value = ClientboundCustomQueryPacket.class, priority = 300)
@@ -28,7 +28,7 @@ public class LoginQueryRequestS2CPacketMixin {
 
     @Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
     private static void readPayload(Identifier id, FriendlyByteBuf buf, CallbackInfoReturnable<CustomQueryPayload> cir) {
-        if (id.getNamespace().equals(GlobalVariables.MOD_ID)) {
+        if (id.getNamespace().equals(Constants.MOD_ID)) {
             cir.setReturnValue(new LoginRequestPayload(id, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE)));
         }
     }

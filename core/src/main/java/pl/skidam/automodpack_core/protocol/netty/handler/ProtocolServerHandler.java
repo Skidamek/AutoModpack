@@ -18,9 +18,9 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.List;
 
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
-import static pl.skidam.automodpack_core.GlobalVariables.hostServer;
-import static pl.skidam.automodpack_core.GlobalVariables.serverConfig;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.Constants.hostServer;
+import static pl.skidam.automodpack_core.Constants.serverConfig;
 import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 
 public class ProtocolServerHandler extends ByteToMessageDecoder {

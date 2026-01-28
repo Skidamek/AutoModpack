@@ -5,13 +5,11 @@ import pl.skidam.automodpack_core.config.Jsons;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
-public class ClientCacheUtils {
+public class LegacyClientCacheUtils {
 
     // TODO change this dummy byte array to contain also some metadata that we have created it
     private static final byte[] smallDummyJar = {
@@ -28,80 +26,11 @@ public class ClientCacheUtils {
             77, 70, -2, -54, 0, 0, 80, 75, 5, 6, 0, 0, 0, 0, 1, 0,
             1, 0, 70, 0, 0, 0, 97, 0, 0, 0, 0, 0,
     };
+
     private static final Jsons.ClientDummyFiles cacheDummyFiles = ConfigTools.load(clientDummyFilesFile, Jsons.ClientDummyFiles.class);
-    private static final Jsons.LocalMetadata clientMetadataCache = ConfigTools.load(clientLocalMetadataFile, Jsons.LocalMetadata.class);
     private static final Jsons.ClientDeletedNonModpackFilesTimestamps clientDeletedNonModpackFilesTimestamps = ConfigTools.load(clientDeletionTimeStamps, Jsons.ClientDeletedNonModpackFilesTimestamps.class);
 
-    // Metadata
-
-    // Cheap cache check - 0 bytes read
-    public static String getVerifiedCacheHash(Path path) {
-        if (clientMetadataCache == null) return null;
-
-        try {
-            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
-            Jsons.LocalMetadata.FileFingerprint fingerprint = clientMetadataCache.files.get(path.toAbsolutePath().normalize().toString());
-
-            if (fingerprint != null && fingerprint.lastSize == attrs.size() && fingerprint.lastModified == attrs.lastModifiedTime().toMillis()) {
-                return fingerprint.sha1;
-            }
-        } catch (IOException e) {
-            LOGGER.debug("Could not read attributes for {}", path);
-        }
-        return null; // Metadata mismatch or missing cache
-    }
-
-    public static void updateMetadataCache(Path path, String hash) {
-        if (clientMetadataCache == null) return;
-        try {
-            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
-            clientMetadataCache.files.put(path.toAbsolutePath().normalize().toString(), new Jsons.LocalMetadata.FileFingerprint(hash, attrs.size(), attrs.lastModifiedTime().toMillis()));
-        } catch (IOException e) {
-            LOGGER.error("Could not update cache for {}", path, e);
-        }
-    }
-
-    public static String computeHashIfNeeded(Path modPath) {
-        // Check cache first
-        String cachedHash = getVerifiedCacheHash(modPath);
-        if (cachedHash != null) return cachedHash;
-
-        // Fallback to hashing and update cache
-        String diskHash = CustomFileUtils.getHash(modPath);
-        updateMetadataCache(modPath, diskHash);
-        return diskHash;
-    }
-
-    public static boolean fastHashCompare(Path file1, Path file2) {
-        if (!Files.exists(file1) || !Files.exists(file2)) return false;
-
-        String hash1 = computeHashIfNeeded(file1);
-        String hash2 = computeHashIfNeeded(file2);
-
-        if (hash1 == null || hash2 == null) return false;
-
-        return hash1.equals(hash2);
-    }
-
-    public static void updateCache(Path path, String hash) {
-        if (clientMetadataCache == null) return;
-        try {
-            BasicFileAttributes attrs = Files.readAttributes(path, BasicFileAttributes.class);
-            clientMetadataCache.files.put(path.toAbsolutePath().normalize().toString(), new Jsons.LocalMetadata.FileFingerprint(hash, attrs.size(), attrs.lastModifiedTime().toMillis()));
-        } catch (IOException e) {
-            LOGGER.error("Could not update cache for {}", path, e);
-        }
-    }
-
-    public static void saveMetadataCache() {
-        if (clientMetadataCache == null) {
-            return;
-        }
-        ConfigTools.save(clientLocalMetadataFile, clientMetadataCache);
-    }
-
     // Dummy
-
     public static void deleteDummyFiles() {
         if (cacheDummyFiles == null || cacheDummyFiles.files.isEmpty()) {
             return;
@@ -112,8 +41,8 @@ public class ClientCacheUtils {
             try {
                 String filePath = iterator.next();
                 Path file = Path.of(filePath);
-                if (CustomFileUtils.compareFilesByteByByte(file, smallDummyJar)) {
-                    CustomFileUtils.executeOrder66(file, false);
+                if (SmartFileUtils.compareSmallFile(file, smallDummyJar)) {
+                    SmartFileUtils.executeOrder66(file, false);
                 }
                 iterator.remove();
             } catch (Exception e) {
@@ -146,6 +75,8 @@ public class ClientCacheUtils {
         }
         ConfigTools.save(clientDummyFilesFile, cacheDummyFiles);
     }
+
+    // Non Modpack Deleted files timestamps
 
     public static boolean wasThisTimestampEvaluatedBefore(String timestamp) {
         if (clientDeletedNonModpackFilesTimestamps == null) return false;

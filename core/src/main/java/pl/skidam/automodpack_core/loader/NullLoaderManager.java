@@ -1,9 +1,5 @@
 package pl.skidam.automodpack_core.loader;
 
-import pl.skidam.automodpack_core.utils.FileInspection;
-
-import java.util.Collection;
-
 public class NullLoaderManager implements LoaderManagerService {
     @Override
     public ModPlatform getPlatformType() {
@@ -13,11 +9,6 @@ public class NullLoaderManager implements LoaderManagerService {
     @Override
     public boolean isModLoaded(String modId) {
         return false;
-    }
-
-    @Override
-    public Collection<FileInspection.Mod> getModList() {
-        return null;
     }
 
     @Override

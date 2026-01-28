@@ -1,6 +1,6 @@
 package pl.skidam.automodpack_core.utils.launchers;
 
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 
 import java.nio.file.Path;
 
@@ -16,7 +16,7 @@ public class PandoraMeta {
 
             if (!newVersion.equals(currentVersion)) {
                 json.addProperty("preferred_loader_version", newVersion);
-                GlobalVariables.LOGGER.info("Pandora: Updated loader version to {}", newVersion);
+                Constants.LOGGER.info("Pandora: Updated loader version to {}", newVersion);
                 return true;
             }
             return false;

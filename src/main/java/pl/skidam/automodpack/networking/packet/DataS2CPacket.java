@@ -13,7 +13,7 @@ import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 
-import static pl.skidam.automodpack_core.GlobalVariables.*;
+import static pl.skidam.automodpack_core.Constants.*;
 
 public class DataS2CPacket {
 

@@ -3,7 +3,7 @@ package pl.skidam.automodpack_core.utils;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import java.util.Locale;
-import static pl.skidam.automodpack_core.GlobalVariables.LOGGER;
+import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_ZSTD;
 
 public class PlatformUtils {
