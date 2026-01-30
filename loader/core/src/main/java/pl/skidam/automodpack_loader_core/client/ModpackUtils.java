@@ -154,6 +154,11 @@ public class ModpackUtils {
             Path modpackFile = SmartFileUtils.getPath(modpackDir, formattedFile);
             Path storeFile = SmartFileUtils.getPath(storeDir, contentItem.sha1);
 
+            if (!Files.exists(storeFile)) {
+                LOGGER.debug("File {} not found in store, can't hardlink", formattedFile);
+                return;
+            }
+
             if (!Files.exists(modpackFile)) {
                 LOGGER.debug("Hard-linking {} file to the modpack directory", formattedFile);
                 SmartFileUtils.hardlinkFile(storeFile, modpackFile);
