@@ -32,6 +32,7 @@ public class Constants {
     public static Jsons.ClientConfigFieldsV2 clientConfig;
     public static Jsons.KnownHostsFields knownHosts;
     public static final Path automodpackDir = Path.of("automodpack");
+    public static final Path storeDir = automodpackDir.resolve("store");
     public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
     // TODO More server modpacks
     // Main - required

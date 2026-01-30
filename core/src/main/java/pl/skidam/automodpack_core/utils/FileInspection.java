@@ -54,7 +54,7 @@ public class FileInspection {
     public static Mod getMod(Path file, FileMetadataCache cache) {
         if (isJarInvalid(file)) return null;
 
-        String hash = cache != null ? cache.getHashOrNull(file) : SmartFileUtils.getHash(file);
+        String hash = cache != null ? cache.getHashOrNull(file) : HashUtils.getHash(file);
         if (hash == null) {
             LOGGER.error("Failed to get hash for file: {}", file);
             return null;

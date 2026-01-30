@@ -306,14 +306,14 @@ public class ModpackContent {
             type = "other";
         }
 
-        String sha1 = cache != null ? cache.getHashOrNull(file) : SmartFileUtils.getHash(file);
+        String sha1 = cache != null ? cache.getHashOrNull(file) : HashUtils.getHash(file);
 
         // For CF API
         String murmur = null;
         if (type.equals("mod") || type.equals("shader") || type.equals("resourcepack")) {
             murmur = sha1MurmurMapPreviousContent.get(sha1); // Get from cache
             if (murmur == null) {
-                murmur = SmartFileUtils.getCurseforgeMurmurHash(file);
+                murmur = HashUtils.getCurseforgeMurmurHash(file);
             }
         }
 

@@ -100,7 +100,7 @@ public class NetUtils {
         String certPem = "-----BEGIN CERTIFICATE-----\n"
                 + formatBase64(Base64.getEncoder().encodeToString(cert.getEncoded()))
                 + "-----END CERTIFICATE-----";
-        SmartFileUtils.setupFilePaths(path);
+        SmartFileUtils.createParentDirs(path);
         Files.writeString(path, certPem);
     }
 
@@ -117,7 +117,7 @@ public class NetUtils {
         String keyPem = "-----BEGIN PRIVATE KEY-----\n"
                 + formatBase64(Base64.getEncoder().encodeToString(keySpec.getEncoded()))
                 + "-----END PRIVATE KEY-----";
-        SmartFileUtils.setupFilePaths(path);
+        SmartFileUtils.createParentDirs(path);
         Files.writeString(path, keyPem);
     }
 
