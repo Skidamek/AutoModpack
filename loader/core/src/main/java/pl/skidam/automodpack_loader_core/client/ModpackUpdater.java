@@ -219,8 +219,8 @@ public class ModpackUpdater {
                 // Downloads completed, save json files
                 Files.writeString(modpackContentFile, serverModpackContentJson);
             } catch (Exception e) {
-                downloadManager.cancelAllAndShutdown();
-                LOGGER.error("Error during modpack download", e);
+                if (downloadManager != null) downloadManager.cancelAllAndShutdown();
+                throw e;
             }
 
             LegacyClientCacheUtils.deleteDummyFiles();
