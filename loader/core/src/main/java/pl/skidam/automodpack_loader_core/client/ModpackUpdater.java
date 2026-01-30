@@ -179,8 +179,8 @@ public class ModpackUpdater {
 
         try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
             // Don't download files which already exist
-            // The existing files will be copied over in the applyModpack method
-            var finalFilesToUpdate = ModpackUtils.getOnlyNonExistingFiles(filesToUpdate, cache);
+            ModpackUtils.populateStoreFromCWD(filesToUpdate, cache);
+            var finalFilesToUpdate = ModpackUtils.identifyUncachedFiles(filesToUpdate);
 
             // Rename modpack
             modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
@@ -441,6 +441,8 @@ public class ModpackUpdater {
             throw new IllegalStateException("Failed to load modpack content"); // Something gone very wrong...
         }
 
+        ModpackUtils.hardlinkModpack(modpackDir, modpackContent, cache);
+
         // Prepare modpack, analyze nested mods
         List<FileInspection.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir, cache);
 
@@ -450,8 +452,6 @@ public class ModpackUpdater {
         Set<String> workaroundMods = new WorkaroundUtil(modpackDir).getWorkaroundMods(modpackContent);
         Set<String> filesNotToCopy = getFilesNotToCopy(modpackContent.list, workaroundMods);
         boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy, cache);
-        workaroundMods = new WorkaroundUtil(modpackDir).getWorkaroundMods(modpackContent);
-        filesNotToCopy = getFilesNotToCopy(modpackContent.list, workaroundMods);
 
         Set<Path> modpackMods = new HashSet<>();
         Collection<FileInspection.Mod> modpackModList = new ArrayList<>();

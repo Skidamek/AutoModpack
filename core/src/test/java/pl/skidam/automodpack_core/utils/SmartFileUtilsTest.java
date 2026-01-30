@@ -21,7 +21,7 @@ class SmartFileUtilsTest {
         String content = "test content 2137!";
         Files.writeString(file, content);
 
-        String actualHash = SmartFileUtils.getHash(file);
+        String actualHash = HashUtils.getHash(file);
 
         assertNotNull(actualHash, "Hash should not be null");
         assertEquals("16883d77e42fcb574c70e31cda49b3f955a48be8", actualHash, "getHash should return the correct SHA-1 hash");
@@ -32,7 +32,7 @@ class SmartFileUtilsTest {
         Path file = tempDir.resolve("murmur-test.txt");
         Files.writeString(file, "test content 2137!");
 
-        String actualHash = SmartFileUtils.getCurseforgeMurmurHash(file);
+        String actualHash = HashUtils.getCurseforgeMurmurHash(file);
 
         assertEquals("3151456706", actualHash, "MurmurHash for 'test' should match known constant");
     }
@@ -48,8 +48,8 @@ class SmartFileUtilsTest {
         Files.writeString(cleanFile, cleanContent);
         Files.writeString(messyFile, messyContent);
 
-        String cleanHash = SmartFileUtils.getCurseforgeMurmurHash(cleanFile);
-        String messyHash = SmartFileUtils.getCurseforgeMurmurHash(messyFile);
+        String cleanHash = HashUtils.getCurseforgeMurmurHash(cleanFile);
+        String messyHash = HashUtils.getCurseforgeMurmurHash(messyFile);
 
         assertEquals(cleanHash, messyHash, "Hashes should be identical despite whitespace differences");
         assertEquals("2667173943", messyHash, "Messy file should still hash to the value of 'test'");
@@ -59,7 +59,7 @@ class SmartFileUtilsTest {
     void testGetHash_NonExistentFile() {
         Path missingFile = tempDir.resolve("does-not-exist.txt");
 
-        String result = SmartFileUtils.getHash(missingFile);
+        String result = HashUtils.getHash(missingFile);
         
         assertNull(result, "Should return null for missing file");
     }

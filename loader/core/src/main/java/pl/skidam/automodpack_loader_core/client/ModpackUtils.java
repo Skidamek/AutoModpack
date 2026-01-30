@@ -108,34 +108,63 @@ public class ModpackUtils {
         return new UpdateCheckResult(false, Set.of());
     }
 
-    // TODO check more dirs, preferably with a database of all indexed files by their hashes
-    // This will scan the CWD with CustomFileUtils.getPathFromCWD(modpack.file) and if the file exist with matching hash, it won't be returned in the final set
-    // Used to avoid downloading files that are already present and valid on disk so we can just copy them over instead of downloading them all again
-    public static Set<Jsons.ModpackContentFields.ModpackContentItem> getOnlyNonExistingFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck, FileMetadataCache cache) {
-        Set<Jsons.ModpackContentFields.ModpackContentItem> nonExistingFiles = new HashSet<>();
+    // Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
+    public static void populateStoreFromCWD(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache) {
+        for (var entry : filesToUpdate) {
+            Path storeFile = SmartFileUtils.getPath(storeDir, entry.sha1);
 
-        LOGGER.info("Checking for existing files to skip downloading...");
-        var time = System.currentTimeMillis();
-        int filesSkipped = 0;
+            if (Files.exists(storeFile)) {
+                LOGGER.debug("File already exists in store: {}", entry.file);
+                continue;
+            }
 
-        for (var entry : filesToCheck) {
             Path fileInCWD = SmartFileUtils.getPathFromCWD(entry.file);
             if (Files.isRegularFile(fileInCWD)) {
                 String diskHash = cache.getHashOrNull(fileInCWD);
                 if (diskHash.equalsIgnoreCase(entry.sha1)) {
-                    LOGGER.debug("File already exists and matches hash, skipping download: {}", entry.file);
-                    filesSkipped++;
-                    continue;
+                    LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
+                    try {
+                        SmartFileUtils.copyFile(fileInCWD, storeFile);
+                    } catch (IOException e) {
+                        LOGGER.error("Failed to copy file from CWD to store: {}", entry.file, e);
+                    }
                 }
             }
-
-            nonExistingFiles.add(entry);
         }
+    }
 
+    // Returns the set of files that are missing from the store.
+    public static Set<Jsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck) {
+        Set<Jsons.ModpackContentFields.ModpackContentItem> nonExistingFiles = new HashSet<>();
+        for (var entry : filesToCheck) {
+            Path storeFile = SmartFileUtils.getPath(storeDir, entry.sha1);
 
-        LOGGER.info("Finished checking for existing files in CWD, {} files left to download (skipped {} existing). Took {} ms", nonExistingFiles.size(), filesSkipped, System.currentTimeMillis() - time);
-
+            if (!Files.exists(storeFile)) {
+                nonExistingFiles.add(entry);
+            }
+        }
         return nonExistingFiles;
+    }
+
+    // Installs files from the store (storeDir/<sha1>) to the instance (modpackDir/<file>).
+    // Attempts to hardlink first, falls back to a copy if that fails.
+    public static void hardlinkModpack(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, FileMetadataCache cache) throws IOException {
+        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
+            String formattedFile = contentItem.file;
+            Path modpackFile = SmartFileUtils.getPath(modpackDir, formattedFile);
+            Path storeFile = SmartFileUtils.getPath(storeDir, contentItem.sha1);
+
+            if (!Files.exists(modpackFile)) {
+                LOGGER.debug("Hard-linking {} file to the modpack directory", formattedFile);
+                SmartFileUtils.hardlinkFile(storeFile, modpackFile);
+            } else {
+                String modpackFileHash = cache.getHashOrNull(modpackFile);
+                if (!contentItem.sha1.equalsIgnoreCase(modpackFileHash)) {
+                    LOGGER.debug("Over-hard-linking {} file in the modpack directory", formattedFile);
+                    SmartFileUtils.hardlinkFile(storeFile, modpackFile);
+                }
+            }
+        }
     }
 
     public static boolean deleteFilesMarkedForDeletionByTheServer(Set<Jsons.ModpackContentFields.FileToDelete> filesToDeleteOnClient, FileMetadataCache cache) {
@@ -229,12 +258,6 @@ public class ModpackUtils {
             boolean runFileExists = Files.exists(runFile);
             boolean runFileHashMatch = false;
             if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, cache.getHashOrNull(runFile));
-
-            if (runFileHashMatch && !modpackFileExists) {
-                LOGGER.debug("Copying {} file to the modpack directory", formattedFile);
-                SmartFileUtils.copyFile(runFile, modpackFile);
-                modpackFileExists = true;
-            }
 
             // We only copy mods to the run directory which are not ignored - which need a workaround
             // If its any other file type, always copy

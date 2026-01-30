@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_loader_core;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
@@ -102,7 +103,7 @@ public class SelfUpdater {
             }
 
             // Exact Hash Match (Fastest check)
-            if (automodpack.SHA1Hash().equals(SmartFileUtils.getHash(THIS_MOD_JAR))) {
+            if (automodpack.SHA1Hash().equals(HashUtils.getHash(THIS_MOD_JAR))) {
                 LOGGER.info("Already on the target version (Hash match): {}", AM_VERSION);
                 return false;
             }

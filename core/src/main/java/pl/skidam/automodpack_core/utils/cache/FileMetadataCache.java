@@ -2,7 +2,7 @@ package pl.skidam.automodpack_core.utils.cache;
 
 import org.h2.mvstore.MVMap;
 import org.h2.mvstore.MVStore;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.HashUtils;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -85,7 +85,7 @@ public class FileMetadataCache implements AutoCloseable {
             }
 
             // Actual work happens here
-            String newHash = SmartFileUtils.getHash(absPath);
+            String newHash = HashUtils.getHash(absPath);
 
             CachedFile newRecord = new CachedFile(newHash, currentTime, currentSize, currentFileKey);
             fileMetadataMap.put(pathKey, newRecord);
