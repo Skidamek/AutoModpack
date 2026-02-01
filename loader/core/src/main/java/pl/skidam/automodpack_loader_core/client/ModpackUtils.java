@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core.client;
 
+import org.jetbrains.annotations.NotNull;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -16,6 +17,7 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import java.io.*;
 import java.net.*;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.*;
@@ -50,40 +52,93 @@ public class ModpackUtils {
             return new UpdateCheckResult(true, serverModpackContent.list);
         }
 
-        LOGGER.info("Indexing file system...");
-        var start = System.currentTimeMillis();
-
-        Set<Path> existingFileTree;
-        try (var stream = Files.walk(modpackDir)) {
-            existingFileTree = stream.collect(Collectors.toSet());
-        } catch (IOException e) {
-            LOGGER.error("Failed to walk directory", e);
-            return new UpdateCheckResult(true, serverModpackContent.list);
-        }
-
         LOGGER.info("Verifying content against server list...");
+        var start = System.currentTimeMillis();
 
         Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = ConcurrentHashMap.newKeySet();
 
+        // Group & Sort Server Files (Optimizes Disk Seek Pattern)
+        // Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
+        // TreeMap ensures alphabetical order of directories (HDD friendly).
+        Map<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> itemsByDir =
+                serverModpackContent.list.stream()
+                        .collect(Collectors.groupingBy(
+                                item -> SmartFileUtils.getPath(modpackDir, item.file).getParent(),
+                                TreeMap::new,
+                                Collectors.toList()
+                        ));
+
         try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-            serverModpackContent.list.forEach(serverItem -> {
-                Path serverItemPath = SmartFileUtils.getPath(modpackDir, serverItem.file);
-                if (!existingFileTree.contains(serverItemPath)) {
-                    filesToUpdate.add(serverItem); // File is missing
-                    return;
-                } else if (serverItem.editable) { // TODO check if this is enough of a check, what if user already had a file but there's provided the same by a new modpack version which wasnt in the modpack before?
-                    LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
-                    return;
+
+            // Process Directory by Directory
+            for (Map.Entry<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
+                Path parentDir = entry.getKey();
+                List<Jsons.ModpackContentFields.ModpackContentItem> itemsInDir = entry.getValue();
+
+                // If directory is missing, all items in it are missing.
+                if (!Files.exists(parentDir)) {
+                    filesToUpdate.addAll(itemsInDir);
+                    continue;
                 }
 
-                String hash = cache.getHashOrNull(serverItemPath);
-                if (hash != null && hash.equals(serverItem.sha1)) {
-                    return; // File is up to date
+                // Read all file attributes in this folder in ONE pass.
+                // This map will hold "FileName" -> "Attributes"
+                Map<String, BasicFileAttributes> diskFiles = new HashMap<>();
+
+                try {
+                    // walkFileTree with depth 1 is efficient on Windows (gets attributes for free within a single syscall)
+                    Files.walkFileTree(parentDir, EnumSet.noneOf(FileVisitOption.class), 1, new SimpleFileVisitor<>() {
+                        @NotNull @Override
+                        public FileVisitResult visitFile(@NotNull Path file, @NotNull BasicFileAttributes attrs) {
+                            diskFiles.put(file.getFileName().toString(), attrs);
+                            return FileVisitResult.CONTINUE;
+                        }
+
+                        @NotNull @Override
+                        public FileVisitResult visitFileFailed(@NotNull Path file, @NotNull IOException exc) {
+                            return FileVisitResult.CONTINUE; // Handle locked files or permission errors gracefully
+                        }
+                    });
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to inspect directory: {}", parentDir, e);
+                    filesToUpdate.addAll(itemsInDir);
+                    continue;
                 }
 
-                // This file needs to be updated
-                filesToUpdate.add(serverItem);
-            });
+                // Check Individual Files in a given directory (Pure RAM logic, 0 IO)
+                for (var serverItem : itemsInDir) {
+                    String fileName = Paths.get(serverItem.file).getFileName().toString();
+                    BasicFileAttributes diskAttrs = diskFiles.get(fileName);
+
+                    if (diskAttrs == null) {
+                        // File does not exist in the directory map
+                        filesToUpdate.add(serverItem);
+                    } else {
+                        if (serverItem.editable) { // TODO check if this is enough of a check, what if user already had a file but there's provided the same by a new modpack version which wasn't in the modpack before?
+                            LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
+                            continue;
+                        }
+
+                        // Check Size first from already read attributes
+                        if (diskAttrs.size() != Long.parseLong(serverItem.size)) {
+                            filesToUpdate.add(serverItem);
+                            continue;
+                        }
+
+                        // Finally, check Hash
+                        // We pass 'diskAttrs' to the cache so it doesn't need to re-stat the file.
+                        String hash = cache.getHashOrNullWithAttributes(parentDir.resolve(fileName), diskAttrs);
+
+                        if (!serverItem.sha1.equalsIgnoreCase(hash)) {
+                            filesToUpdate.add(serverItem);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error during update check", e);
+            // Fail-safe: assume update needed if process crashes
+            return new UpdateCheckResult(true, serverModpackContent.list);
         }
 
         if (!filesToUpdate.isEmpty()) {
@@ -99,7 +154,7 @@ public class ModpackUtils {
 
         for (Jsons.ModpackContentFields.ModpackContentItem clientItem : clientModpackContent.list) {
             if (!serverFileSet.contains(clientItem.file)) {
-                LOGGER.info("Found file marked for deletion (its no longer on server): {}", clientItem.file);
+                LOGGER.info("Found file marked for deletion: {}", clientItem.file);
                 return new UpdateCheckResult(true, Set.of());
             }
         }
