@@ -61,10 +61,14 @@ public class FileMetadataCache implements AutoCloseable {
     }
 
     public String getOrComputeHash(Path file) throws IOException {
+        BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
+        return getOrComputeHashWithAttributes(file, attrs);
+    }
+
+    public String getOrComputeHashWithAttributes(Path file, BasicFileAttributes attrs) {
         Path absPath = file.toAbsolutePath().normalize();
         String pathKey = absPath.toString();
 
-        BasicFileAttributes attrs = Files.readAttributes(absPath, BasicFileAttributes.class);
         long currentSize = attrs.size();
         long currentTime = attrs.lastModifiedTime().toMillis();
         String currentFileKey = attrs.fileKey() != null ? attrs.fileKey().toString() : "null";
@@ -102,6 +106,15 @@ public class FileMetadataCache implements AutoCloseable {
         try {
             return getOrComputeHash(path);
         } catch (IOException e) {
+            LOGGER.error("Failed to compute hash for path: {}", path, e);
+            return null;
+        }
+    }
+
+    public String getHashOrNullWithAttributes(Path path, BasicFileAttributes attrs) {
+        try {
+            return getOrComputeHashWithAttributes(path, attrs);
+        } catch (Exception e) {
             LOGGER.error("Failed to compute hash for path: {}", path, e);
             return null;
         }
