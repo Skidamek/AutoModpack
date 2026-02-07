@@ -22,8 +22,8 @@ legacyForge {
 }
 
 dependencies {
-    implementation(project(":core"))
-    implementation(project(":loader-core"))
+    implementation(project(":core")) { isTransitive = false }
+    implementation(project(":loader-core")) { isTransitive = false }
 
     compileOnly("net.fabricmc.fabric-api:fabric-api:0.92.6+1.20.1")
     annotationProcessor("org.spongepowered:mixin:0.8.5:processor") // Required to generate refmaps

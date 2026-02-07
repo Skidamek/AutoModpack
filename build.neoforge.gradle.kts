@@ -22,8 +22,8 @@ repositories {
 }
 
 dependencies {
-    implementation(project(":core"))
-    implementation(project(":loader-core"))
+    implementation(project(":core")) { isTransitive = false }
+    implementation(project(":loader-core")) { isTransitive = false }
 
     implementation("org.sinytra.forgified-fabric-api:forgified-fabric-api:0.115.6+2.1.4+1.21.1")
 }

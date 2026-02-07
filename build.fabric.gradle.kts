@@ -16,8 +16,8 @@ loom {
 }
 
 dependencies {
-    implementation(project(":core"))
-    implementation(project(":loader-core"))
+    implementation(project(":core")) { isTransitive = false }
+    implementation(project(":loader-core")) { isTransitive = false }
 
     minecraft("com.mojang:minecraft:${property("deps.minecraft")}")
     mappings(loom.officialMojangMappings())
