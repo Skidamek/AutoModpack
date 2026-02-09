@@ -275,12 +275,11 @@ public class ModpackUpdater {
         new ScreenManager().download(downloadManager, getModpackName());
         downloadManager.attachDownloadClient(downloadClient);
 
-        var randomizedList = new ArrayList<>(finalFilesToUpdate);
-        Collections.shuffle(randomizedList);
-        for (var serverItem : randomizedList) {
+        for (var serverItem : finalFilesToUpdate) {
 
             String serverFilePath = serverItem.file;
-            String serverHash = serverItem.sha1;
+            String serverFileHash = serverItem.sha1;
+            long serverFileSize = Long.parseLong(serverItem.size);
 
             Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
 
@@ -289,8 +288,8 @@ public class ModpackUpdater {
             }
 
             List<String> urls = new ArrayList<>();
-            if (fetchManager != null && fetchManager.getFetchDatas().containsKey(serverHash)) {
-                urls.addAll(fetchManager.getFetchDatas().get(serverHash).fetchedData().urls());
+            if (fetchManager != null && fetchManager.getFetchDatas().containsKey(serverFileHash)) {
+                urls.addAll(fetchManager.getFetchDatas().get(serverFileHash).fetchedData().urls());
             }
 
             Runnable failureCallback = () -> {
@@ -299,21 +298,21 @@ public class ModpackUpdater {
 
             Runnable successCallback = () -> {
                 List<String> mainPageUrls = new LinkedList<>();
-                if (fetchManager != null && fetchManager.getFetchDatas().get(serverHash) != null) {
-                    mainPageUrls = fetchManager.getFetchDatas().get(serverHash).fetchedData().mainPageUrls();
+                if (fetchManager != null && fetchManager.getFetchDatas().get(serverFileHash) != null) {
+                    mainPageUrls = fetchManager.getFetchDatas().get(serverFileHash).fetchedData().mainPageUrls();
                 }
 
                 changelogs.changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrls);
 
                 try {
-                    cache.overwriteCache(downloadFile, serverHash);
+                    cache.overwriteCache(downloadFile, serverFileHash);
                 } catch (Exception e) {
                     LOGGER.error("Failed to update cache for {}", downloadFile, e);
                 }
             };
 
 
-            downloadManager.download(downloadFile, serverHash, urls, successCallback, failureCallback);
+            downloadManager.download(downloadFile, serverFileHash, urls, serverFileSize, successCallback, failureCallback);
         }
 
         downloadManager.joinAll();
@@ -385,12 +384,11 @@ public class ModpackUpdater {
 
             // TODO try to fetch again from modrinth and curseforge
 
-            randomizedList = new ArrayList<>(refreshedFilteredList);
-            Collections.shuffle(randomizedList);
-            for (var serverItem : randomizedList) {
+            for (var serverItem : refreshedFilteredList) {
 
                 String serverFilePath = serverItem.file;
-                String serverHash = serverItem.sha1;
+                String serverFileHash = serverItem.sha1;
+                long serverFileSize = Long.parseLong(serverItem.size);
 
                 Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
 
@@ -404,13 +402,13 @@ public class ModpackUpdater {
                     changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
 
                     try {
-                        cache.overwriteCache(downloadFile, serverHash);
+                        cache.overwriteCache(downloadFile, serverFileHash);
                     } catch (Exception e) {
                         LOGGER.error("Failed to update cache for {}", downloadFile, e);
                     }
                 };
 
-                downloadManager.download(downloadFile, serverHash, List.of(), successCallback, failureCallback);
+                downloadManager.download(downloadFile, serverFileHash, List.of(), serverFileSize, successCallback, failureCallback);
             }
 
             downloadManager.joinAll();
