@@ -18,7 +18,7 @@ public class SpeedFormatter {
     }
 
     public static String formatETA(long seconds) {
-        if (seconds <= 0) return "-1";
+        if (seconds < 0) return "-1";
 
         long days = seconds / 86400;
         long hours = (seconds % 86400) / 3600;

@@ -77,15 +77,17 @@ public class Speedometer {
 	}
 
 	public synchronized long getETA() {
-		long remainingBytes = Math.max(0, totalBytesExpected.get() - totalBytesReceived.get());
+		long receievedBytes = totalBytesReceived.get();
+		if (receievedBytes <= 0) return -1;
+		long remainingBytes = Math.max(0, totalBytesExpected.get() - receievedBytes);
 		if (remainingBytes == 0) return 0;
 
 		// Get the "Real" speed from the window (not the smoothed one)
-		double realSpeed = calculateWindowSpeed(System.currentTimeMillis(), totalBytesReceived.get());
+		double realSpeed = calculateWindowSpeed(System.currentTimeMillis(), receievedBytes);
 
 		// Safety: If speed is 0 or very low, return -1 (unknown)
 		if (realSpeed < 1024) return -1;
 
-		return (long) (remainingBytes / realSpeed);
+		return (long) (remainingBytes / realSpeed) + 1;
 	}
 }
