@@ -320,7 +320,7 @@ public class ModpackUpdater {
 
         LOGGER.info("Finished downloading files in {}ms", System.currentTimeMillis() - startFetching);
 
-        if (downloadManager.isCanceled()) {
+        if (downloadManager.isCancelled()) {
             LOGGER.warn("Download canceled");
             return;
         }
@@ -415,7 +415,7 @@ public class ModpackUpdater {
 
             downloadManager.joinAll();
 
-            if (downloadManager.isCanceled()) {
+            if (downloadManager.isCancelled()) {
                 LOGGER.warn("Download canceled");
                 return;
             }
