@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_loader_core.utils;
 
-import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
@@ -8,14 +7,13 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 
 import java.io.*;
-import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.zip.GZIPInputStream;
+import java.util.function.IntConsumer;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
@@ -29,13 +27,15 @@ public class DownloadManager {
             new CustomThreadFactoryBuilder().setNameFormat("AutoModpackDownload-%d").build()
     );
 
+    private final HttpFileDownloader httpDownloader = new HttpFileDownloader();
     private DownloadClient downloadClient = null;
+
     private volatile boolean cancelled = false;
 
+    // --- QUEUES ---
     private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
     public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
 
-    // --- Source Usage Tracking ---
     private final Map<String, Integer> activeDownloadsPerSource = new ConcurrentHashMap<>();
 
     // --- PROGRESS TRACKING ---
@@ -90,23 +90,19 @@ public class DownloadManager {
         // Example: 50% Bytes Done, 40% Files Done -> Lag = 0.10 (BAD)
         double lag = byteProgress - fileProgress;
 
-        // --- 2. DETERMINE SLOT ALLOCATION ---
+        // --- 2. DETERMINE SHARES (Proportional Control) ---
+        // We decide what % of our threads should be working on Big Files.
+        double targetBigShare;
 
-        int maxBigSlots;
+        if (lag > 0.02)         targetBigShare = 0.0; // Panic (>2% Behind): 0% Big, 100% Small
+        else if (lag > 0.005)   targetBigShare = 0.2; // Warning (>0.5% Behind): 20% Big (1/5)
+        else if (lag < -0.15)   targetBigShare = 1.0; // Ahead (>15%): 100% Big
+        else if (lag < -0.10)   targetBigShare = 0.8; // Ahead (>10%): 80% Big (4/5)
+        else if (lag < -0.05)   targetBigShare = 0.6; // Ahead (>5%): 60% Big (3/5)
+        else                    targetBigShare = 0.4; // Balanced: 40% Big (2/5)
 
-        if (lag > 0.02) {
-            // Files are >2% behind.
-            // Don't queue any big files anymore. Use all threads for Small Files.
-            maxBigSlots = 0;
-        } else if (lag > 0.005) {
-            // Files are >0.5% behind.
-            // Allow only 1 big file to keep bandwidth alive.
-            maxBigSlots = 1;
-        } else {
-            // Balanced / Ahead.
-            // Allow natural mix 3:2.
-            maxBigSlots = 2;
-        }
+        int slotsForBig = (int) Math.round(MAX_DOWNLOADS_IN_PROGRESS * targetBigShare);
+        int slotsForSmall = MAX_DOWNLOADS_IN_PROGRESS - slotsForBig;
 
         // --- 3. COUNT CURRENT STATE ---
 
@@ -119,8 +115,7 @@ public class DownloadManager {
 
         // --- 4. DECISION ---
 
-        // Do we want a Big file?
-        boolean wantBig = (activeBig < maxBigSlots);
+        boolean preferBig = activeBig < slotsForBig || activeSmall > slotsForSmall;
 
         // --- 5. AVAILABILITY CHECK ---
 
@@ -135,14 +130,14 @@ public class DownloadManager {
         }
 
         // Fallback Logic
-        if (wantBig && !hasBig) wantBig = false; // Wanted Big, but none left. Take Small.
-        if (!wantBig && !hasSmall) wantBig = true; // Wanted Small, but none left. Take Big.
+        if (preferBig && !hasBig) preferBig = false; // Wanted Big, but none left. Take Small.
+        if (!preferBig && !hasSmall) preferBig = true; // Wanted Small, but none left. Take Big.
 
         // --- 6. SELECT BEST FILE ---
 
         FileInspection.HashPathPair bestKey = null;
         QueuedDownload bestTask = null;
-        String bestDomain = null;
+        String bestSource = null;
         int lowestLoad = Integer.MAX_VALUE;
 
         for (Map.Entry<FileInspection.HashPathPair, QueuedDownload> entry : queuedDownloads.entrySet()) {
@@ -150,7 +145,7 @@ public class DownloadManager {
             boolean isBig = task.fileSize > avgSize;
 
             // FILTER: Strict Type Check
-            if (isBig != wantBig) continue;
+            if (isBig != preferBig) continue;
 
             String source = predictSource(task);
             int activeInSource = activeDownloadsPerSource.getOrDefault(source, 0);
@@ -163,7 +158,7 @@ public class DownloadManager {
                 lowestLoad = activeInSource;
                 bestKey = entry.getKey();
                 bestTask = task;
-                bestDomain = source;
+                bestSource = source;
             }
         }
 
@@ -178,7 +173,7 @@ public class DownloadManager {
                 if (activeDownloadsPerSource.getOrDefault(source, 0) < MAX_DOWNLOADS_IN_PROGRESS) {
                     bestKey = entry.getKey();
                     bestTask = task;
-                    bestDomain = source;
+                    bestSource = source;
                     break;
                 }
             }
@@ -188,11 +183,13 @@ public class DownloadManager {
 
         // --- EXECUTE ---
         queuedDownloads.remove(bestKey);
-        activeDownloadsPerSource.merge(bestDomain, 1, Integer::sum);
+        activeDownloadsPerSource.merge(bestSource, 1, Integer::sum);
 
         final FileInspection.HashPathPair key = bestKey;
         final QueuedDownload task = bestTask;
-        final String activeDomain = bestDomain;
+        final String activeDomain = bestSource;
+
+        LOGGER.info("Queuning download for: {} {} {}", task.file, task.fileSize, activeDomain);
 
         CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
             try {
@@ -264,9 +261,9 @@ public class DownloadManager {
 
         try {
             if (url != null && !Objects.equals(url, "host") && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
-                httpDownloadFile(url, tempStoreFile);
+                httpDownloader.download(url, tempStoreFile, this::updateNetworkProgress);
             } else if (downloadClient != null) {
-                hostDownloadFile(hashPathPair, tempStoreFile);
+                hostDownloadFile(hashPathPair, tempStoreFile, this::updateNetworkProgress);
             } else {
                 return false;
             }
@@ -335,40 +332,10 @@ public class DownloadManager {
         }
     }
 
-    // --- IO ---
-
-    private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, Path targetFile) throws IOException {
+    private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, Path targetFile, IntConsumer progressAction) throws IOException {
         SmartFileUtils.createParentDirs(targetFile);
-        var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), targetFile, this::updateNetworkProgress);
+        var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), targetFile, progressAction);
         future.join();
-    }
-
-    private void httpDownloadFile(String urlString, Path targetFile) throws IOException, InterruptedException {
-        SmartFileUtils.createParentDirs(targetFile);
-        URLConnection connection = getHttpConnection(urlString);
-
-        try (InputStream rawIn = connection.getInputStream();
-             InputStream in = "gzip".equals(connection.getHeaderField("Content-Encoding")) ? new GZIPInputStream(rawIn) : rawIn;
-             OutputStream out = new BufferedOutputStream(new FileOutputStream(targetFile.toFile()), 64 * 1024)) {
-
-            byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
-            int bytesRead;
-            while ((bytesRead = in.read(buffer)) != -1) {
-                if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Download cancelled");
-                out.write(buffer, 0, bytesRead);
-                updateNetworkProgress(bytesRead);
-            }
-        }
-    }
-
-    private URLConnection getHttpConnection(String urlString) throws IOException {
-        URL url = new URL(urlString);
-        URLConnection connection = url.openConnection();
-        connection.addRequestProperty("Accept-Encoding", "gzip");
-        connection.addRequestProperty("User-Agent", "github/skidamek/automodpack/" + AM_VERSION);
-        connection.setConnectTimeout(10000);
-        connection.setReadTimeout(10000);
-        return connection;
     }
 
     private void updateNetworkProgress(long bytes) {
