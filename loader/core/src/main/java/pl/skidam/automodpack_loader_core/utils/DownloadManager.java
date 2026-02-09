@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.GZIPInputStream;
 
 import static pl.skidam.automodpack_core.Constants.*;
@@ -21,7 +22,6 @@ import static pl.skidam.automodpack_core.Constants.*;
 public class DownloadManager {
 
     private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
-    // Actually 3 attempts (0, 1, 2)
     private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
 
     private final ExecutorService downloadExecutor = Executors.newFixedThreadPool(
@@ -32,34 +32,30 @@ public class DownloadManager {
     private DownloadClient downloadClient = null;
     private volatile boolean cancelled = false;
 
-    // TODO remove it, we should assume that if hash matches file is the same so we don't need to separately track path+hash pairs
-    // Maps a specific file request (Path + Hash) to a download task
     private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
     public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
 
-    private long bytesDownloaded = 0;
-    private long bytesToDownload = 0;
+    // Stats
+    private final AtomicLong totalBytesDownloaded = new AtomicLong(0); // For Progress Bar (Includes Cache)
+    private final AtomicLong totalBytesToDownload = new AtomicLong(0); // For Progress Bar
     private int addedToQueue = 0;
-    private int downloaded = 0;
+    private int downloadedCount = 0;
 
     private final Semaphore semaphore = new Semaphore(0);
-    private final SpeedMeter speedMeter = new SpeedMeter(this);
+
+    private final Speedometer speedometer = new Speedometer();
 
     public DownloadManager() { }
 
     public DownloadManager(long bytesToDownload) {
-        this.bytesToDownload = bytesToDownload;
+        this.totalBytesToDownload.set(bytesToDownload);
+        this.speedometer.setExpectedBytes(bytesToDownload);
     }
 
     public void attachDownloadClient(DownloadClient downloadClient) {
         this.downloadClient = downloadClient;
     }
 
-    /**
-     * Queues a file for download.
-     * The file will be downloaded to the global store (by hash) and then copied to the 'file' path.
-     */
-    // TODO dont copy (update self updater to either use store directly or write a method to directly download without store)
     public void download(Path file, String sha1, List<String> urls, Runnable successCallback, Runnable failureCallback) {
         FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
 
@@ -93,9 +89,6 @@ public class DownloadManager {
         downloadsInProgress.put(key, new DownloadData(future, task.file));
     }
 
-    /**
-     * Main logic for processing a single download request.
-     */
     private void processDownloadTask(FileInspection.HashPathPair hashPathPair, QueuedDownload task) {
         LOGGER.info("Processing {} - Hash: {}", task.file.getFileName(), hashPathPair.hash());
 
@@ -104,15 +97,16 @@ public class DownloadManager {
         boolean interrupted = false;
 
         try {
-            // Check if file already exists in Store
             if (verifyFile(storeFile, hashPathPair.hash())) {
-                // Increment progress for the cached file so percentage calc remains accurate
+                // CACHE HIT
                 long size = Files.size(storeFile);
-                bytesDownloaded += size;
-                // Don't update speedMeter for cache hits to avoid fake speed spikes
+                totalBytesDownloaded.addAndGet(size);
+                // IMPORTANT: Do NOT add cached bytes to Speedometer.
+                // It would fake a massive speed spike.
+
                 success = true;
             } else {
-                // Not in store, attempt download
+                // DOWNLOAD REQUIRED
                 success = attemptDownload(hashPathPair, task, storeFile);
             }
 
@@ -125,18 +119,11 @@ public class DownloadManager {
         }
     }
 
-    /**
-     * Tries to download the file from available sources (URLs or Client).
-     * Returns true if downloaded and verified successfully.
-     */
     private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path storeFile) throws InterruptedException {
         int numberOfIndexes = task.urls.size();
-        // Determine which URL to try based on retry count
         int urlIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
-
         String url = (task.urls.size() > urlIndex) ? task.urls.get(urlIndex) : null;
 
-        // Use a temporary file for downloading to ensure atomicity
         Path tempStoreFile = storeDir.resolve(hashPathPair.hash() + ".tmp");
 
         try {
@@ -149,9 +136,7 @@ public class DownloadManager {
                 return false;
             }
 
-            // Verify the temp file
             if (verifyFile(tempStoreFile, hashPathPair.hash())) {
-                // Move temp file to actual store file
                 SmartFileUtils.moveFile(tempStoreFile, storeFile);
                 return true;
             } else {
@@ -166,24 +151,18 @@ public class DownloadManager {
         }
     }
 
-    /**
-     * Handles the cleanup, callbacks, and retries.
-     */
     private void cleanupAndFinalize(FileInspection.HashPathPair key, QueuedDownload task, Path storeFile, boolean success, boolean interrupted) {
         downloadsInProgress.remove(key);
 
         if (success) {
             try {
-                // Copy from Store -> Destination
                 SmartFileUtils.copyFile(storeFile, task.file);
-
-                downloaded++;
+                downloadedCount++;
                 LOGGER.info("Finished: {} -> {}", storeFile.getFileName(), task.file.getFileName());
                 task.successCallback.run();
                 semaphore.release();
             } catch (IOException e) {
                 LOGGER.error("Failed to copy from store to destination: {}", task.file, e);
-                // Technically a failure in the final step, treat as retry-able
                 handleRetry(key, task, interrupted);
             }
         } else {
@@ -198,13 +177,15 @@ public class DownloadManager {
     private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {
         if (interrupted) return;
 
-        // Increase total bytes because we will try to download this amount again
         try {
-            // Estimate size if possible, or just ignore (original code logic)
-            if (Files.exists(task.file)) bytesToDownload += Files.size(task.file);
+            if (Files.exists(task.file)) {
+                long size = Files.size(task.file);
+                // If we retry, we expect to download this size again
+                totalBytesToDownload.addAndGet(size);
+                speedometer.setExpectedBytes(totalBytesToDownload.get());
+            }
         } catch (IOException ignored) {}
 
-        // Wipe destination just in case
         SmartFileUtils.executeOrder66(task.file);
 
         int numberOfIndexes = task.urls.size();
@@ -225,7 +206,7 @@ public class DownloadManager {
 
     private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, Path targetFile) throws IOException {
         SmartFileUtils.createParentDirs(targetFile);
-        var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), targetFile, this::updateProgress);
+        var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), targetFile, this::updateNetworkProgress);
         future.join();
     }
 
@@ -244,7 +225,7 @@ public class DownloadManager {
             while ((bytesRead = in.read(buffer)) != -1) {
                 if (Thread.currentThread().isInterrupted()) throw new InterruptedException("Download cancelled");
                 out.write(buffer, 0, bytesRead);
-                updateProgress(bytesRead);
+                updateNetworkProgress(bytesRead);
             }
         }
     }
@@ -259,12 +240,13 @@ public class DownloadManager {
         return connection;
     }
 
-    private void updateProgress(long bytes) {
-        bytesDownloaded += bytes;
-        speedMeter.addDownloadedBytes(bytes);
+    /**
+     * Updates counters ONLY for actual network traffic.
+     */
+    private void updateNetworkProgress(long bytes) {
+        totalBytesDownloaded.addAndGet(bytes);
+        speedometer.addBytes(bytes);
     }
-
-    // --- Helpers ---
 
     private boolean verifyFile(Path file, String expectedHash) {
         if (!Files.exists(file)) return false;
@@ -275,7 +257,7 @@ public class DownloadManager {
         }
     }
 
-    // --- State Management (Preserved) ---
+    // --- Getters & Control ---
 
     public void joinAll() throws InterruptedException {
         semaphore.acquire(addedToQueue);
@@ -283,21 +265,26 @@ public class DownloadManager {
         semaphore.release(addedToQueue);
     }
 
-    public SpeedMeter getSpeedMeter() { return speedMeter; }
+    // --- UI Helpers ---
 
-    public long getTotalBytesRemaining() { return bytesToDownload - bytesDownloaded; }
-
-    public int getTotalPercentageOfFileSizeDownloaded() {
-        if (bytesToDownload == 0) return 0;
-        int percentage = (int) (bytesDownloaded * 100 / bytesToDownload);
-        return Math.max(0, Math.min(100, percentage));
+    public long getDownloadSpeed() {
+        return speedometer.getSpeed();
     }
 
-    public String getStage() { return downloaded + "/" + addedToQueue; }
+    public long getETA() {
+        return speedometer.getETA();
+    }
+
+    public double getPrecisePercentage() {
+        long total = totalBytesToDownload.get();
+        if (total == 0) return 0.0;
+        double pc = (double) totalBytesDownloaded.get() * 100.0 / total;
+        return Math.max(0.0, Math.min(100.0, pc));
+    }
+
+    public String getStage() { return downloadedCount + "/" + addedToQueue; }
 
     public boolean isRunning() { return !downloadExecutor.isShutdown(); }
-
-    public boolean isCanceled() { return cancelled; }
 
     public void cancelAllAndShutdown() {
         cancelled = true;
@@ -309,14 +296,20 @@ public class DownloadManager {
 
         semaphore.release(addedToQueue);
         downloadsInProgress.clear();
-        downloaded = 0;
+        downloadedCount = 0;
         addedToQueue = 0;
 
         if (downloadClient != null) downloadClient.close();
         downloadExecutor.shutdown();
     }
 
-    // --- Inner Classes ---
+    public boolean isCancelled() {
+        return cancelled;
+    }
+
+    public void setCancelled(boolean cancelled) {
+        this.cancelled = cancelled;
+    }
 
     public static class QueuedDownload {
         private final Path file;
