@@ -6,6 +6,8 @@ import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import java.util.*;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -20,39 +22,43 @@ public class FetchManager {
     public record FetchedData (List<String> urls, List<String> mainPageUrls) { }
     public record Datas(FetchData fetchData, FetchedData fetchedData) { }
     private final Map<String, Datas> fetchDatas = new HashMap<>();
+
     public FetchManager(List<FetchData> fetchDatas) {
         for (FetchData fetchData : fetchDatas) {
-            this.fetchDatas.put(fetchData.sha1, new Datas(fetchData, new FetchedData(new ArrayList<>(), new ArrayList<>())));
+            this.fetchDatas.put(fetchData.sha1, new Datas(fetchData, new FetchedData(
+                    Collections.synchronizedList(new ArrayList<>(2)),
+                    Collections.synchronizedList(new ArrayList<>(2)))
+            ));
         }
     }
 
     // Matrices for screen
-    public int fetchesDone = 0;
+    public final AtomicInteger fetchesDone = new AtomicInteger(0);
     private CompletableFuture<Void> completableFuture;
 
     public void cancel() {
-        completableFuture.cancel(true);
+        if (completableFuture != null) completableFuture.cancel(true);
     }
 
     public void fetch() {
-        // make map of sha1s and murmurs
-        Map<String, String> cf = new HashMap<>();
-        List<String> mo = new ArrayList<>();
-        for (Map.Entry<String, Datas> entry : fetchDatas.entrySet()) {
-            FetchData fetchData = entry.getValue().fetchData();
-            if (fetchData.murmur != null && !fetchData.murmur.isBlank()) {
-                cf.put(fetchData.sha1, fetchData.murmur);
-            }
+        Map<String, String> cfHashes = new HashMap<>();
+        List<String> moHashes = new ArrayList<>();
 
-            mo.add(fetchData.sha1);
+        for (Datas data : fetchDatas.values()) {
+            if (data.fetchData.murmur != null && !data.fetchData.murmur.isBlank()) {
+                cfHashes.put(data.fetchData.sha1, data.fetchData.murmur);
+            }
+            moHashes.add(data.fetchData.sha1);
         }
 
         try {
-            completableFuture = CompletableFuture.runAsync(() -> {
-                fetchByMurmur(cf);
-                fetchBySha1(mo);
-            });
+            CompletableFuture<Void> cfFuture = CompletableFuture.runAsync(() -> fetchByMurmur(cfHashes));
+            CompletableFuture<Void> moFuture = CompletableFuture.runAsync(() -> fetchBySha1(moHashes));
+
+            completableFuture = CompletableFuture.allOf(cfFuture, moFuture);
             completableFuture.join();
+
+            randomizeFinalOrder();
         } catch (CancellationException e) {
             LOGGER.warn("Fetch canceled");
         } catch (Exception e) {
@@ -60,29 +66,45 @@ public class FetchManager {
         }
     }
 
+    private void randomizeFinalOrder() {
+        ThreadLocalRandom rng = ThreadLocalRandom.current();
+        for (Datas data : fetchDatas.values()) {
+            List<String> urls = data.fetchedData().urls();
+
+            // Coin filp order
+            if (urls.size() == 2 && rng.nextBoolean()) {
+                String first = urls.get(0);
+                urls.set(0, urls.get(1));
+                urls.set(1, first);
+            }
+        }
+    }
+
     private void fetchBySha1(List<String> sha1s) {
-        List<ModrinthAPI> modrinthFileInfos = ModrinthAPI.getModsInfosFromListOfSHA1(sha1s);
-        if (modrinthFileInfos == null) return;
-        for (ModrinthAPI modrinthFileInfo : modrinthFileInfos) {
-            String sha1 = modrinthFileInfo.SHA1Hash();
-            final Datas datas = fetchDatas.get(sha1);
-            String mainPageUrl = ModrinthAPI.getMainPageUrl(modrinthFileInfo.modrinthID(), datas.fetchData.fileType);
-            datas.fetchedData().urls().add(modrinthFileInfo.downloadUrl());
-            datas.fetchedData().mainPageUrls().add(mainPageUrl);
-            fetchDatas.put(sha1, datas);
-            fetchesDone++;
+        List<ModrinthAPI> results = ModrinthAPI.getModsInfosFromListOfSHA1(sha1s);
+        if (results == null) return;
+
+        for (ModrinthAPI info : results) {
+            Datas datas = fetchDatas.get(info.SHA1Hash());
+            if (datas != null) {
+                datas.fetchedData().urls().add(info.downloadUrl());
+                String mainPageUrl = ModrinthAPI.getMainPageUrl(info.modrinthID(), datas.fetchData.fileType);
+                datas.fetchedData().mainPageUrls().add(mainPageUrl);
+                fetchesDone.incrementAndGet();
+            }
         }
     }
 
     private void fetchByMurmur(Map<String, String> hashes) {
-        List<CurseForgeAPI> cfFileInfos = CurseForgeAPI.getModInfosFromFingerPrints(hashes);
-        if (cfFileInfos == null) return;
-        for (CurseForgeAPI cfFileInfo : cfFileInfos) {
-            String sha1 = cfFileInfo.sha1Hash();
-            final Datas datas = fetchDatas.get(sha1);
-            datas.fetchedData().urls().add(cfFileInfo.downloadUrl());
-            fetchDatas.put(sha1, datas);
-            fetchesDone++;
+        List<CurseForgeAPI> results = CurseForgeAPI.getModInfosFromFingerPrints(hashes);
+        if (results == null) return;
+
+        for (CurseForgeAPI info : results) {
+            Datas datas = fetchDatas.get(info.sha1Hash());
+            if (datas != null) {
+                datas.fetchedData().urls().add(info.downloadUrl());
+                fetchesDone.incrementAndGet();
+            }
         }
     }
 
