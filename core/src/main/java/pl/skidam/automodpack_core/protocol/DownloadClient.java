@@ -282,7 +282,7 @@ class PreValidationConnection {
  */
 class Connection implements AutoCloseable {
 
-    private byte protocolVersion = PROTOCOL_VERSION;
+    private byte protocolVersion = LATEST_SUPPORTED_PROTOCOL_VERSION;
     private byte compressionType = COMPRESSION_ZSTD;
     private int chunkSize = DEFAULT_CHUNK_SIZE;
     private final byte[] secretBytes;
@@ -513,6 +513,10 @@ class Connection implements AutoCloseable {
         out.flush();
 
         byte version = in.readByte();
+        if (version >= 1 && version < protocolVersion) {
+            protocolVersion = version;
+        }
+
         byte type = in.readByte();
         if (type != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected response: " + type);
 
@@ -534,6 +538,10 @@ class Connection implements AutoCloseable {
         out.flush();
 
         byte version = in.readByte();
+        if (version >= 1 && version < protocolVersion) {
+            protocolVersion = version;
+        }
+
         byte type = in.readByte();
         if (type != CONFIGURATION_CHUNK_SIZE_TYPE) throw new IOException("Unexpected response: " + type);
 

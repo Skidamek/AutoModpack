@@ -31,6 +31,14 @@ public class ConfigurationHandler extends ChannelInboundHandlerAdapter {
         LOGGER.debug("Message version: {}, type: {}, readable bytes: {}", version, type, in.readableBytes());
         if ((type & 0xF0) == 0x40) {
             if (type == CONFIGURATION_ECHO_TYPE) {
+                if (version > LATEST_SUPPORTED_PROTOCOL_VERSION || version <= 0) {
+                    LOGGER.debug("Failed to negotatie protocol version with client");
+                    ctx.close();
+                    return;
+                }
+                ctx.channel().attr(NettyServer.PROTOCOL_VERSION).set(version);
+                LOGGER.debug("Negotiated {} protocol version with the client", version);
+
                 // remove this channel from pipeline
                 ctx.pipeline().remove(this);
                 LOGGER.debug("Removed ConfigurationHandler from pipeline after receiving echo configuration message.");
@@ -54,7 +62,7 @@ public class ConfigurationHandler extends ChannelInboundHandlerAdapter {
                 ctx.channel().attr(NettyServer.COMPRESSION_TYPE).set(negotiatedCompressionType);
 
                 // Send negotiated values back to client
-                ConfigurationCompressionMessage responseMsg = new ConfigurationCompressionMessage(PROTOCOL_VERSION, negotiatedCompressionType);
+                ConfigurationCompressionMessage responseMsg = new ConfigurationCompressionMessage(LATEST_SUPPORTED_PROTOCOL_VERSION, negotiatedCompressionType);
                 ctx.writeAndFlush(responseMsg.toByteBuf());
 
                 LOGGER.debug("Negotiated configuration: compression {}", negotiatedCompressionType);
@@ -78,13 +86,13 @@ public class ConfigurationHandler extends ChannelInboundHandlerAdapter {
                 ctx.channel().attr(NettyServer.CHUNK_SIZE).set(negotiatedChunkSize);
 
                 // Send negotiated values back to client
-                ConfigurationChunkSizeMessage responseMsg = new ConfigurationChunkSizeMessage(PROTOCOL_VERSION, negotiatedChunkSize);
+                ConfigurationChunkSizeMessage responseMsg = new ConfigurationChunkSizeMessage(LATEST_SUPPORTED_PROTOCOL_VERSION, negotiatedChunkSize);
                 ctx.writeAndFlush(responseMsg.toByteBuf());
 
                 LOGGER.debug("Negotiated configuration: chunk size {}", negotiatedChunkSize);
             } else {
                 LOGGER.debug("Received unknown configuration message type: {} version: {}", type, version);
-                UnknownConfigurationMessage responseMsg = new UnknownConfigurationMessage(PROTOCOL_VERSION);
+                UnknownConfigurationMessage responseMsg = new UnknownConfigurationMessage(LATEST_SUPPORTED_PROTOCOL_VERSION);
                 ctx.writeAndFlush(responseMsg.toByteBuf());
             }
             in.release(); // Release the buffer after processing configuration message

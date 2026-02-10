@@ -30,7 +30,7 @@ public class NetUtils {
     public static final int MAGIC_AMOK = 0x414D4F4B;
 
     // Protocol versions
-    public static final byte PROTOCOL_VERSION = 0x01;
+    public static final byte LATEST_SUPPORTED_PROTOCOL_VERSION = 0x01;
 
     // Compression types
     public static final byte COMPRESSION_NONE = 0x00;

@@ -40,24 +40,29 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, ProtocolMessage msg) throws Exception {
+        this.protocolVersion = ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).get();
+        this.chunkSize = ctx.pipeline().channel().attr(NettyServer.CHUNK_SIZE).get();
+
         byte clientProtocolVersion = msg.getVersion();
+
+        if (protocolVersion != clientProtocolVersion) {
+            sendError(ctx, protocolVersion, "Protocol version mismatch");
+            return;
+        }
+
         SocketAddress address = ctx.channel().attr(NettyServer.REAL_REMOTE_ADDR).get();
 
         // Validate the secret
         if (!validateSecret(ctx, address, msg.getSecret())) {
-            sendError(ctx, clientProtocolVersion, "Authentication failed");
+            sendError(ctx, protocolVersion, "Authentication failed");
             return;
         }
-
-        // reassign channel attributes
-        this.protocolVersion = ctx.pipeline().channel().attr(NettyServer.PROTOCOL_VERSION).get();
-        this.chunkSize = ctx.pipeline().channel().attr(NettyServer.CHUNK_SIZE).get();
 
         switch (msg.getType()) {
             case ECHO_TYPE:
                 EchoMessage echoMsg = (EchoMessage) msg;
                 ByteBuf echoBuf = ctx.alloc().buffer(1 + 1 + msg.getSecret().length + echoMsg.getData().length);
-                echoBuf.writeByte(clientProtocolVersion);
+                echoBuf.writeByte(protocolVersion);
                 echoBuf.writeByte(ECHO_TYPE);
                 echoBuf.writeBytes(echoMsg.getSecret());
                 echoBuf.writeBytes(echoMsg.getData());
@@ -73,7 +78,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
                 refreshModpackFiles(ctx, refreshRequest.getFileHashesList());
                 break;
             default:
-                sendError(ctx, clientProtocolVersion, "Unknown message type");
+                sendError(ctx, protocolVersion, "Unknown message type");
         }
     }
 
