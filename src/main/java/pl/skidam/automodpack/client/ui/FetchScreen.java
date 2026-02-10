@@ -41,7 +41,7 @@ public class FetchScreen extends VersionedScreen {
         if (fetchManager == null) {
             return -1;
         }
-        return fetchManager.fetchesDone;
+        return fetchManager.fetchesDone.get();
     }
 
     @Override
