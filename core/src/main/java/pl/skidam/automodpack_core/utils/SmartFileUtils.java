@@ -106,6 +106,14 @@ public class SmartFileUtils {
         }
     }
 
+    public static void createParentDirsNoEx(Path file) {
+        try {
+            createParentDirs(file);
+        } catch (IOException e) {
+            LOGGER.error("Failed to create parent dirs", e);
+        }
+    }
+
     public static boolean isEmptyDirectory(Path parentPath) throws IOException {
         if (!Files.isDirectory(parentPath)) return false;
         try (Stream<Path> pathStream = Files.list(parentPath)) {

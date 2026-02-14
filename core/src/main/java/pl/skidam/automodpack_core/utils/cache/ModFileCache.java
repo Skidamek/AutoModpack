@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.utils.cache;
 import org.h2.mvstore.MVMap;
 import org.h2.mvstore.MVStore;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -27,6 +28,7 @@ public class ModFileCache implements AutoCloseable {
 
     public static ModFileCache open(Path path) {
         Path absPath = path.toAbsolutePath().normalize();
+        SmartFileUtils.createParentDirsNoEx(absPath);
         synchronized (GLOBAL_LOCK) {
             ModFileCache existing = INSTANCES.get(absPath);
             if (existing != null) {
