@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.utils.cache;
 import org.h2.mvstore.MVMap;
 import org.h2.mvstore.MVStore;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -33,6 +34,7 @@ public class FileMetadataCache implements AutoCloseable {
 
     public static FileMetadataCache open(Path path) {
         Path absPath = path.toAbsolutePath().normalize();
+        SmartFileUtils.createParentDirsNoEx(absPath);
         synchronized (GLOBAL_LOCK) {
             FileMetadataCache existing = INSTANCES.get(absPath);
             if (existing != null) {
