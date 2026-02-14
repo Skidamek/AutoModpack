@@ -7,7 +7,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 /*?}*/
 
 import pl.skidam.automodpack.init.Common;
-import pl.skidam.automodpack_core.GlobalVariables;
+import pl.skidam.automodpack_core.Constants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.resources.Identifier;
@@ -15,12 +15,10 @@ import net.minecraft.sounds.SoundEvent;
 /*? if neoforge {*/
 /*import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
-import static pl.skidam.automodpack_core.Constants.MOD_ID;
 *//*?} else if forge {*/
 /*import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
-import static pl.skidam.automodpack_core.Constants.MOD_ID;
 *//*?} else {*/
 /*? if >=1.19.3 {*/
 import net.minecraft.core.Registry;
@@ -46,7 +44,7 @@ public class AudioManager {
 
 /*? if forge {*/
     /*public AudioManager(IEventBus eventBus) {
-        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, MOD_ID);
+        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, Constants.MOD_ID);
         SOUND_REGISTER.register(eventBus);
         WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
     }
@@ -54,7 +52,7 @@ public class AudioManager {
 
 /*? if neoforge {*/
     /*public AudioManager(IEventBus eventBus) {
-        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(BuiltInRegistries.SOUND_EVENT, MOD_ID);
+        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(BuiltInRegistries.SOUND_EVENT, Constants.MOD_ID);
         SOUND_REGISTER.register(eventBus);
         WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
     }
@@ -82,7 +80,7 @@ public class AudioManager {
     public static void playMusic() {
         if (playing) return;
         if (WAITING_MUSIC == null || WAITING_MUSIC.get() == null) {
-            GlobalVariables.LOGGER.error("WAITING_MUSIC is null?!");
+            Constants.LOGGER.error("WAITING_MUSIC is null?!");
             return;
         }
         if (SOUND_INSTANCE == null) {
