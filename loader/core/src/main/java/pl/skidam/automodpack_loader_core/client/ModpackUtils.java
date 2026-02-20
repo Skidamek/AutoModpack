@@ -625,7 +625,13 @@ public class ModpackUtils {
 
         ClientSelectionManager clientSelectionManager = ClientSelectionManager.getMgr();
 
-        clientSelectionManager.addPack(packId, new Jsons.ClientSelectionManagerFields.Modpack(modpackAddresses));
+        var pack = new Jsons.ClientSelectionManagerFields.Modpack(modpackAddresses);
+
+        if (clientSelectionManager.packExists(packId)) {
+            pack.selectedGroups = clientSelectionManager.getSelectedGroups(packId);
+        }
+
+        clientSelectionManager.addPack(packId, pack);
     }
 
     // Returns modpack name formatted for path or url if server doesn't provide modpack name

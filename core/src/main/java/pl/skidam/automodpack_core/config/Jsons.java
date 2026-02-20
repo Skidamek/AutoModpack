@@ -368,6 +368,11 @@ public class Jsons {
                 this.modpackAddresses = modpackAddresses;
                 this.selectedGroups = new ArrayList<>();
             }
+
+            public Modpack(ModpackAddresses modpackAddresses, List<Group> selectedGroups) {
+                this.modpackAddresses = modpackAddresses;
+                this.selectedGroups = selectedGroups;
+            }
         }
 
         public static class Group {

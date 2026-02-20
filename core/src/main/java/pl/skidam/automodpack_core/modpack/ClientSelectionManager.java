@@ -51,6 +51,7 @@ public class ClientSelectionManager {
         return getSelectedGroups(getSelectedPackId());
     }
 
+    // TODO make packids somehow unique and independet from modpackNames or server addresses
     public boolean packExists(String packId) {
         return selections.modpacks.containsKey(packId);
     }
@@ -61,6 +62,9 @@ public class ClientSelectionManager {
     }
 
     public void addPack(String packId, ClientSelectionManagerFields.Modpack pack) {
+        if (selections.modpacks.containsKey(packId)) {
+            LOGGER.debug("Overwritting pack {}", packId);
+        }
         selections.modpacks.put(packId, pack);
         save();
     }

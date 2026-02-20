@@ -5,7 +5,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Util;
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
@@ -209,29 +208,29 @@ public class ModpackSelectionScreen extends VersionedScreen {
             mgr.addPack(content.modpackName, new Jsons.ClientSelectionManagerFields.Modpack(new Jsons.ModpackAddresses()));
         }
 
-        Constants.LOGGER.info("Selected {} pack", content.modpackName);
-        Constants.LOGGER.info("Selected {} groups", selectedGroups);
-
-        mgr.setSelectedPack(content.modpackName);
-
         // Assemble Groups map
         List<Jsons.ClientSelectionManagerFields.Group> finalGroupsToSave = new ArrayList<>();
         for (String id : selectedGroups) {
             List<String> filesForGroup = new ArrayList<>();
             Jsons.ModpackGroupFields group = content.groups.get(id);
-            // add all groups even if the group is not selective because it might become one someday, so yeah save all files which we download currently
-            if (group != null && selectedSelectiveFiles.containsKey(id)) {
-                filesForGroup.addAll(selectedSelectiveFiles.get(id));
+            // add all groups even if the group is not selective because it might become one someday, so save all files which we download currently
+            if (group != null) {
+                if (group.selective && selectedSelectiveFiles.containsKey(id)) {
+                    filesForGroup.addAll(selectedSelectiveFiles.get(id));
+                } else if (!group.selective) {
+                    filesForGroup.addAll(group.files.stream().map(modpackContentItem -> modpackContentItem.file).toList());
+                }
             }
             finalGroupsToSave.add(new Jsons.ClientSelectionManagerFields.Group(id, filesForGroup));
         }
 
         mgr.setSelectedGroups(content.modpackName, finalGroupsToSave);
+        mgr.setSelectedPack(content.modpackName);
 
         Set<Jsons.ModpackContentItem> finalFiles = new HashSet<>();
         for (String id : selectedGroups) {
             Jsons.ModpackGroupFields group = content.groups.get(id);
-            if (group == null || !isOsCompatible(group.compatibleOS) || group.files == null) continue;
+            if (group == null || group.files == null) continue;
 
             if (group.selective) {
                 Set<String> selectedFiles = selectedSelectiveFiles.get(id);
