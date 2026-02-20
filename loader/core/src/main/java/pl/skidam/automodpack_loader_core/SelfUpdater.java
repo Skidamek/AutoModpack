@@ -39,7 +39,7 @@ public class SelfUpdater {
         return update(null);
     }
 
-    public static boolean update(Jsons.ModpackContentFields serverModpackContent) {
+    public static boolean update(Jsons.ModpackContent serverModpackContent) {
         if (LOADER_MANAGER.isDevelopmentEnvironment()) return false;
 
         if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER && !serverConfig.selfUpdater) {

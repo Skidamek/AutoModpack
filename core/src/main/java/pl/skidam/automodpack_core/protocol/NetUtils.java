@@ -1,14 +1,5 @@
 package pl.skidam.automodpack_core.protocol;
 
-import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
-import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.operator.ContentSigner;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
-import pl.skidam.automodpack_core.utils.LockFreeInputStream;
-
 import java.io.InputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -22,6 +13,14 @@ import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HexFormat;
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+import pl.skidam.automodpack_core.utils.LockFreeInputStream;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public class NetUtils {
 
@@ -50,6 +49,13 @@ public class NetUtils {
     public static final byte CONFIGURATION_ECHO_TYPE = 0x40;
     public static final byte CONFIGURATION_COMPRESSION_TYPE = 0x41;
     public static final byte CONFIGURATION_CHUNK_SIZE_TYPE = 0x42;
+    public static final byte CONFIGURATION_GROUP_TYPE = 0x43;
+
+    // V3 Request message types
+    public static final byte GROUP_SELECTION_TYPE = 0x10;
+
+    // Compression
+    public static final int COMPRESSION_THRESHOLD = 65536; // 64KB
 
     // Chunk size
     public static final int DEFAULT_CHUNK_SIZE = 256 * 1024; // 256 KB
@@ -97,9 +103,7 @@ public class NetUtils {
     }
 
     public static void saveCertificate(X509Certificate cert, Path path) throws Exception {
-        String certPem = "-----BEGIN CERTIFICATE-----\n"
-                + formatBase64(Base64.getEncoder().encodeToString(cert.getEncoded()))
-                + "-----END CERTIFICATE-----";
+        String certPem = "-----BEGIN CERTIFICATE-----\n" + formatBase64(Base64.getEncoder().encodeToString(cert.getEncoded())) + "-----END CERTIFICATE-----";
         SmartFileUtils.createParentDirs(path);
         Files.writeString(path, certPem);
     }
@@ -114,9 +118,7 @@ public class NetUtils {
 
     public static void savePrivateKey(PrivateKey key, Path path) throws Exception {
         PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(key.getEncoded());
-        String keyPem = "-----BEGIN PRIVATE KEY-----\n"
-                + formatBase64(Base64.getEncoder().encodeToString(keySpec.getEncoded()))
-                + "-----END PRIVATE KEY-----";
+        String keyPem = "-----BEGIN PRIVATE KEY-----\n" + formatBase64(Base64.getEncoder().encodeToString(keySpec.getEncoded())) + "-----END PRIVATE KEY-----";
         SmartFileUtils.createParentDirs(path);
         Files.writeString(path, keyPem);
     }

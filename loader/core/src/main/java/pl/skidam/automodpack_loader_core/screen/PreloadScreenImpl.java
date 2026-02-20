@@ -9,6 +9,9 @@ public class PreloadScreenImpl implements ScreenService {
     public void download(Object... args) { }
 
     @Override
+    public void modpackSelection(Object... args) { }
+
+    @Override
     public void fetch(Object... args) { }
 
     @Override

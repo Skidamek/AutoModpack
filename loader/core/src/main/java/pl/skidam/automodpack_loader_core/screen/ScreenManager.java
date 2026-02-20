@@ -12,6 +12,11 @@ public class ScreenManager implements ScreenService {
     }
 
     @Override
+    public void modpackSelection(Object... args) {
+        INSTANCE.modpackSelection(args);
+    }
+
+    @Override
     public void fetch(Object... args) {
         INSTANCE.fetch(args);
     }

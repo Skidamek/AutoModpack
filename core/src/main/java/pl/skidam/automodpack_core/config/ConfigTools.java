@@ -1,26 +1,21 @@
-
 package pl.skidam.automodpack_core.config;
 
-import com.google.gson.*;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
+import static pl.skidam.automodpack_core.Constants.*;
 
+import com.google.gson.*;
 import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-
-import static pl.skidam.automodpack_core.Constants.*;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 public class ConfigTools {
 
-    public static Gson GSON = new GsonBuilder()
-            .disableHtmlEscaping()
-            .setPrettyPrinting()
-            .registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())
-            .create();
+    public static Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter()).create();
 
-    private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress>,JsonDeserializer<InetSocketAddress> {
+    private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress>, JsonDeserializer<InetSocketAddress> {
+
         @Override
         public JsonElement serialize(InetSocketAddress src, Type typeOfSrc, JsonSerializationContext context) {
             return new JsonPrimitive(src.getHostString() + ":" + src.getPort());
@@ -50,14 +45,14 @@ public class ConfigTools {
                 String json = Files.readString(configFile);
                 return GSON.fromJson(json, configClass);
             }
-        } catch (Exception ignored) { }
+        } catch (Exception ignored) {}
         return null;
     }
 
     public static <T> T load(Path configFile, Class<T> configClass) {
         try {
             if (!Files.isDirectory(configFile.getParent())) {
-                 Files.createDirectories(configFile.getParent());
+                Files.createDirectories(configFile.getParent());
             }
 
             if (Files.isRegularFile(configFile)) {
@@ -80,7 +75,8 @@ public class ConfigTools {
             e.printStackTrace();
         }
 
-        try { // create new config
+        try {
+            // create new config
             T obj = getConfigObject(configClass);
             save(configFile, obj);
             return obj;
@@ -94,7 +90,7 @@ public class ConfigTools {
     public static <T> T load(String json, Class<T> configClass) {
         try {
             if (json != null) {
-	            return GSON.fromJson(json, configClass);
+                return GSON.fromJson(json, configClass);
             }
         } catch (Exception e) {
             LOGGER.error("Couldn't load config! " + configClass);
@@ -121,13 +117,12 @@ public class ConfigTools {
         }
     }
 
-
     // Modpack content stuff
-    public static Jsons.ModpackContentFields loadModpackContent(Path modpackContentFile) {
+    public static Jsons.ModpackContent loadModpackContent(Path modpackContentFile) {
         try {
             if (Files.isRegularFile(modpackContentFile)) {
                 String json = Files.readString(modpackContentFile);
-                return GSON.fromJson(json, Jsons.ModpackContentFields.class);
+                return GSON.fromJson(json, Jsons.ModpackContent.class);
             }
         } catch (Exception e) {
             LOGGER.error("Couldn't load modpack content! {}", modpackContentFile.toAbsolutePath().normalize(), e);
@@ -135,7 +130,7 @@ public class ConfigTools {
         return null;
     }
 
-    public static void saveModpackContent(Path modpackContentFile, Jsons.ModpackContentFields configObject) {
+    public static void saveModpackContent(Path modpackContentFile, Jsons.ModpackContent configObject) {
         try {
             if (!Files.isDirectory(modpackContentFile.getParent())) {
                 Files.createDirectories(modpackContentFile.getParent());
@@ -144,6 +139,35 @@ public class ConfigTools {
             Files.writeString(modpackContentFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (Exception e) {
             LOGGER.error("Couldn't save modpack content! " + configObject.getClass());
+            e.printStackTrace();
+        }
+    }
+
+    public static Jsons.ClientSelectionManagerFields loadClientSelectionManager(Path selectionFile) {
+        try {
+            if (Files.isRegularFile(selectionFile)) {
+                String json = Files.readString(selectionFile);
+                Jsons.ClientSelectionManagerFields obj = GSON.fromJson(json, Jsons.ClientSelectionManagerFields.class);
+                if (obj == null) {
+                    return new Jsons.ClientSelectionManagerFields();
+                }
+                return obj;
+            }
+        } catch (Exception e) {
+            LOGGER.debug("Couldn't load client selection manager file (this is normal on first startup): {}", e.getMessage());
+        }
+        return new Jsons.ClientSelectionManagerFields();
+    }
+
+    public static void saveClientSelectionManager(Path selectionFile, Jsons.ClientSelectionManagerFields configObject) {
+        try {
+            if (!Files.isDirectory(selectionFile.getParent())) {
+                Files.createDirectories(selectionFile.getParent());
+            }
+
+            Files.writeString(selectionFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (Exception e) {
+            LOGGER.error("Couldn't save client selection manager!");
             e.printStackTrace();
         }
     }

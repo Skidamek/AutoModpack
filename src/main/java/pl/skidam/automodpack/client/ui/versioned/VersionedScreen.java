@@ -85,15 +85,39 @@ public class VersionedScreen extends Screen {
 	*//*?}*/
 
 	/*? if >=1.20 {*/
-	public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
+	public static void drawCenteredText(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
 		matrices.getContext().drawCenteredString(textRenderer, text, centerX, y, color);
 	}
+	public static void drawCenteredText(VersionedMatrices matrices, Font textRenderer, String text, int centerX, int y, int color) {
+		matrices.getContext().drawCenteredString(textRenderer, text, centerX, y, color);
+	}
+	// FIXME the centering may be incorrect
 	/*?} else {*/
-	/*public static void drawCenteredTextWithShadow(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
+	/*public static void drawCenteredText(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int centerX, int y, int color) {
+		textRenderer.drawShadow(matrices.getContext(), text, (float)(centerX - textRenderer.width(text) / 2), (float)y, color);
+	}
+	public static void drawCenteredText(VersionedMatrices matrices, Font textRenderer, String text, int centerX, int y, int color) {
 		textRenderer.drawShadow(matrices.getContext(), text, (float)(centerX - textRenderer.width(text) / 2), (float)y, color);
 	}
 	*//*?}*/
 
+	/*? if >=1.20 {*/
+	public static void drawText(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int x, int y, int color) {
+		matrices.getContext().drawString(textRenderer, text, x, y, color);
+	}
+
+	public static void drawText(VersionedMatrices matrices, Font textRenderer, String text, int x, int y, int color) {
+		matrices.getContext().drawString(textRenderer, text, x, y, color);
+	}
+	/*?} else {*/
+	/*public static void drawText(VersionedMatrices matrices, Font textRenderer, MutableComponent text, int x, int y, int color) {
+		textRenderer.drawShadow(matrices.getContext(), text, x, y, color);
+	}
+
+	public static void drawText(VersionedMatrices matrices, Font textRenderer, String text, int x, int y, int color) {
+		textRenderer.drawShadow(matrices.getContext(), text, x, y, color);
+	}
+	 *//*?}*/
 
 	/*? if <1.19.3 {*/
 	/*public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
@@ -128,7 +152,7 @@ public class VersionedScreen extends Screen {
     *//*?}*/
 
     /*? if <=1.20 {*/
-	/*public static void drawTexture(ResourceLocation textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
+	/*public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/^? if <=1.16.5 {^/
 		/^Minecraft.getInstance().getTextureManager().bindTexture(textureID);
 		^//^?} else {^/
@@ -141,7 +165,7 @@ public class VersionedScreen extends Screen {
 		/*? if >=1.21.6 {*/
 		matrices.getContext().blit(RenderPipelines.GUI_TEXTURED, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		/*?} elif >=1.21.2 {*/
-		/*Function<ResourceLocation, RenderType> RenderTypes = RenderType::guiTextured;
+		/*Function<Identifier, RenderType> RenderTypes = RenderType::guiTextured;
 		matrices.getContext().blit(RenderTypes, textureID, x, y, u, v, width, height, textureWidth, textureHeight);
 		*//*?} else {*/
 		/*matrices.getContext().blit(textureID, x, y, u, v, width, height, textureWidth, textureHeight);

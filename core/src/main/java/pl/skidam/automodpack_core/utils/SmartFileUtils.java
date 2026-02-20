@@ -167,4 +167,13 @@ public class SmartFileUtils {
         formattedFile = formattedFile.replace(File.separator, "/");
         return formattedFile.startsWith("/") ? formattedFile : "/" + formattedFile;
     }
+
+    // Use only if you checked file existance
+    public static long size(Path path) {
+        try {
+            return Files.size(path);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

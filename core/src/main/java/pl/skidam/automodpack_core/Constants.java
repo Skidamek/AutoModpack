@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core;
 
+import java.nio.file.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -7,11 +8,10 @@ import pl.skidam.automodpack_core.loader.*;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
-import java.nio.file.Path;
-
 // More or less constants
 // TODO cleanup
 public class Constants {
+
     public static final Logger LOGGER = LogManager.getLogger("AutoModpack");
     public static final String MOD_ID = "automodpack"; // For real its "automodpack_mod" but we use this for resource locations etc.
     public static Boolean DEBUG = false;
@@ -28,8 +28,8 @@ public class Constants {
     public static Path MODS_DIR;
     public static ModpackExecutor modpackExecutor;
     public static NettyServer hostServer;
-    public static Jsons.ServerConfigFieldsV2 serverConfig;
-    public static Jsons.ClientConfigFieldsV2 clientConfig;
+    public static Jsons.ServerConfigFieldsV3 serverConfig;
+    public static Jsons.ClientConfigFieldsV3 clientConfig;
     public static Jsons.KnownHostsFields knownHosts;
     public static final Path automodpackDir = Path.of("automodpack");
     public static final Path storeDir = automodpackDir.resolve("store");
@@ -38,10 +38,8 @@ public class Constants {
     // Main - required
     // Addons - optional addon packs
     // Switches - optional or required packs, chosen by the player, only one can be installed at a time
-    public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
     public static Path hostModpackContentFile = hostModpackDir.resolve("automodpack-content.json");
     public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
-    public static Path clientLocalMetadataFile = automodpackDir.resolve("automodpack-client-metadata.json");
     public static Path cacheDir = automodpackDir.resolve("cache");
     public static Path hashCacheDBFile = cacheDir.resolve("hash-cache.db");
     public static Path modCacheDBFile = cacheDir.resolve("mod-cache.db");
@@ -54,10 +52,10 @@ public class Constants {
     public static final Path serverCertFile = privateDir.resolve("cert.crt");
     public static final Path serverPrivateKeyFile = privateDir.resolve("key.pem");
 
-
     // Client
     public static final Path modpackContentTempFile = automodpackDir.resolve("automodpack-content.json.temp");
     public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
+    public static final Path clientSelectionFile = automodpackDir.resolve("automodpack-client-selection.json");
     public static final Path clientSecretsFile = privateDir.resolve("automodpack-client-secrets.json");
     public static final Path modpacksDir = automodpackDir.resolve("modpacks");
 

@@ -18,7 +18,7 @@ public class FetchManager {
     // Send request to CurseForge with murmurs
     // Return the results i guess
 
-    public record FetchData(String file, String sha1, String murmur, String fileSize, String fileType) { }
+    public record FetchData(String file, String sha1, String murmur, long fileSize, String fileType) { }
     public record FetchedData (List<String> urls, List<String> mainPageUrls) { }
     public record Datas(FetchData fetchData, FetchedData fetchedData) { }
     private final Map<String, Datas> fetchDatas = new HashMap<>();

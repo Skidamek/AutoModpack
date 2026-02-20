@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
@@ -20,6 +21,11 @@ public class ScreenImpl implements ScreenService {
     @Override
     public void download(Object... args) {
         Minecraft.getInstance().execute(() -> Screens.download(args[0], args[1]));
+    }
+
+    @Override
+    public void modpackSelection(Object... args) {
+        Minecraft.getInstance().execute(() -> Screens.modpackSelection(args[0], args[1], args[2]));
     }
 
     @Override
@@ -85,6 +91,10 @@ public class ScreenImpl implements ScreenService {
 
         public static void download(Object downloadManager, Object header) {
             Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
+        }
+
+        public static void modpackSelection(Object parentScreen, Object modpackUpdater, Object modpackcontent) {
+            Screens.setScreen(new ModpackSelectionScreen((Screen) parentScreen, (ModpackUpdater) modpackUpdater, (Jsons.ModpackContent) modpackcontent));
         }
 
         public static void fetch(Object fetchManager) {

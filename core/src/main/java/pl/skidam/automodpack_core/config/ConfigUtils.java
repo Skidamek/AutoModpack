@@ -14,6 +14,7 @@ public class ConfigUtils {
         }
     }
 
+    // TODO adapt yourself
     public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config) {
         Set<String> fixedSyncedFiles = new HashSet<>(config.syncedFiles.size());
         Set<String> fixedAllowEditsInFiles = new HashSet<>(config.allowEditsInFiles.size());

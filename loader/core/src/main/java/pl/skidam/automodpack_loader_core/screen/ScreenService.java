@@ -5,6 +5,7 @@ import java.util.Optional;
 public interface ScreenService {
 
     void download(Object... args);
+    void modpackSelection(Object... args);
     void fetch(Object... args);
     void changelog(Object... args);
     void restart(Object... args);

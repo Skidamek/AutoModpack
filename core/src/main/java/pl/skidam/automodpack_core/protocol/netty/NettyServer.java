@@ -22,13 +22,12 @@ import java.security.KeyPair;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
-import pl.skidam.automodpack_core.utils.ObservableMap;
 
 public class NettyServer {
 
@@ -36,8 +35,10 @@ public class NettyServer {
     public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("COMPRESSION_TYPE");
     public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
     public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
+    public static final AttributeKey<Object> GROUP_MESSAGE = AttributeKey.valueOf("GROUP_MESSAGE");
+
     private final Map<Channel, String> connections = new ConcurrentHashMap<>();
-    private final Map<String, Path> paths = new ConcurrentHashMap<>();
+
     private MultithreadEventLoopGroup eventLoopGroup;
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
@@ -64,18 +65,16 @@ public class NettyServer {
         return certificateFingerprint;
     }
 
-    public void setPaths(ObservableMap<String, Path> paths) {
-        this.paths.putAll(paths.getMap());
-        paths.addOnPutCallback(this.paths::put);
-        paths.addOnRemoveCallback(this.paths::remove);
-    }
-
-    public void removePaths(ObservableMap<String, Path> paths) {
-        paths.getMap().forEach(this.paths::remove);
-    }
-
     public Optional<Path> getPath(String hash) {
-        return Optional.ofNullable(paths.get(hash));
+        if (modpackExecutor != null) {
+            for (ModpackContent content : modpackExecutor.modpacks.values()) {
+                Path path = content.getPath(hash);
+                if (path != null) {
+                    return Optional.of(path);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     public Optional<ChannelFuture> start() {
@@ -110,14 +109,11 @@ public class NettyServer {
 
                 // Shiny TLS 1.3
                 sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
-                        .sslProvider(SslProvider.JDK)
-                        .protocols("TLSv1.3")
-                        .ciphers(Arrays.asList(
-                                "TLS_AES_128_GCM_SHA256",
-                                "TLS_AES_256_GCM_SHA384",
-                                "TLS_CHACHA20_POLY1305_SHA256"))
-                        .sessionTimeout(1800)
-                        .build();
+                    .sslProvider(SslProvider.JDK)
+                    .protocols("TLSv1.3")
+                    .ciphers(Arrays.asList("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"))
+                    .sessionTimeout(1800)
+                    .build();
 
                 // generate sha256 from cert as a fingerprint
                 certificateFingerprint = NetUtils.getFingerprint(cert);
@@ -156,18 +152,20 @@ public class NettyServer {
             new TrafficShaper(eventLoopGroup);
 
             serverChannel = new ServerBootstrap()
-                    .channel(socketChannelClass)
-                    .childOption(ChannelOption.TCP_NODELAY, true)
-                    .childHandler(new ChannelInitializer<SocketChannel>() {
+                .channel(socketChannelClass)
+                .childOption(ChannelOption.TCP_NODELAY, true)
+                .childHandler(
+                    new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel ch) {
                             ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(sslCtx));
                         }
-                    })
-                    .group(eventLoopGroup)
-                    .localAddress(bindAddress)
-                    .bind()
-                    .syncUninterruptibly();
+                    }
+                )
+                .group(eventLoopGroup)
+                .localAddress(bindAddress)
+                .bind()
+                .syncUninterruptibly();
         } catch (Exception e) {
             LOGGER.error("Failed to start Netty server", e);
             return Optional.empty();
@@ -220,7 +218,17 @@ public class NettyServer {
             return false;
         }
 
-        if (paths.isEmpty()) {
+        boolean hasFiles = false;
+        if (modpackExecutor != null) {
+            for (ModpackContent content : modpackExecutor.modpacks.values()) {
+                if (!content.isEmpty()) {
+                    hasFiles = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasFiles) {
             LOGGER.warn("No file to host. Can't start modpack host server.");
             return false;
         }

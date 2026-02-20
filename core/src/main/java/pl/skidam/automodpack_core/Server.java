@@ -1,21 +1,21 @@
 package pl.skidam.automodpack_core;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.modpack.ModpackExecutor;
-import pl.skidam.automodpack_core.modpack.ModpackContent;
-import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import static pl.skidam.automodpack_core.Constants.*;
 
 import java.nio.file.Path;
 import java.util.HashSet;
-
-import static pl.skidam.automodpack_core.Constants.*;
+import java.util.LinkedHashMap;
+import java.util.Set;
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ModpackContent;
+import pl.skidam.automodpack_core.modpack.ModpackExecutor;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 public class Server {
 
     // TODO Finish this class that it will be able to host the server without mod
     public static void main(String[] args) {
-
         if (args.length < 1) {
             LOGGER.error("Modpack id not provided!");
             return;
@@ -35,9 +35,8 @@ public class Server {
         serverConfigFile = modpackDir.resolve("automodpack-server.json");
         serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
-        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
         if (serverConfig != null) {
-            serverConfig.syncedFiles = new HashSet<>();
             serverConfig.validateSecrets = false;
             ConfigTools.save(serverConfigFile, serverConfig);
 
@@ -60,8 +59,7 @@ public class Server {
         mainModpackDir.toFile().mkdirs();
 
         ModpackExecutor modpackExecutor = new ModpackExecutor();
-        ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, modpackExecutor.getExecutor());
-        boolean generated = modpackExecutor.generateNew(modpackContent);
+        boolean generated = modpackExecutor.generateNew();
 
         if (generated) {
             LOGGER.info("Modpack generated!");

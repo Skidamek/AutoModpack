@@ -5,6 +5,7 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -31,9 +32,9 @@ public class ModpackUpdater {
     public DownloadManager downloadManager;
     public long totalBytesToDownload = 0;
     public boolean fullDownload = false;
-    private Jsons.ModpackContentFields serverModpackContent;
+    private Jsons.ModpackContent serverModpackContent;
     private String serverModpackContentJson; // TODO: remove this variable and use serverModpackContent directly
-    public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
+    public Map<Jsons.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
     private final Jsons.ModpackAddresses modpackAddresses;
     private final Secrets.Secret modpackSecret;
@@ -44,11 +45,15 @@ public class ModpackUpdater {
         return serverModpackContent.modpackName;
     }
 
-    public Set<Jsons.ModpackContentFields.ModpackContentItem> getModpackFileList() {
-        return serverModpackContent.list;
+    public Set<Jsons.ModpackContentItem> getWholeModpackFileList() {
+        return ModpackUtils.getModpackFileList(serverModpackContent);
     }
 
-    public ModpackUpdater(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
+    public Jsons.ModpackContent getServerModpackContent() {
+        return serverModpackContent;
+    }
+
+    public ModpackUpdater(Jsons.ModpackContent modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
         this.serverModpackContent = modpackContent;
         this.modpackAddresses = modpackAddresses;
         this.modpackSecret = secret;
@@ -82,7 +87,7 @@ public class ModpackUpdater {
             // Handle new modpack
             if (!Files.exists(modpackContentFile)) {
                 if (preload) {
-                    startUpdate(serverModpackContent.list);
+                    startUpdate(ModpackUtils.getModpackFileList(serverModpackContent));
                 } else {
                     fullDownload = true;
                     new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
@@ -167,7 +172,7 @@ public class ModpackUpdater {
         LOGGER.info("Modpack is already loaded");
     }
 
-    public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
+    public void startUpdate(Set<Jsons.ModpackContentItem> filesToUpdate) {
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");
             return;
@@ -190,9 +195,9 @@ public class ModpackUpdater {
             long startFetching = System.currentTimeMillis();
             List<FetchManager.FetchData> fetchDatas = new ArrayList<>();
 
-            for (Jsons.ModpackContentFields.ModpackContentItem serverItem : finalFilesToUpdate) {
+            for (Jsons.ModpackContentItem serverItem : finalFilesToUpdate) {
 
-                totalBytesToDownload += Long.parseLong(serverItem.size);
+                totalBytesToDownload += serverItem.size;
                 String fileType = serverItem.type;
 
                 // Check if the file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
@@ -255,7 +260,7 @@ public class ModpackUpdater {
         }
     }
 
-    private void downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager, FileMetadataCache cache) throws InterruptedException {
+    private void downloadModpack(Set<Jsons.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager, FileMetadataCache cache) throws InterruptedException {
         int wholeQueue = finalFilesToUpdate.size();
 
         if (wholeQueue == 0) {
@@ -279,7 +284,7 @@ public class ModpackUpdater {
 
             String serverFilePath = serverItem.file;
             String serverFileHash = serverItem.sha1;
-            long serverFileSize = Long.parseLong(serverItem.size);
+            long serverFileSize = serverItem.size;
 
             Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
 
@@ -336,7 +341,7 @@ public class ModpackUpdater {
         failedDownloadsSecMap.forEach((k, v) -> {
             hashesToRefresh.put(k.file, k.sha1);
             failedDownloads.remove(k);
-            totalBytesToDownload += Long.parseLong(k.size);
+            totalBytesToDownload += k.size;
         });
 
         if (hashesToRefresh.isEmpty()) {
@@ -368,7 +373,7 @@ public class ModpackUpdater {
             this.serverModpackContentJson = GSON.toJson(refreshedContent);
 
             // filter list to only the failed downloads
-            var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
+            var refreshedFilteredList = ModpackUtils.getModpackFileList(refreshedContent).stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
             if (refreshedFilteredList.isEmpty()) {
                 return;
             }
@@ -388,7 +393,7 @@ public class ModpackUpdater {
 
                 String serverFilePath = serverItem.file;
                 String serverFileHash = serverItem.sha1;
-                long serverFileSize = Long.parseLong(serverItem.size);
+                long serverFileSize = serverItem.size;
 
                 Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
 
@@ -429,11 +434,11 @@ public class ModpackUpdater {
     private boolean applyModpack(FileMetadataCache cache) throws Exception {
         ModpackUtils.selectModpack(modpackDir, modpackAddresses, newDownloadedFiles);
         try { // try catch this error there because we don't want to stop the whole method just because of that
-            SecretsStore.saveClientSecret(clientConfig.selectedModpack, modpackSecret);
+            SecretsStore.saveClientSecret(ClientSelectionManager.getMgr().getSelectedPackId(), modpackSecret);
         } catch (IllegalArgumentException e) {
             LOGGER.error("Failed to save client secret", e);
         }
-        Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+        Jsons.ModpackContent modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {
             throw new IllegalStateException("Failed to load modpack content"); // Something gone very wrong...
@@ -448,7 +453,7 @@ public class ModpackUpdater {
         boolean needsRestart0 = deleteNonModpackFiles(modpackContent, cache);
 
         Set<String> workaroundMods = new WorkaroundUtil(modpackDir).getWorkaroundMods(modpackContent);
-        Set<String> filesNotToCopy = getFilesNotToCopy(modpackContent.list, workaroundMods);
+        Set<String> filesNotToCopy = getFilesNotToCopy(ModpackUtils.getModpackFileList(modpackContent), workaroundMods);
         boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy, cache);
 
         Set<Path> modpackMods = new HashSet<>();
@@ -496,7 +501,7 @@ public class ModpackUpdater {
             ignoredFiles = ModpackUtils.getIgnoredFiles(conflictingNestedMods, workaroundMods);
         }
 
-        Set<String> forceCopyFiles = modpackContent.list.stream()
+        Set<String> forceCopyFiles = ModpackUtils.getModpackFileList(modpackContent).stream()
                 .filter(item -> item.forceCopy)
                 .map(item -> item.file)
                 .collect(Collectors.toSet());
@@ -516,11 +521,11 @@ public class ModpackUpdater {
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory
-    private Set<String> getFilesNotToCopy(Set<Jsons.ModpackContentFields.ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
+    private Set<String> getFilesNotToCopy(Set<Jsons.ModpackContentItem> modpackContentItems, Set<String> workaroundMods) {
         Set<String> filesNotToCopy = new HashSet<>();
 
         // Make list of files which we do not copy to the running directory
-        for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentItems) {
+        for (Jsons.ModpackContentItem item : modpackContentItems) {
             if (item.forceCopy) {
                 continue;
             }
@@ -540,8 +545,8 @@ public class ModpackUpdater {
         return filesNotToCopy;
     }
 
-    private boolean deleteNonModpackFiles(Jsons.ModpackContentFields modpackContent, FileMetadataCache cache) throws IOException {
-        Set<String> modpackFiles = modpackContent.list.stream().map(modpackContentField -> modpackContentField.file).collect(Collectors.toSet());
+    private boolean deleteNonModpackFiles(Jsons.ModpackContent modpackContent, FileMetadataCache cache) throws IOException {
+        Set<String> modpackFiles = ModpackUtils.getModpackFileList(modpackContent).stream().map(modpackContentField -> modpackContentField.file).collect(Collectors.toSet());
         List<Path> pathList;
         try (Stream<Path> pathStream = Files.walk(modpackDir)) {
             pathList = pathStream.toList();

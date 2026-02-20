@@ -3,8 +3,8 @@ package pl.skidam.automodpack_loader_core;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -13,7 +13,6 @@ import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
@@ -41,7 +40,8 @@ public class Preload {
     }
 
     private void updateAll() {
-        var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(clientConfig.selectedModpack);
+        ClientSelectionManager clientSelectionManager = ClientSelectionManager.getMgr();
+        var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(clientSelectionManager.getSelectedPackId());
 
         if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER || optionalSelectedModpackDir.isEmpty()) {
             SelfUpdater.update();
@@ -49,24 +49,15 @@ public class Preload {
         }
 
         selectedModpackDir = optionalSelectedModpackDir.get();
-        InetSocketAddress selectedModpackAddress = null;
-        InetSocketAddress selectedServerAddress = null;
-        boolean requiresMagic = true; // Default to true
-        if (!clientConfig.selectedModpack.isBlank() && clientConfig.installedModpacks.containsKey(clientConfig.selectedModpack)) {
-            var entry = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
-            selectedModpackAddress = entry.hostAddress;
-            selectedServerAddress = entry.serverAddress;
-            requiresMagic = entry.requiresMagic;
-        }
+        Jsons.ModpackAddresses modpackAddresses = clientSelectionManager.getSelectedAddresses();
 
         // Only selfupdate if no modpack is selected
-        if (selectedModpackAddress == null) {
+        if (modpackAddresses.hostAddress == null) {
             SelfUpdater.update();
             LegacyClientCacheUtils.deleteDummyFiles();
         } else {
-            Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
+            Secrets.Secret secret = SecretsStore.getClientSecret(clientSelectionManager.getSelectedPackId());
 
-            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress, requiresMagic);
             var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
             var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
@@ -120,65 +111,68 @@ public class Preload {
     private void loadConfigs() {
         long startTime = System.currentTimeMillis();
 
+        // TODO V3 migration
         // load client config
-        if (clientConfigOverride == null) {
-            var clientConfigVersion = ConfigTools.softLoad(clientConfigFile, Jsons.VersionConfigField.class);
-            if (clientConfigVersion != null) {
-                if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
-                    // Update the configs schemes to not crash the game if loaded with old config!
-                    var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
-                    if (clientConfigV1 != null) { // update to V2 - just delete the installedModpacks
-                        clientConfigVersion.DO_NOT_CHANGE_IT = 2;
-                        clientConfigV1.DO_NOT_CHANGE_IT = 2;
-                        clientConfigV1.installedModpacks = null;
-                    }
+//        if (clientConfigOverride == null) {
+//            var clientConfigVersion = ConfigTools.softLoad(clientConfigFile, Jsons.VersionConfigField.class);
+//            if (clientConfigVersion != null) {
+//                if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
+//                    // Update the configs schemes to not crash the game if loaded with old config!
+//                    var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
+//                    if (clientConfigV1 != null) { // update to V2 - just delete the installedModpacks
+//                        clientConfigVersion.DO_NOT_CHANGE_IT = 2;
+//                        clientConfigV1.DO_NOT_CHANGE_IT = 2;
+//                        clientConfigV1.installedModpacks = null;
+//                    }
+//
+//                    ConfigTools.save(clientConfigFile, clientConfigV1);
+//                    LOGGER.info("Updated client config version to {}", clientConfigVersion.DO_NOT_CHANGE_IT);
+//                }
+//            }
+//
+//            clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV2.class);
+//        } else {
+//            // TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
+//            LOGGER.warn("You are using unofficial {} mod", MOD_ID);
+//            LOGGER.warn("Using client config overrides! Editing the {} file will have no effect", clientConfigFile);
+//            LOGGER.warn("Remove the {} file from inside the jar or remove and download fresh {} mod jar from modrinth/curseforge", clientConfigFileOverrideResource, MOD_ID);
+//            clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV2.class);
+//        }
+//
+//        var serverConfigVersion = ConfigTools.softLoad(serverConfigFile, Jsons.VersionConfigField.class);
+//        if (serverConfigVersion != null) {
+//            if (serverConfigVersion.DO_NOT_CHANGE_IT == 1) {
+//                // Update the configs schemes to make this update not as breaking as it could be
+//                var serverConfigV1 = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV1.class);
+//                var serverConfigV2 = ConfigTools.softLoad(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+//                if (serverConfigV1 != null && serverConfigV2 != null) {
+//                    serverConfigVersion.DO_NOT_CHANGE_IT = 2;
+//                    serverConfigV2.DO_NOT_CHANGE_IT = 2;
+//
+//                    if (serverConfigV1.hostIp.isBlank()) {
+//                        serverConfigV2.addressToSend = "";
+//                    } else {
+//                        serverConfigV2.addressToSend = AddressHelpers.parse(serverConfigV1.hostIp).getHostString();
+//                    }
+//
+//                    if (serverConfigV1.hostModpackOnMinecraftPort) {
+//                        serverConfigV2.bindPort = -1;
+//                        serverConfigV2.portToSend = -1;
+//                    } else {
+//                        serverConfigV2.bindPort = serverConfigV1.hostPort;
+//                        serverConfigV2.portToSend = serverConfigV1.hostPort;
+//                    }
+//                }
+//
+//                ConfigTools.save(serverConfigFile, serverConfigV2);
+//                LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
+//            }
+//        }
 
-                    ConfigTools.save(clientConfigFile, clientConfigV1);
-                    LOGGER.info("Updated client config version to {}", clientConfigVersion.DO_NOT_CHANGE_IT);
-                }
-            }
-
-            clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV2.class);
-        } else {
-            // TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
-            LOGGER.warn("You are using unofficial {} mod", MOD_ID);
-            LOGGER.warn("Using client config overrides! Editing the {} file will have no effect", clientConfigFile);
-            LOGGER.warn("Remove the {} file from inside the jar or remove and download fresh {} mod jar from modrinth/curseforge", clientConfigFileOverrideResource, MOD_ID);
-            clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV2.class);
-        }
-
-        var serverConfigVersion = ConfigTools.softLoad(serverConfigFile, Jsons.VersionConfigField.class);
-        if (serverConfigVersion != null) {
-            if (serverConfigVersion.DO_NOT_CHANGE_IT == 1) {
-                // Update the configs schemes to make this update not as breaking as it could be
-                var serverConfigV1 = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV1.class);
-                var serverConfigV2 = ConfigTools.softLoad(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
-                if (serverConfigV1 != null && serverConfigV2 != null) {
-                    serverConfigVersion.DO_NOT_CHANGE_IT = 2;
-                    serverConfigV2.DO_NOT_CHANGE_IT = 2;
-
-                    if (serverConfigV1.hostIp.isBlank()) {
-                        serverConfigV2.addressToSend = "";
-                    } else {
-                        serverConfigV2.addressToSend = AddressHelpers.parse(serverConfigV1.hostIp).getHostString();
-                    }
-
-                    if (serverConfigV1.hostModpackOnMinecraftPort) {
-                        serverConfigV2.bindPort = -1;
-                        serverConfigV2.portToSend = -1;
-                    } else {
-                        serverConfigV2.bindPort = serverConfigV1.hostPort;
-                        serverConfigV2.portToSend = serverConfigV1.hostPort;
-                    }
-                }
-
-                ConfigTools.save(serverConfigFile, serverConfigV2);
-                LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
-            }
-        }
+        clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV3.class);
 
         // load server config
-        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+        serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
 
         if (serverConfig != null) {
             // Add current loader to the list
@@ -194,25 +188,25 @@ public class Preload {
                 LOGGER.info("Changed modpack name to {}", serverConfig.modpackName);
             }
 
-            ConfigUtils.normalizeServerConfig(serverConfig);
+//            ConfigUtils.normalizeServerConfig(serverConfig);
 
             // Save changes
             ConfigTools.save(serverConfigFile, serverConfig);
         }
 
-        if (clientConfig != null) {
-            // Very important to have this map initialized
-            if (clientConfig.installedModpacks == null) {
-                clientConfig.installedModpacks = new HashMap<>();
-            }
-
-            if (clientConfig.selectedModpack == null) {
-                clientConfig.selectedModpack = "";
-            }
-
-            // Save changes
-            ConfigTools.save(clientConfigFile, clientConfig);
-        }
+//        if (clientConfig != null) {
+//            // Very important to have this map initialized
+//            if (clientConfig.installedModpacks == null) {
+//                clientConfig.installedModpacks = new HashMap<>();
+//            }
+//
+//            if (clientConfig.selectedModpack == null) {
+//                clientConfig.selectedModpack = "";
+//            }
+//
+//            // Save changes
+//            ConfigTools.save(clientConfigFile, clientConfig);
+//        }
 
         knownHosts = ConfigTools.load(knownHostsFile, Jsons.KnownHostsFields.class);
         if (knownHosts != null) {

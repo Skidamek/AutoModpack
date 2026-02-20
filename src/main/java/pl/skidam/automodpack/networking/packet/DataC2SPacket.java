@@ -8,10 +8,12 @@ import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.net.InetSocketAddress;
@@ -82,11 +84,14 @@ public class DataC2SPacket {
             Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
             var optionalServerModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, true);
 
+            ClientSelectionManager clientSelectionManager = ClientSelectionManager.getMgr();
+
             if (optionalServerModpackContent.isPresent()) {
                 ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
                 if (updateCheckResult.requiresUpdate()) {
                     disconnectImmediately(handler);
+//                    new ScreenManager().modpackSelection(optionalServerModpackContent.get());
                     new ModpackUpdater(optionalServerModpackContent.get(), modpackAddresses, secret, modpackDir).processModpackUpdate(updateCheckResult);
                     needsDisconnecting = true;
                 } else {
@@ -99,7 +104,7 @@ public class DataC2SPacket {
                     }
 
                     if (selectedModpackChanged) {
-                        SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
+                        SecretsStore.saveClientSecret(clientSelectionManager.getSelectedPackId(), secret);
                         disconnectImmediately(handler);
                         new ReLauncher(modpackDir, UpdateType.SELECT, null).restart(false);
                         needsDisconnecting = true;
@@ -111,8 +116,8 @@ public class DataC2SPacket {
                 needsDisconnecting = true;
             }
 
-            if (clientConfig.selectedModpack != null && !clientConfig.selectedModpack.isBlank()) {
-                SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
+            if (clientSelectionManager.getSelectedPackId() != null && !clientSelectionManager.getSelectedPackId().isBlank()) {
+                SecretsStore.saveClientSecret(clientSelectionManager.getSelectedPackId(), secret);
             }
 
             response.writeUtf(String.valueOf(needsDisconnecting), Short.MAX_VALUE);

@@ -125,32 +125,32 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         int lineHeight = 12; // Consistent line spacing
         
         // Title
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.title").withStyle(ChatFormatting.BOLD),
                 this.width / 2, this.height / 2 - 85, TextColors.WHITE);
 
         // Description line 1
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.description1"),
                 this.width / 2, this.height / 2 - 65, TextColors.WHITE);
 
         // Description line 2
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.description2"),
                 this.width / 2, this.height / 2 - 65 + lineHeight, TextColors.WHITE);
 
         // Server fingerprint label
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.fingerprint.label"),
                 this.width / 2, this.height / 2 - 35, TextColors.WHITE);
 
         // Server fingerprint value (concatenated, gray, not bold - intentionally harder to read)
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.literal(getConcatenatedFingerprint()),
                 this.width / 2, this.height / 2 - 35 + lineHeight, TextColors.LIGHT_GRAY);
 
         // Confirmation text
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.confirm.text"),
                 this.width / 2, this.height / 2 - 15 + lineHeight, TextColors.WHITE);
     }

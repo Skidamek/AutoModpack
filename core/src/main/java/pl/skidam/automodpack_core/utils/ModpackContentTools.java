@@ -1,22 +1,13 @@
 package pl.skidam.automodpack_core.utils;
 
-import pl.skidam.automodpack_core.config.Jsons;
+import static pl.skidam.automodpack_core.Constants.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
-
-import static pl.skidam.automodpack_core.Constants.*;
+import pl.skidam.automodpack_core.config.Jsons;
 
 public class ModpackContentTools {
-    public static String getFileType(String file, Jsons.ModpackContentFields list) {
-        for (Jsons.ModpackContentFields.ModpackContentItem item : list.list) {
-            if (item.file.contains(file)) { // compare file absolute path if it contains item.file
-                return item.type;
-            }
-        }
-        return "other";
-    }
 
     public static Optional<Path> getModpackDir(String modpack) {
         if (modpack == null || modpack.isEmpty()) {

@@ -4,6 +4,7 @@ import org.jetbrains.annotations.NotNull;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
@@ -34,34 +35,34 @@ import static pl.skidam.automodpack_core.utils.LegacyClientCacheUtils.*;
 public class ModpackUtils {
 
     // Modpack may require update even if there's no files to update, because some files may need to be deleted
-    public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
+    public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentItem> filesToUpdate) {}
 
     // Fast and friendly method to check if the modpack is up to date without modifying anything on disk
-    public static UpdateCheckResult isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
-        if (serverModpackContent == null || serverModpackContent.list == null) {
-            throw new IllegalArgumentException("Server modpack content list is null");
+    public static UpdateCheckResult isUpdate(Jsons.ModpackContent serverModpackContent, Path modpackDir) {
+        if (serverModpackContent == null || serverModpackContent.groups == null) {
+            throw new IllegalArgumentException("Server modpack content groups is null");
         }
 
         var optionalClientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
         if (optionalClientModpackContentFile.isEmpty() || !Files.exists(optionalClientModpackContentFile.get())) {
-            return new UpdateCheckResult(true, serverModpackContent.list);
+            return new UpdateCheckResult(true, getModpackFileList(serverModpackContent));
         }
 
-        Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
+        Jsons.ModpackContent clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
         if (clientModpackContent == null) {
-            return new UpdateCheckResult(true, serverModpackContent.list);
+            return new UpdateCheckResult(true, getModpackFileList(serverModpackContent));
         }
 
         LOGGER.info("Verifying content against server list...");
         var start = System.currentTimeMillis();
 
-        Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = ConcurrentHashMap.newKeySet();
+        Set<Jsons.ModpackContentItem> filesToUpdate = ConcurrentHashMap.newKeySet();
 
         // Group & Sort Server Files (Optimizes Disk Seek Pattern)
         // Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
         // TreeMap ensures alphabetical order of directories (HDD friendly).
-        Map<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> itemsByDir =
-                serverModpackContent.list.stream()
+        Map<Path, List<Jsons.ModpackContentItem>> itemsByDir =
+                getModpackFileList(serverModpackContent).stream()
                         .collect(Collectors.groupingBy(
                                 item -> SmartFileUtils.getPath(modpackDir, item.file).getParent(),
                                 TreeMap::new,
@@ -71,9 +72,9 @@ public class ModpackUtils {
         try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 
             // Process Directory by Directory
-            for (Map.Entry<Path, List<Jsons.ModpackContentFields.ModpackContentItem>> entry : itemsByDir.entrySet()) {
+            for (Map.Entry<Path, List<Jsons.ModpackContentItem>> entry : itemsByDir.entrySet()) {
                 Path parentDir = entry.getKey();
-                List<Jsons.ModpackContentFields.ModpackContentItem> itemsInDir = entry.getValue();
+                List<Jsons.ModpackContentItem> itemsInDir = entry.getValue();
 
                 // If directory is missing, all items in it are missing.
                 if (!Files.exists(parentDir)) {
@@ -120,7 +121,7 @@ public class ModpackUtils {
                         }
 
                         // Check Size first from already read attributes
-                        if (diskAttrs.size() != Long.parseLong(serverItem.size)) {
+                        if (diskAttrs.size() != serverItem.size) {
                             filesToUpdate.add(serverItem);
                             continue;
                         }
@@ -138,7 +139,7 @@ public class ModpackUtils {
         } catch (Exception e) {
             LOGGER.error("Error during update check", e);
             // Fail-safe: assume update needed if process crashes
-            return new UpdateCheckResult(true, serverModpackContent.list);
+            return new UpdateCheckResult(true, getModpackFileList(serverModpackContent));
         }
 
         if (!filesToUpdate.isEmpty()) {
@@ -148,11 +149,11 @@ public class ModpackUtils {
 
         LOGGER.info("Checking for deleted files...");
 
-        Set<String> serverFileSet = serverModpackContent.list.stream()
+        Set<String> serverFileSet = getModpackFileList(serverModpackContent).stream()
                 .map(item -> item.file)
                 .collect(Collectors.toSet());
 
-        for (Jsons.ModpackContentFields.ModpackContentItem clientItem : clientModpackContent.list) {
+        for (Jsons.ModpackContentItem clientItem : getModpackFileList(serverModpackContent)) {
             if (!serverFileSet.contains(clientItem.file)) {
                 LOGGER.info("Found file marked for deletion: {}", clientItem.file);
                 return new UpdateCheckResult(true, Set.of());
@@ -163,8 +164,16 @@ public class ModpackUtils {
         return new UpdateCheckResult(false, Set.of());
     }
 
+    public static Set<Jsons.ModpackContentItem> getModpackFileList(Jsons.ModpackContent serverModpackContent) {
+        ClientSelectionManager clientSelectionManager = ClientSelectionManager.getMgr();
+        if (clientSelectionManager.packExists(serverModpackContent.modpackName)) {
+            return clientSelectionManager.getSelectedFiles(serverModpackContent);
+        }
+        return serverModpackContent.groups.values().stream().flatMap(group -> group.files.stream()).collect(Collectors.toSet());
+    }
+
     // Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
-    public static void populateStoreFromCWD(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache) {
+    public static void populateStoreFromCWD(Set<Jsons.ModpackContentItem> filesToUpdate, FileMetadataCache cache) {
         for (var entry : filesToUpdate) {
             Path storeFile = SmartFileUtils.getPath(storeDir, entry.sha1);
 
@@ -189,8 +198,8 @@ public class ModpackUtils {
     }
 
     // Returns the set of files that are missing from the store.
-    public static Set<Jsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck) {
-        Set<Jsons.ModpackContentFields.ModpackContentItem> nonExistingFiles = new HashSet<>();
+    public static Set<Jsons.ModpackContentItem> identifyUncachedFiles(Set<Jsons.ModpackContentItem> filesToCheck) {
+        Set<Jsons.ModpackContentItem> nonExistingFiles = new HashSet<>();
         for (var entry : filesToCheck) {
             Path storeFile = SmartFileUtils.getPath(storeDir, entry.sha1);
 
@@ -203,8 +212,8 @@ public class ModpackUtils {
 
     // Installs files from the store (storeDir/<sha1>) to the instance (modpackDir/<file>).
     // Attempts to hardlink first, falls back to a copy if that fails.
-    public static void hardlinkModpack(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, FileMetadataCache cache) throws IOException {
-        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
+    public static void hardlinkModpack(Path modpackDir, Jsons.ModpackContent serverModpackContent, FileMetadataCache cache) throws IOException {
+        for (Jsons.ModpackContentItem contentItem : getModpackFileList(serverModpackContent)) {
             String formattedFile = contentItem.file;
             Path modpackFile = SmartFileUtils.getPath(modpackDir, formattedFile);
             Path storeFile = SmartFileUtils.getPath(storeDir, contentItem.sha1);
@@ -227,7 +236,7 @@ public class ModpackUtils {
         }
     }
 
-    public static boolean deleteFilesMarkedForDeletionByTheServer(Set<Jsons.ModpackContentFields.FileToDelete> filesToDeleteOnClient, FileMetadataCache cache) {
+    public static boolean deleteFilesMarkedForDeletionByTheServer(Set<Jsons.FileToDelete> filesToDeleteOnClient, FileMetadataCache cache) {
         if (!clientConfig.allowRemoteNonModpackDeletions) {
             if (!filesToDeleteOnClient.isEmpty()) {
                 LOGGER.warn("Server requested deletion of {} files, but remote deletions are disabled in client config! Consider deleting them manually.", filesToDeleteOnClient.size());
@@ -300,11 +309,11 @@ public class ModpackUtils {
         return deletedAnyModFile.get();
     }
 
-    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy, FileMetadataCache cache) throws IOException {
+    public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContent serverModpackContent, Set<String> filesNotToCopy, FileMetadataCache cache) throws IOException {
         boolean needsRestart = false;
 
         // correct the files locations
-        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
+        for (Jsons.ModpackContentItem contentItem : getModpackFileList(serverModpackContent)) {
             String formattedFile = contentItem.file;
             Path modpackFile = SmartFileUtils.getPath(modpackDir, formattedFile);
             Path runFile = SmartFileUtils.getPathFromCWD(formattedFile);
@@ -349,10 +358,10 @@ public class ModpackUtils {
         return needsRestart;
     }
 
-    public static boolean removeRestModsNotToCopy(Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy, Set<Path> modsToKeep, FileMetadataCache cache) {
+    public static boolean removeRestModsNotToCopy(Jsons.ModpackContent serverModpackContent, Set<String> filesNotToCopy, Set<Path> modsToKeep, FileMetadataCache cache) {
         boolean needsRestart = false;
 
-        for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
+        for (Jsons.ModpackContentItem contentItem : getModpackFileList(serverModpackContent)) {
             String formattedFile = contentItem.file;
             Path runFile = SmartFileUtils.getPathFromCWD(formattedFile);
             boolean isMod = "mod".equals(contentItem.type);
@@ -515,11 +524,13 @@ public class ModpackUtils {
         }
     }
 
-    public static Path renameModpackDir(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
-        String currentName = clientConfig.selectedModpack;
+    public static Path renameModpackDir(Jsons.ModpackContent serverModpackContent, Path modpackDir) {
+        ClientSelectionManager clientSelectionManager = ClientSelectionManager.getMgr();
+
+        String currentName = clientSelectionManager.getSelectedPackId();
         String newName = serverModpackContent.modpackName;
 
-        if (clientConfig.installedModpacks == null || clientConfig.selectedModpack == null || clientConfig.selectedModpack.isBlank()) {
+        if (currentName == null || currentName.isBlank()) {
             return modpackDir;
         }
 
@@ -527,7 +538,7 @@ public class ModpackUtils {
             return modpackDir;
         }
 
-        var installedAddresses = clientConfig.installedModpacks.get(currentName);
+        var installedAddresses = clientSelectionManager.getSelectedAddresses();
         if (installedAddresses == null) {
             return modpackDir;
         }
@@ -554,8 +565,10 @@ public class ModpackUtils {
 
     // Returns true if value changed
     public static boolean selectModpack(Path modpackDirToSelect, Jsons.ModpackAddresses modpackAddresses, Set<String> newDownloadedFiles) {
+        ClientSelectionManager clientSelectionManager = ClientSelectionManager.getMgr();
+
+        String oldName = clientSelectionManager.getSelectedPackId();
         String newName = modpackDirToSelect.getFileName().toString();
-        String oldName = clientConfig.selectedModpack;
 
         // If nothing changed, update list only and return early to avoid I/O.
         if (Objects.equals(newName, oldName)) {
@@ -575,9 +588,7 @@ public class ModpackUtils {
         processEditableFiles(modpackDirToSelect, (dir, files) ->
                 ModpackUtils.copyPreviousEditableFiles(dir, files, newDownloadedFiles));
 
-        // Update Configuration and Save
-        clientConfig.selectedModpack = newName;
-        ConfigTools.save(clientConfigFile, clientConfig);
+        clientSelectionManager.setSelectedPack(newName);
         ModpackUtils.addModpackToList(newName, modpackAddresses);
 
         LOGGER.info("Selected modpack: {}", newName);
@@ -587,37 +598,34 @@ public class ModpackUtils {
 
     private static void processEditableFiles(Path modpackDir, java.util.function.BiConsumer<Path, Set<String>> action) {
         Path contentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
-        Jsons.ModpackContentFields content = ConfigTools.loadModpackContent(contentFile);
+        Jsons.ModpackContent content = ConfigTools.loadModpackContent(contentFile);
 
         if (content != null) {
-            Set<String> editableFiles = getEditableFiles(content.list);
+            Set<String> editableFiles = getEditableFiles(getModpackFileList(content));
             action.accept(modpackDir, editableFiles);
         }
     }
 
-    public static void removeModpackFromList(String modpackName) {
-        if (modpackName == null || modpackName.isEmpty()) {
+    public static void removeModpackFromList(String modpackId) {
+        if (modpackId == null || modpackId.isEmpty()) {
             return;
         }
 
-        if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.containsKey(modpackName)) {
-            Map<String, Jsons.ModpackAddresses> modpacks = new HashMap<>(clientConfig.installedModpacks);
-            modpacks.remove(modpackName);
-            clientConfig.installedModpacks = modpacks;
-            ConfigTools.save(clientConfigFile, clientConfig);
+        ClientSelectionManager clientSelectionManager = ClientSelectionManager.getMgr();
+
+        if (clientSelectionManager.packExists(modpackId)) {
+            clientSelectionManager.removePack(modpackId);
         }
     }
 
-    public static void addModpackToList(String modpackName, Jsons.ModpackAddresses modpackAddresses) {
-        if (modpackName == null || modpackName.isEmpty() || modpackAddresses.isAnyEmpty()) {
+    public static void addModpackToList(String packId, Jsons.ModpackAddresses modpackAddresses) {
+        if (packId == null || packId.isEmpty() || modpackAddresses.isAnyEmpty()) {
             return;
         }
 
-        Map<String, Jsons.ModpackAddresses> modpacks = new HashMap<>(clientConfig.installedModpacks);
-        modpacks.put(modpackName, modpackAddresses);
-        clientConfig.installedModpacks = modpacks;
+        ClientSelectionManager clientSelectionManager = ClientSelectionManager.getMgr();
 
-        ConfigTools.save(clientConfigFile, clientConfig);
+        clientSelectionManager.addPack(packId, new Jsons.ClientSelectionManagerFields.Modpack(modpackAddresses));
     }
 
     // Returns modpack name formatted for path or url if server doesn't provide modpack name
@@ -645,19 +653,19 @@ public class ModpackUtils {
         return modpackDir;
     }
 
-    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, boolean allowAskingUser) {
+    public static Optional<Jsons.ModpackContent> requestServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, boolean allowAskingUser) {
         return fetchModpackContent(modpackAddresses, secret,
                 (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
                 "Fetched", allowAskingUser);
     }
 
-    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, byte[][] fileHashes, boolean allowAskingUser) {
+    public static Optional<Jsons.ModpackContent> refreshServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, byte[][] fileHashes, boolean allowAskingUser) {
         return fetchModpackContent(modpackAddresses, secret,
                 (client) -> client.requestRefresh(fileHashes, modpackContentTempFile),
                 "Re-fetched", allowAskingUser);
     }
 
-    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
+    private static Optional<Jsons.ModpackContent> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
         if (secret == null)
             return Optional.empty();
         if (modpackAddresses.isAnyEmpty())
@@ -753,17 +761,17 @@ public class ModpackUtils {
         return accepted.get();
     }
 
-    public static boolean potentiallyMalicious(Jsons.ModpackContentFields serverModpackContent) {
+    public static boolean potentiallyMalicious(Jsons.ModpackContent serverModpackContent) {
         if (isUnsafePath(serverModpackContent.modpackName, true)) {
             LOGGER.error("Modpack content is invalid: modpack name '{}' is unsafe/malicious", serverModpackContent.modpackName);
             return true;
         }
 
-        if (serverModpackContent.list == null || serverModpackContent.list.isEmpty()) {
+        if (serverModpackContent.groups == null || serverModpackContent.groups.isEmpty()) {
             return false;
         }
 
-        boolean listInvalid = serverModpackContent.list.stream().anyMatch(item -> {
+        boolean listInvalid = getModpackFileList(serverModpackContent).stream().anyMatch(item -> {
             if (isHashInvalid(item.sha1)) {
                 LOGGER.error("Modpack content is invalid: file '{}' has invalid sha1 '{}'", item.file, item.sha1);
                 return true;
@@ -868,10 +876,10 @@ public class ModpackUtils {
         }
     }
 
-    static Set<String> getEditableFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> modpackContentItems) {
+    static Set<String> getEditableFiles(Set<Jsons.ModpackContentItem> modpackContentItems) {
         Set<String> editableFiles = new HashSet<>();
 
-        for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : modpackContentItems) {
+        for (Jsons.ModpackContentItem modpackContentItem : modpackContentItems) {
             if (modpackContentItem.editable) {
                 editableFiles.add(modpackContentItem.file);
             }

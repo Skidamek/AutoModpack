@@ -24,7 +24,7 @@ public class ChangelogScreen extends VersionedScreen {
     private final Path modpackDir;
     private final Changelogs changelogs;
     private static Map<String, String> formattedChanges;
-    private Jsons.ModpackContentFields modpackContent = null;
+    private Jsons.ModpackContent modpackContent = null;
     private ListEntryWidget listEntryWidget;
     private EditBox searchField;
     private Button backButton;
@@ -142,7 +142,7 @@ public class ChangelogScreen extends VersionedScreen {
 
         String summary = "+ " + filesAdded + " | - " + filesRemoved;
 
-        drawCenteredTextWithShadow(
+        drawCenteredText(
             matrices,
             font,
             VersionedText.literal(summary),

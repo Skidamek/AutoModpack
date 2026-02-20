@@ -1,8 +1,18 @@
 package pl.skidam.automodpack.modpack;
 
+import static net.minecraft.commands.Commands.literal;
+import static pl.skidam.automodpack_core.Constants.*;
+
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
+import java.util.Set;
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.util.Util;
 /*? if >= 1.21.11 {*/
 import net.minecraft.server.permissions.Permission;
 import net.minecraft.server.permissions.PermissionLevel;
@@ -12,79 +22,75 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import java.util.Set;
-import net.minecraft.ChatFormatting;
-import net.minecraft.util.Util;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.network.chat.ClickEvent;
-import net.minecraft.network.chat.HoverEvent;
-import net.minecraft.network.chat.MutableComponent;
-import pl.skidam.automodpack_core.config.ConfigUtils;
-
-import static net.minecraft.commands.Commands.literal;
-import static pl.skidam.automodpack_core.Constants.*;
 
 public class Commands {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         var automodpackNode = dispatcher.register(
-                literal("automodpack")
-                        .executes(Commands::about)
-                        .then(literal("generate")
-                                .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                .executes(Commands::generateModpack)
+            literal("automodpack")
+                .executes(Commands::about)
+                .then(
+                    literal("generate")
+                        .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                        .executes(Commands::generateModpack)
+                )
+                .then(
+                    literal("host")
+                        .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                        .executes(Commands::modpackHostAbout)
+                        .then(
+                            literal("start")
+                                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                .executes(Commands::startModpackHost)
                         )
-                        .then(literal("host")
-                                .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                .executes(Commands::modpackHostAbout)
-                                .then(literal("start")
-                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                        .executes(Commands::startModpackHost)
-                                )
-                                .then(literal("stop")
-                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                        .executes(Commands::stopModpackHost)
-                                )
-                                .then(literal("restart")
-                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                        .executes(Commands::restartModpackHost)
-                                )
-                                .then(literal("connections")
-                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                        .executes(Commands::connections)
-                                )
-                                .then(literal("fingerprint")
-                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                        .executes(Commands::fingerprint)
-                                )
+                        .then(
+                            literal("stop")
+                                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                .executes(Commands::stopModpackHost)
                         )
-                        .then(literal("config")
-                                .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                .then(literal("reload")
-                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                        .executes(Commands::reload)
-                                )
+                        .then(
+                            literal("restart")
+                                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                .executes(Commands::restartModpackHost)
                         )
+                        .then(
+                            literal("connections")
+                                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                .executes(Commands::connections)
+                        )
+                        .then(
+                            literal("fingerprint")
+                                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                .executes(Commands::fingerprint)
+                        )
+                )
+                .then(
+                    literal("config")
+                        .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                        .then(
+                            literal("reload")
+                                .requires(source -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                .executes(Commands::reload)
+                        )
+                )
         );
 
-        dispatcher.register(
-                literal("amp")
-                        .executes(Commands::about)
-                        .redirect(automodpackNode)
-        );
+        dispatcher.register(literal("amp").executes(Commands::about).redirect(automodpackNode));
     }
 
     private static int fingerprint(CommandContext<CommandSourceStack> context) {
         String fingerprint = hostServer.getCertificateFingerprint();
         if (fingerprint != null) {
-            MutableComponent fingerprintText = VersionedText.literal(fingerprint).withStyle(style -> style
+            MutableComponent fingerprintText = VersionedText.literal(fingerprint).withStyle(style ->
+                style
                     /*? if >=1.21.5 {*/
                     .withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
-                    .withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
-                     /*?} else {*/
-                    /*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
+                    .withClickEvent(new ClickEvent.CopyToClipboard(fingerprint))
+            );
+            /*?} else {*/
+            /*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
                     .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
-            *//*?}*/
+             *//*?}*/
             send(context, "Certificate fingerprint", ChatFormatting.WHITE, fingerprintText, ChatFormatting.YELLOW, false);
         } else {
             send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
@@ -118,9 +124,8 @@ public class Commands {
 
     private static int reload(CommandContext<CommandSourceStack> context) {
         Util.backgroundExecutor().execute(() -> {
-            var tempServerConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+            var tempServerConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV3.class);
             if (tempServerConfig != null) {
-                ConfigUtils.normalizeServerConfig(tempServerConfig, true);
                 serverConfig = tempServerConfig;
                 send(context, "AutoModpack server config reloaded!", ChatFormatting.GREEN, true);
             } else {
@@ -224,31 +229,22 @@ public class Commands {
     }
 
     private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, boolean broadcast) {
-        VersionedCommandSource.sendFeedback(context,
-                VersionedText.literal(msg)
-                        .withStyle(msgColor),
-                broadcast);
+        VersionedCommandSource.sendFeedback(context, VersionedText.literal(msg).withStyle(msgColor), broadcast);
     }
 
     private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, String appendMsg, ChatFormatting appendMsgColor, boolean broadcast) {
-        VersionedCommandSource.sendFeedback(context,
-                VersionedText.literal(msg)
-                        .withStyle(msgColor)
-                        .append(VersionedText.literal(" - ")
-                                .withStyle(ChatFormatting.WHITE))
-                        .append(VersionedText.literal(appendMsg)
-                                .withStyle(appendMsgColor)),
-                broadcast);
+        VersionedCommandSource.sendFeedback(
+            context,
+            VersionedText.literal(msg).withStyle(msgColor).append(VersionedText.literal(" - ").withStyle(ChatFormatting.WHITE)).append(VersionedText.literal(appendMsg).withStyle(appendMsgColor)),
+            broadcast
+        );
     }
 
     private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, MutableComponent appendMsg, ChatFormatting appendMsgColor, boolean broadcast) {
-        VersionedCommandSource.sendFeedback(context,
-                VersionedText.literal(msg)
-                        .withStyle(msgColor)
-                        .append(VersionedText.literal(" - ")
-                                .withStyle(ChatFormatting.WHITE))
-                        .append(appendMsg
-                                .withStyle(appendMsgColor)),
-                broadcast);
+        VersionedCommandSource.sendFeedback(
+            context,
+            VersionedText.literal(msg).withStyle(msgColor).append(VersionedText.literal(" - ").withStyle(ChatFormatting.WHITE)).append(appendMsg.withStyle(appendMsgColor)),
+            broadcast
+        );
     }
 }
