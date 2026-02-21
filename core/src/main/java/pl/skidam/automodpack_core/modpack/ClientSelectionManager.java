@@ -126,10 +126,10 @@ public class ClientSelectionManager {
         List<ClientSelectionManagerFields.Group> userSelectedGroups = getSelectedGroups(content.modpackName);
         boolean hasSavedSelection = userSelectedGroups != null && !userSelectedGroups.isEmpty();
 
-        Map<String, List<String>> savedGroupFilesMap = new HashMap<>();
+        Set<String> savedGroupFilesMap = new HashSet<>();
         if (hasSavedSelection) {
             for (ClientSelectionManagerFields.Group g : userSelectedGroups) {
-                savedGroupFilesMap.put(g.groupId, g.selectedFiles);
+                savedGroupFilesMap.add(g.groupId);
             }
         }
 
@@ -141,26 +141,13 @@ public class ClientSelectionManager {
 
             boolean shouldInclude;
             if (hasSavedSelection) {
-                shouldInclude = savedGroupFilesMap.containsKey(id) || group.required;
+                shouldInclude = savedGroupFilesMap.contains(id) || group.required;
             } else {
                 shouldInclude = group.required || group.recommended;
             }
 
             if (shouldInclude && group.files != null) {
-                if (group.selective) {
-                    List<String> userSelectedFiles = savedGroupFilesMap.get(id);
-                    if (userSelectedFiles != null && hasSavedSelection) {
-                        for (Jsons.ModpackContentItem file : group.files) {
-                            if (userSelectedFiles.contains(file.file)) {
-                                finalFiles.add(file);
-                            }
-                        }
-                    } else {
-                        finalFiles.addAll(group.files);
-                    }
-                } else {
-                    finalFiles.addAll(group.files);
-                }
+                finalFiles.addAll(group.files);
             }
         }
 

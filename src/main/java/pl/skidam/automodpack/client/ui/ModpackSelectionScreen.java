@@ -31,7 +31,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
     private String validationError = "";
 
     public final Set<String> selectedGroups = new HashSet<>();
-    public final Map<String, Set<String>> selectedSelectiveFiles = new HashMap<>();
 
     public ModpackSelectionScreen(Screen parent, ModpackUpdater updater, Jsons.ModpackContent content) {
         super(VersionedText.literal("Select Modpack Groups"));
@@ -122,26 +121,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
         if (hasSavedSelection) {
             for (Jsons.ClientSelectionManagerFields.Group g : savedGroups) {
                 savedGroupIds.add(g.groupId);
-                if (g.selectedFiles != null) {
-                    selectedSelectiveFiles.put(g.groupId, new HashSet<>(g.selectedFiles));
-                }
             }
         }
 
         for (Map.Entry<String, Jsons.ModpackGroupFields> entry : content.groups.entrySet()) {
             String id = entry.getKey();
             Jsons.ModpackGroupFields group = entry.getValue();
-
-            if (group.selective) {
-                // Pre-fill selective sets with all files if not saved
-                if (!hasSavedSelection || !selectedSelectiveFiles.containsKey(id)) {
-                    Set<String> files = new HashSet<>();
-                    if (group.files != null) {
-                        for (Jsons.ModpackContentItem item : group.files) files.add(item.file);
-                    }
-                    selectedSelectiveFiles.put(id, files);
-                }
-            }
 
             if (isOsCompatible(group.compatibleOS)) {
                 if (hasSavedSelection) {
@@ -211,17 +196,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
         // Assemble Groups map
         List<Jsons.ClientSelectionManagerFields.Group> finalGroupsToSave = new ArrayList<>();
         for (String id : selectedGroups) {
-            List<String> filesForGroup = new ArrayList<>();
-            Jsons.ModpackGroupFields group = content.groups.get(id);
-            // add all groups even if the group is not selective because it might become one someday, so save all files which we download currently
-            if (group != null) {
-                if (group.selective && selectedSelectiveFiles.containsKey(id)) {
-                    filesForGroup.addAll(selectedSelectiveFiles.get(id));
-                } else if (!group.selective) {
-                    filesForGroup.addAll(group.files.stream().map(modpackContentItem -> modpackContentItem.file).toList());
-                }
-            }
-            finalGroupsToSave.add(new Jsons.ClientSelectionManagerFields.Group(id, filesForGroup));
+            finalGroupsToSave.add(new Jsons.ClientSelectionManagerFields.Group(id));
         }
 
         mgr.setSelectedGroups(content.modpackName, finalGroupsToSave);
@@ -232,16 +207,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
             Jsons.ModpackGroupFields group = content.groups.get(id);
             if (group == null || group.files == null) continue;
 
-            if (group.selective) {
-                Set<String> selectedFiles = selectedSelectiveFiles.get(id);
-                if (selectedFiles != null) {
-                    for (Jsons.ModpackContentItem file : group.files) {
-                        if (selectedFiles.contains(file.file)) finalFiles.add(file);
-                    }
-                }
-            } else {
-                finalFiles.addAll(group.files);
-            }
+            finalFiles.addAll(group.files);
         }
 
         // Run update asynchronously so the UI successfully transitions to the download screen without blocking
@@ -345,10 +311,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
             drawText(matrices, minecraft.font, boxText, x + 5, y + 4, color);
             drawText(matrices, minecraft.font, group.displayName, x + 25, y + 4, color);
 
-            if (group.selective && isCompat) {
-                drawText(matrices, minecraft.font, VersionedText.literal("[Configure]"), x + entryWidth - 70, y + 4, 0x55FF55);
-            }
-
             if (!isCompat) {
                 drawText(matrices, minecraft.font, VersionedText.literal("Incompatible OS"), x + 25, y + 16, 0xFF5555);
             } else if (group.description != null && !group.description.isEmpty()) {
@@ -374,11 +336,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
         private boolean mouseClickedInternal(double mouseX, double mouseY, int button) {
             if (!isOsCompatible(group.compatibleOS)) return false;
-
-            if (group.selective && mouseX >= currentX + currentWidth - 70 && mouseX <= currentX + currentWidth && mouseY >= currentY && mouseY <= currentY + 20) {
-                minecraft.setScreen(new SelectiveFileScreen(ModpackSelectionScreen.this, groupId, group, selectedSelectiveFiles.get(groupId)));
-                return true;
-            }
 
             if (!group.required) {
                 toggleGroup(groupId, !selectedGroups.contains(groupId));

@@ -171,11 +171,11 @@ public class Jsons {
         // UI Metadata
         public String displayName = ""; // Its already as a map key (group id / file path) but the visible might me different
         public String description = ""; // e.g., "Increases FPS using Sodium/Lithium"
+        public String category = "";
 
         // Logic Flags
         public boolean required = false; // If true, user cannot uncheck (with the question above it seems that if client may opt for a different required pack if both are breaking each other)
         public boolean recommended = false; // Selected by default, if required this option doesn't matter
-        public boolean selective = false; // If true, the user can pick-and-choose individual files else the group is "all-or-nothing"
 
         // Dependency & Compatibility
         public List<String> breaksWith = List.of(); // e.g., ["optifine-group"]
@@ -266,9 +266,9 @@ public class Jsons {
         // These values map directly from config - Jsons.GroupDeclaration
         public String displayName;
         public String description;
+        public String category;
         public boolean required;
         public boolean recommended;
-        public boolean selective;
         public List<String> breaksWith;
         public List<String> requires;
         public List<String> compatibleOS;
@@ -280,12 +280,12 @@ public class Jsons {
             this.files = new HashSet<>();
         }
 
-        public ModpackGroupFields(String displayName, String description, boolean required, boolean recommended, boolean selective, List<String> breaksWith, List<String> requires, List<String> compatibleOS) {
+        public ModpackGroupFields(String displayName, String description, String category, boolean required, boolean recommended, List<String> breaksWith, List<String> requires, List<String> compatibleOS) {
             this.displayName = displayName;
             this.description = description;
+            this.category = category;
             this.required = required;
             this.recommended = recommended;
-            this.selective = selective;
             this.breaksWith = breaksWith;
             this.requires = requires;
             this.compatibleOS = compatibleOS;
@@ -294,9 +294,9 @@ public class Jsons {
         public ModpackGroupFields(Jsons.GroupDeclaration groupDeclaration) {
             this.displayName = groupDeclaration.displayName;
             this.description = groupDeclaration.description;
+            this.category = groupDeclaration.category;
             this.required = groupDeclaration.required;
             this.recommended = groupDeclaration.recommended;
-            this.selective = groupDeclaration.selective;
             this.breaksWith = groupDeclaration.breaksWith;
             this.requires = groupDeclaration.requires;
             this.compatibleOS = groupDeclaration.compatibleOS;
@@ -375,13 +375,12 @@ public class Jsons {
             }
         }
 
+        // TODO consider just a string field of groupId in the Modpack class instead
         public static class Group {
             public final String groupId;
-            public final List<String> selectedFiles;
 
-            public Group(String groupId, List<String> selectedFiles) {
+            public Group(String groupId) {
                 this.groupId = groupId;
-                this.selectedFiles = selectedFiles;
             }
         }
     }
