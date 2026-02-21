@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol.netty.message;
 import io.netty.buffer.ByteBuf;
 
 public abstract class ConfigurationMessage {
+
     private final byte version; // 1 byte
     private final byte type; // 1 byte
 

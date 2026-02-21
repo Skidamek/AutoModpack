@@ -90,7 +90,7 @@ public class RestartScreen extends VersionedScreen {
         int lineHeight = 12; // Consistent line spacing
 
         // Title
-        drawCenteredTextWithShadow(matrices, this.font,
+        drawCenteredText(matrices, this.font,
             VersionedText.translatable("automodpack.restart." + updateType.toString()).withStyle(ChatFormatting.BOLD),
             this.width / 2,
             this.height / 2 - 60,
@@ -98,7 +98,7 @@ public class RestartScreen extends VersionedScreen {
         );
 
         // Description line 1
-        drawCenteredTextWithShadow(
+        drawCenteredText(
             matrices,
             this.font,
             VersionedText.translatable("automodpack.restart.description"),
@@ -108,7 +108,7 @@ public class RestartScreen extends VersionedScreen {
         );
 
         // Description line 2
-        drawCenteredTextWithShadow(
+        drawCenteredText(
             matrices,
             this.font,
             VersionedText.translatable("automodpack.restart.secDescription"),

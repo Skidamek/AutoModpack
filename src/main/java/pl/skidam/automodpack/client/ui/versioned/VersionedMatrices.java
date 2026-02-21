@@ -45,8 +45,18 @@ public class VersionedMatrices  /*? if <1.20 {*/ /*extends PoseStack *//*?}*/   
 	}
 	*//*?}*/
 /*?} else {*/
-	/*public PoseStack getContext() {
-		return this;
+	/*private final PoseStack stack;
+
+	public VersionedMatrices(PoseStack stack) {
+		this.stack = stack;
+	}
+
+	public VersionedMatrices() {
+		this.stack = null;
+	}
+
+	public PoseStack getContext() {
+		return stack != null ? stack : this;
 	}
 *//*?}*/
 }

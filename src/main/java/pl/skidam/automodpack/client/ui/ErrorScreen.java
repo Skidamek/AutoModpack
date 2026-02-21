@@ -38,7 +38,6 @@ public class ErrorScreen extends VersionedScreen {
             20,
             VersionedText.translatable("automodpack.back"),
             button -> {
-                assert minecraft != null;
                 minecraft.setScreen(null);
             }
         );
@@ -49,7 +48,7 @@ public class ErrorScreen extends VersionedScreen {
         int lineHeight = 12; // Consistent line spacing
 
         // Title with error indicator
-        drawCenteredTextWithShadow(matrices, this.font,
+        drawCenteredText(matrices, this.font,
             VersionedText.literal("[AutoModpack] Error! ").append(VersionedText.translatable("automodpack.error").withStyle(ChatFormatting.RED)),
             this.width / 2,
             this.height / 2 - 50,
@@ -58,7 +57,7 @@ public class ErrorScreen extends VersionedScreen {
 
         // Error messages
         for (int i = 0; i < this.errorMessages.length; i++) {
-            drawCenteredTextWithShadow(
+            drawCenteredText(
                 matrices,
                 this.font,
                 VersionedText.translatable(this.errorMessages[i]),

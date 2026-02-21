@@ -5,12 +5,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.utils.FileTreeScanner;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static pl.skidam.automodpack_core.Constants.DEBUG;
@@ -96,22 +101,43 @@ class ModpackTest {
                 "ModpackContentItems(file=/mods/server-mod-1.20.jar, size=1, type=other, editable=false, forceCopy=false, sha1=86f7e437faa5a7fce15d1ddcb9eaeaea377667b8, murmur=null)"
         );
 
-        Constants.serverConfig = new Jsons.ServerConfigFieldsV2();
+        Constants.serverConfig = new Jsons.ServerConfigFieldsV3();
         Constants.serverConfig.autoExcludeUnnecessaryFiles = false;
+        Constants.serverConfig.autoExcludeServerSideMods = false;
 
-        ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable), new HashSet<>(), new ModpackExecutor().getExecutor());
-        content.create(null);
+        // Configure dummy group definition
+        Jsons.GroupDeclaration decl = new Jsons.GroupDeclaration();
+        decl.allowEditsInFiles = editable;
+
+        // FIXED: Give the scanner the test directory so it actually has a location to scan from!
+        FileTreeScanner editableScanner = new FileTreeScanner(new HashSet<>(editable), Set.of(testFilesDir));
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(2);
+
+        // Run the scanner purely in-memory bypassing file saving
+        GroupContentScanner scanner = new GroupContentScanner(
+                "main",
+                testFilesDir,
+                decl,
+                null,
+                editableScanner,
+                null,
+                executor,
+                new ConcurrentHashMap<>(),
+                null
+        );
+
+        scanner.scanAndGenerate();
+        Set<Jsons.ModpackContentItem> generatedItems = scanner.getGroupFields().files;
 
         boolean correct = true;
-
         System.out.println();
 
-        if (content.list.size() != correctResults.size()) {
-            System.out.println("Incorrect number of items! Expected " + correctResults.size() + " but got " + content.list.size());
+        if (generatedItems.size() != correctResults.size()) {
+            System.out.println("Incorrect number of items! Expected " + correctResults.size() + " but got " + generatedItems.size());
             correct = false;
         }
 
-        for (var item : content.list) {
+        for (var item : generatedItems) {
             if (correctResults.contains(item.toString())) {
                 System.out.println("Correct: " + item);
             } else {
@@ -122,6 +148,6 @@ class ModpackTest {
         }
 
         assertTrue(correct);
+        executor.shutdown();
     }
-
 }

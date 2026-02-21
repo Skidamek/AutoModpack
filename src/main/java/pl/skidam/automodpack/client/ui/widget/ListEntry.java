@@ -84,7 +84,7 @@ public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
 			centeredY = centeredY - 10 / 2;
 		}
 
-		VersionedScreen.drawCenteredTextWithShadow(versionedMatrices, client.font, text, centeredX, centeredY, TextColors.WHITE);
+		VersionedScreen.drawCenteredText(versionedMatrices, client.font, text, centeredX, centeredY, TextColors.WHITE);
 
 		// if (mainPageUrls != null) {
 		//     int badgeX = x - 42;

@@ -67,9 +67,9 @@ public class Common {
         /*? if >=1.21.11 {*/
         return Identifier.tryBuild(MOD_ID, path);
         /*?} else if >=1.19.2 {*/
-        /*return ResourceLocation.tryBuild(MOD_ID, path);
+        /*return Identifier.tryBuild(MOD_ID, path);
         *//*?} else {*/
-        /*return new ResourceLocation(MOD_ID, path);
+        /*return new Identifier(MOD_ID, path);
         *//*?}*/
     }
 }

@@ -49,8 +49,6 @@ public class SkipVerificationScreen extends VersionedScreen {
     }
 
     public void initWidgets() {
-        assert this.minecraft != null;
-        
         this.textField = new EditBox(this.font, this.width / 2 - 170, this.height / 2 + 15, 340, 20,
                 VersionedText.literal("")
         );
@@ -59,7 +57,6 @@ public class SkipVerificationScreen extends VersionedScreen {
         this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 150, 20,
                 VersionedText.translatable("automodpack.back"),
                 button -> {
-                    assert this.minecraft != null;
                     this.minecraft.setScreen(verificationScreen);
                 }
         );
@@ -91,19 +88,15 @@ public class SkipVerificationScreen extends VersionedScreen {
         
         if (input.equals(REQUIRED_TEXT)) {
             confirmButton.active = false;
-            if (this.minecraft != null) {
-                this.minecraft.setScreen(parent);
-            }
+            this.minecraft.setScreen(parent);
             validatedCallback.run();
         } else {
             Constants.LOGGER.error("Skip verification text mismatch, try again");
-            if (this.minecraft != null) {
-                /*? if > 1.21.1 {*/
-                this.minecraft.getToastManager().addToast(failedToast);
-                /*?} else {*/
-                /*this.minecraft.getToasts().addToast(failedToast);
-                *//*?}*/
-            }
+            /*? if > 1.21.1 {*/
+            this.minecraft.getToastManager().addToast(failedToast);
+            /*?} else {*/
+            /*this.minecraft.getToasts().addToast(failedToast);
+            *//*?}*/
         }
     }
 
@@ -128,32 +121,32 @@ public class SkipVerificationScreen extends VersionedScreen {
         int lineHeight = 12; // Consistent line spacing
         
         // Warning title
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.title").withStyle(ChatFormatting.BOLD),
                 this.width / 2, this.height / 2 - 85, TextColors.LIGHT_RED);
 
         // Warning message line 1
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.warning1"),
                 this.width / 2, this.height / 2 - 65, TextColors.WHITE);
 
         // Warning message line 2
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.warning2"),
                 this.width / 2, this.height / 2 - 65 + lineHeight, TextColors.LIGHT_RED);
 
         // Instructions
-        drawCenteredTextWithShadow(matrices, this.font, 
+        drawCenteredText(matrices, this.font, 
                 VersionedText.translatable("automodpack.validation.skip.instruction"),
                 this.width / 2, this.height / 2 - 35, TextColors.WHITE);
 
         // Confirmation prompt
-        drawCenteredTextWithShadow(matrices, this.font,
+        drawCenteredText(matrices, this.font,
                 VersionedText.translatable("automodpack.validation.skip.confirm.text"),
                 this.width / 2, this.height / 2 - 10, TextColors.WHITE);
 
         // Required text to type (displayed prominently)
-        drawCenteredTextWithShadow(matrices, this.font,
+        drawCenteredText(matrices, this.font,
                 VersionedText.literal("\"" + REQUIRED_TEXT + "\"").withStyle(ChatFormatting.ITALIC),
                 this.width / 2, this.height / 2 - 10 + lineHeight, TextColors.WHITE);
     }

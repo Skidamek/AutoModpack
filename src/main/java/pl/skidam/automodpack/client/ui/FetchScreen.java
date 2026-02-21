@@ -53,7 +53,7 @@ public class FetchScreen extends VersionedScreen {
         }
 
         // Title
-        drawCenteredTextWithShadow(
+        drawCenteredText(
             matrices,
             this.font,
             VersionedText.translatable("automodpack.fetch").withStyle(
@@ -65,7 +65,7 @@ public class FetchScreen extends VersionedScreen {
         );
 
         // Please wait message
-        drawCenteredTextWithShadow(
+        drawCenteredText(
             matrices,
             this.font,
             VersionedText.translatable("automodpack.wait"),
@@ -75,7 +75,7 @@ public class FetchScreen extends VersionedScreen {
         );
 
         // Found count
-        drawCenteredTextWithShadow(
+        drawCenteredText(
             matrices,
             this.font,
             VersionedText.translatable("automodpack.fetch.found", getFetchesDone()),

@@ -41,7 +41,7 @@ public class DownloadScreen extends VersionedScreen {
     private String cachedETA = "Calculating...";
 
     private long lastTextUpdate = 0;
-    private static final long TEXT_UPDATE_INTERVAL = 100; // Update strings 10x per second
+    private static final long TEXT_UPDATE_INTERVAL = 100;
 
     public DownloadScreen(DownloadManager downloadManager, String header) {
         super(VersionedText.literal("DownloadScreen"));
@@ -132,24 +132,24 @@ public class DownloadScreen extends VersionedScreen {
         matrices.scale(scale, scale, scale);
 
         if (downloadManager != null && !downloadManager.downloadsInProgress.isEmpty()) {
-            drawCenteredTextWithShadow(matrices, this.font,
+            drawCenteredText(matrices, this.font,
                     VersionedText.translatable("automodpack.download.downloading").withStyle(ChatFormatting.BOLD),
                     this.width / 2, y, TextColors.WHITE);
 
             int currentY = y + 15;
             synchronized (downloadManager.downloadsInProgress) {
                 for (DownloadManager.DownloadData data : downloadManager.downloadsInProgress.values()) {
-                    drawCenteredTextWithShadow(matrices, this.font,
+                    drawCenteredText(matrices, this.font,
                             VersionedText.literal(data.getFileName()),
                             (int) (((float) this.width / 2) * scale), currentY, TextColors.GRAY);
                     currentY += 10;
                 }
             }
         } else {
-            drawCenteredTextWithShadow(matrices, this.font,
+            drawCenteredText(matrices, this.font,
                     VersionedText.translatable("automodpack.download.noFiles"),
                     (int) (((float) this.width / 2) * scale), y, TextColors.WHITE);
-            drawCenteredTextWithShadow(matrices, this.font,
+            drawCenteredText(matrices, this.font,
                     VersionedText.translatable("automodpack.wait").withStyle(ChatFormatting.BOLD),
                     (int) (((float) this.width / 2) * scale), y + 24, TextColors.WHITE);
         }
@@ -164,13 +164,13 @@ public class DownloadScreen extends VersionedScreen {
         drawDownloadingFiles(matrices);
 
         // Title
-        drawCenteredTextWithShadow(matrices, this.font,
+        drawCenteredText(matrices, this.font,
                 VersionedText.literal(header).withStyle(ChatFormatting.BOLD),
                 this.width / 2, this.height / 2 - 110, TextColors.WHITE);
 
         if (downloadManager != null && downloadManager.isRunning()) {
-            drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 10, TextColors.WHITE);
-            drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 10 + lineHeight * 2, TextColors.WHITE);
+            drawCenteredText(matrices, this.font, (MutableComponent) getStage(), this.width / 2, this.height / 2 - 10, TextColors.WHITE);
+            drawCenteredText(matrices, this.font, (MutableComponent) getTotalETA(), this.width / 2, this.height / 2 - 10 + lineHeight * 2, TextColors.WHITE);
 
             float scaleBar = 1.35F;
             int barWidth = PROGRESS_BAR_WIDTH;
@@ -187,7 +187,7 @@ public class DownloadScreen extends VersionedScreen {
             drawTexture(PROGRESS_BAR_FULL_TEXTURE, matrices, Math.round(barDrawX), Math.round(barDrawY), 0, 0, Math.min(barFilledWidth, barWidth), barHeight, barWidth, barHeight);
             matrices.popPose();
 
-            drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 36 + lineHeight * 2, TextColors.WHITE);
+            drawCenteredText(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 36 + lineHeight * 2, TextColors.WHITE);
             cancelButton.active = true;
         } else {
             cancelButton.active = false;

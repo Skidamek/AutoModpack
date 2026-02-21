@@ -15,17 +15,14 @@ import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
@@ -85,52 +82,22 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
     private void refreshModpackFiles(ChannelHandlerContext context, byte[][] FileHashesList) throws IOException {
         Set<String> hashes = new HashSet<>();
         for (byte[] hash : FileHashesList) {
-            hashes.add(new String(hash));
+            hashes.add(new String(hash, CharsetUtil.UTF_8));
         }
+
         LOGGER.info("Received refresh request for files of hashes: {}", hashes);
-        List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
-        Set<ModpackContent> modpacks = new HashSet<>();
 
-        try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-            for (String hash : hashes) {
-                final Optional<Path> optionalPath = resolvePath(hash);
-                if (optionalPath.isEmpty()) continue;
-                Path path = optionalPath.get();
-                ModpackContent modpack = null;
-
-                for (var content : modpackExecutor.modpacks.values()) {
-                    if (!content.pathsMap.getMap().containsKey(hash)) {
-                        continue;
-                    }
-
-                    modpack = content;
-                    break;
-                }
-
-                if (modpack == null) {
-                    continue;
-                }
-
-                modpacks.add(modpack);
-                creationFutures.add(modpack.replaceAsync(path, cache));
-            }
-        }
-
-        creationFutures.forEach(CompletableFuture::join);
-        modpacks.forEach(modpackContent -> {
-            var optionalPreviousModpackContent = modpackContent.getPreviousContent();
-            if (optionalPreviousModpackContent.isEmpty()) { // How?
-                LOGGER.error("Could not find previous modpack content for modpack while refreshing it: {}", modpackContent.getModpackName());
-                return;
-            }
-            Jsons.ModpackContentFields previousModpackContent = optionalPreviousModpackContent.get();
-            modpackContent.saveModpackContent(previousModpackContent.nonModpackFilesToDelete);
-        });
-
-        LOGGER.info("Sending new modpack-content.json");
-
-        // Sends new json
-        sendFile(context, new byte[0]);
+        modpackExecutor.refreshFiles(hashes)
+                .thenRun(() -> {
+                    LOGGER.info("Refreshed files, sending updated modpack-content.json");
+                    // Send new json
+                    sendFile(context, new byte[0]);
+                })
+                .exceptionally(ex -> {
+                    LOGGER.error("Error refreshing files", ex);
+                    sendError(context, protocolVersion, "Internal server error during refresh");
+                    return null;
+                });
     }
 
     private boolean validateSecret(ChannelHandlerContext ctx, SocketAddress address, byte[] secret) {
@@ -151,7 +118,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         return valid;
     }
 
-    private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) throws IOException {
+    private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) {
         final String sha1 = new String(bsha1, CharsetUtil.UTF_8);
         final Optional<Path> optionalPath = resolvePath(sha1);
 
@@ -161,7 +128,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
         }
 
         final Path path = optionalPath.get();
-        final long fileSize = Files.size(path);
+        final long fileSize = SmartFileUtils.size(path);
 
         ByteBuf responseHeader = ctx.alloc().buffer(1 + 1 + 8);
         responseHeader.writeByte(this.protocolVersion);
