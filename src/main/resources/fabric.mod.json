@@ -13,7 +13,7 @@
     "issues": "https://github.com/Skidamek/AutoModpack/issues/"
   },
   "license": "LGPL-3.0-or-later",
-  "icon": "assets/automodpack/icon.png",
+  "icon": "icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
