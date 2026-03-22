@@ -18,7 +18,7 @@ So you want to start using AutoModpack? Great! Let's get you started.
 
 ## First Connection
 
-On first connection, you will be prompted to verify the server's certificate fingerprint. This ensures you are connecting to the correct server and not a malicious one. Read more about [certificate verification](technicals/certificate).
+On first connection, you will usually be prompted to verify the server's public key / endpoint ID. This ensures you are connecting to the correct server and not a malicious one. Servers can remove that prompt for new clients by publishing a DNSSEC TXT proof for the endpoint ID. Read more about [server identity verification](technicals/certificate).
 
 After verification, AutoModpack will ask you to confirm the modpack installation. Confirm it, and the modpack will download and install automatically.
 
@@ -92,7 +92,7 @@ Restart your game. Your server's modpack should now be loaded, and you should be
 AutoModpack automatically manages client configuration. When you connect to a server, AutoModpack will:
 
 - Download the modpack (mods, configs, resource packs, etc.) to `~/.minecraft/automodpack/modpacks/{modpack}/`
-- Prompt you to verify the server's certificate fingerprint (first time only)
+- Prompt you to verify the server's public key / endpoint ID (first time only)
 - Ask for confirmation to install the modpack
 
 After installation, restart Minecraft to load the modpack.

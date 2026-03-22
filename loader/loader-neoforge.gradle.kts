@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.api.tasks.SourceSetContainer
 
 plugins {
     kotlin("jvm")
@@ -20,6 +21,11 @@ neoForge {
     }
 }
 
+val shadowImplementation = configurations.create("shadowImplementation") {
+    extendsFrom(configurations.getByName("implementation"))
+    isCanBeResolved = true
+}
+
 dependencies {
     compileOnly(project(":core"))
     compileOnly(project(":loader-core"))
@@ -30,20 +36,9 @@ dependencies {
 
     // Stuff to actually bundle
     implementation("org.tomlj:tomlj:1.1.1")
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.83")
     implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
-    // Disable transitives so netty-buffer/common/transport aren't pulled in
-    implementation("io.netty:netty-codec-haproxy:4.2.9.Final") {
-        isTransitive = false
-    }
+    implementation("dnsjava:dnsjava:3.6.4")
     implementation("com.h2database:h2-mvstore:2.4.240")
-}
-
-configurations {
-    create("shadowImplementation") {
-        extendsFrom(configurations.getByName("implementation"))
-        isCanBeResolved = true
-    }
 }
 
 tasks.named<ShadowJar>("shadowJar") {
@@ -53,10 +48,10 @@ tasks.named<ShadowJar>("shadowJar") {
     // Combine all subproject outputs efficiently
     val subprojects = listOf(":core", ":loader-core")
     subprojects.forEach {
-        from(project(it).sourceSets.main.get().output)
+        from(project(it).extensions.getByType(SourceSetContainer::class.java).named("main").get().output)
     }
 
-    configurations = listOf(project.configurations.getByName("shadowImplementation"))
+    configurations = listOf(shadowImplementation)
 
     val reloc = "amp_libs"
     relocate("org.antlr", "${reloc}.org.antlr")
@@ -64,8 +59,7 @@ tasks.named<ShadowJar>("shadowJar") {
     relocate("org.apache.hc", "${reloc}.org.apache.hc")
     relocate("org.checkerframework", "${reloc}.org.checkerframework")
     relocate("org.slf4j", "${reloc}.org.slf4j")
-    relocate("org.bouncycastle", "${reloc}.org.bouncycastle")
-    relocate("io.netty.handler.codec.haproxy", "${reloc}.io.netty.handler.codec.haproxy")
+    relocate("org.xbill", "${reloc}.org.xbill")
 
     // Project internal relocations
     relocate("pl.skidam.automodpack_loader_core_neoforge", "pl.skidam.automodpack_loader_core")

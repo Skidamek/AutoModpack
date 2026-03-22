@@ -59,7 +59,7 @@ public class ScreenImpl implements ScreenService {
 
     @Override
     public void validation(Object... args) {
-        Minecraft.getInstance().execute(() -> Screens.validation(args[0], args[1], args[2], args[3]));
+        Minecraft.getInstance().execute(() -> Screens.validation(args[0], args[1], args[2], args[3], args[4], args[5]));
     }
 
     @Override
@@ -115,8 +115,8 @@ public class ScreenImpl implements ScreenService {
 //            Screens.setScreen(new MenuScreen());
         }
 
-        public static void validation(Object parent, Object serverFingerprint, Object validatedCallback, Object canceledCallback) {
-            Screens.setScreen(new FingerprintVerificationScreen((Screen) parent, (String) serverFingerprint, (Runnable) validatedCallback, (Runnable) canceledCallback));
+        public static void validation(Object parent, Object identityLabel, Object identityValue, Object documentationUrl, Object validatedCallback, Object canceledCallback) {
+            Screens.setScreen(new PubkeyVerificationScreen((Screen) parent, (String) identityLabel, (String) identityValue, (String) documentationUrl, (Runnable) validatedCallback, (Runnable) canceledCallback));
         }
     }
 }

@@ -1,8 +1,13 @@
 
 package pl.skidam.automodpack_core.config;
 
-import pl.skidam.automodpack_core.auth.Secrets;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
+import pl.skidam.automodpack_core.auth.TrustEvidence;
 
+import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,10 +38,26 @@ public class Jsons {
         public boolean allowRemoteNonModpackDeletions = true;
     }
 
+    public static class ClientConfigFieldsV3 {
+        public int DO_NOT_CHANGE_IT = 3; // file version
+        public String selectedModpack = ""; // modpack name
+        public Map<String, PersistedModpackConnection> installedModpacks; // modpack name -> persisted connection details
+        public boolean updateSelectedModpackOnLaunch = true;
+        public boolean selfUpdater = false;
+        public boolean syncAutoModpackVersion = true;
+        public boolean syncLoaderVersion = true;
+        public boolean playMusic = true;
+        public boolean allowRemoteNonModpackDeletions = true;
+    }
+
+    @Deprecated
     public static class ModpackAddresses {
+        public String endpointId; // iroh endpoint id
+        public transient List<InetSocketAddress> directAddresses; // legacy migration-only field
         public InetSocketAddress hostAddress; // modpack host address
         public InetSocketAddress serverAddress; // minecraft server address
-        public boolean requiresMagic; // if true, client will use magic packets to connect to the modpack host
+        public boolean shareMinecraftConnection; // if true, client may carry iroh packets inside the login connection
+        public transient boolean requiresMagic; // legacy migration-only field
 
         public ModpackAddresses() {
             // Default constructor for Gson
@@ -49,14 +70,126 @@ public class Jsons {
          * @param serverAddress minecraft server address that represents the target address
          *                      which client uses to connect. This value CANNOT be manipulated by the server.
          */
-        public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, boolean requiresMagic) {
+        public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress) {
+            this(null, hostAddress, serverAddress, List.of(), false);
+        }
+
+        @Deprecated
+        public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, boolean ignoredRequiresMagic) {
+            this(null, hostAddress, serverAddress, List.of(), false);
+        }
+
+        public ModpackAddresses(String endpointId, InetSocketAddress hostAddress, InetSocketAddress serverAddress) {
+            this(endpointId, hostAddress, serverAddress, List.of(), false);
+        }
+
+        public ModpackAddresses(String endpointId, InetSocketAddress hostAddress, InetSocketAddress serverAddress, boolean shareMinecraftConnection) {
+            this(endpointId, hostAddress, serverAddress, List.of(), shareMinecraftConnection);
+        }
+
+        @Deprecated
+        public ModpackAddresses(String endpointId, InetSocketAddress hostAddress, InetSocketAddress serverAddress, boolean ignoredRequiresMagic, boolean shareMinecraftConnection) {
+            this(endpointId, hostAddress, serverAddress, List.of(), shareMinecraftConnection);
+        }
+
+        public ModpackAddresses(String endpointId, InetSocketAddress hostAddress, InetSocketAddress serverAddress, List<InetSocketAddress> directAddresses, boolean shareMinecraftConnection) {
+            this.endpointId = endpointId;
+            this.directAddresses = directAddresses == null ? new ArrayList<>() : new ArrayList<>(directAddresses);
             this.hostAddress = hostAddress;
             this.serverAddress = serverAddress;
-            this.requiresMagic = requiresMagic;
+            this.shareMinecraftConnection = shareMinecraftConnection;
+        }
+
+        @Deprecated
+        public ModpackAddresses(String endpointId, InetSocketAddress hostAddress, InetSocketAddress serverAddress, List<InetSocketAddress> directAddresses, boolean ignoredRequiresMagic, boolean shareMinecraftConnection) {
+            this(endpointId, hostAddress, serverAddress, directAddresses, shareMinecraftConnection);
         }
 
         public boolean isAnyEmpty() {
-            return hostAddress == null || serverAddress == null || hostAddress.getHostString().isBlank() || serverAddress.getHostString().isBlank();
+            return serverAddress == null
+                    || serverAddress.getHostString().isBlank()
+                    || (!hasIrohEndpoint() && !hasBootstrapAddress());
+        }
+
+        public boolean hasIrohEndpoint() {
+            return endpointId != null && !endpointId.isBlank();
+        }
+
+        public boolean hasBootstrapAddress() {
+            return hostAddress != null && !hostAddress.getHostString().isBlank() && hostAddress.getPort() > 0;
+        }
+
+        public boolean hasDirectAddresses() {
+            return directAddresses != null && !directAddresses.isEmpty();
+        }
+
+        public boolean hasNettyFallback() {
+            return hasBootstrapAddress();
+        }
+    }
+
+    @Deprecated
+    public static PersistedModpackConnection legacyToPersistedModpackConnection(ModpackAddresses addresses) {
+        if (addresses == null) {
+            return null;
+        }
+
+        return new PersistedModpackConnection(
+            addresses.serverAddress,
+            new PersistedIrohAddressBook(
+                addresses.endpointId,
+                addresses.hostAddress,
+                List.of(),
+                System.currentTimeMillis()
+            )
+        );
+    }
+
+    public static class PersistedIrohAddressBook {
+        public String endpointId;
+        public transient List<InetSocketAddress> directIpAddresses;
+        public InetSocketAddress rawTcp;
+        public long savedAt;
+
+        public PersistedIrohAddressBook() {
+        }
+
+        public PersistedIrohAddressBook(String endpointId, InetSocketAddress rawTcp, List<InetSocketAddress> directIpAddresses, long savedAt) {
+            this.endpointId = endpointId;
+            this.directIpAddresses = null;
+            this.rawTcp = rawTcp;
+            this.savedAt = savedAt;
+        }
+
+        public boolean hasEndpointId() {
+            return endpointId != null && !endpointId.isBlank();
+        }
+
+        public boolean hasRawTcp() {
+            return rawTcp != null && !rawTcp.getHostString().isBlank() && rawTcp.getPort() > 0;
+        }
+
+        public boolean hasDirectIpAddresses() {
+            return directIpAddresses != null && !directIpAddresses.isEmpty();
+        }
+    }
+
+    public static class PersistedModpackConnection {
+        public InetSocketAddress minecraftServerAddress;
+        public PersistedIrohAddressBook lastSuccessfulAddressBook;
+
+        public PersistedModpackConnection() {
+        }
+
+        public PersistedModpackConnection(InetSocketAddress minecraftServerAddress, PersistedIrohAddressBook lastSuccessfulAddressBook) {
+            this.minecraftServerAddress = minecraftServerAddress;
+            this.lastSuccessfulAddressBook = lastSuccessfulAddressBook;
+        }
+
+        public boolean hasUsableAddressBook() {
+            return minecraftServerAddress != null
+                && lastSuccessfulAddressBook != null
+                && lastSuccessfulAddressBook.hasEndpointId();
         }
     }
 
@@ -107,12 +240,9 @@ public class Jsons {
         public int bindPort = -1;
         public String addressToSend = "";
         public int portToSend = -1;
-        public boolean disableInternalTLS = false;
-        public boolean requireMagicPackets = false;
+        public boolean shareMinecraftConnection = true;
         public boolean updateIpsOnEveryStart = false;
         public int bandwidthLimit = 0;
-        public boolean validateSecrets = true;
-        public long secretLifetime = 336; // 336 hours = 14 days
         public boolean selfUpdater = false;
         public Set<String> acceptedLoaders = new HashSet<>();
 
@@ -134,12 +264,169 @@ public class Jsons {
         public String mcVersion = "";
     }
 
-    public static class SecretsFields {
-        public Map<String, Secrets.Secret> secrets = new HashMap<>();
+    public enum DnssecStatus {
+        SECURE_MATCH,
+        SECURE_MISMATCH,
+        BOGUS,
+        INSECURE,
+        NO_RECORD,
+        NXDOMAIN,
+        MALFORMED,
+        UNAVAILABLE,
+        SKIPPED_IP_LITERAL
+    }
+
+    public static class DnssecDomainRecord {
+        public String hostname;
+        public String txtName;
+        public String endpointId;
+        public DnssecStatus status;
+        public long checkedAt;
+        public String reason;
+
+        public DnssecDomainRecord() {
+        }
+
+        public DnssecDomainRecord(String hostname, String txtName, String endpointId, DnssecStatus status, long checkedAt, String reason) {
+            this.hostname = hostname;
+            this.txtName = txtName;
+            this.endpointId = endpointId;
+            this.status = status;
+            this.checkedAt = checkedAt;
+            this.reason = reason;
+        }
+    }
+
+    public static class TrustedEndpointRecord {
+        public String endpointId;
+        public TrustEvidence trustEvidence = TrustEvidence.NONE;
+        public long trustedAt;
+        public Map<String, DnssecDomainRecord> dnssecDomains = new LinkedHashMap<>();
+
+        public TrustedEndpointRecord() {
+        }
+
+        public TrustedEndpointRecord(String endpointId, TrustEvidence trustEvidence, long trustedAt, Map<String, DnssecDomainRecord> dnssecDomains) {
+            this.endpointId = endpointId;
+            this.trustEvidence = trustEvidence == null ? TrustEvidence.NONE : trustEvidence;
+            this.trustedAt = trustedAt;
+            this.dnssecDomains = dnssecDomains == null ? new LinkedHashMap<>() : new LinkedHashMap<>(dnssecDomains);
+        }
+
+        public void normalize() {
+            if (trustEvidence == null) {
+                trustEvidence = TrustEvidence.NONE;
+            }
+            if (dnssecDomains == null) {
+                dnssecDomains = new LinkedHashMap<>();
+            }
+        }
+    }
+
+    public static class KnownHostsFieldsV2 {
+        public Map<String, TrustedEndpointRecord> trustedEndpoints = new LinkedHashMap<>();
+        public transient Map<String, String> endpointIds; // legacy migration-only field
+
+        public void normalize() {
+            if (trustedEndpoints == null) {
+                trustedEndpoints = new LinkedHashMap<>();
+            }
+            trustedEndpoints.values().removeIf(Objects::isNull);
+            trustedEndpoints.values().forEach(TrustedEndpointRecord::normalize);
+        }
+    }
+
+    public static KnownHostsFieldsV2 loadKnownHostsV2(String json) {
+        KnownHostsFieldsV2 knownHosts = new KnownHostsFieldsV2();
+        if (json == null || json.isBlank()) {
+            return knownHosts;
+        }
+
+        JsonElement parsed;
+        try {
+            parsed = JsonParser.parseString(json);
+        } catch (Exception e) {
+            return knownHosts;
+        }
+
+        if (!parsed.isJsonObject()) {
+            return knownHosts;
+        }
+
+        JsonObject root = parsed.getAsJsonObject();
+        JsonElement trustedEndpointsElement = root.get("trustedEndpoints");
+        if (isLegacyTrustedEndpointsMap(trustedEndpointsElement)) {
+            migrateLegacyTrustedEndpoints(knownHosts.trustedEndpoints, trustedEndpointsElement.getAsJsonObject());
+        } else if (trustedEndpointsElement != null && trustedEndpointsElement.isJsonObject()) {
+            Type trustedEndpointsType = new TypeToken<Map<String, TrustedEndpointRecord>>() { }.getType();
+            Map<String, TrustedEndpointRecord> decoded = ConfigTools.GSON.fromJson(trustedEndpointsElement, trustedEndpointsType);
+            if (decoded != null) {
+                knownHosts.trustedEndpoints.putAll(decoded);
+            }
+        }
+
+        JsonElement endpointIdsElement = root.get("endpointIds");
+        if (endpointIdsElement != null && endpointIdsElement.isJsonObject()) {
+            migrateLegacyTrustedEndpoints(knownHosts.trustedEndpoints, endpointIdsElement.getAsJsonObject());
+        }
+
+        knownHosts.normalize();
+        return knownHosts;
+    }
+
+    private static boolean isLegacyTrustedEndpointsMap(JsonElement element) {
+        if (element == null || !element.isJsonObject()) {
+            return false;
+        }
+
+        for (Map.Entry<String, JsonElement> entry : element.getAsJsonObject().entrySet()) {
+            if (!entry.getValue().isJsonPrimitive() || !entry.getValue().getAsJsonPrimitive().isString()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void migrateLegacyTrustedEndpoints(Map<String, TrustedEndpointRecord> target, JsonObject source) {
+        for (Map.Entry<String, JsonElement> entry : source.entrySet()) {
+            if (!entry.getValue().isJsonPrimitive() || !entry.getValue().getAsJsonPrimitive().isString()) {
+                continue;
+            }
+
+            String endpointId = entry.getValue().getAsString();
+            if (endpointId == null || endpointId.isBlank()) {
+                continue;
+            }
+
+            target.putIfAbsent(entry.getKey(), new TrustedEndpointRecord(endpointId, TrustEvidence.TOFU_KNOWN, 0L, Map.of()));
+        }
     }
 
     public static class KnownHostsFields {
-        public Map<String, String> hosts; // host, fingerprint
+        public Map<String, String> trustedEndpoints; // canonical server address, endpoint id
+        public transient Map<String, String> endpointIds; // legacy migration-only field
+    }
+
+    public static class PlayerEndpointsFields {
+        public Map<String, PlayerEndpointRecord> byUuid = new HashMap<>();
+    }
+
+    public static class PlayerEndpointRecord {
+        public String endpointId;
+        public String lastKnownName;
+        public long firstSeenAt;
+        public long lastSeenAt;
+
+        public PlayerEndpointRecord() {
+        }
+
+        public PlayerEndpointRecord(String endpointId, String lastKnownName, long firstSeenAt, long lastSeenAt) {
+            this.endpointId = endpointId;
+            this.lastKnownName = lastKnownName;
+            this.firstSeenAt = firstSeenAt;
+            this.lastSeenAt = lastSeenAt;
+        }
     }
 
     public static class ModpackContentFields {

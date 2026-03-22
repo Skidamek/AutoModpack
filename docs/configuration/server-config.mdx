@@ -64,37 +64,43 @@ This setting accepts a list of objects containing a path and a SHA1 hash.
 ```
 
 <details>
-<summary>How to get the SHA1 Hash</summary>
+    <summary>How to get the SHA1 Hash</summary>
 
-You must provide the hash for the specific version of the file you want to delete.
+    You must provide the hash for the specific version of the file you want to delete.
 
-### Option 1: Linux Command Line
+    ### Option 1: Linux Command Line
 
-```bash
-sha1sum path/to/file
-```
+    ```bash
+    sha1sum path/to/file
+    ```
 
-### Option 2: Online Tools
+    ### Option 2: Online Tools
 
-You can use a browser-based calculator like [SHA1 File Checksum](https://emn178.github.io/online-tools/sha1_checksum.html).
+    You can use a browser-based calculator like [SHA1 File
+    Checksum](https://emn178.github.io/online-tools/sha1_checksum.html).
 </details>
 
 ## Network & Hosting
 
 These settings control how the file server is exposed to the internet.
 
-| Setting                 | Default | Description                                                                                            |
-|-------------------------|---------|--------------------------------------------------------------------------------------------------------|
-| `bindAddress`           | `""`    | The local IP to bind the host to. Empty binds to 0.0.0.0 or ::0. Ignored if bindPort is -1.            |
-| `bindPort`              | `-1`    | The port to listen on. -1 uses the Minecraft Server's port (recommended).                              |
-| `addressToSend`         | `""`    | The public IP/Domain sent to clients to start the download. Empty defaults to the connection address.  |
-| `portToSend`            | `-1`    | The public port sent to clients. -1 uses the connection port.                                          |
-| `bandwidthLimit`        | `0`     | Upload speed limit in Mbps (0 = unlimited).                                                            |
-| `disableInternalTLS`    | `false` | Disables internal TLS. Use this only if you handle SSL via a Reverse Proxy (like Nginx - recommended). |
-| `requireMagicPackets`   | `false` | Requires a "Magic Packet" handshake to start downloads. Always enabled if bindPort is -1.              |
-| `updateIpsOnEveryStart` | `false` | Updates addressToSend on startup. Useful for dynamic residential IPs.                                  |
-| `validateSecrets`       | `true`  | Protects downloads using unique, temporary secrets per user.                                           |
-| `secretLifetime`        | `336`   | How long (in hours) a download secret remains valid.                                                   |
+| Setting                    | Default | Description                                                                                                                                                                                      |
+|----------------------------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `bindAddress`              | `""`    | The local IP to bind the host to. Empty binds to 0.0.0.0 or ::0. Ignored if bindPort is -1.                                                                                                      |
+| `bindPort`                 | `-1`    | The port to listen on. -1 uses the Minecraft Server's port (recommended).                                                                                                                        |
+| `addressToSend`            | `""`    | The public IP/Domain sent to clients to start the download. Empty defaults to the connection address.                                                                                            |
+| `portToSend`               | `-1`    | The public port sent to clients. -1 uses the connection port.                                                                                                                                    |
+| `bandwidthLimit`           | `0`     | Upload speed limit in Mbps (0 = unlimited).                                                                                                                                                      |
+| `shareMinecraftConnection` | `true`  | Reuses the player's Minecraft connection to tunnel Iroh packets during in-game updates instead of opening a separate raw TCP bootstrap socket. Preload/offline updates still use raw-TCP routes. |
+| `updateIpsOnEveryStart`    | `false` | Updates addressToSend on startup. Useful for dynamic residential IPs.                                                                                                                            |
+
+If you want to remove the first-connection TOFU screen for new clients, prefer a DNS hostname in `addressToSend` and publish a DNSSEC TXT record for it:
+
+```dns
+_automodpack.your-hostname.example. 300 IN TXT "endpoint=v1:<endpoint-id>"
+```
+
+If players join with one hostname but AutoModpack advertises a different raw bootstrap hostname, you need a matching `_automodpack` TXT record for both names. Read [Identity Verification](../technicals/certificate) for the exact rules.
 
 ## Nagging Un-modded Clients
 

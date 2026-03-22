@@ -11,9 +11,9 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import pl.skidam.automodpack.networking.LoginNetworkingIDs;
 import pl.skidam.automodpack.networking.PayloadHelper;
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;
+import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
 // TODO find better way to do this, its mixin only for 1.20.2 and above
 @Mixin(value = ServerboundCustomQueryAnswerPacket.class, priority = 300)
@@ -29,7 +29,7 @@ public class LoginQueryResponseC2SPacketMixin {
 
     @Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
     private static void readResponse(int queryId, FriendlyByteBuf buf, CallbackInfoReturnable<CustomQueryAnswerPayload> cir) {
-        Identifier automodpackID = LoginNetworkingIDs.getByValue(queryId);
+        Identifier automodpackID = ServerLoginNetworkAddon.getAutoModpackChannel(queryId);
         if (automodpackID == null) {
             return;
         }

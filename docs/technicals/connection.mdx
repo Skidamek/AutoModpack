@@ -1,12 +1,12 @@
 ### Encryption
 
-Modpack download connection is secured using TLS 1.3.
+AutoModpack now prefers an iroh-based QUIC transport for modpack downloads.
 
-This is the same security standard used by HTTPS, the protocol which you're using all the time to browse the web (even now!).
+The QUIC session handles encryption and peer authentication directly, while AutoModpack uses the server's endpoint ID as the primary user-visible identity.
 
-TLS has method of verifying the server's identity using a certificate which is crucial to prevent attacks such as [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack).
+When the server enables `shareMinecraftConnection`, AutoModpack can carry an Iroh custom transport over the existing Minecraft connection during the in-game update flow. This avoids opening a second TCP bootstrap socket in restrictive proxy, firewall, or NAT environments. Preload and offline update checks use the same Iroh download protocol, but only with the saved direct-IP and raw-TCP routes from a previous successful session.
 
-That's why AutoModpack requires you to verify the server's certificate fingerprint when connecting to the server for the first time. Read [how to verify the certificate fingerprint](certificate) for more details.
+On first connect, the client asks you to verify that endpoint ID unless the server published a matching DNSSEC TXT proof. Once trusted, the same server can be recognized on future connections. Read [how identity verification works](certificate) for the exact DNS record format and rules.
 
 ### Direct Downloads
 
@@ -25,11 +25,15 @@ However, this only applies to files downloaded from your server.
 ### Authorization
 
 <Callout>
-Do not confuse this with [certificate fingerprint verification](certificate), which is used to verify the server's identity.
+Do not confuse this with [server identity verification](certificate), which is used to verify the server's public key.
 </Callout>
 
-AutoModpack uses a simple authorization mechanism to prevent unauthorized access to your modpack.
-When you connect to the server, in the background AutoModpack generates a random unique secret for each player. This secret is then send to the player and used to authorize the player to download the modpack files.
-Every time you reconnect to the server, the old secret is invalidated and a new one is generated.
-This prevents unauthorized access to your modpack files and ensures that only whitelisted and not banned players can download the modpack.
-If you don't want to use this feature, you can disable it (`validateSecrets`) in the [server config](../configuration/server-config).
+AutoModpack authorizes modpack downloads through the player's authenticated Minecraft identity and the player's bound Iroh endpoint/public key.
+
+During Minecraft login, the client announces its Iroh public key over the encrypted Minecraft connection. The server binds that key to the authenticated player UUID. Later Iroh connections are accepted only when:
+
+- the remote Iroh TLS handshake proves possession of the matching private key
+- that endpoint ID is bound to a known player UUID
+- that UUID is currently allowed by the server's whitelist / ban rules
+
+In online mode this gives strong player-bound authorization. In offline mode the same logic still applies, but it inherits Minecraft's weaker identity model.

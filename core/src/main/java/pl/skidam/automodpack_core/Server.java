@@ -4,7 +4,8 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
-import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.protocol.HybridHostServer;
+import pl.skidam.automodpack_core.protocol.iroh.IrohAvailability;
 
 import java.nio.file.Path;
 import java.util.HashSet;
@@ -21,7 +22,8 @@ public class Server {
             return;
         }
 
-        NettyServer server = new NettyServer();
+        IrohAvailability.warnIfUnavailable(LOGGER);
+        HybridHostServer server = new HybridHostServer();
         hostServer = server;
 
         String modpackDirStr = args[0];
@@ -38,7 +40,6 @@ public class Server {
         serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
         if (serverConfig != null) {
             serverConfig.syncedFiles = new HashSet<>();
-            serverConfig.validateSecrets = false;
             ConfigTools.save(serverConfigFile, serverConfig);
 
             if (serverConfig.bindPort == -1) {

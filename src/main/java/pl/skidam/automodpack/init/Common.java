@@ -6,7 +6,8 @@ import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.protocol.HybridHostServer;
+import pl.skidam.automodpack_core.protocol.iroh.IrohAvailability;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -42,7 +43,8 @@ public class Common {
 
     public static void init() {
         GAME_CALL = new GameCall();
-        hostServer = new NettyServer();
+        IrohAvailability.warnIfUnavailable(LOGGER);
+        hostServer = new HybridHostServer();
         modpackExecutor = new ModpackExecutor();
     }
 

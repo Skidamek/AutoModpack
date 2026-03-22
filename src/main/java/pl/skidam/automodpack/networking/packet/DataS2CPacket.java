@@ -8,6 +8,7 @@ import net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import pl.skidam.automodpack.modpack.GameHelpers;
+import pl.skidam.automodpack.networking.ConnectionIrohTunnelRegistry;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -28,6 +29,8 @@ public class DataS2CPacket {
     private static void handlePacket(ServerLoginPacketListenerImpl handler, FriendlyByteBuf buf) {
         try {
             GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
+            Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+            ConnectionIrohTunnelRegistry.removeServer(connection);
 
             if (buf.readableBytes() == 0) {
                 return;
@@ -36,29 +39,34 @@ public class DataS2CPacket {
             String clientHasUpdate = buf.readUtf(Short.MAX_VALUE);
 
             if ("true".equals(clientHasUpdate)) { // disconnect
-                LOGGER.warn("{} has not installed modpack. Certificate fingerprint: {}", GameHelpers.getPlayerName(profile), hostServer.getCertificateFingerprint());
+                LOGGER.warn("{} has not installed modpack. Endpoint ID: {}", GameHelpers.getPlayerName(profile), hostServer.getIrohEndpointId());
                 Component reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
-                Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
                 connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
             } else if ("false".equals(clientHasUpdate)) {
                 LOGGER.info("{} has installed whole modpack", GameHelpers.getPlayerName(profile));
             } else {
                 Component reason = VersionedText.literal("[AutoModpack] Host server error. Please contact server administrator to check the server logs!");
-                Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
                 connection.send(new ClientboundLoginDisconnectPacket(reason));
                 connection.disconnect(reason);
 
                 LOGGER.error("Host server error. AutoModpack host server is down or server is not configured correctly");
 
                 if (serverConfig.bindPort == -1) {
-                    LOGGER.warn("You are hosting AutoModpack host server on the Minecraft port.");
+                    LOGGER.warn("AutoModpack raw TCP hosting is configured on the Minecraft port.");
+                    LOGGER.info("If the client sent its original hostname and port, the raw TCP route is derived per-client from that login handshake.");
                 } else {
                     LOGGER.warn("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", serverConfig.bindPort);
+                    if (serverConfig.portToSend <= 0) {
+                        LOGGER.info("No explicit portToSend is configured, so clients will use bindPort '{}' for raw TCP bootstrap.", serverConfig.bindPort);
+                    }
                 }
 
-                LOGGER.warn("Make sure that 'addressToSend' is correctly set in the config file!");
-                LOGGER.warn("It can be either an IP address or a domain pointing to your modpack host server.");
+                if (serverConfig.addressToSend == null || serverConfig.addressToSend.isBlank()) {
+                    LOGGER.warn("No explicit addressToSend is configured. Clients will only get a raw TCP route if their login handshake provided the original server hostname.");
+                } else {
+                    LOGGER.info("Configured raw TCP host override addressToSend='{}'", serverConfig.addressToSend);
+                }
                 LOGGER.warn("If nothing works, try changing the 'bindPort' in the config file, then forward / open it and restart server");
                 LOGGER.warn("Note that some hosting providers may proxy this port internally and give you a different address and port to use. In this case, separate the given address with ':', and set the first part as 'addressToSend' and the second part as 'portToSend' in the config file.");
 
@@ -66,7 +74,7 @@ public class DataS2CPacket {
                     LOGGER.error("bindPort '{}' is different than portToSend '{}'. If you are not using reverse proxy, match them! If you do use reverse proxy, make sure it is setup correctly.", serverConfig.bindPort, serverConfig.portToSend);
                 }
 
-                LOGGER.warn("Server certificate fingerprint: {}", hostServer.getCertificateFingerprint());
+                LOGGER.warn("Server iroh endpoint ID: {}", hostServer.getIrohEndpointId());
             }
         } catch (Exception e) {
             LOGGER.error("Error while handling DataS2CPacket", e);

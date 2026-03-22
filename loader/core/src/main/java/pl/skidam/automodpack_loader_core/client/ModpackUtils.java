@@ -1,11 +1,14 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import org.jetbrains.annotations.NotNull;
-import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.EndpointTrustDecision;
+import pl.skidam.automodpack_core.auth.EndpointTrustVerifier;
+import pl.skidam.automodpack_core.auth.TrustEvidence;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionInfo;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.iroh.IrohIdentity;
 import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -18,14 +21,13 @@ import java.io.*;
 import java.net.*;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.security.cert.CertificateEncodingException;
-import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack_core.Constants.*;
@@ -517,13 +519,8 @@ public class ModpackUtils {
 
     public static Path renameModpackDir(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
         String currentName = clientConfig.selectedModpack;
-        String newName = serverModpackContent.modpackName;
 
         if (clientConfig.installedModpacks == null || clientConfig.selectedModpack == null || clientConfig.selectedModpack.isBlank()) {
-            return modpackDir;
-        }
-
-        if (newName.isEmpty() || newName.equals(currentName)) {
             return modpackDir;
         }
 
@@ -532,10 +529,20 @@ public class ModpackUtils {
             return modpackDir;
         }
 
+        String endpointId = installedAddresses.lastSuccessfulAddressBook == null ? null : installedAddresses.lastSuccessfulAddressBook.endpointId;
+        if (endpointId == null || endpointId.isBlank()) {
+            return modpackDir;
+        }
+
+        String newName = modpackDirectoryName(endpointId, installedAddresses.minecraftServerAddress);
+        if (newName.isEmpty() || newName.equals(currentName)) {
+            return modpackDir;
+        }
+
         Path newModpackDir = modpackDir.getParent().resolve(newName);
 
         try {
-            LOGGER.info("Renaming modpack directory: {} -> {}", modpackDir.getFileName(), newName);
+            LOGGER.info("Renaming modpack directory to canonical endpoint id key: {} -> {}", modpackDir.getFileName(), newName);
             Files.move(modpackDir, newModpackDir, StandardCopyOption.REPLACE_EXISTING);
 
             removeModpackFromList(currentName);
@@ -553,13 +560,13 @@ public class ModpackUtils {
     }
 
     // Returns true if value changed
-    public static boolean selectModpack(Path modpackDirToSelect, Jsons.ModpackAddresses modpackAddresses, Set<String> newDownloadedFiles) {
+    public static boolean selectModpack(Path modpackDirToSelect, Jsons.PersistedModpackConnection modpackConnection, Set<String> newDownloadedFiles) {
         String newName = modpackDirToSelect.getFileName().toString();
         String oldName = clientConfig.selectedModpack;
 
         // If nothing changed, update list only and return early to avoid I/O.
         if (Objects.equals(newName, oldName)) {
-            ModpackUtils.addModpackToList(newName, modpackAddresses);
+            ModpackUtils.addModpackToList(newName, modpackConnection);
             return false;
         }
 
@@ -578,7 +585,7 @@ public class ModpackUtils {
         // Update Configuration and Save
         clientConfig.selectedModpack = newName;
         ConfigTools.save(clientConfigFile, clientConfig);
-        ModpackUtils.addModpackToList(newName, modpackAddresses);
+        ModpackUtils.addModpackToList(newName, modpackConnection);
 
         LOGGER.info("Selected modpack: {}", newName);
 
@@ -601,20 +608,20 @@ public class ModpackUtils {
         }
 
         if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.containsKey(modpackName)) {
-            Map<String, Jsons.ModpackAddresses> modpacks = new HashMap<>(clientConfig.installedModpacks);
+            Map<String, Jsons.PersistedModpackConnection> modpacks = new HashMap<>(clientConfig.installedModpacks);
             modpacks.remove(modpackName);
             clientConfig.installedModpacks = modpacks;
             ConfigTools.save(clientConfigFile, clientConfig);
         }
     }
 
-    public static void addModpackToList(String modpackName, Jsons.ModpackAddresses modpackAddresses) {
-        if (modpackName == null || modpackName.isEmpty() || modpackAddresses.isAnyEmpty()) {
+    public static void addModpackToList(String modpackName, Jsons.PersistedModpackConnection modpackConnection) {
+        if (modpackName == null || modpackName.isEmpty() || modpackConnection == null || !modpackConnection.hasUsableAddressBook()) {
             return;
         }
 
-        Map<String, Jsons.ModpackAddresses> modpacks = new HashMap<>(clientConfig.installedModpacks);
-        modpacks.put(modpackName, modpackAddresses);
+        Map<String, Jsons.PersistedModpackConnection> modpacks = new HashMap<>(clientConfig.installedModpacks);
+        modpacks.put(modpackName, modpackConnection);
         clientConfig.installedModpacks = modpacks;
 
         ConfigTools.save(clientConfigFile, clientConfig);
@@ -622,6 +629,23 @@ public class ModpackUtils {
 
     // Returns modpack name formatted for path or url if server doesn't provide modpack name
     public static Path getModpackPath(InetSocketAddress address, String modpackName) {
+        return getModpackPath(address, modpackName, null);
+    }
+
+    public static Path getModpackPath(InetSocketAddress address, String modpackName, String endpointId) {
+        Path canonicalDir = SmartFileUtils.getPath(modpacksDir, modpackDirectoryName(endpointId, address));
+        migrateLegacyModpackDirIfNeeded(endpointId, canonicalDir);
+        return canonicalDir;
+    }
+
+    private static String modpackDirectoryName(String endpointId, InetSocketAddress address) {
+        if (endpointId != null && !endpointId.isBlank()) {
+            String shortenedEndpointId = endpointId.substring(0, Math.min(endpointId.length(), 7));
+            if (FileInspection.isInValidFileName(shortenedEndpointId)) {
+                return FileInspection.fixFileName(shortenedEndpointId);
+            }
+            return shortenedEndpointId;
+        }
 
         String strAddress = address.getHostString() + ":" + address.getPort();
         String correctedName = strAddress;
@@ -630,40 +654,84 @@ public class ModpackUtils {
             correctedName = FileInspection.fixFileName(strAddress);
         }
 
-        Path modpackDir = SmartFileUtils.getPath(modpacksDir, correctedName);
+        return correctedName;
+    }
 
-        if (!modpackName.isEmpty()) {
-            String nameFromName = modpackName;
-
-            if (FileInspection.isInValidFileName(modpackName)) {
-                nameFromName = FileInspection.fixFileName(modpackName);
-            }
-
-            modpackDir = SmartFileUtils.getPath(modpacksDir, nameFromName);
+    private static void migrateLegacyModpackDirIfNeeded(String endpointId, Path canonicalDir) {
+        if (endpointId == null || endpointId.isBlank() || canonicalDir == null || clientConfig == null || clientConfig.installedModpacks == null || clientConfig.installedModpacks.isEmpty()) {
+            return;
         }
 
-        return modpackDir;
+        String canonicalName = canonicalDir.getFileName().toString();
+        Map<String, Jsons.PersistedModpackConnection> modpacks = new HashMap<>(clientConfig.installedModpacks);
+        boolean changed = false;
+
+        for (Map.Entry<String, Jsons.PersistedModpackConnection> entry : clientConfig.installedModpacks.entrySet()) {
+            String currentName = entry.getKey();
+            Jsons.PersistedModpackConnection persistedConnection = entry.getValue();
+            String storedEndpointId = persistedConnection == null || persistedConnection.lastSuccessfulAddressBook == null
+                ? null
+                : persistedConnection.lastSuccessfulAddressBook.endpointId;
+
+            if (!endpointId.equals(storedEndpointId) || Objects.equals(currentName, canonicalName)) {
+                continue;
+            }
+
+            Path legacyDir = modpacksDir.resolve(currentName);
+            if (Files.exists(legacyDir) && !Files.exists(canonicalDir)) {
+                try {
+                    LOGGER.info("Migrating modpack directory to canonical endpoint key: {} -> {}", currentName, canonicalName);
+                    Files.move(legacyDir, canonicalDir, StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to migrate modpack directory {} to {}", currentName, canonicalName, e);
+                    return;
+                }
+            }
+
+            modpacks.remove(currentName);
+            modpacks.putIfAbsent(canonicalName, persistedConnection);
+            if (Objects.equals(clientConfig.selectedModpack, currentName)) {
+                clientConfig.selectedModpack = canonicalName;
+            }
+            changed = true;
+            break;
+        }
+
+        if (changed) {
+            clientConfig.installedModpacks = modpacks;
+            ConfigTools.save(clientConfigFile, clientConfig);
+        }
     }
 
-    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, boolean allowAskingUser) {
-        return fetchModpackContent(modpackAddresses, secret,
+    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(ModpackConnectionInfo connectionInfo, boolean allowAskingUser) {
+        return requestServerModpackContent(connectionInfo, allowAskingUser, null);
+    }
+
+    public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(ModpackConnectionInfo connectionInfo, boolean allowAskingUser, IntFunction<DownloadClient> preferredClientFactory) {
+        return fetchModpackContent(connectionInfo,
                 (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
-                "Fetched", allowAskingUser);
+                "Fetched", allowAskingUser, preferredClientFactory);
     }
 
-    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, byte[][] fileHashes, boolean allowAskingUser) {
-        return fetchModpackContent(modpackAddresses, secret,
+    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(ModpackConnectionInfo connectionInfo, byte[][] fileHashes, boolean allowAskingUser) {
+        return refreshServerModpackContent(connectionInfo, fileHashes, allowAskingUser, null);
+    }
+
+    public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(ModpackConnectionInfo connectionInfo, byte[][] fileHashes, boolean allowAskingUser, IntFunction<DownloadClient> preferredClientFactory) {
+        return fetchModpackContent(connectionInfo,
                 (client) -> client.requestRefresh(fileHashes, modpackContentTempFile),
-                "Re-fetched", allowAskingUser);
+                "Re-fetched", allowAskingUser, preferredClientFactory);
     }
 
-    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
-        if (secret == null)
-            return Optional.empty();
-        if (modpackAddresses.isAnyEmpty())
+    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(ModpackConnectionInfo connectionInfo, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser, IntFunction<DownloadClient> preferredClientFactory) {
+        if (connectionInfo == null || connectionInfo.minecraftServerAddress() == null)
             throw new IllegalArgumentException("Modpack addresses are empty!");
 
-        try (DownloadClient client = DownloadClient.tryCreate(modpackAddresses, secret.secretBytes(), 1, userValidationCallback(modpackAddresses.hostAddress, allowAskingUser))) {
+        if (connectionInfo.hasEndpointId() && !isEndpointTrusted(connectionInfo, allowAskingUser)) {
+            return Optional.empty();
+        }
+
+        try (DownloadClient client = createDownloadClient(connectionInfo, 1, allowAskingUser, preferredClientFactory)) {
             if (client == null) return Optional.empty();
             var future = operation.apply(client);
             Path path = future.get();
@@ -682,53 +750,65 @@ public class ModpackUtils {
         return Optional.empty();
     }
 
-    public static boolean canConnectModpackHost(Jsons.ModpackAddresses modpackAddresses) {
-        if (modpackAddresses.isAnyEmpty())
-            throw new IllegalArgumentException("Modpack addresses are empty!");
-
-        try (DownloadClient client = DownloadClient.tryCreate(modpackAddresses, null, 1, null)) {
-            return client != null;
-        } catch (Exception e) {
-            LOGGER.error("Error while pinging AutoModpack host server", e);
+    public static DownloadClient createDownloadClient(ModpackConnectionInfo connectionInfo, int poolSize, boolean allowAskingUser, IntFunction<DownloadClient> preferredClientFactory) {
+        if (preferredClientFactory != null) {
+            try {
+                DownloadClient preferred = preferredClientFactory.apply(poolSize);
+                if (preferred != null) {
+                    return preferred;
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Preferred download client initialization failed, falling back to default transport", e);
+            }
         }
 
-        return false;
+        return DownloadClient.tryCreate(connectionInfo, poolSize);
     }
 
-    /**
-     * Returns a callback for use with {@link DownloadClient} that checks for trusted fingerprints in the known hosts
-     * list of the client config.
-     *
-     * @param address         the address being connected to
-     * @param allowAskingUser whether the user should be prompted if a certificate is not trusted
-     * @return the callback
-     */
-    public static Function<X509Certificate, Boolean> userValidationCallback(InetSocketAddress address, boolean allowAskingUser) {
-        return certificate -> {
-            String fingerprint;
-            try {
-                fingerprint = NetUtils.getFingerprint(certificate);
-            } catch (CertificateEncodingException e) {
-                return false;
-            }
-            if (Objects.equals(knownHosts.hosts.get(address.getHostString()), fingerprint))
-                return true;
-            LOGGER.warn("Received untrusted certificate from server {}!", address.getHostString());
-            if (allowAskingUser) {
-                boolean trusted = askUserAboutCertificate(address, fingerprint);
-                if (trusted) {
-                    knownHosts.hosts.put(address.getHostString(), fingerprint);
-                    ConfigTools.save(knownHostsFile, knownHosts);
-                }
-                return trusted;
-            }
+    public static boolean canConnectModpackHost(ModpackConnectionInfo connectionInfo) {
+        if (connectionInfo == null || connectionInfo.minecraftServerAddress() == null)
+            throw new IllegalArgumentException("Modpack addresses are empty!");
 
+        return connectionInfo.hasEndpointId()
+            && (
+                connectionInfo.hasRawTcpAddress()
+                    || connectionInfo.hasDirectIpAddresses()
+                    || connectionInfo.shareMinecraftConnection()
+            );
+    }
+
+    private static boolean isEndpointTrusted(ModpackConnectionInfo connectionInfo, boolean allowAskingUser) {
+        if (connectionInfo == null || !connectionInfo.hasEndpointId()) {
+            return true;
+        }
+
+        EndpointTrustDecision trustDecision = EndpointTrustVerifier.evaluate(connectionInfo, knownHosts);
+        if (trustDecision.isHardFailure()) {
+            LOGGER.error("Rejecting endpoint {} for {} because DNSSEC trust failed: {}", connectionInfo.endpointId(), IrohIdentity.canonicalServerKey(connectionInfo.minecraftServerAddress()), trustDecision.reason());
             return false;
-        };
+        }
+
+        if (trustDecision.isTrusted()) {
+            EndpointTrustVerifier.trust(connectionInfo, trustDecision.trustEvidence(), trustDecision.dnssecDomains(), knownHosts);
+            ConfigTools.save(knownHostsFile, knownHosts);
+            return true;
+        }
+
+        String key = IrohIdentity.canonicalServerKey(connectionInfo.minecraftServerAddress());
+        LOGGER.warn("Received untrusted iroh endpoint id from server {}!", key);
+        if (!allowAskingUser) {
+            return false;
+        }
+
+        boolean trusted = askUserAboutEndpoint(connectionInfo.minecraftServerAddress(), connectionInfo.endpointId());
+        if (trusted) {
+            EndpointTrustVerifier.trust(connectionInfo, TrustEvidence.TOFU_MANUAL, trustDecision.dnssecDomains(), knownHosts);
+            ConfigTools.save(knownHostsFile, knownHosts);
+        }
+        return trusted;
     }
 
-    private static Boolean askUserAboutCertificate(InetSocketAddress address, String fingerprint) {
-        LOGGER.info("Asking user for {}", address.getHostString());
+    private static boolean askUserAboutEndpoint(InetSocketAddress serverAddress, String endpointId) {
         Optional<Object> screen = new ScreenManager().getScreen();
         if (screen.isEmpty()) {
             LOGGER.warn("No screen available, cannot ask user");
@@ -736,20 +816,26 @@ public class ModpackUtils {
         }
 
         CountDownLatch latch = new CountDownLatch(1);
-
         AtomicBoolean accepted = new AtomicBoolean(false);
         Runnable trustCallback = () -> {
             accepted.set(true);
             latch.countDown();
         };
         Runnable cancelCallback = latch::countDown;
-        new ScreenManager().validation(screen.get(), fingerprint, trustCallback, cancelCallback);
+        new ScreenManager().validation(
+                screen.get(),
+                "Server public key (endpoint ID)",
+                endpointId,
+                "https://moddedmc.wiki/en/project/automodpack/latest/docs/technicals/certificate",
+                trustCallback,
+                cancelCallback
+        );
         try {
             latch.await();
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             return false;
         }
-
         return accepted.get();
     }
 

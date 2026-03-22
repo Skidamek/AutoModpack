@@ -19,11 +19,14 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 // credits to fabric api
 public class ServerLoginNetworkAddon implements PacketSender {
+    private static final AtomicInteger NEXT_QUERY_ID = new AtomicInteger(-10_000);
+    private static final Map<Integer, Identifier> AUTOMODPACK_QUERY_CHANNELS = new ConcurrentHashMap<>();
 
     private final ServerLoginPacketListenerImpl handler;
     private final Connection connection;
@@ -79,6 +82,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
     private boolean handle(int queryId, @Nullable FriendlyByteBuf originalBuf) {
 
         Identifier channel = this.channels.remove(queryId);
+        AUTOMODPACK_QUERY_CHANNELS.remove(queryId);
 
         if (channel == null) {
             // Not an AutoModpack packet.
@@ -106,12 +110,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
 
     @Override
     public ClientboundCustomQueryPacket createPacket(Identifier channelName, FriendlyByteBuf buf) {
-        Integer queryId = LoginNetworkingIDs.getByKey(channelName);
-
-        if (queryId == null) {
-            return null;
-        }
-
+        int queryId = NEXT_QUERY_ID.getAndDecrement();
         return new ClientboundCustomQueryPacket(queryId, /*? if <1.20.2 {*/ /*channelName, buf *//*?} else {*/ new LoginRequestPayload(channelName, buf) /*?}*/);
     }
 
@@ -122,9 +121,19 @@ public class ServerLoginNetworkAddon implements PacketSender {
         LoginQueryParser loginQuery = new LoginQueryParser(packet);
         if (loginQuery.success) {
             this.channels.put(loginQuery.queryId, loginQuery.channelName);
+            AUTOMODPACK_QUERY_CHANNELS.put(loginQuery.queryId, loginQuery.channelName);
             this.connection.send(packet);
         } else {
             LOGGER.error("Failed to send packet: {}", packet);
         }
+    }
+
+    public void clearPendingChannels() {
+        this.channels.keySet().forEach(AUTOMODPACK_QUERY_CHANNELS::remove);
+        this.channels.clear();
+    }
+
+    public static Identifier getAutoModpackChannel(int queryId) {
+        return AUTOMODPACK_QUERY_CHANNELS.get(queryId);
     }
 }

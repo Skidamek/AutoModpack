@@ -5,7 +5,7 @@ import org.apache.logging.log4j.Logger;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.*;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
-import pl.skidam.automodpack_core.protocol.netty.NettyServer;
+import pl.skidam.automodpack_core.protocol.ModpackHostService;
 
 import java.nio.file.Path;
 
@@ -27,10 +27,10 @@ public class Constants {
     public static Path THIS_MOD_JAR;
     public static Path MODS_DIR;
     public static ModpackExecutor modpackExecutor;
-    public static NettyServer hostServer;
+    public static ModpackHostService hostServer;
     public static Jsons.ServerConfigFieldsV2 serverConfig;
-    public static Jsons.ClientConfigFieldsV2 clientConfig;
-    public static Jsons.KnownHostsFields knownHosts;
+    public static Jsons.ClientConfigFieldsV3 clientConfig;
+    public static Jsons.KnownHostsFieldsV2 knownHosts;
     public static final Path automodpackDir = Path.of("automodpack");
     public static final Path storeDir = automodpackDir.resolve("store");
     public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
@@ -49,16 +49,13 @@ public class Constants {
     public static Path clientDeletionTimeStamps = automodpackDir.resolve("automodpack-deletion-timestamps-files.json");
     public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
     public static final Path privateDir = automodpackDir.resolve(".private");
-    public static final Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");
+    public static final Path playerEndpointsFile = privateDir.resolve("automodpack-player-endpoints.json");
     public static final Path knownHostsFile = privateDir.resolve("automodpack-known-hosts.json");
-    public static final Path serverCertFile = privateDir.resolve("cert.crt");
-    public static final Path serverPrivateKeyFile = privateDir.resolve("key.pem");
 
 
     // Client
     public static final Path modpackContentTempFile = automodpackDir.resolve("automodpack-content.json.temp");
     public static final Path clientConfigFile = automodpackDir.resolve("automodpack-client.json");
-    public static final Path clientSecretsFile = privateDir.resolve("automodpack-client-secrets.json");
     public static final Path modpacksDir = automodpackDir.resolve("modpacks");
 
     public static final String clientConfigFileOverrideResource = "overrides-automodpack-client.json";

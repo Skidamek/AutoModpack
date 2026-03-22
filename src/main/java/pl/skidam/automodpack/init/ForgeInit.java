@@ -1,16 +1,12 @@
 package pl.skidam.automodpack.init;
 
 /*? if forge {*/
-/*import pl.skidam.automodpack.client.ScreenImpl;
-import pl.skidam.automodpack.client.audio.AudioManager;
-import pl.skidam.automodpack.modpack.Commands;
-import pl.skidam.automodpack.networking.ModPackets;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_loader_core.screen.ScreenManager;
-
+/*import pl.skidam.automodpack.modpack.Commands;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.fml.loading.FMLLoader;
 import net.minecraftforge.fml.common.Mod;
 
 import static pl.skidam.automodpack_core.Constants.*;
@@ -20,18 +16,16 @@ public class ForgeInit {
 
     public ForgeInit() {
         preload = false;
-        ScreenManager.INSTANCE = new ScreenImpl();
 
         long start = System.currentTimeMillis();
         LOGGER.info("Launching AutoModpack...");
 
-         Common.init();
+        Common.init();
 
-        if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
+        if (FMLLoader.getDist() == Dist.DEDICATED_SERVER) {
             Common.serverInit();
         } else {
-            ModPackets.registerC2SPackets();
-            new AudioManager(FMLJavaModLoadingContext.get().getModEventBus());
+            ForgeClientInit.init(FMLJavaModLoadingContext.get().getModEventBus());
         }
 
 

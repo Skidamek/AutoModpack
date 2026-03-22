@@ -10,6 +10,7 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_ZSTD;
@@ -21,8 +22,12 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_ZSTD;
 public class ZstdCompression implements CompressionCodec {
 
     private static MethodHandle compressMethodHandle;
+    private static MethodHandle compressRangeMethodHandle;
+    private static MethodHandle compressBoundMethodHandle;
     private static MethodHandle decompressMethodHandle;
     private static MethodHandle decompressFrameMethodHandle;
+    private static MethodHandle isErrorMethodHandle;
+    private static MethodHandle getErrorNameMethodHandle;
     private static boolean initialized = true;
 
     static {
@@ -40,12 +45,29 @@ public class ZstdCompression implements CompressionCodec {
             Class<?> zstdClass = Class.forName("com.github.luben.zstd.Zstd", true, loader);
 
             Method compressMethod = zstdClass.getMethod("compress", byte[].class);
+            Method compressRangeMethod = zstdClass.getMethod(
+                "compressByteArray",
+                byte[].class,
+                int.class,
+                int.class,
+                byte[].class,
+                int.class,
+                int.class,
+                int.class
+            );
+            Method compressBoundMethod = zstdClass.getMethod("compressBound", long.class);
             Method decompressMethod = zstdClass.getMethod("decompress", byte[].class, int.class);
             Method decompressFrameMethod = zstdClass.getMethod("decompressFrame", byte[].class, int.class, int.class, int.class);
+            Method isErrorMethod = zstdClass.getMethod("isError", long.class);
+            Method getErrorNameMethod = zstdClass.getMethod("getErrorName", long.class);
 
             compressMethodHandle = MethodHandles.lookup().unreflect(compressMethod);
+            compressRangeMethodHandle = MethodHandles.lookup().unreflect(compressRangeMethod);
+            compressBoundMethodHandle = MethodHandles.lookup().unreflect(compressBoundMethod);
             decompressMethodHandle = MethodHandles.lookup().unreflect(decompressMethod);
             decompressFrameMethodHandle = MethodHandles.lookup().unreflect(decompressFrameMethod);
+            isErrorMethodHandle = MethodHandles.lookup().unreflect(isErrorMethod);
+            getErrorNameMethodHandle = MethodHandles.lookup().unreflect(getErrorNameMethod);
         } catch (Throwable e) {
             initialized = false;
             LOGGER.debug("Failed to initialize embedded zstd-jni", e);
@@ -61,6 +83,42 @@ public class ZstdCompression implements CompressionCodec {
     public byte[] compress(byte[] input) throws IOException {
         try {
             return (byte[]) compressMethodHandle.invokeExact(input);
+        } catch (Throwable e) {
+            throw new IOException("Zstd compression failed", e);
+        }
+    }
+
+    @Override
+    public byte[] compress(byte[] input, int offset, int length) throws IOException {
+        if (offset == 0 && length == input.length) {
+            return compress(input);
+        }
+
+        try {
+            long bound = (long) compressBoundMethodHandle.invokeExact((long) length);
+            if (bound <= 0 || bound > Integer.MAX_VALUE) {
+                throw new IOException("Invalid zstd compression bound: " + bound);
+            }
+
+            byte[] compressed = new byte[(int) bound];
+            long written = (long) compressRangeMethodHandle.invokeExact(
+                compressed,
+                0,
+                compressed.length,
+                input,
+                offset,
+                length,
+                0
+            );
+            if ((boolean) isErrorMethodHandle.invokeExact(written)) {
+                String errorName = (String) getErrorNameMethodHandle.invokeExact(written);
+                throw new IOException("Zstd compression failed: " + errorName);
+            }
+
+            int actualLength = Math.toIntExact(written);
+            return actualLength == compressed.length ? compressed : Arrays.copyOf(compressed, actualLength);
+        } catch (IOException e) {
+            throw e;
         } catch (Throwable e) {
             throw new IOException("Zstd compression failed", e);
         }

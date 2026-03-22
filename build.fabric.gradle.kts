@@ -4,7 +4,7 @@ plugins {
     kotlin("jvm")
     id("automodpack.common")
     id("automodpack.utils")
-    id("fabric-loom")
+    id("net.fabricmc.fabric-loom-remap")
 }
 
 version = "${property("mod_version")}"
@@ -42,7 +42,14 @@ dependencies {
 
     // Required for translatable texts in 1.21.9+ for some reason i need both v0 and v1?
     if (sc.current.parsed >= "1.21.9") {
-        include(modImplementation(fabricApi.module("fabric-resource-loader-v1", property("deps.fabric-api") as String))!!)
+        include(
+            modImplementation(
+                fabricApi.module(
+                    "fabric-resource-loader-v1",
+                    property("deps.fabric-api") as String
+                )
+            )!!
+        )
     }
 }
 

@@ -9,7 +9,7 @@ import net.minecraft.server.permissions.PermissionLevel;
 /*?}*/
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
-import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.auth.PlayerEndpointsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import java.util.Set;
@@ -53,9 +53,9 @@ public class Commands {
                                         .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::connections)
                                 )
-                                .then(literal("fingerprint")
+                                .then(literal("endpoint")
                                         .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                        .executes(Commands::fingerprint)
+                                        .executes(Commands::endpoint)
                                 )
                         )
                         .then(literal("config")
@@ -74,42 +74,42 @@ public class Commands {
         );
     }
 
-    private static int fingerprint(CommandContext<CommandSourceStack> context) {
-        String fingerprint = hostServer.getCertificateFingerprint();
-        if (fingerprint != null) {
-            MutableComponent fingerprintText = VersionedText.literal(fingerprint).withStyle(style -> style
+    private static int endpoint(CommandContext<CommandSourceStack> context) {
+        String endpointId = hostServer.getIrohEndpointId();
+        if (endpointId != null && !endpointId.isBlank()) {
+            MutableComponent endpointText = VersionedText.literal(endpointId).withStyle(style -> style
                     /*? if >=1.21.5 {*/
                     .withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
-                    .withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
-                     /*?} else {*/
+                    .withClickEvent(new ClickEvent.CopyToClipboard(endpointId)));
+                    /*?} else {*/
                     /*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
-                    .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
+                    .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, endpointId)));
             *//*?}*/
-            send(context, "Certificate fingerprint", ChatFormatting.WHITE, fingerprintText, ChatFormatting.YELLOW, false);
+            send(context, "Iroh endpoint ID", ChatFormatting.WHITE, endpointText, ChatFormatting.YELLOW, false);
         } else {
-            send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
+            send(context, "Iroh endpoint ID is not available. Make sure iroh hosting started correctly.", ChatFormatting.RED, false);
         }
-
         return Command.SINGLE_SUCCESS;
     }
 
     private static int connections(CommandContext<CommandSourceStack> context) {
         Util.backgroundExecutor().execute(() -> {
-            var connections = hostServer.getConnections();
-            var uniqueSecrets = Set.copyOf(connections.values());
+            var connectionCounts = hostServer.getConnectionCountsByEndpoint();
+            var uniqueEndpoints = Set.copyOf(connectionCounts.keySet());
+            int totalConnections = connectionCounts.values().stream().mapToInt(Integer::intValue).sum();
 
-            send(context, String.format("Active connections: %d Unique connections: %d ", connections.size(), uniqueSecrets.size()), ChatFormatting.YELLOW, false);
+            send(context, String.format("Active connections: %d Unique endpoints: %d ", totalConnections, uniqueEndpoints.size()), ChatFormatting.YELLOW, false);
 
-            for (String secret : uniqueSecrets) {
-                var playerSecretPair = SecretsStore.getHostSecret(secret);
-                if (playerSecretPair == null) continue;
+            for (String endpointId : uniqueEndpoints) {
+                String playerId = PlayerEndpointsStore.getPlayerUuidForEndpoint(endpointId);
+                int connNum = connectionCounts.getOrDefault(endpointId, 0);
+                if (playerId == null) {
+                    send(context, String.format("Endpoint %s is using %d connections", endpointId, connNum), ChatFormatting.GREEN, false);
+                    continue;
+                }
 
-                String playerId = playerSecretPair.getKey();
                 var profile = GameHelpers.getPlayerProfile(playerId);
-
-                long connNum = connections.values().stream().filter(secret::equals).count();
-
-                send(context, String.format("Player: %s (%s) is downloading modpack using %d connections", GameHelpers.getPlayerName(profile), playerId, connNum), ChatFormatting.GREEN, false);
+                send(context, String.format("Player: %s (%s) endpoint=%s is using %d connections", GameHelpers.getPlayerName(profile), playerId, endpointId, connNum), ChatFormatting.GREEN, false);
             }
         });
 
@@ -194,13 +194,17 @@ public class Commands {
         ChatFormatting statusColor = hostServer.isRunning() ? ChatFormatting.GREEN : ChatFormatting.RED;
         String status = hostServer.isRunning() ? "running" : "not running";
         send(context, "Modpack hosting status", ChatFormatting.GREEN, status, statusColor, false);
+        send(context, "Iroh transport", ChatFormatting.WHITE, hostServer.isIrohEnabled() ? "enabled" : "disabled", hostServer.isIrohEnabled() ? ChatFormatting.GREEN : ChatFormatting.RED, false);
+        if (hostServer.getIrohEndpointId() != null) {
+            send(context, "Iroh endpoint ID", ChatFormatting.WHITE, hostServer.getIrohEndpointId(), ChatFormatting.YELLOW, false);
+        }
         return Command.SINGLE_SUCCESS;
     }
 
     private static int about(CommandContext<CommandSourceStack> context) {
         send(context, "AutoModpack", ChatFormatting.GREEN, AM_VERSION, ChatFormatting.WHITE, false);
         send(context, "/automodpack generate", ChatFormatting.YELLOW, false);
-        send(context, "/automodpack host start/stop/restart/connections/fingerprint", ChatFormatting.YELLOW, false);
+        send(context, "/automodpack host start/stop/restart/connections/endpoint", ChatFormatting.YELLOW, false);
         send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
         return Command.SINGLE_SUCCESS;
     }

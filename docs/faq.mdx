@@ -5,13 +5,16 @@ No, it's both. You need to have it installed on server as well as on client.
 Take a look at [modpack creation page](techinicals/modpack-creation).
 
 ### How to restrict access to my modpack?
-Enable `validateSecrets` in the [config](configuration/server-config), turn on `online-mode` in the server.properties and enable whitelist or ban someone.
+Use the normal Minecraft whitelist / ban system. AutoModpack binds each player's Iroh endpoint/public key to the UUID from Minecraft login, so only players currently allowed by the server can establish the download connection. `online-mode=true` is still strongly recommended.
+
+### How do I remove the first connection verification screen?
+Publish a DNSSEC-signed TXT record at `_automodpack.<hostname>` containing `endpoint=v1:<server-endpoint-id>`, then make sure clients connect with that hostname. If AutoModpack uses a second raw bootstrap hostname, publish the same TXT record there too. The full explanation is on the [Identity Verification](technicals/certificate) page.
 
 ### Does it work on lan (single-player world with option for other players to join)?
 Yes. Just remember to generate modpack via command /`automodpack generate` and start modpack host /`automodpack host start`.
 
 ### Does it work with single-player world shared via essential, world host, e4mc?
-Likely no, most of these type of mods forward only minecraft packets. These mods would need to support automodpack protocol or just relay all tcp packets instead of limiting to minecraft protocol.
+Yes! However, only in game, the modpack update functionality on preload will likely not function because we may be only able to communicate via Minecraft connection.
 
 ### Can I use non modpack mods on client?
 Yes, you can add any mod you want to use alongside downloaded modpack by just placing the mod into the standard mods' folder.
@@ -25,7 +28,7 @@ Not yet, it may come in the future.
 ### Do I have to open any port on my router?
 No, you don't need to. By default AutoModpack injects into minecraft networking I/O which reuses your minecraft server port. (e.g. 25565)
 
-If you want to use different port. Disable `hostModpackOnMinecraftPort` and change `hostPort` in [config](configuration/server-config).
+If you want to use a different port, set `bindPort` / `portToSend` in the [config](configuration/server-config) instead of sharing the Minecraft port.
 
 ### What happens when I update AutoModpack version on server?
 Client always try to sync to the server's version of AutoModpack. It updates or downgrades itself to the server's version if such is found on the Modrinth.

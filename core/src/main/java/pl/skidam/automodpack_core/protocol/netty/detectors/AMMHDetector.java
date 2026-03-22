@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.protocol.netty.detectors;
 
 import io.netty.buffer.ByteBuf;
+
 import java.nio.charset.StandardCharsets;
 
 import static pl.skidam.automodpack_core.protocol.NetUtils.MAGIC_AMMH;

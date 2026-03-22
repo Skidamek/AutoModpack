@@ -1,42 +1,165 @@
-### How to verify the certificate fingerprint?
-To verify, simply **copy the fingerprint from your server console to the game.** This is a one-time verification, meaning you won't need to repeat it after the initial connection. This process helps prevent security threats like [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). **The fingerprint is the same for everyone on your server, and it never changes, it's recommended to share it with players ahead of time.**
+## Server Identity Verification
 
-If you can't find the fingerprint in the console, you can retrieve it at any time using the **`/automodpack host fingerprint` [command](../commands/commands)**.
+AutoModpack no longer uses the old "trust this TLS certificate/fingerprint" flow for modpack downloads.
 
-However, please do not think of it like a password to the modpack, it's not a password or any secret, it's a public verifiable piece of server certificate, **anyone could download** your modpack without previous knowledge of such fingerprint.
+Instead, server identity is based on the server's persistent Iroh identity:
 
-If you don't want players to explicitly verify the certificate manually, and you own a domain (required), you can provide your own CA signed certificate.
+- QUIC/TLS inside Iroh still encrypts the connection
+- the user-visible identity is the server's Iroh endpoint ID
+- DNSSEC can prove that endpoint ID automatically, so new clients do not need a manual trust prompt
 
-### How to provide your own CA signed certificate?
+So the value a player verifies is the **Iroh endpoint ID**, not a separate TLS certificate fingerprint.
 
-You can use tools like [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html).
+## Where the endpoint ID comes from
 
-After obtaining the certificate, on the server in the `~/automodpack/.private/` directory, replace the `cert.crt` (with the full chain certificate) and `key.pem` files ([key has to be in PKCS#8 (PEM) format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) - here be cautious as interception of these files may result in impersonation of the server, [read more](https://security.stackexchange.com/a/16694).
-If you're hosting modpack on different sub/domain than your minecraft server, make sure that your certificate verifies both of the sub/domains.
+AutoModpack stores the server's persistent Iroh key in:
 
-### Little tutorial on how to obtain a certificate using Certbot
-
-Install Certbot on your pc or server, then run the example command and follow further certbot instructions to obtain a certificate for your domain:
-
-```bash
-# certbot certonly --manual --preferred-challenges dns -d <modpack-host-domain> -d <minecraft-server-domain>
+```text
+~/automodpack/.private/iroh.key
 ```
-If you're hosting modpack on the same port as your minecraft server, in most cases these domains will match, if so you don't need to provide the second domain.
 
-<Callout variant="warning">
-Never copy-paste random commands from the internet, always read the documentation of the tool you're using!
-</Callout>
+The endpoint ID is derived from that key. If you delete or rotate `iroh.key`, the endpoint ID changes too.
 
-After obtaining the certificate, the files you need are `fullchain.pem` (the full chain certificate, copy and rename to `cert.crt`) and `privkey.pem` (the private key, copy and rename to `key.pem`).
+You can print the current endpoint ID with:
 
-### Wait but why do I need all this? It's just a modpack for my friends!
+```text
+/automodpack host endpoint
+```
 
-If someone could easily take control over the automodpack connection, they could download on your (or your friends) computers anything they want.
-Minecraft isn't sandboxed in any way and mods **can run any arbitrary code** so if someone could easily inject some malicious piece of code to any automodpack modpack no matter who the victim is, that would be a huge win for them anyway, they could steal passwords from your browser, accounts to various services or even delete your very important folder with funny cat memes, there are many possibilities.
-That's why we believe it's important to have some security measures.
+That is the value you publish in DNS and the value the client would otherwise ask the player to verify manually.
 
-### Hmm... ok but nobody knows about my server besides my friends, why should I care?
+## How trust works
 
-Even if you think that nobody knows about your server, it may not be true. There are many ways how someone could find out about your server.
-For example there are many minecraft server scanners which scan the entire internet for minecraft servers, and you could be a victim if your server would be found vulnerable, and we wouldn't verify the certificate.
-However nothing we do here stops someone from taking control over your server in different ways, (e.g. gaining access to it via ssh or your server hosting panel) that's why it's very important that you as a server owner take your security seriously and use strong passwords, enable two-factor authentication and keep your server software up to date.
+When a client receives the server's endpoint ID, AutoModpack checks trust in this order:
+
+1. DNSSEC TXT proof
+2. previously saved known-hosts trust
+3. manual TOFU confirmation screen
+
+The DNSSEC step checks every hostname route AutoModpack knows for that server:
+
+- the Minecraft hostname the player joined with
+- the advertised raw-TCP bootstrap hostname, if one is advertised and it is a hostname
+- IP literals are skipped because they cannot be DNSSEC-validated
+
+For each hostname, AutoModpack looks up:
+
+```text
+_automodpack.<hostname>
+```
+
+and expects a TXT record in exactly this format:
+
+```text
+endpoint=v1:<64-lowercase-hex-endpoint-id>
+```
+
+Example:
+
+```dns
+_automodpack.play.example.com. 3600 IN TXT "endpoint=v1:00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+```
+
+If DNSSEC proves the record and the value matches, the client can trust the server without asking the player.
+
+## DNSSEC lookup behavior
+
+AutoModpack does not ship its own root trust anchors. Instead, it relies on authenticated DNS responses.
+
+The client first queries Cloudflare DNS-over-HTTPS at `https://cloudflare-dns.com/dns-query` and only accepts the answer as DNSSEC proof if the DNS `AD` flag is set.
+
+If Cloudflare is unreachable, AutoModpack retries the same lookup once through the system resolver.
+
+The fallback is intentionally strict:
+
+- if Cloudflare is reachable and returns an authenticated match, trust it
+- if Cloudflare is reachable and returns an authenticated mismatch or malformed TXT, reject immediately
+- if Cloudflare is reachable but does not return authenticated DNSSEC proof, do not retry somewhere else looking for a better answer
+- only a Cloudflare transport or availability failure causes a retry through the system resolver
+
+If neither resolver can provide authenticated DNSSEC proof, AutoModpack falls back to TOFU. It does not pretend DNSSEC succeeded.
+
+## When the trust prompt disappears
+
+The manual verification screen is skipped only when:
+
+- at least one hostname route has a DNSSEC-secure TXT match
+- every non-IP hostname route that AutoModpack checks is also DNSSEC-secure and matches
+
+In practice:
+
+- if players join `play.example.com`, publish `_automodpack.play.example.com`
+- if the raw bootstrap host is also `play.example.com`, that one record is enough
+- if the raw bootstrap host is different, for example `mods.example.com`, you must publish both:
+
+```dns
+_automodpack.play.example.com. 300 IN TXT "endpoint=v1:<endpoint-id>"
+_automodpack.mods.example.com. 300 IN TXT "endpoint=v1:<endpoint-id>"
+```
+
+Both hostnames must be under DNSSEC-signed zones.
+
+## When the trust prompt still appears
+
+New clients still see the manual verification screen when:
+
+- you join by IP address instead of a hostname
+- the hostname is not under DNSSEC
+- `_automodpack.<hostname>` is missing
+- DNSSEC validation is unavailable
+- one hostname route is secure but another hostname route is unsigned or missing the TXT record
+
+If a player already trusted the same endpoint ID before, AutoModpack can still fall back to that saved trust.
+
+## When AutoModpack rejects the server immediately
+
+AutoModpack refuses the server immediately if DNSSEC returns a strong contradiction, for example:
+
+- the TXT record is DNSSEC-secure but contains a different endpoint ID
+- the TXT record is malformed
+- multiple conflicting AutoModpack TXT values exist
+- the DNSSEC proof is bogus
+
+This is intentional. A secure mismatch is treated as stronger evidence than an old TOFU decision.
+
+## How to set it up
+
+1. Start the server once so `iroh.key` exists.
+2. Run `/automodpack host endpoint`.
+3. Copy the endpoint ID.
+4. Decide which hostname(s) AutoModpack will use:
+   - the Minecraft hostname players join with
+   - the raw bootstrap hostname too, if it is different
+5. Publish `_automodpack.<hostname>` TXT records containing `endpoint=v1:<endpoint-id>`.
+6. Make sure those DNS records are covered by DNSSEC.
+7. Make sure players connect using the same hostname(s) you published.
+8. Make sure the client can reach Cloudflare DoH, or has a working validating system resolver as fallback.
+
+If you later rotate `iroh.key`, update the TXT records to the new endpoint ID. Otherwise clients will see a DNSSEC mismatch and the connection will be rejected.
+
+### Minimal example
+
+If players connect to `play.example.com` and the raw bootstrap host is also `play.example.com`, one TXT record is enough:
+
+```dns
+_automodpack.play.example.com. 300 IN TXT "endpoint=v1:<endpoint-id>"
+```
+
+If players join `play.example.com` but AutoModpack advertises a different raw bootstrap hostname such as `mods.example.com`, you need both:
+
+```dns
+_automodpack.play.example.com. 300 IN TXT "endpoint=v1:<endpoint-id>"
+_automodpack.mods.example.com. 300 IN TXT "endpoint=v1:<endpoint-id>"
+```
+
+## Recommended setup
+
+For the least confusing onboarding:
+
+- use a DNS hostname, not a raw IP, in the server address players join
+- if you advertise a separate raw-TCP host, make it a DNS hostname too
+- publish DNSSEC TXT records for every hostname route AutoModpack uses
+- make sure clients can reach Cloudflare DoH, or have a validating system resolver available if Cloudflare is blocked
+- keep `iroh.key` stable
+
+That gives you zero-click trust for new clients without bringing back the old certificate workflow.

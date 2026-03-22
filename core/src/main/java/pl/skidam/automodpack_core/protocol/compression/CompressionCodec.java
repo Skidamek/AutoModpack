@@ -20,6 +20,31 @@ public interface CompressionCodec {
     byte[] compress(byte[] input) throws IOException;
 
     /**
+     * Compresses a specific range of the input data.
+     *
+     * <p>The default implementation copies the requested range into a standalone array for
+     * backward compatibility. Codecs that support ranged compression should override this
+     * to avoid the extra source-buffer copy.
+     *
+     * @param input the source buffer
+     * @param offset the start offset of the input range
+     * @param length the length of the input range
+     * @return the compressed data
+     * @throws IOException if compression fails
+     */
+    default byte[] compress(byte[] input, int offset, int length) throws IOException {
+        if (offset < 0 || length < 0 || offset > input.length - length) {
+            throw new IOException("Invalid compression range");
+        }
+        if (offset == 0 && length == input.length) {
+            return compress(input);
+        }
+        byte[] slice = new byte[length];
+        System.arraycopy(input, offset, slice, 0, length);
+        return compress(slice);
+    }
+
+    /**
      * Decompresses the compressed data.
      * <p>
      * Note: This legacy method assumes the entire array is the compressed payload.

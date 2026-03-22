@@ -21,6 +21,14 @@ public class NoneCompression implements CompressionCodec {
     }
 
     @Override
+    public byte[] compress(byte[] input, int offset, int length) {
+        if (offset == 0 && length == input.length) {
+            return input;
+        }
+        return Arrays.copyOfRange(input, offset, offset + length);
+    }
+
+    @Override
     public byte[] decompress(byte[] compressed, int originalLength) {
         return compressed;
     }

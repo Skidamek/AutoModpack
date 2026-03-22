@@ -34,6 +34,22 @@ abstract class MergeJarTask : DefaultTask() {
     @get:OutputFile
     abstract val outputJar: RegularFileProperty
 
+    private fun resolveSingleOptionalJar(libsDir: File, prefix: String): File? {
+        val matches = libsDir.listFiles()
+            ?.filter { file -> file.isFile && file.name.startsWith(prefix) && file.name.endsWith(".jar") }
+            ?.sortedBy { it.name }
+            .orEmpty()
+
+        return when (matches.size) {
+            0 -> null
+            1 -> matches.single()
+            else -> error(
+                "Expected at most one ${prefix}*.jar in ${libsDir.absolutePath}, " +
+                    "but found ${matches.size}: ${matches.joinToString { it.name }}"
+            )
+        }
+    }
+
     @TaskAction
     fun mergeJars() {
         val mergedDir = File(mergedDirPath.get())
@@ -56,7 +72,6 @@ abstract class MergeJarTask : DefaultTask() {
         val zstdFile = libsDir.listFiles()
             ?.firstOrNull { file -> file.isFile && file.name.startsWith("zstd-jni-") && file.name.endsWith(".jar") }
             ?: error("No zstd-jni-*.jar found in libs directory! ${libsDir.absolutePath}")
-
         val finalJar = File(mergedDir, jarToMerge.name)
 
         val seen = mutableSetOf<String>()
@@ -84,6 +99,6 @@ abstract class MergeJarTask : DefaultTask() {
         }
 
         outputJar.get().asFile.writeText(finalJar.absolutePath)
-        println("Merged: ${jarToMerge.name} and ${zstdFile.name} from: ${loaderFile.name} into: ${finalJar.name} Took: ${System.currentTimeMillis() - time}ms")
+        println("Merged: ${jarToMerge.name}, ${zstdFile.name} from: ${loaderFile.name} into: ${finalJar.name} Took: ${System.currentTimeMillis() - time}ms")
     }
 }

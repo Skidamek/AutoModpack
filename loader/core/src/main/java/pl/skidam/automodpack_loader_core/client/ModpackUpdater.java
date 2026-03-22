@@ -1,11 +1,10 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import org.jetbrains.annotations.Nullable;
-import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionInfo;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
@@ -19,6 +18,8 @@ import java.net.ConnectException;
 import java.net.SocketTimeoutException;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -35,8 +36,10 @@ public class ModpackUpdater {
     private String serverModpackContentJson; // TODO: remove this variable and use serverModpackContent directly
     public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
-    private final Jsons.ModpackAddresses modpackAddresses;
-    private final Secrets.Secret modpackSecret;
+    private final ModpackConnectionInfo connectionInfo;
+    private final Jsons.PersistedModpackConnection modpackConnection;
+    private final IntFunction<DownloadClient> preferredDownloadClientFactory;
+    private final CompletableFuture<Boolean> loginUpdateFuture = new CompletableFuture<>();
     private Path modpackDir;
     private Path modpackContentFile;
 
@@ -48,14 +51,31 @@ public class ModpackUpdater {
         return serverModpackContent.list;
     }
 
-    public ModpackUpdater(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
-        this.serverModpackContent = modpackContent;
-        this.modpackAddresses = modpackAddresses;
-        this.modpackSecret = secret;
-        this.modpackDir = modpackPath;
+    public CompletableFuture<Boolean> getLoginUpdateFuture() {
+        return loginUpdateFuture;
+    }
 
-        if (this.modpackAddresses == null || this.modpackAddresses.isAnyEmpty()) {
-            throw new IllegalArgumentException("modpackAddresses is null or empty");
+    public void cancelPendingUpdate() {
+        completeLoginUpdate(true);
+    }
+
+    public ModpackUpdater(Jsons.ModpackContentFields modpackContent, ModpackConnectionInfo connectionInfo, Path modpackPath) {
+        this(modpackContent, connectionInfo, connectionInfo == null ? null : connectionInfo.toPersistedModpackConnection(), modpackPath, null);
+    }
+
+    public ModpackUpdater(Jsons.ModpackContentFields modpackContent, ModpackConnectionInfo connectionInfo, Jsons.PersistedModpackConnection modpackConnection, Path modpackPath) {
+        this(modpackContent, connectionInfo, modpackConnection, modpackPath, null);
+    }
+
+    public ModpackUpdater(Jsons.ModpackContentFields modpackContent, ModpackConnectionInfo connectionInfo, Jsons.PersistedModpackConnection modpackConnection, Path modpackPath, IntFunction<DownloadClient> preferredDownloadClientFactory) {
+        this.serverModpackContent = modpackContent;
+        this.connectionInfo = connectionInfo;
+        this.modpackConnection = modpackConnection;
+        this.modpackDir = modpackPath;
+        this.preferredDownloadClientFactory = preferredDownloadClientFactory;
+
+        if (this.connectionInfo == null || !this.connectionInfo.isUsable()) {
+            throw new IllegalArgumentException("connectionInfo is null or unusable");
         }
     }
 
@@ -68,6 +88,7 @@ public class ModpackUpdater {
                 try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
                     CheckAndLoadModpack(cache);
                 }
+                completeLoginUpdate(false);
                 return;
             }
 
@@ -105,10 +126,12 @@ public class ModpackUpdater {
                     try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
                         CheckAndLoadModpack(cache);
                     }
+                    completeLoginUpdate(false);
                 }
             }
         } catch (Exception e) {
             LOGGER.error("Error while initializing modpack updater", e);
+            completeLoginUpdate(true);
         }
     }
 
@@ -168,11 +191,6 @@ public class ModpackUpdater {
     }
 
     public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
-        if (modpackSecret == null) {
-            LOGGER.error("Cannot update modpack, secret is null");
-            return;
-        }
-
         new ScreenManager().download(downloadManager, getModpackName());
         long start = System.currentTimeMillis();
 
@@ -236,23 +254,33 @@ public class ModpackUpdater {
 
                 new ScreenManager().error("automodpack.error.files", "Failed to download: " + failedFiles, "automodpack.error.logs");
                 LOGGER.error("Update failed successfully! Try again! Took: {}ms", System.currentTimeMillis() - start);
+                completeLoginUpdate(true);
             } else if (preload) {
                 LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
                 CheckAndLoadModpack(cache);
+                completeLoginUpdate(false);
             } else  {
                 boolean requiredRestart = applyModpack(cache);
                 LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);
                 UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
+                completeLoginUpdate(true);
                 new ReLauncher(modpackDir, updateType, changelogs).restart(false);
             }
         } catch (SocketTimeoutException | ConnectException e) {
-            LOGGER.error("{} is not responding", "Modpack host of " + modpackAddresses.hostAddress, e);
+            LOGGER.error("{} is not responding", "Modpack host of " + describeModpackTarget(), e);
+            completeLoginUpdate(true);
         } catch (InterruptedException e) {
             LOGGER.info("Interrupted the download");
+            completeLoginUpdate(true);
         } catch (Exception e) {
             new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
             LOGGER.error("Critical error during modpack update", e);
+            completeLoginUpdate(true);
         }
+    }
+
+    private void completeLoginUpdate(boolean disconnectRequired) {
+        loginUpdateFuture.complete(disconnectRequired);
     }
 
     private void downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager, FileMetadataCache cache) throws InterruptedException {
@@ -265,8 +293,12 @@ public class ModpackUpdater {
 
         LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
-        DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(),
-                Math.min(wholeQueue, 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+        DownloadClient downloadClient = ModpackUtils.createDownloadClient(
+                connectionInfo,
+                Math.min(wholeQueue, 5),
+                false,
+                preferredDownloadClientFactory
+        );
         if (downloadClient == null) {
             return;
         }
@@ -354,7 +386,7 @@ public class ModpackUpdater {
         // TODO set client to a waiting for the server to respond screen
         LOGGER.warn("Trying to refresh the modpack content");
         LOGGER.info("Sending hashes to refresh: {}", hashesToRefresh.values());
-        var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackAddresses, modpackSecret, hashesArray, false);
+        var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(connectionInfo, hashesArray, false, preferredDownloadClientFactory);
         if (refreshedContentOptional.isEmpty()) {
             LOGGER.error("Failed to refresh the modpack content");
         } else {
@@ -373,7 +405,12 @@ public class ModpackUpdater {
                 return;
             }
 
-            downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
+            downloadClient = ModpackUtils.createDownloadClient(
+                    connectionInfo,
+                    Math.min(refreshedFilteredList.size(), 5),
+                    false,
+                    preferredDownloadClientFactory
+            );
             if (downloadClient == null) {
                 return;
             }
@@ -392,7 +429,7 @@ public class ModpackUpdater {
 
                 Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
 
-                LOGGER.info("Retrying to download {} from {}", serverFilePath, modpackAddresses.hostAddress.getHostName());
+                LOGGER.info("Retrying to download {} from {}", serverFilePath, describeModpackTarget());
 
                 Runnable failureCallback = () -> {
                     failedDownloads.put(serverItem, List.of());
@@ -426,13 +463,12 @@ public class ModpackUpdater {
 
     // this is run every time we modpack is updated
     // returns true if restart is required
+
+    private String describeModpackTarget() {
+        return connectionInfo.describeTarget();
+    }
     private boolean applyModpack(FileMetadataCache cache) throws Exception {
-        ModpackUtils.selectModpack(modpackDir, modpackAddresses, newDownloadedFiles);
-        try { // try catch this error there because we don't want to stop the whole method just because of that
-            SecretsStore.saveClientSecret(clientConfig.selectedModpack, modpackSecret);
-        } catch (IllegalArgumentException e) {
-            LOGGER.error("Failed to save client secret", e);
-        }
+        ModpackUtils.selectModpack(modpackDir, modpackConnection, newDownloadedFiles);
         Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
         if (modpackContent == null) {

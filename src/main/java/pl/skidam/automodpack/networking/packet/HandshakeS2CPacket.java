@@ -10,16 +10,25 @@ import net.minecraft.server.*;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack.init.Common;
+import pl.skidam.automodpack.networking.ConnectionIrohTunnelRegistry;
 import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack.networking.PacketSender;
+import pl.skidam.automodpack.networking.connection.AutoModpackConnectionTransportHolder;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
-import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.auth.PlayerEndpointsStore;
+import pl.skidam.automodpack_core.protocol.HybridHostServer;
+import pl.skidam.automodpack_core.protocol.iroh.EndpointProof;
+import pl.skidam.automodpack_core.protocol.iroh.IrohIdentity;
+import pl.skidam.automodpack_core.protocol.iroh.RawTcpAdvertisementResolver;
+import pl.skidam.automodpack_core.protocol.iroh.tunnel.ServerConnectionIrohTunnelSession;
 
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.UUID;
 
 import static pl.skidam.automodpack.networking.ModPackets.DATA;
@@ -79,6 +88,19 @@ public class HandshakeS2CPacket {
 
             String clientResponse = buf.readUtf(Short.MAX_VALUE);
             HandshakePacket clientHandshakePacket = HandshakePacket.fromJson(clientResponse);
+            int trailingBytes = buf.readableBytes();
+            byte[] clientEndpointId = null;
+
+            if (clientHandshakePacket.protocolVersion >= HandshakePacket.CURRENT_PROTOCOL_VERSION) {
+                if (trailingBytes != EndpointProof.TOTAL_LENGTH) {
+                    throw new IllegalStateException("Client handshake proof must be exactly " + EndpointProof.TOTAL_LENGTH + " bytes");
+                }
+                byte[] proof = new byte[EndpointProof.TOTAL_LENGTH];
+                buf.readBytes(proof);
+                clientEndpointId = EndpointProof.verifyAndExtractEndpointId(proof);
+            } else if (trailingBytes != 0) {
+                throw new IllegalStateException("Legacy client handshake contained unexpected trailing bytes");
+            }
 
             boolean isAcceptedLoader = false;
             for (String loader : serverConfig.acceptedLoaders) {
@@ -88,7 +110,8 @@ public class HandshakeS2CPacket {
                 }
             }
 
-            if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION)) {
+            boolean protocolAccepted = clientHandshakePacket.protocolVersion >= HandshakePacket.CURRENT_PROTOCOL_VERSION;
+            if (!isAcceptedLoader || !clientHandshakePacket.amVersion.equals(AM_VERSION) || !protocolAccepted) {
                 Component reason = VersionedText.literal("AutoModpack version mismatch! Install " + AM_VERSION + " version of AutoModpack mod for " + LOADER_MANAGER.getPlatformType().toString().toLowerCase() + " to play on this server!");
                 if (isClientVersionHigher(clientHandshakePacket.amVersion)) {
                     reason = VersionedText.literal("You are using a more recent version of AutoModpack than the server. Please contact the server administrator to update the AutoModpack mod.");
@@ -98,8 +121,14 @@ public class HandshakeS2CPacket {
                 return;
             }
 
-            if (!hostServer.isRunning() && serverConfig.portToSend == -1) {
-                LOGGER.info("Host server is not running. Modpack will not be sent to {}", GameHelpers.getPlayerName(profile));
+            if (clientEndpointId == null) {
+                throw new IllegalStateException("Client did not provide endpoint proof");
+            }
+
+            PlayerEndpointsStore.bindPlayer(GameHelpers.getPlayerUUID(profile).toString(), GameHelpers.getPlayerName(profile), clientEndpointId);
+
+            if (!hostServer.isIrohEnabled()) {
+                LOGGER.info("Iroh host runtime is not running. Modpack will not be sent to {}", GameHelpers.getPlayerName(profile));
                 return;
             }
 
@@ -110,18 +139,81 @@ public class HandshakeS2CPacket {
                 return;
             }
 
-            // now we know player is authenticated, packets are encrypted and player is whitelisted
-            // regenerate unique secret
-            Secrets.Secret secret = Secrets.generateSecret();
-            SecretsStore.saveHostSecret(GameHelpers.getPlayerUUID(profile).toString(), secret);
+            String endpointId = hostServer.getIrohEndpointId();
+            List<String> directAddresses = hostServer.getIrohDirectAddresses().stream()
+                    .map(address -> {
+                        String host = address.getHostString();
+                        if (host.contains(":") && !host.startsWith("[")) {
+                            host = "[" + host + "]";
+                        }
+                        return host + ":" + address.getPort();
+                    })
+                    .toList();
+            RawTcpAdvertisementResolver.Resolution rawTcpResolution = RawTcpAdvertisementResolver.resolve(
+                serverConfig,
+                clientHandshakePacket.requestedServerHost,
+                clientHandshakePacket.requestedServerPort,
+                hostServer.shouldHost()
+            );
+            InetSocketAddress rawTcpAddress = rawTcpResolution == null ? null : rawTcpResolution.address();
+            if (rawTcpAddress != null) {
+                LOGGER.info(
+                    "Advertising raw TCP bootstrap route {}:{} to {} using {}",
+                    rawTcpAddress.getHostString(),
+                    rawTcpAddress.getPort(),
+                    GameHelpers.getPlayerName(profile),
+                    rawTcpResolution.source()
+                );
+            } else {
+                LOGGER.info("No raw TCP bootstrap route could be derived for {}", GameHelpers.getPlayerName(profile));
+            }
+            LOGGER.info(
+                "Sending {} modpack host address: {}:{} endpointId={}",
+                GameHelpers.getPlayerName(profile),
+                rawTcpAddress == null ? "<none>" : rawTcpAddress.getHostString(),
+                rawTcpAddress == null ? -1 : rawTcpAddress.getPort(),
+                endpointId
+            );
 
-            String addressToSend = serverConfig.addressToSend;
-            int portToSend = serverConfig.portToSend;
-            boolean requiresMagic = (serverConfig.bindPort == -1 && hostServer.isRunning()) || serverConfig.requireMagicPackets;
+            boolean shareMinecraftConnection = serverConfig.shareMinecraftConnection
+                    && endpointId != null
+                    && !endpointId.isBlank()
+                    && hostServer instanceof HybridHostServer;
+            long tunnelSessionId = shareMinecraftConnection ? ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE) : 0L;
 
-            LOGGER.info("Sending {} modpack host address: {}:{}", GameHelpers.getPlayerName(profile), addressToSend, portToSend);
+            if (shareMinecraftConnection) {
+                try {
+                    ServerConnectionIrohTunnelSession session = new ServerConnectionIrohTunnelSession(
+                            tunnelSessionId,
+                            (HybridHostServer) hostServer,
+                            endpointId,
+                            ((AutoModpackConnectionTransportHolder) connection).automodpack$getConnectionManager()
+                    );
+                    session.start();
+                    ConnectionIrohTunnelRegistry.registerServer(connection, session);
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to start connection-level iroh tunnel for {}", GameHelpers.getPlayerName(profile), e);
+                    ConnectionIrohTunnelRegistry.removeServer(connection);
+                    shareMinecraftConnection = false;
+                    tunnelSessionId = 0L;
+                }
+            }
 
-            DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
+            DataPacket.RawTcpRouteAdvertisement rawTcpAdvertisement =
+                rawTcpAddress != null
+                    ? new DataPacket.RawTcpRouteAdvertisement(rawTcpAddress.getHostString(), rawTcpAddress.getPort())
+                    : null;
+            DataPacket.IrohAddressBookAdvertisement irohAdvertisement = new DataPacket.IrohAddressBookAdvertisement(
+                endpointId,
+                directAddresses,
+                rawTcpAdvertisement,
+                shareMinecraftConnection ? new DataPacket.MinecraftCarrierAdvertisement(tunnelSessionId) : null
+            );
+            DataPacket dataPacket = new DataPacket(
+                serverConfig.modpackName,
+                serverConfig.requireAutoModpackOnClient,
+                irohAdvertisement
+            );
             String packetContentJson = dataPacket.toJson();
 
             FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());

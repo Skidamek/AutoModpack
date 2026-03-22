@@ -8,8 +8,14 @@ Most of the launchers will work without any issues, but some modified custom cli
 | CurseForge                | ✅             | Supported                                                                                               |
 | GDLauncher                | ✅             | Supported                                                                                               |
 | ATLauncher                | ✅             | Supported                                                                                               |
-| PojavLauncher (Android)   | ✅             | Should work since 4.0.0 stable                                                                          |
-| FCL (Android)             | ✅             | Should work since 4.0.0 stable                                                                          |
+| PojavLauncher (Android)   | ✅             | Supported on `arm64-v8a`; bundled `iroh` JNI currently targets 64-bit ARM Android only                 |
+| FCL (Android)             | ✅             | Supported on `arm64-v8a`; bundled `iroh` JNI currently targets 64-bit ARM Android only                 |
 | Feather Client            | ❌             | Unsupported - breaks modpack loading                                                                    |
 | Lunar Client              | ❌             | Unsupported - breaks modpack loading                                                                    |
 | PCL2                      | ⚠️            | Unclear, may work                                                                                       |
+
+Android notes:
+
+- Bundled `iroh` JNI support currently targets `arm64-v8a` only.
+- `x86_64` Android is not bundled yet.
+- For launcher-specific debugging, you can override native loading with `-Diroh.native.path=/absolute/path/to/libiroh_pipes_jni.so`.

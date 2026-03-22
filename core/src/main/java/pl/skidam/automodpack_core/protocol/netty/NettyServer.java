@@ -10,21 +10,13 @@ import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.ssl.SslContext;
-import io.netty.handler.ssl.SslContextBuilder;
-import io.netty.handler.ssl.SslProvider;
-import io.netty.util.AttributeKey;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.KeyPair;
-import java.security.cert.X509Certificate;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+import java.util.Optional;
 
+import pl.skidam.automodpack_core.protocol.HostConnectionStats;
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
@@ -32,38 +24,10 @@ import pl.skidam.automodpack_core.utils.ObservableMap;
 
 public class NettyServer {
 
-    public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
-    public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("COMPRESSION_TYPE");
-    public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
-    public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
-    private final Map<Channel, String> connections = new ConcurrentHashMap<>();
-    private final Map<String, Path> paths = new ConcurrentHashMap<>();
+    private final Map<String, Path> paths = new java.util.concurrent.ConcurrentHashMap<>();
     private MultithreadEventLoopGroup eventLoopGroup;
     private ChannelFuture serverChannel;
     private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
-    private String certificateFingerprint;
-    private SslContext sslCtx;
-
-    public void addConnection(Channel channel, String secret) {
-        synchronized (connections) {
-            connections.put(channel, secret);
-        }
-    }
-
-    public void removeConnection(Channel channel) {
-        synchronized (connections) {
-            connections.remove(channel);
-        }
-    }
-
-    public Map<Channel, String> getConnections() {
-        return connections;
-    }
-
-    public String getCertificateFingerprint() {
-        return certificateFingerprint;
-    }
-
     public void setPaths(ObservableMap<String, Path> paths) {
         this.paths.putAll(paths.getMap());
         paths.addOnPutCallback(this.paths::put);
@@ -78,54 +42,13 @@ public class NettyServer {
         return Optional.ofNullable(paths.get(hash));
     }
 
-    public Optional<ChannelFuture> start() {
+    public Optional<ChannelFuture> startServer() {
         if (!serverConfig.modpackHost) {
             LOGGER.warn("Modpack hosting is disabled in config");
             return Optional.empty();
         }
 
         try {
-            if (serverConfig.disableInternalTLS && serverConfig.bindPort != -1) {
-                LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use e.g. a reverse proxy with TLS.");
-            } else {
-                if (serverConfig.disableInternalTLS) {
-                    LOGGER.error("Internal TLS cannot be disabled. You have to bind modpack host on a separate port, preferably also on a loopback address or atleast some private one.");
-                }
-
-                if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
-                    // Create a self-signed certificate
-                    KeyPair keyPair = NetUtils.generateKeyPair();
-                    X509Certificate cert = NetUtils.selfSign(keyPair);
-
-                    // save it to the file
-                    NetUtils.saveCertificate(cert, serverCertFile);
-                    NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
-                }
-
-                X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
-
-                if (cert == null) {
-                    throw new IllegalStateException("Server certificate couldn't be loaded");
-                }
-
-                // Shiny TLS 1.3
-                sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
-                        .sslProvider(SslProvider.JDK)
-                        .protocols("TLSv1.3")
-                        .ciphers(Arrays.asList(
-                                "TLS_AES_128_GCM_SHA256",
-                                "TLS_AES_256_GCM_SHA384",
-                                "TLS_CHACHA20_POLY1305_SHA256"))
-                        .sessionTimeout(1800)
-                        .build();
-
-                // generate sha256 from cert as a fingerprint
-                certificateFingerprint = NetUtils.getFingerprint(cert);
-                if (certificateFingerprint != null) {
-                    LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
-                }
-            }
-
             if (!canStart()) {
                 new TrafficShaper(null);
                 return Optional.empty();
@@ -161,7 +84,7 @@ public class NettyServer {
                     .childHandler(new ChannelInitializer<SocketChannel>() {
                         @Override
                         protected void initChannel(SocketChannel ch) {
-                            ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(sslCtx));
+                            ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler());
                         }
                     })
                     .group(eventLoopGroup)
@@ -174,6 +97,10 @@ public class NettyServer {
         }
 
         return Optional.ofNullable(serverChannel);
+    }
+
+    public boolean start() {
+        return startServer().isPresent() || shouldHost;
     }
 
     public boolean shouldHost() {
@@ -211,8 +138,8 @@ public class NettyServer {
         return serverChannel.channel().isOpen();
     }
 
-    public SslContext getSslCtx() {
-        return sslCtx;
+    public Map<String, Integer> getConnectionCountsByEndpoint() {
+        return HostConnectionStats.countValues(java.util.List.of());
     }
 
     private boolean canStart() {

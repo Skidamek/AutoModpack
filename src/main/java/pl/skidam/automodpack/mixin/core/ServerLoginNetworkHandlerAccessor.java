@@ -21,4 +21,10 @@ public interface ServerLoginNetworkHandlerAccessor {
 
     @Accessor
     MinecraftServer getServer();
+
+    @Accessor("tick")
+    int getTick();
+
+    @Accessor("tick")
+    void setTick(int tick);
 }

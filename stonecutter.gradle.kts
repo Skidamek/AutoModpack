@@ -1,10 +1,19 @@
+import dev.kikugie.stonecutter.controller.flag.StonecutterFlag
+
 plugins {
     id("dev.kikugie.stonecutter")
     kotlin("jvm") version "2.3.0" apply false
-    id("fabric-loom") version "1.15-SNAPSHOT" apply false
+    id("net.fabricmc.fabric-loom-remap") version "1.15-SNAPSHOT" apply false
+    id("net.fabricmc.fabric-loom") version "1.15-SNAPSHOT" apply false // for future mc ver 26.1
     id("net.neoforged.moddev") version "2.0.139" apply false
     id("com.gradleup.shadow") version "9.3.0" apply false
     id("org.moddedmc.wiki.toolkit") version "0.4+"
+}
+
+stonecutter flags {
+    // Stonecutter registers sync-time generate tasks with the variant directory
+    // as the task request root, which IntelliJ/Gradle misreads as an included build.
+    StonecutterFlag.GENERATE_SOURCES_ON_SYNC(false)
 }
 
 wiki {
@@ -30,7 +39,10 @@ stonecutter.parameters {
 
         string(current.parsed >= "1.21.11") {
             replace("net.minecraft.Util", "net.minecraft.util.Util")
-            replace("source.hasPermission(3))", "source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))")
+            replace(
+                "source.hasPermission(3))",
+                "source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))"
+            )
         }
     }
 }

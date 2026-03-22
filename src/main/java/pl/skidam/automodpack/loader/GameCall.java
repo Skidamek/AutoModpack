@@ -21,4 +21,16 @@ public class GameCall implements GameCallService {
 
         return GameHelpers.isPlayerAuthorized(address, profile);
     }
+
+    @Override
+    public boolean isPlayerAuthorized(String id) {
+        var profile = GameHelpers.getPlayerProfile(id);
+
+        if (server == null) {
+            LOGGER.error("Server is null?");
+            return true;
+        }
+
+        return GameHelpers.isPlayerAuthorized(null, profile);
+    }
 }

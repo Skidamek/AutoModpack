@@ -18,6 +18,9 @@
   "entrypoints": {
     "main": [
       "pl.skidam.automodpack.init.FabricInit::onInitialize"
+    ],
+    "client": [
+      "pl.skidam.automodpack.init.FabricClientInit"
     ]
   },
   "mixins": [

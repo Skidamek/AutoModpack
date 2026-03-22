@@ -4,6 +4,9 @@ import io.netty.buffer.Unpooled;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
+import pl.skidam.automodpack_core.protocol.iroh.EndpointProof;
+import pl.skidam.automodpack_core.protocol.iroh.IrohIdentity;
+import pl.skidam.automodpack_core.protocol.iroh.IrohTransportSupport;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_loader_core.SelfUpdater;
 import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
@@ -13,6 +16,7 @@ import java.util.concurrent.CompletableFuture;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
+import pl.skidam.automodpack.networking.ModPackets;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
@@ -33,8 +37,17 @@ public class HandshakeC2SPacket {
 
             updateIfNeededMod(handler, serverHandshakePacket.amVersion, serverHandshakePacket.mcVersion);
 
-            HandshakePacket clientHandshakePacket = new HandshakePacket(Set.of(loader), AM_VERSION, MC_VERSION);
+            var originalServerAddress = ModPackets.getOriginalServerAddress();
+            HandshakePacket clientHandshakePacket = new HandshakePacket(
+                Set.of(loader),
+                AM_VERSION,
+                MC_VERSION,
+                HandshakePacket.CURRENT_PROTOCOL_VERSION,
+                originalServerAddress == null ? null : originalServerAddress.getHostString(),
+                originalServerAddress == null ? null : originalServerAddress.getPort()
+            );
             outBuf.writeUtf(clientHandshakePacket.toJson(), Short.MAX_VALUE);
+            outBuf.writeBytes(EndpointProof.create(IrohIdentity.loadOrCreateEndpointId(IrohTransportSupport.IROH_KEY_FILE)));
 
             return CompletableFuture.completedFuture(outBuf);
         } catch (Exception e) {

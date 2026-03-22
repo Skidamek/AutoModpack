@@ -20,9 +20,14 @@ public class GzipCompression implements CompressionCodec {
 
     @Override
     public byte[] compress(byte[] input) throws IOException {
+        return compress(input, 0, input.length);
+    }
+
+    @Override
+    public byte[] compress(byte[] input, int offset, int length) throws IOException {
         try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
              GZIPOutputStream gzipOutputStream = new GZIPOutputStream(byteArrayOutputStream)) {
-            gzipOutputStream.write(input);
+            gzipOutputStream.write(input, offset, length);
             gzipOutputStream.finish();
             return byteArrayOutputStream.toByteArray();
         } catch (Exception e) {

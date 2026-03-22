@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import java.io.File
 
 plugins {
     kotlin("jvm")
@@ -19,17 +20,45 @@ val deps = listOf(
     "io.netty:netty-all:4.2.9.Final",
     "org.apache.logging.log4j:log4j-core:2.25.2",
     "com.google.code.gson:gson:2.13.2",
-    "org.bouncycastle:bcpkix-jdk18on:1.82",
     "org.apache.httpcomponents.client5:httpclient5:5.5.1",
     "org.tomlj:tomlj:1.1.1",
-    "com.h2database:h2-mvstore:2.4.240"
+    "com.h2database:h2-mvstore:2.4.240",
+    "dnsjava:dnsjava:3.6.4"
 )
+
+fun resolveSingleIrohPipesJniJar(): File {
+    val libsDir = rootProject.projectDir.resolve("libs")
+    val matches = libsDir.listFiles()
+        ?.filter { file -> file.isFile && file.name.startsWith("iroh-pipes-jni-") && file.name.endsWith(".jar") }
+        ?.sortedBy { it.name }
+        .orEmpty()
+
+    return when (matches.size) {
+        1 -> matches.single()
+        0 -> error(
+            "Missing automodpack/libs/iroh-pipes-jni-*.jar. " +
+                "Run scripts/update-iroh-jni.sh from the repository root before building AutoModpack."
+        )
+        else -> error(
+            "Expected exactly one automodpack/libs/iroh-pipes-jni-*.jar but found ${matches.size}: " +
+                matches.joinToString { it.name }
+        )
+    }
+}
+
+val irohPipesJniJar = files(resolveSingleIrohPipesJniJar())
+val stagedIrohNativesDir = rootProject.projectDir.resolve("libs/.iroh-staging")
+val unpackedIrohJavaDir = layout.buildDirectory.dir("generated/iroh-pipes-jni-java")
 
 dependencies {
     // minecraft/loaders uses these, so we cant just implement them because it wont resolve in gradle
     deps.forEach { compileOnly(it) }
     deps.forEach { runtimeOnly(it) }
     deps.forEach { testImplementation(it) }
+    compileOnly("org.slf4j:slf4j-api:1.7.36")
+    testImplementation("org.slf4j:slf4j-api:1.7.36")
+    compileOnly(irohPipesJniJar)
+    testImplementation(irohPipesJniJar)
 
     testImplementation("org.junit.jupiter:junit-jupiter:6.0.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.1")
@@ -45,6 +74,28 @@ java {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
+}
+
+val unpackIrohPipesJniJava by tasks.registering(Sync::class) {
+    from({
+        zipTree(resolveSingleIrohPipesJniJar())
+    }) {
+        include("dev/iroh/**")
+        exclude("META-INF/natives/**")
+        exclude("META-INF/MANIFEST.MF")
+        exclude("META-INF/*.SF")
+        exclude("META-INF/*.DSA")
+        exclude("META-INF/*.RSA")
+    }
+    into(unpackedIrohJavaDir)
+}
+
+tasks.named<ProcessResources>("processResources") {
+    dependsOn(unpackIrohPipesJniJava)
+    from(stagedIrohNativesDir) {
+        into("META-INF/natives/iroh")
+    }
+    from(unpackedIrohJavaDir)
 }
 
 tasks.named<Test>("test") {

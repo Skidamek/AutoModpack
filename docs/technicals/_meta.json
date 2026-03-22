@@ -3,8 +3,12 @@
     "name": "Connection",
     "icon": null
   },
+  "iroh-minecraft-connection-tunnel-spec.md": {
+    "name": "Iroh Connection Tunnel Spec",
+    "icon": null
+  },
   "certificate.mdx": {
-    "name": "Certificate Handling",
+    "name": "Identity Verification",
     "icon": null
   },
   "modpack-creation.mdx": {

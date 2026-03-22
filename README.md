@@ -44,7 +44,7 @@ AutoModpack works by generating a modpack (**metadata file**) on the server, whi
 
 When a client connects to the server:
 
-1.  Connection: AutoModpack establishes a secure connection and prompts you to [verify the server's certificate fingerprint](https://moddedmc.wiki/en/project/automodpack/docs/technicals/certificate).
+1.  Connection: AutoModpack establishes an Iroh-based connection and prompts you to [verify the server's identity](https://moddedmc.wiki/en/project/automodpack/docs/technicals/certificate). The user-visible identity is the server's Iroh endpoint ID/public key.
 2.  Direct links: Fetches the APIs for direct downloads of your modpack's files from Modrinth and CurseForge, where possible (mods, resource packs, shaders).
 3.  Modpack download: All files are downloaded to the client's automodpack folder.
 4.  Game restart: AutoModpack loads the modpack, and the client is perfectly synced and ready to play!

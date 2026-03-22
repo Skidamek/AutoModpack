@@ -30,6 +30,6 @@ public abstract class ServerNetworkIoMixin {
             return;
         }
 
-        channel.pipeline().addFirst(MOD_ID, new ProtocolServerHandler(Constants.hostServer.getSslCtx()));
+        channel.pipeline().addFirst(MOD_ID, new ProtocolServerHandler());
     }
 }

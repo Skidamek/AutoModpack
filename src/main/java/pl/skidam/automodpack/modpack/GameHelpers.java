@@ -33,7 +33,7 @@ public class GameHelpers {
         if (!playerManager.isWhiteListed(playerId)) {
             return false;
         }
-        if (playerManager.getIpBans().isBanned(address)) {
+        if (address != null && playerManager.getIpBans().isBanned(address)) {
             return false;
         }
 

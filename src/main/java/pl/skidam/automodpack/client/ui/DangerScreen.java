@@ -35,7 +35,10 @@ public class DangerScreen extends VersionedScreen {
                 120,
                 20,
                 VersionedText.translatable("automodpack.danger.cancel"),
-                button -> this.minecraft.setScreen(parent)
+                button -> {
+                    modpackUpdaterInstance.cancelPendingUpdate();
+                    this.minecraft.setScreen(parent);
+                }
             )
         );
 

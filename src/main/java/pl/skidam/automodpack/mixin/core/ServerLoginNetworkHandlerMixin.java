@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import pl.skidam.automodpack.networking.ConnectionIrohTunnelRegistry;
 import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
 
@@ -65,6 +66,10 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             return;
         }
 
+        if (ConnectionIrohTunnelRegistry.hasActiveServerSession(((ServerLoginNetworkHandlerAccessor) (Object) this).getConnection())) {
+            ((ServerLoginNetworkHandlerAccessor) (Object) this).setTick(0);
+        }
+
         // Send first automodpack packet
         if (!this.automodpack$addon.queryTick()) {
             // We need more time to process packets
@@ -72,6 +77,8 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             return;
         }
 
+        ConnectionIrohTunnelRegistry.removeServer(((ServerLoginNetworkHandlerAccessor) (Object) this).getConnection());
+        this.automodpack$addon.clearPendingChannels();
         this.automodpack$addon = null;
     }
 

@@ -1,10 +1,9 @@
 package pl.skidam.automodpack_loader_core;
 
-import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionInfo;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -49,25 +48,18 @@ public class Preload {
         }
 
         selectedModpackDir = optionalSelectedModpackDir.get();
-        InetSocketAddress selectedModpackAddress = null;
-        InetSocketAddress selectedServerAddress = null;
-        boolean requiresMagic = true; // Default to true
+        Jsons.PersistedModpackConnection selectedConnection = null;
         if (!clientConfig.selectedModpack.isBlank() && clientConfig.installedModpacks.containsKey(clientConfig.selectedModpack)) {
-            var entry = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
-            selectedModpackAddress = entry.hostAddress;
-            selectedServerAddress = entry.serverAddress;
-            requiresMagic = entry.requiresMagic;
+            selectedConnection = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
         }
+        ModpackConnectionInfo selectedConnectionInfo = ModpackConnectionInfo.fromPersisted(selectedConnection);
 
         // Only selfupdate if no modpack is selected
-        if (selectedModpackAddress == null) {
+        if (selectedConnectionInfo == null || !selectedConnectionInfo.isUsable()) {
             SelfUpdater.update();
             LegacyClientCacheUtils.deleteDummyFiles();
         } else {
-            Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
-
-            Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress, requiresMagic);
-            var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
+            var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(selectedConnectionInfo, false);
             var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
             // Use the latest modpack content if available
@@ -84,7 +76,7 @@ public class Preload {
             LegacyClientCacheUtils.deleteDummyFiles();
 
             if (clientConfig.updateSelectedModpackOnLaunch) {
-                new ModpackUpdater(latestModpackContent, modpackAddresses, secret, selectedModpackDir).processModpackUpdate(null);
+                new ModpackUpdater(latestModpackContent, selectedConnectionInfo, selectedConnection, selectedModpackDir).processModpackUpdate(null);
             }
         }
     }
@@ -122,29 +114,13 @@ public class Preload {
 
         // load client config
         if (clientConfigOverride == null) {
-            var clientConfigVersion = ConfigTools.softLoad(clientConfigFile, Jsons.VersionConfigField.class);
-            if (clientConfigVersion != null) {
-                if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
-                    // Update the configs schemes to not crash the game if loaded with old config!
-                    var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
-                    if (clientConfigV1 != null) { // update to V2 - just delete the installedModpacks
-                        clientConfigVersion.DO_NOT_CHANGE_IT = 2;
-                        clientConfigV1.DO_NOT_CHANGE_IT = 2;
-                        clientConfigV1.installedModpacks = null;
-                    }
-
-                    ConfigTools.save(clientConfigFile, clientConfigV1);
-                    LOGGER.info("Updated client config version to {}", clientConfigVersion.DO_NOT_CHANGE_IT);
-                }
-            }
-
-            clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV2.class);
+            clientConfig = loadClientConfigV3(clientConfigFile);
         } else {
             // TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
             LOGGER.warn("You are using unofficial {} mod", MOD_ID);
             LOGGER.warn("Using client config overrides! Editing the {} file will have no effect", clientConfigFile);
             LOGGER.warn("Remove the {} file from inside the jar or remove and download fresh {} mod jar from modrinth/curseforge", clientConfigFileOverrideResource, MOD_ID);
-            clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV2.class);
+            clientConfig = loadClientConfigV3(clientConfigOverride);
         }
 
         var serverConfigVersion = ConfigTools.softLoad(serverConfigFile, Jsons.VersionConfigField.class);
@@ -214,12 +190,18 @@ public class Preload {
             ConfigTools.save(clientConfigFile, clientConfig);
         }
 
-        knownHosts = ConfigTools.load(knownHostsFile, Jsons.KnownHostsFields.class);
-        if (knownHosts != null) {
-            if (knownHosts.hosts == null) {
-                knownHosts.hosts = new HashMap<>();
+        if (Files.isRegularFile(knownHostsFile)) {
+            try {
+                knownHosts = Jsons.loadKnownHostsV2(Files.readString(knownHostsFile));
+            } catch (IOException e) {
+                LOGGER.error("Failed to read known hosts, regenerating defaults", e);
+                knownHosts = new Jsons.KnownHostsFieldsV2();
             }
+        } else {
+            knownHosts = new Jsons.KnownHostsFieldsV2();
         }
+        knownHosts.normalize();
+        ConfigTools.save(knownHostsFile, knownHosts);
 
         try {
             Files.createDirectories(privateDir);
@@ -244,5 +226,70 @@ public class Preload {
         }
 
         LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
+    }
+
+    private static Jsons.ClientConfigFieldsV3 loadClientConfigV3(Path configFile) {
+        Jsons.VersionConfigField version = ConfigTools.softLoad(configFile, Jsons.VersionConfigField.class);
+        if (version == null || version.DO_NOT_CHANGE_IT >= 3) {
+            return ConfigTools.load(configFile, Jsons.ClientConfigFieldsV3.class);
+        }
+
+        try {
+            Jsons.ClientConfigFieldsV3 migrated = migrateClientConfig(version.DO_NOT_CHANGE_IT, Files.readString(configFile));
+            if (migrated != null) {
+                ConfigTools.save(configFile, migrated);
+                LOGGER.info("Updated client config version to {}", migrated.DO_NOT_CHANGE_IT);
+                return migrated;
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to read client config for migration", e);
+        }
+
+        return ConfigTools.load(configFile, Jsons.ClientConfigFieldsV3.class);
+    }
+
+    private static Jsons.ClientConfigFieldsV3 loadClientConfigV3(String json) {
+        Jsons.VersionConfigField version = ConfigTools.load(json, Jsons.VersionConfigField.class);
+        if (version == null || version.DO_NOT_CHANGE_IT >= 3) {
+            return ConfigTools.load(json, Jsons.ClientConfigFieldsV3.class);
+        }
+
+        Jsons.ClientConfigFieldsV3 migrated = migrateClientConfig(version.DO_NOT_CHANGE_IT, json);
+        return migrated == null ? ConfigTools.load(json, Jsons.ClientConfigFieldsV3.class) : migrated;
+    }
+
+    private static Jsons.ClientConfigFieldsV3 migrateClientConfig(int version, String json) {
+        if (version <= 1) {
+            Jsons.ClientConfigFieldsV1 legacy = ConfigTools.load(json, Jsons.ClientConfigFieldsV1.class);
+            if (legacy == null) {
+                return null;
+            }
+            Jsons.ClientConfigFieldsV3 migrated = new Jsons.ClientConfigFieldsV3();
+            migrated.selectedModpack = legacy.selectedModpack == null ? "" : legacy.selectedModpack;
+            migrated.selfUpdater = legacy.selfUpdater;
+            migrated.installedModpacks = new HashMap<>();
+            return migrated;
+        }
+
+        Jsons.ClientConfigFieldsV2 legacy = ConfigTools.load(json, Jsons.ClientConfigFieldsV2.class);
+        if (legacy == null) {
+            return null;
+        }
+
+        Jsons.ClientConfigFieldsV3 migrated = new Jsons.ClientConfigFieldsV3();
+        migrated.selectedModpack = legacy.selectedModpack == null ? "" : legacy.selectedModpack;
+        migrated.updateSelectedModpackOnLaunch = legacy.updateSelectedModpackOnLaunch;
+        migrated.selfUpdater = legacy.selfUpdater;
+        migrated.syncAutoModpackVersion = legacy.syncAutoModpackVersion;
+        migrated.syncLoaderVersion = legacy.syncLoaderVersion;
+        migrated.playMusic = legacy.playMusic;
+        migrated.allowRemoteNonModpackDeletions = legacy.allowRemoteNonModpackDeletions;
+        migrated.installedModpacks = new HashMap<>();
+        if (legacy.installedModpacks != null) {
+            legacy.installedModpacks.forEach((modpackName, addresses) ->
+                migrated.installedModpacks.put(modpackName, Jsons.legacyToPersistedModpackConnection(addresses))
+            );
+        }
+        return migrated;
     }
 }
