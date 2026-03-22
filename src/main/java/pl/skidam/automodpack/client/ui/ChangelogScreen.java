@@ -107,12 +107,14 @@ public class ChangelogScreen extends VersionedScreen {
 
     @Override
     public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-        this.listEntryWidget.render(
+        /*? if <26.1 {*/
+        /*this.listEntryWidget.render(
             matrices.getContext(),
             mouseX,
             mouseY,
             delta
         );
+        *//*?}*/
 
         ListEntry selectedEntry = listEntryWidget.getSelected();
         if (selectedEntry != null) {

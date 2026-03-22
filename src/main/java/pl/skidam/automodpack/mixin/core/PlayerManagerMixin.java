@@ -53,8 +53,13 @@ private void onPlayerConnect(Connection netManager, ServerPlayer player, Callbac
                     /*?} else {*/
                     /*.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, serverConfig.nagClickableLink)));
                     *//*?}*/
-            player.displayClientMessage(nagText, false);
+            /*? if >=26.1 {*/
+            player.sendSystemMessage(nagText, false);
+            player.sendSystemMessage(nagClickableText, false);
+            /*?} else {*/
+            /*player.displayClientMessage(nagText, false);
             player.displayClientMessage(nagClickableText, false);
+            *//*?}*/
         }
     }
 }

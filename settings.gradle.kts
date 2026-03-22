@@ -44,6 +44,7 @@ stonecutter {
             .forEach { version("$version-$it", version).buildscript = "build.$it.gradle.kts" }
 
         // Configure your targets here!
+        version("26.1-fabric", "26.1").buildscript = "build.fabric.unobf.gradle.kts"
         match("1.21.11", "fabric", "neoforge")
         match("1.21.10", "fabric", "neoforge")
         match("1.21.8", "fabric", "neoforge")

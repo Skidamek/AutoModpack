@@ -1,6 +1,8 @@
 package pl.skidam.automodpack.client.ui.versioned;
 
-/*? if >=1.20 {*/
+/*? if >=26.1 {*/
+/*import net.minecraft.client.gui.GuiGraphicsExtractor;
+*//*?} elif >=1.20 {*/
 import net.minecraft.client.gui.GuiGraphics;
 /*?} else {*/
 /*import com.mojang.blaze3d.vertex.PoseStack;
@@ -8,7 +10,17 @@ import net.minecraft.client.gui.GuiGraphics;
 
 public class VersionedMatrices  /*? if <1.20 {*/ /*extends PoseStack *//*?}*/   {
 
-/*? if >=1.20 {*/
+/*? if >=26.1 {*/
+	/*private final GuiGraphicsExtractor context;
+
+	public VersionedMatrices(GuiGraphicsExtractor context) {
+		this.context = context;
+	}
+
+	public GuiGraphicsExtractor getContext() {
+		return context;
+	}
+	*//*?} elif >=1.20 {*/
 	private final GuiGraphics context;
 
 	public VersionedMatrices(GuiGraphics context) {
@@ -18,7 +30,13 @@ public class VersionedMatrices  /*? if <1.20 {*/ /*extends PoseStack *//*?}*/   
 	public GuiGraphics getContext() {
 		return context;
 	}
+/*?} else {*/
+	/*public PoseStack getContext() {
+		return this;
+	}
+	*//*?}*/
 
+/*? if >=1.20 {*/
 	/*? if >=1.21.6 {*/
 	public void pushPose() {
 		context.pose().pushMatrix();
@@ -44,9 +62,5 @@ public class VersionedMatrices  /*? if <1.20 {*/ /*extends PoseStack *//*?}*/   
 		context.pose().scale(x, y, z);
 	}
 	*//*?}*/
-/*?} else {*/
-	/*public PoseStack getContext() {
-		return this;
-	}
-*//*?}*/
+/*?}*/
 }
