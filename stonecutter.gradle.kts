@@ -2,7 +2,7 @@ plugins {
     id("dev.kikugie.stonecutter")
     kotlin("jvm") version "2.3.0" apply false
     id("fabric-loom") version "1.15-SNAPSHOT" apply false
-    id("net.neoforged.moddev") version "2.0.139" apply false
+    id("net.neoforged.moddev") version "2.0.140" apply false
     id("com.gradleup.shadow") version "9.3.0" apply false
     id("org.moddedmc.wiki.toolkit") version "0.4+"
 }
@@ -30,7 +30,10 @@ stonecutter.parameters {
 
         string(current.parsed >= "1.21.11") {
             replace("net.minecraft.Util", "net.minecraft.util.Util")
-            replace("source.hasPermission(3))", "source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))")
+            replace(
+                "source.hasPermission(3))",
+                "source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))"
+            )
         }
     }
 }

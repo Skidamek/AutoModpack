@@ -23,7 +23,10 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 public class FileInspection {
 
     private static final Gson GSON = new Gson();
-    private static final String LOADER = Constants.LOADER;
+
+    private static String getLoader() {
+        return Constants.LOADER;
+    }
 
     public record HashPathPair(String hash, Path path) {}
 
@@ -93,11 +96,22 @@ public class FileInspection {
         if (isJarInvalid(file)) return false;
 
         try (FileSystem fs = FileSystems.newFileSystem(file)) {
-            Path metaPath = getMetadataPath(fs);
-            if (metaPath != null) return true;
+            String loader = getLoader();
+            String entryPathString = loader == null ? null : switch (loader) {
+                case "neoforge" -> "META-INF/neoforge.mods.toml";
+                case "fabric" -> "fabric.mod.json";
+                case "forge" -> "META-INF/mods.toml";
+                default -> null;
+            };
 
-            if ("forge".equals(LOADER) || "neoforge".equals(LOADER)) {
-                return hasSpecificServices(fs);
+            if (entryPathString != null && Files.exists(fs.getPath(entryPathString))) {
+                return true;
+            }
+
+            if ("forge".equals(loader) || "neoforge".equals(loader)) {
+                if (hasSpecificServices(fs)) {
+                    return true;
+                }
             }
         } catch (IOException e) {
             LOGGER.error("Error examining JarJar in {}", e);
@@ -268,27 +282,21 @@ public class FileInspection {
     private static ModMetadata parseJsonMetadata(BufferedReader reader) {
         try {
             JsonObject json = GSON.fromJson(reader, JsonObject.class);
-            JsonObject root = json;
-
-            if (json.has("quilt_loader")) {
-                root = json.getAsJsonObject("quilt_loader");
-            }
-
-            String modId = getJsonString(root, "id");
-            String version = getJsonString(root, "version");
+            String modId = getJsonString(json, "id");
+            String version = getJsonString(json, "version");
             Set<String> provides = new HashSet<>();
             Set<String> deps = new HashSet<>();
             LoaderManagerService.EnvironmentType env = LoaderManagerService.EnvironmentType.UNIVERSAL;
 
-            if (root.has("provides")) {
-                for (JsonElement e : root.get("provides").getAsJsonArray()) {
+            if (json.has("provides")) {
+                for (JsonElement e : json.get("provides").getAsJsonArray()) {
                     if (e.isJsonObject()) provides.add(e.getAsJsonObject().get("id").getAsString());
                     else provides.add(e.getAsString());
                 }
             }
 
-            if (root.has("depends")) {
-                JsonElement depends = root.get("depends");
+            if (json.has("depends")) {
+                JsonElement depends = json.get("depends");
                 if (depends.isJsonObject()) {
                     deps.addAll(depends.getAsJsonObject().keySet());
                 } else if (depends.isJsonArray()) {
@@ -299,8 +307,8 @@ public class FileInspection {
                 }
             }
 
-            if (root.has("environment")) {
-                String envStr = root.get("environment").getAsString();
+            if (json.has("environment")) {
+                String envStr = json.get("environment").getAsString();
                 if ("client".equalsIgnoreCase(envStr)) env = LoaderManagerService.EnvironmentType.CLIENT;
                 else if ("server".equalsIgnoreCase(envStr)) env = LoaderManagerService.EnvironmentType.SERVER;
             }
@@ -321,11 +329,11 @@ public class FileInspection {
     }
 
     public static Path getMetadataPath(FileSystem fs) {
-        String preferredEntry = switch (LOADER) {
+        String loader = getLoader();
+        String preferredEntry = loader == null ? null : switch (loader) {
             case "neoforge" -> "META-INF/neoforge.mods.toml";
             case "fabric" -> "fabric.mod.json";
             case "forge" -> "META-INF/mods.toml";
-            case "quilt" -> "quilt.mod.json";
             default -> null;
         };
 
@@ -334,7 +342,7 @@ public class FileInspection {
             if (Files.exists(p)) return p;
         }
 
-        for (String fallback : List.of("META-INF/neoforge.mods.toml", "fabric.mod.json", "META-INF/mods.toml", "quilt.mod.json")) {
+        for (String fallback : List.of("META-INF/neoforge.mods.toml", "fabric.mod.json", "META-INF/mods.toml")) {
             if (fallback.equals(preferredEntry)) continue;
             Path p = fs.getPath(fallback);
             if (Files.exists(p)) return p;
