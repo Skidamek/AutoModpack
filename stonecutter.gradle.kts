@@ -17,7 +17,10 @@ wiki {
 stonecutter active "1.21.11-fabric" /* [SC] DO NOT EDIT */
 
 stonecutter.parameters {
-    constants.match(node.metadata.project.substringAfterLast('-'), "fabric", "neoforge", "forge")
+    val (version, loader) = current.project.split('-', limit = 2)
+
+    constants.match(loader, "fabric", "neoforge", "forge")
+    properties.tags(version, loader)
 
     replacements {
         string(current.parsed >= "1.20.2") {

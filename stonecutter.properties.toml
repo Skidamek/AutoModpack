@@ -1,0 +1,167 @@
+["26.1-fabric"]
+deps.fabric-api = "0.144.0+26.1"
+
+["26.1"]
+deps.minecraft = "26.1-rc-3"
+meta.minecraft = "26.1-rc.3"
+publish_versions = "26.1"
+
+
+["1.21.11-fabric"]
+deps.fabric-api = "0.141.1+1.21.11"
+
+["1.21.11-neoforge"]
+deps.neoforge = "21.11.8-beta"
+
+["1.21.11"]
+deps.minecraft = "1.21.11"
+meta.minecraft = "1.21.11"
+publish_versions = "1.21.11"
+
+
+["1.21.10-fabric"]
+deps.fabric-api = "0.138.4+1.21.10"
+
+["1.21.10-neoforge"]
+deps.neoforge = "21.10.64"
+
+["1.21.10"]
+deps.minecraft = "1.21.10"
+meta.minecraft = "1.21.10"
+publish_versions = "1.21.10"
+
+
+["1.21.8-fabric"]
+deps.fabric-api = "0.136.1+1.21.8"
+
+["1.21.8-neoforge"]
+deps.neoforge = "21.8.50"
+
+["1.21.8"]
+deps.minecraft = "1.21.8"
+meta.minecraft = ">=1.21.6 <=1.21.8"
+publish_versions = "1.21.6\n1.21.7\n1.21.8"
+
+
+["1.21.5-fabric"]
+deps.fabric-api = "0.128.2+1.21.5"
+
+["1.21.5-neoforge"]
+deps.neoforge = "21.5.75"
+
+["1.21.5"]
+deps.minecraft = "1.21.5"
+meta.minecraft = "1.21.5"
+publish_versions = "1.21.5"
+
+
+["1.21.4-fabric"]
+deps.fabric-api = "0.119.4+1.21.4"
+
+["1.21.4-neoforge"]
+deps.neoforge = "21.4.135"
+
+["1.21.4"]
+deps.minecraft = "1.21.4"
+meta.minecraft = "1.21.4"
+publish_versions = "1.21.4"
+
+
+["1.21.3-fabric"]
+deps.fabric-api = "0.114.1+1.21.3"
+
+["1.21.3-neoforge"]
+deps.neoforge = "21.3.76"
+
+["1.21.3"]
+deps.minecraft = "1.21.3"
+meta.minecraft = ">=1.21.2 <=1.21.3"
+publish_versions = "1.21.2\n1.21.3"
+
+
+["1.21.1-fabric"]
+deps.fabric-api = "0.116.7+1.21.1"
+
+["1.21.1-neoforge"]
+deps.neoforge = "21.1.169"
+
+["1.21.1"]
+deps.minecraft = "1.21.1"
+meta.minecraft = ">=1.21 <=1.21.1"
+publish_versions = "1.21\n1.21.1"
+
+
+["1.20.6-fabric"]
+deps.fabric-api = "0.100.8+1.20.6"
+
+["1.20.6-neoforge"]
+deps.neoforge = "20.6.135"
+
+["1.20.6"]
+deps.minecraft = "1.20.6"
+meta.minecraft = "1.20.6"
+publish_versions = "1.20.6"
+
+
+["1.20.4-fabric"]
+deps.fabric-api = "0.97.3+1.20.4"
+
+["1.20.4-neoforge"]
+deps.neoforge = "20.4.248"
+
+["1.20.4"]
+deps.minecraft = "1.20.4"
+meta.minecraft = "1.20.4"
+publish_versions = "1.20.4"
+
+
+["1.20.1-fabric"]
+deps.fabric-api = "0.92.7+1.20.1"
+
+["1.20.1-forge"]
+deps.forge = "1.20.1-47.3.0"
+
+["1.20.1"]
+deps.minecraft = "1.20.1"
+meta.minecraft = ">=1.20 <=1.20.1"
+publish_versions = "1.20\n1.20.1"
+
+
+["1.19.4-fabric"]
+deps.fabric-api = "0.87.2+1.19.4"
+
+["1.19.4-forge"]
+deps.forge = "1.19.4-45.3.0"
+
+["1.19.4"]
+deps.minecraft = "1.19.4"
+meta.minecraft = "1.19.4"
+publish_versions = "1.19.4"
+
+
+["1.19.2-fabric"]
+deps.fabric-api = "0.76.1+1.19.2"
+
+["1.19.2-forge"]
+deps.forge = "1.19.2-43.3.0"
+
+["1.19.2"]
+deps.minecraft = "1.19.2"
+meta.minecraft = ">=1.19 <=1.19.2"
+publish_versions = "1.19\n1.19.1\n1.19.2"
+
+
+["1.18.2-fabric"]
+deps.fabric-api = "0.76.0+1.18.2"
+
+["1.18.2-forge"]
+deps.forge = "1.18.2-40.2.10"
+
+["1.18.2"]
+deps.minecraft = "1.18.2"
+meta.minecraft = "1.18.x"
+publish_versions = "1.18\n1.18.1\n1.18.2"
+
+
+["fabric"]
+deps.fabric-loader = "0.15.11"
