@@ -1,9 +1,12 @@
 ["26.1-fabric"]
 deps.fabric-api = "0.144.0+26.1"
 
+["26.1-neoforge"]
+deps.neoforge = "26.1.0.1-beta"
+
 ["26.1"]
-deps.minecraft = "26.1-rc-3"
-meta.minecraft = "26.1-rc.3"
+deps.minecraft = "26.1"
+meta.minecraft = "26.1"
 publish_versions = "26.1"
 
 
