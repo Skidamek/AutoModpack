@@ -71,7 +71,7 @@ tasks {
     }
 
     processResources {
-        exclude("**/fabric.mod.json", "**/automodpack.accesswidener")
+        exclude("**/fabric.mod.json", "**/automodpack*.accesswidener", "**/neoforge.mods.toml")
         if (sc.current.parsed >= "1.21.9") {
             exclude("**/pack.mcmeta")
             rename("new-pack.mcmeta", "pack.mcmeta")

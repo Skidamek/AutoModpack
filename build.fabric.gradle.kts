@@ -1,18 +1,24 @@
 @file:Suppress("UnstableApiUsage")
 
+import pl.skidam.automodpack.buildlogic.FabricPlugin.FabricExtension
+
 plugins {
     kotlin("jvm")
     id("automodpack.common")
     id("automodpack.utils")
-    id("fabric-loom")
+    id("net.fabricmc.fabric-loom-remap") apply false
+    id("net.fabricmc.fabric-loom") apply false
+    id("automodpack.fabric")
 }
+
+val fabric = the<FabricExtension>()
 
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
 base.archivesName.set("${property("mod_name")}-mc${property("deps.minecraft")}-fabric".lowercase())
 
 loom {
-    accessWidenerPath = rootProject.file("src/main/resources/automodpack.accesswidener")
+    accessWidenerPath = rootProject.file(fabric.accessWidenerPath)
 }
 
 dependencies {
@@ -20,7 +26,9 @@ dependencies {
     implementation(project(":loader-core")) { isTransitive = false }
 
     minecraft("com.mojang:minecraft:${property("deps.minecraft")}")
-    mappings(loom.officialMojangMappings())
+    if (!fabric.isUnobf) {
+        mappings(loom.officialMojangMappings())
+    }
 
     modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric-loader")}")
 
@@ -65,7 +73,14 @@ java {
 
 tasks {
     processResources {
-        exclude("**/neoforge.mods.toml", "**/mods.toml", "**/accesstransformer.cfg")
+        exclude("**/neoforge.mods.toml", "**/mods.toml", "**/accesstransformer*.cfg")
+        if (fabric.isUnobf) {
+            exclude("**/automodpack.accesswidener")
+            rename("automodpack.unobf.accesswidener", "automodpack.accesswidener")
+        } else {
+            exclude("**/automodpack.unobf.accesswidener")
+        }
+
         if (sc.current.parsed >= "1.21.9") {
             exclude("**/pack.mcmeta")
             rename("new-pack.mcmeta", "pack.mcmeta")
