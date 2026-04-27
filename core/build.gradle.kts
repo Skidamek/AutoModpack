@@ -22,6 +22,7 @@ val deps = listOf(
     "org.bouncycastle:bcpkix-jdk18on:1.82",
     "org.apache.httpcomponents.client5:httpclient5:5.5.1",
     "org.tomlj:tomlj:1.1.1",
+    "org.antlr:antlr4-runtime:4.11.1",
     "com.h2database:h2-mvstore:2.4.240"
 )
 
