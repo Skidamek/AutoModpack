@@ -188,27 +188,12 @@ public class ModpackUpdater {
 
             // FETCH
             long startFetching = System.currentTimeMillis();
-            List<FetchManager.FetchData> fetchDatas = new ArrayList<>();
 
             for (Jsons.ModpackContentFields.ModpackContentItem serverItem : finalFilesToUpdate) {
-
                 totalBytesToDownload += Long.parseLong(serverItem.size);
-                String fileType = serverItem.type;
-
-                // Check if the file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
-                if (fileType.equals("mod") || fileType.equals("shader") || fileType.equals("resourcepack")) {
-                    fetchDatas.add(new FetchManager.FetchData(serverItem.file, serverItem.sha1, serverItem.murmur, serverItem.size, fileType));
-                }
             }
 
-            FetchManager fetchManager = null;
-
-            if (!fetchDatas.isEmpty()) {
-                fetchManager = new FetchManager(fetchDatas);
-                new ScreenManager().fetch(fetchManager);
-                fetchManager.fetch();
-                LOGGER.info("Finished fetching urls in {}ms", System.currentTimeMillis() - startFetching);
-            }
+            FetchManager fetchManager = fetchDownloadUrls(finalFilesToUpdate);
 
             // DOWNLOAD
             try {
@@ -373,6 +358,8 @@ public class ModpackUpdater {
                 return;
             }
 
+            FetchManager refreshedFetchManager = fetchDownloadUrls(refreshedFilteredList);
+
             downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.userValidationCallback(modpackAddresses.hostAddress, false));
             if (downloadClient == null) {
                 return;
@@ -382,8 +369,6 @@ public class ModpackUpdater {
             new ScreenManager().download(downloadManager, getModpackName());
             downloadManager.attachDownloadClient(downloadClient);
 
-            // TODO try to fetch again from modrinth and curseforge
-
             for (var serverItem : refreshedFilteredList) {
 
                 String serverFilePath = serverItem.file;
@@ -392,14 +377,24 @@ public class ModpackUpdater {
 
                 Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
 
-                LOGGER.info("Retrying to download {} from {}", serverFilePath, modpackAddresses.hostAddress.getHostName());
+                List<String> urls = new ArrayList<>();
+                FetchManager.Datas fetchData = refreshedFetchManager == null ? null : refreshedFetchManager.getFetchDatas().get(serverFileHash);
+                if (fetchData != null) {
+                    urls.addAll(fetchData.fetchedData().urls());
+                }
+
+                LOGGER.info("Retrying to download {} from {}", serverFilePath, urls.isEmpty() ? modpackAddresses.hostAddress.getHostName() : urls);
 
                 Runnable failureCallback = () -> {
-                    failedDownloads.put(serverItem, List.of());
+                    failedDownloads.put(serverItem, urls);
                 };
 
                 Runnable successCallback = () -> {
-                    changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
+                    List<String> mainPageUrls = new LinkedList<>();
+                    if (fetchData != null) {
+                        mainPageUrls.addAll(fetchData.fetchedData().mainPageUrls());
+                    }
+                    changelogs.changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrls);
 
                     try {
                         cache.overwriteCache(downloadFile, serverFileHash);
@@ -408,7 +403,7 @@ public class ModpackUpdater {
                     }
                 };
 
-                downloadManager.download(downloadFile, serverFileHash, List.of(), serverFileSize, successCallback, failureCallback);
+                downloadManager.download(downloadFile, serverFileHash, urls, serverFileSize, successCallback, failureCallback);
             }
 
             downloadManager.joinAll();
@@ -422,6 +417,34 @@ public class ModpackUpdater {
 
             LOGGER.info("Finished refreshed downloading files in {}ms", System.currentTimeMillis() - startFetching);
         }
+    }
+
+    private FetchManager fetchDownloadUrls(Collection<Jsons.ModpackContentFields.ModpackContentItem> items) {
+        List<FetchManager.FetchData> fetchDatas = getFetchDatas(items);
+        if (fetchDatas.isEmpty()) {
+            return null;
+        }
+
+        long startFetching = System.currentTimeMillis();
+        FetchManager fetchManager = new FetchManager(fetchDatas);
+        new ScreenManager().fetch(fetchManager);
+        fetchManager.fetch();
+        LOGGER.info("Finished fetching urls in {}ms", System.currentTimeMillis() - startFetching);
+        return fetchManager;
+    }
+
+    private List<FetchManager.FetchData> getFetchDatas(Collection<Jsons.ModpackContentFields.ModpackContentItem> items) {
+        List<FetchManager.FetchData> fetchDatas = new ArrayList<>();
+        for (Jsons.ModpackContentFields.ModpackContentItem item : items) {
+            if (canFetchDownloadUrl(item.type)) {
+                fetchDatas.add(new FetchManager.FetchData(item.file, item.sha1, item.murmur, item.size, item.type));
+            }
+        }
+        return fetchDatas;
+    }
+
+    private boolean canFetchDownloadUrl(String fileType) {
+        return "mod".equals(fileType) || "shader".equals(fileType) || "resourcepack".equals(fileType);
     }
 
     // this is run every time we modpack is updated
