@@ -29,15 +29,18 @@ aggregated and written to `results.json`.
 
 ## CLI reference
 
+All commands run from the repo root:
+
 ```
-uv run autotester build-images [--client-image IMG] [--headlessmc-version VER]
-uv run autotester run        [--target ID | all] [--scenario ID] [--jobs N]
-                             [--docker-uid UID] [--docker-gid GID]
-                             [--artifact-dir PATH] [--out-dir PATH]
-                             [--client-image IMG]
-uv run autotester clean      [--out-dir PATH]
+uv --project autotester run autotester build-images [--client-image IMG] [--headlessmc-version VER]
+uv --project autotester run autotester run        [--target ID | all] [--scenario ID] [--jobs N]
+                                                  [--docker-uid UID] [--docker-gid GID]
+                                                  [--artifact-dir PATH] [--out-dir PATH]
+                                                  [--client-image IMG]
+uv --project autotester run autotester clean      [--out-dir PATH]
 ```
 
+(Or `cd autotester` and use `uv run autotester ...` instead.)
 ### build-images
 
 Builds the client Docker image (Java + HeadlessMC).
@@ -407,7 +410,11 @@ topology:
       dependencies: true
 ```
 
+<<<<<<< HEAD
 Then run: `uv run autotester run --scenario my-test`
+=======
+Then run: `uv --project autotester run autotester run --scenario my-test`
+>>>>>>> 4d2f314c (autotester: Docker-based in-game integration test framework)
 
 ## CI (GitHub Actions)
 
