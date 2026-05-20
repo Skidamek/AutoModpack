@@ -29,7 +29,7 @@
 #   quit                Bridge: quit game → wait for client exit.
 #   wait_join           Poll null screenClass (player in-game).
 #
-# ── serverFiles (replaces old "assertions") ─────────────────────────────
+# ── serverFiles ─────────────────────────────────────────────────────────
 # Describes files the SERVER hosts in its modpack; the client downloads
 # and syncs them. Everything is under the server's host-modpack/main/ dir.
 #

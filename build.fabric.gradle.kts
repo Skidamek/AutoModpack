@@ -71,10 +71,6 @@ java {
     withSourcesJar()
 }
 
-sourceSets.main {
-    java.setSrcDirs(listOf(layout.buildDirectory.dir("generated/stonecutter/main/java")))
-}
-
 tasks {
     processResources {
         exclude("**/neoforge.mods.toml", "**/mods.toml", "**/accesstransformer*.cfg")
