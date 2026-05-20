@@ -5,20 +5,22 @@ import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.Files;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -32,6 +34,7 @@ public class Preload {
             LOGGER.info("Prelaunching AutoModpack...");
             initializeConstants();
             loadConfigs();
+            bootstrapAutotestClientHooks();
             updateAll();
             LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
         } catch (Exception e) {
@@ -83,8 +86,16 @@ public class Preload {
             // Delete dummy files
             LegacyClientCacheUtils.deleteDummyFiles();
 
-            if (clientConfig.updateSelectedModpackOnLaunch) {
-                new ModpackUpdater(latestModpackContent, modpackAddresses, secret, selectedModpackDir).processModpackUpdate(null);
+			var modpackUpdaterInstance = new ModpackUpdater(latestModpackContent, modpackAddresses, secret, selectedModpackDir);
+
+            if (clientConfig.updateSelectedModpackOnLaunch) { // Check updates and load the modpack
+	            modpackUpdaterInstance.processModpackUpdate(null);
+            } else { // Otherwise just load the modpack
+	            try {
+		            modpackUpdaterInstance.CheckAndLoadModpack();
+	            } catch (Exception e) {
+		            LOGGER.error("Failed to check and load modpack, trying to update it", e);
+	            }
             }
         }
     }
@@ -244,5 +255,26 @@ public class Preload {
         }
 
         LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
+    }
+
+    private void bootstrapAutotestClientHooks() {
+        if (!Boolean.getBoolean("automodpack.autotest")) {
+            return;
+        }
+        if (LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.CLIENT) {
+            return;
+        }
+        try {
+            Class<?> screenImplClass = Class.forName("pl.skidam.automodpack.client.ScreenImpl");
+            ScreenManager.INSTANCE = (pl.skidam.automodpack_loader_core.screen.ScreenService) screenImplClass.getDeclaredConstructor().newInstance();
+        } catch (Throwable e) {
+            LOGGER.warn("Failed to bootstrap AutoModpack ScreenImpl during prelaunch", e);
+        }
+        try {
+            Class<?> bridgeClass = Class.forName("pl.skidam.automodpack.client.autotest.AutoTestBridge");
+            bridgeClass.getMethod("startIfEnabled").invoke(null);
+        } catch (Throwable e) {
+            LOGGER.warn("Failed to start AutoModpack autotest bridge during prelaunch", e);
+        }
     }
 }

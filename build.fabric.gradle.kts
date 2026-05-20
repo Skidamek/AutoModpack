@@ -66,13 +66,26 @@ java {
     } else {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        toolchain.languageVersion.set(JavaLanguageVersion.of(17))
     }
     withSourcesJar()
 }
 
+sourceSets.main {
+    java.setSrcDirs(listOf(layout.buildDirectory.dir("generated/stonecutter/main/java")))
+}
+
 tasks {
+    named("sourcesJar") {
+        dependsOn("stonecutterGenerate")
+    }
+    named("compileJava") {
+        dependsOn("stonecutterGenerate")
+    }
+    named("compileKotlin") {
+        dependsOn("stonecutterGenerate")
+    }
     processResources {
+        dependsOn("stonecutterGenerate")
         exclude("**/neoforge.mods.toml", "**/mods.toml", "**/accesstransformer*.cfg")
         if (fabric.isUnobf) {
             exclude("**/automodpack.accesswidener")

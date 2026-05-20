@@ -82,18 +82,6 @@ meta.minecraft = "1.21.4"
 publish_versions = "1.21.4"
 
 
-["1.21.3-fabric"]
-deps.fabric-api = "0.114.1+1.21.3"
-
-["1.21.3-neoforge"]
-deps.neoforge = "21.3.76"
-
-["1.21.3"]
-deps.minecraft = "1.21.3"
-meta.minecraft = ">=1.21.2 <=1.21.3"
-publish_versions = "1.21.2\n1.21.3"
-
-
 ["1.21.1-fabric"]
 deps.fabric-api = "0.116.7+1.21.1"
 
@@ -104,18 +92,6 @@ deps.neoforge = "21.1.169"
 deps.minecraft = "1.21.1"
 meta.minecraft = ">=1.21 <=1.21.1"
 publish_versions = "1.21\n1.21.1"
-
-
-["1.20.6-fabric"]
-deps.fabric-api = "0.100.8+1.20.6"
-
-["1.20.6-neoforge"]
-deps.neoforge = "20.6.135"
-
-["1.20.6"]
-deps.minecraft = "1.20.6"
-meta.minecraft = "1.20.6"
-publish_versions = "1.20.6"
 
 
 ["1.20.4-fabric"]
@@ -140,18 +116,6 @@ deps.forge = "1.20.1-47.3.0"
 deps.minecraft = "1.20.1"
 meta.minecraft = ">=1.20 <=1.20.1"
 publish_versions = "1.20\n1.20.1"
-
-
-["1.19.4-fabric"]
-deps.fabric-api = "0.87.2+1.19.4"
-
-["1.19.4-forge"]
-deps.forge = "1.19.4-45.3.0"
-
-["1.19.4"]
-deps.minecraft = "1.19.4"
-meta.minecraft = "1.19.4"
-publish_versions = "1.19.4"
 
 
 ["1.19.2-fabric"]

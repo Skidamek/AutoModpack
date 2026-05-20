@@ -25,12 +25,17 @@ dependencies {
     implementation(project(":core")) { isTransitive = false }
     implementation(project(":loader-core")) { isTransitive = false }
 
-    implementation("org.sinytra.forgified-fabric-api:forgified-fabric-api:0.115.6+2.1.4+1.21.1")
+    if (sc.current.parsed >= "1.21") {
+        implementation("org.sinytra.forgified-fabric-api:forgified-fabric-api:0.115.6+2.1.4+1.21.1")
+    }
 }
 
 tasks {
     processResources {
-        exclude("**/fabric.mod.json", "**/automodpack*.accesswidener", "**/mods.toml")
+        exclude("**/fabric.mod.json", "**/automodpack*.accesswidener")
+        if (sc.current.parsed >= "1.21") {
+            exclude("**/mods.toml")
+        }
         if (sc.current.parsed >= "1.21.9") {
             exclude("**/pack.mcmeta")
             rename("new-pack.mcmeta", "pack.mcmeta")
@@ -49,10 +54,18 @@ java {
         sourceCompatibility = JavaVersion.VERSION_25
         targetCompatibility = JavaVersion.VERSION_25
         toolchain.languageVersion.set(JavaLanguageVersion.of(25))
-    } else {
+    } else if (sc.current.parsed >= "1.21") {
         withSourcesJar()
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    } else if (sc.current.parsed >= "1.20.5") {
+        withSourcesJar()
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    } else {
+        withSourcesJar()
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 }

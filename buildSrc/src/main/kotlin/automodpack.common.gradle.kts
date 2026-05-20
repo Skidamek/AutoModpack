@@ -47,9 +47,14 @@ val mergeJarTask = tasks.register<MergeJarTask>("mergeJar") {
     this.outputJar.set(layout.buildDirectory.file("merged-jar-path.txt"))
 
     val filesToHash = mutableListOf<Any>()
+    tasks.findByName("jar")?.let { projectJar ->
+        dependsOn(projectJar)
+        filesToHash.add(projectJar)
+    }
     for (module in getAllDependentLoaderModules(project.name)) {
-        val modLoaderJar = rootProject.project(module).tasks.named("jar")
-        filesToHash.add(modLoaderJar)
+        rootProject.project(module).tasks.findByName("jar")?.let { modLoaderJar ->
+            filesToHash.add(modLoaderJar)
+        }
     }
 
     // Compute the actual hash of the content of all input jars.

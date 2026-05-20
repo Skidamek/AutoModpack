@@ -23,7 +23,9 @@ import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -729,10 +731,22 @@ public class ModpackUtils {
 
     private static Boolean askUserAboutCertificate(InetSocketAddress address, String fingerprint) {
         LOGGER.info("Asking user for {}", address.getHostString());
-        Optional<Object> screen = new ScreenManager().getScreen();
-        if (screen.isEmpty()) {
-            LOGGER.warn("No screen available, cannot ask user");
-            return false;
+
+        Object parent = null;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (parent == null) {
+            parent = new ScreenManager().getScreen().orElse(null);
+            if (parent == null) {
+                if (System.nanoTime() > deadline) {
+                    LOGGER.warn("No screen available, cannot ask user");
+                    return false;
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    return false;
+                }
+            }
         }
 
         CountDownLatch latch = new CountDownLatch(1);
@@ -743,14 +757,111 @@ public class ModpackUtils {
             latch.countDown();
         };
         Runnable cancelCallback = latch::countDown;
-        new ScreenManager().validation(screen.get(), fingerprint, trustCallback, cancelCallback);
+        new ScreenManager().validation(parent, fingerprint, trustCallback, cancelCallback);
         try {
-            latch.await();
+            if (!latch.await(120, TimeUnit.SECONDS)) {
+                LOGGER.warn("Certificate validation timed out for {}", address.getHostString());
+                return false;
+            }
         } catch (InterruptedException e) {
             return false;
         }
 
         return accepted.get();
+    }
+
+    // ---- Async versions (non-blocking, used by login packet flow) ----
+
+    public static CompletableFuture<Optional<Jsons.ModpackContentFields>> requestServerModpackContentAsync(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, boolean allowAskingUser) {
+        return fetchModpackContentAsync(modpackAddresses, secret,
+                (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
+                "Fetched", allowAskingUser);
+    }
+
+    private static CompletableFuture<Optional<Jsons.ModpackContentFields>> fetchModpackContentAsync(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, CompletableFuture<Path>> operation, String fetchType, boolean allowAskingUser) {
+        if (secret == null)
+            return CompletableFuture.completedFuture(Optional.empty());
+        if (modpackAddresses.isAnyEmpty())
+            throw new IllegalArgumentException("Modpack addresses are empty!");
+
+        return DownloadClient.createAsync(modpackAddresses, secret.secretBytes(), 1, userValidationCallbackAsync(modpackAddresses.hostAddress, allowAskingUser))
+                .thenApply(client -> {
+                    try (client) {
+                        Path path = operation.apply(client).get();
+                        var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
+                        Files.deleteIfExists(modpackContentTempFile);
+
+                        if (content.isPresent() && potentiallyMalicious(content.get())) {
+                            return Optional.<Jsons.ModpackContentFields>empty();
+                        }
+
+                        return content;
+                    } catch (Exception e) {
+                        LOGGER.error("Error while getting server modpack content", e);
+                        return Optional.<Jsons.ModpackContentFields>empty();
+                    }
+                })
+                .exceptionally(e -> {
+                    LOGGER.error("Error while getting server modpack content", e);
+                    return Optional.empty();
+                });
+    }
+
+    public static Function<X509Certificate, CompletableFuture<Boolean>> userValidationCallbackAsync(InetSocketAddress address, boolean allowAskingUser) {
+        return certificate -> {
+            String fingerprint;
+            try {
+                fingerprint = NetUtils.getFingerprint(certificate);
+            } catch (CertificateEncodingException e) {
+                return CompletableFuture.completedFuture(false);
+            }
+            if (Objects.equals(knownHosts.hosts.get(address.getHostString()), fingerprint))
+                return CompletableFuture.completedFuture(true);
+            LOGGER.warn("Received untrusted certificate from server {}!", address.getHostString());
+            if (allowAskingUser) {
+                return askUserAboutCertificateAsync(address, fingerprint);
+            }
+
+            return CompletableFuture.completedFuture(false);
+        };
+    }
+
+    private static CompletableFuture<Boolean> askUserAboutCertificateAsync(InetSocketAddress address, String fingerprint) {
+        LOGGER.info("Asking user for {}", address.getHostString());
+
+        return CompletableFuture.supplyAsync(() -> {
+            Object screen = null;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+            while (screen == null) {
+                screen = new ScreenManager().getScreen().orElse(null);
+                if (screen == null) {
+                    if (System.nanoTime() > deadline) {
+                        LOGGER.warn("No screen available, cannot ask user");
+                        return false;
+                    }
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        return false;
+                    }
+                }
+            }
+
+            CompletableFuture<Boolean> future = new CompletableFuture<>();
+            Runnable trustAction = () -> {
+                knownHosts.hosts.put(address.getHostString(), fingerprint);
+                ConfigTools.save(knownHostsFile, knownHosts);
+                future.complete(true);
+            };
+            Runnable cancelAction = () -> future.complete(false);
+            new ScreenManager().validation(screen, fingerprint, trustAction, cancelAction);
+
+            try {
+                return future.get(120, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                return false;
+            }
+        });
     }
 
     public static boolean potentiallyMalicious(Jsons.ModpackContentFields serverModpackContent) {

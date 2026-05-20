@@ -1,0 +1,147 @@
+name: In-game Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Autotest scenario"
+        default: "sync"
+      target:
+        description: "Target ID (or 'all')"
+        default: "all"
+      jobs:
+        description: "Parallel runs"
+        default: "1"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      scenario: ${{ steps.set-scenario.outputs.scenario }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - id: set-matrix
+        run: |
+          TARGET="${{ github.event.inputs.target || 'all' }}"
+          ALL=$(uv run --project autotester python -c "import json,yaml; ids=[t['id'] for t in yaml.safe_load(open('autotester/targets.yaml')).get('targets',[])]; print(json.dumps(ids))")
+          if [ "$TARGET" = "all" ]; then
+            echo "matrix={\"target\":$ALL}" >> $GITHUB_OUTPUT
+          else
+            echo "matrix={\"target\":[\"$TARGET\"]}" >> $GITHUB_OUTPUT
+          fi
+      - id: set-scenario
+        run: |
+          echo "scenario=${{ github.event.inputs.scenario || 'sync' }}" >> $GITHUB_OUTPUT
+
+  build:
+    needs: [prepare]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Build AutoModpack
+        run: ./gradlew build
+      - uses: actions/upload-artifact@v6
+        with:
+          name: merged-jars
+          path: merged/
+          if-no-files-found: error
+
+  ingame:
+    needs: [build, prepare]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - uses: actions/download-artifact@v6
+        with:
+          name: merged-jars
+          path: merged/
+      - name: Build autotest client image
+        run: uv --project autotester run autotester build-images
+      - name: Run autotest
+        run: >
+          uv --project autotester run autotester run
+          --target "${{ matrix.target }}"
+          --scenario "${{ needs.prepare.outputs.scenario }}"
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: autotester-${{ matrix.target }}
+          path: autotester/out
+
+  report:
+    needs: [ingame]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: autotester-*
+          merge-multiple: true
+      - name: Aggregate results
+        id: aggregate
+        run: |
+          cat > /tmp/aggregate.py << 'PYEOF'
+          import json, glob, os
+          results = []
+          for f in sorted(glob.glob("**/results.json", recursive=True)):
+              try:
+                  data = json.load(open(f))
+                  results.extend(data.get("results", []))
+              except Exception:
+                  name = f.split(os.sep)[0] if os.sep in f else "unknown"
+                  results.append({"target": name, "ok": False, "error": "results.json missing or invalid"})
+
+          total = len(results)
+          passed = sum(1 for r in results if r.get("ok"))
+          any_ok = passed == total
+
+          for r in results:
+              if not r.get("ok"):
+                  err = r.get("error", "unknown error")
+                  print(f"::error title={r['target']}::{err}")
+
+          summary = {"ok": any_ok, "total": total, "passed": passed, "failed": total - passed, "results": results}
+          with open("aggregated.json", "w") as f:
+              json.dump(summary, f, indent=2)
+
+          md = "## In-game Test Results\n\n"
+          md += f"**{'PASS' if any_ok else 'FAIL'}** — {passed}/{total} passed, {total - passed} failed\n\n"
+          md += "| Status | Target | Duration | Error |\n"
+          md += "|--------|--------|----------|-------|\n"
+          for r in results:
+              status = "✅" if r.get("ok") else "❌"
+              dur = f"{r.get('duration', 0):.1f}s" if "duration" in r else "-"
+              err = r.get("error", "") if not r.get("ok") else ""
+              md += f"| {status} | {r['target']} | {dur} | {err} |\n"
+
+          with open("summary.md", "w") as f:
+              f.write(md)
+
+          print(f"ok={str(any_ok).lower()}", file=open(os.environ["GITHUB_OUTPUT"], "a"))
+          PYEOF
+          python3 /tmp/aggregate.py
+      - uses: actions/upload-artifact@v6
+        with:
+          name: aggregated-results
+          path: |
+            aggregated.json
+            summary.md
+      - name: Post job summary
+        run: cat summary.md >> $GITHUB_STEP_SUMMARY
+      - name: Check overall result
+        if: steps.aggregate.outputs.ok != 'true'
+        run: |
+          echo "Some tests failed"
+          exit 1

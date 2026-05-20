@@ -9,10 +9,13 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 public class DangerScreen extends VersionedScreen {
 
     private final Screen parent;
     private final ModpackUpdater modpackUpdaterInstance;
+    private final AtomicBoolean updateStarted = new AtomicBoolean(false);
 
     public DangerScreen(Screen parent, ModpackUpdater modpackUpdaterInstance) {
         super(VersionedText.literal("DangerScreen"));
@@ -48,7 +51,11 @@ public class DangerScreen extends VersionedScreen {
                 VersionedText.translatable(
                     "automodpack.danger.confirm"
                 ).withStyle(ChatFormatting.BOLD),
-                button -> Util.backgroundExecutor().execute(() -> modpackUpdaterInstance.startUpdate(modpackUpdaterInstance.getModpackFileList()))
+                button -> {
+                    if (updateStarted.compareAndSet(false, true)) {
+                        Util.backgroundExecutor().execute(() -> modpackUpdaterInstance.startUpdate(modpackUpdaterInstance.getModpackFileList()));
+                    }
+                }
             )
         );
     }
@@ -102,7 +109,7 @@ public class DangerScreen extends VersionedScreen {
 
     @Override
     public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
+        if (keyCode == 257 && updateStarted.compareAndSet(false, true)) { // Enter key (GLFW_KEY_ENTER = 257)
             Util.backgroundExecutor().execute(() -> modpackUpdaterInstance.startUpdate(modpackUpdaterInstance.getModpackFileList()));
             return true;
         }

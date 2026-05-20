@@ -76,15 +76,31 @@ tasks.named<ShadowJar>("shadowJar") {
 
     exclude("kotlin/**", "log4j2.xml")
     exclude("META-INF/maven/**", "META-INF/native-image/**", "META-INF/io.netty.versions.properties")
+    exclude("META-INF/services/java.security.Provider")
 
     mergeServiceFiles()
 }
 
 
+val moduleName = project.name.removePrefix("loader-")
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    when {
+        moduleName == "neoforge-fml10" -> {
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+        }
+        moduleName == "neoforge-fml4" -> {
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+        }
+        else -> {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
+            toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+        }
+    }
     withSourcesJar()
 }
 

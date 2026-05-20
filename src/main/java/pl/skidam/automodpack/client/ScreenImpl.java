@@ -10,56 +10,75 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;
 import java.util.Optional;
-import net.minecraft.util.Util;
+import java.util.concurrent.TimeUnit;
 import net.minecraft.client.Minecraft;
+import pl.skidam.automodpack_core.Constants;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 
 public class ScreenImpl implements ScreenService {
 
+    private static void executeOnClient(Runnable task) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        Minecraft client;
+        while ((client = Minecraft.getInstance()) == null) {
+            if (System.nanoTime() > deadline) {
+                Constants.LOGGER.warn("Could not execute on client: Minecraft not yet initialized");
+                return;
+            }
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        client.execute(task);
+    }
+
     @Override
     public void download(Object... args) {
-        Minecraft.getInstance().execute(() -> Screens.download(args[0], args[1]));
+        executeOnClient(() -> Screens.download(args[0], args[1]));
     }
 
     @Override
     public void fetch(Object... args) {
-        Minecraft.getInstance().execute(() -> Screens.fetch(args[0]));
+        executeOnClient(() -> Screens.fetch(args[0]));
     }
 
     @Override
     public void changelog(Object... args) {
-        Minecraft.getInstance().execute(() -> Screens.changelog(args[0], args[1], args[2]));
+        executeOnClient(() -> Screens.changelog(args[0], args[1], args[2]));
     }
 
     @Override
     public void restart(Object... args) {
-        Minecraft.getInstance().execute(() -> Screens.restart(args[0], args[1], args[2]));
+        executeOnClient(() -> Screens.restart(args[0], args[1], args[2]));
     }
 
     @Override
     public void danger(Object... args) {
-        Minecraft.getInstance().execute(() -> Screens.danger(args[0], args[1]));
+        executeOnClient(() -> Screens.danger(args[0], args[1]));
     }
 
     @Override
     public void error(String... args) {
-        Minecraft.getInstance().execute(() -> Screens.error(args));
+        executeOnClient(() -> Screens.error(args));
     }
 
     @Override
     public void menu(Object... args) {
-        Minecraft.getInstance().execute(Screens::menu);
+        executeOnClient(Screens::menu);
     }
 
     @Override
     public void title(Object... args) {
-        Minecraft.getInstance().execute(Screens::title);
+        executeOnClient(Screens::title);
     }
 
     @Override
     public void validation(Object... args) {
-        Minecraft.getInstance().execute(() -> Screens.validation(args[0], args[1], args[2], args[3]));
+        executeOnClient(() -> Screens.validation(args[0], args[1], args[2], args[3]));
     }
 
     @Override
@@ -83,12 +102,7 @@ public class ScreenImpl implements ScreenService {
         }
 
         public static void setScreen(Screen screen) {
-            // required for forge to handle it properly
-            /*? if >=26.2 {*/
-            Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().gui.setScreen(screen)));
-            /*?} else {*/
-            /*Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(screen)));
-            *//*?}*/
+            Minecraft.getInstance().setScreen(screen);
         }
 
         public static void download(Object downloadManager, Object header) {

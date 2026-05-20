@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+loader="${1:?loader required}"
+minecraft="${2:?minecraft version required}"
+host="${3:?server host required}"
+port="${4:?server port required}"
+java_version="${5:?java version required}"
+loader_version="${6:-}"
+
+game_dir="${AM_AUTOTEST_GAME_DIR:-/work/game}"
+hmc_dir="${AM_AUTOTEST_HMC_DIR:-/work/hmc-cache}"
+bridge_token="${AM_AUTOTEST_BRIDGE_TOKEN:?bridge token required}"
+
+mkdir -p "$game_dir" "$hmc_dir"
+mkdir -p "$hmc_dir/HeadlessMC"
+
+# Select pre-installed Java - no HMC auto-download
+case "$java_version" in
+  17)
+    export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
+    ;;
+  21)
+    export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
+    ;;
+  25)
+    export JAVA_HOME="/usr/lib/jvm/java-25-temurin"
+    ;;
+  *)
+    echo "ERROR: unsupported Java version: $java_version" >&2
+    exit 1
+    ;;
+esac
+export PATH="$JAVA_HOME/bin:$PATH"
+
+jvmargs="-Dautomodpack.autotest=true -Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dcom.mojang.text2speech=false"
+gameargs="--width 854 --height 480"
+
+cat > "$hmc_dir/HeadlessMC/config.properties" <<EOF
+hmc.mcdir=$hmc_dir
+hmc.gamedir=$game_dir
+hmc.offline=true
+hmc.offline.username=AutoTest
+hmc.auto.download.java=false
+hmc.java.versions=$JAVA_HOME/bin/java
+hmc.java.require.exact=false
+hmc.crash.report.watcher=true
+hmc.exit.on.failed.command=true
+hmc.gameargs=$gameargs
+EOF
+
+cd "$hmc_dir"
+
+launch_target="${loader}:${minecraft}"
+if [[ "$loader" == "fabric" && -n "$loader_version" ]]; then
+  hmc --command "fabric ${minecraft} --uid ${loader_version}"
+  launch_target="fabric-loader-${loader_version}-${minecraft}"
+fi
+
+yes | hmc --command "download ${minecraft}" 2>/dev/null || true
+hmc --command "config -refresh" 2>/dev/null || true
+
+exec hmc \
+  --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"

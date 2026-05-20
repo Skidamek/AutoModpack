@@ -1,0 +1,49 @@
+# ── scenario: download-only ─────────────────────────────────────────────
+# Minimal: launch_server → wait_server → read_fingerprint → launch_client
+# → connect → fingerprint → download → verify → quit.
+# Skips restart and rejoin — faster feedback when debugging downloads.
+#
+# See sync.yaml for detailed documentation on serverFiles, server engine,
+# server caching (Docker volumes), and client caching (HMC cache seed).
+
+id: download-only
+description: |
+  Launch server/client → accept fingerprint → sync modpack → verify → quit.
+  Skips restart/rejoin for faster iteration.
+
+flow:
+  - launch_server
+  - launch_client
+  - read_fingerprint
+  - wait_server
+  - wait_bridge
+  - click_continue
+  - connect
+  - wait_fingerprint
+  - accept_fingerprint
+  - wait_danger
+  - click_confirm
+  - wait_download
+  - verify_files
+  - quit
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    modrinth:
+      projects:
+        - ferrite-core?
+      dependencies: true
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+    - path: config/amp-autotest-alpha.txt
+      content: "amp-autotest-alpha\n"
+    - path: config/amp-autotest-beta.json
+      content: '{"id":"beta","value":42}'
+    - path: config/amp-autotest-gamma.cfg
+      content: "alpha=true\nbeta=false\n"
