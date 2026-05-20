@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.mixin.core;
 
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
@@ -22,7 +22,7 @@ public class FabricLoginMixin {
         /*? if <1.20.2 {*/
         /*Identifier id = packet.getIdentifier();
         *//*?} else {*/
-        ResourceLocation id = packet.payload().id();
+        Identifier id = packet.payload().id();
         /*?}*/
         // Cancel if it's one of our channels
         if (LoginNetworkingIDs.getByKey(id) != null) {
