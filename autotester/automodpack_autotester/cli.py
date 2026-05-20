@@ -4,13 +4,13 @@ import json
 import logging
 import os
 import shutil
-import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+import docker as docker_py
+
 from .config import REPO_ROOT, ROOT, load_scenarios, load_settings, load_targets
-from .docker import Docker
 from .runner import run_case
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
@@ -24,20 +24,17 @@ def _resolve_settings_path(s: dict, key: str, default: str) -> Path:
 
 
 def _kill_amp_containers() -> None:
-    r = subprocess.run(
-        ["docker", "ps", "-q", "-a", "--filter", "name=amp-"],
-        capture_output=True, text=True, check=False,
-    )
-    for cid in r.stdout.strip().split():
-        if cid:
-            subprocess.run(["docker", "rm", "-f", cid], check=False, capture_output=True)
-    r = subprocess.run(
-        ["docker", "network", "ls", "-q", "--filter", "name=amp-"],
-        capture_output=True, text=True, check=False,
-    )
-    for nid in r.stdout.strip().split():
-        if nid:
-            subprocess.run(["docker", "network", "rm", nid], check=False, capture_output=True)
+    client = docker_py.from_env()
+    for c in client.containers.list(all=True, filters={"name": "amp-"}):
+        try:
+            c.remove(force=True)
+        except Exception:
+            pass
+    for n in client.networks.list(filters={"name": "amp-"}):
+        try:
+            n.remove()
+        except Exception:
+            pass
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -73,11 +70,12 @@ def main(argv: list[str] | None = None) -> int:
         img = args.client_image or str(
             s.get("images", {}).get("client", "automodpack-autotest-client:local")
         )
-        Docker().build(
-            img,
-            ROOT / "docker" / "client" / "Dockerfile",
-            ROOT / "docker" / "client",
-            {"HEADLESSMC_VERSION": ver},
+        docker_py.from_env().images.build(
+            path=str(ROOT / "docker" / "client"),
+            dockerfile=str(ROOT / "docker" / "client" / "Dockerfile"),
+            tag=img,
+            buildargs={"HEADLESSMC_VERSION": ver},
+            rm=True,
         )
         return 0
 

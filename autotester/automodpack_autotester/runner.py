@@ -6,23 +6,112 @@ import os
 import re
 import secrets
 import shutil
-import subprocess
 import time
 from collections.abc import Callable
 from fnmatch import fnmatch
 from pathlib import Path
 
+import docker as docker_py
+
 from .bridge import BridgeClient
 from .config import Target
-from .docker import Docker
+
 
 logger = logging.getLogger(__name__)
+
+_docker = docker_py.from_env()
+
+
+def _container(name):
+    return _docker.containers.get(name)
+
+
+def _container_logs(name):
+    try:
+        return _container(name).logs().decode("utf-8", errors="replace")
+    except docker_py.errors.NotFound:
+        return ""
+
+
+def _remove_container(name):
+    try:
+        _container(name).remove(force=True)
+    except docker_py.errors.NotFound:
+        pass
+
+
+def _ensure_network(name):
+    _remove_network(name)
+    _docker.networks.create(name, check_duplicate=True)
+
+
+def _remove_network(name):
+    try:
+        _docker.networks.get(name).remove()
+    except docker_py.errors.NotFound:
+        pass
+
+
+def _ensure_volume(name):
+    _docker.volumes.create(name)
+
+
+def _remove_volume(name):
+    try:
+        _docker.volumes.get(name).remove()
+    except docker_py.errors.NotFound:
+        pass
+
+
+def _run_container(name, image, network, env, mounts, command=None, user=None):
+    volumes = {}
+    for host, container_path, readonly in mounts:
+        volumes[str(host)] = {"bind": container_path, "mode": "ro" if readonly else "rw"}
+    return _docker.containers.run(
+        image, detach=True, name=name, network=network,
+        environment=dict(env), volumes=volumes, command=command, user=user,
+    )
+
+
+def _assert_running(name):
+    c = _container(name)
+    c.reload()
+    state = c.attrs.get("State", {})
+    if not state.get("Running", False):
+        raise RuntimeError(
+            f"Container {name} exited (code={state.get('ExitCode', -1)}, error={state.get('Error', '')})"
+        )
+
+
+def _inspect_container(name):
+    return _container(name).attrs
+
+
+def _wait_for_log(name, needle, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if needle in _container_logs(name):
+            return
+        _assert_running(name)
+        time.sleep(2)
+    raise TimeoutError(f"Timeout waiting for {needle!r} in {name}")
+
+
+def _wait_exited(name, timeout):
+    c = _container(name)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        c.reload()
+        if not c.attrs.get("State", {}).get("Running", False):
+            return
+        time.sleep(1)
+    raise TimeoutError(f"Timeout waiting for {name} to exit")
+
 
 PHASES: dict[str, Callable] = {}
 
 
 def _reg(name: str) -> Callable:
-    """Decorator: register a function in PHASES under the given name."""
     def wrapper(fn: Callable) -> Callable:
         PHASES[name] = fn
         return fn
@@ -73,7 +162,6 @@ def run_case(
     srv_name = f"amp-s-{secrets.token_hex(4)}"[:63]
     cli_name = f"amp-c-{secrets.token_hex(4)}"[:63]
     token = secrets.token_hex(16)
-    docker = Docker()
     ctx = dict(locals())
 
     for d in (server_dir, game_dir, cache_dir):
@@ -99,7 +187,7 @@ def run_case(
 
         _prepare_server(ctx, target, settings)
         _seed_cache(ctx)
-        docker.create_network(net_name)
+        _ensure_network(net_name)
 
         flow = scenario.get("flow", [])
         if not flow:
@@ -130,7 +218,7 @@ def run_case(
     finally:
         for name in [cli_name, srv_name]:
             try:
-                logs = docker.logs(name)
+                logs = _container_logs(name)
                 if logs:
                     (case_dir / f"{name}.log").write_text(
                         logs, encoding="utf-8", errors="replace"
@@ -138,17 +226,16 @@ def run_case(
             except Exception:
                 pass
             try:
-                docker.remove_container(name)
+                _remove_container(name)
             except Exception:
                 logger.warning("Failed to remove container %s", name)
-        docker.remove_network(net_name)
+        _remove_network(net_name)
 
 
 # === infrastructure (not flow phases) ===
 
 
 def _prepare_server(ctx, target, settings):
-    """Write server config and test files to server_dir BEFORE launch."""
     srv_dir = ctx["server_dir"]
     (srv_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx["artifact"], srv_dir / "mods" / "automodpack.jar")
@@ -172,45 +259,17 @@ def _prepare_server(ctx, target, settings):
 
 
 def _seed_cache(ctx):
-    """Pre-populate HMC cache from previous run (client side only)."""
     cache_seed = (ctx["out_dir"].parent / ".hmc-cache").resolve()
     if cache_seed.exists() and cache_seed != ctx["cache_dir"]:
-        try:
-            subprocess.run(
-                [
-                    "cp",
-                    "-ra",
-                    "--reflink=auto",
-                    f"{cache_seed}/.",
-                    f"{ctx['cache_dir']}/",
-                ],
-                check=True,
-                capture_output=True,
-            )
-        except subprocess.CalledProcessError:
-            shutil.copytree(
-                cache_seed,
-                ctx["cache_dir"],
-                copy_function=shutil.copy2,
-                dirs_exist_ok=True,
-            )
+        shutil.copytree(
+            cache_seed,
+            ctx["cache_dir"],
+            copy_function=shutil.copy2,
+            dirs_exist_ok=True,
+        )
 
 
 def _launch_server(ctx, target, scenario, settings):
-    """Start the Minecraft server container.
-
-    Server type (forge/fabric/etc) comes from:
-      1. topology.server.type in the scenario YAML
-      2. serverTypes.{loader} in settings.yaml
-      3. Auto-detected by itzg/minecraft-server if neither set.
-
-    Server env vars are merged from (lower wins):
-      - settings.yaml → server.env (defaults)
-      - scenario YAML → topology.server.env (overrides)
-
-    Server files/libraries are cached in a Docker volume
-    (amp-server-cache-{target.id}) that persists between runs.
-    """
     topo = scenario.get("topology", {}).get("server", {})
     srv_type = topo.get("type") or settings.get("serverTypes", {}).get(target.loader)
     if not srv_type:
@@ -256,8 +315,8 @@ def _launch_server(ctx, target, scenario, settings):
     if sc.get("enabled", True):
         vol = f"{sc.get('volumePrefix', 'amp-server-cache')}-{target.id}"
         if sc.get("clean", False):
-            ctx["docker"].remove_volume(vol)
-        ctx["docker"].ensure_volume(vol)
+            _remove_volume(vol)
+        _ensure_volume(vol)
         mounts = [(vol, "/data", False)]
         for sub in ("mods", "automodpack"):
             (ctx["server_dir"] / sub).mkdir(parents=True, exist_ok=True)
@@ -270,17 +329,12 @@ def _launch_server(ctx, target, scenario, settings):
     )
     if ":" not in img:
         img = f"{img}:{str(settings.get('images', {}).get('serverTagTemplate', 'java{java}')).format(java=target.java)}"
-    ctx["docker"].run_detached(
+    _run_container(
         name=ctx["srv_name"], image=img, network=ctx["net_name"], env=env, mounts=mounts
     )
 
 
 def _launch_client(ctx, target, client_image):
-    """Start a fresh client container.
-
-    Client uses an HMC cache directory (hmc-cache/) mounted at /work/hmc-cache.
-    This cache is seeded from the previous run via _seed_cache above.
-    """
     game_dir = ctx["game_dir"]
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx["artifact"], game_dir / "mods" / "automodpack.jar")
@@ -289,7 +343,7 @@ def _launch_client(ctx, target, client_image):
         (game_dir / "config" / "fml.toml").write_text(
             'disableConfigWatcher = false\nearlyWindowControl = false\nmaxThreads = -1\nversionCheck = true\ndefaultConfigPath = "defaultconfigs"\ndisableOptimizedDFU = true\nearlyWindowProvider = "fmlearlywindow"\nearlyWindowWidth = 854\nearlyWindowHeight = 480\nearlyWindowMaximized = false\ndebugOpenGl = false\nearlyWindowFBScale = 1\nearlyWindowSkipGLVersions = []\nearlyWindowSquir = false\nearlyLoadingScreenTheme = ""\ndependencyOverrides = {}\n'
         )
-    ctx["docker"].run_detached(
+    _run_container(
         name=ctx["cli_name"],
         image=client_image,
         network=ctx["net_name"],
@@ -314,22 +368,21 @@ def _launch_client(ctx, target, client_image):
         user=f"{_uid()}:{_gid()}",
     )
     time.sleep(1)
-    ctx["docker"].assert_running(ctx["cli_name"])
+    _assert_running(ctx["cli_name"])
 
 
 def _wait_server(ctx, target, scenario, settings):
     to = scenario.get("timeouts", {}) or settings.get("timeouts", {})
-    ctx["docker"].wait_for_log(
+    _wait_for_log(
         ctx["srv_name"], "Done (", timeout=float(to.get("serverStartSeconds", 180))
     )
 
 
-# === flow phases — each does exactly ONE thing ===
+# === flow phases ===
 
 
 @_reg("wait_bridge")
 def _phase_wait_bridge(ctx):
-    """Poll bridge-state.json until it exists, then ping the bridge."""
     if "bridge" in ctx:
         return
     ctx["bridge"] = BridgeClient(ctx["game_dir"], ctx["token"])
@@ -337,9 +390,9 @@ def _phase_wait_bridge(ctx):
     dl = time.monotonic() + to
     while time.monotonic() < dl:
         try:
-            ctx["docker"].assert_running(ctx["cli_name"])
+            _assert_running(ctx["cli_name"])
         except RuntimeError as e:
-            logs = ctx["docker"].logs(ctx["cli_name"])
+            logs = _container_logs(ctx["cli_name"])
             raise TimeoutError(
                 f"Client exited before bridge: {e}\n--- logs ---\n{logs[-2000:]}"
             )
@@ -355,7 +408,6 @@ def _phase_wait_bridge(ctx):
 
 @_reg("click_continue")
 def _phase_click_continue(ctx):
-    """Dismiss any interstitial screen by clicking 'Continue' until TitleScreen appears."""
     bridge = ctx["bridge"]
     dl = time.monotonic() + 30
     while time.monotonic() < dl:
@@ -380,17 +432,10 @@ def _phase_click_continue(ctx):
 
 @_reg("read_fingerprint")
 def _phase_read_fingerprint(ctx):
-    """Read TLS certificate fingerprint from server container logs.
-    
-    Polls for up to serverStartSeconds (default 180s) because the server
-    starts in parallel with this phase. The fingerprint line appears
-    early in startup — usually within seconds — but we keep waiting
-    for slow starts.
-    """
     to = float(ctx["scenario"].get("timeouts", {}).get("serverStartSeconds", 180))
     dl = time.monotonic() + to
     while time.monotonic() < dl:
-        logs = ctx["docker"].logs(ctx["srv_name"])
+        logs = _container_logs(ctx["srv_name"])
         for line in logs.splitlines():
             m = re.search(
                 r"(?:certificate\s+)?fingerprint[:\s]+([0-9A-Fa-f:]+)", line, re.IGNORECASE
@@ -404,27 +449,23 @@ def _phase_read_fingerprint(ctx):
 
 @_reg("connect")
 def _phase_connect(ctx):
-    """Connect the client to the server, retrying if connection fails or sticks."""
     bridge = ctx["bridge"]
     host = ctx["srv_name"]
     deadline = time.monotonic() + 90
 
-    # Both Yarn and MojMap class-name checks (Yarn: class_397=ConnectScreen, class_442=TitleScreen)
     _TITLE = ("TitleScreen", "class_442")
     _CONNECT = ("ConnectScreen", "class_397")
 
     while time.monotonic() < deadline:
         bridge.request("connect", host=host, port=25565)
-        # Poll up to 15s: TitleScreen → failure (retry); not ConnectScreen → success; stuck on ConnectScreen → retry
         poll_dl = time.monotonic() + 15
         while time.monotonic() < poll_dl:
             screen = str(bridge.request("get_screen").get("screenClass") or "")
             if any(n in screen for n in _TITLE):
-                break  # connection failed → retry
+                break
             if not any(n in screen for n in _CONNECT):
-                return  # no longer connecting → success (FingerprintScreen, DangerScreen, etc.)
+                return
             time.sleep(0.5)
-        # Cancel the stuck connection by reopening the title screen before retrying
         bridge.request("set_screen")
         time.sleep(1)
     raise RuntimeError("Could not connect after multiple attempts")
@@ -432,7 +473,6 @@ def _phase_connect(ctx):
 
 @_reg("wait_fingerprint")
 def _phase_wait_fingerprint(ctx):
-    """Wait for the mod's FingerprintVerificationScreen to appear."""
     fp = ctx.get("fingerprint")
     if not fp:
         raise RuntimeError("No fingerprint — run read_fingerprint phase first")
@@ -449,7 +489,6 @@ def _phase_wait_fingerprint(ctx):
 
 @_reg("accept_fingerprint")
 def _phase_accept_fingerprint(ctx):
-    """Type the fingerprint into the EditBox and click Verify (real user flow)."""
     fp = ctx.get("fingerprint")
     if not fp:
         raise RuntimeError("No fingerprint — run read_fingerprint phase first")
@@ -471,7 +510,6 @@ def _phase_accept_fingerprint(ctx):
 
 @_reg("skip_fingerprint")
 def _phase_skip_fingerprint(ctx):
-    """Skip fingerprint verification (for versions without EditBox)."""
     bridge = ctx["bridge"]
     bridge.request("click", selector={"text": "Skip"})
     _await(
@@ -502,7 +540,6 @@ def _phase_skip_fingerprint(ctx):
 
 @_reg("wait_danger")
 def _phase_wait_danger(ctx):
-    """Wait for DangerScreen to appear."""
     bridge = ctx["bridge"]
     _await(
         lambda: (
@@ -516,7 +553,6 @@ def _phase_wait_danger(ctx):
 
 @_reg("click_confirm")
 def _phase_click_confirm(ctx):
-    """Click the last active Button on the current screen (Confirm on DangerScreen)."""
     bridge = ctx["bridge"]
     dl = time.monotonic() + 5
     while time.monotonic() < dl:
@@ -533,7 +569,6 @@ def _phase_click_confirm(ctx):
 
 @_reg("wait_download")
 def _phase_wait_download(ctx):
-    """Wait for the modpack download marker file to appear."""
     marker = (
         ctx["game_dir"]
         / "automodpack"
@@ -553,7 +588,6 @@ def _phase_wait_download(ctx):
 
 @_reg("verify_files")
 def _phase_verify_files(ctx):
-    """Check that all expected serverFiles exist in the synced modpack."""
     mp_root = ctx["game_dir"] / "automodpack" / "modpacks" / ctx["modpack_name"]
     dl = time.monotonic() + 120
     while time.monotonic() < dl:
@@ -568,7 +602,6 @@ def _phase_verify_files(ctx):
 
 @_reg("verify_mods")
 def _phase_verify_mods(ctx):
-    """Check that all expected mod patterns match at least one installed jar."""
     if not ctx["expected_mods"]:
         return
     mp_root = ctx["game_dir"] / "automodpack" / "modpacks" / ctx["modpack_name"]
@@ -588,7 +621,6 @@ def _phase_verify_mods(ctx):
 
 @_reg("click_restart")
 def _phase_click_restart(ctx):
-    """Wait 20s for RestartScreen; if shown, click Restart. Otherwise continue."""
     bridge = ctx["bridge"]
     dl = time.monotonic() + 20
     while time.monotonic() < dl:
@@ -607,16 +639,15 @@ def _phase_click_restart(ctx):
                         break
             except RuntimeError:
                 pass
-            ctx["docker"].wait_exited(ctx["cli_name"], timeout=90)
+            _wait_exited(ctx["cli_name"], timeout=90)
             return
         time.sleep(0.5)
 
 
 @_reg("quit")
 def _phase_quit(ctx):
-    """Disconnect and quit the game if still running."""
     try:
-        state = ctx["docker"].inspect(ctx["cli_name"]).get("State", {})
+        state = _inspect_container(ctx["cli_name"]).get("State", {})
         if state.get("Running", False):
             ctx["bridge"].request("quit")
     except (RuntimeError, TimeoutError):
@@ -625,20 +656,17 @@ def _phase_quit(ctx):
 
 @_reg("launch_server")
 def _phase_launch_server(ctx):
-    """Start the server container."""
     _launch_server(ctx, ctx["target"], ctx["scenario"], ctx["settings"])
 
 
 @_reg("wait_server")
 def _phase_wait_server(ctx):
-    """Wait for 'Done (' in server logs."""
     _wait_server(ctx, ctx["target"], ctx["scenario"], ctx["settings"])
 
 
 @_reg("launch_client")
 def _phase_launch_client(ctx):
-    """Start a fresh client container (for rejoin phase)."""
-    ctx["docker"].remove_container(ctx["cli_name"])
+    _remove_container(ctx["cli_name"])
     if "bridge" in ctx:
         del ctx["bridge"]
     _launch_client(ctx, ctx["target"], ctx["client_image"])
@@ -646,7 +674,6 @@ def _phase_launch_client(ctx):
 
 @_reg("wait_join")
 def _phase_wait_join(ctx):
-    """Wait for null screenClass indicating the player is in-game."""
     bridge = ctx["bridge"]
     to = float(ctx["scenario"].get("timeouts", {}).get("rejoinSeconds", 180))
     _await(

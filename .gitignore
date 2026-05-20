@@ -48,6 +48,3 @@ __pycache__/
 *.egg-info/
 autotester/out/
 autotester/.hmc-cache/
-# build output
-/pl/
-/META-INF/
