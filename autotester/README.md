@@ -410,11 +410,7 @@ topology:
       dependencies: true
 ```
 
-<<<<<<< HEAD
-Then run: `uv run autotester run --scenario my-test`
-=======
 Then run: `uv --project autotester run autotester run --scenario my-test`
->>>>>>> 4d2f314c (autotester: Docker-based in-game integration test framework)
 
 ## CI (GitHub Actions)
 

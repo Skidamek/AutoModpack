@@ -265,12 +265,6 @@ public class Preload {
             return;
         }
         try {
-            Class<?> screenImplClass = Class.forName("pl.skidam.automodpack.client.ScreenImpl");
-            ScreenManager.INSTANCE = (pl.skidam.automodpack_loader_core.screen.ScreenService) screenImplClass.getDeclaredConstructor().newInstance();
-        } catch (Throwable e) {
-            LOGGER.warn("Failed to bootstrap AutoModpack ScreenImpl during prelaunch", e);
-        }
-        try {
             Class<?> bridgeClass = Class.forName("pl.skidam.automodpack.client.autotest.AutoTestBridge");
             bridgeClass.getMethod("startIfEnabled").invoke(null);
         } catch (Throwable e) {

@@ -81,26 +81,10 @@ tasks.named<ShadowJar>("shadowJar") {
     mergeServiceFiles()
 }
 
-
-val moduleName = project.name.removePrefix("loader-")
 java {
-    when {
-        moduleName == "neoforge-fml10" -> {
-            sourceCompatibility = JavaVersion.VERSION_21
-            targetCompatibility = JavaVersion.VERSION_21
-            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
-        }
-        moduleName == "neoforge-fml4" -> {
-            sourceCompatibility = JavaVersion.VERSION_21
-            targetCompatibility = JavaVersion.VERSION_21
-            toolchain.languageVersion.set(JavaLanguageVersion.of(21))
-        }
-        else -> {
-            sourceCompatibility = JavaVersion.VERSION_17
-            targetCompatibility = JavaVersion.VERSION_17
-            toolchain.languageVersion.set(JavaLanguageVersion.of(17))
-        }
-    }
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
     withSourcesJar()
 }
 
