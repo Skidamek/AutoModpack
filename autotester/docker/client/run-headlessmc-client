@@ -57,7 +57,7 @@ if [[ "$loader" == "fabric" && -n "$loader_version" ]]; then
   launch_target="fabric-loader-${loader_version}-${minecraft}"
 fi
 
-yes | hmc --command "download ${minecraft}" 2>/dev/null || true
+echo n | hmc --command "download ${minecraft}" 2>/dev/null || true
 hmc --command "config -refresh" 2>/dev/null || true
 
 exec hmc \
