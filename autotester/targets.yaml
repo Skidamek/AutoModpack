@@ -17,8 +17,6 @@ targets:
   - { id: "1.21.4-neoforge", minecraft: "1.21.4", loader: "neoforge", java: 21, neoforgeVersion: "21.4.157" }
   - { id: "1.21.1-fabric", minecraft: "1.21.1", loader: "fabric", java: 21, fabricLoader: "0.17.3" }
   - { id: "1.21.1-neoforge", minecraft: "1.21.1", loader: "neoforge", java: 21, neoforgeVersion: "21.1.230" }
-  - { id: "1.20.4-fabric", minecraft: "1.20.4", loader: "fabric", java: 17, fabricLoader: "0.17.3" }
-  - { id: "1.20.4-neoforge", minecraft: "1.20.4", loader: "neoforge", java: 17, neoforgeVersion: "20.4.248" }
   - { id: "1.20.1-fabric", minecraft: "1.20.1", loader: "fabric", java: 17, fabricLoader: "0.17.3" }
   - { id: "1.20.1-forge", minecraft: "1.20.1", loader: "forge", java: 17, forgeVersion: "47.3.0" }
   - { id: "1.19.2-fabric", minecraft: "1.19.2", loader: "fabric", java: 17, fabricLoader: "0.17.3" }

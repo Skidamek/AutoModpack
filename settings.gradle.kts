@@ -34,7 +34,7 @@ coreModules.forEach { module ->
         "fabric-core" -> project.buildFileName = "../../loader-fabric-core.gradle.kts"
         "fabric-15", "fabric-16" -> project.buildFileName = "../../loader-fabric.gradle.kts"
         "forge-fml40", "forge-fml47" -> project.buildFileName = "../../loader-forge.gradle.kts"
-        "neoforge-fml2", "neoforge-fml4", "neoforge-fml10" -> project.buildFileName = "../../loader-neoforge.gradle.kts"
+        "neoforge-fml4", "neoforge-fml10" -> project.buildFileName = "../../loader-neoforge.gradle.kts"
     }
 }
 
@@ -52,7 +52,6 @@ stonecutter {
         match("1.21.5", "fabric", "neoforge")
         match("1.21.4", "fabric", "neoforge")
         match("1.21.1", "fabric", "neoforge")
-        match("1.20.4", "fabric", "neoforge")
         match("1.20.1", "fabric", "forge")
         match("1.19.2", "fabric", "forge")
         match("1.18.2", "fabric", "forge")

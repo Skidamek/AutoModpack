@@ -94,18 +94,6 @@ meta.minecraft = ">=1.21 <=1.21.1"
 publish_versions = "1.21\n1.21.1"
 
 
-["1.20.4-fabric"]
-deps.fabric-api = "0.97.3+1.20.4"
-
-["1.20.4-neoforge"]
-deps.neoforge = "20.4.248"
-
-["1.20.4"]
-deps.minecraft = "1.20.4"
-meta.minecraft = "1.20.4"
-publish_versions = "1.20.4"
-
-
 ["1.20.1-fabric"]
 deps.fabric-api = "0.92.7+1.20.1"
 
