@@ -24,7 +24,7 @@ case "$java_version" in
     export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
     ;;
   25)
-    export JAVA_HOME="/usr/lib/jvm/java-25-temurin"
+    export JAVA_HOME="/usr/lib/jvm/java-25-openjdk-amd64"
     ;;
   *)
     echo "ERROR: unsupported Java version: $java_version" >&2
