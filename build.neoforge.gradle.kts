@@ -51,7 +51,7 @@ java {
         sourceCompatibility = JavaVersion.VERSION_25
         targetCompatibility = JavaVersion.VERSION_25
         toolchain.languageVersion.set(JavaLanguageVersion.of(25))
-    } else if (sc.current.parsed >= "1.20.5") {
+    } else {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
