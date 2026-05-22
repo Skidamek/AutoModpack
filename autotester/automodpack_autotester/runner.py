@@ -71,14 +71,17 @@ def _remove_volume(name):
         pass
 
 
-def _run_container(name, image, network, env, mounts, command=None, user=None):
+def _run_container(name, image, network, env, mounts, command=None, user=None, entrypoint=None):
     volumes = {}
     for host, container_path, readonly in mounts:
         volumes[str(host)] = {"bind": container_path, "mode": "ro" if readonly else "rw"}
-    return _docker.containers.run(
-        image, detach=True, name=name, network=network,
+    kwargs = dict(
+        image=image, detach=True, name=name, network=network,
         environment=dict(env), volumes=volumes, command=command, user=user,
     )
+    if entrypoint is not None:
+        kwargs["entrypoint"] = entrypoint
+    return _docker.containers.run(**kwargs)
 
 
 def _assert_running(name):
@@ -165,14 +168,13 @@ def run_case(
     case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
     server_dir = case_dir / "server"
     game_dir = case_dir / "client" / "game"
-    cache_dir = case_dir / "hmc-cache"
     net_name = f"amp-{secrets.token_hex(4)}"[:63]
     srv_name = f"amp-s-{secrets.token_hex(4)}"[:63]
     cli_name = f"amp-c-{secrets.token_hex(4)}"[:63]
     token = secrets.token_hex(16)
     ctx = dict(locals())
 
-    for d in (server_dir, game_dir, cache_dir):
+    for d in (server_dir, game_dir):
         d.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -194,7 +196,6 @@ def run_case(
         ctx["expected_mods"] = [str(m) for m in sf.get("expectedMods", [])]
 
         _prepare_server(ctx, target, settings)
-        _seed_cache(ctx)
         _ensure_network(net_name)
 
         flow = scenario.get("flow", [])
@@ -266,17 +267,6 @@ def _prepare_server(ctx, target, settings):
         f.write_text(content)
 
 
-def _seed_cache(ctx):
-    cache_seed = (ctx["out_dir"].parent / ".hmc-cache").resolve()
-    if cache_seed.exists() and cache_seed != ctx["cache_dir"]:
-        shutil.copytree(
-            cache_seed,
-            ctx["cache_dir"],
-            copy_function=shutil.copy2,
-            dirs_exist_ok=True,
-        )
-
-
 def _launch_server(ctx, target, scenario, settings):
     topo = scenario.get("topology", {}).get("server", {})
     srv_type = topo.get("type") or settings.get("serverTypes", {}).get(target.loader)
@@ -346,11 +336,11 @@ def _launch_client(ctx, target, client_image):
     game_dir = ctx["game_dir"]
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx["artifact"], game_dir / "mods" / "automodpack.jar")
-    if target.loader in ("forge", "neoforge"):
-        (game_dir / "config").mkdir(parents=True, exist_ok=True)
-        (game_dir / "config" / "fml.toml").write_text(
-            'disableConfigWatcher = false\nearlyWindowControl = false\nmaxThreads = -1\nversionCheck = true\ndefaultConfigPath = "defaultconfigs"\ndisableOptimizedDFU = true\nearlyWindowProvider = "fmlearlywindow"\nearlyWindowWidth = 854\nearlyWindowHeight = 480\nearlyWindowMaximized = false\ndebugOpenGl = false\nearlyWindowFBScale = 1\nearlyWindowSkipGLVersions = []\nearlyWindowSquir = false\nearlyLoadingScreenTheme = ""\ndependencyOverrides = {}\n'
-        )
+
+    # Mount the persistent HMC cache directly (no per-case copy)
+    hmc_cache_root = (ctx["out_dir"].parent / ".hmc-cache").resolve()
+    hmc_cache_root.mkdir(parents=True, exist_ok=True)
+
     _run_container(
         name=ctx["cli_name"],
         image=client_image,
@@ -358,11 +348,11 @@ def _launch_client(ctx, target, client_image):
         env={
             "AM_AUTOTEST_BRIDGE_TOKEN": ctx["token"],
             "AM_AUTOTEST_GAME_DIR": "/work/game",
-            "AM_AUTOTEST_HMC_DIR": "/work/hmc-cache",
+            "AM_AUTOTEST_HMC_CACHE_DIR": "/work/hmc-cache",
         },
         mounts=[
             (game_dir, "/work/game", False),
-            (ctx["cache_dir"], "/work/hmc-cache", False),
+            (hmc_cache_root, "/work/hmc-cache", False),
         ],
         command=[
             "/opt/automodpack/run-headlessmc-client",

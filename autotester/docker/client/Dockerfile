@@ -29,10 +29,18 @@ RUN apt-get update \
         openjdk-25-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache \
-    && curl -fsSL "https://github.com/headlesshq/headlessmc/releases/download/${HEADLESSMC_VERSION}/headlessmc-launcher-linux-x64" \
-        -o /usr/local/bin/hmc \
-    && chmod +x /usr/local/bin/hmc
+# Detect architecture at build time and fetch the matching HMC binary
+RUN HMC_ARCH="$(uname -m)" && \
+    case "$HMC_ARCH" in \
+        x86_64) HMC_BIN="headlessmc-launcher-linux-x64" ;; \
+        aarch64) HMC_BIN="headlessmc-launcher-linux-arm64" ;; \
+        *) echo "Unsupported architecture: $HMC_ARCH"; exit 1 ;; \
+    esac && \
+    mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache && \
+    curl -fsSL \
+        "https://github.com/headlesshq/headlessmc/releases/download/${HEADLESSMC_VERSION}/${HMC_BIN}" \
+        -o /usr/local/bin/hmc && \
+    chmod +x /usr/local/bin/hmc
 
 COPY run-headlessmc-client /opt/automodpack/run-headlessmc-client
 RUN chmod +x /opt/automodpack/run-headlessmc-client

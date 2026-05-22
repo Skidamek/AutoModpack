@@ -9,11 +9,14 @@ java_version="${5:?java version required}"
 loader_version="${6:-}"
 
 game_dir="${AM_AUTOTEST_GAME_DIR:-/work/game}"
-hmc_dir="${AM_AUTOTEST_HMC_DIR:-/work/hmc-cache}"
+cache_dir="${AM_AUTOTEST_HMC_CACHE_DIR:-/work/hmc-cache}"
 bridge_token="${AM_AUTOTEST_BRIDGE_TOKEN:?bridge token required}"
 
-mkdir -p "$game_dir" "$hmc_dir"
-mkdir -p "$hmc_dir/HeadlessMC"
+mkdir -p "$game_dir" "$cache_dir"
+
+# Per-test HMC config dir — avoids write conflicts on shared cache bind-mount
+config_dir=$(mktemp -d "/tmp/hmc-config-XXXXXX")
+mkdir -p "$config_dir/HeadlessMC"
 
 # Select pre-installed Java - no HMC auto-download
 case "$java_version" in
@@ -33,11 +36,13 @@ case "$java_version" in
 esac
 export PATH="$JAVA_HOME/bin:$PATH"
 
+# ── Build JVM arguments ───────────────────────────────────────────
 jvmargs="-Dautomodpack.autotest=true -Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dcom.mojang.text2speech=false"
 gameargs="--width 854 --height 480"
 
-cat > "$hmc_dir/HeadlessMC/config.properties" <<EOF
-hmc.mcdir=$hmc_dir
+# ── Write HMC config to per-test directory ────────────────────────
+cat > "$config_dir/HeadlessMC/config.properties" <<EOF
+hmc.mcdir=$cache_dir
 hmc.gamedir=$game_dir
 hmc.offline=true
 hmc.offline.username=AutoTest
@@ -49,16 +54,19 @@ hmc.exit.on.failed.command=true
 hmc.gameargs=$gameargs
 EOF
 
-cd "$hmc_dir"
+export HMC_HOME="$config_dir"
 
+# ── Install Fabric loader if needed ───────────────────────────────
 launch_target="${loader}:${minecraft}"
-if [[ "$loader" == "fabric" && -n "$loader_version" ]]; then
-  hmc --command "fabric ${minecraft} --uid ${loader_version}"
-  launch_target="fabric-loader-${loader_version}-${minecraft}"
+if [ "$loader" = "fabric" ] && [ -n "$loader_version" ]; then
+    hmc --command "fabric ${minecraft} --uid ${loader_version}" 2>/dev/null || true
+    launch_target="fabric-loader-${loader_version}-${minecraft}"
 fi
 
+# ── Pre-download Minecraft assets (no-op if cached) ───────────────
 echo n | hmc --command "download ${minecraft}" 2>/dev/null || true
 hmc --command "config -refresh" 2>/dev/null || true
 
+# ── Launch ─────────────────────────────────────────────────────────
 exec hmc \
   --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"
