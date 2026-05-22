@@ -19,6 +19,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -30,6 +31,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
     private final MinecraftServer server;
     private final Collection<Future<?>> synchronizers = new ConcurrentLinkedQueue<>();
     public final Map<Integer, Identifier> channels = new ConcurrentHashMap<>();
+    private final AtomicInteger processingCount = new AtomicInteger(0);
     private boolean firstTick = true;
 
     public ServerLoginNetworkAddon(ServerLoginPacketListenerImpl serverLoginNetworkHandler) {
@@ -61,7 +63,7 @@ public class ServerLoginNetworkAddon implements PacketSender {
             return true;
         });
 
-        return this.channels.isEmpty() && this.synchronizers.isEmpty();
+        return this.processingCount.get() == 0 && this.channels.isEmpty() && this.synchronizers.isEmpty();
     }
 
     /**
@@ -71,9 +73,14 @@ public class ServerLoginNetworkAddon implements PacketSender {
      * @return true if the packet was handled
      */
     public boolean handle(ServerboundCustomQueryAnswerPacket packet) {
-        LoginQueryParser loginQuery = new LoginQueryParser(packet);
-        if (loginQuery.success) return handle(loginQuery.queryId, loginQuery.buf);
-        return false;
+        this.processingCount.incrementAndGet();
+        try {
+            LoginQueryParser loginQuery = new LoginQueryParser(packet);
+            if (loginQuery.success) return handle(loginQuery.queryId, loginQuery.buf);
+            return false;
+        } finally {
+            this.processingCount.decrementAndGet();
+        }
     }
 
     private boolean handle(int queryId, @Nullable FriendlyByteBuf originalBuf) {
