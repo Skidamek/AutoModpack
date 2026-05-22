@@ -116,8 +116,8 @@ public final class AutoTestBridge {
                     };
                     b.onPress(input);
                     /*?} else {*/
-                    /*b.onPress();*/
-                    /*?}*/
+                    /*b.onPress();
+                    *//*?}*/
                 }
                 return ok();
             });
@@ -166,8 +166,8 @@ public final class AutoTestBridge {
                 /*? if >= 1.19.4 {*/
                 wo.addProperty("x", aw.getX()); wo.addProperty("y", aw.getY());
                 /*?} else {*/
-                /*wo.addProperty("x", aw.x); wo.addProperty("y", aw.y);*/
-                /*?}*/
+                /*wo.addProperty("x", aw.x); wo.addProperty("y", aw.y);
+                *//*?}*/
                 wo.addProperty("active", aw.active); wo.addProperty("visible", aw.visible);
                 a.add(wo);
             }
@@ -198,7 +198,7 @@ public final class AutoTestBridge {
                 /*ConnectScreen.startConnecting(new TitleScreen(), captured, ServerAddress.parseString(addr), new ServerData("AutoTest", addr, ServerData.Type.OTHER), false);
                 *//*?} else if >= 1.20.1 {*/
                 /*ConnectScreen.startConnecting(new TitleScreen(), captured, ServerAddress.parseString(addr), new ServerData("AutoTest", addr, false), false);
-                */                /*?} else {*/
+                                *//*?} else {*/
                 /*ConnectScreen.startConnecting(new TitleScreen(), captured, ServerAddress.parseString(addr), new ServerData("AutoTest", addr, false));
                 *//*?}*/
                 f.complete(ok());
