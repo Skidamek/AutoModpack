@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,7 +12,7 @@ class BridgeClient:
     game_dir: Path
     token: str
 
-    def request(self, op: str, **payload) -> dict:
+    def request(self, op: str, timeout: float = 30, **payload) -> dict:
         autotest_dir = self.game_dir / "automodpack" / "autotest"
         autotest_dir.mkdir(parents=True, exist_ok=True)
         cmd = autotest_dir / "bridge-command.json"
@@ -22,7 +23,7 @@ class BridgeClient:
             json.dumps({"token": self.token, "op": op, **payload}), encoding="utf-8"
         )
         tmp.rename(cmd)
-        deadline = time.monotonic() + 30
+        deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if rsp.exists():
                 data = json.loads(rsp.read_text(encoding="utf-8"))
@@ -30,5 +31,5 @@ class BridgeClient:
                 if not data.get("ok"):
                     raise RuntimeError(f"Bridge error on '{op}': {data.get('error', data)}")
                 return data
-            time.sleep(0.05)
-        raise TimeoutError(f"Bridge did not respond to '{op}' after 30s")
+            time.sleep(random.uniform(0.03, 0.07))
+        raise TimeoutError(f"Bridge did not respond to '{op}' after {timeout}s")

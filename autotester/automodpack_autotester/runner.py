@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import re
 import secrets
 import shutil
@@ -22,13 +23,20 @@ logger = logging.getLogger(__name__)
 _docker = docker_py.from_env()
 
 
+def _jitter_sleep(base, fraction=0.2):
+    time.sleep(random.uniform(base * (1 - fraction), base * (1 + fraction)))
+
+
 def _container(name):
     return _docker.containers.get(name)
 
 
-def _container_logs(name):
+def _container_logs(name, tail=None):
     try:
-        return _container(name).logs().decode("utf-8", errors="replace")
+        kwargs = {}
+        if tail is not None:
+            kwargs["tail"] = tail
+        return _container(name).logs(**kwargs).decode("utf-8", errors="replace")
     except docker_py.errors.NotFound:
         return ""
 
@@ -90,10 +98,10 @@ def _inspect_container(name):
 def _wait_for_log(name, needle, timeout):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if needle in _container_logs(name):
+        if needle in _container_logs(name, tail=200):
             return
         _assert_running(name)
-        time.sleep(2)
+        _jitter_sleep(2)
     raise TimeoutError(f"Timeout waiting for {needle!r} in {name}")
 
 
@@ -104,7 +112,7 @@ def _wait_exited(name, timeout):
         c.reload()
         if not c.attrs.get("State", {}).get("Running", False):
             return
-        time.sleep(1)
+        _jitter_sleep(1)
     raise TimeoutError(f"Timeout waiting for {name} to exit")
 
 
@@ -140,7 +148,7 @@ def _await(pred, timeout, msg):
         r = pred()
         if r is not None:
             return r
-        time.sleep(0.5)
+        _jitter_sleep(0.5)
     raise TimeoutError(msg)
 
 
@@ -367,7 +375,7 @@ def _launch_client(ctx, target, client_image):
         ],
         user=f"{_uid()}:{_gid()}",
     )
-    time.sleep(1)
+    _jitter_sleep(1)
     _assert_running(ctx["cli_name"])
 
 
@@ -398,11 +406,11 @@ def _phase_wait_bridge(ctx):
             )
         if _bridge_state(ctx).exists():
             try:
-                ctx["bridge"].request("ping")
+                ctx["bridge"].request("ping", timeout=5)
                 return
             except Exception:
                 pass
-        time.sleep(1)
+        _jitter_sleep(1)
     raise TimeoutError(f"Bridge for {ctx['target'].id} did not become available within {to}s")
 
 
@@ -414,7 +422,7 @@ def _phase_click_continue(ctx):
         try:
             r = bridge.request("get_widgets")
         except (TimeoutError, RuntimeError):
-            time.sleep(1)
+            _jitter_sleep(1)
             continue
         if "TitleScreen" in str(r.get("screenClass", "")) or "class_442" in str(
             r.get("screenClass", "")
@@ -425,9 +433,9 @@ def _phase_click_continue(ctx):
                 bridge.request("click", selector={"text": "Continue"})
             except (TimeoutError, RuntimeError):
                 pass
-            time.sleep(1)
+            _jitter_sleep(1)
             continue
-        time.sleep(0.5)
+        _jitter_sleep(0.5)
 
 
 @_reg("read_fingerprint")
@@ -435,7 +443,7 @@ def _phase_read_fingerprint(ctx):
     to = float(ctx["scenario"].get("timeouts", {}).get("serverStartSeconds", 180))
     dl = time.monotonic() + to
     while time.monotonic() < dl:
-        logs = _container_logs(ctx["srv_name"])
+        logs = _container_logs(ctx["srv_name"], tail=200)
         for line in logs.splitlines():
             m = re.search(
                 r"(?:certificate\s+)?fingerprint[:\s]+([0-9A-Fa-f:]+)", line, re.IGNORECASE
@@ -443,7 +451,7 @@ def _phase_read_fingerprint(ctx):
             if m:
                 ctx["fingerprint"] = m.group(1)
                 return
-        time.sleep(1)
+        _jitter_sleep(1)
     raise RuntimeError("No TLS fingerprint found in server logs")
 
 
@@ -457,17 +465,19 @@ def _phase_connect(ctx):
     _CONNECT = ("ConnectScreen", "class_397")
 
     while time.monotonic() < deadline:
+        _assert_running(ctx["cli_name"])
         bridge.request("connect", host=host, port=25565)
-        poll_dl = time.monotonic() + 15
+        remaining = deadline - time.monotonic()
+        poll_dl = time.monotonic() + min(remaining, 45)
         while time.monotonic() < poll_dl:
             screen = str(bridge.request("get_screen").get("screenClass") or "")
             if any(n in screen for n in _TITLE):
                 break
             if not any(n in screen for n in _CONNECT):
                 return
-            time.sleep(0.5)
+            _jitter_sleep(0.5)
         bridge.request("set_screen")
-        time.sleep(1)
+        _jitter_sleep(1)
     raise RuntimeError("Could not connect after multiple attempts")
 
 
@@ -493,19 +503,16 @@ def _phase_accept_fingerprint(ctx):
     if not fp:
         raise RuntimeError("No fingerprint — run read_fingerprint phase first")
     ctx["bridge"].request("verify_fingerprint", fingerprint=fp)
-    _await(
-        lambda: (
-            any(
-                n in str(ctx["bridge"].request("get_screen").get("screenClass", ""))
-                for n in ("DangerScreen", "DownloadScreen", "RestartScreen")
-            )
-            or "FingerprintVerificationScreen"
-            not in str(ctx["bridge"].request("get_screen").get("screenClass", ""))
-            or None
-        ),
-        20,
-        "Fingerprint verification did not complete",
-    )
+
+    def _check():
+        screen_class = str(ctx["bridge"].request("get_screen").get("screenClass", ""))
+        if any(n in screen_class for n in ("DangerScreen", "DownloadScreen", "RestartScreen")):
+            return True
+        if "FingerprintVerificationScreen" not in screen_class:
+            return True
+        return None
+
+    _await(_check, 20, "Fingerprint verification did not complete")
 
 
 @_reg("skip_fingerprint")
@@ -534,7 +541,7 @@ def _phase_skip_fingerprint(ctx):
             ):
                 bridge.request("click", selector={"widgetId": w["id"]})
                 return
-        time.sleep(1)
+        _jitter_sleep(1)
     raise RuntimeError("Skip button did not activate")
 
 
@@ -559,7 +566,7 @@ def _phase_click_confirm(ctx):
         widgets = bridge.request("get_widgets").get("widgets", [])
         if widgets:
             break
-        time.sleep(0.2)
+        _jitter_sleep(0.2)
     for w in reversed(widgets):
         if w.get("type") == "Button" and w.get("active", False):
             bridge.request("click", widgetId=int(w.get("id", -1)))
@@ -593,7 +600,7 @@ def _phase_verify_files(ctx):
     while time.monotonic() < dl:
         if all((mp_root / rel).exists() for rel, _ in ctx["scenario_files"]):
             return
-        time.sleep(2)
+        _jitter_sleep(2)
     missing = [
         str(rel) for rel, _ in ctx["scenario_files"] if not (mp_root / rel).exists()
     ]
@@ -611,7 +618,7 @@ def _phase_verify_mods(ctx):
         mods = {p.name for p in mod_dir.glob("*.jar")} if mod_dir.exists() else set()
         if all(any(fnmatch(m, p) for m in mods) for p in ctx["expected_mods"]):
             return
-        time.sleep(2)
+        _jitter_sleep(2)
     existing = {p.name for p in mod_dir.glob("*.jar")} if mod_dir.exists() else set()
     missing = [
         p for p in ctx["expected_mods"] if not any(fnmatch(m, p) for m in existing)
@@ -629,19 +636,20 @@ def _phase_click_restart(ctx):
         except TimeoutError:
             continue
         if "RestartScreen" in str(screen.get("screenClass", "")):
-            try:
-                widgets = bridge.request("get_widgets").get("widgets", [])
-                action_labels = ("close", "restart", "quit")
-                for w in reversed(widgets):
-                    txt = str(w.get("text", "")).lower()
-                    if w.get("type") == "Button" and w.get("active", False) and any(l in txt for l in action_labels):
-                        bridge.request("click", widgetId=int(w.get("id", -1)))
-                        break
-            except RuntimeError:
-                pass
+            widgets = bridge.request("get_widgets").get("widgets", [])
+            clicked = False
+            action_labels = ("close", "restart", "quit")
+            for w in reversed(widgets):
+                txt = str(w.get("text", "")).lower()
+                if w.get("type") == "Button" and w.get("active", False) and any(label in txt for label in action_labels):
+                    bridge.request("click", widgetId=int(w.get("id", -1)))
+                    clicked = True
+                    break
+            if not clicked:
+                raise RuntimeError("No restart button found on RestartScreen")
             _wait_exited(ctx["cli_name"], timeout=90)
             return
-        time.sleep(0.5)
+        _jitter_sleep(0.5)
 
 
 @_reg("quit")
@@ -676,17 +684,19 @@ def _phase_launch_client(ctx):
 def _phase_wait_join(ctx):
     bridge = ctx["bridge"]
     to = float(ctx["scenario"].get("timeouts", {}).get("rejoinSeconds", 180))
-    _await(
-        lambda: (
-            "FingerprintVerificationScreen"
-            not in str(bridge.request("get_screen").get("screenClass", ""))
-            and "DownloadScreen"
-            not in str(bridge.request("get_screen").get("screenClass", ""))
-            and "RestartScreen"
-            not in str(bridge.request("get_screen").get("screenClass", ""))
-            and bridge.request("get_screen").get("screenClass") is None
-            or None
-        ),
-        to,
-        f"{ctx['target'].id}: Player did not join in-game within {to}s",
-    )
+
+    def _check():
+        screen = bridge.request("get_screen")
+        screen_class = screen.get("screenClass")
+        if screen_class is None:
+            return True
+        name = str(screen_class)
+        if "FingerprintVerificationScreen" in name:
+            return None
+        if "DownloadScreen" in name:
+            return None
+        if "RestartScreen" in name:
+            return None
+        return True
+
+    _await(_check, to, f"{ctx['target'].id}: Player did not join in-game within {to}s")
