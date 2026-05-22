@@ -2,19 +2,19 @@ package pl.skidam.automodpack.mixin.core;
 
 import net.minecraft.network.protocol.login.ServerboundCustomQueryAnswerPacket;
 import net.minecraft.server.network.ServerLoginPacketListenerImpl;
-import org.spongepowered.asm.mixin.*;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworkAddon;
-
-import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 @Mixin(value = ServerLoginPacketListenerImpl.class, priority = 300)
 public abstract class ServerLoginNetworkHandlerMixin  {
 
-    @Shadow private ServerLoginPacketListenerImpl.State state;
+	/*? if <= 1.20.1 {*/
+    /*@org.spongepowered.asm.mixin.Shadow ServerLoginPacketListenerImpl.State state;
+    *//*?}*/
     @Unique private ServerLoginNetworkAddon automodpack$addon;
 
     @Inject(
@@ -38,22 +38,31 @@ public abstract class ServerLoginNetworkHandlerMixin  {
         // Handle queries
         if (this.automodpack$addon.handle(packet)) {
             ci.cancel(); // We have handled it, cancel vanilla behavior
-        } else {
-            // Catch unhandled AutoModpack `LoginResponsePayload` packets - it generally shouldn't happen, but just in case and also fabric api does it too...
-            /*? if >=1.20.2 {*/
-            if (packet.payload() instanceof LoginResponsePayload response) {
-                if (response.data() != null) {
-                    response.data().skipBytes(response.data().readableBytes());
-                }
-                LOGGER.debug("Unhandled LoginResponsePayload in ServerLoginPacketListenerImpl with id: {}", response.id());
-            }
-            /*?}*/
         }
     }
 
+    /*? if > 1.20.1 {*/
     @Inject(
+            method = "verifyLoginAndFinishConnectionSetup",
+            at = @At("HEAD"),
+            cancellable = true
+    )
+    private void beforeVerifyLogin(CallbackInfo ci) {
+        if (this.automodpack$addon == null) {
+            return;
+        }
+
+        if (!this.automodpack$addon.queryTick()) {
+            ci.cancel();
+            return;
+        }
+
+        this.automodpack$addon = null;
+    }
+    /*?} else {*/
+    /*@Inject(
             method = "tick",
-            at = @At(value = "HEAD"),
+            at = @At("HEAD"),
             cancellable = true
     )
     private void sendOurPackets(CallbackInfo ci) {
@@ -61,18 +70,16 @@ public abstract class ServerLoginNetworkHandlerMixin  {
             return;
         }
 
-        if (state != ServerLoginPacketListenerImpl.State.NEGOTIATING && state != ServerLoginPacketListenerImpl.State./*? if <1.20.2 {*/ /*READY_TO_ACCEPT *//*?} else {*/VERIFYING/*?}*/) {
+        if (state != ServerLoginPacketListenerImpl.State.NEGOTIATING && state != ServerLoginPacketListenerImpl.State.READY_TO_ACCEPT) {
             return;
         }
 
-        // Send first automodpack packet
         if (!this.automodpack$addon.queryTick()) {
-            // We need more time to process packets
             ci.cancel();
             return;
         }
 
         this.automodpack$addon = null;
     }
-
+    *//*?}*/
 }
