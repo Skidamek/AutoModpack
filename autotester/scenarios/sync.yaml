@@ -15,7 +15,7 @@
 #   read_fingerprint    Extract TLS certificate fingerprint from server logs.
 #   launch_client       Start/restart the client container (HeadlessMC).
 #   wait_bridge         Poll bridge-state.json, ping the bridge TCP handler.
-#   click_continue      Click "Continue" on minecraft welcome screen.
+#   ensure_ready        Wait and/or click through "Continue" till title screen appears.
 #   connect             Bridge: connect to server at {srv_name}:25565.
 #   wait_fingerprint    Wait until the client opens FingerprintVerificationScreen.
 #   accept_fingerprint  Type fingerprint into EditBox, click Verify.
@@ -82,7 +82,7 @@ flow:
   - read_fingerprint            # extract TLS fingerprint from server logs
   - wait_server                 # wait for "Done (" — runs concurrent with client boot
   - wait_bridge                 # poll bridge-state.json, ping bridge
-  - click_continue              # click Continue on welcome screen
+  - ensure_ready                # wait till title scrren and click through continue on welcome screen
   - connect                     # bridge.connect(host, port)
   - wait_fingerprint            # wait for FingerprintVerificationScreen
   - accept_fingerprint          # type fingerprint in EditBox → click Verify
@@ -94,6 +94,7 @@ flow:
   - quit                        # bridge.quit() → wait for client exit
   - launch_client               # fresh client container (rejoin)
   - wait_bridge                 # wait for bridge on new client
+  - ensure_ready                # wait till title scrren appears
   - connect                     # connect to server
   - wait_join                   # poll null screenClass (in-game)
   - quit                        # quit

@@ -404,8 +404,8 @@ def _phase_wait_bridge(ctx):
     raise TimeoutError(f"Bridge for {ctx['target'].id} did not become available within {to}s")
 
 
-@_reg("click_continue")
-def _phase_click_continue(ctx):
+@_reg("ensure_ready")
+def _phase_ensure_ready(ctx):
     bridge = ctx["bridge"]
     dl = time.monotonic() + 30
     while time.monotonic() < dl:
