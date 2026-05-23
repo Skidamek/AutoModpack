@@ -89,7 +89,7 @@ public class ModpackContent {
                 }
             }
 
-            var tempPathMap = new HashMap<>(filesToProcess);
+            var tempPathMap = new ConcurrentHashMap<>(filesToProcess);
 
             List<CompletableFuture<Jsons.ModpackContentFields.ModpackContentItem>> futures = filesToProcess.entrySet().stream()
                     .map(entry -> CompletableFuture.supplyAsync(() -> {

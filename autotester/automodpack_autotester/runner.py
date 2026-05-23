@@ -337,8 +337,8 @@ def _launch_client(ctx, target, client_image):
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx["artifact"], game_dir / "mods" / "automodpack.jar")
 
-    # Mount the persistent HMC cache directly (no per-case copy)
-    hmc_cache_root = (ctx["out_dir"].parent / ".hmc-cache").resolve()
+    # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
+    hmc_cache_root = (ctx["out_dir"].parent / ".hmc-cache" / target.id.replace(".", "_")).resolve()
     hmc_cache_root.mkdir(parents=True, exist_ok=True)
 
     _run_container(

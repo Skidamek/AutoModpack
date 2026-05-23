@@ -234,8 +234,14 @@ public final class AutoTestBridge {
     }
 
     private static String execOnMain(ThrowingSupplier<String> t) throws Exception {
+        Minecraft c;
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while ((c = Minecraft.getInstance()) == null) {
+            if (System.nanoTime() > deadline) return err("Minecraft not initialized");
+            Thread.sleep(100);
+        }
         CompletableFuture<String> f = new CompletableFuture<>();
-        Minecraft.getInstance().execute(() -> { try { f.complete(t.get()); } catch (Exception e) { f.completeExceptionally(e); } });
+        c.execute(() -> { try { f.complete(t.get()); } catch (Exception e) { f.completeExceptionally(e); } });
         return f.get(60, TimeUnit.SECONDS);
     }
 
