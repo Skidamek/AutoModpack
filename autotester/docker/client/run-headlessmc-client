@@ -14,6 +14,14 @@ bridge_token="${AM_AUTOTEST_BRIDGE_TOKEN:?bridge token required}"
 
 mkdir -p "$game_dir" "$cache_dir"
 
+# ── Share client-jar cache across targets ──────────────────────────────
+shared_versions="/work/hmc-shared-versions"
+mkdir -p "$shared_versions"
+if [ ! -L "$cache_dir/versions" ]; then
+    rm -rf "$cache_dir/versions" 2>/dev/null || true
+    ln -s "$shared_versions" "$cache_dir/versions"
+fi
+
 # ── Find the right Java binary ─────────────────────────────────────
 java_bin=""
 for dir in /usr/lib/jvm/*"${java_version}"*/bin/java; do
@@ -64,7 +72,7 @@ EOF
 # ── Install Fabric loader if needed ───────────────────────────────
 launch_target="${loader}:${minecraft}"
 if [ "$loader" = "fabric" ] && [ -n "$loader_version" ]; then
-    hmc --command "fabric ${minecraft} --uid ${loader_version}" 2>/dev/null || true
+    timeout 30 hmc --command "fabric ${minecraft} --uid ${loader_version}" 2>/dev/null || true
     launch_target="fabric-loader-${loader_version}-${minecraft}"
 fi
 
@@ -75,10 +83,10 @@ earlyWindowControl = false
 splashscreen = false
 EOF
 
-# ── Pre-download Minecraft assets (no-op if cached) ───────────────
-echo n | hmc --command "download ${minecraft}" 2>/dev/null || true
+# ── Pre-download Minecraft assets (best-effort, with timeout) ─────
+timeout 20 hmc --command "download ${minecraft}" 2>/dev/null || true
 hmc --command "config -refresh" 2>/dev/null || true
 
 # ── Launch ─────────────────────────────────────────────────────────
-exec hmc \
+exec timeout 90 hmc \
   --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"

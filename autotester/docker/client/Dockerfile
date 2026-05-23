@@ -36,8 +36,8 @@ RUN HMC_ARCH="$(uname -m)" && \
         aarch64) HMC_BIN="headlessmc-launcher-linux-arm64" ;; \
         *) echo "Unsupported architecture: $HMC_ARCH"; exit 1 ;; \
     esac && \
-    mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache /work/HeadlessMC && \
-    chmod a+rwx /work/HeadlessMC && \
+    mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache /work/HeadlessMC /work/hmc-shared-versions && \
+    chmod a+rwx /work/HeadlessMC /work/hmc-shared-versions && \
     curl -fsSL \
         "https://github.com/headlesshq/headlessmc/releases/download/${HEADLESSMC_VERSION}/${HMC_BIN}" \
         -o /usr/local/bin/hmc && \

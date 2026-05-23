@@ -11,7 +11,7 @@ images:
 run:
   target: all
   scenario: sync
-  jobs: 4
+  jobs: 1
   retryMax: 0
 
 server:

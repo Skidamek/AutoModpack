@@ -162,7 +162,11 @@ def main(argv: list[str] | None = None) -> int:
             print("\nInterrupted, cleaning up containers...", file=sys.stderr)
             for ff in task_map:
                 ff.cancel()
-            _kill_amp_containers()
+            try:
+                _kill_amp_containers()
+            except KeyboardInterrupt:
+                print("Force exit.", file=sys.stderr)
+                os._exit(1)
             print("Cleanup complete.", file=sys.stderr)
 
         finally:
@@ -172,9 +176,8 @@ def main(argv: list[str] | None = None) -> int:
                 json.dumps({"ok": ok, "results": list(results.values())}, indent=2)
             )
             if interrupted:
-                return 1
+                os._exit(1)
             return 0 if ok else 1
 
     except KeyboardInterrupt:
-        print("Force exit.", file=sys.stderr)
-        return 1
+        os._exit(1)

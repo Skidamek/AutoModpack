@@ -277,7 +277,7 @@ images:
 run:
   target: all                        # Default --target
   scenario: sync                     # Default --scenario
-  jobs: 4                            # Default --jobs
+  jobs: 1                            # Default --jobs
   retryMax: 0                        # Not implemented (reserved)
 
 server:
