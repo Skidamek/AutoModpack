@@ -11,7 +11,8 @@ fun getLoaderModuleName(name: String): String {
         name.contains("fabric") -> "fabric-core"
         name.contains("neoforge") -> when (mcVersion) {
             "1.21.8", "1.21.5", "1.21.4", "1.21.1" -> "neoforge-fml4"
-            "1.21.11", "1.21.10", "26.1" -> "neoforge-fml10"
+            "1.21.10", "1.21.11" -> "neoforge-fml10"
+            "26.1" -> "neoforge-fml11"
             else -> error("Unknown neoforge loader module for Minecraft version: $mcVersion")
         }
         name.contains("forge") -> if (mcVersion == "1.18.2") "forge-fml40" else "forge-fml47"

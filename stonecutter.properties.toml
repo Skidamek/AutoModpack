@@ -11,22 +11,22 @@ publish_versions = "26.2"
 
 
 ["26.1-fabric"]
-deps.fabric-api = "0.144.0+26.1"
+deps.fabric-api = "0.149.1+26.1.2"
 
 ["26.1-neoforge"]
-deps.neoforge = "26.1.0.1-beta"
+deps.neoforge = "26.1.2.64-beta"
 
 ["26.1"]
 deps.minecraft = "26.1"
-meta.minecraft = "26.1"
-publish_versions = "26.1"
+meta.minecraft = "~26.1"
+publish_versions = "26.1\n26.1.1\n26.1.2"
 
 
 ["1.21.11-fabric"]
-deps.fabric-api = "0.141.1+1.21.11"
+deps.fabric-api = "0.141.4+1.21.11"
 
 ["1.21.11-neoforge"]
-deps.neoforge = "21.11.8-beta"
+deps.neoforge = "21.11.42"
 
 ["1.21.11"]
 deps.minecraft = "1.21.11"
@@ -83,10 +83,10 @@ publish_versions = "1.21.4"
 
 
 ["1.21.1-fabric"]
-deps.fabric-api = "0.116.7+1.21.1"
+deps.fabric-api = "0.116.12+1.21.1"
 
 ["1.21.1-neoforge"]
-deps.neoforge = "21.1.169"
+deps.neoforge = "21.1.230"
 
 ["1.21.1"]
 deps.minecraft = "1.21.1"

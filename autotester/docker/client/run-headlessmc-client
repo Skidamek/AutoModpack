@@ -68,12 +68,12 @@ if [ "$loader" = "fabric" ] && [ -n "$loader_version" ]; then
     launch_target="fabric-loader-${loader_version}-${minecraft}"
 fi
 
-# ── Disable NeoForge early display window (crashes in headless CI) ──
-#    The early-loading screen serves no purpose on a headless server and
-#    has a race condition: initRender reads FMLConfig before FMLConfig.load()
-#    finishes writing defaults, causing a null → auto-unbox NPE.
+# ── Disable Neo/Forge early display window (may cause crash in CI) ──
 mkdir -p "$game_dir/config"
-echo "earlyWindowControl = false" > "$game_dir/config/fml.toml"
+cat > "$game_dir/config/fml.toml" <<EOF
+earlyWindowControl = false
+splashscreen = false
+EOF
 
 # ── Pre-download Minecraft assets (no-op if cached) ───────────────
 echo n | hmc --command "download ${minecraft}" 2>/dev/null || true

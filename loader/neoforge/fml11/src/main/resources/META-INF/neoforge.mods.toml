@@ -1,0 +1,14 @@
+modLoader = "javafml"
+loaderVersion = "[1,)"
+license = "LGPLv3"
+
+[[mods]]
+modId = "automodpack"
+version = "${version}"
+displayName = "AutoModpack"
+displayURL = "https://modrinth.com/mod/automodpack"
+authors = "Skidam"
+description = '''
+
+'''
+logoFile = "icon.png"
