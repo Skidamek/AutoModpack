@@ -68,6 +68,13 @@ if [ "$loader" = "fabric" ] && [ -n "$loader_version" ]; then
     launch_target="fabric-loader-${loader_version}-${minecraft}"
 fi
 
+# ── Workaround NeoForge race condition: FMLConfig.load() writes fml.toml  ─
+#    in a background thread, but the early-display thread reads it before
+#    the defaults are written — missing key → auto-unbox NPE.
+#    Pre-seed the file so the key exists regardless of thread ordering.
+mkdir -p "$game_dir/config"
+echo "debugOpenGl = false" > "$game_dir/config/fml.toml"
+
 # ── Pre-download Minecraft assets (no-op if cached) ───────────────
 echo n | hmc --command "download ${minecraft}" 2>/dev/null || true
 hmc --command "config -refresh" 2>/dev/null || true
