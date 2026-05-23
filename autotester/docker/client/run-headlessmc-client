@@ -14,34 +14,41 @@ bridge_token="${AM_AUTOTEST_BRIDGE_TOKEN:?bridge token required}"
 
 mkdir -p "$game_dir" "$cache_dir"
 
-# Per-test HMC config dir — avoids write conflicts on shared cache bind-mount
-config_dir=$(mktemp -d "/tmp/hmc-config-XXXXXX")
-mkdir -p "$config_dir/HeadlessMC"
+# ── Find the right Java binary ─────────────────────────────────────
+java_bin=""
+for dir in /usr/lib/jvm/*"${java_version}"*/bin/java; do
+    if [ -x "$dir" ]; then
+        java_bin="$dir"
+        break
+    fi
+done
 
-# Select pre-installed Java - no HMC auto-download
-case "$java_version" in
-  17)
-    export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-amd64"
-    ;;
-  21)
-    export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
-    ;;
-  25)
-    export JAVA_HOME="/usr/lib/jvm/java-25-openjdk-amd64"
-    ;;
-  *)
-    echo "ERROR: unsupported Java version: $java_version" >&2
+if [ -z "$java_bin" ] && command -v java &>/dev/null; then
+    java_bin="$(command -v java)"
+fi
+
+if [ -z "$java_bin" ] || [ ! -x "$java_bin" ]; then
+    echo "ERROR: Java ${java_version} not found" >&2
+    echo "Searched /usr/lib/jvm/*${java_version}* and PATH" >&2
+    ls -la /usr/lib/jvm/ 2>/dev/null || echo "(no /usr/lib/jvm)" >&2
     exit 1
-    ;;
-esac
+fi
+
+actual_ver=$("$java_bin" -version 2>&1 | head -1 | sed 's/.*version "\([0-9]*\).*/\1/')
+echo "Java: $("$java_bin" -version 2>&1 | head -1) ($java_bin)"
+if [ "$actual_ver" != "$java_version" ]; then
+    echo "WARNING: Requested Java ${java_version}, using Java ${actual_ver}" >&2
+fi
+
+export JAVA_HOME="${java_bin%/bin/java}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
 # ── Build JVM arguments ───────────────────────────────────────────
 jvmargs="-Dautomodpack.autotest=true -Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dcom.mojang.text2speech=false"
 gameargs="--width 854 --height 480"
 
-# ── Write HMC config to per-test directory ────────────────────────
-cat > "$config_dir/HeadlessMC/config.properties" <<EOF
+# ── Write HMC config ──────────────────────────────────────────────
+cat > /work/HeadlessMC/config.properties <<EOF
 hmc.mcdir=$cache_dir
 hmc.gamedir=$game_dir
 hmc.offline=true
@@ -53,8 +60,6 @@ hmc.crash.report.watcher=true
 hmc.exit.on.failed.command=true
 hmc.gameargs=$gameargs
 EOF
-
-export HMC_HOME="$config_dir"
 
 # ── Install Fabric loader if needed ───────────────────────────────
 launch_target="${loader}:${minecraft}"
