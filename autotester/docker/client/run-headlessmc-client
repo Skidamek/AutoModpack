@@ -68,12 +68,12 @@ if [ "$loader" = "fabric" ] && [ -n "$loader_version" ]; then
     launch_target="fabric-loader-${loader_version}-${minecraft}"
 fi
 
-# ── Workaround NeoForge race condition: FMLConfig.load() writes fml.toml  ─
-#    in a background thread, but the early-display thread reads it before
-#    the defaults are written — missing key → auto-unbox NPE.
-#    Pre-seed the file so the key exists regardless of thread ordering.
+# ── Disable NeoForge early display window (crashes in headless CI) ──
+#    The early-loading screen serves no purpose on a headless server and
+#    has a race condition: initRender reads FMLConfig before FMLConfig.load()
+#    finishes writing defaults, causing a null → auto-unbox NPE.
 mkdir -p "$game_dir/config"
-echo "debugOpenGl = false" > "$game_dir/config/fml.toml"
+echo "earlyWindowControl = false" > "$game_dir/config/fml.toml"
 
 # ── Pre-download Minecraft assets (no-op if cached) ───────────────
 echo n | hmc --command "download ${minecraft}" 2>/dev/null || true
