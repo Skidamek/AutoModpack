@@ -20,12 +20,12 @@ Yes, you can add any mod you want to use alongside downloaded modpack by just pl
 Just delete file from server, or exclude it from sync, read about `syncedFiles` in [config](configuration/server-config)
 
 ### Can I remove/disable non modpack files/mods from player use?
-Not yet, it may come in the future.
+Read about `nonModpackFilesToDelete` in [config](configuration/server-config)
 
 ### Do I have to open any port on my router?
-No, you don't need to. By default AutoModpack injects into minecraft networking I/O which reuses your minecraft server port. (e.g. 25565)
+No, you don't need to. By default, AutoModpack injects into minecraft networking I/O which reuses your minecraft server port. (e.g. 25565)
 
-If you want to use different port. Disable `hostModpackOnMinecraftPort` and change `hostPort` in [config](configuration/server-config).
+If you want to use different port. Change `bindPort` and `portToSend` in [config](configuration/server-config).
 
 ### What happens when I update AutoModpack version on server?
 Client always try to sync to the server's version of AutoModpack. It updates or downgrades itself to the server's version if such is found on the Modrinth.

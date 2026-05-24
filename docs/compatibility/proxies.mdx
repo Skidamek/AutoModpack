@@ -1,14 +1,32 @@
-Most minecraft proxies won't work with AutoModpack due to early login stage packets. However Gate Lite is supported and works well with AutoModpack. Here is a list of known proxies and their compatibility:
+Most Minecraft proxies drop early login packets. AutoModpack needs those packets to function. A standard proxy setup will break it.
 
-| Proxy Name                                        | Compatibility | Notes       |
-|---------------------------------------------------|---------------|-------------|
-| [Gate Lite](https://gate.minekube.com/guide/lite) | ✅             | Supported   |
-| Gate                                              | ❌             | Unsupported |
-| Velocity                                          | ❌             | Unsupported |
-| Waterfall                                         | ❌             | Unsupported |
-| BungeeCord                                        | ❌             | Unsupported |
+You need a proxy that forwards those packets. Here is the current compatibility.
 
-When using Gate Lite, it's crucial to correctly configure `portToSend`. By default, clients attempt to connect to the modpack host using the same port they used to connect to your Minecraft server. However, when using a proxy like Gate, this port differs from your actual Minecraft server's port, preventing clients from connecting to download the modpack.
+| Proxy                                             | Status  | Setup Required     |
+|---------------------------------------------------|---------|--------------------|
+| [Velocity](https://papermc.io/software/velocity/) | ✅ Works | Needs patch plugin |
+| [Gate Lite](https://gate.minekube.com/guide/lite) | ✅ Works | Port configuration |
+| Gate                                              | ❌ Fails | N/A                |
+| Waterfall                                         | ❌ Fails | N/A                |
+| BungeeCord                                        | ❌ Fails | N/A                |
 
-Therefore, if your modpack is hosted with `bindPort` set to `-1`, `portToSend` must be set to the port from which your Minecraft server is accessible from (typically, this will be the same port on which Minecraft server listens).
-Similarly, if `bindPort` is set to a specific port, `portToSend` must be set to the port from which modpack host is accessible from (typically, this will be the same as `bindPort`).
+### Velocity
+
+Velocity will not forward the packets on its own. You need to patch it.
+
+Install the official [AutoModpack Velocity plugin](https://modrinth.com/plugin/automodpackvelocity).
+
+
+### Gate Lite
+
+Gate Lite forwards the packets out of the box. Your issue here is routing.
+
+Clients default to downloading the modpack on the same port they used to connect to the server. The proxy changes that port. If you leave it alone, the client tries to pull files from the wrong place and the connection fails.
+
+You override this behavior with the `portToSend` setting.
+
+If your `bindPort` is set to `-1`
+- Set `portToSend` to the port your backend Minecraft server uses to listen for connections.
+
+If your `bindPort` is set to a specific number:
+- Set `portToSend` to the port your modpack host uses. This is usually the exact same number you used for `bindPort`.
