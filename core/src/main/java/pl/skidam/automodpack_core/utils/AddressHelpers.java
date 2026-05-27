@@ -58,8 +58,11 @@ public class AddressHelpers {
     }
 
     public static boolean areIpsEqual(String ip1, String ip2) {
+        if (ip1 == null || ip2 == null) return false;
         try {
-            return InetAddress.getByName(ip1).equals(InetAddress.getByName(ip2));
+            var a1 = InetAddress.getByName(ip1);
+            var a2 = InetAddress.getByName(ip2);
+            return a1.equals(a2);
         } catch (UnknownHostException ignored) {
         }
         return false;

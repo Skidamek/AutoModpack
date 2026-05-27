@@ -246,7 +246,7 @@ public class ModpackUpdater {
                 new ReLauncher(modpackDir, updateType, changelogs).restart(false);
             }
         } catch (SocketTimeoutException | ConnectException e) {
-            LOGGER.error("{} is not responding", "Modpack host of " + modpackAddresses.hostAddress, e);
+            LOGGER.error("{} is not responding", "Modpack host of " + modpackAddresses.hostAddress.getHostString(), e);
         } catch (InterruptedException e) {
             LOGGER.info("Interrupted the download");
         } catch (Exception e) {
@@ -392,7 +392,7 @@ public class ModpackUpdater {
 
                 Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
 
-                LOGGER.info("Retrying to download {} from {}", serverFilePath, modpackAddresses.hostAddress.getHostName());
+                LOGGER.info("Retrying to download {} from {}", serverFilePath, modpackAddresses.hostAddress.getHostString());
 
                 Runnable failureCallback = () -> {
                     failedDownloads.put(serverItem, List.of());

@@ -82,7 +82,7 @@ public class DownloadClient implements AutoCloseable {
                 .toList();
 
         connections.addAll(newConnections);
-        LOGGER.info("Download client initialized with {} connections to {}", connections.size(), modpackAddresses.hostAddress);
+        LOGGER.info("Download client initialized with {} connections to {}", connections.size(), modpackAddresses.hostAddress.getHostString());
     }
 
     /**
