@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.networking.client;
 
+import io.netty.buffer.Unpooled;
 import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.LoginQueryParser;
@@ -47,15 +48,26 @@ public class ClientLoginNetworkAddon {
 
         try {
             CompletableFuture<FriendlyByteBuf> future = handler.receive(this.client, this.handler, buf);
-            future.thenAccept(resultBuf -> {
-                ServerboundCustomQueryAnswerPacket packet = new ServerboundCustomQueryAnswerPacket(queryId, /*? if <1.20.2 {*/ /*resultBuf *//*?} else {*/ new LoginResponsePayload(channelName, resultBuf) /*?}*/);
-                ((ClientLoginNetworkHandlerAccessor) this.handler).getConnection().send(packet);
+            future.whenComplete((resultBuf, throwable) -> {
+                if (throwable != null) {
+                    LOGGER.error("Failed to handle login query in channel \"{}\"", channelName, throwable);
+                    resultBuf = new FriendlyByteBuf(Unpooled.buffer());
+                }
+                if (resultBuf == null) {
+                    resultBuf = new FriendlyByteBuf(Unpooled.buffer());
+                }
+                sendResponse(queryId, channelName, resultBuf);
             });
         } catch (Throwable e) {
             LOGGER.error("Encountered exception while handling in channel with name \"{}\"", channelName, e);
-            throw e;
+            sendResponse(queryId, channelName, new FriendlyByteBuf(Unpooled.buffer()));
         }
 
         return true;
+    }
+
+    private void sendResponse(int queryId, Identifier channelName, FriendlyByteBuf resultBuf) {
+        ServerboundCustomQueryAnswerPacket packet = new ServerboundCustomQueryAnswerPacket(queryId, /*? if <1.20.2 {*/ /*resultBuf *//*?} else {*/ new LoginResponsePayload(channelName, resultBuf) /*?}*/);
+        ((ClientLoginNetworkHandlerAccessor) this.handler).getConnection().send(packet);
     }
 }

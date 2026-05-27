@@ -24,7 +24,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -650,45 +649,39 @@ public class ModpackUtils {
     public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, boolean allowAskingUser) {
         return fetchModpackContent(modpackAddresses, secret,
                 (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
-                "Fetched", allowAskingUser);
+                allowAskingUser);
     }
 
     public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, byte[][] fileHashes, boolean allowAskingUser) {
         return fetchModpackContent(modpackAddresses, secret,
                 (client) -> client.requestRefresh(fileHashes, modpackContentTempFile),
-                "Re-fetched", allowAskingUser);
+                allowAskingUser);
     }
 
-    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, Future<Path>> operation, String fetchType, boolean allowAskingUser) {
+    private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, CompletableFuture<Path>> operation, boolean allowAskingUser) {
         if (secret == null)
             return Optional.empty();
         if (modpackAddresses.isAnyEmpty())
             throw new IllegalArgumentException("Modpack addresses are empty!");
 
-        try (DownloadClient client = DownloadClient.tryCreate(modpackAddresses, secret.secretBytes(), 1, userValidationCallback(modpackAddresses.hostAddress, allowAskingUser))) {
-            if (client == null) return Optional.empty();
-            var future = operation.apply(client);
-            Path path = future.get();
-            var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
-            Files.deleteIfExists(modpackContentTempFile);
-
-            if (content.isPresent() && potentiallyMalicious(content.get())) {
-                return Optional.empty();
-            }
-
-            return content;
+        try {
+            return fetchModpackContentAsync(
+                    modpackAddresses,
+                    secret,
+                    operation,
+                    blockingValidationCallback(modpackAddresses.hostAddress, allowAskingUser)
+            ).get();
         } catch (Exception e) {
             LOGGER.error("Error while getting server modpack content", e);
+            return Optional.empty();
         }
-
-        return Optional.empty();
     }
 
     public static boolean canConnectModpackHost(Jsons.ModpackAddresses modpackAddresses) {
         if (modpackAddresses.isAnyEmpty())
             throw new IllegalArgumentException("Modpack addresses are empty!");
 
-        try (DownloadClient client = DownloadClient.tryCreate(modpackAddresses, null, 1, null)) {
+        try (DownloadClient client = DownloadClient.createAsync(modpackAddresses, null, 1, null).get()) {
             return client != null;
         } catch (Exception e) {
             LOGGER.error("Error while pinging AutoModpack host server", e);
@@ -773,38 +766,70 @@ public class ModpackUtils {
     // ---- Async versions (non-blocking, used by login packet flow) ----
 
     public static CompletableFuture<Optional<Jsons.ModpackContentFields>> requestServerModpackContentAsync(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, boolean allowAskingUser) {
-        return fetchModpackContentAsync(modpackAddresses, secret,
-                (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
-                "Fetched", allowAskingUser);
-    }
-
-    private static CompletableFuture<Optional<Jsons.ModpackContentFields>> fetchModpackContentAsync(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Function<DownloadClient, CompletableFuture<Path>> operation, String fetchType, boolean allowAskingUser) {
         if (secret == null)
             return CompletableFuture.completedFuture(Optional.empty());
-        if (modpackAddresses.isAnyEmpty())
-            throw new IllegalArgumentException("Modpack addresses are empty!");
+        if (modpackAddresses.isAnyEmpty()) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Modpack addresses are empty!"));
+        }
 
-        return DownloadClient.createAsync(modpackAddresses, secret.secretBytes(), 1, userValidationCallbackAsync(modpackAddresses.hostAddress, allowAskingUser))
-                .thenApply(client -> {
-                    try (client) {
-                        Path path = operation.apply(client).get();
-                        var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
-                        Files.deleteIfExists(modpackContentTempFile);
+        return fetchModpackContentAsync(modpackAddresses, secret,
+                (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
+                userValidationCallbackAsync(modpackAddresses.hostAddress, allowAskingUser));
+    }
 
-                        if (content.isPresent() && potentiallyMalicious(content.get())) {
+    private static CompletableFuture<Optional<Jsons.ModpackContentFields>> fetchModpackContentAsync(
+            Jsons.ModpackAddresses modpackAddresses,
+            Secrets.Secret secret,
+            Function<DownloadClient, CompletableFuture<Path>> operation,
+            Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
+        if (secret == null)
+            return CompletableFuture.completedFuture(Optional.empty());
+        if (modpackAddresses.isAnyEmpty()) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Modpack addresses are empty!"));
+        }
+
+        return DownloadClient.createAsync(modpackAddresses, secret.secretBytes(), 1, trustCallback)
+                .thenCompose(client -> {
+                    CompletableFuture<Path> operationFuture;
+                    try {
+                        operationFuture = operation.apply(client);
+                    } catch (Exception e) {
+                        try {
+                            client.close();
+                        } catch (Exception ignored) {}
+                        return CompletableFuture.completedFuture(Optional.<Jsons.ModpackContentFields>empty());
+                    }
+
+                    return operationFuture.handle((path, throwable) -> {
+                        try (client) {
+                            if (throwable != null) {
+                                LOGGER.error("Error while getting server modpack content", throwable);
+                                return Optional.<Jsons.ModpackContentFields>empty();
+                            }
+
+                            var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
+                            Files.deleteIfExists(modpackContentTempFile);
+
+                            if (content.isPresent() && potentiallyMalicious(content.get())) {
+                                return Optional.<Jsons.ModpackContentFields>empty();
+                            }
+
+                            return content;
+                        } catch (Exception e) {
+                            LOGGER.error("Error while getting server modpack content", e);
                             return Optional.<Jsons.ModpackContentFields>empty();
                         }
-
-                        return content;
-                    } catch (Exception e) {
-                        LOGGER.error("Error while getting server modpack content", e);
-                        return Optional.<Jsons.ModpackContentFields>empty();
-                    }
+                    });
                 })
                 .exceptionally(e -> {
                     LOGGER.error("Error while getting server modpack content", e);
-                    return Optional.empty();
+                    return Optional.<Jsons.ModpackContentFields>empty();
                 });
+    }
+
+    private static Function<X509Certificate, CompletableFuture<Boolean>> blockingValidationCallback(InetSocketAddress address, boolean allowAskingUser) {
+        Function<X509Certificate, Boolean> callback = userValidationCallback(address, allowAskingUser);
+        return certificate -> CompletableFuture.completedFuture(callback.apply(certificate));
     }
 
     public static Function<X509Certificate, CompletableFuture<Boolean>> userValidationCallbackAsync(InetSocketAddress address, boolean allowAskingUser) {

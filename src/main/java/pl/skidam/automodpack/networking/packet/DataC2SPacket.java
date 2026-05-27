@@ -39,9 +39,9 @@ public class DataC2SPacket {
             return CompletableFuture.completedFuture(error);
         }
 
-        String packetAddress = dataPacket.address;
+        String packetAddress = dataPacket.address == null ? "" : dataPacket.address;
         int packetPort = dataPacket.port;
-        String modpackName = dataPacket.modpackName;
+        String modpackName = dataPacket.modpackName == null ? "" : dataPacket.modpackName;
         Secrets.Secret secret = dataPacket.secret;
         boolean modRequired = dataPacket.modRequired;
         boolean requiresMagic = dataPacket.requiresMagic;
@@ -56,32 +56,29 @@ public class DataC2SPacket {
         ModPackets.setOriginalServerAddress(null); // Reset for next server reconnection
         if (serverAddress == null) {
             LOGGER.error("Server address is null! Something gone very wrong! Please report this issue! https://github.com/Skidamek/AutoModpack/issues");
-            return CompletableFuture.completedFuture(new FriendlyByteBuf(Unpooled.buffer()));
+            return CompletableFuture.completedFuture(buildResponse(null));
         }
 
-        // Get actual address of the server client have connected to and format it
-        InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
-        String effectiveHost;
-        int effectivePort;
+        Path modpackDir;
+        Jsons.ModpackAddresses modpackAddresses;
+        try {
+            InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
+            var connectedInetAddress = connectedAddress.getAddress();
+            String effectiveHost = packetAddress.isBlank()
+                    ? (connectedInetAddress == null ? connectedAddress.getHostString() : connectedInetAddress.getHostAddress())
+                    : packetAddress;
+            int effectivePort = packetPort == -1 ? connectedAddress.getPort() : packetPort;
 
-        if (packetAddress.isBlank()) {
-            effectiveHost = connectedAddress.getAddress().getHostAddress();
-        } else {
-            effectiveHost = packetAddress;
+            InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
+
+            LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
+
+            modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
+            modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
+        } catch (Exception e) {
+            LOGGER.error("Error preparing modpack address from data packet", e);
+            return CompletableFuture.completedFuture(buildResponse(null));
         }
-
-        if (packetPort == -1) {
-            effectivePort = connectedAddress.getPort();
-        } else {
-            effectivePort = packetPort;
-        }
-
-        InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
-
-        LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
-
-        Path modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
-        Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
 
         return ModpackUtils.requestServerModpackContentAsync(modpackAddresses, secret, true)
                 .thenApply(optionalServerModpackContent -> {

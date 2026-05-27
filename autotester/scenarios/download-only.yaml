@@ -1,15 +1,6 @@
-# ── scenario: download-only ─────────────────────────────────────────────
-# Minimal: launch_server → wait_server → read_fingerprint → launch_client
-# → connect → fingerprint → download → verify → quit.
-# Skips restart and rejoin — faster feedback when debugging downloads.
-#
-# See sync.yaml for detailed documentation on serverFiles, server engine,
-# server caching (Docker volumes), and client caching (HMC cache seed).
-
 id: download-only
 description: |
-  Launch server/client → accept fingerprint → sync modpack → verify → quit.
-  Skips restart/rejoin for faster iteration.
+  Launch server/client, accept fingerprint, sync modpack, verify files, and quit.
 
 flow:
   - launch_server

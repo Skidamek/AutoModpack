@@ -1,103 +1,30 @@
-# ── scenario: sync ──────────────────────────────────────────────────────
-# Full end-to-end: launches server + client, connects, verifies fingerprint,
-# downloads the modpack, verifies files, restarts, and rejoins.
-#
-# CLI:  autotester run --scenario sync
-# New scenario: copy this file, change `id` and `flow:` list.
-#
-# ── Phases ──────────────────────────────────────────────────────────────
-# Edit the `flow:` list below. Each entry is a phase name registered in
-# runner.py → PHASES dict. Add/remove/reorder freely — no Python changes.
-#
-# Known phases:
-#   launch_server       Start the server container (itzg/minecraft-server).
-#   wait_server         Wait for "Done (" in server logs.
-#   read_fingerprint    Extract TLS certificate fingerprint from server logs.
-#   launch_client       Start/restart the client container (HeadlessMC).
-#   wait_bridge         Poll bridge-state.json, ping the bridge TCP handler.
-#   ensure_ready        Wait and/or click through "Continue" till title screen appears.
-#   connect             Bridge: connect to server at {srv_name}:25565.
-#   wait_fingerprint    Wait until the client opens FingerprintVerificationScreen.
-#   accept_fingerprint  Type fingerprint into EditBox, click Verify.
-#   skip_fingerprint    Skip verification (versions without EditBox).
-#   wait_danger         Poll until DangerScreen appears.
-#   click_confirm       Click the confirm button on DangerScreen.
-#   wait_download       Poll for the marker file in the synced modpack.
-#   verify_files        Check all serverFiles exist in the synced modpack.
-#   verify_mods         Check expected mod glob patterns match installed jars.
-#   click_restart       If RestartScreen → click Restart; wait for exit.
-#   quit                Bridge: quit game → wait for client exit.
-#   wait_join           Poll null screenClass (player in-game).
-#
-# ── serverFiles ─────────────────────────────────────────────────────────
-# Describes files the SERVER hosts in its modpack; the client downloads
-# and syncs them. Everything is under the server's host-modpack/main/ dir.
-#
-#   modpackName     Namespace for the modpack (both server and client).
-#                   Server: host-modpack/main/
-#                   Client: modpacks/{modpackName}/
-#
-#   marker          Relative path inside the modpack that signals
-#                   "sync completed". Written to host-modpack/main/ before
-#                   server start. Verified by `wait_download` on the client.
-#                   The file is NOT checked into the repo — it is generated
-#                   by _prepare_server() before each test run.
-#
-#   files           List of {path, content} — files written to the server's
-#                   host-modpack/main/ BEFORE server launch. After sync,
-#                   `verify_files` checks each exists under the client's
-#                   modpacks/{modpackName}/ directory.
-#
-#   expectedMods    Glob patterns for .jar files expected in the synced
-#                   mods/ directory. Add `verify_mods` to flow to enable.
-#                   Not used by default (add when testing mod filtering).
-#
-# ── Topology ────────────────────────────────────────────────────────────
-# topology.server.type overrides the engine mapping from settings.yaml:
-#   fabric → FABRIC, forge → FORGE, neoforge → NEOFORGE
-# If unset, settings.yaml → serverTypes maps loader→type.
-# The value becomes the TYPE env var for itzg/minecraft-server.
-#
-# topology.server.modrinth defines extra mods via Modrinth API.
-# topology.server.env merges with (and overrides) settings.yaml → server.env.
-# topology.server.memory sets container memory (default 2G).
-#
-# ── Caching ─────────────────────────────────────────────────────────────
-# Server: Docker volume amp-server-cache-{target.id} persists JARs.
-#   Set serverCache.clean: true in settings.yaml to purge before each run.
-# Client: HMC cache at ~/.hmc-cache/ seeded via cp --reflink before each
-#   run to avoid re-downloading Minecraft jars every test.
-#
-# ── Timeouts ────────────────────────────────────────────────────────────
-# Per-scenario overrides for settings.yaml timeouts. Set under timeouts: {}.
-# Keys: serverStartSeconds, clientStartSeconds, downloadFileSeconds, rejoinSeconds.
-
 id: sync
 description: |
-  Launch server/client → accept fingerprint → sync modpack → verify → restart → rejoin → in-game check.
+  Launch server/client, accept fingerprint, sync modpack, verify files, restart,
+  rejoin, and verify the player reaches the game.
 
 flow:
-  - launch_server               # start the server container
-  - launch_client               # start client immediately — both boot in parallel
-  - read_fingerprint            # extract TLS fingerprint from server logs
-  - wait_server                 # wait for "Done (" — runs concurrent with client boot
-  - wait_bridge                 # poll bridge-state.json, ping bridge
-  - ensure_ready                # wait till title scrren and click through continue on welcome screen
-  - connect                     # bridge.connect(host, port)
-  - wait_fingerprint            # wait for FingerprintVerificationScreen
-  - accept_fingerprint          # type fingerprint in EditBox → click Verify
-  - wait_danger                 # poll until DangerScreen appears
-  - click_confirm               # click last active Button (Confirm)
-  - wait_download               # poll for marker file in synced modpack
-  - verify_files                # check all serverFiles exist
-  - click_restart               # if RestartScreen → click Restart; wait for exit
-  - quit                        # bridge.quit() → wait for client exit
-  - launch_client               # fresh client container (rejoin)
-  - wait_bridge                 # wait for bridge on new client
-  - ensure_ready                # wait till title scrren appears
-  - connect                     # connect to server
-  - wait_join                   # poll null screenClass (in-game)
-  - quit                        # quit
+  - launch_server
+  - launch_client
+  - read_fingerprint
+  - wait_server
+  - wait_bridge
+  - ensure_ready
+  - connect
+  - wait_fingerprint
+  - accept_fingerprint
+  - wait_danger
+  - click_confirm
+  - wait_download
+  - verify_files
+  - click_restart
+  - quit
+  - launch_client
+  - wait_bridge
+  - ensure_ready
+  - connect
+  - wait_join
+  - quit
 
 topology:
   server:

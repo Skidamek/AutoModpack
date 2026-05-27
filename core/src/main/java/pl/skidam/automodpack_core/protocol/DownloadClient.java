@@ -73,6 +73,10 @@ public class DownloadClient implements AutoCloseable {
             int poolSize,
             Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
 
+        if (poolSize < 1) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Pool size must be greater than 0"));
+        }
+
         return CompletableFuture.supplyAsync(() -> {
                     KeyStore keyStore = loadDefaultKeyStore();
                     AtomicReference<X509Certificate[]> capturedChain = new AtomicReference<>();
@@ -230,10 +234,17 @@ public class DownloadClient implements AutoCloseable {
 
     public static DownloadClient tryCreate(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) {
         try {
-            return new DownloadClient(modpackAddresses, secretBytes, poolSize, trustedByUserCallback);
-        } catch (IOException e) {
-            LOGGER.error("Failed to create download client: {}", e.getMessage());
-            LOGGER.debug(e);
+            Function<X509Certificate, CompletableFuture<Boolean>> asyncCallback = trustedByUserCallback == null
+                    ? null
+                    : certificate -> CompletableFuture.completedFuture(trustedByUserCallback.apply(certificate));
+            return createAsync(modpackAddresses, secretBytes, poolSize, asyncCallback).get();
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            Throwable cause = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
+            LOGGER.error("Failed to create download client: {}", cause.getMessage());
+            LOGGER.debug(cause);
             return null;
         }
     }
