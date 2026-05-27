@@ -349,6 +349,12 @@ def _launch_client(ctx, target, client_image):
             "AM_AUTOTEST_BRIDGE_TOKEN": ctx["token"],
             "AM_AUTOTEST_GAME_DIR": "/work/game",
             "AM_AUTOTEST_HMC_CACHE_DIR": "/work/hmc-cache",
+            "AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS": str(
+                int(float(ctx["scenario"].get("timeouts", {}).get(
+                    "clientRunSeconds",
+                    ctx["settings"].get("timeouts", {}).get("clientRunSeconds", 600),
+                )))
+            ),
         },
         mounts=[
             (game_dir, "/work/game", False),

@@ -41,6 +41,7 @@ headlessmc:
 timeouts:
   serverStartSeconds: 180
   clientStartSeconds: 180
+  clientRunSeconds: 300
   downloadFileSeconds: 180
   rejoinSeconds: 90
 

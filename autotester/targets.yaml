@@ -4,9 +4,9 @@ defaults:
 
 targets:
   - { id: "26.1-fabric", minecraft: "26.1", loader: "fabric", java: 25, fabricLoader: "0.18.4" }
-  - { id: "26.1-neoforge", minecraft: "26.1", loader: "neoforge", java: 25, neoforgeVersion: "26.1.0.1-beta" }
+  - { id: "26.1-neoforge", minecraft: "26.1", loader: "neoforge", java: 25, neoforgeVersion: "26.1.2.64-beta" }
   - { id: "1.21.11-fabric", minecraft: "1.21.11", loader: "fabric", java: 21, fabricLoader: "0.17.3" }
-  - { id: "1.21.11-neoforge", minecraft: "1.21.11", loader: "neoforge", java: 21, neoforgeVersion: "21.11.37-beta" }
+  - { id: "1.21.11-neoforge", minecraft: "1.21.11", loader: "neoforge", java: 21, neoforgeVersion: "21.11.42" }
   - { id: "1.21.10-fabric", minecraft: "1.21.10", loader: "fabric", java: 21, fabricLoader: "0.17.3" }
   - { id: "1.21.10-neoforge", minecraft: "1.21.10", loader: "neoforge", java: 21, neoforgeVersion: "21.10.64" }
   - { id: "1.21.8-fabric", minecraft: "1.21.8", loader: "fabric", java: 21, fabricLoader: "0.17.3" }

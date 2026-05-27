@@ -11,6 +11,7 @@ loader_version="${6:-}"
 game_dir="${AM_AUTOTEST_GAME_DIR:-/work/game}"
 cache_dir="${AM_AUTOTEST_HMC_CACHE_DIR:-/work/hmc-cache}"
 bridge_token="${AM_AUTOTEST_BRIDGE_TOKEN:?bridge token required}"
+client_timeout="${AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS:-600}"
 
 mkdir -p "$game_dir" "$cache_dir"
 
@@ -88,5 +89,5 @@ timeout 20 hmc --command "download ${minecraft}" 2>/dev/null || true
 hmc --command "config -refresh" 2>/dev/null || true
 
 # ── Launch ─────────────────────────────────────────────────────────
-exec timeout 90 hmc \
+exec timeout "$client_timeout" hmc \
   --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"
