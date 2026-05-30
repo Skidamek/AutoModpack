@@ -81,7 +81,7 @@ public class DataC2SPacket {
         }
 
         return ModpackUtils.requestServerModpackContentAsync(modpackAddresses, secret, true)
-                .thenApply(optionalServerModpackContent -> {
+                .thenApplyAsync(optionalServerModpackContent -> {
                     long t0 = System.currentTimeMillis();
 
                     if (optionalServerModpackContent.isEmpty()) {
@@ -148,6 +148,7 @@ public class DataC2SPacket {
     }
 
     private static void disconnectImmediately(ClientHandshakePacketListenerImpl clientLoginNetworkHandler) {
-        ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) clientLoginNetworkHandler).getConnection()).getChannel().disconnect();
+        var channel = ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) clientLoginNetworkHandler).getConnection()).getChannel();
+        channel.disconnect();
     }
 }
