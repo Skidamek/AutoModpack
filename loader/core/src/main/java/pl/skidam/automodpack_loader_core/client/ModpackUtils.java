@@ -800,7 +800,7 @@ public class ModpackUtils {
                         return CompletableFuture.completedFuture(Optional.<Jsons.ModpackContentFields>empty());
                     }
 
-                    return operationFuture.handle((path, throwable) -> {
+                    return operationFuture.handleAsync((path, throwable) -> {
                         try (client) {
                             if (throwable != null) {
                                 LOGGER.error("Error while getting server modpack content", throwable);
