@@ -62,14 +62,30 @@ public class DataC2SPacket {
         Path modpackDir;
         Jsons.ModpackAddresses modpackAddresses;
         try {
-            InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
-            var connectedInetAddress = connectedAddress.getAddress();
-            String effectiveHost = packetAddress.isBlank()
-                    ? (connectedInetAddress == null ? connectedAddress.getHostString() : connectedInetAddress.getHostAddress())
-                    : packetAddress;
-            int effectivePort = packetPort == -1 ? connectedAddress.getPort() : packetPort;
+	        // Get actual address of the server client have connected to and format it
+	        InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
+	        String effectiveHost;
+	        int effectivePort;
 
-            InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
+	        // If the packet specifies a non-blank address, use it or else use address from the server client have connected to.
+	        // Important! Use getAddress().getHostAddress() instead of getHostString()
+	        // because Minecraft creates connectedAddress instance through a constructor which attempts a reverse DNS lookup
+	        // which resolves PTR record for the IP address and stores the resolved hostname in the hostname field.
+	        if (packetAddress.isBlank()) {
+		        var connectedInetAddress = connectedAddress.getAddress();
+		        effectiveHost = connectedInetAddress == null ? connectedAddress.getHostString() : connectedInetAddress.getHostAddress();
+	        } else {
+		        effectiveHost = packetAddress;
+	        }
+
+	        if (packetPort == -1) {
+		        effectivePort = connectedAddress.getPort();
+	        } else {
+		        effectivePort = packetPort;
+	        }
+
+	        // Construct the final modpack address
+	        InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
 
             LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 

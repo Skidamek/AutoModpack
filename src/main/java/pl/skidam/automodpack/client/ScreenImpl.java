@@ -10,30 +10,14 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 import net.minecraft.client.Minecraft;
-import pl.skidam.automodpack_core.Constants;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 
 public class ScreenImpl implements ScreenService {
 
     private static void executeOnClient(Runnable task) {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-        Minecraft client;
-        while ((client = Minecraft.getInstance()) == null) {
-            if (System.nanoTime() > deadline) {
-                Constants.LOGGER.warn("Could not execute on client: Minecraft not yet initialized");
-                return;
-            }
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-        }
-        client.execute(task);
+	    Minecraft.getInstance().execute(task);
     }
 
     @Override
