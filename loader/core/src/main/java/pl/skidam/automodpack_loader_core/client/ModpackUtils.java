@@ -812,7 +812,7 @@ public class ModpackUtils {
                 })
                 .exceptionally(e -> {
                     LOGGER.error("Error while getting server modpack content", e);
-                    return Optional.<Jsons.ModpackContentFields>empty();
+                    return Optional.empty();
                 });
     }
 
