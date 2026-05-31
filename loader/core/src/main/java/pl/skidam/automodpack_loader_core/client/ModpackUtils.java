@@ -725,21 +725,10 @@ public class ModpackUtils {
     private static Boolean askUserAboutCertificate(InetSocketAddress address, String fingerprint) {
         LOGGER.info("Asking user for {}", address.getHostString());
 
-        Object parent = null;
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-        while (parent == null) {
-            parent = new ScreenManager().getScreen().orElse(null);
-            if (parent == null) {
-                if (System.nanoTime() > deadline) {
-                    LOGGER.warn("No screen available, cannot ask user");
-                    return false;
-                }
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    return false;
-                }
-            }
+        var parent = new ScreenManager().getScreen().orElse(null);
+        if (parent == null) {
+            LOGGER.warn("No screen available, cannot ask user");
+            return false;
         }
 
         CountDownLatch latch = new CountDownLatch(1);
@@ -855,22 +844,11 @@ public class ModpackUtils {
         LOGGER.info("Asking user for {}", address.getHostString());
 
         return CompletableFuture.supplyAsync(() -> {
-            Object screen = null;
-            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-            while (screen == null) {
-                screen = new ScreenManager().getScreen().orElse(null);
-                if (screen == null) {
-                    if (System.nanoTime() > deadline) {
-                        LOGGER.warn("No screen available, cannot ask user");
-                        return false;
-                    }
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        return false;
-                    }
-                }
-            }
+	        var parent = new ScreenManager().getScreen().orElse(null);
+	        if (parent == null) {
+		        LOGGER.warn("No screen available, cannot ask user");
+		        return false;
+	        }
 
             CompletableFuture<Boolean> future = new CompletableFuture<>();
             Runnable trustAction = () -> {
@@ -879,7 +857,7 @@ public class ModpackUtils {
                 future.complete(true);
             };
             Runnable cancelAction = () -> future.complete(false);
-            new ScreenManager().validation(screen, fingerprint, trustAction, cancelAction);
+            new ScreenManager().validation(parent, fingerprint, trustAction, cancelAction);
 
             try {
                 return future.get(120, TimeUnit.SECONDS);
