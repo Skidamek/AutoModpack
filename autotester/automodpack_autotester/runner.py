@@ -138,7 +138,12 @@ def _gid():
 
 
 def _load_ver(t):
-    return t.fabric_loader or t.forge_version or t.neoforge_version or ""
+    if t.loader == "fabric":
+        return t.fabric_loader or ""
+    if t.loader == "forge":
+        return t.forge_version or ""
+    if t.loader == "neoforge":
+        return t.neoforge_version or ""
 
 
 def _bridge_state(ctx):
@@ -153,6 +158,43 @@ def _await(pred, timeout, msg):
             return r
         _jitter_sleep(0.5)
     raise TimeoutError(msg)
+
+
+def _button_with_text(gui: dict, *needles: str, enabled: bool | None = None) -> dict | None:
+    lowered = tuple(n.lower() for n in needles)
+    candidates = []
+    for button in gui.get("buttons", []):
+        if enabled is not None and bool(button.get("enabled", False)) != enabled:
+            continue
+        candidates.append(button)
+    if not lowered:
+        return candidates[0] if candidates else None
+
+    for button in candidates:
+        text = str(button.get("text", "")).strip().lower()
+        if any(n == text for n in lowered):
+            return button
+
+    for button in candidates:
+        text = str(button.get("text", "")).lower()
+        if not any(n in text for n in lowered):
+            continue
+        return button
+    return None
+
+
+def _click_button(bridge: BridgeClient, *needles: str, enabled: bool | None = True) -> dict:
+    gui = bridge.gui()
+    button = _button_with_text(gui, *needles, enabled=enabled)
+    if button is None:
+        labels = [b.get("text", "") for b in gui.get("buttons", [])]
+        raise RuntimeError(f"No matching button {needles!r}; available={labels!r}")
+    return bridge.click(int(button["id"]))
+
+
+def _first_text_field(gui: dict) -> dict | None:
+    fields = gui.get("textFields", [])
+    return fields[0] if fields else None
 
 
 def run_case(
@@ -336,6 +378,8 @@ def _launch_client(ctx, target, client_image):
     game_dir = ctx["game_dir"]
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
     shutil.copy2(ctx["artifact"], game_dir / "mods" / "automodpack.jar")
+    (game_dir / "options.txt").write_text("narrator:0\n")
+    _bridge_state(ctx).unlink(missing_ok=True)
 
     # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
     hmc_cache_root = (ctx["out_dir"].parent / ".hmc-cache" / target.id.replace(".", "_")).resolve()
@@ -400,38 +444,17 @@ def _phase_wait_bridge(ctx):
             raise TimeoutError(
                 f"Client exited before bridge: {e}\n--- logs ---\n{logs[-2000:]}"
             )
-        if _bridge_state(ctx).exists():
-            try:
-                ctx["bridge"].request("ping", timeout=5)
-                return
-            except Exception:
-                pass
+        try:
+            state_file = _bridge_state(ctx)
+            if state_file.exists():
+                data = json.loads(state_file.read_text(encoding="utf-8"))
+                if data.get("status") == "ready":
+                    ctx["bridge"].request("ping", timeout=5)
+                    return
+        except Exception:
+            pass
         _jitter_sleep(1)
     raise TimeoutError(f"Bridge for {ctx['target'].id} did not become available within {to}s")
-
-
-@_reg("ensure_ready")
-def _phase_ensure_ready(ctx):
-    bridge = ctx["bridge"]
-    dl = time.monotonic() + 30
-    while time.monotonic() < dl:
-        try:
-            r = bridge.request("get_widgets")
-        except (TimeoutError, RuntimeError):
-            _jitter_sleep(1)
-            continue
-        if "TitleScreen" in str(r.get("screenClass", "")) or "class_442" in str(
-            r.get("screenClass", "")
-        ):
-            return
-        if any("Continue" in str(w.get("text", "")) for w in r.get("widgets", [])):
-            try:
-                bridge.request("click", selector={"text": "Continue"})
-            except (TimeoutError, RuntimeError):
-                pass
-            _jitter_sleep(1)
-            continue
-        _jitter_sleep(0.5)
 
 
 @_reg("read_fingerprint")
@@ -462,17 +485,17 @@ def _phase_connect(ctx):
 
     while time.monotonic() < deadline:
         _assert_running(ctx["cli_name"])
-        bridge.request("connect", host=host, port=25565)
+        bridge.connect(host, 25565)
         remaining = deadline - time.monotonic()
         poll_dl = time.monotonic() + min(remaining, 45)
         while time.monotonic() < poll_dl:
-            screen = str(bridge.request("get_screen").get("screenClass") or "")
+            screen = str(bridge.gui().get("screenClass") or "")
             if any(n in screen for n in _TITLE):
                 break
             if not any(n in screen for n in _CONNECT):
                 return
             _jitter_sleep(0.5)
-        bridge.request("set_screen")
+        bridge.request("disconnect")
         _jitter_sleep(1)
     raise RuntimeError("Could not connect after multiple attempts")
 
@@ -484,12 +507,16 @@ def _phase_wait_fingerprint(ctx):
         raise RuntimeError("No fingerprint — run read_fingerprint phase first")
     _await(
         lambda: (
-            "FingerprintVerificationScreen"
-            in str(ctx["bridge"].request("get_screen").get("screenClass", ""))
-            or None
+            gui
+            if (
+                (gui := ctx["bridge"].gui())
+                and _first_text_field(gui)
+                and _button_with_text(gui, "verify", enabled=True)
+            )
+            else None
         ),
         180,
-        f"FingerprintVerificationScreen did not appear for {ctx['target'].id} within 180s",
+        f"Certificate verification prompt did not appear for {ctx['target'].id} within 180s",
     )
 
 
@@ -498,15 +525,19 @@ def _phase_accept_fingerprint(ctx):
     fp = ctx.get("fingerprint")
     if not fp:
         raise RuntimeError("No fingerprint — run read_fingerprint phase first")
-    ctx["bridge"].request("verify_fingerprint", fingerprint=fp)
+    bridge = ctx["bridge"]
+    gui = bridge.gui()
+    field = _first_text_field(gui)
+    if field is None:
+        raise RuntimeError("No fingerprint text field found")
+    bridge.text(int(field["id"]), fp)
+    _click_button(bridge, "verify")
 
     def _check():
-        screen_class = str(ctx["bridge"].request("get_screen").get("screenClass", ""))
-        if any(n in screen_class for n in ("DangerScreen", "DownloadScreen", "RestartScreen")):
-            return True
-        if "FingerprintVerificationScreen" not in screen_class:
-            return True
-        return None
+        gui = bridge.gui()
+        if _button_with_text(gui, "verify"):
+            return None
+        return True
 
     _await(_check, 20, "Fingerprint verification did not complete")
 
@@ -514,29 +545,27 @@ def _phase_accept_fingerprint(ctx):
 @_reg("skip_fingerprint")
 def _phase_skip_fingerprint(ctx):
     bridge = ctx["bridge"]
-    bridge.request("click", selector={"text": "Skip"})
+    _click_button(bridge, "skip")
     _await(
         lambda: (
-            "SkipVerificationScreen"
-            in str(bridge.request("get_screen").get("screenClass", ""))
-            or None
+            gui
+            if ((gui := bridge.gui()) and _first_text_field(gui) and _button_with_text(gui, "skip"))
+            else None
         ),
         15,
         "Skip screen not shown",
     )
-    bridge.request(
-        "set_text", selector={"type": "EditBox", "index": 0}, text="I accept the risk"
-    )
+    field = _first_text_field(bridge.gui())
+    if field is None:
+        raise RuntimeError("No skip confirmation text field found")
+    bridge.text(int(field["id"]), "I accept the risk")
     dl = time.monotonic() + 30
     while time.monotonic() < dl:
-        for w in bridge.request("get_widgets").get("widgets", []):
-            if (
-                w.get("type") == "Button"
-                and "Skip" in str(w.get("text", ""))
-                and w.get("active", False)
-            ):
-                bridge.request("click", selector={"widgetId": w["id"]})
-                return
+        gui = bridge.gui()
+        button = _button_with_text(gui, "skip", enabled=True)
+        if button:
+            bridge.click(int(button["id"]))
+            return
         _jitter_sleep(1)
     raise RuntimeError("Skip button did not activate")
 
@@ -546,11 +575,10 @@ def _phase_wait_danger(ctx):
     bridge = ctx["bridge"]
     _await(
         lambda: (
-            "DangerScreen" in str(bridge.request("get_screen").get("screenClass", ""))
-            or None
+            gui if ((gui := bridge.gui()) and _button_with_text(gui, "download", enabled=True)) else None
         ),
         90,
-        "DangerScreen did not appear within 90s",
+        "Download confirmation did not appear within 90s",
     )
 
 
@@ -559,15 +587,14 @@ def _phase_click_confirm(ctx):
     bridge = ctx["bridge"]
     dl = time.monotonic() + 5
     while time.monotonic() < dl:
-        widgets = bridge.request("get_widgets").get("widgets", [])
-        if widgets:
+        gui = bridge.gui()
+        if gui.get("buttons"):
             break
         _jitter_sleep(0.2)
-    for w in reversed(widgets):
-        if w.get("type") == "Button" and w.get("active", False):
-            bridge.request("click", widgetId=int(w.get("id", -1)))
-            return
-    raise RuntimeError("No active button on DangerScreen")
+    button = _button_with_text(gui, "download", enabled=True)
+    if button is None:
+        raise RuntimeError("No active download confirmation button")
+    bridge.click(int(button["id"]))
 
 
 @_reg("wait_download")
@@ -628,21 +655,12 @@ def _phase_click_restart(ctx):
     dl = time.monotonic() + 20
     while time.monotonic() < dl:
         try:
-            screen = bridge.request("get_screen")
+            gui = bridge.gui()
         except TimeoutError:
             continue
-        if "RestartScreen" in str(screen.get("screenClass", "")):
-            widgets = bridge.request("get_widgets").get("widgets", [])
-            clicked = False
-            action_labels = ("close", "restart", "quit")
-            for w in reversed(widgets):
-                txt = str(w.get("text", "")).lower()
-                if w.get("type") == "Button" and w.get("active", False) and any(label in txt for label in action_labels):
-                    bridge.request("click", widgetId=int(w.get("id", -1)))
-                    clicked = True
-                    break
-            if not clicked:
-                raise RuntimeError("No restart button found on RestartScreen")
+        button = _button_with_text(gui, "close the game", "restart", "quit", enabled=True)
+        if button:
+            bridge.click(int(button["id"]))
             _wait_exited(ctx["cli_name"], timeout=90)
             return
         _jitter_sleep(0.5)
@@ -680,19 +698,14 @@ def _phase_launch_client(ctx):
 def _phase_wait_join(ctx):
     bridge = ctx["bridge"]
     to = float(ctx["scenario"].get("timeouts", {}).get("rejoinSeconds", 180))
-
-    def _check():
-        screen = bridge.request("get_screen")
-        screen_class = screen.get("screenClass")
-        if screen_class is None:
-            return True
-        name = str(screen_class)
-        if "FingerprintVerificationScreen" in name:
-            return None
-        if "DownloadScreen" in name:
-            return None
-        if "RestartScreen" in name:
-            return None
-        return True
-
-    _await(_check, to, f"{ctx['target'].id}: Player did not join in-game within {to}s")
+    dl = time.monotonic() + to
+    while time.monotonic() < dl:
+        _assert_running(ctx["cli_name"])
+        try:
+            gui = bridge.gui(timeout=10)
+            if gui.get("screenClass") is None:
+                return
+        except (TimeoutError, RuntimeError):
+            pass
+        _jitter_sleep(2)
+    raise TimeoutError(f"{ctx['target'].id}: Player did not join in-game within {to}s")

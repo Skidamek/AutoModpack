@@ -35,7 +35,6 @@ public class NeoForgeInit {
          } else {
              ModPackets.registerC2SPackets();
              new AudioManager(eventBus);
-             AutoTestBridge.startIfEnabled();
          }
 
 

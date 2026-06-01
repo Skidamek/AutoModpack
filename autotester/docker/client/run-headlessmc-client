@@ -70,11 +70,27 @@ hmc.exit.on.failed.command=true
 hmc.gameargs=$gameargs
 EOF
 
-# ── Install Fabric loader if needed ───────────────────────────────
+# ── Install loader if needed ──────────────────────────────────────
 launch_target="${loader}:${minecraft}"
 if [ "$loader" = "fabric" ] && [ -n "$loader_version" ]; then
     timeout 30 hmc --command "fabric ${minecraft} --uid ${loader_version}" 2>/dev/null || true
     launch_target="fabric-loader-${loader_version}-${minecraft}"
+#elif [ "$loader" = "forge" ] && [ -n "$loader_version" ]; then
+#    timeout 30 hmc --command "forge ${minecraft} --uid ${loader_version}" 2>/dev/null || true
+#    discovered_target="$(discover_launch_target || true)"
+#    if [ -n "$discovered_target" ]; then
+#        launch_target="$discovered_target"
+#    else
+#        launch_target="${minecraft}-forge-${loader_version}"
+#    fi
+#elif [ "$loader" = "neoforge" ] && [ -n "$loader_version" ]; then
+#    timeout 30 hmc --command "neoforge ${minecraft} --uid ${loader_version}" 2>/dev/null || true
+#    discovered_target="$(discover_launch_target || true)"
+#    if [ -n "$discovered_target" ]; then
+#        launch_target="$discovered_target"
+#    else
+#        launch_target="${minecraft}-neoforge-${loader_version}"
+#    fi
 fi
 
 # ── Disable Neo/Forge early display window (may cause crash in CI) ──

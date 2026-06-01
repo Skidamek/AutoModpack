@@ -8,33 +8,52 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.ConnectScreen;
+/*? if >=1.21.6 {*/
+import net.minecraft.client.gui.screens.GenericMessageScreen;
+/*?}*/
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
+/*? if >= 1.21.10 {*/
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
+/*?}*/
 /*? if >= 1.20.5 {*/
 import net.minecraft.client.multiplayer.TransferState;
 /*?}*/
-import pl.skidam.automodpack.client.ui.FingerprintVerificationScreen;
-import pl.skidam.automodpack_core.Constants;
+/*? if >= 1.19.2 {*/
+import net.minecraft.network.chat.Component;
+/*?} else {*/
+/*import net.minecraft.network.chat.TranslatableComponent;
+*//*?}*/
 
 import java.io.IOException;
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 public final class AutoTestBridge {
     private static final AtomicBoolean STARTED = new AtomicBoolean(false);
-
-    private AutoTestBridge() {}
+    private static volatile Path bridgeDir;
+    private static final AtomicBoolean CLIENT_READY = new AtomicBoolean(false);
 
     public static void startIfEnabled() {
         if (!Boolean.getBoolean("automodpack.autotest")) return;
@@ -45,21 +64,33 @@ public final class AutoTestBridge {
             LOGGER.warn("AutoModpack bridge disabled: token is '{}', gamedir is '{}'", token, gameDir);
             return;
         }
+
         Thread t = new Thread(() -> run(Path.of(gameDir), token), "AutoModpackBridge");
         t.setDaemon(true);
         t.start();
     }
 
+    public static void onClientReady() {
+        if (!CLIENT_READY.compareAndSet(false, true)) return;
+        Path dir = bridgeDir;
+        if (dir == null) return;
+        try {
+            writeFile(dir.resolve("bridge-state.json"), "{\"status\":\"ready\"}");
+        } catch (IOException e) {
+            LOGGER.error("Cannot write client-ready state", e);
+        }
+    }
+
     private static void run(Path gameDir, String token) {
         Path dir = gameDir.resolve("automodpack/autotest");
-        try { Files.createDirectories(dir); } catch (IOException e) {
-            LOGGER.error("Cannot create autotest dir", e);
+        bridgeDir = dir;
+        try {
+            Files.createDirectories(dir);
+        } catch (IOException e) {
+            LOGGER.error("Cannot initialize autotest bridge directory", e);
             return;
         }
-        try { writeFile(dir.resolve("bridge-state.json"), "{\"status\":\"ready\"}"); } catch (IOException e) {
-            LOGGER.error("Cannot write bridge state", e);
-            return;
-        }
+
         LOGGER.info("AutoModpack bridge ready at {}", dir);
         Path cmd = dir.resolve("bridge-command.json");
         Path rsp = dir.resolve("bridge-response.json");
@@ -68,181 +99,280 @@ public final class AutoTestBridge {
                 if (Files.exists(cmd)) {
                     String json = Files.readString(cmd, StandardCharsets.UTF_8);
                     Files.delete(cmd);
-                    String response;
-                    try {
-                        JsonObject req = JsonParser.parseString(json).getAsJsonObject();
-                        if (!token.equals(optString(req, "token"))) {
-                            response = err("Authentication failed: invalid bridge token");
-                        } else {
-                            response = exec(req);
-                        }
-                    } catch (Exception e) {
-                        LOGGER.error("Bridge exec error", e);
-                        response = err(e.getMessage());
-                    }
-                    writeFile(rsp, response);
+                    writeFile(rsp, handle(json, token));
                 }
-                Thread.sleep(100);
-            } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
-              catch (Exception e) { LOGGER.error("Bridge error", e); }
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                LOGGER.error("AutoModpack bridge error", e);
+            }
+        }
+    }
+
+    private static String handle(String json, String token) {
+        try {
+            JsonObject req = JsonParser.parseString(json).getAsJsonObject();
+            if (!token.equals(optString(req, "token"))) {
+                return err("invalid bridge token");
+            }
+
+            return exec(req);
+        } catch (Exception e) {
+            LOGGER.error("AutoModpack bridge command failed", e);
+            return err(e.getMessage());
         }
     }
 
     private static String exec(JsonObject req) throws Exception {
         return switch (optString(req, "op")) {
             case "ping" -> ok();
-            case "get_screen" -> execOnMain(() -> scr(false));
-            case "get_widgets" -> execOnMain(() -> scr(true));
-            case "connect" -> connect(req);
-            case "wait_fingerprint" -> execOnMain(() -> ok());
-            case "set_text" -> execOnMain(() -> {
-                Object w = widget(req);
-                if (w instanceof EditBox e) {
-                    e.setValue(optString(req, "text"));
-                    Screen s = Minecraft.getInstance().screen;
-                    if (s instanceof FingerprintVerificationScreen fps) {
-                        fps.setInputText(optString(req, "text"));
-                    }
-                }
-                return ok();
-            });
-            case "click" -> execOnMain(() -> {
-                Object w = widget(req);
-                if (w instanceof Button b) {
-                    /*? if >= 1.21.10 {*/
-                    var input = new net.minecraft.client.input.InputWithModifiers() {
-                        public int input() { return 0; }
-                        public int modifiers() { return 0; }
-                    };
-                    b.onPress(input);
-                    /*?} else {*/
-                    /*b.onPress();
-                    *//*?}*/
-                }
-                return ok();
-            });
-            case "set_screen" -> execOnMain(() -> { Minecraft.getInstance().setScreen(new TitleScreen()); return ok(); });
-            case "verify_fingerprint" -> execOnMain(() -> {
-                Screen s = Minecraft.getInstance().screen;
-                if (s instanceof FingerprintVerificationScreen fps) {
-                    String fp = optString(req, "fingerprint");
-                    List<Object> widgets = collectWidgets();
-                    for (Object w : widgets) {
-                        if (w instanceof EditBox e) {
-                            e.setValue(fp);
-                            break;
-                        }
-                    }
-                    fps.setInputText(fp);
-                    fps.verifyFingerprint();
-                    return ok();
-                }
-                return err("not on FingerprintVerificationScreen");
-            });
-            case "quit" -> {
-                Minecraft.getInstance().execute(() -> Minecraft.getInstance().stop());
-                yield ok();
-            }
-            default -> err("Unknown bridge operation: '" + optString(req, "op") + "'");
+            case "gui" -> onMain(() -> gui().toString());
+            case "click" -> onMain(() -> click(req));
+            case "text" -> onMain(() -> text(req));
+            case "menu" -> onMain(AutoTestBridge::menu);
+            case "close" -> onMain(AutoTestBridge::close);
+            case "connect" -> onMain(() -> connect(req));
+            case "disconnect" -> onMain(AutoTestBridge::disconnect);
+            case "quit" -> onMain(AutoTestBridge::quit);
+            case "render" -> render(req);
+            default -> err("unknown operation: " + optString(req, "op"));
         };
     }
 
-    private static String scr(boolean detailed) {
-        Screen s = Minecraft.getInstance().screen;
-        JsonObject o = new JsonObject();
-        o.addProperty("ok", true);
+    private static JsonObject gui() {
+        Minecraft c = Minecraft.getInstance();
+        Screen s = c.screen;
+        JsonObject o = base();
         o.addProperty("screenClass", s == null ? null : s.getClass().getName());
         o.addProperty("title", s == null ? null : s.getTitle().getString());
-        if (detailed && s != null) {
-            JsonArray a = new JsonArray();
-            int i = 0;
-            for (Object w : collectWidgets()) {
-                if (!(w instanceof AbstractWidget aw)) continue;
-                JsonObject wo = new JsonObject();
-                wo.addProperty("id", i++);
-                wo.addProperty("type", aw instanceof Button ? "Button" : aw instanceof EditBox ? "EditBox" : aw.getClass().getSimpleName());
-                wo.addProperty("class", aw.getClass().getName());
-                wo.addProperty("text", aw.getMessage().getString());
-                /*? if >= 1.19.4 {*/
-                wo.addProperty("x", aw.getX()); wo.addProperty("y", aw.getY());
-                /*?} else {*/
-                /*wo.addProperty("x", aw.x); wo.addProperty("y", aw.y);
-                *//*?}*/
-                wo.addProperty("active", aw.active); wo.addProperty("visible", aw.visible);
-                a.add(wo);
+        o.add("buttons", elementsJson(elements(s).buttons()));
+        o.add("textFields", elementsJson(elements(s).textFields()));
+        o.add("other", elementsJson(elements(s).other()));
+        o.add("elements", elementsJson(elements(s).all()));
+        return o;
+    }
+
+    private static String click(JsonObject req) {
+        Minecraft c = Minecraft.getInstance();
+        Screen s = c.screen;
+        if (s == null) return err("no screen");
+
+        int button = optInt(req, "button", 0);
+        int x;
+        int y;
+        if (has(req, "id")) {
+            GuiElement e = elements(s).byId(optInt(req, "id", -1));
+            if (e == null) return err("no gui element with id " + optInt(req, "id", -1));
+            if (has(req, "enable") && req.get("enable").getAsBoolean() && e.widget() instanceof Button) {
+                e.widget().active = true;
             }
-            o.add("widgets", a);
+            x = e.x() + e.width() / 2;
+            y = e.y() + e.height() / 2;
+        } else {
+            x = optInt(req, "x", -1);
+            y = optInt(req, "y", -1);
+            if (x < 0 || y < 0) return err("click needs either id or x/y");
         }
-        return o.toString();
+
+        s.mouseMoved(x, y);
+        /*? if >= 1.21.10 {*/
+        MouseButtonEvent event = new MouseButtonEvent(x, y, new MouseButtonInfo(button, 0));
+        s.mouseClicked(event, false);
+        s.mouseReleased(event);
+        /*?} else {*/
+        /*s.mouseClicked(x, y, button);
+        s.mouseReleased(x, y, button);
+        *//*?}*/
+        return ok();
     }
 
-    private static String connect(JsonObject req) throws Exception {
-        String addr = optString(req, "host") + ":" + optInt(req, "port", 25565);
-        Minecraft c;
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-        while ((c = Minecraft.getInstance()) == null) {
-            if (System.nanoTime() > deadline) return err("Minecraft not initialized");
-            Thread.sleep(100);
-        }
-        final Minecraft captured = c;
-        if (captured.getOverlay() != null) {
-            deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(120);
-            while (captured.getOverlay() != null && System.nanoTime() < deadline) Thread.sleep(100);
-        }
-        CompletableFuture<String> f = new CompletableFuture<>();
-        captured.execute(() -> {
-            try {
-                /*? if >= 1.20.5 {*/
-                ConnectScreen.startConnecting(new TitleScreen(), captured, ServerAddress.parseString(addr), new ServerData("AutoTest", addr, ServerData.Type.OTHER), false, (TransferState) null);
-                /*?} else if >= 1.20.4 {*/
-                /*ConnectScreen.startConnecting(new TitleScreen(), captured, ServerAddress.parseString(addr), new ServerData("AutoTest", addr, ServerData.Type.OTHER), false);
-                *//*?} else if >= 1.20.1 {*/
-                /*ConnectScreen.startConnecting(new TitleScreen(), captured, ServerAddress.parseString(addr), new ServerData("AutoTest", addr, false), false);
-                                *//*?} else {*/
-                /*ConnectScreen.startConnecting(new TitleScreen(), captured, ServerAddress.parseString(addr), new ServerData("AutoTest", addr, false));
-                *//*?}*/
-                f.complete(ok());
-            } catch (Exception e) { f.complete(err(e.getMessage())); }
-        });
-        return f.get(30, TimeUnit.SECONDS);
-    }
-
-    private static List<Object> collectWidgets() {
+    private static String text(JsonObject req) {
         Screen s = Minecraft.getInstance().screen;
-        if (s == null) return List.of();
-        return List.copyOf(s.children().stream().filter(w -> w instanceof AbstractWidget).toList());
+        if (s == null) return err("no screen");
+
+        int id = optInt(req, "id", -1);
+        GuiElement e = elements(s).byId(id);
+        if (e == null || !(e.widget() instanceof EditBox editBox)) {
+            return err("no text field with id " + id);
+        }
+
+        editBox.setValue(optString(req, "text"));
+        return ok();
     }
 
-    private static Object widget(JsonObject req) {
-        List<Object> all = collectWidgets();
-        if (all.isEmpty()) throw new NullPointerException("no widgets");
-        int wid = optInt(req, "widgetId", -1);
-        JsonObject sel = req.getAsJsonObject("selector");
-        if (wid < 0 && sel != null) wid = optInt(sel, "widgetId", -1);
-        if (wid >= 0 && wid < all.size()) return all.get(wid);
-        String selType = sel != null ? optString(sel, "type") : null;
-        String selText = sel != null ? optString(sel, "text") : optString(req, "text");
-        int idx = sel != null ? optInt(sel, "index", -1) : -1;
-        var cand = selType != null && !selType.isEmpty() ? all.stream().filter(w -> (w instanceof Button ? "Button" : w instanceof EditBox ? "EditBox" : "").equalsIgnoreCase(selType)).toList() : all;
-        if (selText != null && !selText.isEmpty()) {
-            for (Object w : cand) { if (AbstractWidget.class.cast(w).getMessage().getString().equalsIgnoreCase(selText)) return w; }
-            for (Object w : cand) { if (AbstractWidget.class.cast(w).getMessage().getString().toLowerCase().contains(selText.toLowerCase())) return w; }
-        }
-        if (idx >= 0 && idx < cand.size()) return cand.get(idx);
-        if (!cand.isEmpty()) return cand.get(0);
-        throw new IllegalArgumentException("widget not found");
+    private static String menu() {
+        Minecraft c = Minecraft.getInstance();
+        if (c.player == null) return err("not in game");
+        if (c.screen != null) c.screen.onClose();
+        c.pauseGame(false);
+        return ok();
     }
 
-    private static String execOnMain(ThrowingSupplier<String> t) throws Exception {
-        Minecraft c;
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
-        while ((c = Minecraft.getInstance()) == null) {
-            if (System.nanoTime() > deadline) return err("Minecraft not initialized");
-            Thread.sleep(100);
+    private static String close() {
+        Minecraft c = Minecraft.getInstance();
+        if (c.player == null) return err("not in game");
+        if (c.screen != null) c.screen.onClose();
+        return ok();
+    }
+
+    private static String connect(JsonObject req) {
+        Minecraft c = Minecraft.getInstance();
+        String host = optString(req, "host");
+        int port = optInt(req, "port", 25565);
+        if (host.isBlank()) return err("host is required");
+
+        ServerAddress address = ServerAddress.parseString(host + ":" + port);
+        ServerData serverData = new ServerData("AutoTest", address.toString()
+                /*? if >= 1.20.4 {*/, ServerData.Type.OTHER/*?} else {*//*, false*//*?}*/);
+        /*? if >= 1.20.5 {*/
+        ConnectScreen.startConnecting(new TitleScreen(), c, address, serverData, false, (TransferState) null);
+        /*?} else if >= 1.20.4 {*/
+        /*ConnectScreen.startConnecting(new TitleScreen(), c, address, serverData, false);
+        *//*?} else if >= 1.20.1 {*/
+        /*ConnectScreen.startConnecting(new TitleScreen(), c, address, serverData, false);
+        *//*?} else {*/
+        /*ConnectScreen.startConnecting(new TitleScreen(), c, address, serverData);
+        *//*?}*/
+        return ok();
+    }
+
+    private static String disconnect() {
+        Minecraft c = Minecraft.getInstance();
+        if (c.level == null) {
+            c.setScreen(new TitleScreen());
+            return ok();
         }
-        CompletableFuture<String> f = new CompletableFuture<>();
-        c.execute(() -> { try { f.complete(t.get()); } catch (Exception e) { f.completeExceptionally(e); } });
-        return f.get(60, TimeUnit.SECONDS);
+
+        /*? if >=1.21.6 {*/
+        c.level.disconnect(translatable("multiplayer.status.quitting"));
+        c.clearClientLevel(new GenericMessageScreen(translatable("multiplayer.disconnect.generic")));
+        /*?} else {*/
+        /*c.level.disconnect();
+        *//*?}*/
+        c.setScreen(new TitleScreen());
+        return ok();
+    }
+
+    private static String quit() {
+        Minecraft.getInstance().stop();
+        return ok();
+    }
+
+    private static String render(JsonObject req) throws InterruptedException {
+        int millis = Math.max(1, optInt(req, "time", 1000));
+        boolean includeDuplicates = has(req, "includeDuplicates") && req.get("includeDuplicates").getAsBoolean();
+        RenderedTextCollector.Session session = RenderedTextCollector.start();
+        try {
+            Thread.sleep(millis);
+            JsonObject o = base();
+            JsonArray a = new JsonArray();
+            for (RenderedTextCollector.Entry entry : session.entries(includeDuplicates)) {
+                JsonObject e = new JsonObject();
+                e.addProperty("text", entry.text());
+                e.addProperty("x", entry.x());
+                e.addProperty("y", entry.y());
+                a.add(e);
+            }
+            o.add("strings", a);
+            return o.toString();
+        } finally {
+            session.close();
+        }
+    }
+
+    private static GuiElements elements(Screen screen) {
+        if (screen == null) return new GuiElements(List.of());
+
+        LinkedHashSet<AbstractWidget> widgets = new LinkedHashSet<>();
+        for (GuiEventListener child : screen.children()) {
+            if (child instanceof AbstractWidget widget) widgets.add(widget);
+        }
+        findWidgets(screen, widgets, newSeenSet());
+
+        List<GuiElement> result = new ArrayList<>();
+        int id = 0;
+        for (AbstractWidget widget : widgets) {
+            result.add(new GuiElement(id++, widget));
+        }
+        return new GuiElements(result);
+    }
+
+    private static void findWidgets(Object object, Set<AbstractWidget> widgets, Set<Object> seen) {
+        if (object == null || seen.contains(object)) return;
+        seen.add(object);
+
+        Class<?> type = object.getClass();
+        while (type != null && type != Object.class) {
+            for (Field field : type.getDeclaredFields()) {
+                if (Modifier.isStatic(field.getModifiers())) continue;
+                try {
+                    field.setAccessible(true);
+                    collectWidgetValue(field.get(object), widgets, seen);
+                } catch (ReflectiveOperationException | RuntimeException ignored) {
+                    // Best effort only. Screen#children is the primary source.
+                }
+            }
+            type = type.getSuperclass();
+        }
+    }
+
+    private static void collectWidgetValue(Object value, Set<AbstractWidget> widgets, Set<Object> seen) {
+        if (value == null) return;
+        if (value instanceof AbstractWidget widget) {
+            widgets.add(widget);
+            return;
+        }
+        if (value instanceof Collection<?> collection) {
+            for (Object item : collection) collectWidgetValue(item, widgets, seen);
+            return;
+        }
+        if (value instanceof Map<?, ?> map) {
+            for (Object item : map.values()) collectWidgetValue(item, widgets, seen);
+            return;
+        }
+        if (value.getClass().isArray()) {
+            int length = Array.getLength(value);
+            for (int i = 0; i < length; i++) collectWidgetValue(Array.get(value, i), widgets, seen);
+        }
+    }
+
+    private static JsonArray elementsJson(List<GuiElement> elements) {
+        JsonArray a = new JsonArray();
+        for (GuiElement e : elements) {
+            JsonObject o = new JsonObject();
+            o.addProperty("id", e.id());
+            o.addProperty("text", e.text());
+            o.addProperty("x", e.x());
+            o.addProperty("y", e.y());
+            o.addProperty("width", e.width());
+            o.addProperty("height", e.height());
+            o.addProperty("enabled", e.widget().active);
+            o.addProperty("visible", e.widget().visible);
+            o.addProperty("type", e.type());
+            o.addProperty("class", e.widget().getClass().getName());
+            a.add(o);
+        }
+        return a;
+    }
+
+    private static Set<Object> newSeenSet() {
+        return java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+    }
+
+    private static <T> String onMain(ThrowingSupplier<T> supplier) throws Exception {
+        Minecraft c = Minecraft.getInstance();
+        CompletableFuture<T> f = new CompletableFuture<>();
+        c.execute(() -> {
+            try {
+                f.complete(supplier.get());
+            } catch (Exception e) {
+                f.completeExceptionally(e);
+            }
+        });
+        T result = f.get();
+        return result instanceof String string ? string : String.valueOf(result);
     }
 
     private static void writeFile(Path p, String c) throws IOException {
@@ -251,11 +381,107 @@ public final class AutoTestBridge {
         Files.move(t, p, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
     }
 
-    private static String ok() { return "{\"ok\":true}"; }
-    private static String err(String m) { return "{\"ok\":false,\"error\":\"" + (m != null ? m.replace("\\", "\\\\").replace("\"", "\\\"") : "unknown") + "\"}"; }
-    private static String optString(JsonObject o, String k) { JsonElement e = o.get(k); return e != null && !e.isJsonNull() ? e.getAsString() : ""; }
-    private static int optInt(JsonObject o, String k, int d) { JsonElement e = o.get(k); return e != null && !e.isJsonNull() ? e.getAsInt() : d; }
+    private static JsonObject base() {
+        JsonObject o = new JsonObject();
+        o.addProperty("ok", true);
+        return o;
+    }
+
+    private static String ok() {
+        return "{\"ok\":true}";
+    }
+
+    private static String err(String m) {
+        JsonObject o = new JsonObject();
+        o.addProperty("ok", false);
+        o.addProperty("error", m == null ? "unknown" : m);
+        return o.toString();
+    }
+
+    private static boolean has(JsonObject o, String k) {
+        JsonElement e = o.get(k);
+        return e != null && !e.isJsonNull();
+    }
+
+    private static String optString(JsonObject o, String k) {
+        JsonElement e = o.get(k);
+        return e != null && !e.isJsonNull() ? e.getAsString() : "";
+    }
+
+    private static int optInt(JsonObject o, String k, int d) {
+        JsonElement e = o.get(k);
+        return e != null && !e.isJsonNull() ? e.getAsInt() : d;
+    }
+
+    /*? if >= 1.19.2 {*/
+    private static Component translatable(String key) {
+        return Component.translatable(key);
+    }
+    /*?} else {*/
+    /*private static TranslatableComponent translatable(String key) {
+        return new TranslatableComponent(key);
+    }
+    *//*?}*/
+
+    private record GuiElements(List<GuiElement> all) {
+        GuiElement byId(int id) {
+            for (GuiElement element : all) {
+                if (element.id() == id) return element;
+            }
+            return null;
+        }
+
+        List<GuiElement> buttons() {
+            return all.stream().filter(e -> e.widget() instanceof Button).toList();
+        }
+
+        List<GuiElement> textFields() {
+            return all.stream().filter(e -> e.widget() instanceof EditBox).toList();
+        }
+
+        List<GuiElement> other() {
+            return all.stream().filter(e -> !(e.widget() instanceof Button) && !(e.widget() instanceof EditBox)).toList();
+        }
+    }
+
+    private record GuiElement(int id, AbstractWidget widget) {
+        String text() {
+            return widget instanceof EditBox editBox ? editBox.getValue() : widget.getMessage().getString();
+        }
+
+        int x() {
+            /*? if >= 1.19.4 {*/
+            return widget.getX();
+            /*?} else {*/
+            /*return widget.x;
+            *//*?}*/
+        }
+
+        int y() {
+            /*? if >= 1.19.4 {*/
+            return widget.getY();
+            /*?} else {*/
+            /*return widget.y;
+            *//*?}*/
+        }
+
+        int width() {
+            return widget.getWidth();
+        }
+
+        int height() {
+            return widget.getHeight();
+        }
+
+        String type() {
+            if (widget instanceof Button) return "Button";
+            if (widget instanceof EditBox) return "TextField";
+            return widget.getClass().getSimpleName();
+        }
+    }
 
     @FunctionalInterface
-    private interface ThrowingSupplier<T> { T get() throws Exception; }
+    private interface ThrowingSupplier<T> {
+        T get() throws Exception;
+    }
 }

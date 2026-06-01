@@ -29,7 +29,6 @@ public class FabricInit {
         } else {
             ModPackets.registerC2SPackets();
             new AudioManager();
-            AutoTestBridge.startIfEnabled();
         }
 
     CommandRegistrationCallback.EVENT.register((dispatcher, /*? if >=1.19.1 {*/ w, /*?}*/ dedicated) -> {

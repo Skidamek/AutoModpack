@@ -90,7 +90,6 @@ flow:
   - read_fingerprint
   - wait_server
   - wait_bridge
-  - ensure_ready
   - connect
   - wait_fingerprint
   - accept_fingerprint
@@ -121,13 +120,12 @@ Useful phases:
 | `launch_server` | Start the Minecraft server container. |
 | `wait_server` | Wait until the server logs `Done (`. |
 | `launch_client` | Start a HeadlessMC client container. |
-| `wait_bridge` | Wait until the in-game bridge is ready. |
-| `ensure_ready` | Wait for title screen and dismiss known prompts. |
+| `wait_bridge` | Wait for bridge + client-ready signal from MinecraftMixin. |
 | `connect` | Connect the client to the test server. |
 | `read_fingerprint` | Extract the AutoModpack TLS fingerprint from server logs. |
-| `wait_fingerprint` | Wait for the fingerprint validation screen. |
-| `accept_fingerprint` | Enter and accept the expected fingerprint. |
-| `wait_danger` | Wait for the update confirmation screen. |
+| `wait_fingerprint` | Wait for a certificate prompt with a text field and Verify button. |
+| `accept_fingerprint` | Enter the expected fingerprint and click Verify. |
+| `wait_danger` | Wait for the download confirmation prompt. |
 | `click_confirm` | Confirm the sync/update. |
 | `wait_download` | Wait for the marker file in the synced modpack. |
 | `verify_files` | Verify all configured `serverFiles.files` exist on the client. |
@@ -180,6 +178,6 @@ properties. Commands and responses are JSON files under:
 <gameDir>/automodpack/autotest/
 ```
 
-The bridge is intentionally small and only exposes the UI actions needed by the
-runner: inspect screen/widgets, click buttons, set text, connect, verify
-fingerprints, and quit.
+The bridge is intentionally small and generic. It exposes HMC-specifics-style
+operations for `gui`, `click`, `text`, `menu`, `close`, `connect`, `disconnect`,
+`render`, and `quit`; the runner builds scenario behavior from those primitives.

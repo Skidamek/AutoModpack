@@ -33,3 +33,24 @@ class BridgeClient:
                 return data
             time.sleep(random.uniform(0.03, 0.07))
         raise TimeoutError(f"Bridge did not respond to '{op}' after {timeout}s")
+
+    def gui(self, timeout: float = 30) -> dict:
+        return self.request("gui", timeout=timeout)
+
+    def buttons(self, timeout: float = 30) -> list[dict]:
+        return list(self.gui(timeout=timeout).get("buttons", []))
+
+    def text_fields(self, timeout: float = 30) -> list[dict]:
+        return list(self.gui(timeout=timeout).get("textFields", []))
+
+    def click(self, element_id: int, timeout: float = 30, **payload) -> dict:
+        return self.request("click", timeout=timeout, id=element_id, **payload)
+
+    def click_point(self, x: int, y: int, button: int = 0, timeout: float = 30) -> dict:
+        return self.request("click", timeout=timeout, x=x, y=y, button=button)
+
+    def text(self, element_id: int, value: str, timeout: float = 30) -> dict:
+        return self.request("text", timeout=timeout, id=element_id, text=value)
+
+    def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
+        return self.request("connect", timeout=timeout, host=host, port=port)

@@ -8,7 +8,6 @@ flow:
   - read_fingerprint
   - wait_server
   - wait_bridge
-  - ensure_ready
   - connect
   - wait_fingerprint
   - accept_fingerprint

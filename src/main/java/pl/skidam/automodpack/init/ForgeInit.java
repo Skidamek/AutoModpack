@@ -33,7 +33,6 @@ public class ForgeInit {
         } else {
             ModPackets.registerC2SPackets();
             new AudioManager(FMLJavaModLoadingContext.get().getModEventBus());
-            AutoTestBridge.startIfEnabled();
         }
 
 

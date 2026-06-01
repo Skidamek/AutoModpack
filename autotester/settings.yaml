@@ -27,7 +27,8 @@ server:
     SPAWN_MONSTERS: "false"
     SPAWN_NPCS: "false"
     GENERATE_STRUCTURES: "false"
-    LEVEL_TYPE: "void"
+    LEVEL_TYPE: "flat"
+    GENERATOR_SETTINGS: "{\"lakes\":false,\"layers\":[{\"block\":\"minecraft:stone\",\"height\":1}],\"biome\":\"minecraft:plains\",\"structures\":{\"structures\":{}}}"
     SPAWN_RADIUS: "0"
 
 serverTypes:
