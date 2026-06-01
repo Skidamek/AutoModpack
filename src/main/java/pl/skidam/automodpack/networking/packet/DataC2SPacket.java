@@ -112,11 +112,8 @@ public class DataC2SPacket {
                         ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
 
                         if (updateCheckResult.requiresUpdate()) {
-                            LOGGER.info("DataC2SPacket: update required, disconnecting immediately (t={})", System.currentTimeMillis() - t0);
                             disconnectImmediately(handler);
-                            LOGGER.info("DataC2SPacket: disconnected, calling processModpackUpdate (t={})", System.currentTimeMillis() - t0);
                             new ModpackUpdater(optionalServerModpackContent.get(), modpackAddresses, secret, modpackDir).processModpackUpdate(updateCheckResult);
-                            LOGGER.info("DataC2SPacket: processModpackUpdate returned (t={})", System.currentTimeMillis() - t0);
                             needsDisconnecting = true;
                         } else {
                             boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, modpackAddresses, Set.of());
