@@ -21,7 +21,8 @@
     "core.ConnectScreenMixin",
     "core.MusicTrackerMixin",
     "dev.FontRenderMixin",
-    "dev.MinecraftMixin"
+    "dev.MinecraftMixin",
+    "dev.ResourceLoadStateTrackerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

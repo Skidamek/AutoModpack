@@ -54,6 +54,15 @@ public final class AutoTestBridge {
     private static final AtomicBoolean STARTED = new AtomicBoolean(false);
     private static volatile Path bridgeDir;
     private static final AtomicBoolean CLIENT_READY = new AtomicBoolean(false);
+    private static volatile boolean reloadFinished = false;
+
+    public static void markReloadFinished() {
+        reloadFinished = true;
+    }
+
+    public static boolean hasReloadFinished() {
+        return reloadFinished;
+    }
 
     public static void startIfEnabled() {
         if (!Boolean.getBoolean("automodpack.autotest")) return;
@@ -68,6 +77,25 @@ public final class AutoTestBridge {
         Thread t = new Thread(() -> run(Path.of(gameDir), token), "AutoModpackBridge");
         t.setDaemon(true);
         t.start();
+
+        Thread waiter = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(100);
+                    Minecraft mc = Minecraft.getInstance();
+                    if (mc.screen instanceof TitleScreen && hasReloadFinished()) {
+                        LOGGER.info("AutoModpack: Client is ready, TitleScreen detected");
+                        onClientReady();
+                        return;
+                    } else {
+                        LOGGER.info("AutoModpack: Waiting for TitleScreen, current screen: {}", mc.screen == null ? "null" : mc.screen.getClass().getName());
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }, "AutoModpackReadyWaiter");
+        waiter.setDaemon(true);
+        waiter.start();
     }
 
     public static void onClientReady() {
