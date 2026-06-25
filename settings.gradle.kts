@@ -44,6 +44,8 @@ stonecutter {
             .forEach { version("$version-$it", version).buildscript = "build.$it.gradle.kts" }
 
         // Configure your targets here!
+        // 26.2 added for MC 26.2 port prep (Fabric + NeoForge only - Forge not maintained past 1.20.1)
+        match("26.2", "fabric", "neoforge")
         match("26.1", "fabric", "neoforge")
         match("1.21.11", "fabric", "neoforge")
         match("1.21.10", "fabric", "neoforge")

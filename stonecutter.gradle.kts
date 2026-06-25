@@ -39,5 +39,13 @@ stonecutter.parameters {
                 "source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))"
             )
         }
+
+        // 26.2: Minecraft#screen field / setScreen() / getToastManager() moved onto Minecraft#gui (the Gui class).
+        // Matches lowercase "minecraft.setScreen(" / "minecraft.getToastManager()" only - deliberately excludes
+        // our own "Screens.setScreen(" helper (capital S) in ScreenImpl.java, which is handled separately there.
+        string(current.parsed >= "26.2") {
+            replace("minecraft.setScreen(", "minecraft.gui.setScreen(")
+            replace("minecraft.getToastManager()", "minecraft.gui.toastManager()")
+        }
     }
 }
