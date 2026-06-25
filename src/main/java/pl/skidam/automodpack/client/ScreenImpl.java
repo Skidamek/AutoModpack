@@ -75,7 +75,6 @@ public class ScreenImpl implements ScreenService {
 
     private static class Screens {
         private static Screen getScreen() {
-            // 26.2: Minecraft#screen field moved onto Minecraft#gui (the Gui class)
             /*? if >=26.2 {*/
             return Minecraft.getInstance().gui.screen();
             /*?} else {*/
@@ -85,7 +84,6 @@ public class ScreenImpl implements ScreenService {
 
         public static void setScreen(Screen screen) {
             // required for forge to handle it properly
-            // 26.2: Minecraft#setScreen() moved onto Minecraft#gui (the Gui class)
             /*? if >=26.2 {*/
             Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().gui.setScreen(screen)));
             /*?} else {*/

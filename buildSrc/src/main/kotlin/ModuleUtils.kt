@@ -12,7 +12,6 @@ fun getLoaderModuleName(name: String): String {
         name.contains("neoforge") -> when (mcVersion) {
             "1.20.6", "1.20.4", "1.20.1", "1.19.4", "1.19.2", "1.18.2" -> "neoforge-fml2"
             "1.21.8", "1.21.5", "1.21.4", "1.21.3", "1.21.1" -> "neoforge-fml4"
-            // 26.2 added for MC 26.2 port prep - reuses fml10 (same FML ABI generation as 26.1/1.21.10/1.21.11)
             "1.21.11", "1.21.10", "26.1", "26.2" -> "neoforge-fml10"
             else -> error("Unknown neoforge loader module for Minecraft version: $mcVersion")
         }
