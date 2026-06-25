@@ -2,7 +2,6 @@ package pl.skidam.automodpack.init;
 
 /*? if forge {*/
 /*import pl.skidam.automodpack.client.ScreenImpl;
-import pl.skidam.automodpack.client.autotest.AutoTestBridge;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;

@@ -5,7 +5,6 @@ package pl.skidam.automodpack.init;
 import net.neoforged.fml.common.EventBusSubscriber;
 /^?}^/
 import pl.skidam.automodpack.client.ScreenImpl;
-import pl.skidam.automodpack.client.autotest.AutoTestBridge;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.modpack.Commands;
 import pl.skidam.automodpack.networking.ModPackets;

@@ -49,21 +49,6 @@ public class DownloadClient implements AutoCloseable {
     }
 
     /**
-     * Initializes the client by establishing a single "probe" connection to validate/recover SSL trust,
-     * then hydrates the remaining connection pool in parallel using the validated SSL context.
-     */
-    public DownloadClient(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
-        if (poolSize < 1) throw new IllegalArgumentException("Pool size must be greater than 0");
-
-        KeyStore keyStore = loadDefaultKeyStore();
-
-        InitialConnectionResult probe = establishProbeConnection(modpackAddresses, keyStore, trustedByUserCallback);
-        connections.addAll(hydratePool(probe, secretBytes, poolSize, modpackAddresses));
-
-        LOGGER.info("Download client initialized with {} connections to {}", connections.size(), modpackAddresses.hostAddress);
-    }
-
-    /**
      * Async factory. If the certificate needs user approval, no thread blocks: the returned future
      * completes when the trust callback's future completes (via UI callbacks on the render thread).
      */
@@ -159,41 +144,6 @@ public class DownloadClient implements AutoCloseable {
                 .toList();
         conns.addAll(newConnections);
         return conns;
-    }
-
-    private InitialConnectionResult establishProbeConnection(Jsons.ModpackAddresses addresses, KeyStore keyStore, Function<X509Certificate, Boolean> trustCallback) throws IOException {
-        AtomicReference<X509Certificate[]> capturedChain = new AtomicReference<>();
-        SSLContext context = createSSLContext(keyStore, capturedChain::set);
-
-        try {
-            PreValidationConnection conn = getPreValidationConnection(addresses, context);
-            return new InitialConnectionResult(conn, context);
-        } catch (IOException e) {
-            return recoverProbeConnection(e, addresses, keyStore, trustCallback, capturedChain.get());
-        }
-    }
-
-    private InitialConnectionResult recoverProbeConnection(IOException originalError, Jsons.ModpackAddresses addresses, KeyStore keyStore, Function<X509Certificate, Boolean> trustCallback, X509Certificate[] chain) throws IOException {
-        if (chain == null || chain.length == 0 || trustCallback == null) {
-            throw originalError;
-        }
-
-        boolean isTrusted = trustCallback.apply(chain[0]);
-        if (!isTrusted) {
-            throw new IOException("User rejected the certificate.", originalError);
-        }
-
-        try {
-            keyStore.setCertificateEntry(addresses.hostAddress.getHostString(), chain[0]);
-
-            SSLContext trustedContext = createSSLContext(keyStore, null);
-
-            PreValidationConnection retryConn = getPreValidationConnection(addresses, trustedContext);
-            return new InitialConnectionResult(retryConn, trustedContext);
-
-        } catch (KeyStoreException kse) {
-            throw new IOException("Failed to update KeyStore with trusted certificate", kse);
-        }
     }
 
     private static KeyStore loadDefaultKeyStore() {

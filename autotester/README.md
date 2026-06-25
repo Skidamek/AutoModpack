@@ -93,8 +93,8 @@ flow:
   - connect
   - wait_fingerprint
   - accept_fingerprint
-  - wait_danger
-  - click_confirm
+  - wait_download_prompt
+  - confirm_download
   - wait_download
   - verify_files
   - quit
@@ -120,16 +120,18 @@ Useful phases:
 | `launch_server` | Start the Minecraft server container. |
 | `wait_server` | Wait until the server logs `Done (`. |
 | `launch_client` | Start a HeadlessMC client container. |
-| `wait_bridge` | Wait for bridge + client-ready signal from MinecraftMixin. |
+| `wait_bridge` | Wait for the in-game bridge to report the client is ready. |
 | `connect` | Connect the client to the test server. |
 | `read_fingerprint` | Extract the AutoModpack TLS fingerprint from server logs. |
 | `wait_fingerprint` | Wait for a certificate prompt with a text field and Verify button. |
 | `accept_fingerprint` | Enter the expected fingerprint and click Verify. |
-| `wait_danger` | Wait for the download confirmation prompt. |
-| `click_confirm` | Confirm the sync/update. |
+| `skip_fingerprint` | Skip certificate verification (accept the risk) instead of verifying. |
+| `wait_download_prompt` | Wait for the modpack download/confirmation prompt. |
+| `confirm_download` | Click the download button to start the sync. |
 | `wait_download` | Wait for the marker file in the synced modpack. |
 | `verify_files` | Verify all configured `serverFiles.files` exist on the client. |
-| `click_restart` | Click restart/quit on the restart screen if shown. |
+| `verify_mods` | Verify all configured `serverFiles.expectedMods` exist on the client. |
+| `confirm_restart` | Click restart/quit on the restart screen if shown. |
 | `wait_join` | Verify the client reaches the in-game state. |
 | `quit` | Stop the client through the bridge. |
 
@@ -178,6 +180,6 @@ properties. Commands and responses are JSON files under:
 <gameDir>/automodpack/autotest/
 ```
 
-The bridge is intentionally small and generic. It exposes HMC-specifics-style
-operations for `gui`, `click`, `text`, `menu`, `close`, `connect`, `disconnect`,
-`render`, and `quit`; the runner builds scenario behavior from those primitives.
+The bridge is intentionally small and generic. It exposes operations for
+`ping`, `gui`, `click`, `text`, `connect`, `disconnect`, and `quit`; the runner
+builds scenario behavior from those primitives.

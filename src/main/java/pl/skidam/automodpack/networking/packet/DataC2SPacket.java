@@ -62,30 +62,30 @@ public class DataC2SPacket {
         Path modpackDir;
         Jsons.ModpackAddresses modpackAddresses;
         try {
-	        // Get actual address of the server client have connected to and format it
-	        InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
-	        String effectiveHost;
-	        int effectivePort;
+            // Get actual address of the server client have connected to and format it
+            InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
+            String effectiveHost;
+            int effectivePort;
 
-	        // If the packet specifies a non-blank address, use it or else use address from the server client have connected to.
-	        // Important! Use getAddress().getHostAddress() instead of getHostString()
-	        // because Minecraft creates connectedAddress instance through a constructor which attempts a reverse DNS lookup
-	        // which resolves PTR record for the IP address and stores the resolved hostname in the hostname field.
-	        if (packetAddress.isBlank()) {
-		        var connectedInetAddress = connectedAddress.getAddress();
-		        effectiveHost = connectedInetAddress == null ? connectedAddress.getHostString() : connectedInetAddress.getHostAddress();
-	        } else {
-		        effectiveHost = packetAddress;
-	        }
+            // If the packet specifies a non-blank address, use it or else use address from the server client have connected to.
+            // Important! Use getAddress().getHostAddress() instead of getHostString()
+            // because Minecraft creates connectedAddress instance through a constructor which attempts a reverse DNS lookup
+            // which resolves PTR record for the IP address and stores the resolved hostname in the hostname field.
+            if (packetAddress.isBlank()) {
+                var connectedInetAddress = connectedAddress.getAddress();
+                effectiveHost = connectedInetAddress == null ? connectedAddress.getHostString() : connectedInetAddress.getHostAddress();
+            } else {
+                effectiveHost = packetAddress;
+            }
 
-	        if (packetPort == -1) {
-		        effectivePort = connectedAddress.getPort();
-	        } else {
-		        effectivePort = packetPort;
-	        }
+            if (packetPort == -1) {
+                effectivePort = connectedAddress.getPort();
+            } else {
+                effectivePort = packetPort;
+            }
 
-	        // Construct the final modpack address
-	        InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
+            // Construct the final modpack address
+            InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
 
             LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 
@@ -98,14 +98,6 @@ public class DataC2SPacket {
 
         return ModpackUtils.requestServerModpackContentAsync(modpackAddresses, secret, true)
                 .thenApplyAsync(optionalServerModpackContent -> {
-                    long t0 = System.currentTimeMillis();
-
-                    if (optionalServerModpackContent.isEmpty()) {
-                        if (ModpackUtils.canConnectModpackHost(modpackAddresses)) {
-                            return buildResponse(true);
-                        }
-                    }
-
                     Boolean needsDisconnecting = null;
 
                     if (optionalServerModpackContent.isPresent()) {
@@ -134,6 +126,9 @@ public class DataC2SPacket {
                                 needsDisconnecting = false;
                             }
                         }
+                    } else if (ModpackUtils.canConnectModpackHost(modpackAddresses)) {
+                        // Couldn't download the modpack content (e.g. certificate not verified) but the host is reachable
+                        needsDisconnecting = true;
                     }
 
                     if (clientConfig.selectedModpack != null && !clientConfig.selectedModpack.isBlank()) {

@@ -11,8 +11,8 @@ flow:
   - connect
   - wait_fingerprint
   - accept_fingerprint
-  - wait_danger
-  - click_confirm
+  - wait_download_prompt
+  - confirm_download
   - wait_download
   - verify_files
   - quit

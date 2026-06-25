@@ -177,7 +177,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             if interrupted:
                 os._exit(1)
-            return 0 if ok else 1
+
+        return 0 if ok else 1
 
     except KeyboardInterrupt:
         os._exit(1)

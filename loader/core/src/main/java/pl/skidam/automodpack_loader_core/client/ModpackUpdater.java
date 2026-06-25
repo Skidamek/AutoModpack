@@ -72,7 +72,7 @@ public class ModpackUpdater {
             // Handle the case where serverModpackContent is null
             if (serverModpackContent == null) {
                 try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-                    CheckAndLoadModpack(cache);
+                    checkAndLoadModpack(cache);
                 }
                 return;
             }
@@ -109,7 +109,7 @@ public class ModpackUpdater {
                 } else {
                     Files.writeString(modpackContentFile, serverModpackContentJson);
                     try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-                        CheckAndLoadModpack(cache);
+                        checkAndLoadModpack(cache);
                     }
                 }
             }
@@ -118,13 +118,13 @@ public class ModpackUpdater {
         }
     }
 
-    public void CheckAndLoadModpack() throws Exception {
+    public void checkAndLoadModpack() throws Exception {
         try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-            CheckAndLoadModpack(cache);
+            checkAndLoadModpack(cache);
         }
     }
 
-    private void CheckAndLoadModpack(FileMetadataCache cache) throws Exception {
+    private void checkAndLoadModpack(FileMetadataCache cache) throws Exception {
         if (!Files.exists(modpackDir))
             return;
 
@@ -251,7 +251,7 @@ public class ModpackUpdater {
                 LOGGER.error("Update failed successfully! Try again! Took: {}ms", System.currentTimeMillis() - start);
             } else if (preload) {
                 LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
-                CheckAndLoadModpack(cache);
+                checkAndLoadModpack(cache);
             } else  {
                 boolean requiredRestart = applyModpack(cache);
                 LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);

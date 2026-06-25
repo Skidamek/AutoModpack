@@ -11,8 +11,8 @@ import pl.skidam.automodpack.client.autotest.AutoTestBridge;
 @Mixin(Minecraft.class)
 public abstract class MinecraftMixin {
 
-	@Inject(method = "<init>", at = @At("RETURN"))
-	private void onInit(GameConfig gameConfig, CallbackInfo ci) {
-		AutoTestBridge.startIfEnabled();
-	}
+    @Inject(method = "<init>", at = @At("RETURN"))
+    private void onInit(GameConfig gameConfig, CallbackInfo ci) {
+        AutoTestBridge.startIfEnabled();
+    }
 }

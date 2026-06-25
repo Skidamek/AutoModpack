@@ -61,7 +61,7 @@ public class ClientLoginNetworkAddon {
         } catch (Throwable e) {
             LOGGER.error("Encountered exception while handling in channel with name \"{}\"", channelName, e);
             sendResponse(queryId, channelName, new FriendlyByteBuf(Unpooled.buffer()));
-			throw e;
+            throw e;
         }
 
         return true;

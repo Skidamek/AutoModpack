@@ -570,8 +570,8 @@ def _phase_skip_fingerprint(ctx):
     raise RuntimeError("Skip button did not activate")
 
 
-@_reg("wait_danger")
-def _phase_wait_danger(ctx):
+@_reg("wait_download_prompt")
+def _phase_wait_download_prompt(ctx):
     bridge = ctx["bridge"]
     _await(
         lambda: (
@@ -582,8 +582,8 @@ def _phase_wait_danger(ctx):
     )
 
 
-@_reg("click_confirm")
-def _phase_click_confirm(ctx):
+@_reg("confirm_download")
+def _phase_confirm_download(ctx):
     bridge = ctx["bridge"]
     dl = time.monotonic() + 5
     while time.monotonic() < dl:
@@ -649,8 +649,8 @@ def _phase_verify_mods(ctx):
     raise TimeoutError(f"Mods missing after sync: {', '.join(missing)}")
 
 
-@_reg("click_restart")
-def _phase_click_restart(ctx):
+@_reg("confirm_restart")
+def _phase_confirm_restart(ctx):
     bridge = ctx["bridge"]
     dl = time.monotonic() + 20
     while time.monotonic() < dl:

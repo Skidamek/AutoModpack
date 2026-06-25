@@ -844,11 +844,11 @@ public class ModpackUtils {
         LOGGER.info("Asking user for {}", address.getHostString());
 
         return CompletableFuture.supplyAsync(() -> {
-	        var parent = new ScreenManager().getScreen().orElse(null);
-	        if (parent == null) {
-		        LOGGER.warn("No screen available, cannot ask user");
-		        return false;
-	        }
+            var parent = new ScreenManager().getScreen().orElse(null);
+            if (parent == null) {
+                LOGGER.warn("No screen available, cannot ask user");
+                return false;
+            }
 
             CompletableFuture<Boolean> future = new CompletableFuture<>();
             Runnable trustAction = () -> {

@@ -12,13 +12,11 @@ import pl.skidam.automodpack.client.autotest.AutoTestBridge;
 @Mixin(ResourceLoadStateTracker.class)
 public class ResourceLoadStateTrackerMixin {
 
-	@Inject(method = "finishReload", at = @At("RETURN"))
-	private void onFinishReload(CallbackInfo ci) {
-		AutoTestBridge.markReloadFinished();
-		Minecraft mc = Minecraft.getInstance();
-		if (mc.screen instanceof TitleScreen) {
-			System.out.println("AutoModpack: Client is ready, reload finished, TitleScreen detected");
-			AutoTestBridge.onClientReady();
-		}
-	}
+    @Inject(method = "finishReload", at = @At("RETURN"))
+    private void onFinishReload(CallbackInfo ci) {
+        AutoTestBridge.markReloadFinished();
+        if (Minecraft.getInstance().screen instanceof TitleScreen) {
+            AutoTestBridge.onClientReady();
+        }
+    }
 }

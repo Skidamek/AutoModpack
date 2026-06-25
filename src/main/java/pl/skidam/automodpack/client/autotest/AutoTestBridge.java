@@ -78,17 +78,14 @@ public final class AutoTestBridge {
         t.setDaemon(true);
         t.start();
 
+        // Fallback in case the reload-finished mixin fires before the title screen is shown.
         Thread waiter = new Thread(() -> {
-            while (true) {
+            while (!CLIENT_READY.get()) {
                 try {
                     Thread.sleep(100);
-                    Minecraft mc = Minecraft.getInstance();
-                    if (mc.screen instanceof TitleScreen && hasReloadFinished()) {
-                        LOGGER.info("AutoModpack: Client is ready, TitleScreen detected");
+                    if (Minecraft.getInstance().screen instanceof TitleScreen && hasReloadFinished()) {
                         onClientReady();
                         return;
-                    } else {
-                        LOGGER.info("AutoModpack: Waiting for TitleScreen, current screen: {}", mc.screen == null ? "null" : mc.screen.getClass().getName());
                     }
                 } catch (Exception ignored) {
                 }
@@ -104,6 +101,7 @@ public final class AutoTestBridge {
         if (dir == null) return;
         try {
             writeFile(dir.resolve("bridge-state.json"), "{\"status\":\"ready\"}");
+            LOGGER.info("AutoModpack autotest: client ready, wrote bridge-state.json");
         } catch (IOException e) {
             LOGGER.error("Cannot write client-ready state", e);
         }
@@ -159,12 +157,9 @@ public final class AutoTestBridge {
             case "gui" -> onMain(() -> gui().toString());
             case "click" -> onMain(() -> click(req));
             case "text" -> onMain(() -> text(req));
-            case "menu" -> onMain(AutoTestBridge::menu);
-            case "close" -> onMain(AutoTestBridge::close);
             case "connect" -> onMain(() -> connect(req));
             case "disconnect" -> onMain(AutoTestBridge::disconnect);
             case "quit" -> onMain(AutoTestBridge::quit);
-            case "render" -> render(req);
             default -> err("unknown operation: " + optString(req, "op"));
         };
     }
@@ -175,10 +170,11 @@ public final class AutoTestBridge {
         JsonObject o = base();
         o.addProperty("screenClass", s == null ? null : s.getClass().getName());
         o.addProperty("title", s == null ? null : s.getTitle().getString());
-        o.add("buttons", elementsJson(elements(s).buttons()));
-        o.add("textFields", elementsJson(elements(s).textFields()));
-        o.add("other", elementsJson(elements(s).other()));
-        o.add("elements", elementsJson(elements(s).all()));
+        GuiElements elements = elements(s);
+        o.add("buttons", elementsJson(elements.buttons()));
+        o.add("textFields", elementsJson(elements.textFields()));
+        o.add("other", elementsJson(elements.other()));
+        o.add("elements", elementsJson(elements.all()));
         return o;
     }
 
@@ -230,21 +226,6 @@ public final class AutoTestBridge {
         return ok();
     }
 
-    private static String menu() {
-        Minecraft c = Minecraft.getInstance();
-        if (c.player == null) return err("not in game");
-        if (c.screen != null) c.screen.onClose();
-        c.pauseGame(false);
-        return ok();
-    }
-
-    private static String close() {
-        Minecraft c = Minecraft.getInstance();
-        if (c.player == null) return err("not in game");
-        if (c.screen != null) c.screen.onClose();
-        return ok();
-    }
-
     private static String connect(JsonObject req) {
         Minecraft c = Minecraft.getInstance();
         String host = optString(req, "host");
@@ -286,28 +267,6 @@ public final class AutoTestBridge {
     private static String quit() {
         Minecraft.getInstance().stop();
         return ok();
-    }
-
-    private static String render(JsonObject req) throws InterruptedException {
-        int millis = Math.max(1, optInt(req, "time", 1000));
-        boolean includeDuplicates = has(req, "includeDuplicates") && req.get("includeDuplicates").getAsBoolean();
-        RenderedTextCollector.Session session = RenderedTextCollector.start();
-        try {
-            Thread.sleep(millis);
-            JsonObject o = base();
-            JsonArray a = new JsonArray();
-            for (RenderedTextCollector.Entry entry : session.entries(includeDuplicates)) {
-                JsonObject e = new JsonObject();
-                e.addProperty("text", entry.text());
-                e.addProperty("x", entry.x());
-                e.addProperty("y", entry.y());
-                a.add(e);
-            }
-            o.add("strings", a);
-            return o.toString();
-        } finally {
-            session.close();
-        }
     }
 
     private static GuiElements elements(Screen screen) {

@@ -17,7 +17,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 public class ScreenImpl implements ScreenService {
 
     private static void executeOnClient(Runnable task) {
-	    Minecraft.getInstance().execute(task);
+        Minecraft.getInstance().execute(task);
     }
 
     @Override
