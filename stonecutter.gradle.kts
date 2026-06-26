@@ -1,10 +1,10 @@
 plugins {
     id("dev.kikugie.stonecutter")
-    kotlin("jvm") version "2.3.0" apply false
-    id("net.fabricmc.fabric-loom-remap") version "1.16-SNAPSHOT" apply false
-    id("net.fabricmc.fabric-loom") version "1.16-SNAPSHOT" apply false
+    kotlin("jvm") version "2.3.21" apply false
+    id("net.fabricmc.fabric-loom-remap") version "1.17-SNAPSHOT" apply false
+    id("net.fabricmc.fabric-loom") version "1.17-SNAPSHOT" apply false
     id("net.neoforged.moddev") version "2.0.141" apply false
-    id("com.gradleup.shadow") version "9.4.1" apply false
+    id("com.gradleup.shadow") version "9.4.3" apply false
     id("org.moddedmc.wiki.toolkit") version "0.4+"
 }
 
@@ -14,7 +14,7 @@ wiki {
     }
 }
 
-stonecutter active "26.1-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "26.2-fabric" /* [SC] DO NOT EDIT */
 
 stonecutter.parameters {
     val (version, loader) = current.project.split('-', limit = 2)

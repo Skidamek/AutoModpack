@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -83,7 +84,7 @@ public final class AutoTestBridge {
             while (!CLIENT_READY.get()) {
                 try {
                     Thread.sleep(100);
-                    if (Minecraft.getInstance().screen instanceof TitleScreen && hasReloadFinished()) {
+                    if (currentScreen() instanceof TitleScreen && hasReloadFinished()) {
                         onClientReady();
                         return;
                     }
@@ -164,9 +165,12 @@ public final class AutoTestBridge {
         };
     }
 
+    private static Screen currentScreen() {
+        return (Screen) new ScreenManager().getScreen().orElse(null);
+    }
+
     private static JsonObject gui() {
-        Minecraft c = Minecraft.getInstance();
-        Screen s = c.screen;
+        Screen s = currentScreen();
         JsonObject o = base();
         o.addProperty("screenClass", s == null ? null : s.getClass().getName());
         o.addProperty("title", s == null ? null : s.getTitle().getString());
@@ -179,8 +183,7 @@ public final class AutoTestBridge {
     }
 
     private static String click(JsonObject req) {
-        Minecraft c = Minecraft.getInstance();
-        Screen s = c.screen;
+        Screen s = currentScreen();
         if (s == null) return err("no screen");
 
         int button = optInt(req, "button", 0);
@@ -213,7 +216,7 @@ public final class AutoTestBridge {
     }
 
     private static String text(JsonObject req) {
-        Screen s = Minecraft.getInstance().screen;
+        Screen s = currentScreen();
         if (s == null) return err("no screen");
 
         int id = optInt(req, "id", -1);
@@ -248,19 +251,19 @@ public final class AutoTestBridge {
     }
 
     private static String disconnect() {
-        Minecraft c = Minecraft.getInstance();
-        if (c.level == null) {
-            c.setScreen(new TitleScreen());
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null) {
+            minecraft.gui.setScreen(new TitleScreen());
             return ok();
         }
 
         /*? if >=1.21.6 {*/
-        c.level.disconnect(translatable("multiplayer.status.quitting"));
-        c.clearClientLevel(new GenericMessageScreen(translatable("multiplayer.disconnect.generic")));
+        minecraft.level.disconnect(translatable("multiplayer.status.quitting"));
+        minecraft.clearClientLevel(new GenericMessageScreen(translatable("multiplayer.disconnect.generic")));
         /*?} else {*/
-        /*c.level.disconnect();
+        /*minecraft.level.disconnect();
         *//*?}*/
-        c.setScreen(new TitleScreen());
+        minecraft.gui.setScreen(new TitleScreen());
         return ok();
     }
 

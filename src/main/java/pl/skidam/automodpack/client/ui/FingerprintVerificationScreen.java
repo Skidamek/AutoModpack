@@ -99,7 +99,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         this.validated = true;
         this.inputText = "";
         if (this.minecraft != null) {
-            this.minecraft.setScreen(parent);
+            this.minecraft.gui.setScreen(parent);
         }
         validatedCallback.run();
     }

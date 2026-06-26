@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.mixin.dev;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.ResourceLoadStateTracker;
 import net.minecraft.client.gui.screens.TitleScreen;
 import org.spongepowered.asm.mixin.Mixin;
@@ -8,6 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.client.autotest.AutoTestBridge;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 @Mixin(ResourceLoadStateTracker.class)
 public class ResourceLoadStateTrackerMixin {
@@ -15,7 +15,7 @@ public class ResourceLoadStateTrackerMixin {
     @Inject(method = "finishReload", at = @At("RETURN"))
     private void onFinishReload(CallbackInfo ci) {
         AutoTestBridge.markReloadFinished();
-        if (Minecraft.getInstance().screen instanceof TitleScreen) {
+        if (new ScreenManager().getScreen().orElse(null) instanceof TitleScreen) {
             AutoTestBridge.onClientReady();
         }
     }

@@ -86,7 +86,11 @@ public class ScreenImpl implements ScreenService {
         }
 
         public static void setScreen(Screen screen) {
-            Minecraft.getInstance().setScreen(screen);
+            /*? if >=26.2 {*/
+            Minecraft.getInstance().gui.setScreen(screen);
+            /*?} else {*/
+            /*Minecraft.getInstance().setScreen(screen);
+            *//*?}*/
         }
 
         public static void download(Object downloadManager, Object header) {
