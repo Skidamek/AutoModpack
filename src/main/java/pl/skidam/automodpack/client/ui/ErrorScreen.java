@@ -39,7 +39,7 @@ public class ErrorScreen extends VersionedScreen {
             VersionedText.translatable("automodpack.back"),
             button -> {
                 assert minecraft != null;
-                minecraft.setScreen(null);
+                minecraft.gui.setScreen(null);
             }
         );
     }

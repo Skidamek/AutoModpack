@@ -60,7 +60,7 @@ public class SkipVerificationScreen extends VersionedScreen {
                 VersionedText.translatable("automodpack.back"),
                 button -> {
                     assert this.minecraft != null;
-                    this.minecraft.setScreen(verificationScreen);
+                    this.minecraft.gui.setScreen(verificationScreen);
                 }
         );
 
@@ -92,14 +92,14 @@ public class SkipVerificationScreen extends VersionedScreen {
         if (input.equals(REQUIRED_TEXT)) {
             confirmButton.active = false;
             if (this.minecraft != null) {
-                this.minecraft.setScreen(parent);
+                this.minecraft.gui.setScreen(parent);
             }
             validatedCallback.run();
         } else {
             Constants.LOGGER.error("Skip verification text mismatch, try again");
             if (this.minecraft != null) {
                 /*? if > 1.21.1 {*/
-                this.minecraft.getToastManager().addToast(failedToast);
+                this.minecraft.gui.toastManager().addToast(failedToast);
                 /*?} else {*/
                 /*this.minecraft.getToasts().addToast(failedToast);
                 *//*?}*/

@@ -62,7 +62,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         this.backButton = buttonWidget(this.width / 2 - 155, this.height / 2 + 80, 100, 20,
                 VersionedText.translatable("automodpack.back"),
                 button -> {
-                    this.minecraft.setScreen(parent);
+                    this.minecraft.gui.setScreen(parent);
                     if (!this.validated) {
                         this.canceledCallback.run();
                     }
@@ -74,7 +74,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
                 VersionedText.translatable("automodpack.skip"),
                 button -> {
                     assert this.minecraft != null;
-                    this.minecraft.setScreen(new SkipVerificationScreen(this, this.parent, this.validatedCallback));
+                    this.minecraft.gui.setScreen(new SkipVerificationScreen(this, this.parent, this.validatedCallback));
                 });
 
         // Verify button (right - primary action, bold)
@@ -97,14 +97,14 @@ public class FingerprintVerificationScreen extends VersionedScreen {
             verifyButton.active = false;
             this.validated = true;
             if (this.minecraft != null) {
-                this.minecraft.setScreen(parent);
+                this.minecraft.gui.setScreen(parent);
             }
             validatedCallback.run();
         } else {
             Constants.LOGGER.error("Server fingerprint validation failed, try again");
             if (this.minecraft != null) {
                 /*? if > 1.21.1 {*/
-                this.minecraft.getToastManager().addToast(failedToast);
+                this.minecraft.gui.toastManager().addToast(failedToast);
                 /*?} else {*/
                 /*this.minecraft.getToasts().addToast(failedToast);
                 *//*?}*/

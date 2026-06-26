@@ -14,7 +14,7 @@ wiki {
     }
 }
 
-stonecutter active "1.21.11-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "26.2-fabric" /* [SC] DO NOT EDIT */
 
 stonecutter.parameters {
     val (version, loader) = current.project.split('-', limit = 2)

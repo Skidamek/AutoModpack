@@ -4,7 +4,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.Identifier;
 
 /*? if <1.20.2 {*/
-/*public record LoginResponsePayload(ResourceLocation id, FriendlyByteBuf data) { }
+/*public record LoginResponsePayload(Identifier id, FriendlyByteBuf data) { }
 *//*?} else {*/
 import net.minecraft.network.protocol.login.custom.CustomQueryAnswerPayload;
 import pl.skidam.automodpack.networking.PayloadHelper;

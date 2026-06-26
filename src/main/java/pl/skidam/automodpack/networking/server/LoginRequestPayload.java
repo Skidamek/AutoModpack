@@ -3,7 +3,7 @@ package pl.skidam.automodpack.networking.server;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.Identifier;
 /*? if <1.20.2 {*/
-/*public record LoginRequestPayload(ResourceLocation id, FriendlyByteBuf data) { }
+/*public record LoginRequestPayload(Identifier id, FriendlyByteBuf data) { }
 *//*?} else {*/
 import net.minecraft.network.protocol.login.custom.CustomQueryPayload;
 import pl.skidam.automodpack.networking.PayloadHelper;

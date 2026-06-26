@@ -21,7 +21,7 @@ public class FabricLoginMixin {
     )
     private void dontRemoveAutoModpackChannels(ClientboundCustomQueryPacket packet, CallbackInfo ci) {
         /*? if <1.20.2 {*/
-        /*ResourceLocation id = packet.getIdentifier();
+        /*Identifier id = packet.getIdentifier();
         *//*?} else {*/
         Identifier id = packet.payload().id();
         /*?}*/
