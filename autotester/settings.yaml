@@ -12,7 +12,6 @@ run:
   target: all
   scenario: sync
   jobs: 1
-  retryMax: 0
 
 server:
   memory: 2G

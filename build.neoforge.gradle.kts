@@ -17,17 +17,9 @@ neoForge {
     }
 }
 
-repositories {
-    maven("https://maven.su5ed.dev/releases") { name = "FFAPI" }
-}
-
 dependencies {
     implementation(project(":core")) { isTransitive = false }
     implementation(project(":loader-core")) { isTransitive = false }
-
-    if (sc.current.parsed >= "1.21") {
-        implementation("org.sinytra.forgified-fabric-api:forgified-fabric-api:0.115.6+2.1.4+1.21.1")
-    }
 }
 
 tasks {

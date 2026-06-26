@@ -78,7 +78,6 @@ jobs:
       - uses: actions/download-artifact@v6
         with:
           pattern: autotester-*
-          merge-multiple: true
       - name: Aggregate results
         id: aggregate
         run: |

@@ -18,3 +18,4 @@ autotester = "automodpack_autotester.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["automodpack_autotester*"]
+namespaces = true
