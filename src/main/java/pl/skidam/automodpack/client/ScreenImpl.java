@@ -75,12 +75,20 @@ public class ScreenImpl implements ScreenService {
 
     private static class Screens {
         private static Screen getScreen() {
-            return Minecraft.getInstance().screen;
+            /*? if >=26.2 {*/
+            return Minecraft.getInstance().gui.screen();
+            /*?} else {*/
+            /*return Minecraft.getInstance().screen;
+            *//*?}*/
         }
 
         public static void setScreen(Screen screen) {
             // required for forge to handle it properly
-            Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(screen)));
+            /*? if >=26.2 {*/
+            Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().gui.setScreen(screen)));
+            /*?} else {*/
+            /*Util.backgroundExecutor().execute(() -> Minecraft.getInstance().execute(() -> Minecraft.getInstance().setScreen(screen)));
+            *//*?}*/
         }
 
         public static void download(Object downloadManager, Object header) {

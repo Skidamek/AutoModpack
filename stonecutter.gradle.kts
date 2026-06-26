@@ -14,7 +14,7 @@ wiki {
     }
 }
 
-stonecutter active "1.21.11-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "26.2-fabric" /* [SC] DO NOT EDIT */
 
 stonecutter.parameters {
     val (version, loader) = current.project.split('-', limit = 2)
@@ -38,6 +38,11 @@ stonecutter.parameters {
                 "source.hasPermission(3))",
                 "source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))"
             )
+        }
+
+        string(current.parsed >= "26.2") {
+            replace("minecraft.setScreen(", "minecraft.gui.setScreen(")
+            replace("minecraft.getToastManager()", "minecraft.gui.toastManager()")
         }
     }
 }
