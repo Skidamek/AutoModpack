@@ -45,7 +45,6 @@ def main(argv: list[str] | None = None) -> int:
 
     build = sub.add_parser("build-images")
     build.add_argument("--client-image")
-    build.add_argument("--headlessmc-version")
 
     run_p = sub.add_parser("run")
     run_p.add_argument("--target")
@@ -64,17 +63,22 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "build-images":
         s = load_settings()
-        ver = args.headlessmc_version or str(
-            s.get("headlessmc", {}).get("version", "2.9.0")
-        )
+        hmc = s.get("headlessmc", {})
         img = args.client_image or str(
             s.get("images", {}).get("client", "automodpack-autotest-client:local")
         )
+        # Pass through only what settings provide; the Dockerfile falls back to
+        # upstream HeadlessMC for anything unset.
+        buildargs = {}
+        if hmc.get("repo"):
+            buildargs["HEADLESSMC_REPO"] = str(hmc["repo"])
+        if hmc.get("ref"):
+            buildargs["HEADLESSMC_REF"] = str(hmc["ref"])
         docker_py.from_env().images.build(
             path=str(ROOT / "docker" / "client"),
             dockerfile=str(ROOT / "docker" / "client" / "Dockerfile"),
             tag=img,
-            buildargs={"HEADLESSMC_VERSION": ver},
+            buildargs=buildargs,
             rm=True,
         )
         return 0

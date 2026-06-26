@@ -37,7 +37,11 @@ serverTypes:
   neoforge: NEOFORGE
 
 headlessmc:
-  version: "2.9.0"
+  # Git repository and ref the HeadlessMC launcher is built from. The default
+  # builds the patch required to launch MC 26.2 headlessly; point these at a
+  # different repo/ref to use another HeadlessMC build.
+  repo: "https://github.com/Skidamek/headlessmc.git"
+  ref: "mc26.2-headless"
 
 timeouts:
   serverStartSeconds: 180

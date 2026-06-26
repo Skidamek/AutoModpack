@@ -76,6 +76,24 @@ Common run options:
 | `--out-dir PATH` | Directory for logs and `results.json`. |
 | `--client-image IMG` | Docker image used for HeadlessMC clients. |
 
+### HeadlessMC build
+
+The client image builds its HeadlessMC launcher from the git repo and ref in
+`settings.yaml`:
+
+```yaml
+headlessmc:
+  repo: "https://github.com/Skidamek/headlessmc.git"
+  ref: "mc26.2-headless"
+```
+
+This default ref carries the patch required to launch **MC 26.2** headlessly
+(stock HeadlessMC can't yet — its LWJGL stubs don't satisfy 26.2's new render
+backend); it does not change behavior on other versions. Point `repo`/`ref` at
+any other HeadlessMC build and rebuild the image
+(`uv --project autotester run autotester build-images`). If they are unset, the
+build falls back to upstream HeadlessMC (`headlesshq/headlessmc`).
+
 ## Scenarios
 
 A scenario is an ordered list of registered phases plus optional topology and
