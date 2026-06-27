@@ -864,7 +864,7 @@ public class ModpackUtils {
             } catch (Exception e) {
                 return false;
             }
-        });
+        }, DownloadClient.NET_EXECUTOR);
     }
 
     public static boolean potentiallyMalicious(Jsons.ModpackContentFields serverModpackContent) {

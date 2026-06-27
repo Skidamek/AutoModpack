@@ -124,6 +124,18 @@ public class ModpackUpdater {
         }
     }
 
+    // Load the already-installed modpack without contacting the server or
+    // reconciling local files against it. Used when update-on-launch is disabled
+    // so the user can freely add/remove mods (e.g. a binary search) without
+    // AutoModpack restoring or deleting them.
+    public void loadModpack() throws Exception {
+        if (!Files.exists(modpackDir))
+            return;
+        try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+            loadModpackMods(cache);
+        }
+    }
+
     private void checkAndLoadModpack(FileMetadataCache cache) throws Exception {
         if (!Files.exists(modpackDir))
             return;
@@ -137,46 +149,51 @@ public class ModpackUpdater {
             return;
         }
 
-        // Load the modpack excluding mods from standard mods directory without need to restart the game
-        if (preload) {
-            Set<String> standardModsHashes;
-            List<Path> modpackMods = List.of();
+        loadModpackMods(cache);
+    }
 
-            // 1. Collect hashes of existing standard mods into a Set for fast lookup
-            try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
-                standardModsHashes = standardModsStream
-                        .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")) // Check extension/type before hashing
-                        .map(cache::getHashOrNull)     // Safe wrapper for IOException
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toSet()); // Use Set for O(1) performance
-            } catch (IOException e) {
-                LOGGER.error("Failed to list standard mods directory", e);
-                standardModsHashes = Collections.emptySet();
-            }
-
-            // 2. Filter modpack mods excluding those already present in standard mods
-            Path modpackModsDir = modpackDir.resolve("mods");
-            if (Files.exists(modpackModsDir)) {
-                try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
-                    final Set<String> finalStandardModsHashes = standardModsHashes;
-                    modpackMods = modpackModsStream
-                            .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar"))
-                            .filter(mod -> {
-                                String modHash = cache.getHashOrNull(mod);
-                                // Only load if hash is valid AND not found in standard set
-                                return modHash != null && !finalStandardModsHashes.contains(modHash);
-                            })
-                            .toList();
-                } catch (IOException e) {
-                    LOGGER.error("Failed to list modpack mods directory", e);
-                }
-            }
-
-            MODPACK_LOADER.loadModpack(modpackMods);
+    // Load the modpack mods that aren't already present in the standard mods
+    // directory, without requiring a restart.
+    private void loadModpackMods(FileMetadataCache cache) throws Exception {
+        if (!preload) {
+            LOGGER.info("Modpack is already loaded");
             return;
         }
 
-        LOGGER.info("Modpack is already loaded");
+        Set<String> standardModsHashes;
+        List<Path> modpackMods = List.of();
+
+        // 1. Collect hashes of existing standard mods into a Set for fast lookup
+        try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
+            standardModsHashes = standardModsStream
+                    .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")) // Check extension/type before hashing
+                    .map(cache::getHashOrNull)     // Safe wrapper for IOException
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet()); // Use Set for O(1) performance
+        } catch (IOException e) {
+            LOGGER.error("Failed to list standard mods directory", e);
+            standardModsHashes = Collections.emptySet();
+        }
+
+        // 2. Filter modpack mods excluding those already present in standard mods
+        Path modpackModsDir = modpackDir.resolve("mods");
+        if (Files.exists(modpackModsDir)) {
+            try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
+                final Set<String> finalStandardModsHashes = standardModsHashes;
+                modpackMods = modpackModsStream
+                        .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar"))
+                        .filter(mod -> {
+                            String modHash = cache.getHashOrNull(mod);
+                            // Only load if hash is valid AND not found in standard set
+                            return modHash != null && !finalStandardModsHashes.contains(modHash);
+                        })
+                        .toList();
+            } catch (IOException e) {
+                LOGGER.error("Failed to list modpack mods directory", e);
+            }
+        }
+
+        MODPACK_LOADER.loadModpack(modpackMods);
     }
 
     public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {

@@ -15,7 +15,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
-RUN git clone --depth 1 --branch "${HEADLESSMC_REF}" "${HEADLESSMC_REPO}" . \
+# Fetch by ref so HEADLESSMC_REF can be a branch, tag, or commit SHA (a shallow
+# `clone --branch` only accepts branch/tag names — fetching FETCH_HEAD also takes SHAs).
+RUN git init -q . \
+    && git remote add origin "${HEADLESSMC_REPO}" \
+    && git fetch --depth 1 origin "${HEADLESSMC_REF}" \
+    && git checkout -q FETCH_HEAD \
     && ./gradlew --no-daemon headlessmc-launcher-wrapper:build -x test \
     && jar="$(find headlessmc-launcher-wrapper/build/libs -maxdepth 1 \
                 -name 'headlessmc-launcher-wrapper-*.jar' \

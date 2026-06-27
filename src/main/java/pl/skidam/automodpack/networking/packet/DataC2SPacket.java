@@ -8,6 +8,7 @@ import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -136,7 +137,7 @@ public class DataC2SPacket {
                     }
 
                     return buildResponse(needsDisconnecting);
-                })
+                }, DownloadClient.NET_EXECUTOR)
                 .exceptionally(e -> {
                     LOGGER.error("Error while handling data packet", e);
                     FriendlyByteBuf response = new FriendlyByteBuf(Unpooled.buffer());

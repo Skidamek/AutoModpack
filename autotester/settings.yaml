@@ -38,9 +38,12 @@ serverTypes:
 headlessmc:
   # Git repository and ref the HeadlessMC launcher is built from. The default
   # builds the patch required to launch MC 26.2 headlessly; point these at a
-  # different repo/ref to use another HeadlessMC build.
+  # different repo/ref to use another HeadlessMC build. ref may be a branch, tag
+  # or commit SHA — pinned to a SHA here for reproducible builds (this is the
+  # head of the mc26.2-headless branch; bump it when the fork moves, or switch
+  # to the upstream tag once the patch is merged upstream).
   repo: "https://github.com/Skidamek/headlessmc.git"
-  ref: "mc26.2-headless"
+  ref: "64d3c126e72bbfccf95e71afaa6536f50bc64097"
 
 timeouts:
   serverStartSeconds: 180

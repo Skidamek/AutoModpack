@@ -31,6 +31,16 @@ import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 public class DownloadClient implements AutoCloseable {
 
+    // Dedicated daemon pool for the blocking network/login stages (pool
+    // hydration, and the up-to-120s certificate prompt). Keeps long downloads
+    // and that prompt off ForkJoinPool.commonPool, which is shared JVM-wide and
+    // also drives the parallel streams used here and in ModpackContent.
+    public static final ExecutorService NET_EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "automodpack-net");
+        t.setDaemon(true);
+        return t;
+    });
+
     private final List<Connection> connections = new ArrayList<>();
 
     private record InitialConnectionResult(PreValidationConnection connection, SSLContext sslContext) {}
@@ -75,7 +85,7 @@ public class DownloadClient implements AutoCloseable {
                         X509Certificate untrusted = (chain != null && chain.length > 0) ? chain[0] : null;
                         return new ProbeResult(null, untrusted, e, keyStore);
                     }
-                }).thenCompose(pr -> {
+                }, NET_EXECUTOR).thenCompose(pr -> {
                     if (pr.success != null) {
                         try {
                             return CompletableFuture.completedFuture(
@@ -104,8 +114,8 @@ public class DownloadClient implements AutoCloseable {
                                     } catch (Exception e) {
                                         throw new CompletionException(new IOException("Failed to reconnect after trust", e));
                                     }
-                                });
-                            }, ForkJoinPool.commonPool())
+                                }, NET_EXECUTOR);
+                            }, NET_EXECUTOR)
                             .orTimeout(120, TimeUnit.SECONDS)
                             .exceptionally(e -> {
                                 throw new CompletionException(new IOException("Certificate not trusted", e));
@@ -132,18 +142,37 @@ public class DownloadClient implements AutoCloseable {
         int remainingNeeded = poolSize - conns.size();
         if (remainingNeeded < 1) return conns;
 
-        List<Connection> newConnections = IntStream.range(0, remainingNeeded)
-                .parallel()
-                .mapToObj(i -> {
-                    try {
-                        return new Connection(getPreValidationConnection(addresses, probe.sslContext()), secretBytes);
-                    } catch (IOException e) {
-                        throw new CompletionException(e);
-                    }
-                })
-                .toList();
-        conns.addAll(newConnections);
+        // Open the remaining connections in parallel. Record each one the moment
+        // it is created so that if any sibling task fails, we can close every
+        // connection that did open (including the probe) instead of leaking its
+        // socket and single-thread executor.
+        List<Connection> opened = Collections.synchronizedList(new ArrayList<>());
+        try {
+            IntStream.range(0, remainingNeeded)
+                    .parallel()
+                    .forEach(i -> {
+                        try {
+                            opened.add(new Connection(getPreValidationConnection(addresses, probe.sslContext()), secretBytes));
+                        } catch (IOException e) {
+                            throw new CompletionException(e);
+                        }
+                    });
+        } catch (RuntimeException e) {
+            for (Connection c : conns) closeQuietly(c);
+            for (Connection c : opened) closeQuietly(c);
+            Throwable cause = (e instanceof CompletionException && e.getCause() != null) ? e.getCause() : e;
+            if (cause instanceof IOException io) throw io;
+            throw new IOException("Failed to hydrate connection pool", cause);
+        }
+        conns.addAll(opened);
         return conns;
+    }
+
+    private static void closeQuietly(AutoCloseable c) {
+        try {
+            c.close();
+        } catch (Exception ignored) {
+        }
     }
 
     private static KeyStore loadDefaultKeyStore() {

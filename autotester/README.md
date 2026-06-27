@@ -11,10 +11,14 @@ opt-in file bridge, and verifies that the modpack sync flow works end to end.
 - `uv`
 - Built AutoModpack artifacts in `merged/`
 
-Build artifacts first from the repository root:
+Build artifacts first from the repository root. Use `build` (which runs the jar
+merge as a finalizer) rather than `mergeJar` directly — `mergeJar` on its own
+does not rebuild the dependency modules. The `-Pautomodpack.autotest` flag bundles
+the in-game test instrumentation (`AutoTestBridge` + the `dev` mixins) into the
+jars; it is required for the autotester and is never included in release builds.
 
 ```bash
-./gradlew mergeJar
+./gradlew build -Pautomodpack.autotest
 ```
 
 ## Quick Start

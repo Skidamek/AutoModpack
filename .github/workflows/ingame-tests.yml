@@ -39,6 +39,8 @@ jobs:
   build:
     needs: [prepare]
     uses: ./.github/workflows/build.yml
+    with:
+      autotest: true
     secrets: inherit
 
   ingame:

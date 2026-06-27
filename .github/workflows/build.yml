@@ -12,6 +12,11 @@ on:
         type: string
         required: false
         default: ''
+      autotest:
+        description: bundle the autotester instrumentation into the jars (never for releases)
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   build:
@@ -31,13 +36,17 @@ jobs:
       - name: Execute Gradle build
         run: |
           chmod +x gradlew
+          flags=""
+          if [ "${{ inputs.autotest }}" = "true" ]; then
+              flags="-Pautomodpack.autotest"
+          fi
           if [ -z "${{ inputs.target_subproject }}" ]; then
               echo "Building all subprojects"
-              ./gradlew build
+              ./gradlew build $flags
           else
               args=$(echo "${{ inputs.target_subproject }}" | tr ',' '\n' | sed 's/$/:build/' | paste -sd ' ')
               echo "Building with arguments=$args"
-              ./gradlew $args
+              ./gradlew $args $flags
           fi
         env:
           BUILD_ID: ${{ github.run_number }}

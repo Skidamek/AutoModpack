@@ -1,9 +1,35 @@
 import java.security.MessageDigest
 import java.math.BigInteger
+import org.gradle.api.tasks.SourceSetContainer
 
 plugins {
     idea
     id("dev.luna5ama.jar-optimizer")
+}
+
+// Test-only instrumentation (AutoTestBridge + the dev mixins that drive it) is
+// compiled into the mod only for autotester builds (-Pautomodpack.autotest); it
+// must never ship in release jars. Exclude it from the source set so it lands in
+// no jar variant (avoids loom remapJar vs jar pitfalls), and drop the dev mixins
+// from the config so Mixin doesn't look for the now-absent classes.
+if (!project.hasProperty("automodpack.autotest")) {
+    plugins.withId("java") {
+        the<SourceSetContainer>().named("main").configure {
+            java.exclude(
+                "pl/skidam/automodpack/client/autotest/**",
+                "pl/skidam/automodpack/mixin/dev/**",
+            )
+        }
+    }
+    tasks.named("processResources").configure {
+        doLast {
+            val cfg = layout.buildDirectory
+                .file("resources/main/automodpack-main.mixins.json").get().asFile
+            if (cfg.exists()) {
+                cfg.writeText(cfg.readText().replace(Regex(",\\s*\"dev\\.[^\"]*\""), ""))
+            }
+        }
+    }
 }
 
 idea {
