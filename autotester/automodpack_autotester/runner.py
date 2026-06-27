@@ -4,23 +4,26 @@ import json
 import logging
 import os
 import random
-import re
 import secrets
 import shutil
 import time
-from collections.abc import Callable
-from fnmatch import fnmatch
 from pathlib import Path
 
 import docker as docker_py
 
 from .bridge import BridgeClient
-from .config import Target
+from .config import Target, load_macros
+from .engine import ClientExited, Context, run_flow
+from .engine.registry import verb
+from .engine.util import await_condition, parse_duration
 
 
 logger = logging.getLogger(__name__)
 
 _docker = docker_py.from_env()
+
+
+# ── low-level docker / container helpers ──────────────────────────────────
 
 
 def _jitter_sleep(base, fraction=0.2):
@@ -119,16 +122,6 @@ def _wait_exited(name, timeout):
     raise TimeoutError(f"Timeout waiting for {name} to exit")
 
 
-PHASES: dict[str, Callable] = {}
-
-
-def _reg(name: str) -> Callable:
-    def wrapper(fn: Callable) -> Callable:
-        PHASES[name] = fn
-        return fn
-    return wrapper
-
-
 def _uid():
     return int(os.environ.get("AUTOTEST_DOCKER_UID", os.getuid()))
 
@@ -144,172 +137,37 @@ def _load_ver(t):
         return t.forge_version or ""
     if t.loader == "neoforge":
         return t.neoforge_version or ""
+    return ""
 
 
-def _bridge_state(ctx):
-    return ctx["game_dir"] / "automodpack" / "autotest" / "bridge-state.json"
+def _bridge_state(ctx: Context) -> Path:
+    return ctx.game_dir / "automodpack" / "autotest" / "bridge-state.json"
 
 
-def _await(pred, timeout, msg):
-    dl = time.monotonic() + timeout
-    while time.monotonic() < dl:
-        r = pred()
-        if r is not None:
-            return r
-        _jitter_sleep(0.5)
-    raise TimeoutError(msg)
+# ── server / client setup ─────────────────────────────────────────────────
 
 
-def _button_with_text(gui: dict, *needles: str, enabled: bool | None = None) -> dict | None:
-    lowered = tuple(n.lower() for n in needles)
-    candidates = []
-    for button in gui.get("buttons", []):
-        if enabled is not None and bool(button.get("enabled", False)) != enabled:
-            continue
-        candidates.append(button)
-    if not lowered:
-        return candidates[0] if candidates else None
-
-    for button in candidates:
-        text = str(button.get("text", "")).strip().lower()
-        if any(n == text for n in lowered):
-            return button
-
-    for button in candidates:
-        text = str(button.get("text", "")).lower()
-        if not any(n in text for n in lowered):
-            continue
-        return button
-    return None
-
-
-def _click_button(bridge: BridgeClient, *needles: str, enabled: bool | None = True) -> dict:
-    gui = bridge.gui()
-    button = _button_with_text(gui, *needles, enabled=enabled)
-    if button is None:
-        labels = [b.get("text", "") for b in gui.get("buttons", [])]
-        raise RuntimeError(f"No matching button {needles!r}; available={labels!r}")
-    return bridge.click(int(button["id"]))
-
-
-def _first_text_field(gui: dict) -> dict | None:
-    fields = gui.get("textFields", [])
-    return fields[0] if fields else None
-
-
-def run_case(
-    target: Target,
-    scenario: dict,
-    *,
-    out_dir: Path,
-    artifact_dir: Path,
-    client_image: str,
-    settings: dict,
-) -> dict:
-    started = time.monotonic()
-    case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
-    server_dir = case_dir / "server"
-    game_dir = case_dir / "client" / "game"
-    net_name = f"amp-{secrets.token_hex(4)}"[:63]
-    srv_name = f"amp-s-{secrets.token_hex(4)}"[:63]
-    cli_name = f"amp-c-{secrets.token_hex(4)}"[:63]
-    token = secrets.token_hex(16)
-    ctx = dict(locals())
-
-    for d in (server_dir, game_dir):
-        d.mkdir(parents=True, exist_ok=True)
-
-    try:
-        pattern = f"automodpack-mc{target.minecraft}-{target.loader}-*.jar"
-        matches = sorted(artifact_dir.glob(pattern))
-        if not matches:
-            raise FileNotFoundError(f"No artifact for {target.id} in {artifact_dir}")
-        ctx["artifact"] = matches[-1].resolve()
-
-        sf = scenario.get("serverFiles", {})
-        ctx["modpack_name"] = str(sf.get("modpackName", "amp-autotest"))
-        ctx["marker_rel"] = Path(
-            str(sf.get("marker", "config/amp-autotest-marker.json"))
-        )
-        ctx["scenario_files"] = [
-            (Path(str(f["path"])), str(f.get("content", "")))
-            for f in sf.get("files", [])
-        ]
-        ctx["expected_mods"] = [str(m) for m in sf.get("expectedMods", [])]
-
-        _prepare_server(ctx, target, settings)
-        _ensure_network(net_name)
-
-        flow = scenario.get("flow", [])
-        if not flow:
-            raise ValueError("scenario has no 'flow' list")
-        for phase_name in flow:
-            fn = PHASES.get(phase_name)
-            if not fn:
-                raise ValueError(f"unknown phase: {phase_name!r}")
-            logger.info("[%s] Phase: %s", target.id, phase_name)
-            fn(ctx)
-
-        return {
-            "target": target.id,
-            "scenario": scenario.get("id", "?"),
-            "ok": True,
-            "duration": time.monotonic() - started,
-        }
-
-    except Exception as e:
-        return {
-            "target": target.id,
-            "scenario": scenario.get("id", "?"),
-            "ok": False,
-            "duration": time.monotonic() - started,
-            "error": str(e),
-        }
-
-    finally:
-        for name in [cli_name, srv_name]:
-            try:
-                logs = _container_logs(name)
-                if logs:
-                    (case_dir / f"{name}.log").write_text(
-                        logs, encoding="utf-8", errors="replace"
-                    )
-            except Exception:
-                pass
-            try:
-                _remove_container(name)
-            except Exception:
-                logger.warning("Failed to remove container %s", name)
-        _remove_network(net_name)
-
-
-# === infrastructure (not flow phases) ===
-
-
-def _prepare_server(ctx, target, settings):
-    srv_dir = ctx["server_dir"]
+def _prepare_server(ctx: Context):
+    srv_dir = ctx.server_dir
     (srv_dir / "mods").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ctx["artifact"], srv_dir / "mods" / "automodpack.jar")
-    cfg = dict(settings.get("automodpack", {}).get("config", {}))
-    cfg["modpackName"] = ctx["modpack_name"]
-    cfg["acceptedLoaders"] = [target.loader]
+    shutil.copy2(ctx.artifact, srv_dir / "mods" / "automodpack.jar")
+    cfg = dict(ctx.settings.get("automodpack", {}).get("config", {}))
+    cfg["modpackName"] = ctx.modpack_name
+    cfg["acceptedLoaders"] = [ctx.target.loader]
     (srv_dir / "automodpack").mkdir(parents=True, exist_ok=True)
-    (srv_dir / "automodpack" / "automodpack-server.json").write_text(
-        json.dumps(cfg, indent=2)
-    )
+    (srv_dir / "automodpack" / "automodpack-server.json").write_text(json.dumps(cfg, indent=2))
     host_root = srv_dir / "automodpack" / "host-modpack" / "main"
     host_root.mkdir(parents=True, exist_ok=True)
-    (host_root / ctx["marker_rel"]).parent.mkdir(parents=True, exist_ok=True)
-    (host_root / ctx["marker_rel"]).write_text(
-        json.dumps({"marker": ctx["modpack_name"]}) + "\n"
-    )
-    for rel, content in ctx["scenario_files"]:
+    (host_root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
+    (host_root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
+    for rel, content in ctx.scenario_files:
         f = host_root / rel
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(content)
 
 
-def _launch_server(ctx, target, scenario, settings):
+def _launch_server(ctx: Context):
+    target, scenario, settings = ctx.target, ctx.scenario, ctx.settings
     topo = scenario.get("topology", {}).get("server", {})
     srv_type = topo.get("type") or settings.get("serverTypes", {}).get(target.loader)
     if not srv_type:
@@ -337,10 +195,7 @@ def _launch_server(ctx, target, scenario, settings):
                 str(p).strip()
                 for p in (
                     list(mr.get("projects", []))
-                    + list(
-                        (mr.get("projectsByLoader", {}) or {}).get(target.loader, [])
-                        or []
-                    )
+                    + list((mr.get("projectsByLoader", {}) or {}).get(target.loader, []) or [])
                 )
                 if p
             )
@@ -359,46 +214,43 @@ def _launch_server(ctx, target, scenario, settings):
         _ensure_volume(vol)
         mounts = [(vol, "/data", False)]
         for sub in ("mods", "automodpack"):
-            (ctx["server_dir"] / sub).mkdir(parents=True, exist_ok=True)
-            mounts.append((ctx["server_dir"] / sub, f"/data/{sub}", False))
+            (ctx.server_dir / sub).mkdir(parents=True, exist_ok=True)
+            mounts.append((ctx.server_dir / sub, f"/data/{sub}", False))
     else:
-        mounts = [(ctx["server_dir"], "/data", False)]
-    img = str(
-        topo.get("image")
-        or settings.get("images", {}).get("server", "itzg/minecraft-server")
-    )
+        mounts = [(ctx.server_dir, "/data", False)]
+    img = str(topo.get("image") or settings.get("images", {}).get("server", "itzg/minecraft-server"))
     if ":" not in img:
-        img = f"{img}:{str(settings.get('images', {}).get('serverTagTemplate', 'java{java}')).format(java=target.java)}"
-    _run_container(
-        name=ctx["srv_name"], image=img, network=ctx["net_name"], env=env, mounts=mounts
-    )
+        tag = str(settings.get("images", {}).get("serverTagTemplate", "java{java}")).format(java=target.java)
+        img = f"{img}:{tag}"
+    _run_container(name=ctx.srv_name, image=img, network=ctx.net_name, env=env, mounts=mounts)
 
 
-def _launch_client(ctx, target, client_image):
-    game_dir = ctx["game_dir"]
+def _launch_client(ctx: Context):
+    game_dir = ctx.game_dir
     (game_dir / "mods").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(ctx["artifact"], game_dir / "mods" / "automodpack.jar")
+    shutil.copy2(ctx.artifact, game_dir / "mods" / "automodpack.jar")
     (game_dir / "options.txt").write_text("narrator:0\n")
     _bridge_state(ctx).unlink(missing_ok=True)
 
     # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
-    hmc_cache_root = (ctx["out_dir"].parent / ".hmc-cache" / target.id.replace(".", "_")).resolve()
+    hmc_cache_root = (ctx.out_dir.parent / ".hmc-cache" / ctx.target.id.replace(".", "_")).resolve()
     hmc_cache_root.mkdir(parents=True, exist_ok=True)
 
+    client_run_seconds = int(float(
+        ctx.scenario.get("timeouts", {}).get(
+            "clientRunSeconds",
+            ctx.settings.get("timeouts", {}).get("clientRunSeconds", 600),
+        )
+    ))
     _run_container(
-        name=ctx["cli_name"],
-        image=client_image,
-        network=ctx["net_name"],
+        name=ctx.cli_name,
+        image=ctx.client_image,
+        network=ctx.net_name,
         env={
-            "AM_AUTOTEST_BRIDGE_TOKEN": ctx["token"],
+            "AM_AUTOTEST_BRIDGE_TOKEN": ctx.token,
             "AM_AUTOTEST_GAME_DIR": "/work/game",
             "AM_AUTOTEST_HMC_CACHE_DIR": "/work/hmc-cache",
-            "AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS": str(
-                int(float(ctx["scenario"].get("timeouts", {}).get(
-                    "clientRunSeconds",
-                    ctx["settings"].get("timeouts", {}).get("clientRunSeconds", 600),
-                )))
-            ),
+            "AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS": str(client_run_seconds),
         },
         mounts=[
             (game_dir, "/work/game", False),
@@ -406,306 +258,238 @@ def _launch_client(ctx, target, client_image):
         ],
         command=[
             "/opt/automodpack/run-headlessmc-client",
-            target.loader,
-            target.minecraft,
+            ctx.target.loader,
+            ctx.target.minecraft,
             "localhost",
             "25565",
-            str(target.java),
-            _load_ver(target),
+            str(ctx.target.java),
+            _load_ver(ctx.target),
         ],
         user=f"{_uid()}:{_gid()}",
     )
     _jitter_sleep(1)
-    _assert_running(ctx["cli_name"])
+    _assert_running(ctx.cli_name)
 
 
-def _wait_server(ctx, target, scenario, settings):
-    to = scenario.get("timeouts", {}) or settings.get("timeouts", {})
-    _wait_for_log(
-        ctx["srv_name"], "Done (", timeout=float(to.get("serverStartSeconds", 180))
+# ── lifecycle verbs (need Docker; pure UI/IO verbs live in engine/) ───────
+
+
+@verb("launch_server")
+def _v_launch_server(ctx: Context, step):
+    _launch_server(ctx)
+
+
+@verb("wait_server")
+def _v_wait_server(ctx: Context, step):
+    to = ctx.scenario.get("timeouts", {}) or ctx.settings.get("timeouts", {})
+    timeout = parse_duration(step.get("timeout"), default=float(to.get("serverStartSeconds", 180)))
+    _wait_for_log(ctx.srv_name, "Done (", timeout=timeout)
+
+
+@verb("launch_client", "relaunch_client")
+def _v_launch_client(ctx: Context, step):
+    _remove_container(ctx.cli_name)
+    ctx.bridge = None
+    _launch_client(ctx)
+
+
+@verb("wait_bridge")
+def _v_wait_bridge(ctx: Context, step):
+    if ctx.bridge is None:
+        ctx.bridge = BridgeClient(ctx.game_dir, ctx.token)
+    timeout = parse_duration(
+        step.get("timeout"),
+        default=float(ctx.scenario.get("timeouts", {}).get("clientStartSeconds", 180)),
     )
-
-
-# === flow phases ===
-
-
-@_reg("wait_bridge")
-def _phase_wait_bridge(ctx):
-    if "bridge" in ctx:
-        return
-    ctx["bridge"] = BridgeClient(ctx["game_dir"], ctx["token"])
-    to = float(ctx["scenario"].get("timeouts", {}).get("clientStartSeconds", 180))
-    dl = time.monotonic() + to
-    while time.monotonic() < dl:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
         try:
-            _assert_running(ctx["cli_name"])
+            _assert_running(ctx.cli_name)
         except RuntimeError as e:
-            logs = _container_logs(ctx["cli_name"])
-            raise TimeoutError(
-                f"Client exited before bridge: {e}\n--- logs ---\n{logs[-2000:]}"
-            )
+            logs = _container_logs(ctx.cli_name)
+            raise TimeoutError(f"Client exited before bridge: {e}\n--- logs ---\n{logs[-2000:]}")
         try:
-            state_file = _bridge_state(ctx)
-            if state_file.exists():
-                data = json.loads(state_file.read_text(encoding="utf-8"))
+            sf = _bridge_state(ctx)
+            if sf.exists():
+                data = json.loads(sf.read_text(encoding="utf-8"))
                 if data.get("status") == "ready":
-                    ctx["bridge"].request("ping", timeout=5)
+                    ctx.bridge.request("ping", timeout=5)
                     return
         except Exception:
             pass
         _jitter_sleep(1)
-    raise TimeoutError(f"Bridge for {ctx['target'].id} did not become available within {to}s")
+    raise TimeoutError(f"Bridge for {ctx.target.id} did not become available within {timeout}s")
 
 
-@_reg("read_fingerprint")
-def _phase_read_fingerprint(ctx):
-    to = float(ctx["scenario"].get("timeouts", {}).get("serverStartSeconds", 180))
-    dl = time.monotonic() + to
-    while time.monotonic() < dl:
-        logs = _container_logs(ctx["srv_name"], tail=200)
-        for line in logs.splitlines():
-            m = re.search(
-                r"(?:certificate\s+)?fingerprint[:\s]+([0-9A-Fa-f:]+)", line, re.IGNORECASE
-            )
-            if m:
-                ctx["fingerprint"] = m.group(1)
-                return
-        _jitter_sleep(1)
-    raise RuntimeError("No TLS fingerprint found in server logs")
-
-
-@_reg("connect")
-def _phase_connect(ctx):
-    bridge = ctx["bridge"]
-    host = ctx["srv_name"]
-    deadline = time.monotonic() + 90
-
+@verb("connect")
+def _v_connect(ctx: Context, step):
+    host = ctx.resolve(step.get("host") or ctx.srv_name)
+    port = int(step.get("port", 25565))
+    timeout = parse_duration(step.get("timeout"), default=90)
+    deadline = time.monotonic() + timeout
     _TITLE = ("TitleScreen", "class_442")
     _CONNECT = ("ConnectScreen", "class_397")
-
     while time.monotonic() < deadline:
-        _assert_running(ctx["cli_name"])
-        bridge.connect(host, 25565)
-        remaining = deadline - time.monotonic()
-        poll_dl = time.monotonic() + min(remaining, 45)
+        _assert_running(ctx.cli_name)
+        ctx.bridge.connect(host, port)
+        poll_dl = time.monotonic() + min(deadline - time.monotonic(), 45)
         while time.monotonic() < poll_dl:
-            screen = str(bridge.gui().get("screenClass") or "")
+            screen = str(ctx.bridge.gui().get("screenClass") or "")
             if any(n in screen for n in _TITLE):
                 break
             if not any(n in screen for n in _CONNECT):
                 return
             _jitter_sleep(0.5)
-        bridge.request("disconnect")
+        ctx.bridge.request("disconnect")
         _jitter_sleep(1)
-    raise RuntimeError("Could not connect after multiple attempts")
+    raise RuntimeError(f"Could not connect to {host}:{port} after multiple attempts")
 
 
-@_reg("wait_fingerprint")
-def _phase_wait_fingerprint(ctx):
-    fp = ctx.get("fingerprint")
-    if not fp:
-        raise RuntimeError("No fingerprint — run read_fingerprint phase first")
-    _await(
-        lambda: (
-            gui
-            if (
-                (gui := ctx["bridge"].gui())
-                and _first_text_field(gui)
-                and _button_with_text(gui, "verify", enabled=True)
-            )
-            else None
-        ),
-        180,
-        f"Certificate verification prompt did not appear for {ctx['target'].id} within 180s",
-    )
-
-
-@_reg("accept_fingerprint")
-def _phase_accept_fingerprint(ctx):
-    fp = ctx.get("fingerprint")
-    if not fp:
-        raise RuntimeError("No fingerprint — run read_fingerprint phase first")
-    bridge = ctx["bridge"]
-    gui = bridge.gui()
-    field = _first_text_field(gui)
-    if field is None:
-        raise RuntimeError("No fingerprint text field found")
-    bridge.text(int(field["id"]), fp)
-    _click_button(bridge, "verify")
-
-    def _check():
-        gui = bridge.gui()
-        if _button_with_text(gui, "verify"):
-            return None
-        return True
-
-    _await(_check, 20, "Fingerprint verification did not complete")
-
-
-@_reg("skip_fingerprint")
-def _phase_skip_fingerprint(ctx):
-    bridge = ctx["bridge"]
-    _click_button(bridge, "skip")
-    _await(
-        lambda: (
-            gui
-            if ((gui := bridge.gui()) and _first_text_field(gui) and _button_with_text(gui, "skip"))
-            else None
-        ),
-        15,
-        "Skip screen not shown",
-    )
-    field = _first_text_field(bridge.gui())
-    if field is None:
-        raise RuntimeError("No skip confirmation text field found")
-    bridge.text(int(field["id"]), "I accept the risk")
-    dl = time.monotonic() + 30
-    while time.monotonic() < dl:
-        gui = bridge.gui()
-        button = _button_with_text(gui, "skip", enabled=True)
-        if button:
-            bridge.click(int(button["id"]))
-            return
-        _jitter_sleep(1)
-    raise RuntimeError("Skip button did not activate")
-
-
-@_reg("wait_download_prompt")
-def _phase_wait_download_prompt(ctx):
-    bridge = ctx["bridge"]
-    _await(
-        lambda: (
-            gui if ((gui := bridge.gui()) and _button_with_text(gui, "download", enabled=True)) else None
-        ),
-        90,
-        "Download confirmation did not appear within 90s",
-    )
-
-
-@_reg("confirm_download")
-def _phase_confirm_download(ctx):
-    bridge = ctx["bridge"]
-    dl = time.monotonic() + 5
-    while time.monotonic() < dl:
-        gui = bridge.gui()
-        if gui.get("buttons"):
-            break
-        _jitter_sleep(0.2)
-    button = _button_with_text(gui, "download", enabled=True)
-    if button is None:
-        raise RuntimeError("No active download confirmation button")
-    bridge.click(int(button["id"]))
-
-
-@_reg("wait_download")
-def _phase_wait_download(ctx):
-    marker = (
-        ctx["game_dir"]
-        / "automodpack"
-        / "modpacks"
-        / ctx["modpack_name"]
-        / ctx["marker_rel"]
-    )
-    timeout = float(ctx["scenario"].get("timeouts", {}).get("downloadFileSeconds", 300))
-    _await(
-        lambda: marker if marker.exists() else None,
-        timeout,
-        f"Download marker file {marker} did not appear within {timeout}s",
-    )
-    if not marker.exists():
-        raise FileNotFoundError(f"Missing marker: {marker}")
-
-
-@_reg("verify_files")
-def _phase_verify_files(ctx):
-    mp_root = ctx["game_dir"] / "automodpack" / "modpacks" / ctx["modpack_name"]
-    dl = time.monotonic() + 120
-    while time.monotonic() < dl:
-        if all((mp_root / rel).exists() for rel, _ in ctx["scenario_files"]):
-            return
-        _jitter_sleep(2)
-    missing = [
-        str(rel) for rel, _ in ctx["scenario_files"] if not (mp_root / rel).exists()
-    ]
-    raise TimeoutError(f"Files missing after sync: {', '.join(missing)}")
-
-
-@_reg("verify_mods")
-def _phase_verify_mods(ctx):
-    if not ctx["expected_mods"]:
-        return
-    mp_root = ctx["game_dir"] / "automodpack" / "modpacks" / ctx["modpack_name"]
-    dl = time.monotonic() + 120
-    mod_dir = mp_root / "mods"
-    while time.monotonic() < dl:
-        mods = {p.name for p in mod_dir.glob("*.jar")} if mod_dir.exists() else set()
-        if all(any(fnmatch(m, p) for m in mods) for p in ctx["expected_mods"]):
-            return
-        _jitter_sleep(2)
-    existing = {p.name for p in mod_dir.glob("*.jar")} if mod_dir.exists() else set()
-    missing = [
-        p for p in ctx["expected_mods"] if not any(fnmatch(m, p) for m in existing)
-    ]
-    raise TimeoutError(f"Mods missing after sync: {', '.join(missing)}")
-
-
-@_reg("confirm_restart")
-def _phase_confirm_restart(ctx):
-    bridge = ctx["bridge"]
-    dl = time.monotonic() + 20
-    while time.monotonic() < dl:
-        try:
-            gui = bridge.gui()
-        except TimeoutError:
-            continue
-        button = _button_with_text(gui, "close the game", "restart", "quit", enabled=True)
-        if button:
-            bridge.click(int(button["id"]))
-            _wait_exited(ctx["cli_name"], timeout=90)
-            return
-        _jitter_sleep(0.5)
-
-
-@_reg("quit")
-def _phase_quit(ctx):
+@verb("disconnect")
+def _v_disconnect(ctx: Context, step):
     try:
-        state = _inspect_container(ctx["cli_name"]).get("State", {})
-        if state.get("Running", False):
-            ctx["bridge"].request("quit")
+        if ctx.bridge is not None:
+            ctx.bridge.request("disconnect")
     except (RuntimeError, TimeoutError):
         pass
 
 
-@_reg("launch_server")
-def _phase_launch_server(ctx):
-    _launch_server(ctx, ctx["target"], ctx["scenario"], ctx["settings"])
+@verb("quit")
+def _v_quit(ctx: Context, step):
+    try:
+        state = _inspect_container(ctx.cli_name).get("State", {})
+        if state.get("Running", False) and ctx.bridge is not None:
+            ctx.bridge.request("quit")
+    except (RuntimeError, TimeoutError):
+        pass
 
 
-@_reg("wait_server")
-def _phase_wait_server(ctx):
-    _wait_server(ctx, ctx["target"], ctx["scenario"], ctx["settings"])
+@verb("wait_client_exit")
+def _v_wait_client_exit(ctx: Context, step):
+    timeout = parse_duration(step.get("timeout"), default=90)
+    _wait_exited(ctx.cli_name, timeout=timeout)
 
 
-@_reg("launch_client")
-def _phase_launch_client(ctx):
-    _remove_container(ctx["cli_name"])
-    if "bridge" in ctx:
-        del ctx["bridge"]
-    _launch_client(ctx, ctx["target"], ctx["client_image"])
+@verb("wait_join")
+def _v_wait_join(ctx: Context, step):
+    timeout = parse_duration(
+        step.get("timeout"),
+        default=float(ctx.scenario.get("timeouts", {}).get("rejoinSeconds", 180)),
+    )
+    await_condition(
+        lambda: True if ctx.gui(timeout=10).get("screenClass") is None else None,
+        timeout,
+        step.get("poll"),
+        f"{ctx.target.id}: player did not reach in-game",
+    )
 
 
-@_reg("wait_join")
-def _phase_wait_join(ctx):
-    bridge = ctx["bridge"]
-    to = float(ctx["scenario"].get("timeouts", {}).get("rejoinSeconds", 180))
-    dl = time.monotonic() + to
-    while time.monotonic() < dl:
-        _assert_running(ctx["cli_name"])
-        try:
-            gui = bridge.gui(timeout=10)
-            if gui.get("screenClass") is None:
-                return
-        except (TimeoutError, RuntimeError):
-            pass
-        _jitter_sleep(2)
-    raise TimeoutError(f"{ctx['target'].id}: Player did not join in-game within {to}s")
+# ── case orchestration ────────────────────────────────────────────────────
+
+
+def run_case(
+    target: Target,
+    scenario: dict,
+    *,
+    out_dir: Path,
+    artifact_dir: Path,
+    client_image: str,
+    settings: dict,
+) -> dict:
+    started = time.monotonic()
+    scenario_id = scenario.get("id", "?")
+    case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
+    server_dir = case_dir / "server"
+    game_dir = case_dir / "client" / "game"
+    net_name = f"amp-{secrets.token_hex(4)}"[:63]
+    srv_name = f"amp-s-{secrets.token_hex(4)}"[:63]
+    cli_name = f"amp-c-{secrets.token_hex(4)}"[:63]
+    token = secrets.token_hex(16)
+
+    for d in (server_dir, game_dir):
+        d.mkdir(parents=True, exist_ok=True)
+
+    step_results: list[dict] = []
+    try:
+        pattern = f"automodpack-mc{target.minecraft}-{target.loader}-*.jar"
+        matches = sorted(artifact_dir.glob(pattern))
+        if not matches:
+            raise FileNotFoundError(f"No artifact for {target.id} in {artifact_dir}")
+        artifact = matches[-1].resolve()
+
+        sf = scenario.get("serverFiles", {})
+        modpack_name = str(sf.get("modpackName", "amp-autotest"))
+        marker_rel = Path(str(sf.get("marker", "config/amp-autotest-marker.json")))
+        scenario_files = [
+            (Path(str(f["path"])), str(f.get("content", ""))) for f in sf.get("files", [])
+        ]
+        expected_mods = [str(m) for m in sf.get("expectedMods", [])]
+
+        ctx = Context(
+            target=target,
+            scenario=scenario,
+            settings=settings,
+            game_dir=game_dir,
+            server_dir=server_dir,
+            case_dir=case_dir,
+            out_dir=out_dir,
+            client_image=client_image,
+            srv_name=srv_name,
+            cli_name=cli_name,
+            net_name=net_name,
+            token=token,
+            artifact=artifact,
+            modpack_name=modpack_name,
+            marker_rel=marker_rel,
+            scenario_files=scenario_files,
+            expected_mods=expected_mods,
+            vars=dict(scenario.get("vars", {}) or {}),
+        )
+        ctx.logs_provider = lambda which, tail=None: _container_logs(
+            srv_name if which == "server" else cli_name, tail=tail
+        )
+
+        def _running():
+            try:
+                _assert_running(cli_name)
+            except RuntimeError as e:
+                raise ClientExited(str(e))
+
+        ctx.running_provider = _running
+
+        _prepare_server(ctx)
+        _ensure_network(net_name)
+
+        run_flow(ctx, scenario, lib=load_macros(), results=step_results)
+
+        return {
+            "target": target.id,
+            "scenario": scenario_id,
+            "ok": True,
+            "duration": time.monotonic() - started,
+            "steps": step_results,
+        }
+
+    except Exception as e:
+        return {
+            "target": target.id,
+            "scenario": scenario_id,
+            "ok": False,
+            "duration": time.monotonic() - started,
+            "error": str(e),
+            "steps": step_results,
+        }
+
+    finally:
+        for name in [cli_name, srv_name]:
+            try:
+                logs = _container_logs(name)
+                if logs:
+                    (case_dir / f"{name}.log").write_text(logs, encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+            try:
+                _remove_container(name)
+            except Exception:
+                logger.warning("Failed to remove container %s", name)
+        _remove_network(net_name)

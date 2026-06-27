@@ -1,21 +1,16 @@
 id: download-only
 description: |
-  Launch server/client, accept fingerprint, sync modpack, verify files, and quit.
+  Boot server + client, trust the certificate, sync the modpack, and verify every
+  hosted file landed on the client. Does not restart or rejoin.
 
 flow:
-  - launch_server
-  - launch_client
-  - read_fingerprint
-  - wait_server
-  - wait_bridge
-  - connect
-  - wait_fingerprint
-  - accept_fingerprint
-  - wait_download_prompt
-  - confirm_download
-  - wait_download
-  - verify_files
-  - quit
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: verify_files
+    name: verify all synced files are present
+  - do: quit
+    name: quit the client
 
 topology:
   server:

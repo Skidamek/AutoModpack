@@ -15,6 +15,13 @@ dependencies = [
 [project.scripts]
 autotester = "automodpack_autotester.cli:main"
 
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["automodpack_autotester*"]

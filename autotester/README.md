@@ -88,10 +88,12 @@ The client image builds its HeadlessMC launcher from the git repo and ref in
 ```yaml
 headlessmc:
   repo: "https://github.com/Skidamek/headlessmc.git"
-  ref: "mc26.2-headless"
+  ref: "64d3c126e72bbfccf95e71afaa6536f50bc64097"  # branch, tag, or commit SHA
 ```
 
-This default ref carries the patch required to launch **MC 26.2** headlessly
+`ref` may be a branch, tag, or commit SHA; it is pinned to a SHA here for
+reproducible image builds. This default ref carries the patch required to launch
+**MC 26.2** headlessly
 (stock HeadlessMC can't yet — its LWJGL stubs don't satisfy 26.2's new render
 backend); it does not change behavior on other versions. Point `repo`/`ref` at
 any other HeadlessMC build and rebuild the image
@@ -100,32 +102,25 @@ build falls back to upstream HeadlessMC (`headlesshq/headlessmc`).
 
 ## Scenarios
 
-A scenario is an ordered list of registered phases plus optional topology and
-server-file configuration:
+Scenarios are **declarative**: a `flow` is an ordered list of *steps*, where each
+step is a verb plus arguments. Verbs are generic building blocks (click a button,
+type into a field, wait for a condition, verify files), so most tests need no
+Python — behavior is expressed entirely in YAML.
 
 ```yaml
 id: download-only
 
 flow:
-  - launch_server
-  - launch_client
-  - read_fingerprint
-  - wait_server
-  - wait_bridge
-  - connect
-  - wait_fingerprint
-  - accept_fingerprint
-  - wait_download_prompt
-  - confirm_download
-  - wait_download
-  - verify_files
-  - quit
+  - use: boot               # a macro from scenarios/_lib.yaml
+  - use: accept_certificate
+  - use: download_modpack
+  - do: verify_files        # a verb with arguments
+    name: verify all synced files are present
+  - do: quit
 
 topology:
   server:
     memory: 2G
-    env:
-      ENABLE_ROLLING_LOGS: "false"
 
 serverFiles:
   modpackName: amp-autotest
@@ -135,27 +130,108 @@ serverFiles:
       content: "hello\n"
 ```
 
-Useful phases:
+A step is either a bare name (`- quit`, or a macro name) or a mapping with a
+`do:` verb and its arguments. Optional keys on any step:
 
-| Phase | Purpose |
+| Key | Meaning |
 | --- | --- |
-| `launch_server` | Start the Minecraft server container. |
-| `wait_server` | Wait until the server logs `Done (`. |
-| `launch_client` | Start a HeadlessMC client container. |
-| `wait_bridge` | Wait for the in-game bridge to report the client is ready. |
-| `connect` | Connect the client to the test server. |
-| `read_fingerprint` | Extract the AutoModpack TLS fingerprint from server logs. |
-| `wait_fingerprint` | Wait for a certificate prompt with a text field and Verify button. |
-| `accept_fingerprint` | Enter the expected fingerprint and click Verify. |
-| `skip_fingerprint` | Skip certificate verification (accept the risk) instead of verifying. |
-| `wait_download_prompt` | Wait for the modpack download/confirmation prompt. |
-| `confirm_download` | Click the download button to start the sync. |
-| `wait_download` | Wait for the marker file in the synced modpack. |
-| `verify_files` | Verify all configured `serverFiles.files` exist on the client. |
-| `verify_mods` | Verify all configured `serverFiles.expectedMods` exist on the client. |
-| `confirm_restart` | Click restart/quit on the restart screen if shown. |
-| `wait_join` | Verify the client reaches the in-game state. |
-| `quit` | Stop the client through the bridge. |
+| `name` | Human-readable label shown in logs and `results.json`. |
+| `when` | A condition; the step runs only if it holds. |
+| `repeat` | Run the step N times. |
+| `optional` | If the step fails, log it and continue instead of failing the run. |
+
+### Verbs
+
+| Verb | Purpose |
+| --- | --- |
+| `click` | Click the element matched by `select:` (defaults to enabled elements). Set `enable: true` to force-enable it first. |
+| `type` / `paste` | Type `value:` into the field matched by `select:` (defaults to the first text field). |
+| `wait_for` | Poll `until:` (a condition) until it holds or `timeout:` elapses. |
+| `assert` | Fail immediately unless `that:` (a condition) holds. |
+| `sleep` | Wait `duration:` (e.g. `2s`). |
+| `wait_file` / `wait_files` | Wait for file(s) under the client game dir. |
+| `verify_files` | Wait until every `serverFiles.files` entry exists in the synced modpack. |
+| `verify_mods` | Wait until every `serverFiles.expectedMods` glob is present. |
+| `launch_server` / `wait_server` | Start the server / wait for `Done (`. |
+| `launch_client` / `relaunch_client` / `wait_bridge` | Start a client / wait for its bridge. |
+| `connect` / `disconnect` / `quit` | Drive the client connection. |
+| `wait_client_exit` | Wait for the client container to exit (after a restart). |
+| `wait_join` | Wait until the player is in-game (no screen open). |
+
+### Selectors
+
+`select:` (and the `element` condition) match GUI elements declaratively:
+
+```yaml
+select:
+  role: button        # button | textfield | any (default)
+  text: Verify        # exact match preferred, else substring (case-insensitive)
+  text_any: [ok, yes] # any of these
+  class: Btn          # substring of the element's class
+  enabled: true       # filter by enabled / visible
+  index: -1           # pick the Nth match (negative counts from the end)
+```
+
+### Conditions
+
+`when:`, `wait_for.until:`, and `assert.that:` all take a condition. All keys in a
+condition must hold (AND):
+
+| Key | True when |
+| --- | --- |
+| `screen` / `screen_not` | The current screen class/title contains (any of) the given value(s). |
+| `screen_none` | No screen is open (the player is in-game). |
+| `element` / `no_element` | A selector matches at least one / no elements. |
+| `file` / `file_gone` | A path under the game dir exists / does not exist. |
+| `log` | A regex matches a container log; capture groups into vars (see below). |
+| `all` / `any` / `not` | Combine sub-conditions. |
+
+### Templating and variables
+
+Strings expand `${...}` against the scenario context: `${target.id}`,
+`${server.host}`, `${modpack}`, `${marker}`, plus any captured variables. The
+`log` condition can capture regex groups into variables for later steps:
+
+```yaml
+- do: wait_for
+  name: read fingerprint
+  until:
+    log:
+      container: server
+      matches: 'fingerprint[:\s]+([0-9A-Fa-f:]+)'
+      capture: { fingerprint: 1 }
+- do: type
+  select: { role: textfield }
+  value: "${fingerprint}"     # captured above
+```
+
+### Macros
+
+Reusable step sequences live in `scenarios/_lib.yaml` and are referenced by name
+(`- use: boot`, or inline as a bare string). A scenario can also define local
+sequences under a `sequences:` key. Files starting with `_` are libraries and are
+never run as scenarios. The shipped library provides `boot`,
+`read_server_fingerprint`, `connect_to_server`, `accept_certificate`,
+`download_modpack`, `restart_client`, and `rejoin`.
+
+### Adding a new verb
+
+Generic verbs cover most needs. When you genuinely need new behavior, register a
+verb in `automodpack_autotester/engine/` (UI/filesystem verbs) or in `runner.py`
+(verbs that touch Docker):
+
+```python
+from automodpack_autotester.engine.registry import verb
+
+@verb("my_step")
+def my_step(ctx, step):
+    target = ctx.resolve(step["arg"])   # expand templates
+    ctx.gui()                           # current GUI snapshot
+    ctx.bridge.click(...)               # drive the client
+```
+
+Engine internals (selectors, conditions, templating, the executor) are covered by
+`tests/` and run without Docker: `uv --project autotester run --group dev pytest`.
 
 ## Output
 
@@ -179,11 +255,19 @@ Important files:
       "scenario": "sync",
       "ok": false,
       "duration": 142.7,
-      "error": "Download marker file ... did not appear"
+      "error": "step 'confirm download' failed: ...",
+      "steps": [
+        { "name": "start server", "verb": "launch_server", "ok": true, "duration": 0.1 },
+        { "name": "confirm download", "verb": "click", "ok": false, "duration": 90.0, "error": "..." }
+      ]
     }
   ]
 }
 ```
+
+Each step records its `name`, `verb`, `ok`, and `duration`; failed steps also
+carry an `error`. On failure the partial step list up to and including the failing
+step is preserved.
 
 ## CI Workflow
 

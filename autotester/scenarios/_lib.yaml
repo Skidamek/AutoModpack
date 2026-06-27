@@ -1,0 +1,92 @@
+# Shared, reusable step sequences (macros). Reference one from a scenario's
+# `flow` by name (a bare string) or with `{ use: <name> }`. Files starting with
+# `_` are libraries, not scenarios, so the runner never executes this directly.
+#
+# Steps are declarative: every entry is either a bare verb/macro name, or a
+# mapping with a `do:` verb plus its arguments. `${...}` templates expand against
+# the scenario context (target, server, modpack, marker, and any captured vars).
+
+# Launch the server and client together (client boots while the server starts),
+# capture the server's TLS fingerprint, then connect once both are ready.
+boot:
+  - do: launch_server
+    name: start server
+  - do: launch_client
+    name: start client (boots in parallel with the server)
+  - use: read_server_fingerprint
+  - do: wait_server
+    name: wait for server to finish loading
+  - do: wait_bridge
+    name: wait for the client test bridge
+  - use: connect_to_server
+
+# Scrape the one-time certificate fingerprint out of the server log into a var.
+read_server_fingerprint:
+  - do: wait_for
+    name: read TLS fingerprint from server log
+    timeout: 180s
+    until:
+      log:
+        container: server
+        matches: '(?:certificate\s+)?fingerprint[:\s]+([0-9A-Fa-f:]+)'
+        capture: { fingerprint: 1 }
+
+connect_to_server:
+  - do: connect
+    name: connect to the server
+
+# Enter the captured fingerprint on the trust prompt and verify it.
+accept_certificate:
+  - do: wait_for
+    name: wait for the certificate prompt
+    timeout: 180s
+    until:
+      all:
+        - element: { role: textfield }
+        - element: { text: verify, enabled: true }
+  - do: type
+    name: enter the fingerprint
+    select: { role: textfield }
+    value: "${fingerprint}"
+  - do: click
+    name: click verify
+    select: { text: verify }
+  - do: wait_for
+    name: wait for the certificate to be accepted
+    timeout: 20s
+    until:
+      no_element: { text: verify }
+
+# Confirm the download prompt and wait for the modpack to land on disk.
+download_modpack:
+  - do: wait_for
+    name: wait for the download prompt
+    timeout: 90s
+    until:
+      element: { text: download, enabled: true }
+  - do: click
+    name: confirm download
+    select: { text: download }
+  - do: wait_file
+    name: wait for the modpack marker file
+    path: "automodpack/modpacks/${modpack}/${marker}"
+    timeout: 300s
+
+# Click the post-download "restart required" button and wait for the client to exit.
+restart_client:
+  - do: click
+    name: confirm restart
+    select: { text_any: ["close the game", "restart", "quit"] }
+    timeout: 20s
+  - do: wait_client_exit
+    name: wait for the client to close
+
+# Relaunch the client and play through to in-game (used to confirm a synced modpack loads).
+rejoin:
+  - do: launch_client
+    name: relaunch the client
+  - do: wait_bridge
+    name: wait for the client test bridge
+  - use: connect_to_server
+  - do: wait_join
+    name: wait until the player is in-game

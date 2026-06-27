@@ -60,4 +60,14 @@ def load_targets() -> dict[str, Target]:
 
 
 def load_scenarios() -> dict[str, dict]:
-    return {f.stem: load_yaml(f) for f in sorted((ROOT / "scenarios").glob("*.yaml"))}
+    return {
+        f.stem: load_yaml(f)
+        for f in sorted((ROOT / "scenarios").glob("*.yaml"))
+        if not f.name.startswith("_")
+    }
+
+
+def load_macros() -> dict:
+    """Shared reusable step sequences from ``scenarios/_lib.yaml`` (if present)."""
+    lib = ROOT / "scenarios" / "_lib.yaml"
+    return load_yaml(lib) if lib.is_file() else {}

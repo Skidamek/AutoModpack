@@ -1,28 +1,19 @@
 id: sync
 description: |
-  Launch server/client, accept fingerprint, sync modpack, verify files, restart,
-  rejoin, and verify the player reaches the game.
+  Full round trip: boot, trust the certificate, sync the modpack, verify the files,
+  restart the client, rejoin, and confirm the player reaches the game with the
+  modpack applied.
 
 flow:
-  - launch_server
-  - launch_client
-  - read_fingerprint
-  - wait_server
-  - wait_bridge
-  - connect
-  - wait_fingerprint
-  - accept_fingerprint
-  - wait_download_prompt
-  - confirm_download
-  - wait_download
-  - verify_files
-  - confirm_restart
-  - quit
-  - launch_client
-  - wait_bridge
-  - connect
-  - wait_join
-  - quit
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: verify_files
+    name: verify all synced files are present
+  - use: restart_client
+  - use: rejoin
+  - do: quit
+    name: quit the client
 
 topology:
   server:
