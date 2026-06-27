@@ -28,7 +28,6 @@ def make_ctx(tmp_path):
             settings={},
             game_dir=game_dir,
             server_dir=tmp_path / "server",
-            case_dir=tmp_path / "case",
             out_dir=tmp_path / "out",
             client_image="img",
             srv_name="srv-container",

@@ -8,18 +8,22 @@ from .registry import verb
 from .util import await_condition, parse_duration
 
 
-@verb("click")
-def click(ctx, step):
-    selector = dict(ctx.resolve(step.get("select") or {}))
-    if "enabled" not in selector:
-        selector["enabled"] = True  # by default only click clickable elements
+def _await_element(ctx, selector, step, not_found):
+    """Poll the GUI until ``selector`` matches an element, or time out."""
     timeout = parse_duration(step.get("timeout"), default=30)
-    el = await_condition(
+    return await_condition(
         lambda: selectors.find_one(ctx.gui(), selector),
         timeout,
         step.get("poll"),
-        f"no element matched {selector!r}",
+        not_found,
     )
+
+
+@verb("click")
+def click(ctx, step):
+    selector = dict(ctx.resolve(step.get("select") or {}))
+    selector.setdefault("enabled", True)  # by default only click clickable elements
+    el = _await_element(ctx, selector, step, f"no element matched {selector!r}")
     if step.get("enable"):
         ctx.bridge.click(int(el["id"]), enable=True)
     else:
@@ -30,13 +34,7 @@ def click(ctx, step):
 def type_(ctx, step):
     selector = dict(ctx.resolve(step.get("select") or {"role": "textfield"}))
     value = str(ctx.resolve(step.get("value", "")))
-    timeout = parse_duration(step.get("timeout"), default=30)
-    el = await_condition(
-        lambda: selectors.find_one(ctx.gui(), selector),
-        timeout,
-        step.get("poll"),
-        f"no text field matched {selector!r}",
-    )
+    el = _await_element(ctx, selector, step, f"no text field matched {selector!r}")
     ctx.bridge.text(int(el["id"]), value)
 
 

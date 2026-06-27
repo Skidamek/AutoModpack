@@ -69,7 +69,7 @@ download_modpack:
     select: { text: download }
   - do: wait_file
     name: wait for the modpack marker file
-    path: "automodpack/modpacks/${modpack}/${marker}"
+    path: "${modpack_dir}/${marker}"
     timeout: 300s
 
 # Click the post-download "restart required" button and wait for the client to exit.

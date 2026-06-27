@@ -153,7 +153,7 @@ A step is either a bare name (`- quit`, or a macro name) or a mapping with a
 | `verify_files` | Wait until every `serverFiles.files` entry exists in the synced modpack. |
 | `verify_mods` | Wait until every `serverFiles.expectedMods` glob is present. |
 | `launch_server` / `wait_server` | Start the server / wait for `Done (`. |
-| `launch_client` / `relaunch_client` / `wait_bridge` | Start a client / wait for its bridge. |
+| `launch_client` / `wait_bridge` | Start a client / wait for its bridge. |
 | `connect` / `disconnect` / `quit` | Drive the client connection. |
 | `wait_client_exit` | Wait for the client container to exit (after a restart). |
 | `wait_join` | Wait until the player is in-game (no screen open). |

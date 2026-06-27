@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
@@ -67,7 +68,31 @@ def load_scenarios() -> dict[str, dict]:
     }
 
 
+@lru_cache(maxsize=1)
 def load_macros() -> dict:
-    """Shared reusable step sequences from ``scenarios/_lib.yaml`` (if present)."""
+    """Shared reusable step sequences from ``scenarios/_lib.yaml`` (if present).
+
+    Cached: the library is static for a run and read once per process.
+    """
     lib = ROOT / "scenarios" / "_lib.yaml"
     return load_yaml(lib) if lib.is_file() else {}
+
+
+@dataclass(frozen=True)
+class ServerFiles:
+    """The modpack a scenario hosts on the server, parsed from ``serverFiles``."""
+
+    modpack_name: str
+    marker: Path
+    files: list[tuple[Path, str]] = field(default_factory=list)
+    expected_mods: list[str] = field(default_factory=list)
+
+
+def parse_server_files(scenario: dict) -> ServerFiles:
+    sf = scenario.get("serverFiles", {}) or {}
+    return ServerFiles(
+        modpack_name=str(sf.get("modpackName", "amp-autotest")),
+        marker=Path(str(sf.get("marker", "config/amp-autotest-marker.json"))),
+        files=[(Path(str(f["path"])), str(f.get("content", ""))) for f in sf.get("files", [])],
+        expected_mods=[str(m) for m in sf.get("expectedMods", [])],
+    )

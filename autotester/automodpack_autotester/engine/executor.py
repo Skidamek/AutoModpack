@@ -31,33 +31,30 @@ def _run_steps(ctx, steps, macros, results, depth=0):
     if depth > 25:
         raise RuntimeError("macro expansion too deep (cycle in sequences?)")
     for raw in steps:
+        # Normalize to a mapping; a bare string is a macro name or a verb name.
         if isinstance(raw, str):
-            if raw in macros:
-                _run_steps(ctx, macros[raw], macros, results, depth + 1)
-                continue
-            step = {"do": raw}
+            step = {"use": raw} if raw in macros else {"do": raw}
         elif isinstance(raw, dict):
             step = dict(raw)
         else:
             raise ValueError(f"invalid step: {raw!r}")
 
-        if "use" in step:
-            name = step["use"]
-            if name not in macros:
-                raise ValueError(f"unknown macro: {name!r}")
-            _run_steps(ctx, macros[name], macros, results, depth + 1)
-            continue
-        if "group" in step:
-            _run_steps(ctx, step.get("steps", []), macros, results, depth + 1)
-            continue
-
+        # `when` and `repeat` apply uniformly to every step kind (verb, use, group).
         when = step.get("when")
         if when is not None and not conditions.evaluate(ctx, ctx.resolve(when)):
-            logger.info("[%s] skip (when not met): %s", _tid(ctx), step.get("name") or step.get("do"))
+            logger.info("[%s] skip (when not met): %s", _tid(ctx), _label(step))
             continue
 
         for _ in range(int(step.get("repeat", 1))):
-            _run_one(ctx, step, results)
+            if "use" in step:
+                name = step["use"]
+                if name not in macros:
+                    raise ValueError(f"unknown macro: {name!r}")
+                _run_steps(ctx, macros[name], macros, results, depth + 1)
+            elif "group" in step:
+                _run_steps(ctx, step.get("steps", []), macros, results, depth + 1)
+            else:
+                _run_one(ctx, step, results)
 
 
 def _run_one(ctx, step, results):
@@ -87,3 +84,7 @@ def _run_one(ctx, step, results):
 
 def _tid(ctx):
     return getattr(ctx.target, "id", "?")
+
+
+def _label(step):
+    return step.get("name") or step.get("do") or step.get("use") or "?"

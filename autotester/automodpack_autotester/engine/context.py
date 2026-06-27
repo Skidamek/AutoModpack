@@ -22,7 +22,6 @@ class Context:
     settings: dict
     game_dir: Path
     server_dir: Path
-    case_dir: Path
     out_dir: Path
     client_image: str
     srv_name: str
@@ -48,6 +47,7 @@ class Context:
             "server": {"host": self.srv_name, "port": 25565},
             "client": {"game_dir": str(self.game_dir)},
             "modpack": self.modpack_name,
+            "modpack_dir": f"automodpack/modpacks/{self.modpack_name}",
             "marker": str(self.marker_rel),
             **self.vars,
         }

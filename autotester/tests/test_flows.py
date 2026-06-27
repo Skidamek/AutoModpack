@@ -7,11 +7,9 @@ no Docker, HeadlessMC, or Minecraft server involved.
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from automodpack_autotester.config import load_macros, load_scenarios
+from automodpack_autotester.config import load_macros, load_scenarios, parse_server_files
 from automodpack_autotester.engine import run_flow
 from automodpack_autotester.engine.registry import verb
 
@@ -26,7 +24,7 @@ def _noop(ctx, step):
     pass
 
 
-@verb("launch_client", "relaunch_client")
+@verb("launch_client")
 def _launch_client(ctx, step):
     ctx.bridge.exited = False  # a fresh client process is running
 
@@ -65,14 +63,13 @@ def _wait_join(ctx, step):
 
 
 def _ctx_for(make_ctx, scenario: dict):
-    sf = scenario.get("serverFiles", {})
-    files = [(Path(str(f["path"])), str(f.get("content", ""))) for f in sf.get("files", [])]
+    sf = parse_server_files(scenario)
     ctx = make_ctx(
         scenario=scenario,
-        modpack_name=str(sf.get("modpackName", "amp-autotest")),
-        marker_rel=Path(str(sf.get("marker", "config/amp-autotest-marker.json"))),
-        scenario_files=files,
-        expected_mods=[str(m) for m in sf.get("expectedMods", [])],
+        modpack_name=sf.modpack_name,
+        marker_rel=sf.marker,
+        scenario_files=sf.files,
+        expected_mods=sf.expected_mods,
     )
     ctx.bridge = FakeBridge(ctx)
     ctx.logs_provider = lambda which, tail=None: (

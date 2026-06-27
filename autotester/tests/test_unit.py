@@ -212,6 +212,20 @@ def test_executor_when_gate_and_repeat(make_ctx):
     assert ctx.vars["log"] == ["x", "x", "x"]
 
 
+def test_executor_when_and_repeat_apply_to_macros_and_groups(make_ctx):
+    ctx = make_ctx()
+    lib = {"greet": [{"do": "t_rec", "tag": "g"}]}
+    scenario = {
+        "flow": [
+            {"use": "greet", "when": {"file": "absent.txt"}},  # gated out
+            {"use": "greet", "repeat": 2},  # macro runs twice
+            {"group": True, "steps": [{"do": "t_rec", "tag": "x"}], "repeat": 2},
+        ]
+    }
+    run_flow(ctx, scenario, lib=lib)
+    assert ctx.vars["log"] == ["g", "g", "x", "x"]
+
+
 def test_executor_records_results_and_optional(make_ctx):
     ctx = make_ctx()
     results = run_flow(ctx, {"flow": [{"do": "t_boom", "name": "explode", "optional": True}]})

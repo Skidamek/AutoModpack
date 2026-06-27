@@ -11,50 +11,44 @@ from .registry import verb
 from .util import await_condition, parse_duration
 
 
+def _await_exist(ctx, root, rels, step, msg, default_timeout):
+    """Poll until every path in ``rels`` exists under ``root``, or time out."""
+    paths = [root / r for r in rels]
+    timeout = parse_duration(step.get("timeout"), default=default_timeout)
+    await_condition(
+        lambda: True if all(p.exists() for p in paths) else None,
+        timeout,
+        step.get("poll"),
+        msg,
+    )
+
+
 @verb("wait_file")
 def wait_file(ctx, step):
     rel = ctx.resolve(str(step["path"]))
-    p = ctx.game_dir / rel
-    timeout = parse_duration(step.get("timeout"), default=300)
-    await_condition(
-        lambda: p if p.exists() else None,
-        timeout,
-        step.get("poll"),
-        f"file {rel} did not appear",
-    )
+    _await_exist(ctx, ctx.game_dir, [rel], step, f"file {rel} did not appear", 300)
 
 
 @verb("wait_files")
 def wait_files(ctx, step):
     root = ctx.game_dir / ctx.resolve(str(step.get("root", "")))
-    paths = [ctx.resolve(str(p)) for p in step.get("paths", [])]
-    timeout = parse_duration(step.get("timeout"), default=120)
-
-    def _all():
-        return True if all((root / p).exists() for p in paths) else None
-
-    missing_msg = f"files did not all appear under {root}"
-    await_condition(_all, timeout, step.get("poll"), missing_msg)
+    rels = [ctx.resolve(str(p)) for p in step.get("paths", [])]
+    _await_exist(ctx, root, rels, step, f"files did not all appear under {root}", 120)
 
 
 @verb("verify_files")
 def verify_files(ctx, step):
     """Wait until every file declared in the scenario's ``serverFiles`` is present."""
-    root = ctx.game_dir / ctx.resolve(str(step.get("root", "automodpack/modpacks/${modpack}")))
+    root = ctx.game_dir / ctx.resolve(str(step.get("root", "${modpack_dir}")))
     rels = [str(rel) for rel, _ in ctx.scenario_files]
-    timeout = parse_duration(step.get("timeout"), default=120)
-
-    def _all():
-        return True if all((root / r).exists() for r in rels) else None
-
-    await_condition(_all, timeout, step.get("poll"), f"modpack files missing under {root}")
+    _await_exist(ctx, root, rels, step, f"modpack files missing under {root}", 120)
 
 
 @verb("verify_mods")
 def verify_mods(ctx, step):
     if not ctx.expected_mods:
         return
-    mod_dir = ctx.game_dir / ctx.resolve(str(step.get("root", "automodpack/modpacks/${modpack}/mods")))
+    mod_dir = ctx.game_dir / ctx.resolve(str(step.get("root", "${modpack_dir}/mods")))
     timeout = parse_duration(step.get("timeout"), default=120)
 
     def _all():

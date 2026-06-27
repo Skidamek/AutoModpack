@@ -12,7 +12,7 @@ from pathlib import Path
 import docker as docker_py
 
 from .bridge import BridgeClient
-from .config import Target, load_macros
+from .config import Target, load_macros, parse_server_files
 from .engine import ClientExited, Context, run_flow
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -286,7 +286,7 @@ def _v_wait_server(ctx: Context, step):
     _wait_for_log(ctx.srv_name, "Done (", timeout=timeout)
 
 
-@verb("launch_client", "relaunch_client")
+@verb("launch_client")
 def _v_launch_client(ctx: Context, step):
     _remove_container(ctx.cli_name)
     ctx.bridge = None
@@ -417,13 +417,7 @@ def run_case(
             raise FileNotFoundError(f"No artifact for {target.id} in {artifact_dir}")
         artifact = matches[-1].resolve()
 
-        sf = scenario.get("serverFiles", {})
-        modpack_name = str(sf.get("modpackName", "amp-autotest"))
-        marker_rel = Path(str(sf.get("marker", "config/amp-autotest-marker.json")))
-        scenario_files = [
-            (Path(str(f["path"])), str(f.get("content", ""))) for f in sf.get("files", [])
-        ]
-        expected_mods = [str(m) for m in sf.get("expectedMods", [])]
+        sf = parse_server_files(scenario)
 
         ctx = Context(
             target=target,
@@ -431,7 +425,6 @@ def run_case(
             settings=settings,
             game_dir=game_dir,
             server_dir=server_dir,
-            case_dir=case_dir,
             out_dir=out_dir,
             client_image=client_image,
             srv_name=srv_name,
@@ -439,10 +432,10 @@ def run_case(
             net_name=net_name,
             token=token,
             artifact=artifact,
-            modpack_name=modpack_name,
-            marker_rel=marker_rel,
-            scenario_files=scenario_files,
-            expected_mods=expected_mods,
+            modpack_name=sf.modpack_name,
+            marker_rel=sf.marker,
+            scenario_files=sf.files,
+            expected_mods=sf.expected_mods,
             vars=dict(scenario.get("vars", {}) or {}),
         )
         ctx.logs_provider = lambda which, tail=None: _container_logs(
