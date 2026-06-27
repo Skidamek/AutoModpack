@@ -36,8 +36,12 @@ jobs:
         run: |
           echo "scenario=${{ github.event.inputs.scenario || 'sync' }}" >> $GITHUB_OUTPUT
 
+  unit:
+    uses: ./.github/workflows/autotester-tests.yml
+    secrets: inherit
+
   build:
-    needs: [prepare]
+    needs: [prepare, unit]
     uses: ./.github/workflows/build.yml
     with:
       autotest: true

@@ -6,6 +6,9 @@ jobs:
   tests: # runs on linux and windows
     uses: ./.github/workflows/tests.yml
     secrets: inherit
+  autotester-tests: # autotester engine unit tests (no Docker)
+    uses: ./.github/workflows/autotester-tests.yml
+    secrets: inherit
   build: # runs on linux
     uses: ./.github/workflows/build.yml
     secrets: inherit
