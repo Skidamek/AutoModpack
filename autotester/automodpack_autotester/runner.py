@@ -188,6 +188,12 @@ def _launch_server(ctx: Context):
         if val:
             env[v] = val
     env.update({str(k): str(v) for k, v in (topo.get("env", {}) or {}).items()})
+    # Run the itzg server as the same user the runner uses, so it can write to the
+    # bind-mounted mods/automodpack dirs (which the runner created). Without this the
+    # server runs as itzg's default UID 1000 and fails on hosts with a different UID
+    # (e.g. the GitHub runner's 1001): AccessDenied writing /data/mods/*.download.
+    env.setdefault("UID", str(_uid()))
+    env.setdefault("GID", str(_gid()))
     mr = topo.get("modrinth", {})
     if mr:
         projs = list(
