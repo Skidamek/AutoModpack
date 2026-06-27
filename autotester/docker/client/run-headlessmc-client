@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+loader="${1:?loader required}"
+minecraft="${2:?minecraft version required}"
+host="${3:?server host required}"
+port="${4:?server port required}"
+java_version="${5:?java version required}"
+loader_version="${6:-}"
+
+game_dir="${AM_AUTOTEST_GAME_DIR:-/work/game}"
+cache_dir="${AM_AUTOTEST_HMC_CACHE_DIR:-/work/hmc-cache}"
+bridge_token="${AM_AUTOTEST_BRIDGE_TOKEN:?bridge token required}"
+client_timeout="${AM_AUTOTEST_CLIENT_TIMEOUT_SECONDS:-600}"
+
+mkdir -p "$game_dir" "$cache_dir"
+
+# ── Share client-jar cache across targets ──────────────────────────────
+shared_versions="/work/hmc-shared-versions"
+mkdir -p "$shared_versions"
+if [ ! -L "$cache_dir/versions" ]; then
+    rm -rf "$cache_dir/versions" 2>/dev/null || true
+    ln -s "$shared_versions" "$cache_dir/versions"
+fi
+
+# ── Find the right Java binary ─────────────────────────────────────
+java_bin=""
+for dir in /usr/lib/jvm/*"${java_version}"*/bin/java; do
+    if [ -x "$dir" ]; then
+        java_bin="$dir"
+        break
+    fi
+done
+
+if [ -z "$java_bin" ] && command -v java &>/dev/null; then
+    java_bin="$(command -v java)"
+fi
+
+if [ -z "$java_bin" ] || [ ! -x "$java_bin" ]; then
+    echo "ERROR: Java ${java_version} not found" >&2
+    echo "Searched /usr/lib/jvm/*${java_version}* and PATH" >&2
+    ls -la /usr/lib/jvm/ 2>/dev/null || echo "(no /usr/lib/jvm)" >&2
+    exit 1
+fi
+
+actual_ver=$("$java_bin" -version 2>&1 | head -1 | sed 's/.*version "\([0-9]*\).*/\1/')
+echo "Java: $("$java_bin" -version 2>&1 | head -1) ($java_bin)"
+if [ "$actual_ver" != "$java_version" ]; then
+    echo "WARNING: Requested Java ${java_version}, using Java ${actual_ver}" >&2
+fi
+
+export JAVA_HOME="${java_bin%/bin/java}"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+# ── Build JVM arguments ───────────────────────────────────────────
+jvmargs="-Dautomodpack.autotest=true -Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dcom.mojang.text2speech=false"
+gameargs="--width 854 --height 480"
+
+# ── Write HMC config ──────────────────────────────────────────────
+cat > /work/HeadlessMC/config.properties <<EOF
+hmc.mcdir=$cache_dir
+hmc.gamedir=$game_dir
+hmc.offline=true
+hmc.offline.username=AutoTest
+hmc.auto.download.java=false
+hmc.java.versions=$JAVA_HOME/bin/java
+hmc.java.require.exact=false
+hmc.crash.report.watcher=true
+hmc.exit.on.failed.command=true
+hmc.gameargs=$gameargs
+EOF
+
+# ── Install loader if needed ──────────────────────────────────────
+# Only Fabric needs an explicit install step: HMC can only `launch` a named
+# version profile, and the `fabric` command is what materialises that profile
+# (fabric-loader-<loader>-<mc>). Forge/NeoForge need no install here — HMC
+# resolves and installs them on demand from the `<loader>:<mc>` launch target.
+launch_target="${loader}:${minecraft}"
+if [ "$loader" = "fabric" ] && [ -n "$loader_version" ]; then
+    timeout 30 hmc --command "fabric ${minecraft} --uid ${loader_version}" 2>/dev/null || true
+    launch_target="fabric-loader-${loader_version}-${minecraft}"
+fi
+
+# ── Disable Neo/Forge early display window (may cause crash in CI) ──
+mkdir -p "$game_dir/config"
+cat > "$game_dir/config/fml.toml" <<EOF
+earlyWindowControl = false
+splashscreen = false
+EOF
+
+# ── Pre-download Minecraft assets (best-effort, with timeout) ─────
+timeout 20 hmc --command "download ${minecraft}" 2>/dev/null || true
+hmc --command "config -refresh" 2>/dev/null || true
+
+# ── Launch ─────────────────────────────────────────────────────────
+exec timeout "$client_timeout" hmc \
+  --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"

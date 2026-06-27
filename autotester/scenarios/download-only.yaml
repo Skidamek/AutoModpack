@@ -1,0 +1,34 @@
+id: download-only
+description: |
+  Boot server + client, trust the certificate, sync the modpack, and verify every
+  hosted file landed on the client. Does not restart or rejoin.
+
+flow:
+  - use: boot
+  - use: accept_certificate
+  - use: download_modpack
+  - do: verify_files
+    name: verify all synced files are present
+  - do: quit
+    name: quit the client
+
+topology:
+  server:
+    memory: 2G
+    env:
+      ENABLE_ROLLING_LOGS: "false"
+    modrinth:
+      projects:
+        - ferrite-core?
+      dependencies: true
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+    - path: config/amp-autotest-alpha.txt
+      content: "amp-autotest-alpha\n"
+    - path: config/amp-autotest-beta.json
+      content: '{"id":"beta","value":42}'
+    - path: config/amp-autotest-gamma.cfg
+      content: "alpha=true\nbeta=false\n"

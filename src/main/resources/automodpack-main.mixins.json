@@ -19,7 +19,9 @@
     "core.ClientLoginNetworkHandlerAccessor",
     "core.ClientLoginNetworkHandlerMixin",
     "core.ConnectScreenMixin",
-    "core.MusicTrackerMixin"
+    "core.MusicTrackerMixin",
+    "dev.MinecraftMixin",
+    "dev.ResourceLoadStateTrackerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

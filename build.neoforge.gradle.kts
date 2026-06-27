@@ -17,15 +17,9 @@ neoForge {
     }
 }
 
-repositories {
-    maven("https://maven.su5ed.dev/releases") { name = "FFAPI" }
-}
-
 dependencies {
     implementation(project(":core")) { isTransitive = false }
     implementation(project(":loader-core")) { isTransitive = false }
-
-    implementation("org.sinytra.forgified-fabric-api:forgified-fabric-api:0.115.6+2.1.4+1.21.1")
 }
 
 tasks {
@@ -50,9 +44,9 @@ java {
         targetCompatibility = JavaVersion.VERSION_25
         toolchain.languageVersion.set(JavaLanguageVersion.of(25))
     } else {
-        withSourcesJar()
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
         toolchain.languageVersion.set(JavaLanguageVersion.of(21))
     }
+    withSourcesJar()
 }

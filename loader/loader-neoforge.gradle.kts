@@ -76,15 +76,16 @@ tasks.named<ShadowJar>("shadowJar") {
 
     exclude("kotlin/**", "log4j2.xml")
     exclude("META-INF/maven/**", "META-INF/native-image/**", "META-INF/io.netty.versions.properties")
+    exclude("META-INF/services/java.security.Provider")
 
     mergeServiceFiles()
 }
 
-
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    val javaVersion = findProperty("deps.java") as String
+    sourceCompatibility = JavaVersion.toVersion(javaVersion)
+    targetCompatibility = JavaVersion.toVersion(javaVersion)
+    toolchain.languageVersion.set(JavaLanguageVersion.of(javaVersion))
     withSourcesJar()
 }
 

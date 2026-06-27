@@ -31,101 +31,151 @@ import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 public class DownloadClient implements AutoCloseable {
 
-    private final List<Connection> connections = new ArrayList<>();
-    private InetSocketAddress address = null;
+    // Dedicated daemon pool for the blocking network/login stages (pool
+    // hydration, and the up-to-120s certificate prompt). Keeps long downloads
+    // and that prompt off ForkJoinPool.commonPool, which is shared JVM-wide and
+    // also drives the parallel streams used here and in ModpackContent.
+    public static final ExecutorService NET_EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "automodpack-net");
+        t.setDaemon(true);
+        return t;
+    });
 
-    /**
-     * Transports the connection and the specific SSLContext used to create it.
-     * Required because the SSLContext may change dynamically during trust recovery.
-     */
+    private final List<Connection> connections = new ArrayList<>();
+
     private record InitialConnectionResult(PreValidationConnection connection, SSLContext sslContext) {}
 
     /**
-     * Initializes the client by establishing a single "probe" connection to validate/recover SSL trust,
-     * then hydrates the remaining connection pool in parallel using the validated SSL context.
+     * Holds the outcome of a single probe attempt, along with the KeyStore for later mutation.
      */
-    public DownloadClient(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) throws IOException {
-        if (poolSize < 1) throw new IllegalArgumentException("Pool size must be greater than 0");
+    private record ProbeResult(InitialConnectionResult success, X509Certificate untrustedCert, IOException error, KeyStore keyStore) {}
 
-        KeyStore keyStore = loadDefaultKeyStore();
-
-        // Establish probe to handle potential SSL handshake errors (e.g., self-signed certs) sequentially before pooling.
-        InitialConnectionResult probe = establishProbeConnection(modpackAddresses, keyStore, trustedByUserCallback);
-
-        if (probe.connection.getSocket() != null && !probe.connection.getSocket().isClosed()) {
-            if (secretBytes == null) {
-                probe.connection().getSocket().close();
-            } else {
-                connections.add(new Connection(probe.connection, secretBytes));
-            }
-        }
-
-        if (secretBytes == null) {
-            return;
-        }
-
-        int remainingNeeded = poolSize - connections.size();
-        if (remainingNeeded < 1) {
-            return;
-        }
-
-        // Parallel pool hydration using the session-aware SSLContext from the probe.
-        List<Connection> newConnections = IntStream.range(0, remainingNeeded)
-                .parallel()
-                .mapToObj(i -> {
-                    try {
-                        return new Connection(getPreValidationConnection(modpackAddresses, probe.sslContext), secretBytes);
-                    } catch (IOException e) {
-                        throw new CompletionException(e);
-                    }
-                })
-                .toList();
-
-        connections.addAll(newConnections);
-        LOGGER.info("Download client initialized with {} connections to {}", connections.size(), modpackAddresses.hostAddress.getHostString());
+    /**
+     * Package-private constructor for the async {@link #createAsync} path.
+     * Accepts a pre-hydrated connection pool.
+     */
+    DownloadClient(List<Connection> connections) {
+        this.connections.addAll(connections);
     }
 
     /**
-     * Attempts a connection with a capturing trust manager. If the handshake fails due to an
-     * untrusted certificate, the chain is captured, presented to the user callback, and the connection is retried.
+     * Async factory. If the certificate needs user approval, no thread blocks: the returned future
+     * completes when the trust callback's future completes (via UI callbacks on the render thread).
      */
-    private InitialConnectionResult establishProbeConnection(Jsons.ModpackAddresses addresses, KeyStore keyStore, Function<X509Certificate, Boolean> trustCallback) throws IOException {
-        AtomicReference<X509Certificate[]> capturedChain = new AtomicReference<>();
-        SSLContext context = createSSLContext(keyStore, capturedChain::set);
+    public static CompletableFuture<DownloadClient> createAsync(
+            Jsons.ModpackAddresses addresses,
+            byte[] secretBytes,
+            int poolSize,
+            Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
 
+        if (poolSize < 1) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("Pool size must be greater than 0"));
+        }
+
+        return CompletableFuture.supplyAsync(() -> {
+                    KeyStore keyStore = loadDefaultKeyStore();
+                    AtomicReference<X509Certificate[]> capturedChain = new AtomicReference<>();
+                    SSLContext context = createSSLContext(keyStore, capturedChain::set);
+
+                    try {
+                        PreValidationConnection probe = getPreValidationConnection(addresses, context);
+                        return new ProbeResult(new InitialConnectionResult(probe, context), null, null, keyStore);
+                    } catch (IOException e) {
+                        X509Certificate[] chain = capturedChain.get();
+                        X509Certificate untrusted = (chain != null && chain.length > 0) ? chain[0] : null;
+                        return new ProbeResult(null, untrusted, e, keyStore);
+                    }
+                }, NET_EXECUTOR).thenCompose(pr -> {
+                    if (pr.success != null) {
+                        try {
+                            return CompletableFuture.completedFuture(
+                                    new DownloadClient(hydratePool(pr.success, secretBytes, poolSize, addresses)));
+                        } catch (IOException e) {
+                            return CompletableFuture.failedFuture(e);
+                        }
+                    }
+                    if (pr.untrustedCert == null || trustCallback == null) {
+                        return CompletableFuture.failedFuture(pr.error);
+                    }
+
+                    return trustCallback.apply(pr.untrustedCert)
+                            .thenComposeAsync(trusted -> {
+                                if (!trusted) {
+                                    return CompletableFuture.failedFuture(new IOException("User rejected certificate"));
+                                }
+                                return CompletableFuture.supplyAsync(() -> {
+                                    try {
+                                        pr.keyStore.setCertificateEntry(addresses.hostAddress.getHostString(), pr.untrustedCert);
+                                        SSLContext trustedCtx = createSSLContext(pr.keyStore, null);
+                                        PreValidationConnection retry = getPreValidationConnection(addresses, trustedCtx);
+                                        return new DownloadClient(hydratePool(
+                                                new InitialConnectionResult(retry, trustedCtx),
+                                                secretBytes, poolSize, addresses));
+                                    } catch (Exception e) {
+                                        throw new CompletionException(new IOException("Failed to reconnect after trust", e));
+                                    }
+                                }, NET_EXECUTOR);
+                            }, NET_EXECUTOR)
+                            .orTimeout(120, TimeUnit.SECONDS)
+                            .exceptionally(e -> {
+                                throw new CompletionException(new IOException("Certificate not trusted", e));
+                            });
+                });
+    }
+
+    /**
+     * Hydrates the connection pool from a successful probe + SSL context.
+     * Shared by both sync and async construction paths.
+     */
+    private static List<Connection> hydratePool(InitialConnectionResult probe, byte[] secretBytes, int poolSize, Jsons.ModpackAddresses addresses) throws IOException {
+        List<Connection> conns = new ArrayList<>();
+        if (probe.connection().getSocket() != null && !probe.connection().getSocket().isClosed()) {
+            if (secretBytes == null) {
+                probe.connection().getSocket().close();
+                return conns;
+            } else {
+                conns.add(new Connection(probe.connection(), secretBytes));
+            }
+        }
+        if (secretBytes == null) return conns;
+
+        int remainingNeeded = poolSize - conns.size();
+        if (remainingNeeded < 1) return conns;
+
+        // Open the remaining connections in parallel. Record each one the moment
+        // it is created so that if any sibling task fails, we can close every
+        // connection that did open (including the probe) instead of leaking its
+        // socket and single-thread executor.
+        List<Connection> opened = Collections.synchronizedList(new ArrayList<>());
         try {
-            PreValidationConnection conn = getPreValidationConnection(addresses, context);
-            return new InitialConnectionResult(conn, context);
-        } catch (IOException e) { // Inavlid/Selfsigned certificate, prompt user for trust.
-            return recoverProbeConnection(e, addresses, keyStore, trustCallback, capturedChain.get());
+            IntStream.range(0, remainingNeeded)
+                    .parallel()
+                    .forEach(i -> {
+                        try {
+                            opened.add(new Connection(getPreValidationConnection(addresses, probe.sslContext()), secretBytes));
+                        } catch (IOException e) {
+                            throw new CompletionException(e);
+                        }
+                    });
+        } catch (RuntimeException e) {
+            for (Connection c : conns) closeQuietly(c);
+            for (Connection c : opened) closeQuietly(c);
+            Throwable cause = (e instanceof CompletionException && e.getCause() != null) ? e.getCause() : e;
+            if (cause instanceof IOException io) throw io;
+            throw new IOException("Failed to hydrate connection pool", cause);
+        }
+        conns.addAll(opened);
+        return conns;
+    }
+
+    private static void closeQuietly(AutoCloseable c) {
+        try {
+            c.close();
+        } catch (Exception ignored) {
         }
     }
 
-    private InitialConnectionResult recoverProbeConnection(IOException originalError, Jsons.ModpackAddresses addresses, KeyStore keyStore, Function<X509Certificate, Boolean> trustCallback, X509Certificate[] chain) throws IOException {
-        if (chain == null || chain.length == 0 || trustCallback == null) {
-            throw originalError;
-        }
-
-        boolean isTrusted = trustCallback.apply(chain[0]);
-        if (!isTrusted) {
-            throw new IOException("User rejected the certificate.", originalError);
-        }
-
-        try {
-            keyStore.setCertificateEntry(addresses.hostAddress.getHostString(), chain[0]);
-
-            // Re-initialize context with the updated KeyStore containing the user-trusted cert.
-            SSLContext trustedContext = createSSLContext(keyStore, null);
-
-            PreValidationConnection retryConn = getPreValidationConnection(addresses, trustedContext);
-            return new InitialConnectionResult(retryConn, trustedContext);
-
-        } catch (KeyStoreException kse) {
-            throw new IOException("Failed to update KeyStore with trusted certificate", kse);
-        }
-    }
-
-    private KeyStore loadDefaultKeyStore() {
+    private static KeyStore loadDefaultKeyStore() {
         try {
             KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
             keyStore.load(null);
@@ -135,22 +185,16 @@ public class DownloadClient implements AutoCloseable {
         }
     }
 
-    private PreValidationConnection getPreValidationConnection(Jsons.ModpackAddresses modpackAddresses, SSLContext sharedContext) throws IOException {
+    private static PreValidationConnection getPreValidationConnection(Jsons.ModpackAddresses modpackAddresses, SSLContext sharedContext) throws IOException {
         String hostName = modpackAddresses.hostAddress.getHostString();
-        if (address == null) {
-            address = new InetSocketAddress(hostName, modpackAddresses.hostAddress.getPort());
-            if (address.isUnresolved()) {
-                throw new IOException("Failed to resolve host address: " + hostName);
-            }
+        InetSocketAddress address = new InetSocketAddress(hostName, modpackAddresses.hostAddress.getPort());
+        if (address.isUnresolved()) {
+            throw new IOException("Failed to resolve host address: " + hostName);
         }
         return new PreValidationConnection(address, modpackAddresses, sharedContext);
     }
 
-    /**
-     * Configures SSL context with TLSv1.3 and a custom TrustManager.
-     * @param onValidating Optional callback to capture certificate chains during handshake failures.
-     */
-    private SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating) {
+    private static SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating) {
         try {
             SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
             X509ExtendedTrustManager trustManager = new CustomizableTrustManager(trustedCertificates, onValidating);
@@ -169,18 +213,21 @@ public class DownloadClient implements AutoCloseable {
 
     public static DownloadClient tryCreate(Jsons.ModpackAddresses modpackAddresses, byte[] secretBytes, int poolSize, Function<X509Certificate, Boolean> trustedByUserCallback) {
         try {
-            return new DownloadClient(modpackAddresses, secretBytes, poolSize, trustedByUserCallback);
-        } catch (IOException e) {
-            LOGGER.error("Failed to create download client: {}", e.getMessage());
-            LOGGER.debug(e);
+            Function<X509Certificate, CompletableFuture<Boolean>> asyncCallback = trustedByUserCallback == null
+                    ? null
+                    : certificate -> CompletableFuture.completedFuture(trustedByUserCallback.apply(certificate));
+            return createAsync(modpackAddresses, secretBytes, poolSize, asyncCallback).get();
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            Throwable cause = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
+            LOGGER.error("Failed to create download client: {}", cause.getMessage());
+            LOGGER.debug(cause);
             return null;
         }
     }
 
-    /**
-     * Recursively searches for an idle connection in the pool.
-     * Marks the found connection as busy to prevent race conditions.
-     */
     private synchronized Connection getFreeConnection() {
         Iterator<Connection> iterator = connections.iterator();
         while (iterator.hasNext()) {
@@ -214,10 +261,6 @@ public class DownloadClient implements AutoCloseable {
     }
 }
 
-/**
- * Handles the initial TCP connection and protocol-specific handshakes (Magic)
- * prior to or during the SSL upgrade.
- */
 class PreValidationConnection {
 
     private final SSLSocket socket;
@@ -227,7 +270,6 @@ class PreValidationConnection {
         plainSocket.connect(resolvedHostAddress, 10000);
         plainSocket.setSoTimeout(10000);
 
-        // Perform custom "Magic" handshake over plain text if required by config.
         if (modpackAddresses.requiresMagic) {
             try {
                 DataOutputStream plainOut = new DataOutputStream(new BufferedOutputStream(plainSocket.getOutputStream()));
@@ -250,7 +292,6 @@ class PreValidationConnection {
             }
         }
 
-        // Layer SSL over the existing socket.
         SSLSocketFactory factory = sslContext.getSocketFactory();
         SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, resolvedHostAddress.getHostString(), resolvedHostAddress.getPort(), true);
 
@@ -276,10 +317,6 @@ class PreValidationConnection {
     }
 }
 
-/**
- * Manages an active, authenticated session. Handles protocol negotiation,
- * framing, compression, and async I/O.
- */
 class Connection implements AutoCloseable {
 
     private byte protocolVersion = LATEST_SUPPORTED_PROTOCOL_VERSION;
@@ -292,8 +329,6 @@ class Connection implements AutoCloseable {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean busy = new AtomicBoolean(false);
 
-    // Reuse this buffer for reading from socket to avoid allocation per frame.
-    // Size = Default Chunk + Header overhead (approx) + Safety margin
     private final byte[] networkInputBuffer = new byte[MAX_CHUNK_SIZE + 8192];
 
     public Connection(PreValidationConnection preValidationConnection, byte[] secretBytes) throws IOException {
@@ -306,7 +341,6 @@ class Connection implements AutoCloseable {
         this.in = new DataInputStream(new BufferedInputStream(this.socket.getInputStream()));
         this.out = new DataOutputStream(new BufferedOutputStream(this.socket.getOutputStream()));
 
-        // Negotiate connection parameters sequentially.
         try {
             if (!PlatformUtils.canUseZstd()) {
                 this.compressionType = COMPRESSION_GZIP;
@@ -389,9 +423,6 @@ class Connection implements AutoCloseable {
         }, executor);
     }
 
-    /**
-     * Cleans up input stream and releases the busy flag upon completion.
-     */
     private void finalBlock(Exception exception) {
         try {
             int available;
@@ -405,9 +436,6 @@ class Connection implements AutoCloseable {
         }
     }
 
-    /**
-     * Segments payload into chunks, compresses them, and sends with protocol framing.
-     */
     private void writeProtocolMessage(byte[] payload) throws IOException {
         CompressionCodec codec = getCompressionCodec();
         int offset = 0;
@@ -427,14 +455,11 @@ class Connection implements AutoCloseable {
         out.flush();
     }
 
-    /**
-     * Reads a framing header (Compressed Len + Original Len) and returns decompressed data.
-     */
     private byte[] readProtocolMessageFrame() throws IOException {
         int compressedLength = in.readInt();
         int originalLength = in.readInt();
 
-        int maxAllowedSize = this.chunkSize + 8192; // Allow overhead buffer
+        int maxAllowedSize = this.chunkSize + 8192;
 
         if (compressedLength < 0 || compressedLength > maxAllowedSize) {
             throw new IOException("Frame compressed length (" + compressedLength + ") exceeds limit (" + maxAllowedSize + ")");
@@ -453,9 +478,6 @@ class Connection implements AutoCloseable {
         return getCompressionCodec().decompress(networkInputBuffer, 0, compressedLength, originalLength);
     }
 
-    /**
-     * Processes the server response stream. Expects Header -> Data Frames -> EOT.
-     */
     private Path readFileResponse(Path destination, IntConsumer chunkCallback) throws IOException {
         byte[] headerData = readProtocolMessageFrame();
         ByteBuffer headerWrap = ByteBuffer.wrap(headerData);

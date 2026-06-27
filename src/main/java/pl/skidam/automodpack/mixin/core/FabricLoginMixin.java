@@ -1,6 +1,5 @@
 package pl.skidam.automodpack.mixin.core;
 
-import net.fabricmc.fabric.impl.networking.server.ServerLoginNetworkAddon;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
@@ -11,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import pl.skidam.automodpack.networking.LoginNetworkingIDs;
 
 @Pseudo
-@Mixin(value = ServerLoginNetworkAddon.class, remap = false)
+@Mixin(targets = "net.fabricmc.fabric.impl.networking.server.ServerLoginNetworkAddon", remap = false)
 public class FabricLoginMixin {
 
     @Inject(

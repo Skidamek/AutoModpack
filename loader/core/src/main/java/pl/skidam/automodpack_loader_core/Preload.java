@@ -65,8 +65,22 @@ public class Preload {
             LegacyClientCacheUtils.deleteDummyFiles();
         } else {
             Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
-
             Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress, requiresMagic);
+
+            // When update-on-launch is disabled, just load the already-installed
+            // modpack: don't contact the server and don't reconcile local files,
+            // so the user can freely add/remove mods (e.g. a binary search).
+            if (!clientConfig.updateSelectedModpackOnLaunch) {
+                LegacyClientCacheUtils.deleteDummyFiles();
+                var localModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+                try {
+                    new ModpackUpdater(localModpackContent, modpackAddresses, secret, selectedModpackDir).loadModpack();
+                } catch (Exception e) {
+                    LOGGER.error("Failed to load modpack", e);
+                }
+                return;
+            }
+
             var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
             var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 
@@ -83,9 +97,7 @@ public class Preload {
             // Delete dummy files
             LegacyClientCacheUtils.deleteDummyFiles();
 
-            if (clientConfig.updateSelectedModpackOnLaunch) {
-                new ModpackUpdater(latestModpackContent, modpackAddresses, secret, selectedModpackDir).processModpackUpdate(null);
-            }
+            new ModpackUpdater(latestModpackContent, modpackAddresses, secret, selectedModpackDir).processModpackUpdate(null);
         }
     }
 

@@ -18,6 +18,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
     private final Runnable validatedCallback;
     private final Runnable canceledCallback;
     private boolean validated = false;
+    private String inputText = "";
     private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE, 
             VersionedText.translatable("automodpack.validation.failed"), 
             VersionedText.translatable("automodpack.retry"));
@@ -40,6 +41,9 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         super.init();
 
         initWidgets();
+        if (!inputText.isEmpty()) {
+            this.textField.setValue(inputText);
+        }
 
         this.addRenderableWidget(this.textField);
         this.addRenderableWidget(this.backButton);
@@ -90,16 +94,28 @@ public class FingerprintVerificationScreen extends VersionedScreen {
         setTooltip(wikiButton, VersionedText.translatable("automodpack.learnmore"));
     }
 
-    private void verifyFingerprint() {
+    public void forceValidate() {
+        verifyButton.active = false;
+        this.validated = true;
+        this.inputText = "";
+        if (this.minecraft != null) {
+            this.minecraft.gui.setScreen(parent);
+        }
+        validatedCallback.run();
+    }
+
+    public void setInputText(String text) {
+        this.inputText = text;
+        if (this.textField != null) {
+            this.textField.setValue(text);
+        }
+    }
+
+    public void verifyFingerprint() {
         String input = textField.getValue().strip();
-        
+        inputText = input;
         if (input.equals(serverFingerprint)) {
-            verifyButton.active = false;
-            this.validated = true;
-            if (this.minecraft != null) {
-                this.minecraft.gui.setScreen(parent);
-            }
-            validatedCallback.run();
+            forceValidate();
         } else {
             Constants.LOGGER.error("Server fingerprint validation failed, try again");
             if (this.minecraft != null) {

@@ -76,6 +76,7 @@ tasks.named<ShadowJar>("shadowJar") {
 
     exclude("kotlin/**", "log4j2.xml")
     exclude("META-INF/maven/**", "META-INF/native-image/**", "META-INF/io.netty.versions.properties")
+    exclude("META-INF/services/java.security.Provider")
 
     mergeServiceFiles()
 }

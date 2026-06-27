@@ -1,0 +1,88 @@
+paths:
+  artifactDir: merged
+  outDir: autotester/out
+
+images:
+  server: itzg/minecraft-server
+  proxy: itzg/mc-proxy
+  client: automodpack-autotest-client:local
+  serverTagTemplate: "java{java}"
+
+run:
+  target: all
+  scenario: sync
+  jobs: 1
+
+server:
+  memory: 2G
+  nameTemplate: "amp-{target_id}"
+  env:
+    EULA: "TRUE"
+    ONLINE_MODE: "FALSE"
+    ENABLE_AUTOPAUSE: "FALSE"
+    MOTD: "amp-autotest"
+    DIFFICULTY: "peaceful"
+    SPAWN_ANIMALS: "false"
+    SPAWN_MONSTERS: "false"
+    SPAWN_NPCS: "false"
+    GENERATE_STRUCTURES: "false"
+    LEVEL_TYPE: "flat"
+    GENERATOR_SETTINGS: "{\"lakes\":false,\"layers\":[{\"block\":\"minecraft:stone\",\"height\":1}],\"biome\":\"minecraft:plains\",\"structures\":{\"structures\":{}}}"
+    SPAWN_RADIUS: "0"
+
+serverTypes:
+  fabric: FABRIC
+  forge: FORGE
+  neoforge: NEOFORGE
+
+headlessmc:
+  # Git repository and ref the HeadlessMC launcher is built from. The default
+  # builds the patch required to launch MC 26.2 headlessly; point these at a
+  # different repo/ref to use another HeadlessMC build. ref may be a branch, tag
+  # or commit SHA — pinned to a SHA here for reproducible builds (this is the
+  # head of the mc26.2-headless branch; bump it when the fork moves, or switch
+  # to the upstream tag once the patch is merged upstream).
+  repo: "https://github.com/Skidamek/headlessmc.git"
+  ref: "64d3c126e72bbfccf95e71afaa6536f50bc64097"
+
+timeouts:
+  serverStartSeconds: 180
+  clientStartSeconds: 180
+  clientRunSeconds: 300
+  downloadFileSeconds: 180
+  rejoinSeconds: 90
+
+serverCache:
+  enabled: true
+  volumePrefix: "amp-server-cache"
+  clean: false
+
+automodpack:
+  config:
+    DO_NOT_CHANGE_IT: 2
+    modpackHost: true
+    generateModpackOnStart: true
+    syncedFiles:
+      - "/mods/*.jar"
+      - "/kubejs/**"
+      - "!/kubejs/server_scripts/**"
+      - "/emotes/*"
+    allowEditsInFiles:
+      - "/config/**"
+    forceCopyFilesToStandardLocation: []
+    nonModpackFilesToDelete: {}
+    autoExcludeServerSideMods: true
+    autoExcludeUnnecessaryFiles: true
+    requireAutoModpackOnClient: true
+    nagUnModdedClients: false
+    bindAddress: ""
+    bindPort: -1
+    addressToSend: ""
+    portToSend: -1
+    disableInternalTLS: false
+    requireMagicPackets: false
+    updateIpsOnEveryStart: false
+    bandwidthLimit: 0
+    validateSecrets: true
+    secretLifetime: 336
+    selfUpdater: false

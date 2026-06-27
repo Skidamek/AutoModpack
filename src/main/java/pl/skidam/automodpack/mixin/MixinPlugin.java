@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Set;
 
 public class MixinPlugin implements IMixinConfigPlugin {
+    private static final boolean AUTOTEST_ENABLED = Boolean.getBoolean("automodpack.autotest");
+
     @Override
     public void onLoad(String mixinPackage) {
         // Needed for versions < 1.18
@@ -21,6 +23,9 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (mixinClassName.contains(".dev.")) {
+            return AUTOTEST_ENABLED;
+        }
         return true;
     }
 

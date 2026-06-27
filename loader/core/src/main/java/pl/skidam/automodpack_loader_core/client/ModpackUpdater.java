@@ -3,21 +3,27 @@ package pl.skidam.automodpack_loader_core.client;
 import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
-import pl.skidam.automodpack_core.utils.*;
+import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
+import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.WorkaroundUtil;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
-import pl.skidam.automodpack_loader_core.utils.*;
+import pl.skidam.automodpack_loader_core.utils.DownloadManager;
+import pl.skidam.automodpack_loader_core.utils.FetchManager;
+import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -66,7 +72,7 @@ public class ModpackUpdater {
             // Handle the case where serverModpackContent is null
             if (serverModpackContent == null) {
                 try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-                    CheckAndLoadModpack(cache);
+                    checkAndLoadModpack(cache);
                 }
                 return;
             }
@@ -103,7 +109,7 @@ public class ModpackUpdater {
                 } else {
                     Files.writeString(modpackContentFile, serverModpackContentJson);
                     try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-                        CheckAndLoadModpack(cache);
+                        checkAndLoadModpack(cache);
                     }
                 }
             }
@@ -112,7 +118,25 @@ public class ModpackUpdater {
         }
     }
 
-    private void CheckAndLoadModpack(FileMetadataCache cache) throws Exception {
+    public void checkAndLoadModpack() throws Exception {
+        try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+            checkAndLoadModpack(cache);
+        }
+    }
+
+    // Load the already-installed modpack without contacting the server or
+    // reconciling local files against it. Used when update-on-launch is disabled
+    // so the user can freely add/remove mods (e.g. a binary search) without
+    // AutoModpack restoring or deleting them.
+    public void loadModpack() throws Exception {
+        if (!Files.exists(modpackDir))
+            return;
+        try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+            loadModpackMods(cache);
+        }
+    }
+
+    private void checkAndLoadModpack(FileMetadataCache cache) throws Exception {
         if (!Files.exists(modpackDir))
             return;
 
@@ -125,51 +149,57 @@ public class ModpackUpdater {
             return;
         }
 
-        // Load the modpack excluding mods from standard mods directory without need to restart the game
-        if (preload) {
-            Set<String> standardModsHashes;
-            List<Path> modpackMods = List.of();
+        loadModpackMods(cache);
+    }
 
-            // 1. Collect hashes of existing standard mods into a Set for fast lookup
-            try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
-                standardModsHashes = standardModsStream
-                        .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")) // Check extension/type before hashing
-                        .map(cache::getHashOrNull)     // Safe wrapper for IOException
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toSet()); // Use Set for O(1) performance
-            } catch (IOException e) {
-                LOGGER.error("Failed to list standard mods directory", e);
-                standardModsHashes = Collections.emptySet();
-            }
-
-            // 2. Filter modpack mods excluding those already present in standard mods
-            Path modpackModsDir = modpackDir.resolve("mods");
-            if (Files.exists(modpackModsDir)) {
-                try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
-                    final Set<String> finalStandardModsHashes = standardModsHashes;
-                    modpackMods = modpackModsStream
-                            .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar"))
-                            .filter(mod -> {
-                                String modHash = cache.getHashOrNull(mod);
-                                // Only load if hash is valid AND not found in standard set
-                                return modHash != null && !finalStandardModsHashes.contains(modHash);
-                            })
-                            .toList();
-                } catch (IOException e) {
-                    LOGGER.error("Failed to list modpack mods directory", e);
-                }
-            }
-
-            MODPACK_LOADER.loadModpack(modpackMods);
+    // Load the modpack mods that aren't already present in the standard mods
+    // directory, without requiring a restart.
+    private void loadModpackMods(FileMetadataCache cache) throws Exception {
+        if (!preload) {
+            LOGGER.info("Modpack is already loaded");
             return;
         }
 
-        LOGGER.info("Modpack is already loaded");
+        Set<String> standardModsHashes;
+        List<Path> modpackMods = List.of();
+
+        // 1. Collect hashes of existing standard mods into a Set for fast lookup
+        try (Stream<Path> standardModsStream = Files.list(MODS_DIR)) {
+            standardModsHashes = standardModsStream
+                    .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar")) // Check extension/type before hashing
+                    .map(cache::getHashOrNull)     // Safe wrapper for IOException
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet()); // Use Set for O(1) performance
+        } catch (IOException e) {
+            LOGGER.error("Failed to list standard mods directory", e);
+            standardModsHashes = Collections.emptySet();
+        }
+
+        // 2. Filter modpack mods excluding those already present in standard mods
+        Path modpackModsDir = modpackDir.resolve("mods");
+        if (Files.exists(modpackModsDir)) {
+            try (Stream<Path> modpackModsStream = Files.list(modpackModsDir)) {
+                final Set<String> finalStandardModsHashes = standardModsHashes;
+                modpackMods = modpackModsStream
+                        .filter(path -> Files.isRegularFile(path) && path.toString().endsWith(".jar"))
+                        .filter(mod -> {
+                            String modHash = cache.getHashOrNull(mod);
+                            // Only load if hash is valid AND not found in standard set
+                            return modHash != null && !finalStandardModsHashes.contains(modHash);
+                        })
+                        .toList();
+            } catch (IOException e) {
+                LOGGER.error("Failed to list modpack mods directory", e);
+            }
+        }
+
+        MODPACK_LOADER.loadModpack(modpackMods);
     }
 
     public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
         if (modpackSecret == null) {
             LOGGER.error("Cannot update modpack, secret is null");
+            new ScreenManager().error("automodpack.error.critical", "Secret is null - cannot update", "automodpack.error.logs");
             return;
         }
 
@@ -238,7 +268,7 @@ public class ModpackUpdater {
                 LOGGER.error("Update failed successfully! Try again! Took: {}ms", System.currentTimeMillis() - start);
             } else if (preload) {
                 LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
-                CheckAndLoadModpack(cache);
+                checkAndLoadModpack(cache);
             } else  {
                 boolean requiredRestart = applyModpack(cache);
                 LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);

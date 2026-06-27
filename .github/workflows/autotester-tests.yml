@@ -1,0 +1,16 @@
+name: step.autotester-tests
+
+# Fast, Docker-free tests for the autotester step engine (selectors, conditions,
+# templating, the executor, and the shipped scenarios run through a fake bridge).
+on: [workflow_call]
+
+jobs:
+  autotester-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Run engine tests
+        working-directory: autotester
+        run: uv run --group dev pytest

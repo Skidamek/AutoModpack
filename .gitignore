@@ -41,3 +41,10 @@ output/
 /core/automodpack/
 
 dupes
+
+# python
+
+__pycache__/
+*.egg-info/
+autotester/out/
+autotester/.hmc-cache/
