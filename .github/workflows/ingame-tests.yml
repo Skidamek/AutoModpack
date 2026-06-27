@@ -20,9 +20,9 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       scenario: ${{ steps.set-scenario.outputs.scenario }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v8
       - id: set-matrix
         run: |
           TARGET="${{ github.event.inputs.target || 'all' }}"
@@ -54,10 +54,10 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-      - uses: actions/download-artifact@v6
+        uses: astral-sh/setup-uv@v8
+      - uses: actions/download-artifact@v8
         with:
           name: build-artifacts
           path: merged/
@@ -68,7 +68,7 @@ jobs:
           uv --project autotester run autotester run
           --target "${{ matrix.target }}"
           --scenario "${{ needs.prepare.outputs.scenario }}"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: autotester-${{ matrix.target }}
@@ -80,8 +80,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
-      - uses: actions/download-artifact@v6
+        uses: astral-sh/setup-uv@v8
+      - uses: actions/download-artifact@v8
         with:
           pattern: autotester-*
       - name: Aggregate results
@@ -127,7 +127,7 @@ jobs:
           print(f"ok={str(any_ok).lower()}", file=open(os.environ["GITHUB_OUTPUT"], "a"))
           PYEOF
           python3 /tmp/aggregate.py
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: aggregated-results
           path: |

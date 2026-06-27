@@ -18,7 +18,7 @@ jobs:
   matrix_prep:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - id: setmatrix
         run: python3 .github/workflows/scripts/matrix.py  # ubuntu-22.04 uses Python 3.10.6
