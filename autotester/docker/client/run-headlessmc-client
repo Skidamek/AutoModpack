@@ -82,11 +82,42 @@ if [ "$loader" = "fabric" ] && [ -n "$loader_version" ]; then
 fi
 
 # ── Disable Neo/Forge early display window (may cause crash in CI) ──
+# Older Forge (≤1.19.2) builds FMLConfig with both autosave() and autoreload().
+# If config/fml.toml isn't already spec-correct, FMLConfig.correct() rewrites it
+# during early bootstrap; autosave flushes that change to disk and the autoreload
+# watcher reloads it on another thread *while* correct() is still iterating the
+# config map → ConcurrentModificationException, crashing the client before the
+# test bridge comes up. Forge 1.20.1+ and NeoForge dropped autoreload() and are
+# not affected. To stay race-free we pre-seed a fully spec-correct fml.toml so
+# correct() is skipped entirely (isCorrect() == true). splashscreen=false /
+# earlyWindowControl=false keep the headless-unsafe early window disabled.
 mkdir -p "$game_dir/config"
-cat > "$game_dir/config/fml.toml" <<EOF
-earlyWindowControl = false
+fml_toml="$game_dir/config/fml.toml"
+case "${loader}:${minecraft}" in
+    forge:1.18.2)
+        cat > "$fml_toml" <<EOF
+versionCheck = true
 splashscreen = false
+defaultConfigPath = "defaultconfigs"
+maxThreads = -1
 EOF
+        ;;
+    forge:1.19.2)
+        cat > "$fml_toml" <<EOF
+versionCheck = true
+splashscreen = false
+defaultConfigPath = "defaultconfigs"
+disableOptimizedDFU = true
+maxThreads = -1
+EOF
+        ;;
+    *)
+        # Forge 1.20.1+ / NeoForge: no autoreload(), so correct() can't race.
+        cat > "$fml_toml" <<EOF
+earlyWindowControl = false
+EOF
+        ;;
+esac
 
 # ── Pre-download Minecraft assets (best-effort, with timeout) ─────
 timeout 20 hmc --command "download ${minecraft}" 2>/dev/null || true
