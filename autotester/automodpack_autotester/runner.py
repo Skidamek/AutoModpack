@@ -273,8 +273,16 @@ def _launch_client(ctx: Context):
     _bridge_state(ctx).unlink(missing_ok=True)
 
     # Per-target HMC cache (isolated to prevent concurrent NeoForge installer corruption)
-    hmc_cache_root = (ctx.out_dir.parent / ".hmc-cache" / ctx.target.id.replace(".", "_")).resolve()
+    tid = ctx.target.id.replace(".", "_")
+    hmc_cache_root = (ctx.out_dir.parent / ".hmc-cache" / tid).resolve()
     hmc_cache_root.mkdir(parents=True, exist_ok=True)
+    # The client image symlinks <cache>/versions -> /work/hmc-shared-versions. Mount
+    # a persistent host dir there so downloaded version jars survive between runs
+    # instead of being re-fetched every time (the symlink target was unmounted, so
+    # versions landed in ephemeral container storage). Kept per-target — sharing one
+    # dir across parallel targets would reintroduce the installer-corruption race.
+    shared_versions = (ctx.out_dir.parent / ".hmc-cache" / "shared-versions" / tid).resolve()
+    shared_versions.mkdir(parents=True, exist_ok=True)
 
     client_run_seconds = int(float(
         ctx.scenario.get("timeouts", {}).get(
@@ -295,6 +303,7 @@ def _launch_client(ctx: Context):
         mounts=[
             (game_dir, "/work/game", False),
             (hmc_cache_root, "/work/hmc-cache", False),
+            (shared_versions, "/work/hmc-shared-versions", False),
         ],
         command=[
             "/opt/automodpack/run-headlessmc-client",
@@ -416,9 +425,21 @@ def _v_wait_client_exit(ctx: Context, step):
       clean — exit code 0
       crash — non-zero exit code
     The ``timeout`` wrapper around the client exits 124, which counts as a crash.
+
+    ``or_alive: true`` tolerates the client *still running* after the grace period
+    instead of failing — for "loaded then idles" on a real-GPU host where the
+    client never crashes. Pair it with a positive ``wait_for`` marker beforehand
+    so the step still proves the client got far enough. Only meaningful with
+    ``expect: any`` (a still-alive client has no exit code to judge).
     """
     timeout = parse_duration(step.get("timeout"), default=90)
-    _wait_exited(ctx.cli_name, timeout=timeout)
+    or_alive = bool(step.get("or_alive") or step.get("tolerate_alive"))
+    try:
+        _wait_exited(ctx.cli_name, timeout=timeout)
+    except TimeoutError:
+        if or_alive:
+            return  # still loaded and running after the grace period — acceptable
+        raise
     expect = str(step.get("expect", "any")).lower()
     if expect == "any":
         return

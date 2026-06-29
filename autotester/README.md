@@ -171,15 +171,17 @@ flow:
       log:
         matches_all: [ 'Prelaunching AutoModpack', 'AutoModpack prelaunched' ]
         not_matches: [ 'ClassNotFoundException' ]
-  - do: wait_exit                 # tolerate a later headless render crash
+  - do: wait_exit                 # tolerate a later headless crash OR a GPU idle
     expect: any
+    or_alive: true
 ```
 
-`stage_modpack` accepts `from:` (a ready modpack dir to copy wholesale, path
-relative to the repo root), `mods:` (extra jars to drop into the pack's `mods/`),
-and `config:` (extra client-config overrides). The combination of whole-log
-assertions and `wait_exit: { expect: any }` makes "verify it loaded, don't care
-what happens at render" robust on both headless and GPU hosts. See
+`stage_modpack` accepts `from:` (a ready modpack dir to copy wholesale), `mods:`
+(extra jars to drop into the pack's `mods/`), and `config:` (extra client-config
+overrides). **`from:` and `mods:` paths resolve against the repo root** (the
+parent of `autotester/`) unless absolute. The combination of whole-log assertions
+and `wait_exit: { expect: any, or_alive: true }` makes "verify it loaded, don't
+care what happens at render" robust on both headless and GPU hosts. See
 `scenarios/client-loads-offline.yaml`.
 
 ### Discovering verbs and validating scenarios
@@ -211,7 +213,7 @@ aborts on a malformed scenario.
 | `launch_client` / `wait_bridge` | Start a client / wait for its bridge. |
 | `stage_modpack` | Pre-stage a modpack into the client game dir for offline/client-only runs (see below). |
 | `connect` / `disconnect` / `quit` | Drive the client connection. |
-| `wait_exit` | Wait for the client container to exit. `expect: any\|clean\|crash` asserts how it exited (default `any`). `wait_client_exit` is an alias. |
+| `wait_exit` | Wait for the client container to exit. `expect: any\|clean\|crash` asserts how it exited (default `any`). `or_alive: true` tolerates the client still running after the grace period (for "loaded then idles" on a GPU host). `wait_client_exit` is an alias. |
 | `wait_join` | Wait until the player is in-game (no screen open). |
 
 Run `autotester verbs` to print this list (with one-line docs) and the valid

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import types
 
+import pytest
+
 from automodpack_autotester import runner
 from automodpack_autotester.config import (
     load_macros,
@@ -92,6 +94,35 @@ def test_transport_precedence():
 def test_scenario_mode():
     assert runner.scenario_mode({}) == "full"
     assert runner.scenario_mode({"mode": "client-only"}) == "client-only"
+
+
+# ── wait_exit (Docker calls stubbed) ─────────────────────────────────────────
+
+
+def test_wait_exit_or_alive_tolerates_still_running(monkeypatch):
+    def never_exits(name, timeout):
+        raise TimeoutError("still running")
+
+    monkeypatch.setattr(runner, "_wait_exited", never_exits)
+    ctx = types.SimpleNamespace(cli_name="c")
+    with pytest.raises(TimeoutError):
+        runner._v_wait_client_exit(ctx, {})  # default: must exit
+    runner._v_wait_client_exit(ctx, {"or_alive": True})  # tolerated
+
+
+def test_wait_exit_expect_clean_and_crash(monkeypatch):
+    monkeypatch.setattr(runner, "_wait_exited", lambda name, timeout: None)
+    ctx = types.SimpleNamespace(cli_name="c")
+
+    monkeypatch.setattr(runner, "_exit_code", lambda name: 0)
+    runner._v_wait_client_exit(ctx, {"expect": "clean"})
+    with pytest.raises(AssertionError):
+        runner._v_wait_client_exit(ctx, {"expect": "crash"})
+
+    monkeypatch.setattr(runner, "_exit_code", lambda name: 1)
+    runner._v_wait_client_exit(ctx, {"expect": "crash"})
+    with pytest.raises(AssertionError):
+        runner._v_wait_client_exit(ctx, {"expect": "clean"})
 
 
 # ── verb discovery ──────────────────────────────────────────────────────────
