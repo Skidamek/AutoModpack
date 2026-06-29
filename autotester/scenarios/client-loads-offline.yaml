@@ -1,0 +1,46 @@
+id: client-loads-offline
+description: |
+  Offline / client-only smoke test. Pre-stage a modpack into the client game dir
+  and boot just the client — no server, no certificate/download/restart dance —
+  then assert on the launch log that AutoModpack prelaunched and loaded the staged
+  modpack without a classloading failure. Tolerant of the client exiting afterward
+  (e.g. a headless render crash), so it is robust on both headless and GPU hosts.
+
+  This is the fast loader-debugging path: edit code, rebuild, rerun, read logs —
+  seconds, not the minutes an end-to-end gameplay round trip takes.
+
+# No server is launched; the client loads a locally staged modpack.
+mode: client-only
+
+flow:
+  - use: boot_client_only
+  - do: wait_for
+    name: wait until AutoModpack has prelaunched
+    timeout: 300s
+    until:
+      log:
+        container: client
+        matches: 'AutoModpack prelaunched'
+  - do: assert
+    name: AutoModpack loaded cleanly (no classloading failure)
+    that:
+      log:
+        container: client
+        # Whole-log match by default: early lines can't scroll out of a tail window.
+        matches_all:
+          - 'Prelaunching AutoModpack'
+          - 'AutoModpack prelaunched'
+        not_matches:
+          - 'ClassNotFoundException'
+          - 'Failed to load modpack'
+  - do: wait_exit
+    name: tolerate the client exiting after load
+    expect: any
+    timeout: 300s
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json
+  files:
+    - path: config/amp-autotest-alpha.txt
+      content: "amp-autotest-alpha\n"

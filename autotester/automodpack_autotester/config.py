@@ -78,6 +78,35 @@ def load_macros() -> dict:
     return load_yaml(lib) if lib.is_file() else {}
 
 
+def scenario_matches_target(scenario: dict, target: "Target") -> bool:
+    """Whether ``scenario`` is in scope for ``target``.
+
+    A scenario can scope itself with any of these header keys; a target must pass
+    every one that is present (globs allowed where noted):
+
+      targets:   [ "1.21.1-neoforge", "neoforge-*" ]   # glob on target id
+      loaders:   [ neoforge ]                            # exact loader
+      minecraft: [ "1.21.1", "1.21.*" ]                  # glob on mc version
+
+    With no scoping keys, the scenario applies to every target (current behavior).
+    """
+    from fnmatch import fnmatch
+
+    def _ok(key, value) -> bool:
+        raw = scenario.get(key)
+        if raw is None:
+            return True
+        patterns = [raw] if isinstance(raw, str) else list(raw)
+        return any(fnmatch(str(value), str(p)) for p in patterns)
+
+    loaders = scenario.get("loaders")
+    if loaders is not None:
+        allowed = [loaders] if isinstance(loaders, str) else list(loaders)
+        if target.loader not in {str(x) for x in allowed}:
+            return False
+    return _ok("targets", target.id) and _ok("minecraft", target.minecraft)
+
+
 @dataclass(frozen=True)
 class ServerFiles:
     """The modpack a scenario hosts on the server, parsed from ``serverFiles``."""

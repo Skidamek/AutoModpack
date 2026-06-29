@@ -10,8 +10,17 @@ from pathlib import Path
 
 import docker as docker_py
 
-from .config import REPO_ROOT, ROOT, load_scenarios, load_settings, load_targets
+from .config import (
+    REPO_ROOT,
+    ROOT,
+    load_macros,
+    load_scenarios,
+    load_settings,
+    load_targets,
+    scenario_matches_target,
+)
 from .runner import run_case
+from .validate import validate_scenario
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -37,6 +46,44 @@ def _kill_amp_containers() -> None:
             pass
 
 
+def _cmd_verbs() -> int:
+    from .engine import conditions
+    from .engine.registry import describe as describe_verbs
+
+    print("Verbs:")
+    for entry in describe_verbs():
+        names = ", ".join(entry["names"])
+        print(f"  {names}")
+        if entry["doc"]:
+            print(f"      {entry['doc']}")
+    print("\nCondition keys (when / until / that):")
+    print(f"  {', '.join(sorted(conditions.KEYS))}")
+    print("\nlog condition keys:")
+    print(f"  {', '.join(sorted(conditions.LOG_KEYS))}")
+    return 0
+
+
+def _cmd_validate(scenario_name: str | None) -> int:
+    macros = load_macros()
+    scenarios = load_scenarios()
+    if scenario_name:
+        if scenario_name not in scenarios:
+            print(f"No such scenario: {scenario_name}", file=sys.stderr)
+            return 1
+        scenarios = {scenario_name: scenarios[scenario_name]}
+    ok = True
+    for name, scenario in scenarios.items():
+        problems = validate_scenario(scenario, macros)
+        if problems:
+            ok = False
+            print(f"FAIL {name}")
+            for prob in problems:
+                print(f"  - {prob}")
+        else:
+            print(f"OK   {name}")
+    return 0 if ok else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -59,7 +106,18 @@ def main(argv: list[str] | None = None) -> int:
     clean = sub.add_parser("clean")
     clean.add_argument("--out-dir", type=Path)
 
+    sub.add_parser("verbs", help="List available scenario verbs and condition keys")
+
+    val = sub.add_parser("validate", help="Statically validate scenario(s) without Docker")
+    val.add_argument("--scenario", help="Scenario stem; omit to validate all")
+
     args = p.parse_args(argv)
+
+    if args.command == "verbs":
+        return _cmd_verbs()
+
+    if args.command == "validate":
+        return _cmd_validate(args.scenario)
 
     if args.command == "build-images":
         s = load_settings()
@@ -108,14 +166,33 @@ def main(argv: list[str] | None = None) -> int:
 
     targets = load_targets()
     scenarios = load_scenarios()
-    scenario = scenarios.get(args.scenario or rc.get("scenario", "sync"))
-    selected = (
+    scenario_name = args.scenario or rc.get("scenario", "sync")
+    scenario = scenarios.get(scenario_name)
+    if scenario is None:
+        print(f"No such scenario: {scenario_name}", file=sys.stderr)
+        return 1
+
+    # Fail fast on a malformed scenario rather than after minutes in Docker.
+    problems = validate_scenario(scenario, load_macros())
+    if problems:
+        print(f"Scenario {scenario_name!r} is invalid:", file=sys.stderr)
+        for prob in problems:
+            print(f"  - {prob}", file=sys.stderr)
+        return 1
+
+    requested = (
         list(targets.values())
         if not args.target or args.target == "all"
         else [targets[args.target]]
     )
+    # Drop targets the scenario doesn't apply to (targets:/loaders:/minecraft:),
+    # so an unrelated target doesn't fail confusingly on missing mods.
+    selected = [t for t in requested if scenario_matches_target(scenario, t)]
+    for t in requested:
+        if t not in selected:
+            print(f"SKIP {t.id} (out of scenario scope)")
     if not selected:
-        print("No targets", file=sys.stderr)
+        print("No targets in scope for this scenario", file=sys.stderr)
         return 1
 
     out_dir = (

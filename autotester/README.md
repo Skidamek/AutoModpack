@@ -140,6 +140,61 @@ A step is either a bare name (`- quit`, or a macro name) or a mapping with a
 | `repeat` | Run the step N times. |
 | `optional` | If the step fails, log it and continue instead of failing the run. |
 
+### Networking, modes, and scoping
+
+Three scenario-header keys decouple *how* a scenario runs from *what* it tests:
+
+| Key | Values | Meaning |
+| --- | --- | --- |
+| `network` | `bridge` (default) / `host` | Container transport. `bridge` wires a per-run user network (CI). `host` puts both containers in the host network namespace (the client reaches the server on `localhost`) — the only topology a host-network-only sandbox allows. Run host transport with `--jobs 1`: host-mode servers all bind `25565` and would collide. Also settable globally via `network:` in `settings.yaml`. |
+| `mode` | `full` (default) / `client-only` | `full` launches a server + client. `client-only` launches **only** the client against a pre-staged modpack — no server, no certificate/download/restart dance. |
+| `targets` / `loaders` / `minecraft` | list (globs where noted) | Scope the scenario to compatible targets. A target must pass every key present: `targets` (glob on id), `loaders` (exact), `minecraft` (glob). Out-of-scope targets are skipped with a `SKIP` line instead of failing on missing mods. |
+
+#### Client-only (offline / pre-staged) mode
+
+`mode: client-only` is the fast loader-debugging path: stage a modpack, boot just
+the client, and assert on the launch log — seconds per iteration instead of a
+multi-minute gameplay round trip. The `stage_modpack` verb lays the modpack into
+`automodpack/modpacks/<name>/` and writes a client config that selects it with
+`updateSelectedModpackOnLaunch=false`, so the client loads it on boot without
+contacting a server:
+
+```yaml
+mode: client-only
+
+flow:
+  - use: boot_client_only        # stage_modpack + launch_client
+  - do: wait_for
+    until: { log: { matches: 'AutoModpack prelaunched' } }
+  - do: assert
+    that:
+      log:
+        matches_all: [ 'Prelaunching AutoModpack', 'AutoModpack prelaunched' ]
+        not_matches: [ 'ClassNotFoundException' ]
+  - do: wait_exit                 # tolerate a later headless render crash
+    expect: any
+```
+
+`stage_modpack` accepts `from:` (a ready modpack dir to copy wholesale, path
+relative to the repo root), `mods:` (extra jars to drop into the pack's `mods/`),
+and `config:` (extra client-config overrides). The combination of whole-log
+assertions and `wait_exit: { expect: any }` makes "verify it loaded, don't care
+what happens at render" robust on both headless and GPU hosts. See
+`scenarios/client-loads-offline.yaml`.
+
+### Discovering verbs and validating scenarios
+
+```bash
+autotester verbs                       # list verbs + condition keys (from the registry)
+autotester validate                    # statically check every scenario
+autotester validate --scenario sync    # check one
+```
+
+`validate` expands macros and checks that every verb/macro name resolves and
+every condition uses known keys — catching typos in seconds instead of after
+minutes in Docker. `run` performs the same check before launching containers and
+aborts on a malformed scenario.
+
 ### Verbs
 
 | Verb | Purpose |
@@ -154,9 +209,13 @@ A step is either a bare name (`- quit`, or a macro name) or a mapping with a
 | `verify_mods` | Wait until every `serverFiles.expectedMods` glob is present. |
 | `launch_server` / `wait_server` | Start the server / wait for `Done (`. |
 | `launch_client` / `wait_bridge` | Start a client / wait for its bridge. |
+| `stage_modpack` | Pre-stage a modpack into the client game dir for offline/client-only runs (see below). |
 | `connect` / `disconnect` / `quit` | Drive the client connection. |
-| `wait_client_exit` | Wait for the client container to exit (after a restart). |
+| `wait_exit` | Wait for the client container to exit. `expect: any\|clean\|crash` asserts how it exited (default `any`). `wait_client_exit` is an alias. |
 | `wait_join` | Wait until the player is in-game (no screen open). |
+
+Run `autotester verbs` to print this list (with one-line docs) and the valid
+condition keys, generated straight from the registry — no need to grep `@verb(`.
 
 ### Selectors
 
@@ -183,8 +242,34 @@ condition must hold (AND):
 | `screen_none` | No screen is open (the player is in-game). |
 | `element` / `no_element` | A selector matches at least one / no elements. |
 | `file` / `file_gone` | A path under the game dir exists / does not exist. |
-| `log` | A regex matches a container log; capture groups into vars (see below). |
+| `log` | A regex matches a log source — container stdout or a game-dir file (see below). |
 | `all` / `any` / `not` | Combine sub-conditions. |
+
+#### The `log` condition
+
+`log` matches against a **source** (a container's stdout, or a file artifact in
+the game dir) with positive, negative, and quantified matchers. By default it
+scans the **whole** log, so an early line can't be silently scrolled out of a
+tail window:
+
+```yaml
+log:
+  container: server | client   # source: container stdout (default: client)
+  file: logs/debug.log          # OR a file under the client game dir
+  tail: 100000                  # only the last N lines (default: the whole log)
+  matches: <regex>              # must be present
+  matches_all: [<regex>, ...]   # every one must be present
+  matches_any: [<regex>, ...]   # at least one must be present
+  not_matches: <regex> | [...]  # none may be present
+  count: N                      # `matches` must occur exactly N times
+  min_count: N                  # ... at least N times
+  max_count: N                  # ... at most N times
+  capture: { var: group }       # capture a group of `matches` into a var
+```
+
+Targeting `file:` lets you assert on the rich evidence in `logs/debug.log`
+(TRACE/Mixin lines) that never reaches stdout. `not_matches` expresses
+"this error no longer appears"; the count keys quantify occurrences.
 
 ### Templating and variables
 

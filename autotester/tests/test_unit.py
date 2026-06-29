@@ -257,3 +257,74 @@ def test_executor_requires_flow(make_ctx):
     ctx = make_ctx()
     with pytest.raises(ValueError):
         run_flow(ctx, {})
+
+
+# ── log conditions: matchers, counts, whole-log default, file targeting ────
+
+_LOGS = "\n".join(
+    ["Prelaunching AutoModpack", "boom ClassNotFoundException: Workarounds$Reference"]
+    + [f"noise line {i}" for i in range(1000)]
+    + ["AutoModpack prelaunched! took 42ms"]
+)
+
+
+def test_log_whole_log_default_sees_early_lines(make_ctx):
+    """An early line is found even with ~1000 lines of trailing noise (no tail=400 footgun)."""
+    ctx = make_ctx()
+    ctx.logs_provider = lambda which, tail=None: _LOGS if tail is None else "\n".join(
+        _LOGS.splitlines()[-tail:]
+    )
+    assert conditions.evaluate(ctx, {"log": {"matches": "Prelaunching AutoModpack"}}) is True
+    # A small explicit tail would scroll the early line out — proving the default matters.
+    assert conditions.evaluate(ctx, {"log": {"tail": 5, "matches": "Prelaunching AutoModpack"}}) is False
+
+
+def test_log_not_matches_and_matches_all_any(make_ctx):
+    ctx = make_ctx()
+    ctx.logs_provider = lambda which, tail=None: _LOGS
+    assert conditions.evaluate(ctx, {"log": {"not_matches": "NoSuchThing"}}) is True
+    assert conditions.evaluate(ctx, {"log": {"not_matches": "ClassNotFoundException"}}) is False
+    assert conditions.evaluate(
+        ctx, {"log": {"matches_all": ["Prelaunching AutoModpack", "prelaunched"]}}
+    ) is True
+    assert conditions.evaluate(
+        ctx, {"log": {"matches_all": ["Prelaunching AutoModpack", "absent"]}}
+    ) is False
+    assert conditions.evaluate(ctx, {"log": {"matches_any": ["absent", "prelaunched"]}}) is True
+
+
+def test_log_count_quantifiers(make_ctx):
+    ctx = make_ctx()
+    ctx.logs_provider = lambda which, tail=None: "hit\nmiss\nhit\nhit\n"
+    assert conditions.evaluate(ctx, {"log": {"matches": "hit", "count": 3}}) is True
+    assert conditions.evaluate(ctx, {"log": {"matches": "hit", "count": 2}}) is False
+    assert conditions.evaluate(ctx, {"log": {"matches": "hit", "min_count": 3}}) is True
+    assert conditions.evaluate(ctx, {"log": {"matches": "hit", "max_count": 2}}) is False
+
+
+def test_log_requires_a_matcher(make_ctx):
+    ctx = make_ctx()
+    ctx.logs_provider = lambda which, tail=None: ""
+    with pytest.raises(ValueError):
+        conditions.evaluate(ctx, {"log": {"container": "client"}})
+
+
+def test_log_file_target_reads_game_dir_artifact(make_ctx):
+    ctx = make_ctx()
+    debug = ctx.game_dir / "logs" / "debug.log"
+    debug.parent.mkdir(parents=True, exist_ok=True)
+    debug.write_text("Mixin: Added class metadata for Workarounds$Reference\n")
+    cond = {"log": {"file": "logs/debug.log", "matches": r"Added class metadata for \S+Reference"}}
+    assert conditions.evaluate(ctx, cond) is True
+    # Missing file is empty, not an error.
+    assert conditions.evaluate(ctx, {"log": {"file": "logs/missing.log", "matches": "x"}}) is False
+
+
+# ── server_host / host transport ──────────────────────────────────────────
+
+
+def test_server_host_overrides_namespace(make_ctx):
+    ctx = make_ctx(server_host="127.0.0.1")
+    assert ctx.resolve("${server.host}") == "127.0.0.1"
+    # Falls back to the container name when unset (bridge transport).
+    assert make_ctx().resolve("${server.host}") == "srv-container"

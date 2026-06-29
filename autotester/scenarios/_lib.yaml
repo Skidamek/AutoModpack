@@ -81,6 +81,17 @@ restart_client:
   - do: wait_client_exit
     name: wait for the client to close
 
+# Offline / client-only boot: pre-stage a modpack into the client game dir and
+# launch just the client (no server, no certificate/download dance). Use in
+# `mode: client-only` scenarios that assert on the launch log. Deliberately omits
+# `wait_bridge` so it stays usable for "loaded then crashed" flows that never
+# reach a steady GUI — add it yourself if your assertions drive the GUI.
+boot_client_only:
+  - do: stage_modpack
+    name: pre-stage the modpack into the client game dir
+  - do: launch_client
+    name: start the client against the pre-staged modpack
+
 # Relaunch the client and play through to in-game (used to confirm a synced modpack loads).
 rejoin:
   - do: launch_client

@@ -33,6 +33,9 @@ class Context:
     marker_rel: Path
     scenario_files: list  # list[(Path, str)]
     expected_mods: list
+    # Address the client uses to reach the server. On bridge networking this is
+    # the server container name; on host networking it's localhost.
+    server_host: str | None = None
     vars: dict = field(default_factory=dict)
     bridge: BridgeClient | None = None
     # Injected by the runner so the engine stays decoupled from Docker.
@@ -44,7 +47,7 @@ class Context:
     def namespace(self) -> dict:
         return {
             "target": self.target,
-            "server": {"host": self.srv_name, "port": 25565},
+            "server": {"host": self.server_host or self.srv_name, "port": 25565},
             "client": {"game_dir": str(self.game_dir)},
             "modpack": self.modpack_name,
             "modpack_dir": f"automodpack/modpacks/{self.modpack_name}",

@@ -54,9 +54,48 @@ def _wait_client_exit(ctx, step):
     assert ctx.bridge.exited, "client did not exit after restart"
 
 
+@verb("wait_exit")
+def _wait_exit(ctx, step):
+    pass
+
+
+@verb("stage_modpack")
+def _stage_modpack(ctx, step):
+    pass
+
+
 @verb("wait_join")
 def _wait_join(ctx, step):
     assert ctx.gui().get("screenClass") is None, "player never reached in-game"
+
+
+# The verb registry is a process-global; importing the runner elsewhere in the
+# suite (e.g. tests/test_meta.py) registers the *real* Docker lifecycle verbs and
+# clobbers the stubs above. Re-install the stubs before each flow test so these
+# tests are independent of module import order.
+_STUBS = {
+    "launch_server": _noop, "wait_server": _noop,
+    "launch_client": _launch_client, "wait_bridge": _wait_bridge,
+    "connect": _connect, "quit": _quit, "disconnect": _disconnect,
+    "wait_client_exit": _wait_client_exit, "wait_exit": _wait_exit,
+    "stage_modpack": _stage_modpack, "wait_join": _wait_join,
+}
+
+
+@pytest.fixture(autouse=True)
+def _use_stub_verbs():
+    from automodpack_autotester.engine.registry import VERBS
+
+    saved = {name: VERBS.get(name) for name in _STUBS}
+    VERBS.update(_STUBS)
+    try:
+        yield
+    finally:
+        for name, fn in saved.items():
+            if fn is None:
+                VERBS.pop(name, None)
+            else:
+                VERBS[name] = fn
 
 
 # ── helpers ───────────────────────────────────────────────────────────────

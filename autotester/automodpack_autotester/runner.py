@@ -12,7 +12,7 @@ from pathlib import Path
 import docker as docker_py
 
 from .bridge import BridgeClient
-from .config import Target, load_macros, parse_server_files
+from .config import REPO_ROOT, Target, load_macros, parse_server_files
 from .engine import ClientExited, Context, run_flow
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -79,9 +79,16 @@ def _run_container(name, image, network, env, mounts, command=None, user=None, e
     for host, container_path, readonly in mounts:
         volumes[str(host)] = {"bind": container_path, "mode": "ro" if readonly else "rw"}
     kwargs = dict(
-        image=image, detach=True, name=name, network=network,
+        image=image, detach=True, name=name,
         environment=dict(env), volumes=volumes, command=command, user=user,
     )
+    # "host" is a network *mode*, not a user-defined network: server and client
+    # share the host's network namespace (so the client reaches the server on
+    # localhost). This is the only topology a --network-host-only sandbox allows.
+    if network == "host":
+        kwargs["network_mode"] = "host"
+    else:
+        kwargs["network"] = network
     if entrypoint is not None:
         kwargs["entrypoint"] = entrypoint
     return _docker.containers.run(**kwargs)
@@ -142,6 +149,33 @@ def _load_ver(t):
 
 def _bridge_state(ctx: Context) -> Path:
     return ctx.game_dir / "automodpack" / "autotest" / "bridge-state.json"
+
+
+def _exit_code(name) -> int | None:
+    try:
+        return _inspect_container(name).get("State", {}).get("ExitCode")
+    except docker_py.errors.NotFound:
+        return None
+
+
+def transport(scenario: dict, settings: dict) -> str:
+    """How containers talk: ``bridge`` (CI default) or ``host`` (constrained envs).
+
+    Decoupled from flow logic, so the same scenario runs either way. Precedence:
+    scenario ``network:`` > settings ``network:`` / ``run.network:`` > ``bridge``.
+    """
+    val = (
+        scenario.get("network")
+        or settings.get("network")
+        or settings.get("run", {}).get("network")
+        or "bridge"
+    )
+    return str(val).lower()
+
+
+def scenario_mode(scenario: dict) -> str:
+    """``full`` (server + client) or ``client-only`` (pre-staged, no server)."""
+    return str(scenario.get("mode", "full")).lower()
 
 
 # ── server / client setup ─────────────────────────────────────────────────
@@ -332,7 +366,7 @@ def _v_wait_bridge(ctx: Context, step):
 
 @verb("connect")
 def _v_connect(ctx: Context, step):
-    host = ctx.resolve(step.get("host") or ctx.srv_name)
+    host = ctx.resolve(step.get("host") or ctx.server_host or ctx.srv_name)
     port = int(step.get("port", 25565))
     timeout = parse_duration(step.get("timeout"), default=90)
     deadline = time.monotonic() + timeout
@@ -373,10 +407,26 @@ def _v_quit(ctx: Context, step):
         pass
 
 
-@verb("wait_client_exit")
+@verb("wait_exit", "wait_client_exit")
 def _v_wait_client_exit(ctx: Context, step):
+    """Wait for the client container to exit, optionally asserting *how* it exited.
+
+    ``expect:`` makes "loaded then crashed/idled" a first-class outcome:
+      any   (default) — exited for any reason; don't judge the code
+      clean — exit code 0
+      crash — non-zero exit code
+    The ``timeout`` wrapper around the client exits 124, which counts as a crash.
+    """
     timeout = parse_duration(step.get("timeout"), default=90)
     _wait_exited(ctx.cli_name, timeout=timeout)
+    expect = str(step.get("expect", "any")).lower()
+    if expect == "any":
+        return
+    code = _exit_code(ctx.cli_name)
+    if expect == "clean" and code not in (0, None):
+        raise AssertionError(f"expected clean client exit, got exit code {code}")
+    if expect == "crash" and code in (0, None):
+        raise AssertionError(f"expected client crash, got exit code {code}")
 
 
 @verb("wait_join")
@@ -393,6 +443,77 @@ def _v_wait_join(ctx: Context, step):
     )
 
 
+@verb("stage_modpack")
+def _v_stage_modpack(ctx: Context, step):
+    """Pre-stage a modpack into the client game dir for offline / client-only runs.
+
+    Lays down ``automodpack/modpacks/<name>/`` and writes a client config that
+    selects it with ``updateSelectedModpackOnLaunch=false``, so the client loads
+    the staged modpack on boot without ever contacting a server. Run this before
+    ``launch_client`` in a ``mode: client-only`` scenario.
+
+    Args: ``from`` (a ready modpack dir to copy wholesale, path relative to the
+    repo root), ``mods`` (extra jars to drop into the pack's ``mods/``), and
+    ``config`` (extra client-config overrides).
+    """
+    game = ctx.game_dir
+    root = game / "automodpack" / "modpacks" / ctx.modpack_name
+    root.mkdir(parents=True, exist_ok=True)
+
+    src = step.get("from")
+    if src:
+        src_path = Path(ctx.resolve(str(src)))
+        if not src_path.is_absolute():
+            src_path = REPO_ROOT / src_path
+        src_path = src_path.resolve()
+        if not src_path.is_dir():
+            raise FileNotFoundError(f"stage_modpack 'from' is not a directory: {src_path}")
+        shutil.copytree(src_path, root, dirs_exist_ok=True)
+
+    # Always (re)write the scenario's declared serverFiles + marker into the pack.
+    (root / ctx.marker_rel).parent.mkdir(parents=True, exist_ok=True)
+    (root / ctx.marker_rel).write_text(json.dumps({"marker": ctx.modpack_name}) + "\n")
+    for rel, content in ctx.scenario_files:
+        f = root / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(content)
+
+    mods = [str(m) for m in (step.get("mods") or [])]
+    if mods:
+        (root / "mods").mkdir(parents=True, exist_ok=True)
+        for m in mods:
+            mp = Path(ctx.resolve(m))
+            if not mp.is_absolute():
+                mp = REPO_ROOT / mp
+            mp = mp.resolve()
+            if not mp.is_file():
+                raise FileNotFoundError(f"stage_modpack mod not found: {mp}")
+            shutil.copy2(mp, root / "mods" / mp.name)
+
+    # A client config that selects the staged pack and disables the launch update,
+    # so Preload loads it locally (no server contact, no file reconciliation). The
+    # installedModpacks entry needs a non-null host address or Preload self-updates
+    # instead of loading; the address is never dialed when update-on-launch is off.
+    host = ctx.server_host or "127.0.0.1"
+    addr = host if ":" in host else f"{host}:25565"
+    cfg = {
+        "DO_NOT_CHANGE_IT": 2,
+        "selectedModpack": ctx.modpack_name,
+        "updateSelectedModpackOnLaunch": False,
+        "installedModpacks": {
+            ctx.modpack_name: {
+                "hostAddress": addr,
+                "serverAddress": addr,
+                "requiresMagic": False,
+            }
+        },
+    }
+    cfg.update(ctx.resolve(step.get("config", {}) or {}))
+    amp = game / "automodpack"
+    amp.mkdir(parents=True, exist_ok=True)
+    (amp / "automodpack-client.json").write_text(json.dumps(cfg, indent=2))
+
+
 # ── case orchestration ────────────────────────────────────────────────────
 
 
@@ -407,12 +528,17 @@ def run_case(
 ) -> dict:
     started = time.monotonic()
     scenario_id = scenario.get("id", "?")
+    net_mode = transport(scenario, settings)
+    mode = scenario_mode(scenario)
     case_dir = out_dir / f"{target.id}-{int(time.time())}-{secrets.token_hex(3)}"
     server_dir = case_dir / "server"
     game_dir = case_dir / "client" / "game"
-    net_name = f"amp-{secrets.token_hex(4)}"[:63]
+    # On host networking the two containers share the host namespace, so there is
+    # no user-defined network to create and the client reaches the server locally.
+    net_name = "host" if net_mode == "host" else f"amp-{secrets.token_hex(4)}"[:63]
     srv_name = f"amp-s-{secrets.token_hex(4)}"[:63]
     cli_name = f"amp-c-{secrets.token_hex(4)}"[:63]
+    server_host = "127.0.0.1" if net_mode == "host" else srv_name
     token = secrets.token_hex(16)
 
     for d in (server_dir, game_dir):
@@ -445,6 +571,7 @@ def run_case(
             marker_rel=sf.marker,
             scenario_files=sf.files,
             expected_mods=sf.expected_mods,
+            server_host=server_host,
             vars=dict(scenario.get("vars", {}) or {}),
         )
         ctx.logs_provider = lambda which, tail=None: _container_logs(
@@ -459,8 +586,11 @@ def run_case(
 
         ctx.running_provider = _running
 
-        _prepare_server(ctx)
-        _ensure_network(net_name)
+        # Client-only (pre-staged) runs never launch a server; full runs do.
+        if mode != "client-only":
+            _prepare_server(ctx)
+        if net_name != "host":
+            _ensure_network(net_name)
 
         run_flow(ctx, scenario, lib=load_macros(), results=step_results)
 
@@ -494,4 +624,5 @@ def run_case(
                 _remove_container(name)
             except Exception:
                 logger.warning("Failed to remove container %s", name)
-        _remove_network(net_name)
+        if net_name != "host":
+            _remove_network(net_name)
