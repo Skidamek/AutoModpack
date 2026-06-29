@@ -9,9 +9,6 @@ on:
       target:
         description: "Target ID (or 'all')"
         default: "all"
-      jobs:
-        description: "Parallel runs"
-        default: "1"
 
 jobs:
   prepare:
@@ -79,8 +76,9 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.2.0
+      # No uv/checkout here: aggregation runs on the stdlib `python3` that
+      # ubuntu-latest ships with. Adding setup-uv without a checkout only
+      # produced "no cache-dependency file matched" / "empty workdir" warnings.
       - uses: actions/download-artifact@v8
         with:
           pattern: autotester-*
@@ -89,6 +87,29 @@ jobs:
         run: |
           cat > /tmp/aggregate.py << 'PYEOF'
           import json, glob, os
+
+          def headline(err):
+              # First line only, with the "--- logs ---" tail stripped: safe for
+              # one-line contexts (table cells, annotation titles).
+              err = (err or "").split("\n--- logs ---", 1)[0].strip()
+              line = err.splitlines()[0] if err else ""
+              return line or "unknown error"
+
+          def cell(text, limit=180):
+              # Collapse to a single line and escape pipes so a multi-line error
+              # can't shatter the markdown table.
+              text = " ".join((text or "").split()).replace("|", "\\|")
+              return (text[: limit - 1] + "…") if len(text) > limit else text
+
+          def gha(msg):
+              # Escape a (possibly multi-line) message for a workflow command.
+              return (msg or "").replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          def gha_prop(val):
+              # Property values additionally escape ',' and ':' (else a comma in
+              # the title starts a bogus property and mangles the annotation).
+              return gha(val).replace(",", "%2C").replace(":", "%3A")
+
           results = []
           for f in sorted(glob.glob("**/results.json", recursive=True)):
               try:
@@ -102,10 +123,11 @@ jobs:
           passed = sum(1 for r in results if r.get("ok"))
           any_ok = passed == total
 
-          for r in results:
-              if not r.get("ok"):
-                  err = r.get("error", "unknown error")
-                  print(f"::error title={r['target']}::{err}")
+          fails = [r for r in results if not r.get("ok")]
+          for r in fails:
+              err = r.get("error", "unknown error")
+              # Title stays single-line; full (escaped) error goes in the message.
+              print(f"::error title={gha_prop(headline(err))}::{gha(err)}")
 
           summary = {"ok": any_ok, "total": total, "passed": passed, "failed": total - passed, "results": results}
           with open("aggregated.json", "w") as f:
@@ -118,8 +140,17 @@ jobs:
           for r in results:
               status = "✅" if r.get("ok") else "❌"
               dur = f"{r.get('duration', 0):.1f}s" if "duration" in r else "-"
-              err = r.get("error", "") if not r.get("ok") else ""
+              err = cell(headline(r.get("error"))) if not r.get("ok") else ""
               md += f"| {status} | {r['target']} | {dur} | {err} |\n"
+
+          if fails:
+              md += "\n### Failure details\n"
+              for r in fails:
+                  err = (r.get("error") or "unknown error").replace("```", "ʼʼʼ")
+                  md += (
+                      f"\n<details><summary>{r['target']}</summary>\n\n"
+                      f"```\n{err.strip()}\n```\n\n</details>\n"
+                  )
 
           with open("summary.md", "w") as f:
               f.write(md)

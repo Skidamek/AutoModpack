@@ -313,7 +313,10 @@ def _v_wait_bridge(ctx: Context, step):
             _assert_running(ctx.cli_name)
         except RuntimeError as e:
             logs = _container_logs(ctx.cli_name)
-            raise TimeoutError(f"Client exited before bridge: {e}\n--- logs ---\n{logs[-2000:]}")
+            # Keep whole trailing lines (not a mid-line byte slice) so the crash
+            # tail — including the exception header — stays readable.
+            tail = "\n".join(logs.splitlines()[-80:])
+            raise TimeoutError(f"Client exited before bridge: {e}\n--- logs ---\n{tail}")
         try:
             sf = _bridge_state(ctx)
             if sf.exists():

@@ -63,6 +63,9 @@ public class Common {
         modpackExecutor.stop();
     }
 
+    // <1.19.2 has no Identifier factory, only the deprecated-for-removal
+    // two-arg constructor, so suppress the unavoidable removal warning there.
+    @SuppressWarnings("removal")
     public static Identifier id(String path) {
         /*? if >=1.21.11 {*/
         return Identifier.tryBuild(MOD_ID, path);
