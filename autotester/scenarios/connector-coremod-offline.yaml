@@ -1,0 +1,74 @@
+id: connector-coremod-offline
+description: |
+  Offline / client-only proof that Sinytra Connector - which ships an ICoreMod (a coremod),
+  an IModFileCandidateLocator and an IDependencyLocator, and loads Fabric mods - runs straight
+  from AutoModpack's modpack folder, with NO copy into the standard mods/ directory.
+
+  This is the hard case the GraphicsBootstrapper trick alone couldn't reach. Connector's
+  coremod transformers are collected by FML's transformers() pass, which runs AFTER our locator
+  has injected the modpack jars into mod discovery and scans the GAME layer - so the ICoreMod
+  is found on the game-library copy we add (services stripped except ICoreMod). The copy also
+  carries the outer jar's classes (e.g. ConnectorEarlyLoader) onto the GAME layer, which the
+  inner Connector mod runtime-references via its mixin plugin - the NoClassDefFoundError that
+  previously forced Connector down the copy-to-standard path.
+
+  Staged together: Connector, Forgified Fabric API + Kotlin-for-Forge (Connector's hard deps),
+  Connector Extras, and explosive-enhancement (a Fabric mod loaded *through* Connector).
+  Crash-tolerant: headless software GL may kill the client at the first frame, after load.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientRunSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage Connector + deps + a Connector-loaded Fabric mod into the modpack folder
+    mods:
+      - url: https://cdn.modrinth.com/data/u58R1TMW/versions/1i8teo7m/connector-2.0.0-beta.14%2B1.21.1-full.jar
+        sha512: 6ed3168c2c7dad2606ada1fdf63ee412bb8bb5620718a702f6ac51310e671f2f93ab46fc96400e258f4433e51b96f9dd21441e1a8963d8b356c75b578e156dcc
+      - url: https://cdn.modrinth.com/data/Aqlf1Shp/versions/7nHK7hMg/forgified-fabric-api-0.116.7%2B2.2.4%2B1.21.1.jar
+        sha512: 858acb32a79e7ed1f37472bd7c50e3d2f47c7d7f6e734a8cece3800eb30d565a09580c261778ea73a0ae25e10e9eb9b16866012fe61d24f671b0ffe3ae2377dd
+      - url: https://cdn.modrinth.com/data/ordsPcFz/versions/uhJhCT7X/kotlinforforge-5.12.0-all.jar
+        sha512: b8c3942f4d33179edf3f102f3d870b99dd436f8b8236dbbd31aa51b888162c692cfd88927295f24dc8b4375232f4c6c17360c5d6c4823f93cbcd7cf4bdc8bd14
+      - url: https://cdn.modrinth.com/data/FYpiwiBR/versions/dgLCqZyo/ConnectorExtras-1.12.1%2B1.21.1.jar
+        sha512: ff9fc5d48a81e820c8c26b8a045e0ab7a3b0e9b5eaee7369b2eadb3f93d7eb423255073dfc327d131cb667df93be066560f3704b4cc8a12b07486b98a12bad1d
+      - url: https://cdn.modrinth.com/data/OSQ8mw2r/versions/LEeJnb8j/explosive-enhancement-1.3.2-1.21-1.21.1.jar
+        sha512: 57692e93c1c8b331884c63e213e3dac5cb19ce2f3bf818f6db1c2cbcdff1d1b8a5ea107f01c6bca79882962df6cf8332a96c5e1adda864345371faff7a6d747a
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  - do: wait_for
+    name: Connector loaded in place, its coremod ran, and the Fabric mod loaded through it
+    timeout: 600s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'Bootstrapping \d+ early-service'
+          # the outer jar's classes reach the GAME layer (ConnectorEarlyLoader etc.)
+          - 'Built game-library copy of connector'
+          # AutoModpack's ICoreMod forwards Connector's coremod transformers from the SERVICE
+          # layer - this is what makes Connector's own mixins apply in place
+          - 'Forwarding \d+ transformer.*ConnectorCoremods'
+          # the Connector-loaded Fabric mod ends up in the final mod list
+          - 'Explosive Enhancement.*\(explosiveenhancement\)'
+  - do: wait_exit
+    name: tolerate the client exiting (headless GL/audio) or staying alive
+    expect: any
+    or_alive: true
+    timeout: 60s
+  - do: assert
+    name: Connector fully initialised in place - no CNF and no failed coremod/mixin apply
+    that:
+      log:
+        container: client
+        not_matches:
+          # the original blocker: inner mod couldn't see the outer jar's classes in place
+          - 'NoClassDefFoundError.*ConnectorEarlyLoader'
+          - 'ClassNotFoundException.*ConnectorEarlyLoader'
+          # if Connector's coremod didn't run, its own mixins (e.g. KeyMappingMixin) fail here
+          - 'Mixin apply for mod connector failed'

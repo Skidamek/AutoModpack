@@ -21,6 +21,38 @@ public class EarlyModLocator implements IModFileCandidateLocator {
         progress.complete();
 
         for (Path path : ModpackLoader.modsToLoad) {
+            // Early-service jars (e.g. Sodium) were placed on a child SERVICE layer and
+            // their GraphicsBootstrappers already fired. Their real mod lives in an inner
+            // jar that their own candidate locator loads; the outer jar must NOT be added
+            // as a mod here (it would duplicate the real mod's id), mirroring how the
+            // loader skips SERVICE-layer jars during normal discovery.
+            if (EarlyServiceLayer.isEarlyServiceJar(path)) {
+                boolean coremod = EarlyServiceLayer.isCoremodJar(path);
+                if (coremod && EarlyServiceLayer.isStandaloneModFile(path)) {
+                    // A jar that ships a coremod AND is itself a mod (root neoforge.mods.toml) -
+                    // a regular mod with an inline coremod. Its coremod transformers are forwarded
+                    // by AutoModpackCoreMod (it was registered on the child SERVICE layer at
+                    // bootstrap); the mod loads here as its real self, mods.toml intact. A stripped
+                    // library copy would gut that mods.toml, so it must not be used here.
+                    pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
+                    pipeline.readModFile(JarContents.of(path), ModFileDiscoveryAttributes.DEFAULT);
+                } else if (!coremod) {
+                    // The inner mod references classes from the outer jar (and Mixin reads them
+                    // as resources). Natively those resolve because the outer jar is on the
+                    // SERVICE layer, an ancestor of GAME; our child layer is only a sibling. Add
+                    // a stripped, library-typed copy of the outer jar to the GAME layer so the
+                    // inner mod can resolve them in place.
+                    EarlyServiceLayer.addLibraryCopy(path, pipeline);
+                }
+                // A non-standalone coremod jar (e.g. Sinytra Connector) runs its own dependency
+                // locator + a ForgeModPackageFilter that strips its own packages from every mod
+                // file already in the discovery set. Adding its copy now would feed it to that
+                // filter and gut it, so that copy is added later, from LazyModLocator, once the
+                // coremod's locator has finished.
+                EarlyServiceLayer.runCandidateLocators(path, context, pipeline);
+                continue;
+            }
+
             pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
             pipeline.readModFile(JarContents.of(path), ModFileDiscoveryAttributes.DEFAULT);
         }

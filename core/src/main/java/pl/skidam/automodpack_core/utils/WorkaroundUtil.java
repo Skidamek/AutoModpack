@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
 
+import static pl.skidam.automodpack_core.Constants.MODPACK_LOADER;
+
 public class WorkaroundUtil {
 
     public final Path modpackPath;
@@ -28,13 +30,35 @@ public class WorkaroundUtil {
             return workaroundMods;
         }
 
+        // Services this loader can run straight from the modpack folder (fire the
+        // GraphicsBootstrapper / run the locators in place, or rely on the GAME layer for
+        // language loaders). A mod shipping only these never needs the copy-to-standard
+        // workaround - and crucially we decide this statically, before the early-service
+        // bootstrapper runs, so the mod is never copied in the first place (a copied mod
+        // would shadow in-place loading forever, since the loader defers to standard mods/).
+        Set<String> handleableServices = MODPACK_LOADER == null ? Set.of() : MODPACK_LOADER.inPlaceHandleableServices();
+
         for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
             if (item.type.equals("mod")) {
                 Path modPath = SmartFileUtils.getPath(modpackPath, item.file);
+
                 try (FileSystem fs = FileSystems.newFileSystem(modPath)) {
-                    if (FileInspection.hasSpecificServices(fs)) {
-                        workaroundMods.add(item.file);
+                    Set<String> services = FileInspection.getSpecificServices(fs);
+
+                    // Not a service mod (or no services at all): AutoModpack loads it from
+                    // the modpack folder normally, no workaround needed.
+                    if (services.isEmpty()) {
+                        continue;
                     }
+
+                    // Every service it ships can be handled in place -> leave it in the
+                    // modpack folder. Otherwise it ships something we can't host in place
+                    // (e.g. a transformation service), so fall back to copy-to-standard.
+                    if (handleableServices.containsAll(services)) {
+                        continue;
+                    }
+
+                    workaroundMods.add(item.file);
                 }
             }
         }
