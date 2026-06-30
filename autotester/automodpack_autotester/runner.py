@@ -13,6 +13,7 @@ import docker as docker_py
 
 from .bridge import BridgeClient
 from .config import REPO_ROOT, Target, load_macros, parse_server_files
+from .mods import resolve_mod
 from .engine import ClientExited, Context, run_flow
 from .engine.registry import verb
 from .engine.util import await_condition, parse_duration
@@ -474,8 +475,10 @@ def _v_stage_modpack(ctx: Context, step):
     ``launch_client`` in a ``mode: client-only`` scenario.
 
     Args: ``from`` (a ready modpack dir to copy wholesale, path relative to the
-    repo root), ``mods`` (extra jars to drop into the pack's ``mods/``), and
-    ``config`` (extra client-config overrides).
+    repo root), ``mods`` (extra jars to drop into the pack's ``mods/`` - each a
+    repo-relative path or a pinned ``{url, sha512}`` remote jar, see
+    :mod:`automodpack_autotester.mods`), and ``config`` (extra client-config
+    overrides).
     """
     game = ctx.game_dir
     root = game / "automodpack" / "modpacks" / ctx.modpack_name
@@ -499,16 +502,11 @@ def _v_stage_modpack(ctx: Context, step):
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(content)
 
-    mods = [str(m) for m in (step.get("mods") or [])]
+    mods = step.get("mods") or []
     if mods:
         (root / "mods").mkdir(parents=True, exist_ok=True)
         for m in mods:
-            mp = Path(ctx.resolve(m))
-            if not mp.is_absolute():
-                mp = REPO_ROOT / mp
-            mp = mp.resolve()
-            if not mp.is_file():
-                raise FileNotFoundError(f"stage_modpack mod not found: {mp}")
+            mp = resolve_mod(m, ctx.resolve)
             shutil.copy2(mp, root / "mods" / mp.name)
 
     # A client config that selects the staged pack and disables the launch update,
