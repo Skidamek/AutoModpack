@@ -110,7 +110,7 @@ public class Preload {
         MODPACK_LOADER = new ModpackLoader();
         MC_VERSION = LOADER_MANAGER.getModVersion("minecraft");
         LOADER_VERSION = LOADER_MANAGER.getLoaderVersion();
-        LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
+        LOADER = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
         THIS_MOD_JAR = JarUtils.getJarPath(this.getClass());
         AM_VERSION = FileInspection.getModVersion(THIS_MOD_JAR);
         MODS_DIR = THIS_MOD_JAR.getParent();
@@ -235,7 +235,7 @@ public class Preload {
 
         try {
             Files.createDirectories(privateDir);
-            String os = System.getProperty("os.name").toLowerCase();
+            String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
             try {
                 if (os.contains("win")) {
                     Files.setAttribute(privateDir, "dos:hidden", true);

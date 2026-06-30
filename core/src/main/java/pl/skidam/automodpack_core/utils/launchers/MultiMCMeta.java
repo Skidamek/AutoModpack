@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import pl.skidam.automodpack_core.Constants;
 
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Map;
 
 // MultiMC and forks like Prism and forks of forks like Fjord etc.
@@ -21,7 +22,7 @@ public class MultiMCMeta {
     );
 
     public static boolean updateLoaderVersion(String loaderType, String newVersion) {
-        String targetUid = LOADER_UID_MAP.get(loaderType.toLowerCase());
+        String targetUid = LOADER_UID_MAP.get(loaderType.toLowerCase(Locale.ROOT));
         if (targetUid == null) return false;
 
         return LauncherVersionSwapper.modifyJson(MMC_PACK_PATH, json -> {

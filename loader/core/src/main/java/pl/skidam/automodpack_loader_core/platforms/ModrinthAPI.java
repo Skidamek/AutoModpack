@@ -8,6 +8,7 @@ import pl.skidam.automodpack_core.utils.Json;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
@@ -25,7 +26,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
             return null;
         }
 
-        String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
+        String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
         String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + MC_VERSION + "\"]";
         requestUrl = requestUrl.replaceAll("\"", "%22"); // so important!
 
@@ -73,7 +74,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
             return null;
         }
 
-        String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
+        String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
         String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + mcVersion + "\"]";
         requestUrl = requestUrl.replaceAll("\"", "%22"); // important!
 
