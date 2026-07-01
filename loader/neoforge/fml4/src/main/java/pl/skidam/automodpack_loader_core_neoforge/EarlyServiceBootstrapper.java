@@ -124,6 +124,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
      */
     private void bootstrapJar(Path jar, ModuleLayer serviceLayer, String[] arguments) {
         ClassLoader serviceClassLoader;
+        ModuleLayer childLayer;
         try {
             SecureJar secureJar = SecureJar.from(jar);
             String moduleName = secureJar.name();
@@ -142,7 +143,9 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             // verifies it is "LAYER SERVICE", "TRANSFORMER" or "FML Early Services").
             ModuleClassLoader classLoader = new ModuleClassLoader("FML Early Services", configuration, parentLayers);
             classLoader.setFallbackClassLoader(getClass().getClassLoader());
-            ModuleLayer.defineModules(configuration, List.of(serviceLayer), name -> classLoader);
+            // Keep the child layer: the GAME-layer bridge needs its module(s) to wire up JPMS read
+            // edges (game <-> child), not just the classloader routing.
+            childLayer = ModuleLayer.defineModules(configuration, List.of(serviceLayer), name -> classLoader).layer();
 
             serviceClassLoader = classLoader;
         } catch (Throwable t) {
@@ -154,7 +157,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
         // Register before firing so the locator phase (and the GAME-layer bridge) can find the
         // classloader even if a bootstrapper throws.
-        EarlyServiceLayer.register(jar, serviceClassLoader);
+        EarlyServiceLayer.register(jar, serviceClassLoader, childLayer);
 
         for (String impl : EarlyServiceLayer.serviceImpls(jar, EarlyServiceLayer.GRAPHICS_BOOTSTRAPPER_SERVICE)) {
             try {

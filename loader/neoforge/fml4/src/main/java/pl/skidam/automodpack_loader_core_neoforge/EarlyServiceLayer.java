@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
+import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 import net.neoforged.fml.loading.FMLLoader;
@@ -127,12 +128,18 @@ public final class EarlyServiceLayer {
     // holds its early-service classes. Populated by EarlyServiceBootstrapper.
     private static final Map<Path, ClassLoader> JAR_CLASSLOADERS = new ConcurrentHashMap<>();
 
+    // Maps each handled modpack jar to its child SERVICE module layer, so the GAME-layer bridge
+    // can wire up JPMS read edges between the child module(s) and the GAME modules.
+    private static final Map<Path, ModuleLayer> JAR_LAYERS = new ConcurrentHashMap<>();
+
     // The GAME-layer bridge must run exactly once, from the injected launch plugin's
     // initializeLaunch (see EarlyServiceBridgePlugin), before Mixin loads any outer class.
     private static final AtomicBoolean GAME_BRIDGE_DONE = new AtomicBoolean(false);
 
-    static void register(Path jar, ClassLoader serviceClassLoader) {
-        JAR_CLASSLOADERS.put(canonical(jar), serviceClassLoader);
+    static void register(Path jar, ClassLoader serviceClassLoader, ModuleLayer childLayer) {
+        Path key = canonical(jar);
+        JAR_CLASSLOADERS.put(key, serviceClassLoader);
+        if (childLayer != null) JAR_LAYERS.put(key, childLayer);
     }
 
     public static boolean isEarlyServiceJar(Path jar) {
@@ -426,6 +433,10 @@ public final class EarlyServiceLayer {
         Map<String, ClassLoader> gameParentLoaders = ModuleClassLoaderAccess.parentLoaders(gameClassLoader);
         Map<String, Object> gamePackageLookup = ModuleClassLoaderAccess.packageLookup(gameClassLoader);
         Map<String, Object> gameResolvedRoots = ModuleClassLoaderAccess.resolvedRoots(gameClassLoader);
+        // The GAME module layer, needed to wire JPMS read edges (see linkModuleReads). Resolved from
+        // ModLauncher's layer manager, not FMLLoader.getGameLayer() - see gameLayerOrNull; null only
+        // if the layer manager is unreachable, in which case reads-linking is skipped.
+        ModuleLayer gameLayer = gameLayerOrNull();
 
         for (Map.Entry<Path, ClassLoader> entry : JAR_CLASSLOADERS.entrySet()) {
             Path jar = entry.getKey();
@@ -458,9 +469,66 @@ public final class EarlyServiceLayer {
                 // those GAME classes. This is what the game-library copy got for free by living on GAME.
                 ((cpw.mods.cl.ModuleClassLoader) childLoader).setFallbackClassLoader(gameClassLoader);
                 LOGGER.info("[AutoModpack] Bridged {} outer package(s) of {} to its early-service layer for in-place class/resource sharing", bridged, jar.getFileName());
+                // Classloader routing makes the outer classes loadable; JPMS still checks module
+                // readability at access time, so wire the read edges a real ancestor layer would give.
+                linkModuleReads(gameLayer, JAR_LAYERS.get(jar), jar);
             } catch (Throwable t) {
                 LOGGER.error("[AutoModpack] Failed to bridge {} to the GAME layer", jar.getFileName(), t);
             }
+        }
+    }
+
+    /**
+     * Wires JPMS read edges both ways between the GAME layer and a bridged jar's child SERVICE layer:
+     * every GAME module reads every child module - so an inner mod (e.g. Connector's {@code connector}
+     * module) can access an outer class ({@code org.sinytra.connector.ConnectorEarlyLoader}) - and
+     * every child module reads every GAME module - so an outer class can access {@code net.minecraft.*}.
+     *
+     * <p>Natively loader resolution establishes these edges across the SERVICE-&gt;GAME parent boundary
+     * (the inner mod's module {@code requires} the outer one, resolved because the outer sits on an
+     * ancestor layer). Our child layer is only a <em>sibling</em> of GAME, so no edge forms and the
+     * inner mod fails with {@code IllegalAccessError: module connector does not read module
+     * org.sinytra.connector}. It surfaces when {@code ImmediateWindowHandler.acceptGameLayer} runs
+     * {@code updateModuleReads} (both the real {@code DisplayWindow} and the headless
+     * {@code DummyProvider} do this, force-loading mixin-plugin classes) - i.e. on any client launch.
+     * We add the edges broadly rather than by {@code requires} because the inner module is often
+     * automatic (no {@code requires} to key off); a read edge only grants access, so this cannot break
+     * anything - it only prevents the {@code IllegalAccessError}.
+     */
+    private static void linkModuleReads(ModuleLayer gameLayer, ModuleLayer childLayer, Path jar) {
+        if (gameLayer == null || childLayer == null) return;
+        java.util.Set<Module> gameModules = gameLayer.modules();
+        java.util.Set<Module> childModules = childLayer.modules();
+        for (Module child : childModules) {
+            for (Module game : gameModules) {
+                ModuleClassLoaderAccess.addReads(game, child); // inner mod -> outer class
+                ModuleClassLoaderAccess.addReads(child, game); // outer class -> minecraft/neoforge
+            }
+        }
+        LOGGER.info("[AutoModpack] Linked JPMS module reads for {}: {} child module(s) <-> {} game module(s)",
+                jar.getFileName(), childModules.size(), gameModules.size());
+    }
+
+    /**
+     * The GAME {@code ModuleLayer} at the bridge (announceLaunch) phase. We deliberately do NOT use
+     * {@code FMLLoader.getGameLayer()}: FML only publishes that in {@code beforeStart}, which runs
+     * <em>after</em> our launch plugin's {@code initializeLaunch}, so it is still null here (its
+     * {@code updateModuleReads} is in fact where the missing read edge crashes). The GAME layer does
+     * already exist though - the TransformingClassLoader is built - and ModLauncher's own
+     * {@code IModuleLayerManager} holds it, reached via {@code Launcher.INSTANCE} by plain reflection
+     * (the {@code cpw.mods.modlauncher} package is accessible; only securejarhandler needed Unsafe).
+     */
+    private static ModuleLayer gameLayerOrNull() {
+        try {
+            Object launcher = Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
+            Object managerOpt = launcher.getClass().getMethod("findLayerManager").invoke(launcher);
+            @SuppressWarnings("unchecked")
+            IModuleLayerManager manager = ((java.util.Optional<IModuleLayerManager>) managerOpt).orElse(null);
+            if (manager == null) return null;
+            return manager.getLayer(IModuleLayerManager.Layer.GAME).orElse(null);
+        } catch (Throwable ignored) {
+            // If the layer manager is not reachable, reads-linking is simply skipped.
+            return null;
         }
     }
 
