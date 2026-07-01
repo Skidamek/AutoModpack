@@ -76,6 +76,46 @@ public final class EarlyServiceLayer {
             .concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
             .collect(Collectors.toUnmodifiableSet());
 
+    // Every service the running loader version actually handles - read from the loader itself so it
+    // is exact for THIS version rather than a hand-maintained cross-version list. NeoForge's
+    // TransformerDiscovererConstants.SERVICES lists the early services it loads before mod discovery
+    // (ITransformationService, IModFileCandidateLocator, IModFileReader, IDependencyLocator,
+    // GraphicsBootstrapper, ImmediateWindowProvider - and NOT the removed IModLocator); ICoreMod and
+    // IModLanguageLoader are handled by FML outside that set. The force-copy decision counts only
+    // services in here (see ModpackLoader#knownServices, WorkaroundUtil): a service the loader does
+    // not handle - a legacy/removed SPI, or a Forge SPI file that is inert on NeoForge - cannot be
+    // fixed by copying to the standard mods/ directory either, so it must never force a copy.
+    private static final Set<String> HANDLED_SERVICES = computeHandledServices();
+
+    /** Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}. */
+    public static Set<String> knownServices() {
+        return HANDLED_SERVICES;
+    }
+
+    private static Set<String> computeHandledServices() {
+        Set<String> handled = new HashSet<>();
+        try {
+            Class<?> constants = Class.forName("net.neoforged.fml.loading.TransformerDiscovererConstants");
+            Object services = constants.getField("SERVICES").get(null);
+            if (services instanceof Set<?> names) {
+                for (Object name : names) {
+                    // SERVICES holds dotted class names (Class.getName()); a service file is the same.
+                    handled.add("META-INF/services/" + String.valueOf(name).replace('/', '.'));
+                }
+            }
+        } catch (Throwable t) {
+            // The internal constant moved/renamed on this loader version: fall back to the services we
+            // know NeoForge handles (the ones we host in place, plus the two we deliberately copy).
+            LOGGER.warn("[AutoModpack] Could not read the loader's early-service list; using the built-in fallback", t);
+            handled.addAll(HANDLEABLE_SERVICES);
+            handled.add("META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader");
+            handled.add("META-INF/services/net.neoforged.neoforgespi.earlywindow.ImmediateWindowProvider");
+        }
+        handled.add(COREMOD_SERVICE);         // ICoreMod - collected by FML's coremod pass
+        handled.add(LANGUAGE_LOADER_SERVICE); // IModLanguageLoader
+        return Set.copyOf(handled);
+    }
+
     // Maps each handled modpack jar to the classloader of the child service layer that
     // holds its early-service classes. Populated by EarlyServiceBootstrapper.
     private static final Map<Path, ClassLoader> JAR_CLASSLOADERS = new ConcurrentHashMap<>();
@@ -130,6 +170,9 @@ public final class EarlyServiceLayer {
             // Constants.LOADER is set, so we must name the live service namespace ourselves
             // (this module is always NeoForge). Forge-namespace service files are inert here.
             services = FileInspection.getSpecificServices(fs, "neoforge");
+            // Keep only what this loader version actually handles, so a legacy/removed SPI (e.g. the
+            // old IModLocator) doesn't wrongly make an otherwise in-place-able mod look unhandleable.
+            services.retainAll(knownServices());
             standalone = Files.exists(fs.getPath("META-INF/neoforge.mods.toml"));
             for (String service : ACTIVELY_RUN_SERVICES) {
                 if (Files.exists(fs.getPath(service))) {

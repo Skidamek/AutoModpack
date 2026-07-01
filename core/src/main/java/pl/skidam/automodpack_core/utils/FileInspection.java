@@ -367,12 +367,15 @@ public class FileInspection {
             TRANSFORMATION_SERVICE
     );
 
-    // The services NeoForge treats as "early" (its TransformerDiscovererConstants.SERVICES: a jar
-    // shipping any of these is put on the SERVICE layer before mod discovery), plus ICoreMod (FML
-    // collects those after discovery) and the mod-loading locators/language loaders. Every service
-    // that decides how a mod is discovered/transformed must be listed here so the copy decision
-    // never silently ignores one - a mod shipping a service AutoModpack can't host in place
-    // (see ModpackLoaderService#inPlaceHandleableServices) must fall back to copy-to-standard.
+    // The NeoForge service files AutoModpack recognises across versions: NeoForge's "early"
+    // services (its TransformerDiscovererConstants.SERVICES - a jar shipping any is put on the
+    // SERVICE layer before mod discovery), plus ICoreMod (collected after discovery), the
+    // mod-loading locators and language loaders, and the older IModLocator SPI. This is a broad,
+    // cross-version recognition set (used to tell a service mod apart from a plain mod). The
+    // force-copy decision narrows it to what the *running* loader version actually handles via
+    // ModpackLoaderService#knownServices (e.g. IModLocator is gone on 1.21.x), so a mod shipping a
+    // service this version ignores is never copied pointlessly. When no loader is present, this set
+    // is the fallback.
     private static final Set<String> NEOFORGE_SERVICES = Set.of(
             "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
             "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",

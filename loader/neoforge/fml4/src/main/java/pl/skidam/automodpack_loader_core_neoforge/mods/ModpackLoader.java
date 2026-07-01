@@ -27,6 +27,13 @@ public class ModpackLoader implements ModpackLoaderService {
     }
 
     @Override
+    public Set<String> knownServices() {
+        // The exact set THIS NeoForge version handles (read from its own TransformerDiscovererConstants).
+        // Lets the copy decision ignore services this version doesn't handle - a copy wouldn't help them.
+        return EarlyServiceLayer.knownServices();
+    }
+
+    @Override
     public void loadModpack(List<Path> modpackMods) {
         try {
             for (Path modpackMod : modpackMods) {

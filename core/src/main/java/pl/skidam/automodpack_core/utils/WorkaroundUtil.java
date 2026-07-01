@@ -37,6 +37,10 @@ public class WorkaroundUtil {
         // bootstrapper runs, so the mod is never copied in the first place (a copied mod
         // would shadow in-place loading forever, since the loader defers to standard mods/).
         Set<String> handleableServices = MODPACK_LOADER == null ? Set.of() : MODPACK_LOADER.inPlaceHandleableServices();
+        // Services THIS loader version actually handles. A mod shipping a service outside this set
+        // (a legacy/removed SPI, or an inert cross-loader SPI file) is not helped by copying it to
+        // mods/ either - the loader ignores that service there too - so it must not force a copy.
+        Set<String> handledServices = MODPACK_LOADER == null ? Set.of() : MODPACK_LOADER.knownServices();
 
         for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
             if (item.type.equals("mod")) {
@@ -45,15 +49,21 @@ public class WorkaroundUtil {
                 try (FileSystem fs = FileSystems.newFileSystem(modPath)) {
                     Set<String> services = FileInspection.getSpecificServices(fs);
 
-                    // Not a service mod (or no services at all): AutoModpack loads it from
-                    // the modpack folder normally, no workaround needed.
+                    // Consider only services the running loader version handles; drop the rest (their
+                    // presence changes nothing about how this loader loads the mod).
+                    if (!handledServices.isEmpty()) {
+                        services.retainAll(handledServices);
+                    }
+
+                    // Not a service mod, or ships nothing this loader handles: AutoModpack loads it
+                    // from the modpack folder normally, no workaround needed.
                     if (services.isEmpty()) {
                         continue;
                     }
 
                     // Every service it ships can be handled in place -> leave it in the
                     // modpack folder. Otherwise it ships something we can't host in place
-                    // (e.g. a transformation service), so fall back to copy-to-standard.
+                    // (e.g. an early window provider), so fall back to copy-to-standard.
                     if (handleableServices.containsAll(services)) {
                         continue;
                     }
