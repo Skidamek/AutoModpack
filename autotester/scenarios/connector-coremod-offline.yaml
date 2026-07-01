@@ -4,13 +4,12 @@ description: |
   an IModFileCandidateLocator and an IDependencyLocator, and loads Fabric mods - runs straight
   from AutoModpack's modpack folder, with NO copy into the standard mods/ directory.
 
-  This is the hard case the GraphicsBootstrapper trick alone couldn't reach. Connector's
-  coremod transformers are collected by FML's transformers() pass, which runs AFTER our locator
-  has injected the modpack jars into mod discovery and scans the GAME layer - so the ICoreMod
-  is found on the game-library copy we add (services stripped except ICoreMod). The copy also
-  carries the outer jar's classes (e.g. ConnectorEarlyLoader) onto the GAME layer, which the
-  inner Connector mod runtime-references via its mixin plugin - the NoClassDefFoundError that
-  previously forced Connector down the copy-to-standard path.
+  This is the hard case the GraphicsBootstrapper trick alone couldn't reach, and the one that
+  used to need a game-library copy. Now it loads with NO copy: AutoModpack's ICoreMod forwards
+  Connector's coremod transformers from the SERVICE layer, and the GAME classloader is bridged to
+  Connector's child layer for both classes (parentLoaders) and resources (resolvedRoots), with the
+  child's fallback pointed at the GAME loader so Connector's own mixin/loader classes resolve
+  net.minecraft.* - exactly what living on the GAME layer gave the copy.
 
   Staged together: Connector, Forgified Fabric API + Kotlin-for-Forge (Connector's hard deps),
   Connector Extras, and explosive-enhancement (a Fabric mod loaded *through* Connector).
@@ -49,8 +48,8 @@ flow:
         container: client
         matches_all:
           - 'Bootstrapping \d+ early-service'
-          # the outer jar's classes reach the GAME layer (ConnectorEarlyLoader etc.)
-          - 'Built game-library copy of connector'
+          # the outer jar's classes/resources reach the GAME layer via the bridge (no copy)
+          - 'Bridged \d+ outer package.*connector'
           # AutoModpack's ICoreMod forwards Connector's coremod transformers from the SERVICE
           # layer - this is what makes Connector's own mixins apply in place
           - 'Forwarding \d+ transformer.*ConnectorCoremods'

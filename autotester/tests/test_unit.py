@@ -69,6 +69,45 @@ def test_await_condition_swallows_transient_then_times_out():
     assert time.monotonic() - start < 2
 
 
+# ── wait_for fail-fast on client exit ──────────────────────────────────────
+
+
+def _log_step(marker: str, timeout: str = "30s") -> dict:
+    return {"until": {"log": {"container": "client", "matches_all": [marker]}}, "timeout": timeout}
+
+
+def test_wait_for_fails_fast_when_client_exits(make_ctx):
+    """A dead container fails the wait immediately instead of polling to the timeout."""
+    from automodpack_autotester.engine.steps_ui import wait_for
+
+    ctx = make_ctx()
+    ctx.logs_provider = lambda which, tail=None: ""  # marker never appears
+    ctx.running_provider = lambda: (_ for _ in ()).throw(ClientExited("exited"))
+
+    start = time.monotonic()
+    with pytest.raises(ClientExited):
+        wait_for(ctx, _log_step("READY", timeout="30s"))
+    assert time.monotonic() - start < 5  # fast-fail, not the 30s timeout
+
+
+def test_wait_for_passes_on_marker_in_final_logs_at_exit(make_ctx):
+    """Exit-right-after-marker race: the marker in the container's final logs still counts."""
+    from automodpack_autotester.engine.steps_ui import wait_for
+
+    ctx = make_ctx()
+    calls = {"n": 0}
+
+    def logs(which, tail=None):
+        calls["n"] += 1
+        # empty on the first look, marker present once the container's final logs are collected
+        return "READY" if calls["n"] >= 2 else ""
+
+    ctx.logs_provider = logs
+    ctx.running_provider = lambda: (_ for _ in ()).throw(ClientExited("exited"))
+
+    wait_for(ctx, _log_step("READY", timeout="30s"))  # must not raise
+
+
 # ── selectors ─────────────────────────────────────────────────────────────
 
 
