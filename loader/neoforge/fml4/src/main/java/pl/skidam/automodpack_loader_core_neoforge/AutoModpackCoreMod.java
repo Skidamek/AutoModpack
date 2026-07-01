@@ -7,16 +7,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * An {@link ICoreMod} shipped by AutoModpack that forwards the transformers of coremods living in
- * the selected modpack folder, so they run without being copied into the standard {@code mods/}
- * directory.
+ * An {@link ICoreMod} shipped by AutoModpack that forwards the transformers of coremods and
+ * transformation services living in the selected modpack folder, so they run without being copied
+ * into the standard {@code mods/} directory.
  *
- * <p>FML collects coremod transformers (its {@code FMLServiceProvider.transformers()} pass) after
- * mod discovery but <em>before</em> the GAME layer is built, scanning only the layers that already
- * exist (BOOT/SERVICE/PLUGIN). A modpack jar reaches at best the GAME layer, so FML never sees its
- * {@code ICoreMod}. AutoModpack itself is on the SERVICE layer and IS scanned - so it instantiates
- * those modpack coremods from the child SERVICE layers {@link EarlyServiceBootstrapper} built for
- * them and returns their transformers here, as if they were AutoModpack's own.
+ * <p>FML/ModLauncher collect these transformers after mod discovery but <em>before</em> the GAME
+ * layer is built, scanning only the layers that already exist (BOOT/SERVICE/PLUGIN). A modpack jar
+ * reaches at best the GAME layer, so its own coremod / transformation service is never seen.
+ * AutoModpack itself is on the SERVICE layer and IS scanned - so it instantiates those modpack
+ * services from the child SERVICE layers {@link EarlyServiceBootstrapper} built for them and returns
+ * their transformers here, as if they were AutoModpack's own.
  *
  * <p>This is what lets e.g. Sinytra Connector load fully in place: its own mixins {@code @Shadow}
  * names that only its coremod remaps to the obfuscated runtime, so without this the coremod never
@@ -28,8 +28,9 @@ public class AutoModpackCoreMod implements ICoreMod {
     @Override
     public Iterable<? extends ITransformer<?>> getTransformers() {
         List<ITransformer<?>> transformers = new ArrayList<>(EarlyServiceLayer.collectForwardedTransformers());
-        // Re-fires the in-place GraphicsBootstrappers on the GAME layer once its launch target
-        // loads, repairing the split static state that crashes mods like asynclogger in place.
+        // Fallback trigger: bridges the GAME classloader to the in-place child layers while the
+        // launch target loads, in case the injected EarlyServiceBridgePlugin didn't run (the bridge
+        // is idempotent, so normally the launch plugin has already done it by announceLaunch).
         transformers.add(new GameGraphicsBootstrapTrigger());
         return transformers;
     }
