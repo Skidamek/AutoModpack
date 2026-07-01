@@ -3,9 +3,6 @@ package pl.skidam.automodpack_loader_core_neoforge;
 import cpw.mods.modlauncher.api.ITransformer;
 import net.neoforged.neoforgespi.coremod.ICoreMod;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * An {@link ICoreMod} shipped by AutoModpack that forwards the transformers of coremods and
  * transformation services living in the selected modpack folder, so they run without being copied
@@ -27,11 +24,6 @@ public class AutoModpackCoreMod implements ICoreMod {
 
     @Override
     public Iterable<? extends ITransformer<?>> getTransformers() {
-        List<ITransformer<?>> transformers = new ArrayList<>(EarlyServiceLayer.collectForwardedTransformers());
-        // Fallback trigger: bridges the GAME classloader to the in-place child layers while the
-        // launch target loads, in case the injected EarlyServiceBridgePlugin didn't run (the bridge
-        // is idempotent, so normally the launch plugin has already done it by announceLaunch).
-        transformers.add(new GameGraphicsBootstrapTrigger());
-        return transformers;
+        return EarlyServiceLayer.collectForwardedTransformers();
     }
 }

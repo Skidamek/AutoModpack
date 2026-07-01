@@ -30,19 +30,6 @@ public class LazyModLocator implements IDependencyLocator {
                 continue;
             }
             EarlyServiceLayer.runDependencyLocators(path, loadedMods, pipeline);
-
-            // For a non-standalone coremod jar (e.g. Sinytra Connector) the game-library copy is
-            // added here, AFTER its own dependency locator has run, rather than during the
-            // candidate phase. The coremod's locator runs a ForgeModPackageFilter that strips its
-            // own packages (e.g. org.sinytra.connector, which holds ConnectorEarlyLoader) from
-            // every mod file already in the discovery set; adding the copy beforehand would gut it.
-            // Added last (this locator has the lowest priority), the copy reaches the GAME layer
-            // untouched, so the inner mod can resolve the outer jar's classes in place. A coremod
-            // jar that is itself a mod (root neoforge.mods.toml) was already added as its real self
-            // by EarlyModLocator and needs no copy.
-            if (EarlyServiceLayer.isCoremodJar(path) && !EarlyServiceLayer.isStandaloneModFile(path)) {
-                EarlyServiceLayer.addLibraryCopy(path, pipeline);
-            }
         }
     }
 

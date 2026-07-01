@@ -30,25 +30,22 @@ public class EarlyModLocator implements IModFileCandidateLocator {
                 boolean coremod = EarlyServiceLayer.isCoremodJar(path);
                 if (coremod && EarlyServiceLayer.isStandaloneModFile(path)) {
                     // A jar that ships a coremod AND is itself a mod (root neoforge.mods.toml) -
-                    // a regular mod with an inline coremod. Its coremod transformers are forwarded
-                    // by AutoModpackCoreMod (it was registered on the child SERVICE layer at
-                    // bootstrap); the mod loads here as its real self, mods.toml intact. A stripped
-                    // library copy would gut that mods.toml, so it must not be used here.
+                    // a regular mod with an inline coremod. It loads here as its real self, mods.toml
+                    // intact, so its classes are on the GAME layer directly (no bridge); its coremod
+                    // transformers are forwarded by AutoModpackCoreMod (it was registered on the
+                    // child SERVICE layer at bootstrap).
                     pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
                     pipeline.readModFile(JarContents.of(path), ModFileDiscoveryAttributes.DEFAULT);
                 }
-                // A non-coremod jar's inner mod references classes from the outer jar. Natively
-                // those resolve because the outer jar is on the SERVICE layer, a GAME ancestor; our
-                // child layer is only a sibling. Rather than add a second, uninitialised copy of the
-                // outer classes to the GAME layer (the split that crashed asynclogger), AutoModpack's
-                // ILaunchPluginService (EarlyServiceBridgePlugin) points the GAME classloader at the
-                // child layer - before Mixin loads any outer class - so the inner mod reads the very
-                // class the GraphicsBootstrapper already fired on. No copy needed.
-                // A non-standalone coremod jar (e.g. Sinytra Connector) runs its own dependency
-                // locator + a ForgeModPackageFilter that strips its own packages from every mod
-                // file already in the discovery set. Adding its copy now would feed it to that
-                // filter and gut it, so that copy is added later, from LazyModLocator, once the
-                // coremod's locator has finished.
+                // Every other early-service jar - a split jar (Sodium) or a non-standalone coremod
+                // (Sinytra Connector) - keeps its outer classes only on its child SERVICE layer. Its
+                // inner mod references those classes; natively they resolve because the outer jar is
+                // on the SERVICE layer, a GAME ancestor, but our child layer is only a sibling. Rather
+                // than add a second, uninitialised copy of the outer classes to the GAME layer (the
+                // split that crashed asynclogger), AutoModpack's ILaunchPluginService
+                // (EarlyServiceBridgePlugin) points the GAME classloader at the child layer - for
+                // both classes and resources, before Mixin loads any outer class - so the inner mod
+                // reads the very class the GraphicsBootstrapper already fired on. No copy needed.
                 EarlyServiceLayer.runCandidateLocators(path, context, pipeline);
                 continue;
             }

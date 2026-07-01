@@ -8,12 +8,9 @@ import net.neoforged.neoforgespi.coremod.ICoreMod;
 import net.neoforged.neoforgespi.locating.IDependencyLocator;
 import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
 import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
-import net.neoforged.neoforgespi.locating.IncompatibleFileReporting;
-import net.neoforged.neoforgespi.locating.ModFileDiscoveryAttributes;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.HashUtils;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -23,7 +20,6 @@ import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,13 +28,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.jar.Attributes;
-import java.util.jar.JarOutputStream;
-import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -89,15 +80,8 @@ public final class EarlyServiceLayer {
     // holds its early-service classes. Populated by EarlyServiceBootstrapper.
     private static final Map<Path, ClassLoader> JAR_CLASSLOADERS = new ConcurrentHashMap<>();
 
-    // Maps each handled jar to the stripped game-library copy built for it (see
-    // libraryCopyFor). Cached so we build each copy at most once.
-    private static final Map<Path, Path> LIBRARY_COPIES = new ConcurrentHashMap<>();
-    // Jars we tried and can't make a game-library copy for (e.g. split-package); remembered
-    // so we don't retry. Separate set because ConcurrentHashMap forbids null values.
-    private static final Set<Path> NO_LIBRARY_COPY = ConcurrentHashMap.newKeySet();
-
-    // The GAME-layer bridge must run exactly once, the first time the launch target's class is
-    // loaded (see GameGraphicsBootstrapTrigger).
+    // The GAME-layer bridge must run exactly once, from the injected launch plugin's
+    // initializeLaunch (see EarlyServiceBridgePlugin), before Mixin loads any outer class.
     private static final AtomicBoolean GAME_BRIDGE_DONE = new AtomicBoolean(false);
 
     static void register(Path jar, ClassLoader serviceClassLoader) {
@@ -209,196 +193,6 @@ public final class EarlyServiceLayer {
     }
 
     /**
-     * Adds an early-service jar's stripped game-library copy (its outer classes, typed
-     * {@code GAMELIBRARY}) to the GAME layer, if one could be built. Shared by both locators so the
-     * add is expressed once; only <em>when</em> it is called differs (see {@link #isCoremodJar}).
-     */
-    public static void addLibraryCopy(Path jar, IDiscoveryPipeline pipeline) {
-        Path libraryCopy = libraryCopyFor(jar);
-        if (libraryCopy != null) {
-            pipeline.addPath(libraryCopy, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
-        }
-    }
-
-    /**
-     * Builds (once, cached) a stripped "game library" copy of an early-service outer jar.
-     *
-     * <p>Mods like Sodium split a thin outer jar - which holds classes the real inner mod
-     * references (e.g. {@code Workarounds$Reference}) - from that inner mod, which the outer
-     * jar's own locator loads onto the GAME layer. Natively the inner mod resolves those
-     * classes because the outer jar sits on the loader's SERVICE layer, an ancestor of GAME.
-     * Our in-place child layer is only a sibling of GAME, so the inner mod cannot see the
-     * outer classes - and crucially Mixin reads them as bytecode <em>resources</em>, which a
-     * mere {@code defineClass} on an ancestor classloader does not expose.
-     *
-     * <p>The fix is to put the outer jar's classes onto the GAME layer itself, as a plain
-     * library. This copy therefore strips everything that would make the loader treat it as a
-     * mod or re-run its services - the mod metadata, the {@code META-INF/services} entries and
-     * the nested {@code META-INF/jarjar} mods - and marks the manifest {@code FMLModType:
-     * GAMELIBRARY} so the loader adds it to the GAME layer as a non-mod library.
-     *
-     * <p>The copy must not share a package with the inner mod (both end up on the GAME layer),
-     * or the module system throws a split-package {@code LayerInstantiationException} at layer
-     * build time - which would take down <em>every</em> mod, not just this one. Such a mod is
-     * not loadable in place this way; we skip the copy and tell the user to force-copy it.
-     *
-     * <p>The copy is cached under {@code automodpack/cache} with a content-hash-stable name, so
-     * it survives a crash (no {@code deleteOnExit} leak) and is reused across launches.
-     *
-     * @return the stripped copy, or {@code null} if it could not be built or would split-package
-     *         (the mod then needs the copy-to-standard workaround).
-     */
-    public static Path libraryCopyFor(Path jar) {
-        if (jar == null) return null;
-        Path key = canonical(jar);
-        Path existing = LIBRARY_COPIES.get(key);
-        if (existing != null) return existing;
-        if (NO_LIBRARY_COPY.contains(key)) return null;
-        synchronized (LIBRARY_COPIES) {
-            existing = LIBRARY_COPIES.get(key);
-            if (existing != null) return existing;
-            if (NO_LIBRARY_COPY.contains(key)) return null;
-            Path copy;
-            try {
-                copy = buildLibraryCopy(jar);
-            } catch (Exception e) {
-                LOGGER.error("[AutoModpack] Could not build a game-library copy of {}; it will need the copy-to-standard fallback", jar.getFileName(), e);
-                copy = null;
-            }
-            if (copy != null) {
-                LIBRARY_COPIES.put(key, copy);
-            } else {
-                NO_LIBRARY_COPY.add(key); // remember known-bad jars so we don't retry
-            }
-            return copy;
-        }
-    }
-
-    private static Path buildLibraryCopy(Path jar) throws Exception {
-        String baseName = jar.getFileName().toString();
-        if (baseName.toLowerCase().endsWith(".jar")) baseName = baseName.substring(0, baseName.length() - 4);
-
-        // Content-hash-stable cache location, reused across launches.
-        Path cacheDir = Constants.cacheDir.resolve("early-service-libs");
-        Files.createDirectories(cacheDir);
-        String hash = HashUtils.getHash(jar);
-        String tag = hash == null ? Long.toHexString(Files.size(jar)) : hash.substring(0, Math.min(16, hash.length()));
-        Path copy = cacheDir.resolve("automodpack-lib-" + baseName + "-" + tag + ".jar");
-        if (Files.isRegularFile(copy) && Files.size(copy) > 0) {
-            return copy; // already built for this exact content
-        }
-
-        Manifest manifest = readManifest(jar);
-        manifest.getMainAttributes().putValue("FMLModType", "GAMELIBRARY");
-        // Strip the automatic-module hint so the copy gets a name derived from its own file
-        // name (automodpack-lib-...), keeping it distinct from the real inner mod's module.
-        manifest.getMainAttributes().remove(new Attributes.Name("Automatic-Module-Name"));
-
-        // Build into a temp file first, so a crash mid-write never leaves a half-written cache
-        // entry that a later launch would trust.
-        Path tmp = Files.createTempFile(cacheDir, baseName + "-", ".jar.tmp");
-        Set<String> outerPackages = new HashSet<>();
-        try (ZipInputStream in = new ZipInputStream(Files.newInputStream(jar));
-             JarOutputStream out = new JarOutputStream(Files.newOutputStream(tmp), manifest)) {
-            byte[] buffer = new byte[8192];
-            ZipEntry entry;
-            while ((entry = in.getNextEntry()) != null) {
-                String name = entry.getName();
-                if (entry.isDirectory() || shouldStripFromLibrary(name)) {
-                    continue;
-                }
-                String pkg = packageOfClassEntry(name);
-                if (pkg != null) outerPackages.add(pkg);
-                out.putNextEntry(new ZipEntry(name));
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, read);
-                }
-                out.closeEntry();
-            }
-        } catch (Exception e) {
-            Files.deleteIfExists(tmp);
-            throw e;
-        }
-
-        // Split-package guard: the inner mod (loaded onto GAME by this jar's own locator) must
-        // not share a package with this game-library copy, also on GAME.
-        Set<String> shared = collectNestedJarPackages(jar);
-        shared.retainAll(outerPackages);
-        if (!shared.isEmpty()) {
-            Files.deleteIfExists(tmp);
-            LOGGER.warn("[AutoModpack] {} shares package(s) {} between its outer jar and its nested mod, so it cannot be loaded in place without a split-package conflict. Add it to 'forceCopyFilesToStandardLocation' to load it from the standard mods directory instead.",
-                    jar.getFileName(), shared);
-            return null;
-        }
-
-        Files.move(tmp, copy, StandardCopyOption.REPLACE_EXISTING);
-        LOGGER.info("[AutoModpack] Built game-library copy of {} for in-place class/resource sharing", jar.getFileName());
-        return copy;
-    }
-
-    /** Package (dotted) of a {@code .class} entry, or {@code null} for non-class / default-package / module-info. */
-    private static String packageOfClassEntry(String entryName) {
-        if (!entryName.endsWith(".class")) return null;
-        if (entryName.endsWith("module-info.class") || entryName.endsWith("package-info.class")) return null;
-        int slash = entryName.lastIndexOf('/');
-        if (slash <= 0) return null;
-        return entryName.substring(0, slash).replace('/', '.');
-    }
-
-    /** Class-file packages contained in this jar's {@code META-INF/jarjar} nested jars. */
-    private static Set<String> collectNestedJarPackages(Path jar) {
-        Set<String> packages = new HashSet<>();
-        try (FileSystem fs = FileSystems.newFileSystem(jar)) {
-            Path jarJarDir = fs.getPath("META-INF", "jarjar");
-            if (Files.notExists(jarJarDir)) return packages;
-            try (var stream = Files.newDirectoryStream(jarJarDir, "*.jar")) {
-                for (Path nested : stream) {
-                    try (ZipInputStream zip = new ZipInputStream(Files.newInputStream(nested))) {
-                        ZipEntry entry;
-                        while ((entry = zip.getNextEntry()) != null) {
-                            String pkg = packageOfClassEntry(entry.getName());
-                            if (pkg != null) packages.add(pkg);
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.warn("[AutoModpack] Could not scan nested jars of {} for split-package check", jar.getFileName(), e);
-        }
-        return packages;
-    }
-
-    // The manifest is written by JarOutputStream itself; service declarations and the mod
-    // metadata are dropped so the copy is a pure library, and nested jars are dropped so we
-    // don't re-discover the inner mod twice. (A coremod's ICoreMod is run from the child SERVICE
-    // layer via AutoModpackCoreMod, not from this GAME-layer copy - FML collects coremod
-    // transformers before the GAME layer is built, so a GAME-layer ICoreMod is never scanned.)
-    private static boolean shouldStripFromLibrary(String entryName) {
-        return entryName.equalsIgnoreCase("META-INF/MANIFEST.MF")
-                || entryName.equals("META-INF/neoforge.mods.toml")
-                || entryName.equals("META-INF/mods.toml")
-                || entryName.startsWith("META-INF/services/")
-                || entryName.startsWith("META-INF/jarjar/");
-    }
-
-    private static Manifest readManifest(Path jar) {
-        try (FileSystem fs = FileSystems.newFileSystem(jar)) {
-            Path mf = fs.getPath("META-INF/MANIFEST.MF");
-            if (Files.exists(mf)) {
-                try (InputStream is = Files.newInputStream(mf)) {
-                    return new Manifest(is);
-                }
-            }
-        } catch (Exception e) {
-            LOGGER.warn("[AutoModpack] Could not read manifest of {}, using a fresh one", jar.getFileName(), e);
-        }
-        Manifest manifest = new Manifest();
-        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
-        return manifest;
-    }
-
-    /**
      * Whether this jar's early services can all be run from the modpack folder. It must declare at
      * its root at least one service we actively run in place (a {@code GraphicsBootstrapper}, a
      * candidate/dependency locator, or a coremod's {@code ICoreMod}) AND ship no service outside
@@ -415,7 +209,8 @@ public final class EarlyServiceLayer {
      * Whether the jar is itself a loadable mod - it declares a root {@code neoforge.mods.toml} - as
      * opposed to a thin outer jar whose real mod is nested or absent (e.g. Sodium's split jar, or
      * Sinytra Connector's locator jar). A coremod jar that IS a standalone mod is added to the GAME
-     * layer as its real self (loading normally); only non-standalone jars need the stripped copy.
+     * layer as its real self (loading normally) and so is left out of the GAME-layer bridge; a
+     * non-standalone one has its outer classes bridged there instead.
      */
     public static boolean isStandaloneModFile(Path jar) {
         return info(jar).standalone();
@@ -500,13 +295,14 @@ public final class EarlyServiceLayer {
      * an {@link EarlyServiceBridgePlugin} launch plugin we inject into ModLauncher: its
      * {@code initializeLaunch} fires during {@code announceLaunch}, after the GAME
      * {@code TransformingClassLoader} is built but before the game main (and thus before Mixin's
-     * prep). {@link GameGraphicsBootstrapTrigger} is a late fallback. Idempotent via
-     * {@link #GAME_BRIDGE_DONE} - but the flag is claimed only once we actually hold the GAME
-     * classloader, so a too-early call (a launch plugin's {@code addResources}) does not poison the
-     * real one.
+     * prep). Idempotent via {@link #GAME_BRIDGE_DONE} - but the flag is claimed only once we actually
+     * hold the GAME classloader, so a too-early call (a launch plugin's {@code addResources}) does
+     * not poison the real one.
      *
-     * <p>Coremod jars (e.g. Sinytra Connector) resolve their outer classes from a game-library copy
-     * left intact and are skipped here.
+     * <p>This bridges both classes ({@code parentLoaders}) and resources ({@code resolvedRoots}), so
+     * it works for a plain split early service (Sodium) AND for a coremod whose outer jar owns the
+     * mixins (Sinytra Connector) - Mixin reads those mixin classes as bytecode resources. Only a
+     * <em>standalone</em> coremod (itself a mod, added to the GAME layer as its real self) is skipped.
      */
     public static void bridgeEarlyServicesToGameLayer() {
         if (GAME_BRIDGE_DONE.get()) return;
@@ -524,24 +320,39 @@ public final class EarlyServiceLayer {
 
         Map<String, ClassLoader> gameParentLoaders = ModuleClassLoaderAccess.parentLoaders(gameClassLoader);
         Map<String, Object> gamePackageLookup = ModuleClassLoaderAccess.packageLookup(gameClassLoader);
+        Map<String, Object> gameResolvedRoots = ModuleClassLoaderAccess.resolvedRoots(gameClassLoader);
 
         for (Map.Entry<Path, ClassLoader> entry : JAR_CLASSLOADERS.entrySet()) {
             Path jar = entry.getKey();
             ClassLoader childLoader = entry.getValue();
-            // Coremod jars resolve their outer classes from a game-library copy left intact (see
-            // EarlyModLocator/LazyModLocator); redirecting them is neither needed nor safe.
-            if (isCoremodJar(jar) || !(childLoader instanceof cpw.mods.cl.ModuleClassLoader)) continue;
+            // A standalone coremod that is itself a mod (root neoforge.mods.toml) was added to the
+            // GAME layer as its real self by EarlyModLocator, so its outer classes already resolve
+            // there - bridging would redirect them to the child. Everything else - plain early
+            // services (Sodium) AND non-standalone coremods whose outer jar owns the mixins (Sinytra
+            // Connector) - resolves through the bridge, with no game-library copy.
+            if ((isCoremodJar(jar) && isStandaloneModFile(jar)) || !(childLoader instanceof cpw.mods.cl.ModuleClassLoader)) continue;
 
             try {
                 int bridged = 0;
                 for (String pkg : ModuleClassLoaderAccess.packageLookup(childLoader).keySet()) {
-                    // Add the child route first (so there is never a window with neither route),
-                    // then drop the copy's own mapping so future loads resolve to the child.
+                    // Classes: route the outer package to the child (single class identity). remove()
+                    // clears any stale GAME mapping (normally none, since we add no copy).
                     gameParentLoaders.put(pkg, childLoader);
                     gamePackageLookup.remove(pkg);
                     bridged++;
                 }
-                LOGGER.info("[AutoModpack] Bridged {} outer package(s) of {} to its early-service layer for in-place class sharing", bridged, jar.getFileName());
+                // Resources: findResourceList never consults parentLoaders, only the loader's own
+                // resolvedRoots, so add the child's jar references too. Without this, Mixin can't read
+                // an outer-jar mixin class's bytecode (a resource) and config prep crashes - the sole
+                // reason coremods like Connector needed a GAME-library copy on resolvedRoots before.
+                gameResolvedRoots.putAll(ModuleClassLoaderAccess.resolvedRoots(childLoader));
+                // The child layer was built at the early-window phase, before the GAME layer existed,
+                // so its parents are only [SERVICE, BOOT] - it cannot see minecraft/neoforge. Now that
+                // GAME is built, point the child's fallback at it, so an outer class loaded on the
+                // child (e.g. a Connector mixin/loader class referencing net.minecraft.*) resolves
+                // those GAME classes. This is what the game-library copy got for free by living on GAME.
+                ((cpw.mods.cl.ModuleClassLoader) childLoader).setFallbackClassLoader(gameClassLoader);
+                LOGGER.info("[AutoModpack] Bridged {} outer package(s) of {} to its early-service layer for in-place class/resource sharing", bridged, jar.getFileName());
             } catch (Throwable t) {
                 LOGGER.error("[AutoModpack] Failed to bridge {} to the GAME layer", jar.getFileName(), t);
             }
@@ -575,10 +386,11 @@ public final class EarlyServiceLayer {
 
     /**
      * Whether this jar ships a coremod ({@code ICoreMod}). Such a jar (e.g. Sinytra Connector)
-     * runs its own mod discovery and a {@code ForgeModPackageFilter} that strips its own packages
-     * from every mod file it finds in the discovery set. So its game-library copy must NOT be
-     * added during the candidate phase (it would be in that set and get gutted); {@link
-     * LazyModLocator} adds it only after the coremod's dependency locator has finished running.
+     * runs its own mod discovery and its coremod transformers are collected by FML's
+     * {@code transformers()} pass before the GAME layer exists, so they are forwarded from the
+     * child SERVICE layer by {@link AutoModpackCoreMod}. A non-standalone coremod's outer classes
+     * (which its own mixins live in) reach the GAME layer through {@link
+     * #bridgeEarlyServicesToGameLayer()}, not a copy.
      */
     public static boolean isCoremodJar(Path jar) {
         return info(jar).coremod();

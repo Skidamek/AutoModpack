@@ -69,8 +69,9 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
                     if (hash != null && standardModHashes.contains(hash)) {
                         continue;
                     }
-                    // Only jars whose every service we can host in place (skips e.g. coremods,
-                    // which getWorkaroundMods sends down the copy-to-standard path instead).
+                    // Only jars whose every service we can host in place - including coremods
+                    // (Connector). A jar shipping any service we can't host (e.g. IModFileReader)
+                    // is left for getWorkaroundMods' copy-to-standard path instead.
                     if (EarlyServiceLayer.eligibleForInPlace(jar)) {
                         earlyServiceJars.add(jar);
                     }
