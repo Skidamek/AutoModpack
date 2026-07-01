@@ -56,6 +56,13 @@ flow:
           # AutoModpack's ICoreMod forwards Connector's coremod transformers from the SERVICE
           # layer - this is what makes Connector's own mixins apply in place
           - 'Forwarding \d+ transformer.*ConnectorCoremods'
+          # Connector's ITransformationService lifecycle runs in place: we inject a forwarding
+          # service so ModLauncher runs its completeScan natively, and Connector's completeScan then
+          # moves authlib/brigadier into the transformable set (ModuleLayerMigrator) and contributes
+          # its FabricASMFixer jar - the machinery its Fabric mods' mixins actually need.
+          - 'Injected the forwarding transformation service'
+          - 'Forwarded \d+ completeScan resource-set.*ConnectorLoaderService'
+          - 'Successfully made module authlib transformable'
           # the Connector-loaded Fabric mod ends up in the final mod list
           - 'Explosive Enhancement.*\(explosiveenhancement\)'
   - do: wait_exit

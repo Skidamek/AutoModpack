@@ -20,6 +20,11 @@ public class EarlyModLocator implements IModFileCandidateLocator {
         new Preload();
         progress.complete();
 
+        // By discovery, ModLauncher has populated its transformation-service registry (which the
+        // early-window phase may be too early for), so ensure our forwarding service is injected now
+        // if it was not already - still before ModLauncher's post-discovery completeScan.
+        EarlyServiceLayer.ensureForwardingTransformationServiceInjected();
+
         for (Path path : ModpackLoader.modsToLoad) {
             // Early-service jars (e.g. Sodium) were placed on a child SERVICE layer and
             // their GraphicsBootstrappers already fired. Their real mod lives in an inner

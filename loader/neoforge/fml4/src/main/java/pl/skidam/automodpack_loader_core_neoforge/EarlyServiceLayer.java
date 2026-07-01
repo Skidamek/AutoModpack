@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
+import cpw.mods.modlauncher.api.IEnvironment;
 import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
@@ -131,6 +132,12 @@ public final class EarlyServiceLayer {
     // Maps each handled modpack jar to its child SERVICE module layer, so the GAME-layer bridge
     // can wire up JPMS read edges between the child module(s) and the GAME modules.
     private static final Map<Path, ModuleLayer> JAR_LAYERS = new ConcurrentHashMap<>();
+
+    // ITransformationService instances instantiated in place per jar, kept so the forwarding service
+    // injected into ModLauncher (AutoModpackTransformationService) can run their completeScan at the
+    // native, post-discovery time - when its returned resources still reach the GAME/PLUGIN layers.
+    private static final Map<Path, List<ITransformationService>> TRANSFORMATION_SERVICES = new ConcurrentHashMap<>();
+    private static final AtomicBoolean FORWARDING_SERVICE_INJECTED = new AtomicBoolean(false);
 
     // The GAME-layer bridge must run exactly once, from the injected launch plugin's
     // initializeLaunch (see EarlyServiceBridgePlugin), before Mixin loads any outer class.
@@ -328,6 +335,164 @@ public final class EarlyServiceLayer {
         return info(jar).standalone();
     }
 
+    public static void runTransformationServiceOnLoad() {
+        IEnvironment env = launcherEnvironment();
+        for (Map.Entry<Path, ClassLoader> entry : JAR_CLASSLOADERS.entrySet()) {
+            Path jar = entry.getKey();
+            ClassLoader cl = entry.getValue();
+            for (String impl : serviceImpls(jar, TRANSFORMATION_SERVICE)) {
+                try {
+                    ITransformationService service = (ITransformationService) Class.forName(impl, true, cl)
+                            .getDeclaredConstructor().newInstance();
+                    TRANSFORMATION_SERVICES.computeIfAbsent(jar, k -> new ArrayList<>()).add(service);
+                    service.onLoad(env, Set.of());
+                    LOGGER.info("[AutoModpack] Ran in-place transformation-service onLoad for {} ({})", impl, jar.getFileName());
+                } catch (Throwable t) {
+                    LOGGER.error("[AutoModpack] Failed in-place transformation-service onLoad for {} from {}", impl, jar.getFileName(), t);
+                }
+            }
+        }
+        ensureForwardingTransformationServiceInjected();
+    }
+
+    public static void runServiceInitialization() {
+        IEnvironment env = launcherEnvironment();
+        int count = 0;
+        for (Map.Entry<Path, List<ITransformationService>> entry : TRANSFORMATION_SERVICES.entrySet()) {
+            for (ITransformationService service : entry.getValue()) {
+                try {
+                    service.initialize(env);
+                    count++;
+                } catch (Throwable t) {
+                    LOGGER.debug("[AutoModpack] In-place transformation service {} initialize() skipped: {}", service.getClass().getName(), t.toString());
+                }
+            }
+        }
+        if (count > 0) {
+            LOGGER.info("[AutoModpack] Completed in-place transformation service initialization for {} service(s)", count);
+        }
+    }
+
+    /**
+     * Forwards ModLauncher's {@code completeScan} to each in-place transformation service, merging
+     * their layer resources. Called by {@link AutoModpackTransformationService} when ModLauncher runs
+     * {@code triggerScanCompletion} - so the returned jars (e.g. Connector's {@code FabricASMFixer}
+     * generated classes and its {@code authlib}/{@code brigadier} moves) are added to the GAME/PLUGIN
+     * layers as they are built.
+     */
+    static List<ITransformationService.Resource> forwardCompleteScan(IModuleLayerManager layerManager) {
+        List<ITransformationService.Resource> resources = new ArrayList<>();
+        for (Map.Entry<Path, List<ITransformationService>> entry : TRANSFORMATION_SERVICES.entrySet()) {
+            for (ITransformationService service : entry.getValue()) {
+                try {
+                    List<ITransformationService.Resource> scanned = service.completeScan(layerManager);
+                    if (scanned != null && !scanned.isEmpty()) {
+                        resources.addAll(scanned);
+                        LOGGER.info("[AutoModpack] Forwarded {} completeScan resource-set(s) from in-place transformation service {} ({})",
+                                scanned.size(), service.getClass().getName(), entry.getKey().getFileName());
+                    }
+                } catch (Throwable t) {
+                    LOGGER.error("[AutoModpack] In-place transformation service {} completeScan failed ({})",
+                            service.getClass().getName(), entry.getKey().getFileName(), t);
+                }
+            }
+        }
+        return resources;
+    }
+
+    /**
+     * Injects {@link AutoModpackTransformationService} into ModLauncher's {@code
+     * TransformationServicesHandler.serviceLookup}. ModLauncher discovers transformation services from
+     * the BOOT layer at bootstrap, before AutoModpack's SERVICE layer exists, so - like the launch
+     * plugin - it must be injected, not shipped. Done at the early-window phase, before ModLauncher's
+     * post-discovery {@code triggerScanCompletion}, so our service's {@code completeScan} is collected
+     * with the rest. (Its {@code onLoad}/{@code initialize} are already past, hence run in place above.)
+     */
+    public static void ensureForwardingTransformationServiceInjected() {
+        if (FORWARDING_SERVICE_INJECTED.get() || TRANSFORMATION_SERVICES.isEmpty()) return;
+
+        Object handler;
+        Map<String, Object> serviceLookup;
+        try {
+            Object launcher = Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
+            handler = readField(launcher, "transformationServicesHandler");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> lookup = (Map<String, Object>) readField(handler, "serviceLookup");
+            serviceLookup = lookup;
+        } catch (Throwable t) {
+            if (FORWARDING_SERVICE_INJECTED.compareAndSet(false, true)) {
+                LOGGER.error("[AutoModpack] Could not reach ModLauncher's transformation-service registry; in-place completeScan resources (e.g. Connector's) will be missing", t);
+            }
+            return;
+        }
+
+        // ModLauncher populates serviceLookup in discoverServices - which can run AFTER the early
+        // window. Not ready yet: leave the flag unset so a later hook (EarlyModLocator, at discovery)
+        // retries. It is still comfortably before triggerScanCompletion (completeScan).
+        if (serviceLookup == null) return;
+        if (serviceLookup.containsKey(AutoModpackTransformationService.NAME)
+                || !FORWARDING_SERVICE_INJECTED.compareAndSet(false, true)) return;
+
+        try {
+            // The decorator ctor is package-private; cpw.mods.modlauncher is reachable, so plain
+            // reflection (setAccessible) reaches it, same as the launch-plugin injection.
+            java.lang.reflect.Constructor<?> ctor = Class.forName("cpw.mods.modlauncher.TransformationServiceDecorator")
+                    .getDeclaredConstructor(ITransformationService.class);
+            ctor.setAccessible(true);
+            Object decorator = ctor.newInstance(new AutoModpackTransformationService());
+            // Its onLoad (which sets isValid) is past; set it directly so nothing skips the decorator.
+            try {
+                writeField(decorator, "isValid", Boolean.TRUE);
+            } catch (Throwable ignored) {
+                // Not fatal: completeScan is not gated on isValid.
+            }
+            // Replace the map rather than mutate it in place: we run from EarlyModLocator, i.e. from
+            // FML's beginScanning, which ModLauncher calls from inside its own iteration over
+            // serviceLookup - an in-place put would ConcurrentModificationException. The ongoing
+            // iteration keeps its old map; ModLauncher re-reads the field for triggerScanCompletion.
+            Map<String, Object> replacement = new java.util.LinkedHashMap<>(serviceLookup);
+            replacement.put(AutoModpackTransformationService.NAME, decorator);
+            writeField(handler, "serviceLookup", replacement);
+            LOGGER.info("[AutoModpack] Injected the forwarding transformation service '{}' so ModLauncher runs each in-place service's completeScan natively (its GAME/PLUGIN-layer resources reach the layers)", AutoModpackTransformationService.NAME);
+        } catch (Throwable t) {
+            LOGGER.error("[AutoModpack] Failed to inject the forwarding transformation service; in-place completeScan resources (e.g. Connector's) will be missing", t);
+        }
+    }
+
+    /** ModLauncher's live {@code IEnvironment} (via {@code Launcher.INSTANCE}), or null if unreachable. */
+    private static IEnvironment launcherEnvironment() {
+        try {
+            Object launcher = Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
+            return (IEnvironment) launcher.getClass().getMethod("environment").invoke(launcher);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    // Plain reflection on cpw.mods.modlauncher internals (reachable, unlike sealed securejarhandler).
+    private static Object readField(Object owner, String name) throws Exception {
+        java.lang.reflect.Field f = findField(owner.getClass(), name);
+        f.setAccessible(true);
+        return f.get(owner);
+    }
+
+    private static void writeField(Object owner, String name, Object value) throws Exception {
+        java.lang.reflect.Field f = findField(owner.getClass(), name);
+        f.setAccessible(true);
+        f.set(owner, value);
+    }
+
+    private static java.lang.reflect.Field findField(Class<?> type, String name) throws NoSuchFieldException {
+        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
+            try {
+                return c.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+                // walk up
+            }
+        }
+        throw new NoSuchFieldException(name);
+    }
+
     /**
      * Instantiates the {@code ICoreMod}s and {@code ITransformationService}s shipped by the
      * registered early-service jars (from their child SERVICE layer, where the outer classes live)
@@ -480,8 +645,8 @@ public final class EarlyServiceLayer {
 
     /**
      * Wires JPMS read edges both ways between the GAME layer and a bridged jar's child SERVICE layer:
-     * every GAME module reads every child module - so an inner mod (e.g. Connector's {@code connector}
-     * module) can access an outer class ({@code org.sinytra.connector.ConnectorEarlyLoader}) - and
+     * every GAME module reads every child module - so an inner module produced by an early-service jar
+     * can access classes from that jar's outer service module - and
      * every child module reads every GAME module - so an outer class can access {@code net.minecraft.*}.
      *
      * <p>Natively loader resolution establishes these edges across the SERVICE-&gt;GAME parent boundary
