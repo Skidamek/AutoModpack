@@ -2,8 +2,9 @@ id: early-services-offline
 description: |
   Offline / client-only proof that a split "early-service" mod (Sodium) loads straight from
   AutoModpack's modpack folder - bootstrapper fires in place, the inner mod is located in
-  place, and the inner mod resolves the outer jar's classes (and Mixin resources) via the
-  game-library copy - with NO copy into the standard mods/ directory.
+  place, and the inner mod resolves the outer jar's classes (and Mixin resources) because the
+  GAME classloader is bridged to Sodium's early-service child layer - with NO copy into the
+  standard mods/ directory.
 
   Pre-stages Sodium into the client game dir and boots just the client (no server, no
   cert/download/restart dance). Verification is log-based and crash-tolerant: Sodium drives
@@ -32,11 +33,11 @@ flow:
   - do: launch_client
     name: boot the client against the pre-staged modpack
   # Poll until ALL the positive evidence is present (gives the client time to boot fully):
-  # the bootstrapper fired in place, the game-library copy was built, the inner mod's own
-  # locator ran in place, and Sodium's inner mod actually initialised (config loaded) - which
-  # only happens if it resolved the outer jar's classes from the game-library copy.
+  # the bootstrapper fired in place, the inner mod's own locator ran in place, the GAME loader
+  # was bridged to Sodium's child layer, and Sodium's inner mod actually initialised (config
+  # loaded) - which only happens if it resolved the outer jar's classes through that bridge.
   - do: wait_for
-    name: Sodium loaded in place (bootstrap + locator + game-library + inner mod init)
+    name: Sodium loaded in place (bootstrap + locator + GAME-layer bridge + inner mod init)
     timeout: 420s
     until:
       log:
@@ -44,8 +45,8 @@ flow:
         matches_all:
           - 'Bootstrapping \d+ early-service'
           - 'in-place GraphicsBootstrapper.*SodiumWorkarounds'
-          - 'Built game-library copy of'
           - 'Running in-place candidate locator.*SodiumServiceModLocator'
+          - 'Bridged \d+ outer package.*sodium'
           - 'Loaded configuration file for Sodium'
   - do: wait_exit
     name: let the client run through to its (headless-GL) exit
@@ -56,7 +57,7 @@ flow:
     that:
       log:
         container: client
-        # the CNF the game-library copy fixed; checked on the full post-exit log so it
+        # the CNF the GAME-layer bridge fixed; checked on the full post-exit log so it
         # covers the render stage where the missing-class mixin previously crashed.
         not_matches:
           - 'ClassNotFoundException.*[Ww]orkarounds'

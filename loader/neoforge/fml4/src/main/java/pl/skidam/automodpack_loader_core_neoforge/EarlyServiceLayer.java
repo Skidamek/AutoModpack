@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
 import cpw.mods.modlauncher.api.ITransformer;
+import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.coremod.ICoreMod;
 import net.neoforged.neoforgespi.locating.IDependencyLocator;
@@ -29,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.jar.Attributes;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
@@ -87,6 +89,10 @@ public final class EarlyServiceLayer {
     // Jars we tried and can't make a game-library copy for (e.g. split-package); remembered
     // so we don't retry. Separate set because ConcurrentHashMap forbids null values.
     private static final Set<Path> NO_LIBRARY_COPY = ConcurrentHashMap.newKeySet();
+
+    // The GAME-layer bridge must run exactly once, the first time the launch target's class is
+    // loaded (see GameGraphicsBootstrapTrigger).
+    private static final AtomicBoolean GAME_BRIDGE_DONE = new AtomicBoolean(false);
 
     static void register(Path jar, ClassLoader serviceClassLoader) {
         JAR_CLASSLOADERS.put(canonical(jar), serviceClassLoader);
@@ -442,6 +448,98 @@ public final class EarlyServiceLayer {
             }
         }
         return transformers;
+    }
+
+    /**
+     * Points the GAME classloader at each in-place early-service jar's child SERVICE layer - the
+     * layer its {@code GraphicsBootstrapper} actually fired on - so the outer classes resolve there,
+     * in place, with no GAME-library copy.
+     *
+     * <p>The inner mod (on the GAME layer) references its outer jar's classes; natively those resolve
+     * because the outer jar sits on the SERVICE layer, a GAME ancestor. Our child layer is only a
+     * sibling, so we add the child as a {@code parentLoaders} delegate for each of the outer jar's
+     * packages (and drop any GAME {@code packageLookup} entry, should a copy ever exist). Then every
+     * outer class - whether referenced structurally during Mixin config prep (Sodium's
+     * {@code Workarounds}) or read for its bootstrap-time static state at runtime (asynclogger's
+     * {@code LoggerConfigurator.config}) - resolves to the single, already-initialised child copy. No
+     * second class, no split static state, no NPE.
+     *
+     * <p>Timing is the whole game. Mixin prepares every mod's config as the launch target starts,
+     * loading those outer classes before any post-GAME mod hook exists. We beat that by running from
+     * an {@link EarlyServiceBridgePlugin} launch plugin we inject into ModLauncher: its
+     * {@code initializeLaunch} fires during {@code announceLaunch}, after the GAME
+     * {@code TransformingClassLoader} is built but before the game main (and thus before Mixin's
+     * prep). {@link GameGraphicsBootstrapTrigger} is a late fallback. Idempotent via
+     * {@link #GAME_BRIDGE_DONE} - but the flag is claimed only once we actually hold the GAME
+     * classloader, so a too-early call (a launch plugin's {@code addResources}) does not poison the
+     * real one.
+     *
+     * <p>Coremod jars (e.g. Sinytra Connector) resolve their outer classes from a game-library copy
+     * left intact and are skipped here.
+     */
+    public static void bridgeEarlyServicesToGameLayer() {
+        if (GAME_BRIDGE_DONE.get()) return;
+
+        ClassLoader gameClassLoader = resolveGameClassLoader();
+        if (!(gameClassLoader instanceof cpw.mods.cl.ModuleClassLoader)) {
+            // The GAME TransformingClassLoader is not in scope yet (e.g. a launch plugin's
+            // addResources runs before it is built). A later caller - our launch plugin's
+            // initializeLaunch, or the coremod fallback - retries, so do NOT consume the one-shot flag.
+            return;
+        }
+
+        // We hold the real GAME classloader; claim the bridge exactly once.
+        if (!GAME_BRIDGE_DONE.compareAndSet(false, true)) return;
+
+        Map<String, ClassLoader> gameParentLoaders = ModuleClassLoaderAccess.parentLoaders(gameClassLoader);
+        Map<String, Object> gamePackageLookup = ModuleClassLoaderAccess.packageLookup(gameClassLoader);
+
+        for (Map.Entry<Path, ClassLoader> entry : JAR_CLASSLOADERS.entrySet()) {
+            Path jar = entry.getKey();
+            ClassLoader childLoader = entry.getValue();
+            // Coremod jars resolve their outer classes from a game-library copy left intact (see
+            // EarlyModLocator/LazyModLocator); redirecting them is neither needed nor safe.
+            if (isCoremodJar(jar) || !(childLoader instanceof cpw.mods.cl.ModuleClassLoader)) continue;
+
+            try {
+                int bridged = 0;
+                for (String pkg : ModuleClassLoaderAccess.packageLookup(childLoader).keySet()) {
+                    // Add the child route first (so there is never a window with neither route),
+                    // then drop the copy's own mapping so future loads resolve to the child.
+                    gameParentLoaders.put(pkg, childLoader);
+                    gamePackageLookup.remove(pkg);
+                    bridged++;
+                }
+                LOGGER.info("[AutoModpack] Bridged {} outer package(s) of {} to its early-service layer for in-place class sharing", bridged, jar.getFileName());
+            } catch (Throwable t) {
+                LOGGER.error("[AutoModpack] Failed to bridge {} to the GAME layer", jar.getFileName(), t);
+            }
+        }
+    }
+
+    /**
+     * Resolves the GAME {@code TransformingClassLoader}. ModLauncher sets it as the thread context
+     * classloader before {@code launch()}, so it is in scope both at {@code announceLaunch} (our
+     * injected launch plugin's {@code initializeLaunch}) and during class transformation (the coremod
+     * fallback) - crucially without {@code FMLLoader.getGameLayer()}'s "mod discovery completed"
+     * precondition, which is not yet met when a launch plugin's {@code addResources} runs. Falls back
+     * to the FML game layer if the context loader is not (yet) a module classloader.
+     */
+    private static ClassLoader resolveGameClassLoader() {
+        ClassLoader ctx = Thread.currentThread().getContextClassLoader();
+        if (ctx instanceof cpw.mods.cl.ModuleClassLoader) return ctx;
+        try {
+            ModuleLayer gameLayer = FMLLoader.getGameLayer();
+            if (gameLayer != null) {
+                for (Module module : gameLayer.modules()) {
+                    ClassLoader cl = module.getClassLoader();
+                    if (cl instanceof cpw.mods.cl.ModuleClassLoader) return cl;
+                }
+            }
+        } catch (Throwable ignored) {
+            // getGameLayer throws until FML mod discovery completes; the context loader covers us.
+        }
+        return null;
     }
 
     /**

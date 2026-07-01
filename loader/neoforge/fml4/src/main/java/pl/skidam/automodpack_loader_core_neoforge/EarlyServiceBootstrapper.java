@@ -92,6 +92,14 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             for (Path jar : earlyServiceJars) {
                 bootstrapJar(jar, serviceLayer, arguments);
             }
+
+            // We fire here at the correct early-window phase, but the in-place outer classes only
+            // get single-class identity once the GAME classloader is bridged to the child layers,
+            // and that must happen before Mixin prepares its configs (which loads those outer
+            // classes). Our ILaunchPluginService does the bridge from its initializeLaunch, but
+            // ModLauncher stores launch plugins in an unordered map and may run Mixin's before ours.
+            // Reorder ours first now - the plugins are already discovered at this phase.
+            EarlyServiceBridgePlugin.ensureRunsFirst();
         } catch (Throwable t) {
             // Never let this take the game down - mods we couldn't handle fall back to
             // the copy-to-standard workaround.
@@ -99,7 +107,20 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
         }
     }
 
-    /** Builds a child SERVICE layer for a single jar and fires its GraphicsBootstrappers. */
+    /**
+     * Builds the child SERVICE layer for a single jar, fires its {@code GraphicsBootstrapper}s on
+     * that layer at this (correct) early-window phase, and registers its classloader.
+     *
+     * <p>The child layer is also what {@link EarlyModLocator}/{@link LazyModLocator} run the jar's
+     * candidate/dependency locators on, and {@link AutoModpackCoreMod} its coremod, during the
+     * pre-GAME discovery phase.
+     *
+     * <p>Firing here is exactly NeoForge's timing. The class identity it initialises is reconciled
+     * with the GAME layer afterwards: instead of giving GAME a separate copy of the outer jar (the
+     * split that crashed asynclogger - GAME read an uninitialised second copy), {@link
+     * EarlyServiceLayer#bridgeEarlyServicesToGameLayer()} points the GAME classloader at <em>this</em>
+     * child layer for the outer packages, so the mod reads the very class fired here.
+     */
     private void bootstrapJar(Path jar, ModuleLayer serviceLayer, String[] arguments) {
         ClassLoader serviceClassLoader;
         try {
@@ -130,8 +151,8 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             return;
         }
 
-        // Register before firing so the locator phase can find the classloader even if a
-        // bootstrapper throws.
+        // Register before firing so the locator phase (and the GAME-layer bridge) can find the
+        // classloader even if a bootstrapper throws.
         EarlyServiceLayer.register(jar, serviceClassLoader);
 
         for (String impl : EarlyServiceLayer.serviceImpls(jar, EarlyServiceLayer.GRAPHICS_BOOTSTRAPPER_SERVICE)) {

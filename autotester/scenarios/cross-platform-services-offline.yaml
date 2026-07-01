@@ -45,6 +45,11 @@ flow:
           - 'in-place GraphicsBootstrapper.*asynclogger'
           # ...and it actually does its job in place: the async log4j context is installed.
           - 'Successfully configured async logger context'
+          # Once the GAME layer is up, AutoModpack bridges its classloader to Async Logger's child
+          # layer, so the inner mod's mixin into Main.main reads the SAME LoggerConfigurator the
+          # GraphicsBootstrapper initialised - instead of an uninitialised second copy (the split
+          # that used to NPE in place). Reaching this proves the in-place class identity is fixed.
+          - 'Bridged \d+ outer package.*asynclogger'
           # spark ships no loader service, so AutoModpack's locator discovers it in the modpack
           # folder and loads it as an ordinary mod (never copied to standard mods/).
           - 'Found mod file.*spark.*EarlyModLocator'
@@ -54,13 +59,21 @@ flow:
     or_alive: true
     timeout: 60s
   - do: assert
-    name: neither mod was sent down the copy-to-standard workaround path
+    name: no copy-to-standard workaround, and no in-place split-state crash
     that:
       log:
         container: client
         not_matches:
           - 'Applying workaround for asynclogger'
           - 'Applying workaround for spark'
+          # The in-place split-state regression: Async Logger's mixin reads an uninitialised
+          # second copy of LoggerConfigurator on the GAME layer (config == null), crashing in
+          # LoggerConfigurator.<clinit> at Main.main start. The async file log drops the tail, but
+          # the exception still hits the container's stdout - assert it is absent. These strings
+          # appear only on that crash, so they catch a "loads then crashes" regression the early
+          # markers (which all fire before Main.main) cannot.
+          - 'ExceptionInInitializerError'
+          - 'ringBufferSize'
 
 serverFiles:
   modpackName: amp-autotest

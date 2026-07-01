@@ -3,6 +3,9 @@ package pl.skidam.automodpack_loader_core_neoforge;
 import cpw.mods.modlauncher.api.ITransformer;
 import net.neoforged.neoforgespi.coremod.ICoreMod;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * An {@link ICoreMod} shipped by AutoModpack that forwards the transformers of coremods living in
  * the selected modpack folder, so they run without being copied into the standard {@code mods/}
@@ -24,6 +27,10 @@ public class AutoModpackCoreMod implements ICoreMod {
 
     @Override
     public Iterable<? extends ITransformer<?>> getTransformers() {
-        return EarlyServiceLayer.collectCoremodTransformers();
+        List<ITransformer<?>> transformers = new ArrayList<>(EarlyServiceLayer.collectCoremodTransformers());
+        // Re-fires the in-place GraphicsBootstrappers on the GAME layer once its launch target
+        // loads, repairing the split static state that crashes mods like asynclogger in place.
+        transformers.add(new GameGraphicsBootstrapTrigger());
+        return transformers;
     }
 }
