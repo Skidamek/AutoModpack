@@ -55,23 +55,30 @@ public final class EarlyServiceLayer {
     public static final String LANGUAGE_LOADER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader";
     public static final String COREMOD_SERVICE = "META-INF/services/net.neoforged.neoforgespi.coremod.ICoreMod";
     public static final String TRANSFORMATION_SERVICE = "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
+    public static final String MOD_FILE_READER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader";
 
     // Services that require active work to run in place: the GraphicsBootstrapper is fired, the
-    // candidate/dependency locators are invoked, and coremod / transformation-service transformers
-    // are forwarded (see AutoModpackCoreMod). A jar must declare at least one of these at its root to
-    // be worth bootstrapping in place. These are also exactly the services whose impl class names we
-    // read. A mod's ITransformationService is nearly always just an early-loading vehicle with empty
+    // candidate/dependency locators are invoked, an IModFileReader is forwarded into the live
+    // discovery pipeline, and coremod / transformation-service transformers are forwarded (see
+    // AutoModpackCoreMod). A jar must declare at least one of these at its root to be worth
+    // bootstrapping in place. These are also exactly the services whose impl class names we read. A
+    // mod's ITransformationService is nearly always just an early-loading vehicle with empty
     // transformers() (asynclogger, Sinytra Connector, CrashAssistant all ship one); we forward its
     // transformers for the rare case they aren't, and its outer classes reach the GAME layer via the
     // bridge like any other early service.
     static final List<String> ACTIVELY_RUN_SERVICES = List.of(
             GRAPHICS_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE,
-            COREMOD_SERVICE, TRANSFORMATION_SERVICE);
+            MOD_FILE_READER_SERVICE, COREMOD_SERVICE, TRANSFORMATION_SERVICE);
 
     // Every service we can host from the modpack folder, so a mod shipping only these never needs
-    // copying: the actively-run ones above, plus language loaders (passive - picked up from the
-    // GAME layer, no work of ours). Single source of truth, consumed by both the copy decision
+    // copying: the actively-run ones above, plus language loaders (passive - picked up from the GAME
+    // layer, no work of ours). Single source of truth, consumed by both the copy decision
     // (getWorkaroundMods) and the in-place bootstrapper.
+    //
+    // ImmediateWindowProvider is deliberately NOT here (though it IS in knownServices): NeoForge picks
+    // the early-window provider from the SERVICE layer by config name at boot, and creates the window
+    // in the same call - before and out of reach of anything we can do from the modpack folder. A mod
+    // whose early window must work therefore has to live in standard mods/, so we let it force-copy.
     public static final Set<String> HANDLEABLE_SERVICES = Stream
             .concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
             .collect(Collectors.toUnmodifiableSet());
@@ -236,11 +243,66 @@ public final class EarlyServiceLayer {
     }
 
     /**
+     * Forwards an early-service jar's {@code IModFileReader}s into the live discovery pipeline, so a
+     * modpack-folder mod that ships a reader for a custom mod-file format can interpret candidates in
+     * place - no copy needed.
+     *
+     * <p>Unlike a locator, a reader isn't invoked directly: the pipeline consults its own
+     * {@code modFileReaders} list (built by {@code ModDiscoverer} from the SERVICE/PLUGIN layers,
+     * which a modpack jar never reaches) whenever it reads a candidate. There is no public API to add
+     * one, so we splice ours into that list by reflection - the loader is an automatic module, so
+     * plain {@code setAccessible} reaches it. We run from {@link EarlyModLocator} (highest priority),
+     * before the pipeline reads most candidates, and re-sort by {@code IOrderedProvider} priority so
+     * our reader keeps the loader's precedence contract.
+     */
+    public static void runModFileReaders(Path jar, IDiscoveryPipeline pipeline) {
+        ClassLoader cl = classLoaderFor(jar);
+        if (cl == null) return;
+        List<Object> readers = new ArrayList<>();
+        for (String impl : serviceImpls(jar, MOD_FILE_READER_SERVICE)) {
+            try {
+                readers.add(Class.forName(impl, true, cl).getDeclaredConstructor().newInstance());
+            } catch (Throwable t) {
+                LOGGER.error("[AutoModpack] Failed to instantiate IModFileReader {} from {}", impl, jar.getFileName(), t);
+            }
+        }
+        if (readers.isEmpty()) return;
+
+        try {
+            // pipeline is ModDiscoverer.DiscoveryPipeline; reach its outer ModDiscoverer's reader list.
+            java.lang.reflect.Field outer = pipeline.getClass().getDeclaredField("this$0");
+            outer.setAccessible(true);
+            Object modDiscoverer = outer.get(pipeline);
+            java.lang.reflect.Field readersField = modDiscoverer.getClass().getDeclaredField("modFileReaders");
+            readersField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<Object> current = (List<Object>) readersField.get(modDiscoverer);
+            List<Object> merged = new ArrayList<>(current);
+            merged.addAll(readers);
+            // ModDiscoverer sorts readers by IOrderedProvider.getPriority(), highest first.
+            merged.sort(java.util.Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
+            readersField.set(modDiscoverer, List.copyOf(merged));
+            LOGGER.info("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), jar.getFileName());
+        } catch (Throwable t) {
+            LOGGER.error("[AutoModpack] Could not forward IModFileReader(s) from {} into mod discovery; a mod relying on that reader may need copy-to-standard", jar.getFileName(), t);
+        }
+    }
+
+    /** {@code IOrderedProvider.getPriority()} of a reader, or the default (0) if it can't be read. */
+    private static int providerPriority(Object provider) {
+        try {
+            return (int) provider.getClass().getMethod("getPriority").invoke(provider);
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    /**
      * Whether this jar's early services can all be run from the modpack folder. It must declare at
      * its root at least one service we actively run in place (a {@code GraphicsBootstrapper}, a
-     * candidate/dependency locator, or a coremod's {@code ICoreMod}) AND ship no service outside
-     * {@link #HANDLEABLE_SERVICES}. Anything else is left for the copy-to-standard path rather than
-     * being half-loaded in place.
+     * candidate/dependency locator, an {@code IModFileReader}, or a coremod's {@code ICoreMod}) AND
+     * ship no service outside {@link #HANDLEABLE_SERVICES}. Anything else is left for the
+     * copy-to-standard path rather than being half-loaded in place.
      */
     public static boolean eligibleForInPlace(Path jar) {
         JarInfo info = info(jar);

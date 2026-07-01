@@ -46,6 +46,10 @@ public class EarlyModLocator implements IModFileCandidateLocator {
                 // (EarlyServiceBridgePlugin) points the GAME classloader at the child layer - for
                 // both classes and resources, before Mixin loads any outer class - so the inner mod
                 // reads the very class the GraphicsBootstrapper already fired on. No copy needed.
+                //
+                // Forward any IModFileReader first, so custom-format candidates offered by the
+                // locators below can be interpreted by it.
+                EarlyServiceLayer.runModFileReaders(path, pipeline);
                 EarlyServiceLayer.runCandidateLocators(path, context, pipeline);
                 continue;
             }
