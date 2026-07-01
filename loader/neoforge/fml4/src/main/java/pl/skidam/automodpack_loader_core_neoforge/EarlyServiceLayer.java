@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
+import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforgespi.ILaunchContext;
@@ -62,14 +63,19 @@ public final class EarlyServiceLayer {
     public static final String DEPENDENCY_LOCATOR_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator";
     public static final String LANGUAGE_LOADER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader";
     public static final String COREMOD_SERVICE = "META-INF/services/net.neoforged.neoforgespi.coremod.ICoreMod";
+    public static final String TRANSFORMATION_SERVICE = "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
 
     // Services that require active work to run in place: the GraphicsBootstrapper is fired, the
-    // candidate/dependency locators are invoked, and a coremod's transformers are forwarded (see
-    // AutoModpackCoreMod). A jar must declare at least one of these at its root to be worth
-    // bootstrapping in place. These are also exactly the services whose impl class names we read.
+    // candidate/dependency locators are invoked, and coremod / transformation-service transformers
+    // are forwarded (see AutoModpackCoreMod). A jar must declare at least one of these at its root to
+    // be worth bootstrapping in place. These are also exactly the services whose impl class names we
+    // read. A mod's ITransformationService is nearly always just an early-loading vehicle with empty
+    // transformers() (asynclogger, Sinytra Connector, CrashAssistant all ship one); we forward its
+    // transformers for the rare case they aren't, and its outer classes reach the GAME layer via the
+    // bridge like any other early service.
     static final List<String> ACTIVELY_RUN_SERVICES = List.of(
             GRAPHICS_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE,
-            COREMOD_SERVICE);
+            COREMOD_SERVICE, TRANSFORMATION_SERVICE);
 
     // Every service we can host from the modpack folder, so a mod shipping only these never needs
     // copying: the actively-run ones above, plus language loaders (passive - picked up from the
@@ -416,22 +422,27 @@ public final class EarlyServiceLayer {
     }
 
     /**
-     * Instantiates the {@code ICoreMod}s shipped by the registered early-service jars (from their
-     * child SERVICE layer, where the outer classes live) and collects their transformers. Called
-     * by {@link AutoModpackCoreMod} during FML's {@code transformers()} pass.
+     * Instantiates the {@code ICoreMod}s and {@code ITransformationService}s shipped by the
+     * registered early-service jars (from their child SERVICE layer, where the outer classes live)
+     * and collects their transformers. Called by {@link AutoModpackCoreMod} during FML's
+     * {@code transformers()} pass.
      *
-     * <p>This is how a modpack-folder coremod (e.g. Sinytra Connector, whose own mixins rely on
-     * its coremod to remap their {@code @Shadow} targets) runs in place. FML only collects coremod
-     * transformers from ICoreMods on layers built before the GAME layer; a modpack jar reaches at
-     * best the GAME layer, so its own ICoreMod is never scanned. AutoModpack, however, sits on the
-     * SERVICE layer and IS scanned - so it forwards the modpack coremods' transformers as its own.
+     * <p>This is how a modpack-folder coremod (e.g. Sinytra Connector, whose own mixins rely on its
+     * coremod to remap their {@code @Shadow} targets) runs in place. FML/ModLauncher only collect
+     * these transformers from layers built before the GAME layer; a modpack jar reaches at best the
+     * GAME layer, so its own coremod/transformation service is never scanned. AutoModpack, however,
+     * sits on the SERVICE layer and IS scanned - so it forwards the modpack services' transformers
+     * as its own. (A transformation service's transformers are usually empty - it is only an
+     * early-loading vehicle - but forwarded for the rare case they aren't.)
      */
-    public static List<ITransformer<?>> collectCoremodTransformers() {
+    public static List<ITransformer<?>> collectForwardedTransformers() {
         List<ITransformer<?>> transformers = new ArrayList<>();
         for (Map.Entry<Path, ClassLoader> entry : JAR_CLASSLOADERS.entrySet()) {
             Path jar = entry.getKey();
-            if (!isCoremodJar(jar)) continue; // most early-service jars ship no coremod
             ClassLoader cl = entry.getValue();
+
+            // A coremod's transformers (e.g. Sinytra Connector's @Shadow name->SRG remap that its
+            // own mixins need to apply). Most early-service jars ship none.
             for (String impl : serviceImpls(jar, COREMOD_SERVICE)) {
                 try {
                     ICoreMod coremod = (ICoreMod) Class.forName(impl, true, cl)
@@ -444,6 +455,26 @@ public final class EarlyServiceLayer {
                             transformers.size() - before, impl, jar.getFileName());
                 } catch (Throwable t) {
                     LOGGER.error("[AutoModpack] Failed to run in-place coremod {} from {}", impl, jar.getFileName(), t);
+                }
+            }
+
+            // A transformation service's transformers. Almost always empty - the service is only a
+            // vehicle to load early (asynclogger, Connector, CrashAssistant all ship such a no-op
+            // one) - but forwarded so any that aren't empty still run in place.
+            for (String impl : serviceImpls(jar, TRANSFORMATION_SERVICE)) {
+                try {
+                    ITransformationService service = (ITransformationService) Class.forName(impl, true, cl)
+                            .getDeclaredConstructor().newInstance();
+                    int before = transformers.size();
+                    for (ITransformer<?> transformer : service.transformers()) {
+                        transformers.add(transformer);
+                    }
+                    if (transformers.size() > before) {
+                        LOGGER.info("[AutoModpack] Forwarding {} transformer(s) from in-place transformation service {} ({})",
+                                transformers.size() - before, impl, jar.getFileName());
+                    }
+                } catch (Throwable t) {
+                    LOGGER.error("[AutoModpack] Failed to run in-place transformation service {} from {}", impl, jar.getFileName(), t);
                 }
             }
         }

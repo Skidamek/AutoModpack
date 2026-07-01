@@ -27,7 +27,7 @@ public class AutoModpackCoreMod implements ICoreMod {
 
     @Override
     public Iterable<? extends ITransformer<?>> getTransformers() {
-        List<ITransformer<?>> transformers = new ArrayList<>(EarlyServiceLayer.collectCoremodTransformers());
+        List<ITransformer<?>> transformers = new ArrayList<>(EarlyServiceLayer.collectForwardedTransformers());
         // Re-fires the in-place GraphicsBootstrappers on the GAME layer once its launch target
         // loads, repairing the split static state that crashes mods like asynclogger in place.
         transformers.add(new GameGraphicsBootstrapTrigger());

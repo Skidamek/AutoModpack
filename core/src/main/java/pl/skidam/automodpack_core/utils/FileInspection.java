@@ -354,22 +354,42 @@ public class FileInspection {
         return name.endsWith("mods.toml") || name.endsWith("mod.json");
     }
 
+    // cpw.mods.modlauncher's ITransformationService is a boot-layer service used by BOTH forge and
+    // neoforge (they share ModLauncher). It makes a jar an "early service" (ModLauncher discovers it
+    // before mod discovery), so it must count for the copy decision on either loader.
+    private static final String TRANSFORMATION_SERVICE =
+            "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
+
     private static final Set<String> FORGE_SERVICES = Set.of(
             "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
             "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
-            "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider"
+            "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
+            TRANSFORMATION_SERVICE
     );
 
+    // The services NeoForge treats as "early" (its TransformerDiscovererConstants.SERVICES: a jar
+    // shipping any of these is put on the SERVICE layer before mod discovery), plus ICoreMod (FML
+    // collects those after discovery) and the mod-loading locators/language loaders. Every service
+    // that decides how a mod is discovered/transformed must be listed here so the copy decision
+    // never silently ignores one - a mod shipping a service AutoModpack can't host in place
+    // (see ModpackLoaderService#inPlaceHandleableServices) must fall back to copy-to-standard.
     private static final Set<String> NEOFORGE_SERVICES = Set.of(
             "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
             "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader",
             "META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader",
             "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
             "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper",
+            "META-INF/services/net.neoforged.neoforgespi.earlywindow.ImmediateWindowProvider",
             // A coremod's transformers are collected by FML after mod discovery, scanning the
             // GAME layer - so a modpack-folder coremod is run in place from the game-library copy
             // (see EarlyServiceLayer). Listed here so the copy decision still accounts for it.
-            "META-INF/services/net.neoforged.neoforgespi.coremod.ICoreMod"
+            "META-INF/services/net.neoforged.neoforgespi.coremod.ICoreMod",
+            // Most mods' ITransformationService is only a vehicle to load early (its transformers()
+            // are empty; the real work is a coremod/mixin) - EarlyServiceLayer forwards its
+            // transformers and bridges its classes in place. One that does essential boot-time work
+            // isn't fully hostable in place and, not being in inPlaceHandleableServices, is copied.
+            TRANSFORMATION_SERVICE
     );
 
     /**
