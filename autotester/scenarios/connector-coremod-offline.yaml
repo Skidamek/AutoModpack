@@ -50,6 +50,9 @@ flow:
           - 'Bootstrapping \d+ early-service'
           # the outer jar's classes/resources reach the GAME layer via the bridge (no copy)
           - 'Bridged \d+ outer package.*connector'
+          # and the JPMS read edges a real ancestor layer would give are wired up, so the inner
+          # 'connector' module can actually access the outer classes (not just load them)
+          - 'Linked JPMS module reads for connector'
           # AutoModpack's ICoreMod forwards Connector's coremod transformers from the SERVICE
           # layer - this is what makes Connector's own mixins apply in place
           - 'Forwarding \d+ transformer.*ConnectorCoremods'
@@ -71,3 +74,8 @@ flow:
           - 'ClassNotFoundException.*ConnectorEarlyLoader'
           # if Connector's coremod didn't run, its own mixins (e.g. KeyMappingMixin) fail here
           - 'Mixin apply for mod connector failed'
+          # JPMS read edge missing: inner 'connector' module can't access an outer class even
+          # though it loads. Surfaces when ImmediateWindowHandler.updateModuleReads force-loads
+          # mixin-plugin classes - the headless DummyProvider does this too, so it reproduces here.
+          - 'does not read module'
+          - 'IllegalAccessError.*connector'

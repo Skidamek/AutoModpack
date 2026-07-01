@@ -36,9 +36,10 @@ flow:
           - 'Bridged \d+ outer package.*CrashAssistant'
           - '\(crash_assistant\)'
   - do: wait_exit
-    name: let the client run through to its (headless-GL) exit
+    name: tolerate the client exiting (headless GL/audio) or staying alive at the main menu
     expect: any
-    timeout: 300s
+    or_alive: true
+    timeout: 60s
   - do: assert
     name: CrashAssistant resolved its outer classes in place (no NoClassDefFoundError from the split)
     that:
