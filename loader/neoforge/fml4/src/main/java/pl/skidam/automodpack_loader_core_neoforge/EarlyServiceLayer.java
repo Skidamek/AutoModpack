@@ -157,13 +157,14 @@ public final class EarlyServiceLayer {
         return service == null ? null : service.classLoader();
     }
 
-    // Stable key so a jar matches whether reached via a relative or absolute path.
+    // Stable key so a jar matches whether reached via a relative or absolute path. Purely lexical
+    // (no toRealPath()): both the writer (register(), from Files.list(modpackMods)) and every reader
+    // (isEarlyServiceJar() etc., from ModpackLoader.modsToLoad) derive paths from listing the same
+    // modpack mods/ folder, with no symlink indirection between them, so lexical equality already
+    // holds - and isEarlyServiceJar() runs once per mod in the modpack (not just early-service jars)
+    // from each locator pass, so avoiding a real filesystem stat here matters on large modpacks.
     private static Path canonical(Path jar) {
-        try {
-            return jar.toRealPath();
-        } catch (Exception e) {
-            return jar.toAbsolutePath().normalize();
-        }
+        return jar.toAbsolutePath().normalize();
     }
 
     // Per-jar facts derived from a single jar mount, cached for the JVM's life (jar content is
