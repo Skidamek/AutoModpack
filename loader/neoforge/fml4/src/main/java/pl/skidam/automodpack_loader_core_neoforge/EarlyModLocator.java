@@ -1,10 +1,7 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
-import net.neoforged.fml.loading.progress.ProgressMeter;
-import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.locating.*;
-import pl.skidam.automodpack_loader_core.Preload;
 import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
 
 import java.nio.file.Path;
@@ -15,19 +12,9 @@ public class EarlyModLocator implements IModFileCandidateLocator {
     @Override
     public void findCandidates(ILaunchContext context, IDiscoveryPipeline pipeline) {
 
-        // Deliberately NOT moved into EarlyServiceBootstrapper's GraphicsBootstrapper phase (unlike
-        // fml10/fml11/forge, where an earlier Preload avoids a restart after an update changes which
-        // mods are early-service mods): a live regression showed that calling Preload from anywhere
-        // within GraphicsBootstrapper.bootstrap() breaks Sinytra Connector's own updateModuleReads
-        // (Class.forName("...DummyTarget") throws ClassNotFoundException at FMLLoader.beforeStart) -
-        // confirmed via A/B testing that this loader's ModLauncher/ITransformationService machinery,
-        // which Connector's own service instantiation and lifecycle run through, is what's sensitive
-        // to it, not a fixable timing gap. fml10/fml11 have no such competing ITransformationService
-        // phase and were verified safe with the earlier placement.
-        ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
-        new Preload();
-        progress.complete();
-
+        // The update/reconcile step (Preload) now runs from EarlyServiceBootstrapper - the
+        // loader's GraphicsBootstrapper phase, which always fires before mod discovery - so
+        // ModpackLoader.modsToLoad is already populated by the time we get here.
         for (Path path : ModpackLoader.modsToLoad) {
             // Early-service jars (e.g. Sodium) were placed on a child SERVICE layer and
             // their GraphicsBootstrappers already fired. Their real mod lives in an inner

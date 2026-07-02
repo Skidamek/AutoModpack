@@ -25,6 +25,17 @@ import java.util.stream.Stream;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
+    public static volatile String EARLY_MC_VERSION;
+    public static volatile String EARLY_NEOFORGE_VERSION;
+    // FMLLoader.getDist() is also unreliable this early - confirmed live to be the actual cause of
+    // a regression with Sinytra Connector: LoaderManager.getEnvironmentType() read SERVER on a
+    // CLIENT launch during Preload, so Preload.updateAll() took its dedicated-server-only branch
+    // and returned without ever populating ModpackLoader.modsToLoad, silently skipping Connector's
+    // embedded Fabric-adapter mod jar (added only via EarlyModLocator's replay of that list) - not
+    // any timing-sensitivity in Connector itself. NeoForge's launchTarget naming convention (e.g.
+    // "forgeclient"/"forgeserver") reliably encodes dist and is on the command line here.
+    public static volatile Boolean EARLY_IS_CLIENT;
+
     @Override
     public String name() {
         return "automodpack";
@@ -34,6 +45,23 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
     public void bootstrap(String[] arguments) {
         try {
             Path gameDir = gameDir(arguments);
+            EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
+            EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
+            String launchTarget = argValue(arguments, "--launchTarget");
+            if (launchTarget != null) {
+                EARLY_IS_CLIENT = !launchTarget.toLowerCase(java.util.Locale.ROOT).contains("server");
+            }
+
+            // Run our own update/reconcile step FIRST, before anything below reads the modpack
+            // folder - this is the earliest hook NeoForge gives any mod (confirmed live: it fires
+            // ~50ms before ModLauncher's own ITransformationService.onLoad lifecycle). Doing the
+            // update here, rather than later in EarlyModLocator, means an update that changes which
+            // mods are early-service mods is already reflected in the folder we scan below, in the
+            // same boot - no restart needed.
+            net.neoforged.fml.loading.progress.ProgressMeter progress =
+                    net.neoforged.fml.loading.progress.StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
+            new pl.skidam.automodpack_loader_core.Preload();
+            progress.complete();
 
             Path modpackMods = resolveSelectedModpackMods(gameDir);
             if (modpackMods == null || !Files.isDirectory(modpackMods)) {
@@ -211,5 +239,20 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             }
         }
         return Path.of(".").toAbsolutePath().normalize();
+    }
+
+    private static String argValue(String[] arguments, String name) {
+        if (arguments != null) {
+            String prefix = name + "=";
+            for (int i = 0; i < arguments.length; i++) {
+                if (name.equals(arguments[i]) && i + 1 < arguments.length) {
+                    return arguments[i + 1];
+                }
+                if (arguments[i].startsWith(prefix)) {
+                    return arguments[i].substring(prefix.length());
+                }
+            }
+        }
+        return null;
     }
 }
