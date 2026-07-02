@@ -75,16 +75,26 @@ flow:
   - do: assert
     name: Connector fully initialised in place - no CNF and no failed coremod/mixin apply
     that:
-      log:
-        container: client
-        not_matches:
-          # the original blocker: inner mod couldn't see the outer jar's classes in place
-          - 'NoClassDefFoundError.*ConnectorEarlyLoader'
-          - 'ClassNotFoundException.*ConnectorEarlyLoader'
-          # if Connector's coremod didn't run, its own mixins (e.g. KeyMappingMixin) fail here
-          - 'Mixin apply for mod connector failed'
-          # JPMS read edge missing: inner 'connector' module can't access an outer class even
-          # though it loads. Surfaces when ImmediateWindowHandler.updateModuleReads force-loads
-          # mixin-plugin classes - the headless DummyProvider does this too, so it reproduces here.
-          - 'does not read module'
-          - 'IllegalAccessError.*connector'
+      all:
+        - log:
+            container: client
+            not_matches:
+              # the original blocker: inner mod couldn't see the outer jar's classes in place
+              - 'NoClassDefFoundError.*ConnectorEarlyLoader'
+              - 'ClassNotFoundException.*ConnectorEarlyLoader'
+              # if Connector's coremod didn't run, its own mixins (e.g. KeyMappingMixin) fail here
+              - 'Mixin apply for mod connector failed'
+              # JPMS read edge missing: inner 'connector' module can't access an outer class even
+              # though it loads. Surfaces when ImmediateWindowHandler.updateModuleReads force-loads
+              # mixin-plugin classes - the headless DummyProvider does this too, so it reproduces here.
+              - 'does not read module'
+              - 'IllegalAccessError.*connector'
+        # Positive check, not just absence-of-error: the Connector-loaded Fabric mod's own mixin
+        # must actually apply, not merely load without exception. This is the exact failure mode
+        # of a prior live-only-detectable regression (ITransformationService.initialize() run too
+        # early silently broke Connector's Fabric mixin registration, with no error anywhere) that
+        # the checks above would NOT have caught - only a positive application signal does. Mixin's
+        # apply-tracing is DEBUG-level and not on the container's stdout, so read it from the file.
+        - log:
+            file: logs/debug.log
+            matches: 'Mixing ExplosionMixin from explosiveenhancement\.mixins\.json into net\.minecraft\.world\.level\.Explosion'
