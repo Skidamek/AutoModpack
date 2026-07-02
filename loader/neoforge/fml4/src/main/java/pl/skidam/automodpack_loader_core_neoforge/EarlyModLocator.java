@@ -15,22 +15,9 @@ public class EarlyModLocator implements IModFileCandidateLocator {
     @Override
     public void findCandidates(ILaunchContext context, IDiscoveryPipeline pipeline) {
 
-        // This locator runs at HIGHEST_SYSTEM_PRIORITY, i.e. before any other locator's findCandidates -
-        // the earliest point in mod discovery (beginScanning). NeoForge's own window-provider assignment
-        // (which every registered GraphicsBootstrapper, including EarlyServiceBootstrapper, necessarily
-        // precedes) has already happened by now, so it is safe to run each in-place transformation
-        // service's initialize() here - see the javadoc on EarlyServiceLayer#runServiceInitialization
-        // for why running it any earlier (from the bootstrap phase itself) breaks Sinytra Connector.
-        EarlyServiceLayer.runServiceInitialization();
-
         ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
         new Preload();
         progress.complete();
-
-        // By discovery, ModLauncher has populated its transformation-service registry (which the
-        // early-window phase may be too early for), so ensure our forwarding service is injected now
-        // if it was not already - still before ModLauncher's post-discovery completeScan.
-        EarlyServiceLayer.ensureForwardingTransformationServiceInjected();
 
         for (Path path : ModpackLoader.modsToLoad) {
             // Early-service jars (e.g. Sodium) were placed on a child SERVICE layer and

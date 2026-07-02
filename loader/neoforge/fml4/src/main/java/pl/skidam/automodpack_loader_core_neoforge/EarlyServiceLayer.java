@@ -138,7 +138,6 @@ public final class EarlyServiceLayer {
     // injected into ModLauncher (AutoModpackTransformationService) can run their completeScan at the
     // native, post-discovery time - when its returned resources still reach the GAME/PLUGIN layers.
     private static final Map<Path, List<ITransformationService>> TRANSFORMATION_SERVICES = new ConcurrentHashMap<>();
-    private static final AtomicBoolean FORWARDING_SERVICE_INJECTED = new AtomicBoolean(false);
 
     // The GAME-layer bridge must run exactly once, from the injected launch plugin's
     // initializeLaunch (see EarlyServiceBridgePlugin), before Mixin loads any outer class.
@@ -337,19 +336,18 @@ public final class EarlyServiceLayer {
     }
 
     /**
-     * Drives {@code onLoad} on each in-place transformation service. Called from the earlywindow
-     * bootstrap - itself running AS a {@code GraphicsBootstrapper.bootstrap()} callback, i.e. from
-     * inside NeoForge's own {@code GraphicsBootstrapper} iteration, before it assigns the real
-     * {@code ImmediateWindowProvider} to {@code ImmediateWindowHandler.provider}. This matches native
-     * timing: {@code TransformerDiscovererConstants}' early-discovery services (which select the window
-     * provider) run before ANY {@code ITransformationService.onLoad}, so natively {@code onLoad} always
-     * sees the real provider already in place too - {@code onLoad} itself does no provider-sensitive
-     * work here (verified for Sinytra Connector: its {@code onLoad} only injects a launch plugin into
-     * the already-live {@code Launcher.INSTANCE}), so running it this early is safe. {@code initialize()}
-     * is a different story - see {@link #runServiceInitialization()}.
+     * Instantiates each in-place jar's declared {@code ITransformationService}(s), from the earlywindow
+     * bootstrap phase (itself a {@code GraphicsBootstrapper.bootstrap()} callback). Does NOT call any
+     * lifecycle method on them - {@link AutoModpackTransformationService}, a real, natively
+     * ServiceLoader-discovered {@code ITransformationService} (see its class javadoc), drives
+     * {@code onLoad}/{@code initialize}/{@code beginScanning}/{@code completeScan}/{@code transformers}
+     * on these instances itself, forwarding each call at the exact moment ModLauncher's own {@code
+     * TransformationServicesHandler} makes it - which is always correctly ordered relative to
+     * everything else (window-provider assignment, other services' onLoad/initialize) because that
+     * ordering is ModLauncher's own native invariant, not something we have to reconstruct by picking a
+     * hook point ourselves.
      */
-    public static void runTransformationServiceOnLoad() {
-        IEnvironment env = launcherEnvironment();
+    public static void instantiateTransformationServices() {
         for (Map.Entry<Path, JarService> entry : JAR_SERVICES.entrySet()) {
             Path jar = entry.getKey();
             ClassLoader cl = entry.getValue().classLoader();
@@ -358,62 +356,79 @@ public final class EarlyServiceLayer {
                     ITransformationService service = (ITransformationService) Class.forName(impl, true, cl)
                             .getDeclaredConstructor().newInstance();
                     TRANSFORMATION_SERVICES.computeIfAbsent(jar, k -> new ArrayList<>()).add(service);
-                    service.onLoad(env, Set.of());
-                    LOGGER.info("[AutoModpack] Ran in-place transformation-service onLoad for {} ({})", impl, jar.getFileName());
+                    LOGGER.info("[AutoModpack] Instantiated in-place transformation service {} ({})", impl, jar.getFileName());
                 } catch (Throwable t) {
-                    LOGGER.error("[AutoModpack] Failed in-place transformation-service onLoad for {} from {}", impl, jar.getFileName(), t);
+                    LOGGER.error("[AutoModpack] Failed to instantiate in-place transformation service {} from {}", impl, jar.getFileName(), t);
                 }
             }
         }
-        ensureForwardingTransformationServiceInjected();
     }
 
-    private static final AtomicBoolean SERVICE_INITIALIZATION_DONE = new AtomicBoolean(false);
+    private interface ServiceAction {
+        void run(ITransformationService service) throws Throwable;
+    }
+
+    private interface ServiceQuery<R> {
+        List<R> run(ITransformationService service) throws Throwable;
+    }
 
     /**
-     * Drives {@code initialize} on each in-place transformation service. Called once from {@link
-     * EarlyModLocator#findCandidates}, NOT from the earlywindow bootstrap that runs {@link
-     * #runTransformationServiceOnLoad()} - {@code initialize()} must run strictly after NeoForge's own
-     * window-provider assignment, which {@link EarlyServiceBootstrapper#bootstrap} necessarily precedes
-     * (it runs as one of the {@code GraphicsBootstrapper}s NeoForge iterates BEFORE assigning the real
-     * provider to the {@code ImmediateWindowHandler.provider} static field).
-     *
-     * <p>Root cause of a live regression that motivated this: Sinytra Connector's {@code
-     * ConnectorLoaderService.initialize()} does not do its real Fabric-loading work itself - it reads
-     * the CURRENT {@code ImmediateWindowHandler.provider}, wraps it in a decorator whose {@code
-     * updateModuleReads} override is where {@code ConnectorEarlyLoader.setup()}/{@code preLaunch()}
-     * (Fabric mixin/entrypoint registration) actually happens, and writes the wrapper back into that
-     * same static field. If {@code initialize()} runs before NeoForge assigns the real provider, that
-     * assignment (which happens right after all {@code GraphicsBootstrapper}s finish) silently
-     * overwrites Connector's wrapper - no error, its mixins just never register. Natively this can't
-     * happen: ModLauncher's {@code TransformationServicesHandler} runs the window-provider-selecting
-     * early-discovery services, then ALL services' {@code onLoad}, THEN ALL services' {@code
-     * initialize()} - so by native {@code initialize()} time the real provider is always already set.
-     *
-     * <p>{@link EarlyModLocator} is AutoModpack's own {@code IModFileCandidateLocator}, registered at
-     * {@code HIGHEST_SYSTEM_PRIORITY} so it runs before any other locator's {@code findCandidates} -
-     * i.e. this call sits at the very top of mod discovery ({@code beginScanning}), which is exactly
-     * where native {@code initialize()} sits relative to discovery: after the window provider is final,
-     * before any mod file is read. Idempotent via {@link #SERVICE_INITIALIZATION_DONE} in case discovery
-     * ever invokes the locator more than once.
+     * Runs {@code action} against every in-place transformation service, isolated in its own try/catch
+     * - one misbehaving in-place service (e.g. throwing {@code IncompatibleEnvironmentException} from
+     * {@code onLoad}) must not mark OUR service invalid and abort ModLauncher's {@code
+     * validateTransformationServices} for everyone.
      */
-    public static void runServiceInitialization() {
-        if (!SERVICE_INITIALIZATION_DONE.compareAndSet(false, true)) return;
-        IEnvironment env = launcherEnvironment();
-        int count = 0;
+    private static void forEachTransformationService(String verb, ServiceAction action) {
         for (Map.Entry<Path, List<ITransformationService>> entry : TRANSFORMATION_SERVICES.entrySet()) {
             for (ITransformationService service : entry.getValue()) {
                 try {
-                    service.initialize(env);
-                    count++;
+                    action.run(service);
+                    LOGGER.info("[AutoModpack] Ran in-place transformation-service {} for {} ({})", verb, service.getClass().getName(), entry.getKey().getFileName());
                 } catch (Throwable t) {
-                    LOGGER.debug("[AutoModpack] In-place transformation service {} initialize() skipped: {}", service.getClass().getName(), t.toString());
+                    LOGGER.error("[AutoModpack] In-place transformation service {} {} failed ({})", service.getClass().getName(), verb, entry.getKey().getFileName(), t);
                 }
             }
         }
-        if (count > 0) {
-            LOGGER.info("[AutoModpack] Completed in-place transformation service initialization for {} service(s)", count);
+    }
+
+    /** Same isolation as {@link #forEachTransformationService}, collecting and logging each non-empty result. */
+    private static <R> List<R> collectFromTransformationServices(String verb, ServiceQuery<R> query) {
+        List<R> results = new ArrayList<>();
+        for (Map.Entry<Path, List<ITransformationService>> entry : TRANSFORMATION_SERVICES.entrySet()) {
+            for (ITransformationService service : entry.getValue()) {
+                try {
+                    List<R> produced = query.run(service);
+                    if (produced != null && !produced.isEmpty()) {
+                        results.addAll(produced);
+                        LOGGER.info("[AutoModpack] Forwarded {} {} result(s) from in-place transformation service {} ({})",
+                                produced.size(), verb, service.getClass().getName(), entry.getKey().getFileName());
+                    }
+                } catch (Throwable t) {
+                    LOGGER.error("[AutoModpack] In-place transformation service {} {} failed ({})", service.getClass().getName(), verb, entry.getKey().getFileName(), t);
+                }
+            }
         }
+        return results;
+    }
+
+    /** Forwards ModLauncher's native {@code onLoad} call to each in-place transformation service. */
+    static void forwardOnLoad(IEnvironment env, Set<String> otherServices) {
+        forEachTransformationService("onLoad", service -> service.onLoad(env, otherServices));
+    }
+
+    /** Forwards ModLauncher's native {@code initialize} call to each in-place transformation service. */
+    static void forwardInitialize(IEnvironment env) {
+        forEachTransformationService("initialize", service -> service.initialize(env));
+    }
+
+    /**
+     * Forwards ModLauncher's native {@code beginScanning} call to each in-place transformation service,
+     * merging their returned resources - previously impossible to run at all, since we had no hook at
+     * ModLauncher's real {@code runScanningTransformationServices} time; those resources now reach the
+     * PLUGIN/GAME layers exactly as they would if the jar sat on the real SERVICE layer.
+     */
+    static List<ITransformationService.Resource> forwardBeginScanning(IEnvironment env) {
+        return collectFromTransformationServices("beginScanning", service -> service.beginScanning(env));
     }
 
     /**
@@ -424,107 +439,34 @@ public final class EarlyServiceLayer {
      * layers as they are built.
      */
     static List<ITransformationService.Resource> forwardCompleteScan(IModuleLayerManager layerManager) {
-        List<ITransformationService.Resource> resources = new ArrayList<>();
-        for (Map.Entry<Path, List<ITransformationService>> entry : TRANSFORMATION_SERVICES.entrySet()) {
-            for (ITransformationService service : entry.getValue()) {
-                try {
-                    List<ITransformationService.Resource> scanned = service.completeScan(layerManager);
-                    if (scanned != null && !scanned.isEmpty()) {
-                        resources.addAll(scanned);
-                        LOGGER.info("[AutoModpack] Forwarded {} completeScan resource-set(s) from in-place transformation service {} ({})",
-                                scanned.size(), service.getClass().getName(), entry.getKey().getFileName());
-                    }
-                } catch (Throwable t) {
-                    LOGGER.error("[AutoModpack] In-place transformation service {} completeScan failed ({})",
-                            service.getClass().getName(), entry.getKey().getFileName(), t);
-                }
-            }
-        }
-        return resources;
+        return collectFromTransformationServices("completeScan", service -> service.completeScan(layerManager));
     }
 
     /**
-     * Injects {@link AutoModpackTransformationService} into ModLauncher's {@code
-     * TransformationServicesHandler.serviceLookup}. ModLauncher discovers transformation services from
-     * the BOOT layer at bootstrap, before AutoModpack's SERVICE layer exists, so - like the launch
-     * plugin - it must be injected, not shipped. Done at the early-window phase, before ModLauncher's
-     * post-discovery {@code triggerScanCompletion}, so our service's {@code completeScan} is collected
-     * with the rest. (Its {@code onLoad}/{@code initialize} are already past, hence run in place above.)
+     * Forwards each in-place transformation service's {@code transformers()}, called by {@link
+     * AutoModpackTransformationService#transformers()} - a separate pass from {@link
+     * #collectForwardedTransformers()} (which forwards {@code ICoreMod} transformers for {@link
+     * AutoModpackCoreMod}), so each SPI's transformers are collected exactly once, by the AutoModpack
+     * service that is itself natively discovered the same way the real SPI would be.
      */
-    public static void ensureForwardingTransformationServiceInjected() {
-        if (FORWARDING_SERVICE_INJECTED.get() || TRANSFORMATION_SERVICES.isEmpty()) return;
-
-        Object handler;
-        Map<String, Object> serviceLookup;
-        try {
-            Object launcher = ModuleClassLoaderAccess.launcherInstance();
-            handler = ModuleClassLoaderAccess.readField(launcher, "transformationServicesHandler");
-            @SuppressWarnings("unchecked")
-            Map<String, Object> lookup = (Map<String, Object>) ModuleClassLoaderAccess.readField(handler, "serviceLookup");
-            serviceLookup = lookup;
-        } catch (Throwable t) {
-            if (FORWARDING_SERVICE_INJECTED.compareAndSet(false, true)) {
-                LOGGER.error("[AutoModpack] Could not reach ModLauncher's transformation-service registry; in-place completeScan resources (e.g. Connector's) will be missing", t);
-            }
-            return;
-        }
-
-        // ModLauncher populates serviceLookup in discoverServices - which can run AFTER the early
-        // window. Not ready yet: leave the flag unset so a later hook (EarlyModLocator, at discovery)
-        // retries. It is still comfortably before triggerScanCompletion (completeScan).
-        if (serviceLookup == null) return;
-        if (serviceLookup.containsKey(AutoModpackTransformationService.NAME)
-                || !FORWARDING_SERVICE_INJECTED.compareAndSet(false, true)) return;
-
-        try {
-            // The decorator ctor is package-private; cpw.mods.modlauncher is reachable, so plain
-            // reflection (setAccessible) reaches it, same as the launch-plugin injection.
-            java.lang.reflect.Constructor<?> ctor = Class.forName("cpw.mods.modlauncher.TransformationServiceDecorator")
-                    .getDeclaredConstructor(ITransformationService.class);
-            ctor.setAccessible(true);
-            Object decorator = ctor.newInstance(new AutoModpackTransformationService());
-            // Its onLoad (which sets isValid) is past; set it directly so nothing skips the decorator.
-            try {
-                ModuleClassLoaderAccess.writeField(decorator, "isValid", Boolean.TRUE);
-            } catch (Throwable ignored) {
-                // Not fatal: completeScan is not gated on isValid.
-            }
-            // Replace the map rather than mutate it in place: we run from EarlyModLocator, i.e. from
-            // FML's beginScanning, which ModLauncher calls from inside its own iteration over
-            // serviceLookup - an in-place put would ConcurrentModificationException. The ongoing
-            // iteration keeps its old map; ModLauncher re-reads the field for triggerScanCompletion.
-            Map<String, Object> replacement = new java.util.LinkedHashMap<>(serviceLookup);
-            replacement.put(AutoModpackTransformationService.NAME, decorator);
-            ModuleClassLoaderAccess.writeField(handler, "serviceLookup", replacement);
-            LOGGER.info("[AutoModpack] Injected the forwarding transformation service '{}' so ModLauncher runs each in-place service's completeScan natively (its GAME/PLUGIN-layer resources reach the layers)", AutoModpackTransformationService.NAME);
-        } catch (Throwable t) {
-            LOGGER.error("[AutoModpack] Failed to inject the forwarding transformation service; in-place completeScan resources (e.g. Connector's) will be missing", t);
-        }
+    static List<ITransformer<?>> collectTransformationServiceTransformers() {
+        return collectFromTransformationServices("transformers", service -> new ArrayList<>(service.transformers()));
     }
 
-    /** ModLauncher's live {@code IEnvironment} (via {@code Launcher.INSTANCE}), or null if unreachable. */
-    private static IEnvironment launcherEnvironment() {
-        try {
-            Object launcher = ModuleClassLoaderAccess.launcherInstance();
-            return (IEnvironment) launcher.getClass().getMethod("environment").invoke(launcher);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
 
     /**
-     * Instantiates the {@code ICoreMod}s and {@code ITransformationService}s shipped by the
-     * registered early-service jars (from their child SERVICE layer, where the outer classes live)
-     * and collects their transformers. Called by {@link AutoModpackCoreMod} during FML's
-     * {@code transformers()} pass.
+     * Instantiates the {@code ICoreMod}s shipped by the registered early-service jars (from their
+     * child SERVICE layer, where the outer classes live) and collects their transformers. Called by
+     * {@link AutoModpackCoreMod} during FML's {@code transformers()} pass.
      *
      * <p>This is how a modpack-folder coremod (e.g. Sinytra Connector, whose own mixins rely on its
-     * coremod to remap their {@code @Shadow} targets) runs in place. FML/ModLauncher only collect
-     * these transformers from layers built before the GAME layer; a modpack jar reaches at best the
-     * GAME layer, so its own coremod/transformation service is never scanned. AutoModpack, however,
-     * sits on the SERVICE layer and IS scanned - so it forwards the modpack services' transformers
-     * as its own. (A transformation service's transformers are usually empty - it is only an
-     * early-loading vehicle - but forwarded for the rare case they aren't.)
+     * coremod to remap their {@code @Shadow} targets) runs in place. {@code ICoreMod} is a NeoForge/FML
+     * SPI, not a ModLauncher one - FML's own {@code transformers()} pass collects it directly (not via
+     * native {@code ServiceLoader} discovery the way {@code ITransformationService} is), and a modpack
+     * jar's coremod is never part of that scan. AutoModpack, however, sits on the SERVICE layer and IS
+     * scanned - so it forwards the modpack coremods' transformers as its own. (A modpack jar's own
+     * {@code ITransformationService} transformers are forwarded separately, by {@link
+     * AutoModpackTransformationService#transformers()} - see {@link #collectTransformationServiceTransformers()}.)
      */
     public static List<ITransformer<?>> collectForwardedTransformers() {
         List<ITransformer<?>> transformers = new ArrayList<>();
@@ -548,29 +490,11 @@ public final class EarlyServiceLayer {
                     LOGGER.error("[AutoModpack] Failed to run in-place coremod {} from {}", impl, jar.getFileName(), t);
                 }
             }
-
-            // A transformation service's transformers. Almost always empty - the service is only a
-            // vehicle to load early (asynclogger, Connector, CrashAssistant all ship such a no-op
-            // one) - but forwarded so any that aren't empty still run in place. Reuse the SAME instance
-            // that already ran onLoad/initialize (see runTransformationServiceOnLoad) rather than
-            // instantiating a fresh, un-lifecycled one - natively transformers() is gathered from the
-            // one TransformationServiceDecorator instance that carried the service through its whole
-            // lifecycle, so a service that builds its transformers from onLoad/initialize state needs
-            // that same instance here too.
-            for (ITransformationService service : TRANSFORMATION_SERVICES.getOrDefault(jar, List.of())) {
-                try {
-                    int before = transformers.size();
-                    for (ITransformer<?> transformer : service.transformers()) {
-                        transformers.add(transformer);
-                    }
-                    if (transformers.size() > before) {
-                        LOGGER.info("[AutoModpack] Forwarding {} transformer(s) from in-place transformation service {} ({})",
-                                transformers.size() - before, service.getClass().getName(), jar.getFileName());
-                    }
-                } catch (Throwable t) {
-                    LOGGER.error("[AutoModpack] Failed to collect transformers from in-place transformation service {} from {}", service.getClass().getName(), jar.getFileName(), t);
-                }
-            }
+            // A transformation service's transformers are forwarded separately, by
+            // AutoModpackTransformationService#transformers() (see collectTransformationServiceTransformers) -
+            // that service is itself natively ServiceLoader-discovered the same way a real
+            // ITransformationService would be, so ModLauncher calls its transformers() directly; forwarding
+            // them again here would register every one of them twice.
         }
         return transformers;
     }

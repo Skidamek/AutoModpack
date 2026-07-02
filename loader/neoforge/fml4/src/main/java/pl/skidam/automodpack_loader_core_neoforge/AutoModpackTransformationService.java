@@ -9,29 +9,30 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * A ModLauncher {@link ITransformationService} that AutoModpack <em>injects</em> into
- * {@code TransformationServicesHandler.serviceLookup} (see {@link EarlyServiceLayer#
- * injectForwardingTransformationService()}). It cannot be discovered the way {@link
- * AutoModpackCoreMod} is: both {@code ICoreMod} and {@code ITransformationService} are ultimately
- * scanned from the SERVICE layer, but ModLauncher builds and scans that layer - via {@code
- * TransformationServicesHandler.discoverServices} - before AutoModpack's own module (itself only
- * placed on the SERVICE layer by the loader) is even resolved, so a shipped {@code
- * ITransformationService} file would never be seen (the same reason {@link EarlyServiceBridgePlugin}
- * is injected, not discovered).
+ * A real, {@code META-INF/services}-shipped {@link ITransformationService} that forwards every
+ * lifecycle call to each in-place early-service jar's own {@code ITransformationService} (see
+ * {@link EarlyServiceLayer}). Discoverable the same way {@link AutoModpackCoreMod} already is:
+ * ModLauncher's {@code TransformationServicesHandler.discoverServices} builds the SERVICE layer from
+ * every jar in the standard {@code mods/} folder that ships any of {@code
+ * TransformerDiscovererConstants.SERVICES} - AutoModpack's own jar already qualifies (it ships {@code
+ * GraphicsBootstrapper}/{@code IModFileCandidateLocator}/{@code IDependencyLocator} service files), so
+ * it is on that layer, and {@code ServiceLoader.load(serviceLayer, ITransformationService.class)} -
+ * called right after - finds this class too.
  *
- * <p>Its one job is {@link #completeScan}: ModLauncher's {@code triggerScanCompletion} calls every
- * registered service's {@code completeScan} <em>after</em> mod discovery and adds the returned jars to
- * the GAME/PLUGIN layers as it builds them. By forwarding to each in-place early-service jar's own
- * transformation service here, resources those services contribute - e.g. Sinytra Connector's
- * {@code FabricASMFixer} generated-classes jar and its {@code authlib}/{@code brigadier} module moves,
- * which its Fabric mods' mixins need - reach the layers natively, at the correct time. Running
- * {@code completeScan} ourselves later (at the bridge phase) could not do this: the GAME layer is
- * already built by then.
+ * <p>This makes every lifecycle call below fire at ModLauncher's own native time, batched with every
+ * other real transformation service: all {@code onLoad}, then all {@code initialize}, then all {@code
+ * beginScanning}, then (after mod discovery) {@code completeScan}, then {@code transformers}. That
+ * ordering is exactly what the modpack-folder jars' own services need (in particular Sinytra
+ * Connector's {@code initialize()}, which must run after NeoForge's window-provider assignment - see
+ * {@code TransformerDiscovererConstants}/{@code ModDirTransformerDiscoverer.earlyInitialization}, which
+ * fires before {@code serviceLookup} is even built, so it always precedes ANY {@code onLoad}, let alone
+ * {@code initialize}), so no manual hook-point-picking is needed the way it was before this class was
+ * natively discovered.
  *
- * <p>{@code onLoad}/{@code initialize} are no-ops: ModLauncher calls those before we can inject, so
- * {@link EarlyServiceLayer#runTransformationServiceOnLoad()} (onLoad, run from the earlywindow
- * bootstrap) and {@link EarlyServiceLayer#runServiceInitialization()} (initialize, run from {@link
- * EarlyModLocator#findCandidates} at the very start of mod discovery) drive them in place instead.
+ * <p>The in-place services themselves are only instantiated at the earlywindow bootstrap phase (see
+ * {@link EarlyServiceLayer#instantiateTransformationServices()}), before this class's {@code onLoad}
+ * can possibly run - so by the time ModLauncher calls any method here, every in-place service exists
+ * and is ready to receive it.
  */
 public class AutoModpackTransformationService implements ITransformationService {
 
@@ -43,13 +44,18 @@ public class AutoModpackTransformationService implements ITransformationService 
     }
 
     @Override
-    public void initialize(IEnvironment environment) {
-        // Driven in place by EarlyServiceBootstrapper - ModLauncher already passed this phase.
+    public void onLoad(IEnvironment env, Set<String> otherServices) {
+        EarlyServiceLayer.forwardOnLoad(env, otherServices);
     }
 
     @Override
-    public void onLoad(IEnvironment env, Set<String> otherServices) {
-        // Driven in place by EarlyServiceBootstrapper - ModLauncher already passed this phase.
+    public void initialize(IEnvironment environment) {
+        EarlyServiceLayer.forwardInitialize(environment);
+    }
+
+    @Override
+    public List<Resource> beginScanning(IEnvironment environment) {
+        return EarlyServiceLayer.forwardBeginScanning(environment);
     }
 
     @Override
@@ -59,7 +65,6 @@ public class AutoModpackTransformationService implements ITransformationService 
 
     @Override
     public List<? extends ITransformer<?>> transformers() {
-        // Real transformers are forwarded via AutoModpackCoreMod; nothing to add here.
-        return List.of();
+        return EarlyServiceLayer.collectTransformationServiceTransformers();
     }
 }
