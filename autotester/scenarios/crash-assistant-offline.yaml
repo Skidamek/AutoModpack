@@ -1,0 +1,54 @@
+id: crash-assistant-offline
+description: |
+  Offline / client-only proof that CrashAssistant - a mod whose only "early service" is a no-op
+  cpw.mods.modlauncher.api.ITransformationService plus an IDependencyLocator that jar-in-jars the
+  real mod - loads straight from AutoModpack's modpack folder, in place, with NO copy into the
+  standard mods/ directory. Its outer classes resolve through the GAME-layer bridge, just like a
+  split early-service mod (Sodium): the transformation service is only a vehicle to load early, so
+  nothing depends on modlauncher registering it at boot.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientRunSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage CrashAssistant into the modpack folder (NOT standard mods/)
+    mods:
+      - url: https://cdn.modrinth.com/data/ix1qq8Ux/versions/znBtgMA0/CrashAssistant-neoforge-1.20.6-1.21.4-1.11.10.jar
+        sha512: e374979e5f191961e6f1bc2c265c5735c5e1546363ae505e235ff9a482e28a4b2aa816e6a6552e042480f6f4b4c6fd31ce8ef710097159e2469b6e7161638ae1
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  - do: wait_for
+    name: CrashAssistant loaded in place (bootstrap + dependency locator + GAME-layer bridge + inner mod)
+    timeout: 420s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'Bootstrapping \d+ early-service'
+          - 'Running in-place dependency locator.*CrashAssistant'
+          - 'Bridged \d+ outer package.*CrashAssistant'
+          - '\(crash_assistant\)'
+  - do: wait_exit
+    name: tolerate the client exiting (headless GL/audio) or staying alive at the main menu
+    expect: any
+    or_alive: true
+    timeout: 60s
+  - do: assert
+    name: CrashAssistant resolved its outer classes in place (no NoClassDefFoundError from the split)
+    that:
+      log:
+        container: client
+        not_matches:
+          - 'NoClassDefFoundError.*crash_assistant'
+          - 'ClassNotFoundException.*crash_assistant'
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json

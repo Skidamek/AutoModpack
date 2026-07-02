@@ -1,0 +1,60 @@
+id: kotlin-language-provider-offline
+description: |
+  Offline / client-only proof that Kotlin-for-Forge - a mod that ships an IModLanguageLoader
+  (a language provider) and a tree of nested jar-in-jar libraries - loads straight from
+  AutoModpack's modpack folder, with NO copy into the standard mods/ directory.
+
+  Language loaders need no in-place bootstrapping: FML's ServiceLoaderUtil scans every module
+  layer including GAME (where AutoModpack puts modpack mods), and SecureJar synthesises the
+  module's `provides` from META-INF/services - so the provider is discovered in place. This
+  verifies that and that the nested kotlin libraries resolve. Crash-tolerant for headless GL.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientRunSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage kotlinforforge (language provider) into the modpack folder
+    mods:
+      - url: https://cdn.modrinth.com/data/ordsPcFz/versions/uhJhCT7X/kotlinforforge-5.12.0-all.jar
+        sha512: b8c3942f4d33179edf3f102f3d870b99dd436f8b8236dbbd31aa51b888162c692cfd88927295f24dc8b4375232f4c6c17360c5d6c4823f93cbcd7cf4bdc8bd14
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  - do: wait_for
+    name: kotlinforforge loaded in place and its language provider ran (no copy)
+    timeout: 600s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'AutoModpack prelaunched'
+          # the aggregator is discovered in the modpack folder, not copied to mods/
+          - 'Found library file "kotlinforforge'
+          # the mod appears in the load list and its Kotlin entrypoint actually runs - which
+          # only happens if the nested IModLanguageLoader was discovered from the GAME layer
+          - 'Kotlin For Forge .*\(kotlinforforge\)'
+          - 'Kotlin For Forge Enabled'
+  - do: wait_exit
+    name: tolerate the client exiting, or staying alive (kotlin has nothing to render)
+    expect: any
+    or_alive: true
+    timeout: 30s
+  - do: assert
+    name: no fatal language-provider / modpack-load failure
+    that:
+      log:
+        container: client
+        # Narrow on purpose: kotlin-only (no Fabric API) emits a benign mixin WARN that
+        # mentions ClassNotFoundException, so we assert on the failures that would actually
+        # mean the language provider or modpack didn't load.
+        not_matches:
+          - 'Failed to load modpack'
+          - 'Cannot load language'
+          - 'Missing or unsupported mandatory dependencies'
+          - 'kotlinforforge.*(ERROR|FATAL)'

@@ -26,6 +26,10 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
             throw new RuntimeException(e);
         }
 
+        for (Path jar : EarlyServiceLayer.registeredJars()) {
+            EarlyServiceLayer.runDependencyLocators(jar, loadedMods, list);
+        }
+
         return list;
     }
 

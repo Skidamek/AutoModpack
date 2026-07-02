@@ -5,7 +5,7 @@ import time
 
 from . import conditions, selectors
 from .registry import verb
-from .util import await_condition, parse_duration
+from .util import ClientExited, await_condition, parse_duration
 
 
 def _await_element(ctx, selector, step, not_found):
@@ -42,8 +42,24 @@ def type_(ctx, step):
 def wait_for(ctx, step):
     cond = step.get("until") or {}
     timeout = parse_duration(step.get("timeout"), default=60)
+
+    def _pred():
+        if conditions.evaluate(ctx, cond):
+            return True
+        # Not met yet. If the client container has already exited, the condition can never
+        # become true - fail fast (raise ClientExited) instead of polling to the timeout.
+        # Re-check the condition after detecting the exit so a marker the container printed
+        # in its final, now-complete logs still counts (exit-right-after-marker race).
+        try:
+            ctx.assert_client_running()
+        except ClientExited:
+            if conditions.evaluate(ctx, cond):
+                return True
+            raise
+        return None
+
     await_condition(
-        lambda: True if conditions.evaluate(ctx, cond) else None,
+        _pred,
         timeout,
         step.get("poll"),
         f"condition not met: {conditions.describe(cond)}",

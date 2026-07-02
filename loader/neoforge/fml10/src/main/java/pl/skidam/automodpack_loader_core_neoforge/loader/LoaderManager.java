@@ -5,6 +5,7 @@ import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.fml.loading.LoadingModList;
 import net.neoforged.fml.loading.moddiscovery.ModInfo;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_loader_core_neoforge.EarlyServiceBootstrapper;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
@@ -29,6 +30,12 @@ public class LoaderManager implements LoaderManagerService {
 
     @Override
     public String getLoaderVersion() {
+        // getVersionInfo() is still null when Preload runs from GraphicsBootstrapper (see
+        // EarlyServiceBootstrapper) - fall back to the value it captured straight off the command
+        // line for that window; by the time preload is false, getVersionInfo() is always populated.
+        if (preload && EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION != null) {
+            return EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION;
+        }
         return FMLLoader.getCurrent().getVersionInfo().neoForgeVersion();
     }
 
@@ -45,6 +52,9 @@ public class LoaderManager implements LoaderManagerService {
     public String getModVersion(String modId) {
         if (preload) {
             if (modId.equals("minecraft")) {
+                if (EarlyServiceBootstrapper.EARLY_MC_VERSION != null) {
+                    return EarlyServiceBootstrapper.EARLY_MC_VERSION;
+                }
                 return FMLLoader.getCurrent().getVersionInfo().mcVersion();
             }
 

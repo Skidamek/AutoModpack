@@ -4,6 +4,7 @@ import cpw.mods.jarhandling.SecureJar;
 import net.neoforged.fml.loading.moddiscovery.locators.JarInJarDependencyLocator;
 import net.neoforged.fml.loading.moddiscovery.readers.JarModsDotTomlModFileReader;
 import net.neoforged.neoforgespi.locating.*;
+import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -19,6 +20,16 @@ public class LazyModLocator implements IDependencyLocator {
             new JarInJarDependencyLocator().scanMods(List.of(modFile), pipeline);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+
+        // Replay the dependency locators of early-service jars (e.g. Ixeris) so their real
+        // (inner) mod loads in place, from the modpack folder, without being copied to the
+        // standard mods directory.
+        for (Path path : ModpackLoader.modsToLoad) {
+            if (!EarlyServiceLayer.isEarlyServiceJar(path)) {
+                continue;
+            }
+            EarlyServiceLayer.runDependencyLocators(path, loadedMods, pipeline);
         }
     }
 

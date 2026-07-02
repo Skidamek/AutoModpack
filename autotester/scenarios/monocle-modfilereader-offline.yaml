@@ -1,0 +1,69 @@
+id: monocle-modfilereader-offline
+description: |
+  Offline / client-only proof that a mod shipping an IModFileReader loads straight from
+  AutoModpack's modpack folder, with NO copy into the standard mods/ directory.
+
+  Monocle (an Iris + Embeddium compatibility layer) ships both an IModFileCandidateLocator
+  (MonocleModLocator) and an IModFileReader (IrisModParser). The reader is what lets Iris be
+  re-parsed to run on Embeddium. Natively the loader collects readers from the SERVICE layer,
+  which AutoModpack's in-place discovery never reaches - so AutoModpack forwards Monocle's
+  reader into the live discovery pipeline (ModDiscoverer.modFileReaders), letting Iris load in
+  place through it.
+
+  Staged together: Monocle + its hard deps Iris and Embeddium. Crash-tolerant: headless
+  software GL may kill the client at the first frame, after everything has loaded.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientRunSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage Monocle + Iris + Embeddium into the modpack folder (NOT standard mods/)
+    mods:
+      - url: https://cdn.modrinth.com/data/apRGdwku/versions/klSc1ush/monocle-0.2.2.ms.jar
+        sha512: 233d65f722329c7dbd3c77992f5d400dfe6e76788207da8d0d4669526e662852d0f0832dc3af23cc6373577462c5fb2153e295267e73d6023e125164ad94d8eb
+      - url: https://cdn.modrinth.com/data/YL57xq9U/versions/t3ruzodq/iris-neoforge-1.8.12%2Bmc1.21.1.jar
+        sha512: 57b8026a3c3c433cf6123d63dc6ce7e11f6d480a72926370db1fc7f2b06059bc16a753ecd7e7af659c19e90b592103196b0e89585ce4f0744a4ca433f59bcf1a
+      - url: https://cdn.modrinth.com/data/sk9rgfiA/versions/J7b96IEd/embeddium-1.0.15%2Bmc1.21.1.jar
+        sha512: d073cf52dcf2aeec3ac9f746d4571c7b4b1ad746fa11d4bcc5a21a264ae3119ac6d341d08cc9a70042cf0ddffc3b3ef3329ed30217035d4551c9d6788b6dc1e6
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  - do: wait_for
+    name: Monocle's reader forwarded in place and Iris loaded through it
+    timeout: 420s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'Bootstrapping \d+ early-service'
+          # the IModFileReader (IrisModParser) is spliced into the live discovery pipeline
+          - 'Forwarded \d+ in-place IModFileReader.*monocle'
+          # Monocle's own candidate locator runs in place
+          - 'Running in-place candidate locator.*MonocleModLocator'
+          # Iris and Embeddium end up in the final mod list (Iris only loads via Monocle's reader)
+          - 'Iris.*\(iris\)'
+          - 'Embeddium.*\(embeddium\)'
+  - do: wait_exit
+    name: let the client run through to its (headless-GL) exit
+    expect: any
+    timeout: 300s
+  - do: assert
+    name: Monocle/Iris loaded in place cleanly - no reader failure, no missing classes
+    that:
+      log:
+        container: client
+        not_matches:
+          - 'Could not forward IModFileReader'
+          - 'Failed to instantiate IModFileReader'
+          - 'NoClassDefFoundError.*monocle'
+          - 'ClassNotFoundException.*monocle'
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json

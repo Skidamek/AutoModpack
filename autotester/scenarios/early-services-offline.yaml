@@ -1,0 +1,67 @@
+id: early-services-offline
+description: |
+  Offline / client-only proof that a split "early-service" mod (Sodium) loads straight from
+  AutoModpack's modpack folder - bootstrapper fires in place, the inner mod is located in
+  place, and the inner mod resolves the outer jar's classes (and Mixin resources) because the
+  GAME classloader is bridged to Sodium's early-service child layer - with NO copy into the
+  standard mods/ directory.
+
+  Pre-stages Sodium into the client game dir and boots just the client (no server, no
+  cert/download/restart dance). Verification is log-based and crash-tolerant: Sodium drives
+  real OpenGL (GL fence objects) which the headless container's software GL can't satisfy, so
+  the client may crash at the first rendered frame AFTER the service has run and the inner mod
+  has loaded. On a GPU host the same assertions hold and the client keeps running.
+
+# Host networking: this sandbox only allows --network host. No server is launched anyway.
+network: host
+mode: client-only
+
+# First run downloads MC + NeoForge via HMC into an ephemeral cache, so allow generous time.
+timeouts:
+  clientRunSeconds: 1200
+
+# Sodium's split-jar early-service mechanism is NeoForge 1.21.1-specific here.
+targets:
+  - 1.21.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage Sodium into the modpack folder (NOT standard mods/)
+    mods:
+      - url: https://cdn.modrinth.com/data/AANobbMI/versions/7XOIgnrf/sodium-neoforge-0.8.12-beta.2%2Bmc1.21.1.jar
+        sha512: 62242a3b7a8f1c564fd267e0dce71e587d8615083b8da69c3bb585eb93d0f6590d8df231104c4dca1c64c513e5d73b56661930af9c88d7ac869afe792996631f
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  # Poll until ALL the positive evidence is present (gives the client time to boot fully):
+  # the bootstrapper fired in place, the inner mod's own locator ran in place, the GAME loader
+  # was bridged to Sodium's child layer, and Sodium's inner mod actually initialised (config
+  # loaded) - which only happens if it resolved the outer jar's classes through that bridge.
+  - do: wait_for
+    name: Sodium loaded in place (bootstrap + locator + GAME-layer bridge + inner mod init)
+    timeout: 420s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'Bootstrapping \d+ early-service'
+          - 'in-place GraphicsBootstrapper.*SodiumWorkarounds'
+          - 'Running in-place candidate locator.*SodiumServiceModLocator'
+          - 'Bridged \d+ outer package.*sodium'
+          - 'Loaded configuration file for Sodium'
+  - do: wait_exit
+    name: let the client run through to its (headless-GL) exit
+    expect: any
+    timeout: 300s
+  - do: assert
+    name: the inner mod resolved the outer jar's classes in place (no ClassNotFoundException)
+    that:
+      log:
+        container: client
+        # the CNF the GAME-layer bridge fixed; checked on the full post-exit log so it
+        # covers the render stage where the missing-class mixin previously crashed.
+        not_matches:
+          - 'ClassNotFoundException.*[Ww]orkarounds'
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json

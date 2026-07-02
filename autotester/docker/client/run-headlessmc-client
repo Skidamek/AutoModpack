@@ -53,7 +53,7 @@ export JAVA_HOME="${java_bin%/bin/java}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
 # ── Build JVM arguments ───────────────────────────────────────────
-jvmargs="-Dautomodpack.autotest=true -Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dcom.mojang.text2speech=false"
+jvmargs="-Dautomodpack.autotest=true -Dautomodpack.autotest.gamedir=${game_dir} -Dautomodpack.autotest.token=${bridge_token} -Dcom.mojang.text2speech=false -Djava.awt.headless=true"
 gameargs="--width 854 --height 480"
 
 # ── Write HMC config ──────────────────────────────────────────────
@@ -124,5 +124,8 @@ timeout 20 hmc --command "download ${minecraft}" 2>/dev/null || true
 hmc --command "config -refresh" 2>/dev/null || true
 
 # ── Launch ─────────────────────────────────────────────────────────
-exec timeout "$client_timeout" hmc \
+# xvfb-run: newer FancyModLoader's fatal-error Swing dialog needs a real X display even with
+# -Djava.awt.headless=true (see Dockerfile) - give it a virtual one so a genuine fatal error
+# reports its real cause instead of crashing on top of it with an unrelated X11/AWT error.
+exec timeout "$client_timeout" xvfb-run -a hmc \
   --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"

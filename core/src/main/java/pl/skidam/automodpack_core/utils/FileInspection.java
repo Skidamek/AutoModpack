@@ -354,64 +354,155 @@ public class FileInspection {
         return name.endsWith("mods.toml") || name.endsWith("mod.json");
     }
 
-    private static final Set<String> KNOWN_SERVICES = Set.of(
+    // cpw.mods.modlauncher's ITransformationService is a boot-layer service used by BOTH forge and
+    // neoforge (they share ModLauncher). It makes a jar an "early service" (ModLauncher discovers it
+    // before mod discovery), so it must count for the copy decision on either loader.
+    private static final String TRANSFORMATION_SERVICE =
+            "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
+
+    private static final Set<String> FORGE_SERVICES = Set.of(
             "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
             "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
             "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModLanguageLoader",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
-            "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
+            TRANSFORMATION_SERVICE
     );
 
+    // The NeoForge service files AutoModpack recognises across versions: NeoForge's "early"
+    // services (its TransformerDiscovererConstants.SERVICES - a jar shipping any is put on the
+    // SERVICE layer before mod discovery), plus ICoreMod (collected after discovery), the
+    // mod-loading locators and language loaders, and the older IModLocator SPI. This is a broad,
+    // cross-version recognition set (used to tell a service mod apart from a plain mod). The
+    // force-copy decision narrows it to what the *running* loader version actually handles via
+    // ModpackLoaderService#knownServices (e.g. IModLocator is gone on 1.21.x), so a mod shipping a
+    // service this version ignores is never copied pointlessly. When no loader is present, this set
+    // is the fallback.
+    private static final Set<String> NEOFORGE_SERVICES = Set.of(
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader",
+            "META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader",
+            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
+            "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper",
+            "META-INF/services/net.neoforged.neoforgespi.earlywindow.ImmediateWindowProvider",
+            // A coremod's transformers are collected by FML after mod discovery, scanning the
+            // GAME layer - so a modpack-folder coremod is run in place from the game-library copy
+            // (see EarlyServiceLayer). Listed here so the copy decision still accounts for it.
+            "META-INF/services/net.neoforged.neoforgespi.coremod.ICoreMod",
+            // Most mods' ITransformationService is only a vehicle to load early (its transformers()
+            // are empty; the real work is a coremod/mixin) - EarlyServiceLayer forwards its
+            // transformers and bridges its classes in place. One that does essential boot-time work
+            // isn't fully hostable in place and, not being in inPlaceHandleableServices, is copied.
+            TRANSFORMATION_SERVICE
+    );
+
+    /**
+     * The loader-service files that matter on the <em>current</em> loader. A cross-platform mod
+     * (e.g. Async Logger) ships service files for both Forge and NeoForge, but only the running
+     * loader's namespace is live - NeoForge never reads {@code net.minecraftforge.forgespi.*} and
+     * Forge never reads {@code net.neoforged.neoforgespi.*}. Counting the inert set would force a
+     * cross-platform mod down the copy-to-standard path for services that never run here, so the
+     * copy decision only sees the live namespace. Fabric/unknown loaders keep the full union (the
+     * services don't gate their copy path, and this preserves the prior {@link #isMod} behaviour).
+     */
+    private static Set<String> knownServices(String loader) {
+        if ("neoforge".equals(loader)) return NEOFORGE_SERVICES;
+        if ("forge".equals(loader)) return FORGE_SERVICES;
+        Set<String> union = new HashSet<>(FORGE_SERVICES);
+        union.addAll(NEOFORGE_SERVICES);
+        return union;
+    }
+
     public static boolean hasSpecificServices(FileSystem fs) {
-        // Fast Check: Look in the root FileSystem
-        for (String service : KNOWN_SERVICES) {
+        Set<String> known = knownServices(getLoader());
+        // Short-circuit on the first root match (the common case for service mods) before paying
+        // for the nested jarjar scan - isMod/isModCompatible call this over every mod.
+        for (String service : known) {
             if (Files.exists(fs.getPath(service))) {
                 return true;
             }
         }
-
-        // Slow Check: Scan nested JARs in META-INF/jarjar
-        return hasSpecificServicesNested(fs);
+        Set<String> nested = new HashSet<>();
+        collectSpecificServicesNested(fs, known, nested, true);
+        return !nested.isEmpty();
     }
 
-    private static boolean hasSpecificServicesNested(FileSystem fs) {
+    /**
+     * The {@link #knownServices() known} loader-service files this jar provides, both at its
+     * root and inside any {@code META-INF/jarjar} nested jars. Used to decide whether a mod
+     * needs the copy-to-standard workaround: a mod is left in the modpack folder only when
+     * <em>every</em> service it ships can be handled in place by the loader
+     * ({@link pl.skidam.automodpack_core.loader.ModpackLoaderService#inPlaceHandleableServices}).
+     */
+    public static Set<String> getSpecificServices(FileSystem fs) {
+        return getSpecificServices(fs, getLoader());
+    }
+
+    /**
+     * As {@link #getSpecificServices(FileSystem)}, but with an explicit {@code loader} instead of
+     * the global {@link Constants#LOADER}. The early-service bootstrapper runs <em>before</em>
+     * {@code Constants.LOADER} is populated, so it must say which namespace is live itself -
+     * otherwise the service set falls back to the forge+neoforge union and a cross-platform mod
+     * is wrongly judged to ship an unhandleable (inert Forge) service.
+     */
+    public static Set<String> getSpecificServices(FileSystem fs, String loader) {
+        Set<String> known = knownServices(loader);
+        Set<String> found = new HashSet<>();
+
+        // Root FileSystem
+        for (String service : known) {
+            if (Files.exists(fs.getPath(service))) {
+                found.add(service);
+            }
+        }
+
+        // Nested JARs in META-INF/jarjar
+        collectSpecificServicesNested(fs, known, found, false);
+
+        return found;
+    }
+
+    /**
+     * @param stopAtFirst {@code true} to return as soon as one match is found (the {@link
+     *                     #hasSpecificServices} boolean check - a hot path run over every mod during
+     *                     discovery), {@code false} to collect every match (the full {@link
+     *                     #getSpecificServices} set the copy-decision needs).
+     */
+    private static void collectSpecificServicesNested(FileSystem fs, Set<String> known, Set<String> found, boolean stopAtFirst) {
         Path jarJarDir = fs.getPath("META-INF", "jarjar");
 
         if (Files.notExists(jarJarDir)) {
-            return false;
+            return;
         }
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(jarJarDir, "*.jar")) {
             for (Path nestedJar : stream) {
-                if (scanNestedJar(nestedJar)) {
-                    return true;
+                collectNestedJarServices(nestedJar, known, found, stopAtFirst);
+                if (stopAtFirst && !found.isEmpty()) {
+                    return;
                 }
             }
         } catch (IOException e) {
             LOGGER.error("Error examining JarJar directory in {}", fs, e);
         }
-
-        return false;
     }
 
-    private static boolean scanNestedJar(Path nestedJarPath) {
+    private static void collectNestedJarServices(Path nestedJarPath, Set<String> known, Set<String> found, boolean stopAtFirst) {
         try (InputStream is = Files.newInputStream(nestedJarPath);
              BufferedInputStream bis = new BufferedInputStream(is);
              ZipInputStream zip = new ZipInputStream(bis)) {
 
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
-                if (KNOWN_SERVICES.contains(entry.getName())) {
-                    return true;
+                if (known.contains(entry.getName())) {
+                    found.add(entry.getName());
+                    if (stopAtFirst) {
+                        return;
+                    }
                 }
             }
         } catch (IOException e) {
             LOGGER.error("Error reading nested JAR {}: {}", nestedJarPath, e.getMessage());
         }
-        return false;
     }
 
     private static final String forbiddenChars = "\\/:*\"<>|!?&%$;=+";

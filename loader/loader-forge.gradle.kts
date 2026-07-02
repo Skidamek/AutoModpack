@@ -1,5 +1,13 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
+// Forces these to configure before us: shadowJar (below) reads their sourceSets output at
+// configuration time via a lazy tasks.named{} block, which - unlike the dependencies{} block -
+// configuration-on-demand does not always reach in time otherwise (surfaces when this project is
+// built standalone, e.g. `gradlew :loader-forge-fml47:build`, rather than as part of a full build).
+evaluationDependsOn(":core")
+evaluationDependsOn(":loader-core")
+evaluationDependsOn(":loader-forge-earlyservices")
+
 plugins {
     kotlin("jvm")
     id("automodpack.utils")
@@ -23,6 +31,7 @@ legacyForge {
 dependencies {
     compileOnly(project(":core"))
     compileOnly(project(":loader-core"))
+    compileOnly(project(":loader-forge-earlyservices"))
 
     // External provided deps to compile this
     compileOnly("com.google.code.gson:gson:2.10.1")
@@ -51,7 +60,7 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
 
     // Combine all subproject outputs efficiently
-    val subprojects = listOf(":core", ":loader-core")
+    val subprojects = listOf(":core", ":loader-core", ":loader-forge-earlyservices")
     subprojects.forEach {
         from(project(it).sourceSets.main.get().output)
     }
