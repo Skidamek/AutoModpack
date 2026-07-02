@@ -15,6 +15,15 @@ public class EarlyModLocator implements IModFileCandidateLocator {
     @Override
     public void findCandidates(ILaunchContext context, IDiscoveryPipeline pipeline) {
 
+        // Deliberately NOT moved into EarlyServiceBootstrapper's GraphicsBootstrapper phase (unlike
+        // fml10/fml11/forge, where an earlier Preload avoids a restart after an update changes which
+        // mods are early-service mods): a live regression showed that calling Preload from anywhere
+        // within GraphicsBootstrapper.bootstrap() breaks Sinytra Connector's own updateModuleReads
+        // (Class.forName("...DummyTarget") throws ClassNotFoundException at FMLLoader.beforeStart) -
+        // confirmed via A/B testing that this loader's ModLauncher/ITransformationService machinery,
+        // which Connector's own service instantiation and lifecycle run through, is what's sensitive
+        // to it, not a fixable timing gap. fml10/fml11 have no such competing ITransformationService
+        // phase and were verified safe with the earlier placement.
         ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
         new Preload();
         progress.complete();

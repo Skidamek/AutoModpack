@@ -24,14 +24,29 @@ import java.util.Set;
  * beginScanning}, then (after mod discovery) {@code completeScan}, then {@code transformers}. No
  * manual hook-point-picking is needed - that ordering is ModLauncher's own native invariant.
  *
- * <p>The in-place services themselves are instantiated by {@link EarlyServiceLayer#bootstrap}, called
- * from {@link EarlyModLocator#scanMods} - the same {@code IModLocator} pass that puts AutoModpack's
- * own jar on the SERVICE layer in the first place, so it always runs before ModLauncher can discover
- * (let alone call) this class.
+ * <p>{@code onLoad} is also where AutoModpack runs its own update/reconcile step ({@code Preload})
+ * and builds the shared child layer for the modpack folder's early-service jars ({@link
+ * EarlyServiceLayer#bootstrap}) - confirmed live to be the earliest hook Forge gives any mod
+ * (fires before {@link EarlyModLocator#scanCandidates}, and {@code FMLPaths.GAMEDIR} is already
+ * populated by this point). Running the update here, before anything scans the modpack folder,
+ * means an update that changes which mods are early-service mods is already reflected in the
+ * folder mod discovery sees later in the same boot - no restart needed.
  */
 public class AutoModpackTransformationService implements ITransformationService {
 
     static final String NAME = "automodpack_early_services";
+
+    // FMLLoader.versionInfo() is still null at onLoad() time - it's only populated later, from
+    // FML's own ITransformationService#initialize (and ModLauncher gives no ordering guarantee
+    // between different services' initialize() calls even in that phase, so waiting for our own
+    // initialize() wouldn't be safe either). Unlike NeoForge's GraphicsBootstrapper#bootstrap,
+    // Forge's ITransformationService#onLoad isn't handed the raw launch arguments, and
+    // ProcessHandle.current().info().arguments() is unreliable (confirmed live: returns an empty
+    // array on at least one JVM/OS combination this runs on), so parse them out of
+    // "sun.java.command" instead - a JVM system property always set to the full command line
+    // (main class + program args) by the launcher itself, present on every JVM tested.
+    public static volatile String EARLY_MC_VERSION;
+    public static volatile String EARLY_FORGE_VERSION;
 
     @Override
     public String name() {
@@ -40,7 +55,26 @@ public class AutoModpackTransformationService implements ITransformationService 
 
     @Override
     public void onLoad(IEnvironment env, Set<String> otherServices) {
+        String[] processArgs = System.getProperty("sun.java.command", "").split("\\s+");
+        EARLY_MC_VERSION = argValue(processArgs, "--fml.mcVersion");
+        EARLY_FORGE_VERSION = argValue(processArgs, "--fml.forgeVersion");
+
+        new pl.skidam.automodpack_loader_core.Preload();
+        EarlyServiceLayer.bootstrap(net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get());
         EarlyServiceLayer.forwardOnLoad(env, otherServices);
+    }
+
+    private static String argValue(String[] arguments, String name) {
+        String prefix = name + "=";
+        for (int i = 0; i < arguments.length; i++) {
+            if (name.equals(arguments[i]) && i + 1 < arguments.length) {
+                return arguments[i + 1];
+            }
+            if (arguments[i].startsWith(prefix)) {
+                return arguments[i].substring(prefix.length());
+            }
+        }
+        return null;
     }
 
     @Override

@@ -1,9 +1,7 @@
 package pl.skidam.automodpack_loader_core_forge;
 
-import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileModLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
-import pl.skidam.automodpack_loader_core.Preload;
 import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
 
 import java.nio.file.Path;
@@ -25,14 +23,10 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
 
     @Override
     public Stream<Path> scanCandidates() {
-        new Preload();
-
-        // AutoModpack's own IModLocator service file (below) is what makes this loader promote
-        // AutoModpack's jar to its SERVICE layer before mod discovery starts - so this is the
-        // earliest point AutoModpack itself is ever invoked, and thus the right place to build the
-        // shared child layer for the modpack folder's own early-service jars (there is no separate
-        // GraphicsBootstrapper-style hook the way NeoForge has).
-        EarlyServiceLayer.bootstrap(FMLPaths.GAMEDIR.get());
+        // The update/reconcile step (Preload) and the early-service child-layer bootstrap now run
+        // from AutoModpackTransformationService#onLoad - ModLauncher's own ITransformationService
+        // lifecycle, which fires before this IModLocator pass - so ModpackLoader.modsToLoad and
+        // EarlyServiceLayer's registered jars are already populated by the time we get here.
 
         // A split-jar early-service mod (no root mods.toml - its real mod is found by its own
         // IModLocator, replayed below) is not itself a loadable ModFile and must be excluded here,
