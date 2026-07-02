@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core_neoforge;
+package pl.skidam.automodpack_loader_core_modlauncher;
 
 import cpw.mods.cl.ModuleClassLoader;
 import sun.misc.Unsafe;
@@ -11,7 +11,8 @@ import java.util.Map;
 
 /**
  * Reads the three private routing maps of a {@link ModuleClassLoader} (and its subclasses, such as
- * ModLauncher's {@code TransformingClassLoader} that backs the GAME layer) so {@link EarlyServiceLayer}
+ * ModLauncher's {@code TransformingClassLoader} that backs the GAME layer) so each loader's own
+ * {@code EarlyServiceLayer} (NeoForge fml4 and Forge each have their own, package-private to them)
  * can bridge the GAME loader to a modpack jar's child layer:
  * <ul>
  *   <li>{@code packageLookup}: package -&gt; the module on <em>this</em> loader that owns it
@@ -30,7 +31,7 @@ import java.util.Map;
  * {@code Field.setAccessible} throws {@code InaccessibleObjectException}. Unsafe field offsets read the
  * object layout, not the field value, so they need no {@code setAccessible} and cross the sealed
  * module boundary. (The launch-plugin injection touches {@code cpw.mods.modlauncher} instead, which
- * <em>is</em> reachable, so {@link EarlyServiceBridgePlugin} uses ordinary reflection there.)
+ * <em>is</em> reachable, so {@link EarlyServiceBridgePlugin} in this package uses ordinary reflection there.)
  *
  * <p>It also carries {@link #addReads(Module, Module)}: routing the GAME loader to a child layer
  * makes the outer classes <em>loadable</em>, but JPMS still enforces module readability at access
@@ -43,7 +44,7 @@ import java.util.Map;
  * {@code java.lang.invoke} is not open to us. A read edge only grants access, so adding them broadly
  * cannot break anything; it only prevents the {@code IllegalAccessError}.
  */
-final class ModuleClassLoaderAccess {
+public final class ModuleClassLoaderAccess {
 
     private static final Unsafe UNSAFE;
     private static final long PACKAGE_LOOKUP_OFFSET;
@@ -93,7 +94,7 @@ final class ModuleClassLoaderAccess {
      * {@code Module.addReads}' caller check). No-op if {@code from} is unnamed (already reads all),
      * already reads {@code to}, or the internal API could not be resolved.
      */
-    static void addReads(Module from, Module to) {
+    public static void addReads(Module from, Module to) {
         if (ADD_READS == null || from == null || to == null || from == to
                 || !from.isNamed() || from.canRead(to)) {
             return;
@@ -111,18 +112,18 @@ final class ModuleClassLoaderAccess {
     }
 
     @SuppressWarnings("unchecked")
-    static Map<String, Object> packageLookup(ClassLoader loader) {
+    public static Map<String, Object> packageLookup(ClassLoader loader) {
         return (Map<String, Object>) UNSAFE.getObject(loader, PACKAGE_LOOKUP_OFFSET);
     }
 
     @SuppressWarnings("unchecked")
-    static Map<String, ClassLoader> parentLoaders(ClassLoader loader) {
+    public static Map<String, ClassLoader> parentLoaders(ClassLoader loader) {
         return (Map<String, ClassLoader>) UNSAFE.getObject(loader, PARENT_LOADERS_OFFSET);
     }
 
     /** {@code Map<moduleName, JarModuleReference>} - the value type is internal to securejarhandler, so raw. */
     @SuppressWarnings("unchecked")
-    static Map<String, Object> resolvedRoots(ClassLoader loader) {
+    public static Map<String, Object> resolvedRoots(ClassLoader loader) {
         return (Map<String, Object>) UNSAFE.getObject(loader, RESOLVED_ROOTS_OFFSET);
     }
 
@@ -133,7 +134,7 @@ final class ModuleClassLoaderAccess {
     // use one implementation instead of two copies. ----
 
     /** {@code cpw.mods.modlauncher.Launcher.INSTANCE}, or throws if ModLauncher isn't on the classpath. */
-    static Object launcherInstance() throws Exception {
+    public static Object launcherInstance() throws Exception {
         return Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
     }
 

@@ -8,6 +8,7 @@ import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 
 import java.io.InputStream;
 import java.lang.module.Configuration;
@@ -106,7 +107,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             bootstrapJars(earlyServiceJars, serviceLayer, arguments);
 
             EarlyServiceLayer.instantiateTransformationServices();
-            EarlyServiceBridgePlugin.ensureRunsFirst();
+            EarlyServiceBridgePlugin.ensureRunsFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
         } catch (Throwable t) {
             Constants.LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
         }

@@ -3,9 +3,12 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 // fml10 and fml11 (NeoForge 21.6+) share one early-service implementation
 // (:loader-neoforge-earlyservices): that NeoForge generation removed ModLauncher/securejarhandler
 // entirely in favor of a flat FMLLoader-owned classloader chain, so their in-place-loading bridge
-// works completely differently from fml4's (NeoForge 21.1) ModLauncher-module-layer approach,
-// which stays inline in fml4's own sources - there's nothing left to share with it.
-val earlyServicesModule = if (project.name == "loader-neoforge-fml4") null else "loader-neoforge-earlyservices"
+// works completely differently from fml4's (NeoForge 21.1) ModLauncher-module-layer approach. fml4
+// instead shares :loader-modlauncher-earlyservices with legacy Forge - both still run the original
+// ModLauncher/securejarhandler machinery, so the GAME-classloader bridge mechanics are identical;
+// only the SPI-specific EarlyServiceLayer/EarlyServiceBootstrapper stay in fml4's own sources.
+val earlyServicesModule = if (project.name == "loader-neoforge-fml4")
+    "loader-modlauncher-earlyservices" else "loader-neoforge-earlyservices"
 
 // Forces these to configure before us: shadowJar (below) reads their sourceSets output at
 // configuration time via a lazy tasks.named{} block, which - unlike the dependencies{} block -
@@ -13,7 +16,7 @@ val earlyServicesModule = if (project.name == "loader-neoforge-fml4") null else 
 // built standalone, e.g. `gradlew :loader-neoforge-fml4:build`, rather than as part of a full build).
 evaluationDependsOn(":core")
 evaluationDependsOn(":loader-core")
-if (earlyServicesModule != null) evaluationDependsOn(":$earlyServicesModule")
+evaluationDependsOn(":$earlyServicesModule")
 
 plugins {
     kotlin("jvm")
@@ -38,7 +41,7 @@ neoForge {
 dependencies {
     compileOnly(project(":core"))
     compileOnly(project(":loader-core"))
-    if (earlyServicesModule != null) compileOnly(project(":$earlyServicesModule"))
+    compileOnly(project(":$earlyServicesModule"))
 
     // External provided deps to compile this
     compileOnly("com.google.code.gson:gson:2.10.1")
@@ -67,7 +70,7 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
 
     // Combine all subproject outputs efficiently
-    val subprojects = listOfNotNull(":core", ":loader-core", earlyServicesModule?.let { ":$it" })
+    val subprojects = listOf(":core", ":loader-core", ":$earlyServicesModule")
     subprojects.forEach {
         from(project(it).sourceSets.main.get().output)
     }
@@ -85,6 +88,8 @@ tasks.named<ShadowJar>("shadowJar") {
 
     // Project internal relocations
     relocate("pl.skidam.automodpack_loader_core_neoforge", "pl.skidam.automodpack_loader_core")
+    // Only present for fml4 (:loader-modlauncher-earlyservices); harmless no-op relocate otherwise.
+    relocate("pl.skidam.automodpack_loader_core_modlauncher", "pl.skidam.automodpack_loader_core")
 
     // Cleanup
     exclude("pl/skidam/automodpack_loader_core/loader/LoaderManager.class")

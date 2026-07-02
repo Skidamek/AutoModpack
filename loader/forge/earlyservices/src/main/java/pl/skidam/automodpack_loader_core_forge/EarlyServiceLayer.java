@@ -12,6 +12,8 @@ import net.minecraftforge.forgespi.locating.IModFile;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
+import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -205,7 +207,7 @@ public final class EarlyServiceLayer {
                 }
             }
 
-            EarlyServiceBridgePlugin.ensureRunsFirst();
+            EarlyServiceBridgePlugin.ensureRunsFirst(EarlyServiceLayer::bridgeEarlyServicesToGameLayer);
         } catch (Throwable t) {
             LOGGER.error("[AutoModpack] Early-service bootstrap failed", t);
         }

@@ -12,6 +12,8 @@ import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
+import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
 import java.io.BufferedReader;
 import java.io.InputStream;

@@ -47,6 +47,13 @@ public class AutoModpackTransformationService implements ITransformationService 
     // (main class + program args) by the launcher itself, present on every JVM tested.
     public static volatile String EARLY_MC_VERSION;
     public static volatile String EARLY_FORGE_VERSION;
+    // FMLLoader.getDist() is also unreliable at onLoad() time, for the same reason versionInfo() is
+    // (see above) - confirmed live on NeoForge fml4 to be the actual cause of a regression: reading
+    // it too early can silently return SERVER on a genuine CLIENT launch, so Preload.updateAll()
+    // takes its dedicated-server-only branch and never populates the mod list early-service
+    // discovery depends on. Forge's launchTarget naming convention (e.g. "forgeclient"/
+    // "forgeserver") reliably encodes dist and is on the same command line as the version args above.
+    public static volatile Boolean EARLY_IS_CLIENT;
 
     @Override
     public String name() {
@@ -58,6 +65,10 @@ public class AutoModpackTransformationService implements ITransformationService 
         String[] processArgs = System.getProperty("sun.java.command", "").split("\\s+");
         EARLY_MC_VERSION = argValue(processArgs, "--fml.mcVersion");
         EARLY_FORGE_VERSION = argValue(processArgs, "--fml.forgeVersion");
+        String launchTarget = argValue(processArgs, "--launchTarget");
+        if (launchTarget != null) {
+            EARLY_IS_CLIENT = !launchTarget.toLowerCase(java.util.Locale.ROOT).contains("server");
+        }
 
         new pl.skidam.automodpack_loader_core.Preload();
         EarlyServiceLayer.bootstrap(net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get());

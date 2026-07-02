@@ -1,3 +1,9 @@
+// Shares the ModLauncher/securejarhandler GAME-classloader bridge (ModuleClassLoaderAccess,
+// EarlyServiceBridgePlugin) with NeoForge fml4 via :loader-modlauncher-earlyservices - both loaders
+// still run the original ModLauncher machinery, so that mechanism is identical; only the SPI types
+// (net.minecraftforge.forgespi vs net.neoforged.neoforgespi) differ, and those stay here.
+evaluationDependsOn(":loader-modlauncher-earlyservices")
+
 plugins {
     kotlin("jvm")
     id("automodpack.utils")
@@ -20,6 +26,7 @@ legacyForge {
 dependencies {
     compileOnly(project(":core"))
     compileOnly(project(":loader-core"))
+    compileOnly(project(":loader-modlauncher-earlyservices"))
 }
 
 java {

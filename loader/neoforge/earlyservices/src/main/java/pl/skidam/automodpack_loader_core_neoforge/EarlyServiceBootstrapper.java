@@ -27,6 +27,13 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
     // capture them from here - the one place with access to `arguments` - before Preload runs.
     public static volatile String EARLY_MC_VERSION;
     public static volatile String EARLY_NEOFORGE_VERSION;
+    // FMLLoader.getCurrent().getDist() is also unreliable this early - confirmed live on fml4 to be
+    // the actual cause of a regression: reading it too early can silently return SERVER on a
+    // genuine CLIENT launch, so Preload.updateAll() takes its dedicated-server-only branch and never
+    // populates the mod list early-service discovery depends on. NeoForge's launchTarget naming
+    // convention (e.g. "forgeclient"/"forgeserver") reliably encodes dist and is on the same
+    // arguments array as the version args below.
+    public static volatile Boolean EARLY_IS_CLIENT;
 
     @Override
     public String name() {
@@ -39,18 +46,19 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             Path gameDir = gameDir(arguments);
             EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
             EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
+            String launchTarget = argValue(arguments, "--launchTarget");
+            if (launchTarget != null) {
+                EARLY_IS_CLIENT = !launchTarget.toLowerCase(java.util.Locale.ROOT).contains("server");
+            }
 
             // Run our own update/reconcile step FIRST, before anything below reads the modpack
             // folder - GraphicsBootstrapper is the earliest hook this loader generation gives any
             // mod (there is no ModLauncher/ITransformationService concept on fml10/fml11 to compete
             // with it). Doing the update here, rather than later in EarlyModLocator, means an update
             // that changes which mods are early-service mods is already reflected in the folder we
-            // scan below, in the same boot - no restart needed. (NeoForge fml4, which still has a
-            // competing ITransformationService.onLoad, deliberately does NOT do this - moving Preload
-            // into its GraphicsBootstrapper phase broke Sinytra Connector's own updateModuleReads;
-            // see fml4's EarlyModLocator for the details. This loader generation has no such hook to
-            // conflict with, and Sodium/Connector-style early-service mods here were verified live
-            // with this ordering.)
+            // scan below, in the same boot - no restart needed. NeoForge fml4 does the same from its
+            // own GraphicsBootstrapper (a separate implementation, since it still has a competing
+            // ITransformationService.onLoad phase and its own module-layer bridge).
             net.neoforged.fml.loading.progress.ProgressMeter progress =
                     net.neoforged.fml.loading.progress.StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
             new pl.skidam.automodpack_loader_core.Preload();

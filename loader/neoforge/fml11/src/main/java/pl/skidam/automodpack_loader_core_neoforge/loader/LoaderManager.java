@@ -41,6 +41,12 @@ public class LoaderManager implements LoaderManagerService {
 
     @Override
     public EnvironmentType getEnvironmentType() {
+        // FMLLoader.getCurrent().getDist() is unreliable during preload (see
+        // EarlyServiceBootstrapper) - prefer the dist captured from --launchTarget on the command
+        // line when it's available.
+        if (EarlyServiceBootstrapper.EARLY_IS_CLIENT != null) {
+            return EarlyServiceBootstrapper.EARLY_IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
+        }
         if (FMLLoader.getCurrent().getDist() == Dist.CLIENT) {
             return EnvironmentType.CLIENT;
         } else {

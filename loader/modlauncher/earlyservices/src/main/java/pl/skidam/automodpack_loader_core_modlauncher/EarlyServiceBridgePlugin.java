@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core_forge;
+package pl.skidam.automodpack_loader_core_modlauncher;
 
 import cpw.mods.jarhandling.SecureJar;
 import cpw.mods.modlauncher.api.NamedPath;
@@ -17,12 +17,21 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
 
     static final String NAME = "automodpack_early_service_bridge";
 
+    // Forge and NeoForge fml4 each have their own EarlyServiceLayer (different SPI types), so the
+    // actual bridging call is supplied by the caller rather than named here.
+    private static volatile Runnable onInitializeLaunch;
+
     @Override
     public String name() {
         return NAME;
     }
 
-    static void ensureRunsFirst() {
+    public static void ensureRunsFirst(Runnable bridgeEarlyServicesToGameLayer) {
+        onInitializeLaunch = bridgeEarlyServicesToGameLayer;
+        ensureRunsFirst();
+    }
+
+    private static void ensureRunsFirst() {
         try {
             Object launcher = ModuleClassLoaderAccess.launcherInstance();
             if (launcher == null) return;
@@ -73,6 +82,9 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
 
     @Override
     public void initializeLaunch(ITransformerLoader transformerLoader, NamedPath[] specialPaths) {
-        EarlyServiceLayer.bridgeEarlyServicesToGameLayer();
+        Runnable bridge = onInitializeLaunch;
+        if (bridge != null) {
+            bridge.run();
+        }
     }
 }
