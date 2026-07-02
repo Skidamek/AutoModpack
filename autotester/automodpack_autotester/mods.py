@@ -7,6 +7,13 @@ A mod entry in a ``stage_modpack`` step is either:
     URL) downloaded once into ``autotester/.mod-cache/`` and verified against its
     ``sha512``.
 
+``url`` and ``sha512`` may each be a plain value, or a mapping keyed by target id
+(``{1.21.1-neoforge: ..., 1.21.10-neoforge: ...}``) when a scenario runs the same
+mod against multiple targets that each need a different build - the matching
+``target_id`` entry is picked before resolving. This is what lets one scenario file
+(e.g. one that stages Sodium) run across several loader-version targets instead of
+being copy-pasted per version with only the mod URLs actually differing.
+
 Pinning the ``sha512`` keeps runs reproducible and CI-safe: the file is
 content-addressed and cached across runs, and a wrong or corrupt download fails
 loudly instead of silently testing the wrong jar. No local, machine-specific
@@ -25,12 +32,23 @@ from .config import REPO_ROOT
 CACHE_DIR = REPO_ROOT / "autotester" / ".mod-cache"
 
 
-def resolve_mod(entry, resolve=str) -> Path:
+def _per_target(value, target_id, field: str):
+    """A plain value, or a {target_id: value} mapping resolved against ``target_id``."""
+    if not isinstance(value, dict):
+        return value
+    if target_id is None or target_id not in value:
+        raise ValueError(f"mod entry '{field}' has no entry for target {target_id!r}: {value!r}")
+    return value[target_id]
+
+
+def resolve_mod(entry, resolve=str, target_id=None) -> Path:
     """A scenario mod entry → a local jar Path (downloading + verifying if remote)."""
     if isinstance(entry, dict):
         if "url" not in entry or "sha512" not in entry:
             raise ValueError(f"remote mod entry needs 'url' and 'sha512': {entry!r}")
-        return _fetch(resolve(str(entry["url"])), str(entry["sha512"]).lower(), entry.get("name"))
+        url = _per_target(entry["url"], target_id, "url")
+        sha512 = _per_target(entry["sha512"], target_id, "sha512")
+        return _fetch(resolve(str(url)), str(sha512).lower(), entry.get("name"))
 
     path = Path(resolve(str(entry)))
     if not path.is_absolute():
