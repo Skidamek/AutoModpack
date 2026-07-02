@@ -422,7 +422,7 @@ public class FileInspection {
             }
         }
         Set<String> nested = new HashSet<>();
-        collectSpecificServicesNested(fs, known, nested);
+        collectSpecificServicesNested(fs, known, nested, true);
         return !nested.isEmpty();
     }
 
@@ -456,12 +456,18 @@ public class FileInspection {
         }
 
         // Nested JARs in META-INF/jarjar
-        collectSpecificServicesNested(fs, known, found);
+        collectSpecificServicesNested(fs, known, found, false);
 
         return found;
     }
 
-    private static void collectSpecificServicesNested(FileSystem fs, Set<String> known, Set<String> found) {
+    /**
+     * @param stopAtFirst {@code true} to return as soon as one match is found (the {@link
+     *                     #hasSpecificServices} boolean check - a hot path run over every mod during
+     *                     discovery), {@code false} to collect every match (the full {@link
+     *                     #getSpecificServices} set the copy-decision needs).
+     */
+    private static void collectSpecificServicesNested(FileSystem fs, Set<String> known, Set<String> found, boolean stopAtFirst) {
         Path jarJarDir = fs.getPath("META-INF", "jarjar");
 
         if (Files.notExists(jarJarDir)) {
@@ -470,14 +476,17 @@ public class FileInspection {
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(jarJarDir, "*.jar")) {
             for (Path nestedJar : stream) {
-                collectNestedJarServices(nestedJar, known, found);
+                collectNestedJarServices(nestedJar, known, found, stopAtFirst);
+                if (stopAtFirst && !found.isEmpty()) {
+                    return;
+                }
             }
         } catch (IOException e) {
             LOGGER.error("Error examining JarJar directory in {}", fs, e);
         }
     }
 
-    private static void collectNestedJarServices(Path nestedJarPath, Set<String> known, Set<String> found) {
+    private static void collectNestedJarServices(Path nestedJarPath, Set<String> known, Set<String> found, boolean stopAtFirst) {
         try (InputStream is = Files.newInputStream(nestedJarPath);
              BufferedInputStream bis = new BufferedInputStream(is);
              ZipInputStream zip = new ZipInputStream(bis)) {
@@ -486,6 +495,9 @@ public class FileInspection {
             while ((entry = zip.getNextEntry()) != null) {
                 if (known.contains(entry.getName())) {
                     found.add(entry.getName());
+                    if (stopAtFirst) {
+                        return;
+                    }
                 }
             }
         } catch (IOException e) {

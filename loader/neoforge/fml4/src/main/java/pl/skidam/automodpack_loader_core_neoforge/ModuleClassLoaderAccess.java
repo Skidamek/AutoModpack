@@ -79,6 +79,11 @@ final class ModuleClassLoaderAccess {
             return trusted.findStatic(modules, "addReads",
                     MethodType.methodType(void.class, Module.class, Module.class));
         } catch (Throwable t) {
+            // Not fatal by itself, but every read edge this class is asked to add will now silently
+            // no-op (see addReads) - which resurrects the exact IllegalAccessError this bridge exists
+            // to prevent, with nothing in the log to explain why. Surface it once, loudly, here instead.
+            pl.skidam.automodpack_core.Constants.LOGGER.error(
+                    "[AutoModpack] Could not resolve jdk.internal.module.Modules.addReads; in-place early-service mods may crash with IllegalAccessError when their inner mod accesses the outer jar's classes", t);
             return null;
         }
     }
@@ -119,5 +124,39 @@ final class ModuleClassLoaderAccess {
     @SuppressWarnings("unchecked")
     static Map<String, Object> resolvedRoots(ClassLoader loader) {
         return (Map<String, Object>) UNSAFE.getObject(loader, RESOLVED_ROOTS_OFFSET);
+    }
+
+    // ---- Plain reflection on cpw.mods.modlauncher internals: that package IS opened/reachable to
+    // us (unlike the sealed cpw.mods.cl/securejarhandler module the fields above cross), so ordinary
+    // Field#setAccessible reaches it without Unsafe. Shared here so EarlyServiceLayer and
+    // EarlyServiceBridgePlugin - both of which reach into ModLauncher's Launcher/handler internals -
+    // use one implementation instead of two copies. ----
+
+    /** {@code cpw.mods.modlauncher.Launcher.INSTANCE}, or throws if ModLauncher isn't on the classpath. */
+    static Object launcherInstance() throws Exception {
+        return Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
+    }
+
+    static Object readField(Object owner, String name) throws Exception {
+        Field f = findField(owner.getClass(), name);
+        f.setAccessible(true);
+        return f.get(owner);
+    }
+
+    static void writeField(Object owner, String name, Object value) throws Exception {
+        Field f = findField(owner.getClass(), name);
+        f.setAccessible(true);
+        f.set(owner, value);
+    }
+
+    private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
+        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
+            try {
+                return c.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+                // walk up
+            }
+        }
+        throw new NoSuchFieldException(name);
     }
 }

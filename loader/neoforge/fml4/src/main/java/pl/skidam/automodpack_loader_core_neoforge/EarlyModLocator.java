@@ -1,6 +1,5 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
-import cpw.mods.jarhandling.JarContents;
 import net.neoforged.fml.loading.progress.ProgressMeter;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.ILaunchContext;
@@ -15,6 +14,14 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 
     @Override
     public void findCandidates(ILaunchContext context, IDiscoveryPipeline pipeline) {
+
+        // This locator runs at HIGHEST_SYSTEM_PRIORITY, i.e. before any other locator's findCandidates -
+        // the earliest point in mod discovery (beginScanning). NeoForge's own window-provider assignment
+        // (which every registered GraphicsBootstrapper, including EarlyServiceBootstrapper, necessarily
+        // precedes) has already happened by now, so it is safe to run each in-place transformation
+        // service's initialize() here - see the javadoc on EarlyServiceLayer#runServiceInitialization
+        // for why running it any earlier (from the bootstrap phase itself) breaks Sinytra Connector.
+        EarlyServiceLayer.runServiceInitialization();
 
         ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
         new Preload();
@@ -40,7 +47,6 @@ public class EarlyModLocator implements IModFileCandidateLocator {
                     // transformers are forwarded by AutoModpackCoreMod (it was registered on the
                     // child SERVICE layer at bootstrap).
                     pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
-                    pipeline.readModFile(JarContents.of(path), ModFileDiscoveryAttributes.DEFAULT);
                 }
                 // Every other early-service jar - a split jar (Sodium) or a non-standalone coremod
                 // (Sinytra Connector) - keeps its outer classes only on its child SERVICE layer. Its
@@ -60,7 +66,6 @@ public class EarlyModLocator implements IModFileCandidateLocator {
             }
 
             pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
-            pipeline.readModFile(JarContents.of(path), ModFileDiscoveryAttributes.DEFAULT);
         }
     }
 

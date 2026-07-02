@@ -12,10 +12,12 @@ import java.util.Set;
  * A ModLauncher {@link ITransformationService} that AutoModpack <em>injects</em> into
  * {@code TransformationServicesHandler.serviceLookup} (see {@link EarlyServiceLayer#
  * injectForwardingTransformationService()}). It cannot be discovered the way {@link
- * AutoModpackCoreMod} is: {@code ICoreMod} is a NeoForge SPI scanned during mod loading from the
- * SERVICE layer, but {@code ITransformationService} is a ModLauncher SPI discovered at bootstrap from
- * the BOOT layer - before AutoModpack's SERVICE layer exists - so a shipped service file would never
- * be seen (the same reason {@link EarlyServiceBridgePlugin} is injected, not discovered).
+ * AutoModpackCoreMod} is: both {@code ICoreMod} and {@code ITransformationService} are ultimately
+ * scanned from the SERVICE layer, but ModLauncher builds and scans that layer - via {@code
+ * TransformationServicesHandler.discoverServices} - before AutoModpack's own module (itself only
+ * placed on the SERVICE layer by the loader) is even resolved, so a shipped {@code
+ * ITransformationService} file would never be seen (the same reason {@link EarlyServiceBridgePlugin}
+ * is injected, not discovered).
  *
  * <p>Its one job is {@link #completeScan}: ModLauncher's {@code triggerScanCompletion} calls every
  * registered service's {@code completeScan} <em>after</em> mod discovery and adds the returned jars to
@@ -27,7 +29,9 @@ import java.util.Set;
  * already built by then.
  *
  * <p>{@code onLoad}/{@code initialize} are no-ops: ModLauncher calls those before we can inject, so
- * {@link EarlyServiceLayer#runTransformationServiceOnLoad()} drives them in place instead.
+ * {@link EarlyServiceLayer#runTransformationServiceOnLoad()} (onLoad, run from the earlywindow
+ * bootstrap) and {@link EarlyServiceLayer#runServiceInitialization()} (initialize, run from {@link
+ * EarlyModLocator#findCandidates} at the very start of mod discovery) drive them in place instead.
  */
 public class AutoModpackTransformationService implements ITransformationService {
 

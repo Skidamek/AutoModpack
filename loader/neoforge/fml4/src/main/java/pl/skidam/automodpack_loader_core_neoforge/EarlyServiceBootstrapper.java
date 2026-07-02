@@ -40,18 +40,26 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
                 return;
             }
 
-            Set<String> standardModHashes = hashStandardMods(gameDir);
-
+            // Checking eligibility first (a handful of root-level Files.exists checks on an already-open
+            // FileSystem) before hashing (a full-content SHA-1 read) avoids paying for a hash on every
+            // ordinary, non-early-service mod - most modpack jars never need one. standardModHashes is
+            // itself a full hash of every standard-mods/ jar, so it is computed lazily too, only once
+            // an eligible jar actually needs the comparison.
             List<Path> earlyServiceJars = new ArrayList<>();
+            Set<String> standardModHashes = null;
             try (Stream<Path> stream = Files.list(modpackMods)) {
                 for (Path jar : stream.filter(EarlyServiceBootstrapper::isJar).toList()) {
+                    if (!EarlyServiceLayer.eligibleForInPlace(jar)) {
+                        continue;
+                    }
+                    if (standardModHashes == null) {
+                        standardModHashes = hashStandardMods(gameDir);
+                    }
                     String hash = HashUtils.getHash(jar);
                     if (hash != null && standardModHashes.contains(hash)) {
                         continue;
                     }
-                    if (EarlyServiceLayer.eligibleForInPlace(jar)) {
-                        earlyServiceJars.add(jar);
-                    }
+                    earlyServiceJars.add(jar);
                 }
             }
 
@@ -67,9 +75,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
                 return;
             }
 
-            for (Path jar : earlyServiceJars) {
-                bootstrapJar(jar, serviceLayer, arguments);
-            }
+            bootstrapJars(earlyServiceJars, serviceLayer, arguments);
 
             EarlyServiceLayer.runTransformationServiceOnLoad();
             EarlyServiceBridgePlugin.ensureRunsFirst();
@@ -78,15 +84,34 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
         }
     }
 
-    private void bootstrapJar(Path jar, ModuleLayer serviceLayer, String[] arguments) {
+    /**
+     * Resolves every eligible jar into ONE shared child configuration/layer/classloader - mirroring
+     * {@code ModuleLayerHandler.buildLayer}, which resolves every jar destined for a given layer (e.g.
+     * the loader's own SERVICE layer) together in a single {@code Configuration.resolveAndBind} call.
+     * Building one configuration per jar (sibling layers) would mean one early-service jar's module can
+     * never {@code requires}/classload another's - breaking any modpack-folder mod that is split across,
+     * or depends on, more than one early-service jar. Resolving them together lets such edges resolve
+     * exactly as they would if these jars sat together on the loader's real SERVICE layer.
+     *
+     * <p>(A live regression with Sinytra Connector was previously misattributed to this method; the
+     * actual cause was {@code ITransformationService.initialize()} running too early relative to
+     * NeoForge's window-provider assignment - see {@link EarlyModLocator#findCandidates}. This shared
+     * layer is unrelated to that timing and does not need to be avoided.)
+     */
+    private void bootstrapJars(List<Path> jars, ModuleLayer serviceLayer, String[] arguments) {
         ClassLoader serviceClassLoader;
         ModuleLayer childLayer;
         try {
-            SecureJar secureJar = SecureJar.from(jar);
-            String moduleName = secureJar.name();
+            SecureJar[] secureJars = new SecureJar[jars.size()];
+            List<String> moduleNames = new ArrayList<>(jars.size());
+            for (int i = 0; i < jars.size(); i++) {
+                SecureJar secureJar = SecureJar.from(jars.get(i));
+                secureJars[i] = secureJar;
+                moduleNames.add(secureJar.name());
+            }
 
             Configuration configuration = serviceLayer.configuration()
-                    .resolveAndBind(JarModuleFinder.of(secureJar), ModuleFinder.of(), List.of(moduleName));
+                    .resolveAndBind(JarModuleFinder.of(secureJars), ModuleFinder.of(), moduleNames);
 
             List<ModuleLayer> parentLayers = flattenParents(serviceLayer);
 
@@ -96,20 +121,24 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
             serviceClassLoader = classLoader;
         } catch (Throwable t) {
-            Constants.LOGGER.error("[AutoModpack] Could not build a service layer for {}, falling back to copy-to-standard", jar.getFileName(), t);
+            Constants.LOGGER.error("[AutoModpack] Could not build a shared service layer for the early-service mods; none of them will be bootstrapped in place", t);
             return;
         }
 
-        EarlyServiceLayer.register(jar, serviceClassLoader, childLayer);
+        for (Path jar : jars) {
+            EarlyServiceLayer.register(jar, serviceClassLoader, childLayer);
+        }
 
-        for (String impl : EarlyServiceLayer.serviceImpls(jar, EarlyServiceLayer.GRAPHICS_BOOTSTRAPPER_SERVICE)) {
-            try {
-                GraphicsBootstrapper bootstrapper = (GraphicsBootstrapper) Class.forName(impl, true, serviceClassLoader)
-                        .getDeclaredConstructor().newInstance();
-                Constants.LOGGER.info("[AutoModpack] Invoking in-place GraphicsBootstrapper {} ({}) from {}", impl, bootstrapper.name(), jar.getFileName());
-                bootstrapper.bootstrap(arguments);
-            } catch (Throwable t) {
-                Constants.LOGGER.error("[AutoModpack] In-place GraphicsBootstrapper {} from {} failed", impl, jar.getFileName(), t);
+        for (Path jar : jars) {
+            for (String impl : EarlyServiceLayer.serviceImpls(jar, EarlyServiceLayer.GRAPHICS_BOOTSTRAPPER_SERVICE)) {
+                try {
+                    GraphicsBootstrapper bootstrapper = (GraphicsBootstrapper) Class.forName(impl, true, serviceClassLoader)
+                            .getDeclaredConstructor().newInstance();
+                    Constants.LOGGER.info("[AutoModpack] Invoking in-place GraphicsBootstrapper {} ({}) from {}", impl, bootstrapper.name(), jar.getFileName());
+                    bootstrapper.bootstrap(arguments);
+                } catch (Throwable t) {
+                    Constants.LOGGER.error("[AutoModpack] In-place GraphicsBootstrapper {} from {} failed", impl, jar.getFileName(), t);
+                }
             }
         }
     }
@@ -135,7 +164,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
     private Path resolveSelectedModpackMods(Path gameDir) {
         String selected = null;
 
-        try (InputStream is = getClass().getResourceAsStream("/overrides-automodpack-client.json")) {
+        try (InputStream is = getClass().getResourceAsStream("/" + Constants.clientConfigFileOverrideResource)) {
             if (is != null) {
                 String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
                 Jsons.ClientConfigFieldsV2 config = ConfigTools.load(json, Jsons.ClientConfigFieldsV2.class);

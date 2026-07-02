@@ -5,7 +5,6 @@ import cpw.mods.modlauncher.api.NamedPath;
 import cpw.mods.modlauncher.serviceapi.ILaunchPluginService;
 import org.objectweb.asm.Type;
 
-import java.lang.reflect.Field;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,11 +24,11 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
 
     static void ensureRunsFirst() {
         try {
-            Object launcher = Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
+            Object launcher = ModuleClassLoaderAccess.launcherInstance();
             if (launcher == null) return;
-            Object pluginHandler = readField(launcher, "launchPlugins");
+            Object pluginHandler = ModuleClassLoaderAccess.readField(launcher, "launchPlugins");
             if (pluginHandler == null) return;
-            Map<String, Object> plugins = (Map<String, Object>) readField(pluginHandler, "plugins");
+            Map<String, Object> plugins = (Map<String, Object>) ModuleClassLoaderAccess.readField(pluginHandler, "plugins");
             if (plugins == null) return;
             if (plugins instanceof PriorityPluginMap ordered) {
                 ordered.putIfAbsent(NAME, new EarlyServiceBridgePlugin());
@@ -37,33 +36,11 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
             }
             PriorityPluginMap ordered = new PriorityPluginMap(NAME, plugins);
             ordered.putIfAbsent(NAME, new EarlyServiceBridgePlugin());
-            writeField(pluginHandler, "plugins", ordered);
+            ModuleClassLoaderAccess.writeField(pluginHandler, "plugins", ordered);
             Constants.LOGGER.info("[AutoModpack] Injected early-service bridge launch plugin '{}' (ModLauncher discovers launch plugins only from the BOOT layer, so SERVICE-layer service files would never be seen)", NAME);
         } catch (Throwable t) {
             Constants.LOGGER.warn("[AutoModpack] Could not inject the early-service bridge launch plugin; in-place graphics-service mods may fail", t);
         }
-    }
-
-    private static Object readField(Object owner, String name) throws Exception {
-        Field field = findField(owner.getClass(), name);
-        field.setAccessible(true);
-        return field.get(owner);
-    }
-
-    private static void writeField(Object owner, String name, Object value) throws Exception {
-        Field field = findField(owner.getClass(), name);
-        field.setAccessible(true);
-        field.set(owner, value);
-    }
-
-    private static Field findField(Class<?> from, String name) throws NoSuchFieldException {
-        for (Class<?> c = from; c != null; c = c.getSuperclass()) {
-            try {
-                return c.getDeclaredField(name);
-            } catch (NoSuchFieldException ignored) {
-            }
-        }
-        throw new NoSuchFieldException(name);
     }
 
     private static final class PriorityPluginMap extends LinkedHashMap<String, Object> {
@@ -97,6 +74,5 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
     @Override
     public void initializeLaunch(ITransformerLoader transformerLoader, NamedPath[] specialPaths) {
         EarlyServiceLayer.bridgeEarlyServicesToGameLayer();
-        EarlyServiceLayer.runServiceInitialization();
     }
 }

@@ -125,13 +125,14 @@ public final class EarlyServiceLayer {
         return Set.copyOf(handled);
     }
 
-    // Maps each handled modpack jar to the classloader of the child service layer that
-    // holds its early-service classes. Populated by EarlyServiceBootstrapper.
-    private static final Map<Path, ClassLoader> JAR_CLASSLOADERS = new ConcurrentHashMap<>();
+    // The classloader of a handled modpack jar's child SERVICE layer (which holds its early-service
+    // classes) plus that layer itself (so the GAME-layer bridge can wire up JPMS read edges between
+    // the child module(s) and the GAME modules) - always written together by register() and mostly
+    // read together, so one map keyed by jar keeps them from drifting out of sync.
+    private record JarService(ClassLoader classLoader, ModuleLayer layer) {}
 
-    // Maps each handled modpack jar to its child SERVICE module layer, so the GAME-layer bridge
-    // can wire up JPMS read edges between the child module(s) and the GAME modules.
-    private static final Map<Path, ModuleLayer> JAR_LAYERS = new ConcurrentHashMap<>();
+    // Maps each handled modpack jar to its child-layer classloader/layer. Populated by EarlyServiceBootstrapper.
+    private static final Map<Path, JarService> JAR_SERVICES = new ConcurrentHashMap<>();
 
     // ITransformationService instances instantiated in place per jar, kept so the forwarding service
     // injected into ModLauncher (AutoModpackTransformationService) can run their completeScan at the
@@ -144,17 +145,17 @@ public final class EarlyServiceLayer {
     private static final AtomicBoolean GAME_BRIDGE_DONE = new AtomicBoolean(false);
 
     static void register(Path jar, ClassLoader serviceClassLoader, ModuleLayer childLayer) {
-        Path key = canonical(jar);
-        JAR_CLASSLOADERS.put(key, serviceClassLoader);
-        if (childLayer != null) JAR_LAYERS.put(key, childLayer);
+        JAR_SERVICES.put(canonical(jar), new JarService(serviceClassLoader, childLayer));
     }
 
     public static boolean isEarlyServiceJar(Path jar) {
-        return jar != null && JAR_CLASSLOADERS.containsKey(canonical(jar));
+        return jar != null && JAR_SERVICES.containsKey(canonical(jar));
     }
 
     private static ClassLoader classLoaderFor(Path jar) {
-        return jar == null ? null : JAR_CLASSLOADERS.get(canonical(jar));
+        if (jar == null) return null;
+        JarService service = JAR_SERVICES.get(canonical(jar));
+        return service == null ? null : service.classLoader();
     }
 
     // Stable key so a jar matches whether reached via a relative or absolute path.
@@ -335,11 +336,23 @@ public final class EarlyServiceLayer {
         return info(jar).standalone();
     }
 
+    /**
+     * Drives {@code onLoad} on each in-place transformation service. Called from the earlywindow
+     * bootstrap - itself running AS a {@code GraphicsBootstrapper.bootstrap()} callback, i.e. from
+     * inside NeoForge's own {@code GraphicsBootstrapper} iteration, before it assigns the real
+     * {@code ImmediateWindowProvider} to {@code ImmediateWindowHandler.provider}. This matches native
+     * timing: {@code TransformerDiscovererConstants}' early-discovery services (which select the window
+     * provider) run before ANY {@code ITransformationService.onLoad}, so natively {@code onLoad} always
+     * sees the real provider already in place too - {@code onLoad} itself does no provider-sensitive
+     * work here (verified for Sinytra Connector: its {@code onLoad} only injects a launch plugin into
+     * the already-live {@code Launcher.INSTANCE}), so running it this early is safe. {@code initialize()}
+     * is a different story - see {@link #runServiceInitialization()}.
+     */
     public static void runTransformationServiceOnLoad() {
         IEnvironment env = launcherEnvironment();
-        for (Map.Entry<Path, ClassLoader> entry : JAR_CLASSLOADERS.entrySet()) {
+        for (Map.Entry<Path, JarService> entry : JAR_SERVICES.entrySet()) {
             Path jar = entry.getKey();
-            ClassLoader cl = entry.getValue();
+            ClassLoader cl = entry.getValue().classLoader();
             for (String impl : serviceImpls(jar, TRANSFORMATION_SERVICE)) {
                 try {
                     ITransformationService service = (ITransformationService) Class.forName(impl, true, cl)
@@ -355,7 +368,37 @@ public final class EarlyServiceLayer {
         ensureForwardingTransformationServiceInjected();
     }
 
+    private static final AtomicBoolean SERVICE_INITIALIZATION_DONE = new AtomicBoolean(false);
+
+    /**
+     * Drives {@code initialize} on each in-place transformation service. Called once from {@link
+     * EarlyModLocator#findCandidates}, NOT from the earlywindow bootstrap that runs {@link
+     * #runTransformationServiceOnLoad()} - {@code initialize()} must run strictly after NeoForge's own
+     * window-provider assignment, which {@link EarlyServiceBootstrapper#bootstrap} necessarily precedes
+     * (it runs as one of the {@code GraphicsBootstrapper}s NeoForge iterates BEFORE assigning the real
+     * provider to the {@code ImmediateWindowHandler.provider} static field).
+     *
+     * <p>Root cause of a live regression that motivated this: Sinytra Connector's {@code
+     * ConnectorLoaderService.initialize()} does not do its real Fabric-loading work itself - it reads
+     * the CURRENT {@code ImmediateWindowHandler.provider}, wraps it in a decorator whose {@code
+     * updateModuleReads} override is where {@code ConnectorEarlyLoader.setup()}/{@code preLaunch()}
+     * (Fabric mixin/entrypoint registration) actually happens, and writes the wrapper back into that
+     * same static field. If {@code initialize()} runs before NeoForge assigns the real provider, that
+     * assignment (which happens right after all {@code GraphicsBootstrapper}s finish) silently
+     * overwrites Connector's wrapper - no error, its mixins just never register. Natively this can't
+     * happen: ModLauncher's {@code TransformationServicesHandler} runs the window-provider-selecting
+     * early-discovery services, then ALL services' {@code onLoad}, THEN ALL services' {@code
+     * initialize()} - so by native {@code initialize()} time the real provider is always already set.
+     *
+     * <p>{@link EarlyModLocator} is AutoModpack's own {@code IModFileCandidateLocator}, registered at
+     * {@code HIGHEST_SYSTEM_PRIORITY} so it runs before any other locator's {@code findCandidates} -
+     * i.e. this call sits at the very top of mod discovery ({@code beginScanning}), which is exactly
+     * where native {@code initialize()} sits relative to discovery: after the window provider is final,
+     * before any mod file is read. Idempotent via {@link #SERVICE_INITIALIZATION_DONE} in case discovery
+     * ever invokes the locator more than once.
+     */
     public static void runServiceInitialization() {
+        if (!SERVICE_INITIALIZATION_DONE.compareAndSet(false, true)) return;
         IEnvironment env = launcherEnvironment();
         int count = 0;
         for (Map.Entry<Path, List<ITransformationService>> entry : TRANSFORMATION_SERVICES.entrySet()) {
@@ -414,10 +457,10 @@ public final class EarlyServiceLayer {
         Object handler;
         Map<String, Object> serviceLookup;
         try {
-            Object launcher = Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
-            handler = readField(launcher, "transformationServicesHandler");
+            Object launcher = ModuleClassLoaderAccess.launcherInstance();
+            handler = ModuleClassLoaderAccess.readField(launcher, "transformationServicesHandler");
             @SuppressWarnings("unchecked")
-            Map<String, Object> lookup = (Map<String, Object>) readField(handler, "serviceLookup");
+            Map<String, Object> lookup = (Map<String, Object>) ModuleClassLoaderAccess.readField(handler, "serviceLookup");
             serviceLookup = lookup;
         } catch (Throwable t) {
             if (FORWARDING_SERVICE_INJECTED.compareAndSet(false, true)) {
@@ -442,7 +485,7 @@ public final class EarlyServiceLayer {
             Object decorator = ctor.newInstance(new AutoModpackTransformationService());
             // Its onLoad (which sets isValid) is past; set it directly so nothing skips the decorator.
             try {
-                writeField(decorator, "isValid", Boolean.TRUE);
+                ModuleClassLoaderAccess.writeField(decorator, "isValid", Boolean.TRUE);
             } catch (Throwable ignored) {
                 // Not fatal: completeScan is not gated on isValid.
             }
@@ -452,7 +495,7 @@ public final class EarlyServiceLayer {
             // iteration keeps its old map; ModLauncher re-reads the field for triggerScanCompletion.
             Map<String, Object> replacement = new java.util.LinkedHashMap<>(serviceLookup);
             replacement.put(AutoModpackTransformationService.NAME, decorator);
-            writeField(handler, "serviceLookup", replacement);
+            ModuleClassLoaderAccess.writeField(handler, "serviceLookup", replacement);
             LOGGER.info("[AutoModpack] Injected the forwarding transformation service '{}' so ModLauncher runs each in-place service's completeScan natively (its GAME/PLUGIN-layer resources reach the layers)", AutoModpackTransformationService.NAME);
         } catch (Throwable t) {
             LOGGER.error("[AutoModpack] Failed to inject the forwarding transformation service; in-place completeScan resources (e.g. Connector's) will be missing", t);
@@ -462,35 +505,11 @@ public final class EarlyServiceLayer {
     /** ModLauncher's live {@code IEnvironment} (via {@code Launcher.INSTANCE}), or null if unreachable. */
     private static IEnvironment launcherEnvironment() {
         try {
-            Object launcher = Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
+            Object launcher = ModuleClassLoaderAccess.launcherInstance();
             return (IEnvironment) launcher.getClass().getMethod("environment").invoke(launcher);
         } catch (Throwable ignored) {
             return null;
         }
-    }
-
-    // Plain reflection on cpw.mods.modlauncher internals (reachable, unlike sealed securejarhandler).
-    private static Object readField(Object owner, String name) throws Exception {
-        java.lang.reflect.Field f = findField(owner.getClass(), name);
-        f.setAccessible(true);
-        return f.get(owner);
-    }
-
-    private static void writeField(Object owner, String name, Object value) throws Exception {
-        java.lang.reflect.Field f = findField(owner.getClass(), name);
-        f.setAccessible(true);
-        f.set(owner, value);
-    }
-
-    private static java.lang.reflect.Field findField(Class<?> type, String name) throws NoSuchFieldException {
-        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
-            try {
-                return c.getDeclaredField(name);
-            } catch (NoSuchFieldException ignored) {
-                // walk up
-            }
-        }
-        throw new NoSuchFieldException(name);
     }
 
     /**
@@ -509,9 +528,9 @@ public final class EarlyServiceLayer {
      */
     public static List<ITransformer<?>> collectForwardedTransformers() {
         List<ITransformer<?>> transformers = new ArrayList<>();
-        for (Map.Entry<Path, ClassLoader> entry : JAR_CLASSLOADERS.entrySet()) {
+        for (Map.Entry<Path, JarService> entry : JAR_SERVICES.entrySet()) {
             Path jar = entry.getKey();
-            ClassLoader cl = entry.getValue();
+            ClassLoader cl = entry.getValue().classLoader();
 
             // A coremod's transformers (e.g. Sinytra Connector's @Shadow name->SRG remap that its
             // own mixins need to apply). Most early-service jars ship none.
@@ -532,21 +551,24 @@ public final class EarlyServiceLayer {
 
             // A transformation service's transformers. Almost always empty - the service is only a
             // vehicle to load early (asynclogger, Connector, CrashAssistant all ship such a no-op
-            // one) - but forwarded so any that aren't empty still run in place.
-            for (String impl : serviceImpls(jar, TRANSFORMATION_SERVICE)) {
+            // one) - but forwarded so any that aren't empty still run in place. Reuse the SAME instance
+            // that already ran onLoad/initialize (see runTransformationServiceOnLoad) rather than
+            // instantiating a fresh, un-lifecycled one - natively transformers() is gathered from the
+            // one TransformationServiceDecorator instance that carried the service through its whole
+            // lifecycle, so a service that builds its transformers from onLoad/initialize state needs
+            // that same instance here too.
+            for (ITransformationService service : TRANSFORMATION_SERVICES.getOrDefault(jar, List.of())) {
                 try {
-                    ITransformationService service = (ITransformationService) Class.forName(impl, true, cl)
-                            .getDeclaredConstructor().newInstance();
                     int before = transformers.size();
                     for (ITransformer<?> transformer : service.transformers()) {
                         transformers.add(transformer);
                     }
                     if (transformers.size() > before) {
                         LOGGER.info("[AutoModpack] Forwarding {} transformer(s) from in-place transformation service {} ({})",
-                                transformers.size() - before, impl, jar.getFileName());
+                                transformers.size() - before, service.getClass().getName(), jar.getFileName());
                     }
                 } catch (Throwable t) {
-                    LOGGER.error("[AutoModpack] Failed to run in-place transformation service {} from {}", impl, jar.getFileName(), t);
+                    LOGGER.error("[AutoModpack] Failed to collect transformers from in-place transformation service {} from {}", service.getClass().getName(), jar.getFileName(), t);
                 }
             }
         }
@@ -603,9 +625,9 @@ public final class EarlyServiceLayer {
         // if the layer manager is unreachable, in which case reads-linking is skipped.
         ModuleLayer gameLayer = gameLayerOrNull();
 
-        for (Map.Entry<Path, ClassLoader> entry : JAR_CLASSLOADERS.entrySet()) {
+        for (Map.Entry<Path, JarService> entry : JAR_SERVICES.entrySet()) {
             Path jar = entry.getKey();
-            ClassLoader childLoader = entry.getValue();
+            ClassLoader childLoader = entry.getValue().classLoader();
             // A standalone coremod that is itself a mod (root neoforge.mods.toml) was added to the
             // GAME layer as its real self by EarlyModLocator, so its outer classes already resolve
             // there - bridging would redirect them to the child. Everything else - plain early
@@ -636,7 +658,7 @@ public final class EarlyServiceLayer {
                 LOGGER.info("[AutoModpack] Bridged {} outer package(s) of {} to its early-service layer for in-place class/resource sharing", bridged, jar.getFileName());
                 // Classloader routing makes the outer classes loadable; JPMS still checks module
                 // readability at access time, so wire the read edges a real ancestor layer would give.
-                linkModuleReads(gameLayer, JAR_LAYERS.get(jar), jar);
+                linkModuleReads(gameLayer, entry.getValue().layer(), jar);
             } catch (Throwable t) {
                 LOGGER.error("[AutoModpack] Failed to bridge {} to the GAME layer", jar.getFileName(), t);
             }
@@ -685,7 +707,7 @@ public final class EarlyServiceLayer {
      */
     private static ModuleLayer gameLayerOrNull() {
         try {
-            Object launcher = Class.forName("cpw.mods.modlauncher.Launcher").getField("INSTANCE").get(null);
+            Object launcher = ModuleClassLoaderAccess.launcherInstance();
             Object managerOpt = launcher.getClass().getMethod("findLayerManager").invoke(launcher);
             @SuppressWarnings("unchecked")
             IModuleLayerManager manager = ((java.util.Optional<IModuleLayerManager>) managerOpt).orElse(null);
