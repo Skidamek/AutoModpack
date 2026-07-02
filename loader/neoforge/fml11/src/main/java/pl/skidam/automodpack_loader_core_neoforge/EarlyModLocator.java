@@ -21,6 +21,33 @@ public class EarlyModLocator implements IModFileCandidateLocator {
         progress.complete();
 
         for (Path path : ModpackLoader.modsToLoad) {
+            // Early-service jars (e.g. Sodium) already had their GraphicsBootstrapper/etc run in
+            // place, from FMLLoader's own classloader chain (EarlyServiceBootstrapper). Unlike fml4,
+            // there's no separate module-layer bridge needed here: FMLLoader's game content loader
+            // automatically falls back to the same chain we appended these jars to, so a standalone
+            // early-service jar (its own root neoforge.mods.toml, e.g. modern Sodium) just needs to be
+            // added as a regular mod file like any other - its classes are already visible everywhere
+            // that matters. A split-jar shim (its real mod lives in a nested jar found by its own
+            // IModFileCandidateLocator/IDependencyLocator, e.g. older split-jar mods) is NOT itself a
+            // mod file and must not be added directly; only its locators are replayed.
+            if (EarlyServiceLayer.isEarlyServiceJar(path)) {
+                if (EarlyServiceLayer.isStandaloneModFile(path)) {
+                    pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
+                    try {
+                        JarContents jarContents = JarContents.ofPath(path);
+                        pipeline.readModFile(jarContents, ModFileDiscoveryAttributes.DEFAULT);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+
+                // Forward any IModFileReader first, so custom-format candidates offered by the
+                // locators below can be interpreted by it.
+                EarlyServiceLayer.runModFileReaders(path, pipeline);
+                EarlyServiceLayer.runCandidateLocators(path, context, pipeline);
+                continue;
+            }
+
             pipeline.addPath(path, ModFileDiscoveryAttributes.DEFAULT, IncompatibleFileReporting.WARN_ALWAYS);
             try {
                 JarContents jarContents = JarContents.ofPath(path);

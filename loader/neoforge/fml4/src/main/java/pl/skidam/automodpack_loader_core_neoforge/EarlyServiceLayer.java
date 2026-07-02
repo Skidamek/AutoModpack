@@ -4,7 +4,6 @@ import cpw.mods.modlauncher.api.IEnvironment;
 import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
-import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.coremod.ICoreMod;
 import net.neoforged.neoforgespi.locating.IDependencyLocator;
@@ -648,23 +647,20 @@ public final class EarlyServiceLayer {
      * Resolves the GAME {@code TransformingClassLoader}. ModLauncher sets it as the thread context
      * classloader before {@code launch()}, so it is in scope both at {@code announceLaunch} (our
      * injected launch plugin's {@code initializeLaunch}) and during class transformation (the coremod
-     * fallback) - crucially without {@code FMLLoader.getGameLayer()}'s "mod discovery completed"
-     * precondition, which is not yet met when a launch plugin's {@code addResources} runs. Falls back
-     * to the FML game layer if the context loader is not (yet) a module classloader.
+     * fallback). Falls back to {@link #gameLayerOrNull()} - ModLauncher's own layer manager, not
+     * FML's - if the context loader is not (yet) a module classloader; unlike FML's game-layer
+     * accessor, that one carries no "mod discovery completed" precondition, so it works as a fallback
+     * at exactly the point where the context loader can't be relied on yet either.
      */
     private static ClassLoader resolveGameClassLoader() {
         ClassLoader ctx = Thread.currentThread().getContextClassLoader();
         if (ctx instanceof cpw.mods.cl.ModuleClassLoader) return ctx;
-        try {
-            ModuleLayer gameLayer = FMLLoader.getGameLayer();
-            if (gameLayer != null) {
-                for (Module module : gameLayer.modules()) {
-                    ClassLoader cl = module.getClassLoader();
-                    if (cl instanceof cpw.mods.cl.ModuleClassLoader) return cl;
-                }
+        ModuleLayer gameLayer = gameLayerOrNull();
+        if (gameLayer != null) {
+            for (Module module : gameLayer.modules()) {
+                ClassLoader cl = module.getClassLoader();
+                if (cl instanceof cpw.mods.cl.ModuleClassLoader) return cl;
             }
-        } catch (Throwable ignored) {
-            // getGameLayer throws until FML mod discovery completes; the context loader covers us.
         }
         return null;
     }

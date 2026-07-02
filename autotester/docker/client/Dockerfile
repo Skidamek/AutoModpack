@@ -35,7 +35,15 @@ FROM ubuntu:26.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HMC_HOME=/work/hmc-cache
 
-# Install Java 17, 21, 25 from repos
+# Install Java 17, 21, 25 from repos. Two things newer FancyModLoader (21.10+/26.x) needs that
+# the previous headless-only setup didn't provide:
+#  - The full (non-headless) *-jre packages: FatalErrorReporting.reportFatalError tries a Swing
+#    dialog even in headless mode - if it can't (java.desktop's libawt_xawt.so is only shipped
+#    by the non-headless package), that UnsatisfiedLinkError itself crashes the client and
+#    replaces the real error in the log, making any such failure undiagnosable.
+#  - xvfb (below): even with -Djava.awt.headless=true, this JDK's HeadlessGraphicsEnvironment
+#    still wraps a real X11GraphicsEnvironment internally on Linux and fails without a display
+#    to connect to - so Swing dialogs need a (virtual) X server regardless of the headless flag.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -43,6 +51,7 @@ RUN apt-get update \
         unzip \
         bash \
         procps \
+        xvfb \
         libatomic1 \
         libx11-6 \
         libxext6 \
@@ -54,9 +63,9 @@ RUN apt-get update \
         libgl1 \
         libglx-mesa0 \
         libasound2t64 \
-        openjdk-17-jre-headless \
-        openjdk-21-jre-headless \
-        openjdk-25-jre-headless \
+        openjdk-17-jre \
+        openjdk-21-jre \
+        openjdk-25-jre \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache \

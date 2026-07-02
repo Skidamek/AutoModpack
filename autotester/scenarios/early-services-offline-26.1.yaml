@@ -1,0 +1,68 @@
+id: early-services-offline-26.1
+description: |
+  fml11 (NeoForge 26.1) variant of early-services-offline: same offline / client-only proof
+  that an early-service mod (Sodium) loads straight from AutoModpack's modpack folder - its
+  GraphicsBootstrapper fires in place and the mod itself is discovered and initialised in place
+  - with NO copy into the standard mods/ directory.
+
+  Like 1.21.10's build, this NeoForge 26.1 Sodium build is a single, standalone jar (real
+  neoforge.mods.toml at its root) that also happens to register a GraphicsBootstrapper - so
+  this loader version's early-service mechanism (FMLLoader.appendLoader, a flat
+  classloader-chain append) needs no separate GAME-layer bridge: appending the jar to
+  FMLLoader's chain before the game content loader is built is by itself enough for the mod's
+  own classes to resolve everywhere, including as the actual discovered mod file.
+
+  Pre-stages Sodium into the client game dir and boots just the client (no server, no
+  cert/download/restart dance). Verification is log-based; the client may idle rather than
+  crash once fully booted - `wait_exit` tolerates that via `or_alive`.
+
+# Host networking: this sandbox only allows --network host. No server is launched anyway.
+network: host
+mode: client-only
+
+# First run downloads MC + NeoForge via HMC into an ephemeral cache, so allow generous time.
+timeouts:
+  clientRunSeconds: 1200
+
+# 26.1-specific Sodium build; the early-service mechanism itself is fml11's port of the
+# same code exercised on 1.21.1 by early-services-offline.
+targets:
+  - 26.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage Sodium into the modpack folder (NOT standard mods/)
+    mods:
+      - url: https://cdn.modrinth.com/data/AANobbMI/versions/Fg5Mk6Y3/sodium-neoforge-0.8.9%2Bmc26.1.1.jar
+        sha512: 1e63fa06189d013db57c8c1875e2c3ea5114e00ab82f0b6540f8e9ed6007fdef9ea2ab90721ce2a55b55e3484fa1696e9a582b33fdf271308c8717db4958629d
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  # Poll until ALL the positive evidence is present (gives the client time to boot fully): the
+  # bootstrapper fired in place, and mod discovery picked up this in-place jar as a real mod
+  # (present in FML's own "Mod List:" dump, printed once discovery finishes).
+  - do: wait_for
+    name: Sodium loaded in place (bootstrap + in-place mod discovery)
+    timeout: 420s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'Bootstrapping \d+ early-service'
+          - 'in-place GraphicsBootstrapper.*SodiumWorkarounds'
+          - 'Sodium .* \(sodium\)'
+  - do: wait_exit
+    name: let the client run to exit, or stay alive idling (both acceptable)
+    expect: any
+    or_alive: true
+    timeout: 120s
+  - do: assert
+    name: Sodium's classes resolved in place (no ClassNotFoundException)
+    that:
+      log:
+        container: client
+        not_matches:
+          - 'ClassNotFoundException.*[Ww]orkarounds'
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json

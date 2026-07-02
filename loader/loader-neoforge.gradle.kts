@@ -1,5 +1,20 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
+// fml10 and fml11 (NeoForge 21.6+) share one early-service implementation
+// (:loader-neoforge-earlyservices): that NeoForge generation removed ModLauncher/securejarhandler
+// entirely in favor of a flat FMLLoader-owned classloader chain, so their in-place-loading bridge
+// works completely differently from fml4's (NeoForge 21.1) ModLauncher-module-layer approach,
+// which stays inline in fml4's own sources - there's nothing left to share with it.
+val earlyServicesModule = if (project.name == "loader-neoforge-fml4") null else "loader-neoforge-earlyservices"
+
+// Forces these to configure before us: shadowJar (below) reads their sourceSets output at
+// configuration time via a lazy tasks.named{} block, which - unlike the dependencies{} block -
+// configuration-on-demand does not always reach in time otherwise (surfaces when this project is
+// built standalone, e.g. `gradlew :loader-neoforge-fml4:build`, rather than as part of a full build).
+evaluationDependsOn(":core")
+evaluationDependsOn(":loader-core")
+if (earlyServicesModule != null) evaluationDependsOn(":$earlyServicesModule")
+
 plugins {
     kotlin("jvm")
     id("automodpack.utils")
@@ -23,6 +38,7 @@ neoForge {
 dependencies {
     compileOnly(project(":core"))
     compileOnly(project(":loader-core"))
+    if (earlyServicesModule != null) compileOnly(project(":$earlyServicesModule"))
 
     // External provided deps to compile this
     compileOnly("com.google.code.gson:gson:2.10.1")
@@ -51,7 +67,7 @@ tasks.named<ShadowJar>("shadowJar") {
     archiveClassifier.set("")
 
     // Combine all subproject outputs efficiently
-    val subprojects = listOf(":core", ":loader-core")
+    val subprojects = listOfNotNull(":core", ":loader-core", earlyServicesModule?.let { ":$it" })
     subprojects.forEach {
         from(project(it).sourceSets.main.get().output)
     }
