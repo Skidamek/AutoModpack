@@ -1,13 +1,16 @@
 id: kotlin-language-provider-offline
 description: |
-  Offline / client-only proof that Kotlin-for-Forge - a mod that ships an IModLanguageLoader
-  (a language provider) and a tree of nested jar-in-jar libraries - loads straight from
-  AutoModpack's modpack folder, with NO copy into the standard mods/ directory.
+  Offline / client-only proof that Kotlin-for-Forge - a mod that ships a language provider
+  (IModLanguageLoader on NeoForge, IModLanguageProvider on Forge) and a tree of nested
+  jar-in-jar libraries - loads straight from AutoModpack's modpack folder, with NO copy into
+  the standard mods/ directory.
 
-  Language loaders need no in-place bootstrapping: FML's ServiceLoaderUtil scans every module
-  layer including GAME (where AutoModpack puts modpack mods), and SecureJar synthesises the
-  module's `provides` from META-INF/services - so the provider is discovered in place. This
-  verifies that and that the nested kotlin libraries resolve. Crash-tolerant for headless GL.
+  Language providers need no in-place bootstrapping: on NeoForge, FML's ServiceLoaderUtil scans
+  every module layer including GAME (where AutoModpack puts modpack mods), and SecureJar
+  synthesises the module's `provides` from META-INF/services; on Forge, the jar is offered to
+  the same discovery pipeline as any mods/-dir jar and FML routes LANGPROVIDER-type files to
+  the PLUGIN layer itself. This verifies that, and that the nested kotlin libraries resolve.
+  Crash-tolerant for headless GL.
 
 network: host
 mode: client-only
@@ -17,29 +20,46 @@ timeouts:
 
 targets:
   - 1.21.1-neoforge
+  - 1.20.1-forge
+  - 1.18.2-forge
 
 flow:
   - do: stage_modpack
     name: stage kotlinforforge (language provider) into the modpack folder
     mods:
-      - url: https://cdn.modrinth.com/data/ordsPcFz/versions/uhJhCT7X/kotlinforforge-5.12.0-all.jar
-        sha512: b8c3942f4d33179edf3f102f3d870b99dd436f8b8236dbbd31aa51b888162c692cfd88927295f24dc8b4375232f4c6c17360c5d6c4823f93cbcd7cf4bdc8bd14
+      - url:
+          1.21.1-neoforge: https://cdn.modrinth.com/data/ordsPcFz/versions/uhJhCT7X/kotlinforforge-5.12.0-all.jar
+          1.20.1-forge: https://cdn.modrinth.com/data/ordsPcFz/versions/Zsh14XeQ/kotlinforforge-4.12.0-all.jar
+          1.18.2-forge: https://cdn.modrinth.com/data/ordsPcFz/versions/NBn3sEQk/kotlinforforge-3.12.0-all.jar
+        sha512:
+          1.21.1-neoforge: b8c3942f4d33179edf3f102f3d870b99dd436f8b8236dbbd31aa51b888162c692cfd88927295f24dc8b4375232f4c6c17360c5d6c4823f93cbcd7cf4bdc8bd14
+          1.20.1-forge: 767f40030ed4b370a3838fa65ae1b79974f31979342fff7cc834a0d5f39eb28612642519352ff2a1dd5226ce1f745f8b3156ee3625ffde01219137d064c1ee40
+          1.18.2-forge: 15e6e2e88ca8ea4df730a20e99e131d266b27822299d464f004bcbc0a3f15c3275d25e3edc4397ef0a6584dd1d6161e9199fa8369f1581abb05ec6c74edc8cc1
   - do: launch_client
     name: boot the client against the pre-staged modpack
   - do: wait_for
-    name: kotlinforforge loaded in place and its language provider ran (no copy)
+    name: kotlinforforge loaded in place and its Kotlin entrypoint actually ran (no copy)
     timeout: 600s
     until:
       log:
         container: client
         matches_all:
           - 'AutoModpack prelaunched'
+          # KFF's own entrypoint log - it only appears if the language provider was
+          # discovered (from the modpack folder, uncopied) and the mod constructed through it
+          - 'Kotlin For Forge Enabled'
+  - do: wait_for
+    name: NeoForge additionally logs the in-place library discovery and the mod-list entry
+    when:
+      target: 1.21.1-neoforge
+    timeout: 60s
+    until:
+      log:
+        container: client
+        matches_all:
           # the aggregator is discovered in the modpack folder, not copied to mods/
           - 'Found library file "kotlinforforge'
-          # the mod appears in the load list and its Kotlin entrypoint actually runs - which
-          # only happens if the nested IModLanguageLoader was discovered from the GAME layer
           - 'Kotlin For Forge .*\(kotlinforforge\)'
-          - 'Kotlin For Forge Enabled'
   - do: wait_exit
     name: tolerate the client exiting, or staying alive (kotlin has nothing to render)
     expect: any

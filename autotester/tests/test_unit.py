@@ -367,3 +367,85 @@ def test_server_host_overrides_namespace(make_ctx):
     assert ctx.resolve("${server.host}") == "127.0.0.1"
     # Falls back to the container name when unset (bridge transport).
     assert make_ctx().resolve("${server.host}") == "srv-container"
+
+
+# ── target / target_not / only_files conditions ──────────────────────────
+
+
+def test_target_condition_str_and_list(make_ctx):
+    ctx = make_ctx()  # target id is 1.21-fabric
+    assert conditions.evaluate(ctx, {"target": "1.21-fabric"}) is True
+    assert conditions.evaluate(ctx, {"target": "1.21.1-neoforge"}) is False
+    assert conditions.evaluate(ctx, {"target": ["1.21.1-neoforge", "1.21-fabric"]}) is True
+    assert conditions.evaluate(ctx, {"target": ["1.21.1-neoforge", "1.20.1-forge"]}) is False
+
+
+def test_target_not_condition(make_ctx):
+    ctx = make_ctx()
+    assert conditions.evaluate(ctx, {"target_not": "1.21-fabric"}) is False
+    assert conditions.evaluate(ctx, {"target_not": ["1.21.1-neoforge"]}) is True
+
+
+def test_only_files_condition(make_ctx):
+    ctx = make_ctx()
+    mods = ctx.game_dir / "mods"  # conftest pre-seeds mods/automodpack.jar
+    assert conditions.evaluate(
+        ctx, {"only_files": {"dir": "mods", "patterns": "automodpack*.jar"}}
+    ) is True
+    (mods / "leaked-mod.jar").write_bytes(b"")
+    assert conditions.evaluate(
+        ctx, {"only_files": {"dir": "mods", "patterns": "automodpack*.jar"}}
+    ) is False
+    assert conditions.evaluate(
+        ctx, {"only_files": {"dir": "mods", "patterns": ["automodpack*.jar", "leaked-*.jar"]}}
+    ) is True
+    # A subdirectory (not a file) also fails the "only files" contract.
+    (mods / "leaked-mod.jar").unlink()
+    (mods / "subdir").mkdir()
+    assert conditions.evaluate(
+        ctx, {"only_files": {"dir": "mods", "patterns": "*"}}
+    ) is False
+    # A missing dir is False, not an error.
+    assert conditions.evaluate(
+        ctx, {"only_files": {"dir": "no-such-dir", "patterns": "*"}}
+    ) is False
+
+
+# ── mods.resolve_mod per-target url/sha512 maps ───────────────────────────
+
+
+def test_resolve_mod_per_target_map_picks_target_entry(tmp_path, monkeypatch):
+    from automodpack_autotester import mods
+
+    fetched = {}
+
+    def fake_fetch(url, sha512, name):
+        fetched["url"], fetched["sha512"] = url, sha512
+        return tmp_path / "cached.jar"
+
+    monkeypatch.setattr(mods, "_fetch", fake_fetch)
+    entry = {
+        "url": {"1.21.1-neoforge": "https://cdn/a.jar", "1.20.1-forge": "https://cdn/b.jar"},
+        "sha512": {"1.21.1-neoforge": "AA", "1.20.1-forge": "BB"},
+    }
+    mods.resolve_mod(entry, target_id="1.20.1-forge")
+    assert fetched == {"url": "https://cdn/b.jar", "sha512": "bb"}  # sha lowercased
+
+
+def test_resolve_mod_per_target_map_missing_target_raises(tmp_path):
+    from automodpack_autotester import mods
+
+    entry = {"url": {"1.21.1-neoforge": "https://cdn/a.jar"}, "sha512": "AA"}
+    with pytest.raises(ValueError, match="no entry for target"):
+        mods.resolve_mod(entry, target_id="26.1-neoforge")
+    with pytest.raises(ValueError, match="no entry for target"):
+        mods.resolve_mod(entry, target_id=None)
+
+
+def test_resolve_mod_plain_values_unchanged(tmp_path, monkeypatch):
+    from automodpack_autotester import mods
+
+    seen = {}
+    monkeypatch.setattr(mods, "_fetch", lambda url, sha, name: seen.update(url=url) or tmp_path / "x.jar")
+    mods.resolve_mod({"url": "https://cdn/plain.jar", "sha512": "cc"}, target_id="1.21.1-neoforge")
+    assert seen["url"] == "https://cdn/plain.jar"
