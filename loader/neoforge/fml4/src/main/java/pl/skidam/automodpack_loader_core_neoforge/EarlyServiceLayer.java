@@ -38,7 +38,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 /**
  * Holds the per-jar child SERVICE module layers built by {@link EarlyServiceBootstrapper}
- * for neo/forge mods that ship "early services" inside the selected modpack folder, and
+ * for NeoForge mods that ship "early services" inside the selected modpack folder, and
  * replays their mod-locating services (which only the loader's SERVICE layer would
  * normally run) into AutoModpack's own discovery so the mods load in place - without
  * being copied into the standard {@code mods/} directory.

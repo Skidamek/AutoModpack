@@ -2,7 +2,7 @@ package pl.skidam.automodpack_loader_core_neoforge;
 
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.EarlyServiceScan;
 
 import java.lang.reflect.Method;
 import java.nio.file.Files;
@@ -10,7 +10,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Stream;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
@@ -66,28 +65,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
                 return;
             }
 
-            // Checking eligibility first (a handful of root-level Files.exists checks on an already-open
-            // FileSystem) before hashing (a full-content SHA-1 read) avoids paying for a hash on every
-            // ordinary, non-early-service mod - most modpack jars never need one. standardModHashes is
-            // itself a full hash of every standard-mods/ jar, so it is computed lazily too, only once
-            // an eligible jar actually needs the comparison.
-            List<Path> earlyServiceJars = new ArrayList<>();
-            Set<String> standardModHashes = null;
-            try (Stream<Path> stream = Files.list(modpackMods)) {
-                for (Path jar : stream.filter(EarlyServiceBootstrapper::isJar).toList()) {
-                    if (!EarlyServiceLayer.eligibleForInPlace(jar)) {
-                        continue;
-                    }
-                    if (standardModHashes == null) {
-                        standardModHashes = HashUtils.getJarHashes(Constants.MODS_DIR);
-                    }
-                    String hash = HashUtils.getHash(jar);
-                    if (hash != null && standardModHashes.contains(hash)) {
-                        continue;
-                    }
-                    earlyServiceJars.add(jar);
-                }
-            }
+            List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, EarlyServiceLayer::eligibleForInPlace);
 
             if (earlyServiceJars.isEmpty()) {
                 return;
@@ -173,9 +151,6 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
         }
     }
 
-    private static boolean isJar(Path path) {
-        return Files.isRegularFile(path) && path.getFileName().toString().toLowerCase().endsWith(".jar");
-    }
 
     private static String argValue(String[] arguments, String name) {
         if (arguments != null) {

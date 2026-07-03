@@ -11,7 +11,7 @@ import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.EarlyServiceScan;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
@@ -178,23 +178,7 @@ public final class EarlyServiceLayer {
                 return;
             }
 
-            List<Path> earlyServiceJars = new ArrayList<>();
-            Set<String> standardModHashes = null;
-            try (Stream<Path> stream = Files.list(modpackMods)) {
-                for (Path jar : stream.filter(EarlyServiceLayer::isJar).toList()) {
-                    if (!eligibleForInPlace(jar)) {
-                        continue;
-                    }
-                    if (standardModHashes == null) {
-                        standardModHashes = HashUtils.getJarHashes(Constants.MODS_DIR);
-                    }
-                    String hash = HashUtils.getHash(jar);
-                    if (hash != null && standardModHashes.contains(hash)) {
-                        continue;
-                    }
-                    earlyServiceJars.add(jar);
-                }
-            }
+            List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, EarlyServiceLayer::eligibleForInPlace);
 
             if (earlyServiceJars.isEmpty()) {
                 return;
@@ -293,9 +277,6 @@ public final class EarlyServiceLayer {
         return result;
     }
 
-    private static boolean isJar(Path path) {
-        return Files.isRegularFile(path) && path.getFileName().toString().toLowerCase().endsWith(".jar");
-    }
 
     public static boolean isEarlyServiceJar(Path jar) {
         return jar != null && JAR_SERVICES.containsKey(canonical(jar));

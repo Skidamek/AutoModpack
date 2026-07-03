@@ -3,8 +3,6 @@ package pl.skidam.automodpack_loader_core_forge;
 import com.google.common.collect.ImmutableMap;
 import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileDependencyLocator;
 import net.minecraftforge.forgespi.locating.IModFile;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.net.URI;
@@ -21,8 +19,6 @@ import static cpw.mods.modlauncher.api.LamdbaExceptionUtils.uncheck;
 
 @SuppressWarnings("unused")
 public class LazyModLocator extends AbstractJarFileDependencyLocator {
-
-    public static Logger LOGGER = LogManager.getLogger("AutoModpack/BootStrap");
 
     @Override
     public List<IModFile> scanMods(Iterable<IModFile> loadedMods) {
