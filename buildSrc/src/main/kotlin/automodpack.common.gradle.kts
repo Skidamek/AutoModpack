@@ -72,13 +72,19 @@ val mergeJarTask = tasks.register<MergeJarTask>("mergeJar") {
     this.buildDirectory.set(layout.buildDirectory)
     this.outputJar.set(layout.buildDirectory.file("merged-jar-path.txt"))
 
+    // Hash the SHADOW jars where they exist: those are the files this task actually merges
+    // (loader/<module>/build/libs), and they are the only outputs that change when a shared
+    // subproject (core, loader-core, an earlyservices module) changes - the plain `jar` outputs
+    // don't contain those classes, so hashing them alone shipped stale merged jars for any
+    // change made purely in a shared module.
     val filesToHash = mutableListOf<Any>()
-    tasks.findByName("jar")?.let { projectJar ->
+    (tasks.findByName("shadowJar") ?: tasks.findByName("jar"))?.let { projectJar ->
         dependsOn(projectJar)
         filesToHash.add(projectJar)
     }
     for (module in getAllDependentLoaderModules(project.name)) {
-        rootProject.project(module).tasks.findByName("jar")?.let { modLoaderJar ->
+        val moduleTasks = rootProject.project(module).tasks
+        (moduleTasks.findByName("shadowJar") ?: moduleTasks.findByName("jar"))?.let { modLoaderJar ->
             filesToHash.add(modLoaderJar)
         }
     }
