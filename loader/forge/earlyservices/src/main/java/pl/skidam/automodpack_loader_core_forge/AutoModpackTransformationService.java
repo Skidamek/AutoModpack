@@ -5,54 +5,36 @@ import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
 import cpw.mods.modlauncher.api.ITransformer;
 
+import pl.skidam.automodpack_loader_core.Preload;
+
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
  * A real, {@code META-INF/services}-shipped {@link ITransformationService} that forwards every
  * lifecycle call to each in-place early-service jar's own {@code ITransformationService} (see
- * {@link EarlyServiceLayer}). Discoverable the normal way: ModLauncher's
- * {@code TransformationServicesHandler.discoverServices} builds the SERVICE layer from every jar
- * in the standard {@code mods/} folder that ships any of {@code
- * ModDirTransformerDiscoverer.SERVICES} - AutoModpack's own jar already qualifies (it ships
- * {@code IModLocator}/{@code IDependencyLocator} service files), so it is on that layer, and
- * {@code ServiceLoader.load(serviceLayer, ITransformationService.class)} - called right after -
- * finds this class too.
+ * {@link EarlyServiceLayer}). Discovered the normal way through ModLauncher's own service lookup
+ * (AutoModpack's jar ships {@code IModLocator}/{@code IDependencyLocator} service files, so it's
+ * already on the SERVICE layer ServiceLoader scans).
  *
- * <p>This makes every lifecycle call below fire at ModLauncher's own native time, batched with every
- * other real transformation service: all {@code onLoad}, then all {@code initialize}, then all {@code
- * beginScanning}, then (after mod discovery) {@code completeScan}, then {@code transformers}. No
- * manual hook-point-picking is needed - that ordering is ModLauncher's own native invariant.
+ * <p>Lifecycle calls below fire at ModLauncher's own native time, batched with every other real
+ * transformation service, so no manual hook-point-picking is needed.
  *
- * <p>{@code onLoad} is also where AutoModpack runs its own update/reconcile step ({@code Preload})
- * and builds the shared child layer for the modpack folder's early-service jars ({@link
- * EarlyServiceLayer#bootstrap}) - confirmed live to be the earliest hook Forge gives any mod
- * (fires before {@link EarlyModLocator#scanCandidates}). Running the update here, before
- * anything scans the modpack folder,
- * means an update that changes which mods are early-service mods is already reflected in the
- * folder mod discovery sees later in the same boot - no restart needed.
+ * <p>{@code onLoad} is also where AutoModpack runs its update/reconcile step ({@link Preload}) and
+ * builds the shared child layer for the modpack folder's early-service jars ({@link
+ * EarlyServiceLayer#bootstrap}) - the earliest hook Forge gives any mod, before {@link
+ * EarlyModLocator#scanCandidates}. Running the update this early means a mod-list change is
+ * already reflected in the folder discovery that happens later in the same boot.
  */
 public class AutoModpackTransformationService implements ITransformationService {
 
     static final String NAME = "automodpack_early_services";
 
-    // FMLLoader.versionInfo() is still null at onLoad() time - it's only populated later, from
-    // FML's own ITransformationService#initialize (and ModLauncher gives no ordering guarantee
-    // between different services' initialize() calls even in that phase, so waiting for our own
-    // initialize() wouldn't be safe either). Unlike NeoForge's GraphicsBootstrapper#bootstrap,
-    // Forge's ITransformationService#onLoad isn't handed the raw launch arguments, and
-    // ProcessHandle.current().info().arguments() is unreliable (confirmed live: returns an empty
-    // array on at least one JVM/OS combination this runs on), so parse them out of
-    // "sun.java.command" instead - a JVM system property always set to the full command line
-    // (main class + program args) by the launcher itself, present on every JVM tested.
+    // sun.java.command (not ProcessHandle, which is unreliable on some JVMs) carries the launch
+    // args; FMLLoader.versionInfo()/getDist() are both still null/unreliable at onLoad() time.
     public static volatile String EARLY_MC_VERSION;
     public static volatile String EARLY_FORGE_VERSION;
-    // FMLLoader.getDist() is also unreliable at onLoad() time, for the same reason versionInfo() is
-    // (see above) - confirmed live on NeoForge fml4 to be the actual cause of a regression: reading
-    // it too early can silently return SERVER on a genuine CLIENT launch, so Preload.updateAll()
-    // takes its dedicated-server-only branch and never populates the mod list early-service
-    // discovery depends on. Forge's launchTarget naming convention (e.g. "forgeclient"/
-    // "forgeserver") reliably encodes dist and is on the same command line as the version args above.
     public static volatile Boolean EARLY_IS_CLIENT;
 
     @Override
@@ -67,10 +49,10 @@ public class AutoModpackTransformationService implements ITransformationService 
         EARLY_FORGE_VERSION = argValue(processArgs, "--fml.forgeVersion");
         String launchTarget = argValue(processArgs, "--launchTarget");
         if (launchTarget != null) {
-            EARLY_IS_CLIENT = !launchTarget.toLowerCase(java.util.Locale.ROOT).contains("server");
+            EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
         }
 
-        new pl.skidam.automodpack_loader_core.Preload();
+        new Preload();
         EarlyServiceLayer.bootstrap();
         EarlyServiceLayer.forwardOnLoad(env, otherServices);
     }

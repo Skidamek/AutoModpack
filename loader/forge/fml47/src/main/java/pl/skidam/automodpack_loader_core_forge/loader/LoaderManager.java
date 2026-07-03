@@ -6,7 +6,7 @@ import net.minecraftforge.fml.loading.moddiscovery.ModInfo;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_loader_core_forge.AutoModpackTransformationService;
 
-import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.Constants.preload;
 
 @SuppressWarnings("unused")
 public class LoaderManager implements LoaderManagerService {

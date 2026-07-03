@@ -3,6 +3,7 @@ package pl.skidam.automodpack_loader_core_neoforge;
 import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.locating.IDependencyLocator;
 import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
+import net.neoforged.neoforgespi.locating.IModFile;
 import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
 import pl.skidam.automodpack_core.Constants;
@@ -11,12 +12,14 @@ import pl.skidam.automodpack_core.utils.FileInspection;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -30,24 +33,17 @@ import java.util.stream.Stream;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 /**
- * NeoForge 21.6+ ("FML 10.x"/"11.x") rewrote loading to drop ModLauncher/securejarhandler
- * entirely: no more per-jar JPMS module layers for early services, no {@code cpw.mods.cl}, no
- * {@code ICoreMod}/{@code ITransformationService} (the coremod/ModLauncher-transformer machinery
- * is gone). Early-service jars (and later, the game content jars) are instead chained onto ONE
- * flat {@code URLClassLoader} lineage that {@code FMLLoader} itself owns and grows via its private
- * {@code appendLoader(name, List<JarContents>)} - each call parents a new loader onto the current
- * one and makes it current. Critically, {@code FMLLoader.buildTransformingLoader()} (which builds
- * the GAME classloader) always does {@code gameLoader.setFallbackClassLoader(currentClassLoader)}
- * - so if we grow that SAME chain with a modpack-folder early-service jar's outer classes BEFORE
- * the game loader is built, the game loader's native fallback already resolves them, natively,
- * with no manual class/resource bridging, no {@code addReads}, no {@code Unsafe}: this class is
- * the equivalent of {@code cpw.mods.cl}-based EarlyServiceLayer's whole
- * {@code bridgeEarlyServicesToGameLayer()} for free.
+ * NeoForge 21.6+ ("FML 10.x"/"11.x") drops ModLauncher/securejarhandler entirely: early-service
+ * jars are chained onto ONE flat {@code URLClassLoader} lineage that {@code FMLLoader} owns and
+ * grows via its private {@code appendLoader(name, List<JarContents>)}. Because
+ * {@code FMLLoader.buildTransformingLoader()} always does
+ * {@code gameLoader.setFallbackClassLoader(currentClassLoader)}, growing that same chain with a
+ * modpack-folder jar's classes BEFORE the game loader is built makes them resolve through that
+ * native fallback with no manual class/resource bridging, {@code addReads}, or {@code Unsafe}.
  *
- * <p>This class covers this loader version's replacement for that logic, plus the same jar
- * inspection/candidate-locator/dependency-locator/mod-file-reader replay that lets a modpack-folder
- * early-service jar's real (inner) mod load in place. See {@link EarlyServiceBootstrapper} for
- * where jars are actually appended to FMLLoader's chain.
+ * <p>This class covers this loader version's jar inspection/candidate-locator/dependency-locator/
+ * mod-file-reader replay that lets a modpack-folder early-service jar's real (inner) mod load in
+ * place. See {@link EarlyServiceBootstrapper} for where jars are appended to FMLLoader's chain.
  */
 public final class EarlyServiceLayer {
 
@@ -58,24 +54,20 @@ public final class EarlyServiceLayer {
     public static final String DEPENDENCY_LOCATOR_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator";
     public static final String LANGUAGE_LOADER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader";
     public static final String MOD_FILE_READER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader";
-    // No COREMOD_SERVICE / TRANSFORMATION_SERVICE here: ICoreMod and ModLauncher's
-    // ITransformationService no longer exist as SPIs on this loader version.
+    // ICoreMod and ModLauncher's ITransformationService no longer exist as SPIs on this loader.
 
     static final List<String> ACTIVELY_RUN_SERVICES = List.of(
             GRAPHICS_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE, MOD_FILE_READER_SERVICE);
 
-    // Every service we can host from the modpack folder, so a mod shipping only these never needs
-    // copying: the actively-run ones above, plus language loaders (passive - picked up from the
-    // flat classloader chain once appended, no work of ours).
+    // Services a mod can ship without needing a copy: the actively-run ones above, plus language
+    // loaders (passive - picked up from the flat classloader chain once appended).
     public static final Set<String> HANDLEABLE_SERVICES = Stream
             .concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
             .collect(Collectors.toUnmodifiableSet());
 
-    // Read from the loader itself (net.neoforged.fml.loading.EarlyServiceDiscovery.SERVICES - the
-    // 10.x+ replacement for the old TransformerDiscovererConstants.SERVICES) so this is exact for
-    // THIS version rather than a hand-maintained list. The force-copy decision counts only services
-    // in here (see ModpackLoader#knownServices): a service this loader doesn't handle can't be
-    // fixed by copying to standard mods/ either, so it must never force a copy.
+    // Read from net.neoforged.fml.loading.EarlyServiceDiscovery.SERVICES so this is exact for this
+    // loader version. The force-copy decision (ModpackLoader#knownServices) counts only services
+    // here: one this loader doesn't handle can't be fixed by copying to standard mods/ either.
     private static final Set<String> HANDLED_SERVICES = computeHandledServices();
 
     /** Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}. */
@@ -87,7 +79,7 @@ public final class EarlyServiceLayer {
         Set<String> handled = new HashSet<>();
         try {
             Class<?> discovery = Class.forName("net.neoforged.fml.loading.EarlyServiceDiscovery");
-            java.lang.reflect.Field field = discovery.getDeclaredField("SERVICES");
+            Field field = discovery.getDeclaredField("SERVICES");
             field.setAccessible(true);
             Object value = field.get(null);
             if (value instanceof Set<?> names) {
@@ -104,9 +96,8 @@ public final class EarlyServiceLayer {
         return Set.copyOf(handled);
     }
 
-    // Every modpack-folder jar EarlyServiceBootstrapper has appended to FMLLoader's classloader
-    // chain, plus that shared classloader (all appended together in one appendLoader call, mirroring
-    // how FMLLoader itself batches its own "FML Early Services" jars into one loader).
+    // Modpack-folder jars EarlyServiceBootstrapper has appended to FMLLoader's classloader chain,
+    // plus that shared classloader.
     private static final Set<Path> REGISTERED_JARS = ConcurrentHashMap.newKeySet();
     private static final AtomicReference<ClassLoader> CHILD_LOADER = new AtomicReference<>();
 
@@ -189,8 +180,7 @@ public final class EarlyServiceLayer {
         ClassLoader cl = classLoaderFor(jar);
         if (cl == null) return;
         @SuppressWarnings("unchecked")
-        List<net.neoforged.neoforgespi.locating.IModFile> mods =
-                (List<net.neoforged.neoforgespi.locating.IModFile>) loadedMods;
+        List<IModFile> mods = (List<IModFile>) loadedMods;
         for (String impl : serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE)) {
             try {
                 IDependencyLocator locator = (IDependencyLocator) Class.forName(impl, true, cl)
@@ -204,8 +194,8 @@ public final class EarlyServiceLayer {
     }
 
     /**
-     * Forwards an early-service jar's {@code IModFileReader}s into the live discovery pipeline. See
-     * the fml4 equivalent's javadoc for why reflection is needed here (no public API to add one).
+     * Forwards an early-service jar's {@code IModFileReader}s into the live discovery pipeline via
+     * reflection - there is no public API to register one.
      */
     public static void runModFileReaders(Path jar, IDiscoveryPipeline pipeline) {
         ClassLoader cl = classLoaderFor(jar);
@@ -221,16 +211,16 @@ public final class EarlyServiceLayer {
         if (readers.isEmpty()) return;
 
         try {
-            java.lang.reflect.Field outer = pipeline.getClass().getDeclaredField("this$0");
+            Field outer = pipeline.getClass().getDeclaredField("this$0");
             outer.setAccessible(true);
             Object modDiscoverer = outer.get(pipeline);
-            java.lang.reflect.Field readersField = modDiscoverer.getClass().getDeclaredField("modFileReaders");
+            Field readersField = modDiscoverer.getClass().getDeclaredField("modFileReaders");
             readersField.setAccessible(true);
             @SuppressWarnings("unchecked")
             List<Object> current = (List<Object>) readersField.get(modDiscoverer);
             List<Object> merged = new ArrayList<>(current);
             merged.addAll(readers);
-            merged.sort(java.util.Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
+            merged.sort(Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
             readersField.set(modDiscoverer, List.copyOf(merged));
             LOGGER.info("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), jar.getFileName());
         } catch (Throwable t) {

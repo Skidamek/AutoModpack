@@ -9,40 +9,36 @@ import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.util.Map;
 
+import pl.skidam.automodpack_core.Constants;
+
 /**
- * Reads the three private routing maps of a {@link ModuleClassLoader} (and its subclasses, such as
- * ModLauncher's {@code TransformingClassLoader} that backs the GAME layer) so each loader's own
- * {@code EarlyServiceLayer} (NeoForge fml4 and Forge each have their own, package-private to them)
- * can bridge the GAME loader to a modpack jar's child layer:
+ * Reads the three private routing maps of a {@link ModuleClassLoader} (and subclasses such as
+ * ModLauncher's {@code TransformingClassLoader} backing the GAME layer) so each loader's own
+ * {@code EarlyServiceLayer} can bridge the GAME loader to a modpack jar's child layer:
  * <ul>
- *   <li>{@code packageLookup}: package -&gt; the module on <em>this</em> loader that owns it
- *       (consulted first by both {@code loadClass} and {@code findResourceList});</li>
+ *   <li>{@code packageLookup}: package -&gt; owning module, consulted first by {@code loadClass}
+ *       and {@code findResourceList};</li>
  *   <li>{@code parentLoaders}: package -&gt; the classloader {@code loadClass} delegates to;</li>
- *   <li>{@code resolvedRoots}: module name -&gt; its jar reference, scanned by
- *       {@code findResourceList} for <em>resources</em> (a package not in {@code packageLookup} is
- *       NOT delegated to {@code parentLoaders} for resources - only classes).</li>
+ *   <li>{@code resolvedRoots}: module name -&gt; jar reference, scanned by {@code findResourceList}
+ *       for <em>resources</em> (a package outside {@code packageLookup} only resolves classes via
+ *       {@code parentLoaders}, never resources).</li>
  * </ul>
- * Adding a {@code parentLoaders} entry (classes) plus the child's {@code resolvedRoots} (resources)
- * is exactly what a real SERVICE-layer ancestor gives the GAME loader; the maps are mutable and never
- * swapped after construction, so we only mutate their contents, never the fields.
+ * A {@code parentLoaders} entry plus the child's {@code resolvedRoots} entry is exactly what a real
+ * SERVICE-layer ancestor would give the GAME loader; the maps are mutable and never swapped after
+ * construction, so only their contents are mutated, never the fields.
  *
- * <p>Why {@link Unsafe} and not plain reflection: {@code cpw.mods.cl.ModuleClassLoader} lives in the
- * {@code cpw.mods.securejarhandler} module, which does <em>not</em> {@code opens cpw.mods.cl} to us -
- * {@code Field.setAccessible} throws {@code InaccessibleObjectException}. Unsafe field offsets read the
- * object layout, not the field value, so they need no {@code setAccessible} and cross the sealed
- * module boundary. (The launch-plugin injection touches {@code cpw.mods.modlauncher} instead, which
- * <em>is</em> reachable, so {@link EarlyServiceBridgePlugin} in this package uses ordinary reflection there.)
+ * <p>{@link Unsafe} is used instead of plain reflection because {@code cpw.mods.cl.ModuleClassLoader}
+ * lives in a module that does not {@code opens cpw.mods.cl} to us, so {@code setAccessible} would
+ * throw. Field offsets read the object layout, not the value, so they need no {@code setAccessible}.
+ * (ModLauncher's own package IS open to us, so {@link EarlyServiceBridgePlugin} uses ordinary
+ * reflection there instead.)
  *
- * <p>It also carries {@link #addReads(Module, Module)}: routing the GAME loader to a child layer
- * makes the outer classes <em>loadable</em>, but JPMS still enforces module readability at access
- * time. Natively the inner mod's module reads the outer module because loader resolution links them
- * across the SERVICE-&gt;GAME parent boundary; our child layer is only a sibling of GAME, so that
- * edge never forms and the inner mod hits {@code IllegalAccessError: module X does not read module
- * Y}. Adding the read edge needs the unconditional {@code jdk.internal.module.Modules.addReads}
- * ({@code java.lang.Module.addReads} is caller-sensitive and only self-adds), reached through the
- * trusted {@code MethodHandles.Lookup.IMPL_LOOKUP} - itself only readable via {@link Unsafe}, since
- * {@code java.lang.invoke} is not open to us. A read edge only grants access, so adding them broadly
- * cannot break anything; it only prevents the {@code IllegalAccessError}.
+ * <p>{@link #addReads(Module, Module)} exists because routing the GAME loader to a child layer makes
+ * classes <em>loadable</em> but JPMS still checks module readability separately. The read edge that
+ * would normally form via the SERVICE-&gt;GAME parent boundary never forms for our sibling child
+ * layer, so the inner mod hits {@code IllegalAccessError}. Fixing it needs the unconditional
+ * {@code jdk.internal.module.Modules.addReads} (unlike caller-sensitive {@code Module.addReads}),
+ * reached through the trusted {@code IMPL_LOOKUP} - itself only readable via {@link Unsafe}.
  */
 public final class ModuleClassLoaderAccess {
 
@@ -80,10 +76,9 @@ public final class ModuleClassLoaderAccess {
             return trusted.findStatic(modules, "addReads",
                     MethodType.methodType(void.class, Module.class, Module.class));
         } catch (Throwable t) {
-            // Not fatal by itself, but every read edge this class is asked to add will now silently
-            // no-op (see addReads) - which resurrects the exact IllegalAccessError this bridge exists
-            // to prevent, with nothing in the log to explain why. Surface it once, loudly, here instead.
-            pl.skidam.automodpack_core.Constants.LOGGER.error(
+            // Not fatal, but addReads becomes a silent no-op afterward, resurrecting the
+            // IllegalAccessError this bridge exists to prevent with no log to explain why.
+            Constants.LOGGER.error(
                     "[AutoModpack] Could not resolve jdk.internal.module.Modules.addReads; in-place early-service mods may crash with IllegalAccessError when their inner mod accesses the outer jar's classes", t);
             return null;
         }
@@ -127,11 +122,8 @@ public final class ModuleClassLoaderAccess {
         return (Map<String, Object>) UNSAFE.getObject(loader, RESOLVED_ROOTS_OFFSET);
     }
 
-    // ---- Plain reflection on cpw.mods.modlauncher internals: that package IS opened/reachable to
-    // us (unlike the sealed cpw.mods.cl/securejarhandler module the fields above cross), so ordinary
-    // Field#setAccessible reaches it without Unsafe. Shared here so EarlyServiceLayer and
-    // EarlyServiceBridgePlugin - both of which reach into ModLauncher's Launcher/handler internals -
-    // use one implementation instead of two copies. ----
+    // ---- Plain reflection on cpw.mods.modlauncher internals below: that package IS open to us
+    // (unlike the sealed module the fields above cross), so ordinary setAccessible works. ----
 
     /** {@code cpw.mods.modlauncher.Launcher.INSTANCE}, or throws if ModLauncher isn't on the classpath. */
     public static Object launcherInstance() throws Exception {

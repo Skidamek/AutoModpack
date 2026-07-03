@@ -3,9 +3,12 @@ package pl.skidam.automodpack_loader_core_neoforge;
 import cpw.mods.cl.JarModuleFinder;
 import cpw.mods.cl.ModuleClassLoader;
 import cpw.mods.jarhandling.SecureJar;
+import net.neoforged.fml.loading.progress.ProgressMeter;
+import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
+import pl.skidam.automodpack_loader_core.Preload;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 
 import java.lang.module.Configuration;
@@ -16,19 +19,15 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
     public static volatile String EARLY_MC_VERSION;
     public static volatile String EARLY_NEOFORGE_VERSION;
-    // FMLLoader.getDist() is also unreliable this early - confirmed live to be the actual cause of
-    // a regression with Sinytra Connector: LoaderManager.getEnvironmentType() read SERVER on a
-    // CLIENT launch during Preload, so Preload.updateAll() took its dedicated-server-only branch
-    // and returned without ever populating ModpackLoader.modsToLoad, silently skipping Connector's
-    // embedded Fabric-adapter mod jar (added only via EarlyModLocator's replay of that list) - not
-    // any timing-sensitivity in Connector itself. NeoForge's launchTarget naming convention (e.g.
-    // "forgeclient"/"forgeserver") reliably encodes dist and is on the command line here.
+    // FMLLoader.getDist() is unreliable this early, so we read dist from --launchTarget instead;
+    // an incorrect dist here makes Preload.updateAll() skip populating ModpackLoader.modsToLoad.
     public static volatile Boolean EARLY_IS_CLIENT;
 
     @Override
@@ -43,19 +42,15 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
             String launchTarget = argValue(arguments, "--launchTarget");
             if (launchTarget != null) {
-                EARLY_IS_CLIENT = !launchTarget.toLowerCase(java.util.Locale.ROOT).contains("server");
+                EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
             }
 
-            // Run our own update/reconcile step FIRST, before anything below reads the modpack
-            // folder - this is the earliest hook NeoForge gives any mod (confirmed live: it fires
-            // ~50ms before ModLauncher's own ITransformationService.onLoad lifecycle). Doing the
-            // update here, rather than later in EarlyModLocator, means an update that changes which
-            // mods are early-service mods is already reflected in the folder we scan below, in the
-            // same boot - no restart needed. It also loads the config and publishes
+            // Run our own update/reconcile step first, before anything below reads the modpack
+            // folder, so an update that changes which mods are early-service mods is already
+            // reflected in the folder we scan below. Also loads the config and publishes
             // Constants.selectedModpackDir / Constants.MODS_DIR, which everything below reads.
-            net.neoforged.fml.loading.progress.ProgressMeter progress =
-                    net.neoforged.fml.loading.progress.StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
-            new pl.skidam.automodpack_loader_core.Preload();
+            ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
+            new Preload();
             progress.complete();
 
             // Set by Preload only when a modpack is selected on a client - null means nothing to do.
@@ -89,26 +84,18 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
     /**
      * Resolves every eligible jar into ONE shared child configuration/layer/classloader - mirroring
-     * {@code ModuleLayerHandler.buildLayer}, which resolves every jar destined for a given layer (e.g.
-     * the loader's own SERVICE layer) together in a single {@code Configuration.resolveAndBind} call.
-     * Building one configuration per jar (sibling layers) would mean one early-service jar's module can
-     * never {@code requires}/classload another's - breaking any modpack-folder mod that is split across,
-     * or depends on, more than one early-service jar. Resolving them together lets such edges resolve
-     * exactly as they would if these jars sat together on the loader's real SERVICE layer.
-     *
-     * <p>(A live regression with Sinytra Connector was previously misattributed to this method; the
-     * actual cause was {@code ITransformationService.initialize()} running too early relative to
-     * NeoForge's window-provider assignment - see {@link EarlyModLocator#findCandidates}. This shared
-     * layer is unrelated to that timing and does not need to be avoided.)
+     * {@code ModuleLayerHandler.buildLayer}, which resolves every jar destined for a given layer
+     * together in a single {@code Configuration.resolveAndBind} call. Building one configuration per
+     * jar (sibling layers) would mean one early-service jar's module can never {@code requires}/
+     * classload another's - breaking a modpack-folder mod split across, or depending on, more than
+     * one early-service jar.
      */
     private void bootstrapJars(List<Path> jars, ModuleLayer serviceLayer, String[] arguments) {
         List<Path> registered = new ArrayList<>(jars);
         if (!buildAndRegister(jars, serviceLayer)) {
-            // The shared resolution failed (e.g. two jars deriving the same automatic module name
-            // throw a ResolutionException for the whole batch). Retry each jar on its own layer so
-            // one bad jar doesn't take every other early-service mod down with it - cross-jar
-            // `requires` edges are lost in this degraded mode, but only the jars that actually fail
-            // resolution stay unregistered.
+            // Shared resolution failed for the whole batch (e.g. a module-name clash). Retry each
+            // jar on its own layer so one bad jar doesn't take every other one down; cross-jar
+            // `requires` edges are lost in this degraded mode.
             registered.clear();
             for (Path jar : jars) {
                 if (buildAndRegister(List.of(jar), serviceLayer)) registered.add(jar);
@@ -175,7 +162,6 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
         }
         return result;
     }
-
 
     private static String argValue(String[] arguments, String name) {
         if (arguments != null) {

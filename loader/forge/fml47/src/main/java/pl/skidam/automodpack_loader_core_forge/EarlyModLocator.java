@@ -23,17 +23,13 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
 
     @Override
     public Stream<Path> scanCandidates() {
-        // The update/reconcile step (Preload) and the early-service child-layer bootstrap now run
-        // from AutoModpackTransformationService#onLoad - ModLauncher's own ITransformationService
-        // lifecycle, confirmed live to fire before this IModLocator pass - so ModpackLoader.modsToLoad
-        // and EarlyServiceLayer's registered jars are already populated by the time we get here.
-
-        // Early-service jars must NOT load as mods here, even with a root mods.toml: native Forge
-        // likewise claims them for the SERVICE layer and excludes them from mod discovery
-        // (ModsFolderLocator filters ModDirTransformerDiscoverer.allExcluded()). Their real mod
-        // arrives through their own IModLocator/IDependencyLocator, replayed below - loading the
-        // outer jar too would double-load it (e.g. CrashAssistant's outer and inner jar share one
-        // modId).
+        // Preload and the early-service child-layer bootstrap run from
+        // AutoModpackTransformationService#onLoad, before this IModLocator pass, so
+        // ModpackLoader.modsToLoad and EarlyServiceLayer's registered jars are already populated.
+        //
+        // Early-service jars must NOT load as mods here: native Forge excludes them from mod
+        // discovery too, and their real mod arrives through their own IModLocator/IDependencyLocator,
+        // replayed in scanMods() below - loading the outer jar too would double-load it (shared modId).
         return ModpackLoader.modsToLoad.stream()
                 .filter(path -> !EarlyServiceLayer.isEarlyServiceJar(path));
     }

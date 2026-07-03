@@ -1,32 +1,31 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
+import net.neoforged.fml.loading.progress.ProgressMeter;
+import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
+import pl.skidam.automodpack_loader_core.Preload;
 
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Locale;
 
 public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
-    // FMLLoader.getCurrent().getVersionInfo() is still null this early (confirmed live on fml4,
-    // and setupLaunchHandler runs at the same relative point on this loader generation), so
-    // LoaderManager can't get the MC/loader version from it during Preload's initializeConstants()
-    // the way it safely could when Preload ran later, from EarlyModLocator. ModLauncher already
-    // has both on the command line (`--fml.mcVersion 1.21.10 --fml.neoForgeVersion ...`), so
-    // capture them from here - the one place with access to `arguments` - before Preload runs.
+    // FMLLoader.getCurrent().getVersionInfo() is still null this early, so LoaderManager can't
+    // get the MC/loader version from it during Preload's initializeConstants(). ModLauncher has
+    // both on the command line (`--fml.mcVersion ... --fml.neoForgeVersion ...`), so capture them
+    // here - the one place with access to `arguments` - before Preload runs.
     public static volatile String EARLY_MC_VERSION;
     public static volatile String EARLY_NEOFORGE_VERSION;
-    // FMLLoader.getCurrent().getDist() is also unreliable this early - confirmed live on fml4 to be
-    // the actual cause of a regression: reading it too early can silently return SERVER on a
-    // genuine CLIENT launch, so Preload.updateAll() takes its dedicated-server-only branch and never
-    // populates the mod list early-service discovery depends on. NeoForge's launchTarget naming
-    // convention (e.g. "forgeclient"/"forgeserver") reliably encodes dist and is on the same
-    // arguments array as the version args below.
+    // FMLLoader.getCurrent().getDist() is also unreliable this early: reading it too early can
+    // silently return SERVER on a genuine CLIENT launch, so Preload.updateAll() takes its
+    // dedicated-server-only branch. NeoForge's launchTarget naming convention
+    // (e.g. "forgeclient"/"forgeserver") reliably encodes dist instead.
     public static volatile Boolean EARLY_IS_CLIENT;
 
     @Override
@@ -41,22 +40,14 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
             String launchTarget = argValue(arguments, "--launchTarget");
             if (launchTarget != null) {
-                EARLY_IS_CLIENT = !launchTarget.toLowerCase(java.util.Locale.ROOT).contains("server");
+                EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
             }
 
-            // Run our own update/reconcile step FIRST, before anything below reads the modpack
-            // folder - GraphicsBootstrapper is the earliest hook this loader generation gives any
-            // mod (there is no ModLauncher/ITransformationService concept on fml10/fml11 to compete
-            // with it). Doing the update here, rather than later in EarlyModLocator, means an update
-            // that changes which mods are early-service mods is already reflected in the folder we
-            // scan below, in the same boot - no restart needed. NeoForge fml4 does the same from its
-            // own GraphicsBootstrapper (a separate implementation, since it still has a competing
-            // ITransformationService.onLoad phase and its own module-layer bridge). It also loads
-            // the config and publishes Constants.selectedModpackDir / Constants.MODS_DIR, which
-            // everything below reads.
-            net.neoforged.fml.loading.progress.ProgressMeter progress =
-                    net.neoforged.fml.loading.progress.StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
-            new pl.skidam.automodpack_loader_core.Preload();
+            // Run the update/reconcile step before anything below reads the modpack folder, so an
+            // update that changes which mods are early-service mods is reflected in the same boot.
+            // This also publishes Constants.selectedModpackDir / Constants.MODS_DIR.
+            ProgressMeter progress = StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
+            new Preload();
             progress.complete();
 
             // Set by Preload only when a modpack is selected on a client - null means nothing to do.
@@ -75,10 +66,8 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
             ClassLoader childLoader = appendToFmlClassLoaderChain(earlyServiceJars);
             if (childLoader == null) {
-                // The batched append failed (logged inside) - e.g. one unreadable jar poisoning the
-                // whole JarContents list. Retry each jar on its own so only the jars that actually
-                // fail stay out; each append parents onto the current chain, so the last returned
-                // loader resolves every successfully appended jar.
+                // Batched append failed - e.g. one unreadable jar poisoning the whole list. Retry
+                // each jar individually so only the jars that actually fail stay out.
                 List<Path> appended = new ArrayList<>();
                 for (Path jar : earlyServiceJars) {
                     ClassLoader loader = appendToFmlClassLoaderChain(List.of(jar));
@@ -113,19 +102,15 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
     }
 
     /**
-     * Grows FMLLoader's own flat classloader chain with these jars, mirroring exactly what it does
-     * for its own "FML Early Services" jars ({@code FMLLoader.loadEarlyServices()} ->
-     * {@code appendLoader("FML Early Services", jarContentsList)}) - a private instance method, so
-     * reflection is needed, but {@code fmlloader.jar} ships no {@code module-info} (early-service
-     * classes, ours included, run in the unnamed module at this phase), so plain
-     * {@code setAccessible} reaches it; no {@code Unsafe} needed, unlike the old {@code cpw.mods.cl}
-     * module boundary on NeoForge <21.6.
+     * Grows FMLLoader's own flat classloader chain with these jars, mirroring what it does for its
+     * own "FML Early Services" jars ({@code FMLLoader.loadEarlyServices()} ->
+     * {@code appendLoader("FML Early Services", jarContentsList)}), a private instance method reached
+     * via reflection.
      *
-     * <p>This is also the entire "bridge to the game layer": {@code FMLLoader} later builds the GAME
-     * {@code TransformingClassLoader} with {@code setFallbackClassLoader(currentClassLoader)} - since
-     * we grow that same {@code currentClassLoader} chain here, before the game loader is built, game
-     * code that references this jar's outer classes resolves them through that native fallback with
-     * no further action from us.
+     * <p>This also bridges to the game layer: {@code FMLLoader} later builds the GAME
+     * {@code TransformingClassLoader} with {@code setFallbackClassLoader(currentClassLoader)}, and
+     * since this grows that same {@code currentClassLoader} chain first, game code resolves these
+     * jars' classes through that native fallback with no further action needed.
      */
     private ClassLoader appendToFmlClassLoaderChain(List<Path> jars) {
         try {
@@ -150,7 +135,6 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             return null;
         }
     }
-
 
     private static String argValue(String[] arguments, String name) {
         if (arguments != null) {

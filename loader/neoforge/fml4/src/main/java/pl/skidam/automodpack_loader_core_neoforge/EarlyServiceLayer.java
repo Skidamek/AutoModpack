@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
+import cpw.mods.cl.ModuleClassLoader;
 import cpw.mods.modlauncher.api.IEnvironment;
 import cpw.mods.modlauncher.api.IModuleLayerManager;
 import cpw.mods.modlauncher.api.ITransformationService;
@@ -8,6 +9,7 @@ import net.neoforged.neoforgespi.ILaunchContext;
 import net.neoforged.neoforgespi.coremod.ICoreMod;
 import net.neoforged.neoforgespi.locating.IDependencyLocator;
 import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
+import net.neoforged.neoforgespi.locating.IModFile;
 import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
 import pl.skidam.automodpack_core.Constants;
@@ -18,16 +20,19 @@ import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -60,41 +65,28 @@ public final class EarlyServiceLayer {
     public static final String TRANSFORMATION_SERVICE = "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
     public static final String MOD_FILE_READER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader";
 
-    // Services that require active work to run in place: the GraphicsBootstrapper is fired, the
-    // candidate/dependency locators are invoked, an IModFileReader is forwarded into the live
-    // discovery pipeline, and coremod / transformation-service transformers are forwarded (see
-    // AutoModpackCoreMod). A jar must declare at least one of these at its root to be worth
-    // bootstrapping in place. These are also exactly the services whose impl class names we read. A
-    // mod's ITransformationService is nearly always just an early-loading vehicle with empty
-    // transformers() (asynclogger, Sinytra Connector, CrashAssistant all ship one); we forward its
-    // transformers for the rare case they aren't, and its outer classes reach the GAME layer via the
-    // bridge like any other early service.
+    // Services that require active work to run in place (fired/invoked/forwarded by this class). A
+    // jar must declare at least one of these at its root to be worth bootstrapping in place; these
+    // are also exactly the services whose impl class names we read.
     static final List<String> ACTIVELY_RUN_SERVICES = List.of(
             GRAPHICS_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE,
             MOD_FILE_READER_SERVICE, COREMOD_SERVICE, TRANSFORMATION_SERVICE);
 
     // Every service we can host from the modpack folder, so a mod shipping only these never needs
     // copying: the actively-run ones above, plus language loaders (passive - picked up from the GAME
-    // layer, no work of ours). Single source of truth, consumed by both the copy decision
-    // (getWorkaroundMods) and the in-place bootstrapper.
+    // layer). Single source of truth for both the copy decision and the in-place bootstrapper.
     //
     // ImmediateWindowProvider is deliberately NOT here (though it IS in knownServices): NeoForge picks
-    // the early-window provider from the SERVICE layer by config name at boot, and creates the window
-    // in the same call - before and out of reach of anything we can do from the modpack folder. A mod
-    // whose early window must work therefore has to live in standard mods/, so we let it force-copy.
+    // the early-window provider and creates the window in the same call, before and out of reach of
+    // anything we can do from the modpack folder, so a mod needing it must force-copy to mods/.
     public static final Set<String> HANDLEABLE_SERVICES = Stream
             .concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
             .collect(Collectors.toUnmodifiableSet());
 
-    // Every service the running loader version actually handles - read from the loader itself so it
-    // is exact for THIS version rather than a hand-maintained cross-version list. NeoForge's
-    // TransformerDiscovererConstants.SERVICES lists the early services it loads before mod discovery
-    // (ITransformationService, IModFileCandidateLocator, IModFileReader, IDependencyLocator,
-    // GraphicsBootstrapper, ImmediateWindowProvider - and NOT the removed IModLocator); ICoreMod and
-    // IModLanguageLoader are handled by FML outside that set. The force-copy decision counts only
-    // services in here (see ModpackLoader#knownServices, WorkaroundUtil): a service the loader does
-    // not handle - a legacy/removed SPI, or a Forge SPI file that is inert on NeoForge - cannot be
-    // fixed by copying to the standard mods/ directory either, so it must never force a copy.
+    // Every service the running loader version actually handles, read from the loader itself
+    // (TransformerDiscovererConstants.SERVICES, plus ICoreMod/IModLanguageLoader which FML handles
+    // outside that set) rather than a hand-maintained cross-version list. The force-copy decision
+    // counts only services in here: one the loader doesn't handle can't be fixed by copying either.
     private static final Set<String> HANDLED_SERVICES = computeHandledServices();
 
     /** Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}. */
@@ -126,11 +118,8 @@ public final class EarlyServiceLayer {
         return Set.copyOf(handled);
     }
 
-    // The classloader of a handled modpack jar's child SERVICE layer (which holds its early-service
-    // classes) plus that layer itself (so the GAME-layer bridge can wire up JPMS read edges between
-    // the child module(s) and the GAME modules) - always written together by register() and mostly
-    // read together, so one map keyed by jar keeps them from drifting out of sync. moduleName is the
-    // jar's own module on that (shared) layer, so the bridge can scope its work to this jar alone.
+    // A handled modpack jar's child SERVICE layer classloader/layer, plus its own module name on
+    // that (shared) layer, so the GAME-layer bridge can scope its work to this jar alone.
     private record JarService(ClassLoader classLoader, ModuleLayer layer, String moduleName) {}
 
     // Maps each handled modpack jar to its child-layer classloader/layer. Populated by EarlyServiceBootstrapper.
@@ -160,11 +149,8 @@ public final class EarlyServiceLayer {
     }
 
     // Stable key so a jar matches whether reached via a relative or absolute path. Purely lexical
-    // (no toRealPath()): both the writer (register(), from Files.list(modpackMods)) and every reader
-    // (isEarlyServiceJar() etc., from ModpackLoader.modsToLoad) derive paths from listing the same
-    // modpack mods/ folder, with no symlink indirection between them, so lexical equality already
-    // holds - and isEarlyServiceJar() runs once per mod in the modpack (not just early-service jars)
-    // from each locator pass, so avoiding a real filesystem stat here matters on large modpacks.
+    // (no toRealPath()): writer and readers all derive paths from listing the same modpack mods/
+    // folder, so lexical equality already holds and a real filesystem stat is avoided.
     private static Path canonical(Path jar) {
         return jar.toAbsolutePath().normalize();
     }
@@ -245,8 +231,7 @@ public final class EarlyServiceLayer {
         ClassLoader cl = classLoaderFor(jar);
         if (cl == null) return;
         @SuppressWarnings("unchecked")
-        List<net.neoforged.neoforgespi.locating.IModFile> mods =
-                (List<net.neoforged.neoforgespi.locating.IModFile>) loadedMods;
+        List<IModFile> mods = (List<IModFile>) loadedMods;
         for (String impl : serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE)) {
             try {
                 IDependencyLocator locator = (IDependencyLocator) Class.forName(impl, true, cl)
@@ -287,17 +272,17 @@ public final class EarlyServiceLayer {
 
         try {
             // pipeline is ModDiscoverer.DiscoveryPipeline; reach its outer ModDiscoverer's reader list.
-            java.lang.reflect.Field outer = pipeline.getClass().getDeclaredField("this$0");
+            Field outer = pipeline.getClass().getDeclaredField("this$0");
             outer.setAccessible(true);
             Object modDiscoverer = outer.get(pipeline);
-            java.lang.reflect.Field readersField = modDiscoverer.getClass().getDeclaredField("modFileReaders");
+            Field readersField = modDiscoverer.getClass().getDeclaredField("modFileReaders");
             readersField.setAccessible(true);
             @SuppressWarnings("unchecked")
             List<Object> current = (List<Object>) readersField.get(modDiscoverer);
             List<Object> merged = new ArrayList<>(current);
             merged.addAll(readers);
             // ModDiscoverer sorts readers by IOrderedProvider.getPriority(), highest first.
-            merged.sort(java.util.Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
+            merged.sort(Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
             readersField.set(modDiscoverer, List.copyOf(merged));
             LOGGER.info("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), jar.getFileName());
         } catch (Throwable t) {
@@ -456,7 +441,6 @@ public final class EarlyServiceLayer {
         return collectFromTransformationServices("transformers", service -> new ArrayList<>(service.transformers()));
     }
 
-
     /**
      * Instantiates the {@code ICoreMod}s shipped by the registered early-service jars (from their
      * child SERVICE layer, where the outer classes live) and collects their transformers. Called by
@@ -510,31 +494,27 @@ public final class EarlyServiceLayer {
      * <p>The inner mod (on the GAME layer) references its outer jar's classes; natively those resolve
      * because the outer jar sits on the SERVICE layer, a GAME ancestor. Our child layer is only a
      * sibling, so we add the child as a {@code parentLoaders} delegate for each of the outer jar's
-     * packages (and drop any GAME {@code packageLookup} entry, should a copy ever exist). Then every
-     * outer class - whether referenced structurally during Mixin config prep (Sodium's
-     * {@code Workarounds}) or read for its bootstrap-time static state at runtime (asynclogger's
-     * {@code LoggerConfigurator.config}) - resolves to the single, already-initialised child copy. No
-     * second class, no split static state, no NPE.
+     * packages (dropping any stale GAME {@code packageLookup} entry). Every outer class - whether
+     * referenced structurally during Mixin config prep or read for its static state at runtime -
+     * then resolves to the single, already-initialised child copy: no second class, no split state.
      *
-     * <p>Timing is the whole game. Mixin prepares every mod's config as the launch target starts,
-     * loading those outer classes before any post-GAME mod hook exists. We beat that by running from
-     * an {@link EarlyServiceBridgePlugin} launch plugin we inject into ModLauncher: its
-     * {@code initializeLaunch} fires during {@code announceLaunch}, after the GAME
-     * {@code TransformingClassLoader} is built but before the game main (and thus before Mixin's
-     * prep). Idempotent via {@link #GAME_BRIDGE_DONE} - but the flag is claimed only once we actually
-     * hold the GAME classloader, so a too-early call (a launch plugin's {@code addResources}) does
-     * not poison the real one.
+     * <p>Mixin prepares every mod's config as the launch target starts, loading outer classes before
+     * any post-GAME mod hook exists. We beat that by running from an {@link EarlyServiceBridgePlugin}
+     * launch plugin injected into ModLauncher: its {@code initializeLaunch} fires during
+     * {@code announceLaunch}, after the GAME {@code TransformingClassLoader} is built but before Mixin's
+     * prep. Idempotent via {@link #GAME_BRIDGE_DONE}, claimed only once we actually hold the GAME
+     * classloader, so a too-early call does not poison the real one.
      *
-     * <p>This bridges both classes ({@code parentLoaders}) and resources ({@code resolvedRoots}), so
-     * it works for a plain split early service (Sodium) AND for a coremod whose outer jar owns the
-     * mixins (Sinytra Connector) - Mixin reads those mixin classes as bytecode resources. Only a
+     * <p>Bridges both classes ({@code parentLoaders}) and resources ({@code resolvedRoots}), so it
+     * works for a plain split early service (Sodium) AND for a coremod whose outer jar owns the mixins
+     * (Sinytra Connector) - Mixin reads mixin classes as bytecode resources. Only a
      * <em>standalone</em> coremod (itself a mod, added to the GAME layer as its real self) is skipped.
      */
     public static void bridgeEarlyServicesToGameLayer() {
         if (GAME_BRIDGE_DONE.get()) return;
 
         ClassLoader gameClassLoader = resolveGameClassLoader();
-        if (!(gameClassLoader instanceof cpw.mods.cl.ModuleClassLoader)) {
+        if (!(gameClassLoader instanceof ModuleClassLoader)) {
             // The GAME TransformingClassLoader is not in scope yet (e.g. a launch plugin's
             // addResources runs before it is built). Our launch plugin's initializeLaunch retries
             // later, so do NOT consume the one-shot flag.
@@ -561,7 +541,7 @@ public final class EarlyServiceLayer {
             // classes (mixins into that mod would silently stop applying). Everything else - plain
             // early services (Sodium) AND non-standalone coremods whose outer jar owns the mixins
             // (Sinytra Connector) - resolves through the bridge, with no game-library copy.
-            if ((isCoremodJar(jar) && isStandaloneModFile(jar)) || !(childLoader instanceof cpw.mods.cl.ModuleClassLoader)) continue;
+            if ((isCoremodJar(jar) && isStandaloneModFile(jar)) || !(childLoader instanceof ModuleClassLoader)) continue;
 
             try {
                 // All jars share ONE child loader/layer (see EarlyServiceBootstrapper#bootstrapJars),
@@ -578,17 +558,14 @@ public final class EarlyServiceLayer {
                     bridged++;
                 }
                 // Resources: findResourceList never consults parentLoaders, only the loader's own
-                // resolvedRoots, so add this jar's reference too. Without this, Mixin can't read
-                // an outer-jar mixin class's bytecode (a resource) and config prep crashes - the sole
-                // reason coremods like Connector needed a GAME-library copy on resolvedRoots before.
+                // resolvedRoots, so add this jar's reference too - otherwise Mixin can't read an
+                // outer-jar mixin class's bytecode (a resource) and config prep crashes.
                 Object root = ModuleClassLoaderAccess.resolvedRoots(childLoader).get(entry.getValue().moduleName());
                 if (root != null) gameResolvedRoots.put(entry.getValue().moduleName(), root);
-                // The child layer was built at the early-window phase, before the GAME layer existed,
-                // so its parents are only [SERVICE, BOOT] - it cannot see minecraft/neoforge. Now that
-                // GAME is built, point the child's fallback at it, so an outer class loaded on the
-                // child (e.g. a Connector mixin/loader class referencing net.minecraft.*) resolves
-                // those GAME classes. This is what the game-library copy got for free by living on GAME.
-                ((cpw.mods.cl.ModuleClassLoader) childLoader).setFallbackClassLoader(gameClassLoader);
+                // The child layer's parents are only [SERVICE, BOOT] (built before GAME existed), so
+                // it can't see minecraft/neoforge; point its fallback at GAME now that GAME exists,
+                // so an outer class referencing net.minecraft.* resolves.
+                ((ModuleClassLoader) childLoader).setFallbackClassLoader(gameClassLoader);
                 LOGGER.info("[AutoModpack] Bridged {} outer package(s) of {} to its early-service layer for in-place class/resource sharing", bridged, jar.getFileName());
                 // Classloader routing makes the outer classes loadable; JPMS still checks module
                 // readability at access time, so wire the read edges a real ancestor layer would give.
@@ -601,25 +578,20 @@ public final class EarlyServiceLayer {
 
     /**
      * Wires JPMS read edges both ways between the GAME layer and a bridged jar's child SERVICE layer:
-     * every GAME module reads every child module - so an inner module produced by an early-service jar
-     * can access classes from that jar's outer service module - and
-     * every child module reads every GAME module - so an outer class can access {@code net.minecraft.*}.
+     * every GAME module reads every child module (so an inner module can access classes from the
+     * outer service module) and vice versa (so an outer class can access {@code net.minecraft.*}).
      *
-     * <p>Natively loader resolution establishes these edges across the SERVICE-&gt;GAME parent boundary
-     * (the inner mod's module {@code requires} the outer one, resolved because the outer sits on an
-     * ancestor layer). Our child layer is only a <em>sibling</em> of GAME, so no edge forms and the
-     * inner mod fails with {@code IllegalAccessError: module connector does not read module
-     * org.sinytra.connector}. It surfaces when {@code ImmediateWindowHandler.acceptGameLayer} runs
-     * {@code updateModuleReads} (both the real {@code DisplayWindow} and the headless
-     * {@code DummyProvider} do this, force-loading mixin-plugin classes) - i.e. on any client launch.
-     * We add the edges broadly rather than by {@code requires} because the inner module is often
-     * automatic (no {@code requires} to key off); a read edge only grants access, so this cannot break
-     * anything - it only prevents the {@code IllegalAccessError}.
+     * <p>Natively these edges form across the SERVICE-&gt;GAME parent boundary via {@code requires}
+     * resolution. Our child layer is only a <em>sibling</em> of GAME, so no edge forms and the inner
+     * mod fails with {@code IllegalAccessError} once {@code ImmediateWindowHandler.acceptGameLayer}
+     * runs {@code updateModuleReads} - i.e. on any client launch. Edges are added broadly rather than
+     * by {@code requires} because the inner module is often automatic (no {@code requires} to key
+     * off); a read edge only grants access, so this cannot break anything.
      */
     private static void linkModuleReads(ModuleLayer gameLayer, ModuleLayer childLayer, Path jar) {
         if (gameLayer == null || childLayer == null) return;
-        java.util.Set<Module> gameModules = gameLayer.modules();
-        java.util.Set<Module> childModules = childLayer.modules();
+        Set<Module> gameModules = gameLayer.modules();
+        Set<Module> childModules = childLayer.modules();
         for (Module child : childModules) {
             for (Module game : gameModules) {
                 ModuleClassLoaderAccess.addReads(game, child); // inner mod -> outer class
@@ -631,20 +603,18 @@ public final class EarlyServiceLayer {
     }
 
     /**
-     * The GAME {@code ModuleLayer} at the bridge (announceLaunch) phase. We deliberately do NOT use
+     * The GAME {@code ModuleLayer} at the bridge (announceLaunch) phase. Deliberately not
      * {@code FMLLoader.getGameLayer()}: FML only publishes that in {@code beforeStart}, which runs
-     * <em>after</em> our launch plugin's {@code initializeLaunch}, so it is still null here (its
-     * {@code updateModuleReads} is in fact where the missing read edge crashes). The GAME layer does
-     * already exist though - the TransformingClassLoader is built - and ModLauncher's own
-     * {@code IModuleLayerManager} holds it, reached via {@code Launcher.INSTANCE} by plain reflection
-     * (the {@code cpw.mods.modlauncher} package is accessible; only securejarhandler needed Unsafe).
+     * after our launch plugin's {@code initializeLaunch}, so it is still null here. The GAME layer
+     * already exists though (TransformingClassLoader is built); reached via ModLauncher's own
+     * {@code IModuleLayerManager} through {@code Launcher.INSTANCE} by plain reflection.
      */
     private static ModuleLayer gameLayerOrNull() {
         try {
             Object launcher = ModuleClassLoaderAccess.launcherInstance();
             Object managerOpt = launcher.getClass().getMethod("findLayerManager").invoke(launcher);
             @SuppressWarnings("unchecked")
-            IModuleLayerManager manager = ((java.util.Optional<IModuleLayerManager>) managerOpt).orElse(null);
+            IModuleLayerManager manager = ((Optional<IModuleLayerManager>) managerOpt).orElse(null);
             if (manager == null) return null;
             return manager.getLayer(IModuleLayerManager.Layer.GAME).orElse(null);
         } catch (Throwable ignored) {
@@ -664,12 +634,12 @@ public final class EarlyServiceLayer {
      */
     private static ClassLoader resolveGameClassLoader() {
         ClassLoader ctx = Thread.currentThread().getContextClassLoader();
-        if (ctx instanceof cpw.mods.cl.ModuleClassLoader) return ctx;
+        if (ctx instanceof ModuleClassLoader) return ctx;
         ModuleLayer gameLayer = gameLayerOrNull();
         if (gameLayer != null) {
             for (Module module : gameLayer.modules()) {
                 ClassLoader cl = module.getClassLoader();
-                if (cl instanceof cpw.mods.cl.ModuleClassLoader) return cl;
+                if (cl instanceof ModuleClassLoader) return cl;
             }
         }
         return null;

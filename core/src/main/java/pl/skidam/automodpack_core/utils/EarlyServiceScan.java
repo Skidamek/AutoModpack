@@ -13,20 +13,16 @@ import java.util.stream.Stream;
 
 /**
  * Selects the modpack-folder jars an early-service bootstrapper should host in place: every jar the
- * loader-specific eligibility test accepts, minus byte-identical duplicates of jars already in the
- * standard {@code mods/} directory (the loader already handles that copy natively). One shared
- * implementation for the three bootstrap entry points (NeoForge fml4, fml10/fml11, Forge).
+ * loader-specific eligibility test accepts, minus byte-identical duplicates already in the standard
+ * {@code mods/} directory (the loader already handles that copy natively).
  */
 public final class EarlyServiceScan {
 
     private EarlyServiceScan() {}
 
     /**
-     * Checking eligibility first (a handful of root-level {@code Files.exists} checks on an
-     * already-open FileSystem) before hashing (a full-content SHA-1 read) avoids paying for a hash
-     * on every ordinary, non-early-service mod - most modpack jars never need one. The
-     * standard-mods hash set is itself a full hash of every standard-mods/ jar, so it is computed
-     * lazily too, only once an eligible jar actually needs the comparison.
+     * Eligibility is checked before hashing, since it's cheap and most modpack jars never need a hash.
+     * The standard-mods hash set is computed lazily, only once an eligible jar needs the comparison.
      */
     public static List<Path> eligibleJars(Path modpackMods, Predicate<Path> eligibleForInPlace) throws IOException {
         List<Path> earlyServiceJars = new ArrayList<>();

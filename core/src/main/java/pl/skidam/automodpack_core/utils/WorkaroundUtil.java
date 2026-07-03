@@ -30,16 +30,13 @@ public class WorkaroundUtil {
             return workaroundMods;
         }
 
-        // Services this loader can run straight from the modpack folder (fire the
-        // GraphicsBootstrapper / run the locators in place, or rely on the GAME layer for
-        // language loaders). A mod shipping only these never needs the copy-to-standard
-        // workaround - and crucially we decide this statically, before the early-service
-        // bootstrapper runs, so the mod is never copied in the first place (a copied mod
-        // would shadow in-place loading forever, since the loader defers to standard mods/).
+        // Services this loader can run straight from the modpack folder; a mod shipping only these
+        // never needs the copy-to-standard workaround. Decided statically, before the early-service
+        // bootstrapper runs, so such a mod is never copied in the first place (a copied mod would
+        // shadow in-place loading forever, since the loader defers to standard mods/).
         Set<String> handleableServices = MODPACK_LOADER == null ? Set.of() : MODPACK_LOADER.inPlaceHandleableServices();
-        // Services THIS loader version actually handles. A mod shipping a service outside this set
-        // (a legacy/removed SPI, or an inert cross-loader SPI file) is not helped by copying it to
-        // mods/ either - the loader ignores that service there too - so it must not force a copy.
+        // Services this loader version actually handles; a service outside this set is inert here,
+        // so it must not force a copy either.
         Set<String> handledServices = MODPACK_LOADER == null ? Set.of() : MODPACK_LOADER.knownServices();
 
         for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
@@ -49,21 +46,18 @@ public class WorkaroundUtil {
                 try (FileSystem fs = FileSystems.newFileSystem(modPath)) {
                     Set<String> services = FileInspection.getSpecificServices(fs);
 
-                    // Consider only services the running loader version handles; drop the rest (their
-                    // presence changes nothing about how this loader loads the mod).
+                    // Consider only services the running loader version handles.
                     if (!handledServices.isEmpty()) {
                         services.retainAll(handledServices);
                     }
 
-                    // Not a service mod, or ships nothing this loader handles: AutoModpack loads it
-                    // from the modpack folder normally, no workaround needed.
+                    // Not a service mod, or ships nothing this loader handles.
                     if (services.isEmpty()) {
                         continue;
                     }
 
-                    // Every service it ships can be handled in place -> leave it in the
-                    // modpack folder. Otherwise it ships something we can't host in place
-                    // (e.g. an early window provider), so fall back to copy-to-standard.
+                    // Every service it ships can be handled in place -> leave it in the modpack
+                    // folder; otherwise fall back to copy-to-standard.
                     if (handleableServices.containsAll(services)) {
                         continue;
                     }

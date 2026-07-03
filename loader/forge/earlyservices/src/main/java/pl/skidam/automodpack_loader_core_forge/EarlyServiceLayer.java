@@ -20,6 +20,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.module.Configuration;
 import java.lang.module.ModuleFinder;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -32,6 +33,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -41,27 +43,17 @@ import java.util.stream.Stream;
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 /**
- * Forge's analog of the NeoForge fml4 {@code EarlyServiceLayer}: both loaders still run on the
- * original ModLauncher/securejarhandler module-layer machinery ({@code cpw.mods.*}), so the core
- * mechanism - building a shared child SERVICE {@link ModuleLayer} for the selected modpack's
- * early-service jars, then bridging the GAME classloader to it - is unchanged. Two things differ
- * because Forge's own SPI surface is smaller/older than NeoForge's:
+ * Forge's analog of the NeoForge fml4 {@code EarlyServiceLayer}: both loaders run on the same
+ * ModLauncher/securejarhandler module-layer machinery ({@code cpw.mods.*}), so the core mechanism -
+ * a shared child SERVICE {@link ModuleLayer} for the modpack's early-service jars, bridged into the
+ * GAME classloader - is unchanged. Forge has no pre-ModLauncher hook, so {@link #bootstrap} instead
+ * runs from {@link AutoModpackTransformationService#onLoad}, the earliest point ModLauncher hands
+ * control to AutoModpack. Forge's {@code ICoreMod} coremod system is not supported (rare, JS-based,
+ * not a per-jar SPI).
  *
- * <ul>
- *   <li>No {@code GraphicsBootstrapper} equivalent - Forge has no pre-ModLauncher hook at all, so
- *       there is no way to build the child layer before ModLauncher's own service lifecycle the way
- *       NeoForge's {@code EarlyServiceBootstrapper} does. Instead {@link #bootstrap} runs from
- *       {@link AutoModpackTransformationService#onLoad}, the earliest point ModLauncher hands
- *       control to AutoModpack (confirmed live to fire before the {@code IModLocator} pass).</li>
- *   <li>No {@code ICoreMod} equivalent worth supporting - Forge's coremod system
- *       ({@code ICoreModProvider}) is a JavaScript-transformer mechanism, not a per-jar SPI, and is
- *       vanishingly rare in modern mods; skipped entirely.</li>
- * </ul>
- *
- * <p>What's left - {@code ITransformationService} (forwarded by {@link AutoModpackTransformationService}),
- * {@code IModLocator} (Forge's {@code IModFileCandidateLocator}), and {@code IDependencyLocator} - is
- * otherwise identical in spirit to the NeoForge fml4 port: a mod that ships only these loads straight
- * from the modpack folder, no copy into the standard {@code mods/} directory.
+ * <p>Handled services - {@code ITransformationService} (forwarded by
+ * {@link AutoModpackTransformationService}), {@code IModLocator}, and {@code IDependencyLocator} -
+ * let a mod shipping only these load straight from the modpack folder with no copy.
  */
 public final class EarlyServiceLayer {
 
@@ -72,31 +64,25 @@ public final class EarlyServiceLayer {
     public static final String LANGUAGE_LOADER_SERVICE = "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider";
     public static final String TRANSFORMATION_SERVICE = "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
 
-    // Services that require active work to run in place: the candidate/dependency locators are
-    // replayed, and a transformation service's lifecycle is forwarded (see AutoModpackTransformationService).
-    // A mod's ITransformationService is nearly always just an early-loading vehicle with empty
-    // transformers(); we forward it anyway for the rare case it isn't, and its outer classes reach
-    // the GAME layer via the bridge like any other early service.
+    // Services requiring active work: candidate/dependency locators are replayed, and a
+    // transformation service's lifecycle is forwarded (see AutoModpackTransformationService).
     static final List<String> ACTIVELY_RUN_SERVICES = List.of(
             CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE, TRANSFORMATION_SERVICE);
 
-    // Every service we can host from the modpack folder, so a mod shipping only these never needs
-    // copying: the actively-run ones above, plus language providers (passive - picked up from the
-    // GAME layer, no work of ours).
+    // Every service hostable from the modpack folder without copying: the actively-run ones above,
+    // plus language providers (passive - picked up from the GAME layer).
     public static final Set<String> HANDLEABLE_SERVICES = Stream
             .concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
             .collect(Collectors.toUnmodifiableSet());
 
-    // The services the running Forge version's own ModDirTransformerDiscoverer scans for - a
-    // mods/-dir jar shipping ANY of these at its root is claimed for the SERVICE layer and EXCLUDED
-    // from mod discovery by ModsFolderLocator (it filters allExcluded()), even when the jar has a
-    // root mods.toml (verified against fmlloader 1.18.2 and 1.20.1 bytecode). Read from the loader
-    // itself (the SERVICES field on 1.20.1+; 1.18.2 hardcodes the check instead of exposing a
-    // field, hence the fallback) so it is exact for THIS version rather than a hand-maintained list.
+    // Services the running Forge's own ModDirTransformerDiscoverer scans for - a mods/-dir jar
+    // shipping any of these is claimed for the SERVICE layer and excluded from mod discovery by
+    // ModsFolderLocator, even with a root mods.toml. Read from the loader's own SERVICES field
+    // (1.20.1+; 1.18.2 hardcodes the check instead, hence the fallback) so it's exact per version.
     private static final Set<String> NATIVE_EXCLUSION_SERVICES = computeNativeExclusionServices();
 
-    // Every service the running Forge version actually handles: the natively-excluded set above,
-    // plus IDependencyLocator (run from the SERVICE layer after discovery) and language providers.
+    // Every service this Forge version actually handles: natively-excluded set above, plus
+    // IDependencyLocator (run post-discovery) and language providers.
     private static final Set<String> HANDLED_SERVICES = computeHandledServices();
 
     /** Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}. */
@@ -108,19 +94,16 @@ public final class EarlyServiceLayer {
         Set<String> excluded = new HashSet<>();
         try {
             Class<?> discoverer = Class.forName("net.minecraftforge.fml.loading.ModDirTransformerDiscoverer");
-            java.lang.reflect.Field field = discoverer.getDeclaredField("SERVICES");
+            Field field = discoverer.getDeclaredField("SERVICES");
             field.setAccessible(true);
             Object services = field.get(null);
             if (services instanceof Set<?> names) {
                 for (Object name : names) {
-                    // SERVICES holds dotted class names (e.g. "cpw.mods.modlauncher.api.
-                    // ITransformationService"); everywhere else we compare full service-file paths.
+                    // SERVICES holds dotted class names; we compare full service-file paths elsewhere.
                     excluded.add("META-INF/services/" + name);
                 }
             }
         } catch (Throwable t) {
-            // No SERVICES field on this Forge version (e.g. 1.18.2, which hardcodes the check
-            // instead): fall back to the services we know it excludes on.
             LOGGER.warn("[AutoModpack] Could not read the loader's early-service list; using the built-in fallback", t);
             excluded.add(CANDIDATE_LOCATOR_SERVICE);
             excluded.add(TRANSFORMATION_SERVICE);
@@ -135,28 +118,22 @@ public final class EarlyServiceLayer {
         return Set.copyOf(handled);
     }
 
-    // The classloader of a handled modpack jar's child SERVICE layer (which holds its early-service
-    // classes) plus that layer itself (so the GAME-layer bridge can wire up JPMS read edges between
-    // the child module(s) and the GAME modules) - always written together by register() and mostly
-    // read together, so one map keyed by jar keeps them from drifting out of sync. moduleName is the
-    // jar's own module on that (shared) layer, so the bridge can scope its work to this jar alone.
+    // classLoader/layer of a handled jar's child SERVICE layer, kept together since the GAME-layer
+    // bridge needs both. moduleName scopes bridging to this jar's own module on the shared layer.
     private record JarService(ClassLoader classLoader, ModuleLayer layer, String moduleName) {}
 
     // Maps each handled modpack jar to its child-layer classloader/layer. Populated by bootstrap().
     private static final Map<Path, JarService> JAR_SERVICES = new ConcurrentHashMap<>();
 
-    // ITransformationService instances instantiated in place per jar, kept so the forwarding service
-    // injected into ModLauncher (AutoModpackTransformationService) can run their completeScan at the
-    // native, post-discovery time - when its returned resources still reach the GAME/PLUGIN layers.
+    // ITransformationService instances instantiated in place per jar, kept so the injected forwarding
+    // service (AutoModpackTransformationService) can run their completeScan at ModLauncher's native,
+    // post-discovery time, when its returned resources still reach the GAME/PLUGIN layers.
     private static final Map<Path, List<ITransformationService>> TRANSFORMATION_SERVICES = new ConcurrentHashMap<>();
 
-    // The whole bootstrap (child layer construction + locator replay) must run exactly once - unlike
-    // NeoForge's GraphicsBootstrapper, EarlyModLocator's scanMods() can in principle be invoked more
-    // than once by a caller doing its own re-discovery.
+    // bootstrap() must run exactly once; EarlyModLocator#scanMods() can be invoked more than once.
     private static final AtomicBoolean BOOTSTRAPPED = new AtomicBoolean(false);
 
-    // The GAME-layer bridge must run exactly once, from the injected launch plugin's
-    // initializeLaunch (see EarlyServiceBridgePlugin), before Mixin loads any outer class.
+    // The GAME-layer bridge must run exactly once, before Mixin loads any outer class.
     private static final AtomicBoolean GAME_BRIDGE_DONE = new AtomicBoolean(false);
 
     /**
@@ -170,9 +147,8 @@ public final class EarlyServiceLayer {
         if (!BOOTSTRAPPED.compareAndSet(false, true)) return;
 
         try {
-            // Preload (run just before this from AutoModpackTransformationService#onLoad) loaded the
-            // config and published Constants.selectedModpackDir / Constants.MODS_DIR; selectedModpackDir
-            // is set only when a modpack is selected on a client - null means nothing to do.
+            // selectedModpackDir is published by Preload (run just before this) and set only when a
+            // modpack is selected on a client.
             Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
             if (modpackMods == null || !Files.isDirectory(modpackMods)) {
                 return;
@@ -277,7 +253,6 @@ public final class EarlyServiceLayer {
         return result;
     }
 
-
     public static boolean isEarlyServiceJar(Path jar) {
         return jar != null && JAR_SERVICES.containsKey(canonical(jar));
     }
@@ -288,9 +263,8 @@ public final class EarlyServiceLayer {
         return service == null ? null : service.classLoader();
     }
 
-    // Purely lexical (no toRealPath()): both the writer (bootstrap(), from Files.list(modpackMods))
-    // and every reader derive their paths from listing the same modpack mods/ folder with no symlink
-    // indirection between them, so lexical equality already holds.
+    // Purely lexical: writer and readers all list the same modpack mods/ folder, no symlinks
+    // involved, so lexical equality already holds.
     private static Path canonical(Path jar) {
         return jar.toAbsolutePath().normalize();
     }
@@ -331,17 +305,12 @@ public final class EarlyServiceLayer {
     }
 
     /**
-     * Whether this jar's early services can all be run from the modpack folder. It must (a) declare
-     * at its root at least one service we actively run in place, (b) ship no service outside
-     * {@link #HANDLEABLE_SERVICES}, and (c) be a jar native Forge would itself claim for the SERVICE
-     * layer and exclude from mod discovery ({@code ModsFolderLocator} filters {@code
-     * ModDirTransformerDiscoverer.allExcluded()} - even for jars with a root {@code mods.toml}).
-     * (c) is what makes the in-place treatment safe: such a jar never loads as a plain mod natively,
-     * so replaying its locators and bridging its outer classes cannot double-load or shadow anything
-     * - its real mod only ever arrives through its own locators (e.g. CrashAssistant's outer and
-     * inner jar share one modId; loading both would be a duplicate-mod crash). A jar NOT natively
-     * excluded is not an early-service jar at all here: it loads as an ordinary mod, exactly as it
-     * would natively.
+     * Whether this jar's early services can all be run from the modpack folder: it must declare at
+     * least one actively-run service, ship no service outside {@link #HANDLEABLE_SERVICES}, and be a
+     * jar native Forge would itself exclude from mod discovery for the SERVICE layer. The last part is
+     * what makes in-place treatment safe - such a jar never loads as a plain mod natively, so replaying
+     * its locators can't double-load or shadow anything (e.g. CrashAssistant's outer/inner jars share
+     * one modId; loading both natively would be a duplicate-mod crash).
      */
     public static boolean eligibleForInPlace(Path jar) {
         JarInfo info = info(jar);
@@ -360,15 +329,11 @@ public final class EarlyServiceLayer {
 
     /**
      * Runs the {@code IModLocator}s declared inside an early-service jar, merging their results into
-     * {@code out}. This is how a modpack-folder split-jar mod loads its real (inner) mod jar - the
-     * loader would otherwise only run this from its own SERVICE layer, which AutoModpack never reaches.
+     * {@code out} - how a modpack-folder split-jar mod loads its real (inner) mod jar.
      *
-     * <p>Invoked by plain reflection, not a static {@code IModLocator} cast: {@code scanMods()}'s
-     * return type is {@code List<IModFile>} on Forge 1.18.2 but {@code List<ModFileOrException>} (a
-     * class that does not exist at all pre-1.19) from ~1.19 on - fine at the source level (generics
-     * erase to a raw {@code List} either way), but this module compiles once against one forgespi
-     * version for both, and a compiled reference to the newer type alone would fail to link on the
-     * older one. Reflection avoids the compiled class ever naming a type the older jar lacks.
+     * <p>Invoked by reflection, not a static cast: {@code scanMods()}'s return type differs between
+     * Forge 1.18.2 and ~1.19+ ({@code ModFileOrException} doesn't exist pre-1.19), and this module
+     * compiles once against a single forgespi version for both.
      */
     public static void runCandidateLocators(Path jar, List<Object> out) {
         ClassLoader cl = classLoaderFor(jar);
@@ -388,9 +353,7 @@ public final class EarlyServiceLayer {
     /**
      * Runs the {@code IDependencyLocator}s declared inside an early-service jar, merging their
      * results into {@code out}. Reflective for the same reason as {@link #runCandidateLocators}: the
-     * standalone {@code IDependencyLocator} interface does not exist at all pre-~1.19 (Forge 1.18.2
-     * folds {@code scanMods(Iterable)} into {@code IModLocator} itself instead), so this shared module
-     * must not name it in compiled bytecode.
+     * standalone {@code IDependencyLocator} interface doesn't exist pre-~1.19.
      */
     public static void runDependencyLocators(Path jar, Iterable<IModFile> loadedMods, List<IModFile> out) {
         ClassLoader cl = classLoaderFor(jar);
@@ -474,9 +437,9 @@ public final class EarlyServiceLayer {
     }
 
     /**
-     * Points the GAME classloader at each in-place early-service jar's child SERVICE layer - see the
-     * NeoForge fml4 {@code EarlyServiceLayer#bridgeEarlyServicesToGameLayer} javadoc for the full
-     * rationale, which applies unchanged here (same {@code cpw.mods.cl} mechanism).
+     * Points the GAME classloader at each in-place early-service jar's child SERVICE layer, wiring
+     * {@code cpw.mods.cl} parentLoaders/resolvedRoots and JPMS module reads so GAME-layer code (e.g.
+     * Mixin) can see and load the early-service jar's outer classes/resources.
      */
     public static void bridgeEarlyServicesToGameLayer() {
         if (GAME_BRIDGE_DONE.get()) return;
@@ -539,15 +502,14 @@ public final class EarlyServiceLayer {
 
     /**
      * The GAME {@code ModuleLayer} at the bridge (announceLaunch) phase, reached via ModLauncher's own
-     * {@code IModuleLayerManager} (not {@code FMLLoader.getGameLayer()}, which is null this early on
-     * Forge too - see the NeoForge fml4 javadoc for why).
+     * {@code IModuleLayerManager} - {@code FMLLoader.getGameLayer()} is still null this early.
      */
     private static ModuleLayer gameLayerOrNull() {
         try {
             Object launcher = ModuleClassLoaderAccess.launcherInstance();
             Object managerOpt = launcher.getClass().getMethod("findLayerManager").invoke(launcher);
             @SuppressWarnings("unchecked")
-            IModuleLayerManager manager = ((java.util.Optional<IModuleLayerManager>) managerOpt).orElse(null);
+            IModuleLayerManager manager = ((Optional<IModuleLayerManager>) managerOpt).orElse(null);
             if (manager == null) return null;
             return manager.getLayer(IModuleLayerManager.Layer.GAME).orElse(null);
         } catch (Throwable ignored) {

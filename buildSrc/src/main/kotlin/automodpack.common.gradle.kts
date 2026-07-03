@@ -7,11 +7,9 @@ plugins {
     id("dev.luna5ama.jar-optimizer")
 }
 
-// Test-only instrumentation (AutoTestBridge + the dev mixins that drive it) is
-// compiled into the mod only for autotester builds (-Pautomodpack.autotest); it
-// must never ship in release jars. Exclude it from the source set so it lands in
-// no jar variant (avoids loom remapJar vs jar pitfalls), and drop the dev mixins
-// from the config so Mixin doesn't look for the now-absent classes.
+// Test-only instrumentation (AutoTestBridge + its dev mixins) must never ship in
+// release jars. Exclude it from the source set for non-autotest builds and strip
+// the dev mixins from the config so Mixin doesn't look for the absent classes.
 if (!project.hasProperty("automodpack.autotest")) {
     plugins.withId("java") {
         the<SourceSetContainer>().named("main").configure {
@@ -72,11 +70,9 @@ val mergeJarTask = tasks.register<MergeJarTask>("mergeJar") {
     this.buildDirectory.set(layout.buildDirectory)
     this.outputJar.set(layout.buildDirectory.file("merged-jar-path.txt"))
 
-    // Hash the SHADOW jars where they exist: those are the files this task actually merges
-    // (loader/<module>/build/libs), and they are the only outputs that change when a shared
-    // subproject (core, loader-core, an earlyservices module) changes - the plain `jar` outputs
-    // don't contain those classes, so hashing them alone shipped stale merged jars for any
-    // change made purely in a shared module.
+    // Hash the shadow jars where they exist: they're what this task actually merges and
+    // the only outputs that change when a shared subproject (core, loader-core, an
+    // earlyservices module) changes. The plain `jar` outputs don't contain those classes.
     val filesToHash = mutableListOf<Any>()
     (tasks.findByName("shadowJar") ?: tasks.findByName("jar"))?.let { projectJar ->
         dependsOn(projectJar)

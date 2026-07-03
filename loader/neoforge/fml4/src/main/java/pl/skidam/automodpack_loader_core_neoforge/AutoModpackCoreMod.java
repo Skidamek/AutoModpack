@@ -12,14 +12,10 @@ import net.neoforged.neoforgespi.coremod.ICoreMod;
  *
  * <p>{@code ICoreMod} is an FML SPI, not a ModLauncher one: FML's own {@code transformers()} pass
  * collects it directly from the layers that already exist (BOOT/SERVICE/PLUGIN) before the GAME layer
- * is built. A modpack jar reaches at best the GAME layer, so its own coremod is never seen there.
- * AutoModpack itself is on the SERVICE layer and IS scanned - so it instantiates those modpack
- * coremods from the child SERVICE layers {@link EarlyServiceBootstrapper} built for them and returns
- * their transformers here, as if they were AutoModpack's own.
- *
- * <p>This is what lets e.g. Sinytra Connector load fully in place: its own mixins {@code @Shadow}
- * names that only its coremod remaps to the obfuscated runtime, so without this the coremod never
- * runs and Connector's mixins fail to apply.
+ * is built, so a modpack jar's own coremod is never seen there. AutoModpack itself is on the SERVICE
+ * layer and IS scanned - so it instantiates those modpack coremods from the child SERVICE layers
+ * {@link EarlyServiceBootstrapper} built for them and returns their transformers here, as if they
+ * were AutoModpack's own.
  */
 @SuppressWarnings("unused")
 public class AutoModpackCoreMod implements ICoreMod {

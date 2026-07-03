@@ -9,11 +9,13 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -135,7 +137,7 @@ public class FileInspection {
         return file == null || !Files.exists(file) || !file.getFileName().toString().endsWith(".jar");
     }
 
-    private static <T> T extractBasicInfo(Path file, java.util.function.Function<ModMetadata, T> extractor) {
+    private static <T> T extractBasicInfo(Path file, Function<ModMetadata, T> extractor) {
         if (isJarInvalid(file)) return null;
         try (FileSystem fs = FileSystems.newFileSystem(file)) {
             ModMetadata meta = getModMetadata(fs);
@@ -354,9 +356,8 @@ public class FileInspection {
         return name.endsWith("mods.toml") || name.endsWith("mod.json");
     }
 
-    // cpw.mods.modlauncher's ITransformationService is a boot-layer service used by BOTH forge and
-    // neoforge (they share ModLauncher). It makes a jar an "early service" (ModLauncher discovers it
-    // before mod discovery), so it must count for the copy decision on either loader.
+    // ITransformationService is a ModLauncher boot-layer service shared by forge and neoforge,
+    // discovered before mod discovery - counts for the copy decision on either loader.
     private static final String TRANSFORMATION_SERVICE =
             "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
 
@@ -367,15 +368,9 @@ public class FileInspection {
             TRANSFORMATION_SERVICE
     );
 
-    // The NeoForge service files AutoModpack recognises across versions: NeoForge's "early"
-    // services (its TransformerDiscovererConstants.SERVICES - a jar shipping any is put on the
-    // SERVICE layer before mod discovery), plus ICoreMod (collected after discovery), the
-    // mod-loading locators and language loaders, and the older IModLocator SPI. This is a broad,
-    // cross-version recognition set (used to tell a service mod apart from a plain mod). The
-    // force-copy decision narrows it to what the *running* loader version actually handles via
-    // ModpackLoaderService#knownServices (e.g. IModLocator is gone on 1.21.x), so a mod shipping a
-    // service this version ignores is never copied pointlessly. When no loader is present, this set
-    // is the fallback.
+    // Broad, cross-version set of NeoForge service files used to tell a service mod apart from a
+    // plain mod. The force-copy decision narrows this to what the running loader version actually
+    // handles via ModpackLoaderService#knownServices; this set is only the fallback.
     private static final Set<String> NEOFORGE_SERVICES = Set.of(
             "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
             "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
@@ -384,25 +379,17 @@ public class FileInspection {
             "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
             "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper",
             "META-INF/services/net.neoforged.neoforgespi.earlywindow.ImmediateWindowProvider",
-            // A coremod's transformers are collected by FML after mod discovery, scanning the
-            // GAME layer - so a modpack-folder coremod is run in place from the game-library copy
-            // (see EarlyServiceLayer). Listed here so the copy decision still accounts for it.
+            // Coremod transformers are collected by FML after mod discovery from the GAME layer
+            // (see EarlyServiceLayer) - listed so the copy decision accounts for it.
             "META-INF/services/net.neoforged.neoforgespi.coremod.ICoreMod",
-            // Most mods' ITransformationService is only a vehicle to load early (its transformers()
-            // are empty; the real work is a coremod/mixin) - EarlyServiceLayer forwards its
-            // transformers and bridges its classes in place. One that does essential boot-time work
-            // isn't fully hostable in place and, not being in inPlaceHandleableServices, is copied.
             TRANSFORMATION_SERVICE
     );
 
     /**
-     * The loader-service files that matter on the <em>current</em> loader. A cross-platform mod
-     * (e.g. Async Logger) ships service files for both Forge and NeoForge, but only the running
-     * loader's namespace is live - NeoForge never reads {@code net.minecraftforge.forgespi.*} and
-     * Forge never reads {@code net.neoforged.neoforgespi.*}. Counting the inert set would force a
-     * cross-platform mod down the copy-to-standard path for services that never run here, so the
-     * copy decision only sees the live namespace. Fabric/unknown loaders keep the full union (the
-     * services don't gate their copy path, and this preserves the prior {@link #isMod} behaviour).
+     * The loader-service files that matter on the current loader. A cross-platform mod (e.g. Async
+     * Logger) ships service files for both Forge and NeoForge, but only the running loader's
+     * namespace is live, so counting the other would wrongly force a copy. Fabric/unknown loaders
+     * keep the full union.
      */
     private static Set<String> knownServices(String loader) {
         if ("neoforge".equals(loader)) return NEOFORGE_SERVICES;
@@ -428,21 +415,18 @@ public class FileInspection {
 
     /**
      * The known ({@link #knownServices(String)}) loader-service files this jar provides, both at its
-     * root and inside any {@code META-INF/jarjar} nested jars. Used to decide whether a mod
-     * needs the copy-to-standard workaround: a mod is left in the modpack folder only when
-     * <em>every</em> service it ships can be handled in place by the loader
-     * ({@link pl.skidam.automodpack_core.loader.ModpackLoaderService#inPlaceHandleableServices}).
+     * root and inside any {@code META-INF/jarjar} nested jars. A mod is left in the modpack folder
+     * only when every service it ships can be handled in place
+     * ({@link ModpackLoaderService#inPlaceHandleableServices}).
      */
     public static Set<String> getSpecificServices(FileSystem fs) {
         return getSpecificServices(fs, getLoader());
     }
 
     /**
-     * As {@link #getSpecificServices(FileSystem)}, but with an explicit {@code loader} instead of
-     * the global {@link Constants#LOADER}. The early-service bootstrapper runs <em>before</em>
-     * {@code Constants.LOADER} is populated, so it must say which namespace is live itself -
-     * otherwise the service set falls back to the forge+neoforge union and a cross-platform mod
-     * is wrongly judged to ship an unhandleable (inert Forge) service.
+     * As {@link #getSpecificServices(FileSystem)}, but with an explicit {@code loader} instead of the
+     * global {@link Constants#LOADER} - needed by the early-service bootstrapper, which runs before
+     * {@code Constants.LOADER} is populated.
      */
     public static Set<String> getSpecificServices(FileSystem fs, String loader) {
         Set<String> known = knownServices(loader);
@@ -462,10 +446,8 @@ public class FileInspection {
     }
 
     /**
-     * @param stopAtFirst {@code true} to return as soon as one match is found (the {@link
-     *                     #hasSpecificServices} boolean check - a hot path run over every mod during
-     *                     discovery), {@code false} to collect every match (the full {@link
-     *                     #getSpecificServices} set the copy-decision needs).
+     * @param stopAtFirst {@code true} to stop at the first match (the {@link #hasSpecificServices}
+     *                     hot path), {@code false} to collect every match ({@link #getSpecificServices}).
      */
     private static void collectSpecificServicesNested(FileSystem fs, Set<String> known, Set<String> found, boolean stopAtFirst) {
         Path jarJarDir = fs.getPath("META-INF", "jarjar");
