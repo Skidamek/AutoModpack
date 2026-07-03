@@ -7,6 +7,7 @@ import net.neoforged.neoforgespi.locating.IModFile;
 import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
 import java.io.BufferedReader;
@@ -49,11 +50,11 @@ public final class EarlyServiceLayer {
 
     private EarlyServiceLayer() {}
 
-    public static final String GRAPHICS_BOOTSTRAPPER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper";
-    public static final String CANDIDATE_LOCATOR_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator";
-    public static final String DEPENDENCY_LOCATOR_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator";
-    public static final String LANGUAGE_LOADER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader";
-    public static final String MOD_FILE_READER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader";
+    public static final String GRAPHICS_BOOTSTRAPPER_SERVICE = LoaderServicePaths.NEOFORGE_GRAPHICS_BOOTSTRAPPER;
+    public static final String CANDIDATE_LOCATOR_SERVICE = LoaderServicePaths.NEOFORGE_CANDIDATE_LOCATOR;
+    public static final String DEPENDENCY_LOCATOR_SERVICE = LoaderServicePaths.NEOFORGE_DEPENDENCY_LOCATOR;
+    public static final String LANGUAGE_LOADER_SERVICE = LoaderServicePaths.NEOFORGE_LANGUAGE_LOADER;
+    public static final String MOD_FILE_READER_SERVICE = LoaderServicePaths.NEOFORGE_MOD_FILE_READER;
     // ICoreMod and ModLauncher's ITransformationService no longer exist as SPIs on this loader.
 
     static final List<String> ACTIVELY_RUN_SERVICES = List.of(
@@ -70,8 +71,12 @@ public final class EarlyServiceLayer {
     // here: one this loader doesn't handle can't be fixed by copying to standard mods/ either.
     private static final Set<String> HANDLED_SERVICES = computeHandledServices();
 
-    /** Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}. */
-    public static Set<String> knownServices() {
+    /**
+     * Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}.
+     * Used to narrow a jar's raw service set (see {@link #inspect}) so a legacy/removed SPI this
+     * loader version doesn't handle can't wrongly block {@link #eligibleForInPlace}.
+     */
+    private static Set<String> knownServices() {
         return HANDLED_SERVICES;
     }
 
@@ -90,7 +95,7 @@ public final class EarlyServiceLayer {
         } catch (Throwable t) {
             LOGGER.warn("[AutoModpack] Could not read the loader's early-service list; using the built-in fallback", t);
             handled.addAll(HANDLEABLE_SERVICES);
-            handled.add("META-INF/services/net.neoforged.neoforgespi.earlywindow.ImmediateWindowProvider");
+            handled.add(LoaderServicePaths.NEOFORGE_IMMEDIATE_WINDOW_PROVIDER);
         }
         handled.add(LANGUAGE_LOADER_SERVICE);
         return Set.copyOf(handled);
@@ -139,10 +144,9 @@ public final class EarlyServiceLayer {
         Map<String, List<String>> impls = new HashMap<>();
         boolean standalone = false;
         try (FileSystem fs = FileSystems.newFileSystem(jar)) {
-            // Explicit "neoforge": this runs from the early-service bootstrapper, before
-            // Constants.LOADER is set, so we must name the live service namespace ourselves.
-            services = FileInspection.getSpecificServices(fs, "neoforge");
-            services.retainAll(knownServices());
+            // Scoped to what this loader version actually handles (knownServices()), so a legacy/
+            // removed SPI doesn't wrongly make an otherwise in-place-able mod look unhandleable.
+            services = FileInspection.getServices(fs, knownServices());
             standalone = Files.exists(fs.getPath("META-INF/neoforge.mods.toml"));
             for (String service : ACTIVELY_RUN_SERVICES) {
                 if (Files.exists(fs.getPath(service))) {

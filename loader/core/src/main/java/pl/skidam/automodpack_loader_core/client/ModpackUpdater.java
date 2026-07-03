@@ -9,7 +9,6 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
-import pl.skidam.automodpack_core.utils.WorkaroundUtil;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
@@ -22,6 +21,8 @@ import pl.skidam.automodpack_loader_core.utils.UpdateType;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -477,7 +478,7 @@ public class ModpackUpdater {
         // delete old deleted files from the server modpack
         boolean needsRestart0 = deleteNonModpackFiles(modpackContent, cache);
 
-        Set<String> workaroundMods = new WorkaroundUtil(modpackDir).getWorkaroundMods(modpackContent);
+        Set<String> workaroundMods = getForceCopyMods(modpackContent);
         Set<String> filesNotToCopy = getFilesNotToCopy(modpackContent.list, workaroundMods);
         boolean needsRestart1 = ModpackUtils.correctFilesLocations(modpackDir, modpackContent, filesNotToCopy, cache);
 
@@ -543,6 +544,32 @@ public class ModpackUpdater {
         boolean needsRestart6 = LauncherVersionSwapper.swapLoaderVersion(modpackContent.loader, modpackContent.loaderVersion);
 
         return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3 || needsRestart4 || needsRestart5 || needsRestart6;
+    }
+
+    // Returns the modpack mods that ship a service file this loader's running version cannot host
+    // in place (see ModpackLoaderService#forceCopyServices) - these must be copied into standard
+    // mods/ instead of staying in the modpack folder.
+    private Set<String> getForceCopyMods(Jsons.ModpackContentFields modpackContentFields) throws IOException {
+        Set<String> forceCopyServices = MODPACK_LOADER.forceCopyServices();
+        Set<String> forceCopyMods = new HashSet<>();
+        if (forceCopyServices.isEmpty()) {
+            return forceCopyMods;
+        }
+
+        for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
+            if (!item.type.equals("mod")) {
+                continue;
+            }
+
+            Path modPath = SmartFileUtils.getPath(modpackDir, item.file);
+            try (FileSystem fs = FileSystems.newFileSystem(modPath)) {
+                if (!FileInspection.getServices(fs, forceCopyServices).isEmpty()) {
+                    forceCopyMods.add(item.file);
+                }
+            }
+        }
+
+        return forceCopyMods;
     }
 
     // returns set of formated files which we should not copy to the cwd - let them stay in the modpack directory

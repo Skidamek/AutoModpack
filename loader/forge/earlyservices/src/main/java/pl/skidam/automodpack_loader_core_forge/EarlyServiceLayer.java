@@ -10,6 +10,7 @@ import cpw.mods.jarhandling.SecureJar;
 import net.minecraftforge.forgespi.locating.IModFile;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.EarlyServiceScan;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
@@ -59,10 +60,10 @@ public final class EarlyServiceLayer {
 
     private EarlyServiceLayer() {}
 
-    public static final String CANDIDATE_LOCATOR_SERVICE = "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator";
-    public static final String DEPENDENCY_LOCATOR_SERVICE = "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator";
-    public static final String LANGUAGE_LOADER_SERVICE = "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider";
-    public static final String TRANSFORMATION_SERVICE = "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
+    public static final String CANDIDATE_LOCATOR_SERVICE = LoaderServicePaths.FORGE_MOD_LOCATOR;
+    public static final String DEPENDENCY_LOCATOR_SERVICE = LoaderServicePaths.FORGE_DEPENDENCY_LOCATOR;
+    public static final String LANGUAGE_LOADER_SERVICE = LoaderServicePaths.FORGE_LANGUAGE_PROVIDER;
+    public static final String TRANSFORMATION_SERVICE = LoaderServicePaths.TRANSFORMATION_SERVICE;
 
     // Services requiring active work: candidate/dependency locators are replayed, and a
     // transformation service's lifecycle is forwarded (see AutoModpackTransformationService).
@@ -85,8 +86,12 @@ public final class EarlyServiceLayer {
     // IDependencyLocator (run post-discovery) and language providers.
     private static final Set<String> HANDLED_SERVICES = computeHandledServices();
 
-    /** Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}. */
-    public static Set<String> knownServices() {
+    /**
+     * Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}.
+     * Used to narrow a jar's raw service set (see {@link #inspect}) so a legacy/removed SPI this
+     * loader version doesn't handle can't wrongly block {@link #eligibleForInPlace}.
+     */
+    private static Set<String> knownServices() {
         return HANDLED_SERVICES;
     }
 
@@ -283,10 +288,9 @@ public final class EarlyServiceLayer {
         Set<String> services = Set.of();
         Map<String, List<String>> impls = new HashMap<>();
         try (FileSystem fs = FileSystems.newFileSystem(jar)) {
-            // Explicit "forge": this can run before Constants.LOADER is set, so we must name the
-            // live service namespace ourselves.
-            services = FileInspection.getSpecificServices(fs, "forge");
-            services.retainAll(knownServices());
+            // Scoped to what this loader version actually handles (knownServices()), so a legacy/
+            // removed SPI doesn't wrongly make an otherwise in-place-able mod look unhandleable.
+            services = FileInspection.getServices(fs, knownServices());
             for (String service : ACTIVELY_RUN_SERVICES) {
                 if (Files.exists(fs.getPath(service))) {
                     activelyRun = true;

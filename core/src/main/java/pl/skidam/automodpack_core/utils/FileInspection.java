@@ -9,7 +9,7 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
-import pl.skidam.automodpack_core.loader.ModpackLoaderService;
+import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 import java.io.*;
@@ -356,51 +356,13 @@ public class FileInspection {
         return name.endsWith("mods.toml") || name.endsWith("mod.json");
     }
 
-    // ITransformationService is a ModLauncher boot-layer service shared by forge and neoforge,
-    // discovered before mod discovery - counts for the copy decision on either loader.
-    private static final String TRANSFORMATION_SERVICE =
-            "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
-
-    private static final Set<String> FORGE_SERVICES = Set.of(
-            "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
-            "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
-            "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
-            TRANSFORMATION_SERVICE
-    );
-
-    // Broad, cross-version set of NeoForge service files used to tell a service mod apart from a
-    // plain mod. The force-copy decision narrows this to what the running loader version actually
-    // handles via ModpackLoaderService#knownServices; this set is only the fallback.
-    private static final Set<String> NEOFORGE_SERVICES = Set.of(
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader",
-            "META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
-            "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper",
-            "META-INF/services/net.neoforged.neoforgespi.earlywindow.ImmediateWindowProvider",
-            // Coremod transformers are collected by FML after mod discovery from the GAME layer
-            // (see EarlyServiceLayer) - listed so the copy decision accounts for it.
-            "META-INF/services/net.neoforged.neoforgespi.coremod.ICoreMod",
-            TRANSFORMATION_SERVICE
-    );
-
     /**
-     * The loader-service files that matter on the current loader. A cross-platform mod (e.g. Async
-     * Logger) ships service files for both Forge and NeoForge, but only the running loader's
-     * namespace is live, so counting the other would wrongly force a copy. Fabric/unknown loaders
-     * keep the full union.
+     * Whether this jar ships any recognized loader-service file, root or nested - used to tell a
+     * service mod apart from a plain mod. Recognition is loader-agnostic (the running loader isn't
+     * known yet in all callers), so this checks the full cross-loader union.
      */
-    private static Set<String> knownServices(String loader) {
-        if ("neoforge".equals(loader)) return NEOFORGE_SERVICES;
-        if ("forge".equals(loader)) return FORGE_SERVICES;
-        Set<String> union = new HashSet<>(FORGE_SERVICES);
-        union.addAll(NEOFORGE_SERVICES);
-        return union;
-    }
-
     public static boolean hasSpecificServices(FileSystem fs) {
-        Set<String> known = knownServices(getLoader());
+        Set<String> known = LoaderServicePaths.ALL_SERVICES;
         // Short-circuit on the first root match (the common case for service mods) before paying
         // for the nested jarjar scan - isMod/isModCompatible call this over every mod.
         for (String service : known) {
@@ -414,40 +376,29 @@ public class FileInspection {
     }
 
     /**
-     * The known ({@link #knownServices(String)}) loader-service files this jar provides, both at its
-     * root and inside any {@code META-INF/jarjar} nested jars. A mod is left in the modpack folder
-     * only when every service it ships can be handled in place
-     * ({@link ModpackLoaderService#inPlaceHandleableServices}).
+     * The {@code ofInterest} loader-service files this jar provides, both at its root and inside any
+     * {@code META-INF/jarjar} nested jars. Callers pass whichever set is relevant to them (e.g. a
+     * loader module's own known/handleable services) instead of a hardcoded loader namespace.
      */
-    public static Set<String> getSpecificServices(FileSystem fs) {
-        return getSpecificServices(fs, getLoader());
-    }
-
-    /**
-     * As {@link #getSpecificServices(FileSystem)}, but with an explicit {@code loader} instead of the
-     * global {@link Constants#LOADER} - needed by the early-service bootstrapper, which runs before
-     * {@code Constants.LOADER} is populated.
-     */
-    public static Set<String> getSpecificServices(FileSystem fs, String loader) {
-        Set<String> known = knownServices(loader);
+    public static Set<String> getServices(FileSystem fs, Set<String> ofInterest) {
         Set<String> found = new HashSet<>();
 
         // Root FileSystem
-        for (String service : known) {
+        for (String service : ofInterest) {
             if (Files.exists(fs.getPath(service))) {
                 found.add(service);
             }
         }
 
         // Nested JARs in META-INF/jarjar
-        collectSpecificServicesNested(fs, known, found, false);
+        collectSpecificServicesNested(fs, ofInterest, found, false);
 
         return found;
     }
 
     /**
      * @param stopAtFirst {@code true} to stop at the first match (the {@link #hasSpecificServices}
-     *                     hot path), {@code false} to collect every match ({@link #getSpecificServices}).
+     *                     hot path), {@code false} to collect every match ({@link #getServices}).
      */
     private static void collectSpecificServicesNested(FileSystem fs, Set<String> known, Set<String> found, boolean stopAtFirst) {
         Path jarJarDir = fs.getPath("META-INF", "jarjar");

@@ -12,23 +12,11 @@ public interface ModpackLoaderService {
     List<FileInspection.Mod> getModpackNestedConflicts(Path modpackDir, FileMetadataCache cache); // Returns list of mods from the modpack Dir that are conflicting with the mods from standard mods dir
 
     /**
-     * Service files (paths under {@code META-INF/services/}, matching
-     * {@link FileInspection#getSpecificServices}) that this loader can run directly from the
-     * modpack folder, so a mod shipping only these never needs copying into the standard
-     * {@code mods/} directory. The default is none.
+     * Service files (paths under {@code META-INF/services/}) this loader generation cannot host in
+     * place - a modpack mod shipping any of these must be copied into the standard {@code mods/}
+     * directory instead of being left in the modpack folder. The default is none.
      */
-    default Set<String> inPlaceHandleableServices() {
-        return Set.of();
-    }
-
-    /**
-     * Service files that the running loader version actually handles - a superset of
-     * {@link #inPlaceHandleableServices()}. The force-copy decision counts only services in this
-     * set: a service the running version doesn't handle (a legacy/removed SPI, or an inert
-     * cross-loader file) must not be copied, since the loader wouldn't process it there either.
-     * The default is empty, falling back to {@link FileInspection}'s cross-version service set.
-     */
-    default Set<String> knownServices() {
+    default Set<String> forceCopyServices() {
         return Set.of();
     }
 }

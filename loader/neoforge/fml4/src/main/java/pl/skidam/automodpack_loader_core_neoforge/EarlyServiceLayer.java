@@ -13,6 +13,7 @@ import net.neoforged.neoforgespi.locating.IModFile;
 import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
@@ -57,13 +58,13 @@ public final class EarlyServiceLayer {
 
     private EarlyServiceLayer() {}
 
-    public static final String GRAPHICS_BOOTSTRAPPER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper";
-    public static final String CANDIDATE_LOCATOR_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator";
-    public static final String DEPENDENCY_LOCATOR_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator";
-    public static final String LANGUAGE_LOADER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.language.IModLanguageLoader";
-    public static final String COREMOD_SERVICE = "META-INF/services/net.neoforged.neoforgespi.coremod.ICoreMod";
-    public static final String TRANSFORMATION_SERVICE = "META-INF/services/cpw.mods.modlauncher.api.ITransformationService";
-    public static final String MOD_FILE_READER_SERVICE = "META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader";
+    public static final String GRAPHICS_BOOTSTRAPPER_SERVICE = LoaderServicePaths.NEOFORGE_GRAPHICS_BOOTSTRAPPER;
+    public static final String CANDIDATE_LOCATOR_SERVICE = LoaderServicePaths.NEOFORGE_CANDIDATE_LOCATOR;
+    public static final String DEPENDENCY_LOCATOR_SERVICE = LoaderServicePaths.NEOFORGE_DEPENDENCY_LOCATOR;
+    public static final String LANGUAGE_LOADER_SERVICE = LoaderServicePaths.NEOFORGE_LANGUAGE_LOADER;
+    public static final String COREMOD_SERVICE = LoaderServicePaths.NEOFORGE_COREMOD;
+    public static final String TRANSFORMATION_SERVICE = LoaderServicePaths.TRANSFORMATION_SERVICE;
+    public static final String MOD_FILE_READER_SERVICE = LoaderServicePaths.NEOFORGE_MOD_FILE_READER;
 
     // Services that require active work to run in place (fired/invoked/forwarded by this class). A
     // jar must declare at least one of these at its root to be worth bootstrapping in place; these
@@ -89,8 +90,12 @@ public final class EarlyServiceLayer {
     // counts only services in here: one the loader doesn't handle can't be fixed by copying either.
     private static final Set<String> HANDLED_SERVICES = computeHandledServices();
 
-    /** Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}. */
-    public static Set<String> knownServices() {
+    /**
+     * Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}.
+     * Used to narrow a jar's raw service set (see {@link #inspect}) so a legacy/removed SPI this
+     * loader version doesn't handle can't wrongly block {@link #eligibleForInPlace}.
+     */
+    private static Set<String> knownServices() {
         return HANDLED_SERVICES;
     }
 
@@ -110,8 +115,8 @@ public final class EarlyServiceLayer {
             // know NeoForge handles (the ones we host in place, plus the two we deliberately copy).
             LOGGER.warn("[AutoModpack] Could not read the loader's early-service list; using the built-in fallback", t);
             handled.addAll(HANDLEABLE_SERVICES);
-            handled.add("META-INF/services/net.neoforged.neoforgespi.locating.IModFileReader");
-            handled.add("META-INF/services/net.neoforged.neoforgespi.earlywindow.ImmediateWindowProvider");
+            handled.add(MOD_FILE_READER_SERVICE);
+            handled.add(LoaderServicePaths.NEOFORGE_IMMEDIATE_WINDOW_PROVIDER);
         }
         handled.add(COREMOD_SERVICE);         // ICoreMod - collected by FML's coremod pass
         handled.add(LANGUAGE_LOADER_SERVICE); // IModLanguageLoader
@@ -176,13 +181,10 @@ public final class EarlyServiceLayer {
         Map<String, List<String>> impls = new HashMap<>();
         boolean standalone = false;
         try (FileSystem fs = FileSystems.newFileSystem(jar)) {
-            // Explicit "neoforge": this runs from the early-service bootstrapper, before
-            // Constants.LOADER is set, so we must name the live service namespace ourselves
-            // (this module is always NeoForge). Forge-namespace service files are inert here.
-            services = FileInspection.getSpecificServices(fs, "neoforge");
-            // Keep only what this loader version actually handles, so a legacy/removed SPI (e.g. the
-            // old IModLocator) doesn't wrongly make an otherwise in-place-able mod look unhandleable.
-            services.retainAll(knownServices());
+            // Scoped to what this loader version actually handles (knownServices()), so a legacy/
+            // removed SPI (e.g. the old IModLocator) doesn't wrongly make an otherwise in-place-able
+            // mod look unhandleable.
+            services = FileInspection.getServices(fs, knownServices());
             standalone = Files.exists(fs.getPath("META-INF/neoforge.mods.toml"));
             for (String service : ACTIVELY_RUN_SERVICES) {
                 if (Files.exists(fs.getPath(service))) {

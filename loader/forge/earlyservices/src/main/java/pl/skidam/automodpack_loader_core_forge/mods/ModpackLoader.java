@@ -4,12 +4,9 @@ import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
-import pl.skidam.automodpack_loader_core_forge.EarlyServiceLayer;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
@@ -18,20 +15,8 @@ public class ModpackLoader implements ModpackLoaderService {
     public static String CONNECTOR_MODS_PROPERTY = "connector.additionalModLocations";
     public static List<Path> modsToLoad = new ArrayList<>();
 
-    @Override
-    public Set<String> inPlaceHandleableServices() {
-        // Single source of truth, shared with the bootstrapper: the candidate/dependency locators
-        // run in place, a transformation service's lifecycle is forwarded, and language providers
-        // are picked up from the GAME layer - so a mod shipping only these never needs copying.
-        return EarlyServiceLayer.HANDLEABLE_SERVICES;
-    }
-
-    @Override
-    public Set<String> knownServices() {
-        // The exact set THIS Forge version promotes to the SERVICE layer early. Lets the copy
-        // decision ignore services this version doesn't handle - a copy wouldn't help them.
-        return EarlyServiceLayer.knownServices();
-    }
+    // No override of forceCopyServices(): this Forge generation can host every service it handles
+    // in place (see EarlyServiceLayer), so nothing forces a copy.
 
     @Override
     public void loadModpack(List<Path> modpackMods) {

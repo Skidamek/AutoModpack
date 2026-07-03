@@ -1,10 +1,9 @@
 package pl.skidam.automodpack_loader_core_neoforge.mods;
 
+import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.loader.ModpackLoaderService;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
-
-import pl.skidam.automodpack_loader_core_neoforge.EarlyServiceLayer;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -19,18 +18,11 @@ public class ModpackLoader implements ModpackLoaderService {
     public static List<Path> modsToLoad = new ArrayList<>();
 
     @Override
-    public Set<String> inPlaceHandleableServices() {
-        // Single source of truth, shared with the in-place bootstrapper: the GraphicsBootstrapper
-        // fires in place, the candidate/dependency locators run in place, and language loaders are
-        // picked up from the GAME layer - so a mod shipping only these never needs copying.
-        return EarlyServiceLayer.HANDLEABLE_SERVICES;
-    }
-
-    @Override
-    public Set<String> knownServices() {
-        // The exact set THIS NeoForge version handles (read from its own TransformerDiscovererConstants).
-        // Lets the copy decision ignore services this version doesn't handle - a copy wouldn't help them.
-        return EarlyServiceLayer.knownServices();
+    public Set<String> forceCopyServices() {
+        // NeoForge picks the early-window provider and creates the window in the same call, before
+        // and out of reach of anything we can do from the modpack folder - a mod needing it must be
+        // copied to standard mods/.
+        return Set.of(LoaderServicePaths.NEOFORGE_IMMEDIATE_WINDOW_PROVIDER);
     }
 
     @Override
