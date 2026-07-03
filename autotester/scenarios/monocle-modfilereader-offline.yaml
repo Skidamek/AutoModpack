@@ -1,17 +1,26 @@
 id: monocle-modfilereader-offline
 description: |
   Offline / client-only proof that a mod shipping an IModFileReader loads straight from
-  AutoModpack's modpack folder, with NO copy into the standard mods/ directory.
+  AutoModpack's modpack folder, with NO copy into the standard mods/ directory - on every
+  NeoForge generation (fml4 via the ModLauncher bridge, fml10/fml11 via the flat chain; the
+  reader-splice into ModDiscoverer.modFileReaders is the same reflection on all three).
 
-  Monocle (an Iris + Embeddium compatibility layer) ships both an IModFileCandidateLocator
-  (MonocleModLocator) and an IModFileReader (IrisModParser). The reader is what lets Iris be
-  re-parsed to run on Embeddium. Natively the loader collects readers from the SERVICE layer,
-  which AutoModpack's in-place discovery never reaches - so AutoModpack forwards Monocle's
-  reader into the live discovery pipeline (ModDiscoverer.modFileReaders), letting Iris load in
-  place through it.
+  1.21.1 (fml4): Monocle (an Iris + Embeddium compatibility layer) ships both an
+  IModFileCandidateLocator (MonocleModLocator) and an IModFileReader (IrisModParser). The
+  reader is what lets Iris be re-parsed to run on Embeddium. Natively the loader collects
+  readers from the SERVICE layer, which AutoModpack's in-place discovery never reaches - so
+  AutoModpack forwards Monocle's reader into the live discovery pipeline
+  (ModDiscoverer.modFileReaders), letting Iris load in place through it.
 
-  Staged together: Monocle + its hard deps Iris and Embeddium. Crash-tolerant: headless
-  software GL may kill the client at the first frame, after everything has loaded.
+  1.21.10/26.1 (fml10/fml11): Monocle has no build there, so TouchController is the reader
+  vehicle instead - it ships a root IModFileReader (NeoV10ModReader) that its own multi-version
+  sub-jars (touchcontroller_common/api, combine) load through; if the forwarded reader didn't
+  run, those required sub-mods would be missing and FML would fail with mandatory-dependency
+  errors. It is also a standalone mod (root neoforge.mods.toml), so it additionally exercises
+  the fml10/fml11 standalone path (added as a normal mod AND its reader replayed).
+
+  Crash-tolerant: headless software GL may kill the client at the first frame, after
+  everything has loaded.
 
 network: host
 mode: client-only
@@ -21,10 +30,14 @@ timeouts:
 
 targets:
   - 1.21.1-neoforge
+  - 1.21.10-neoforge
+  - 26.1-neoforge
 
 flow:
   - do: stage_modpack
     name: stage Monocle + Iris + Embeddium into the modpack folder (NOT standard mods/)
+    when:
+      target: [1.21.1-neoforge]
     mods:
       - url: https://cdn.modrinth.com/data/apRGdwku/versions/klSc1ush/monocle-0.2.2.ms.jar
         sha512: 233d65f722329c7dbd3c77992f5d400dfe6e76788207da8d0d4669526e662852d0f0832dc3af23cc6373577462c5fb2153e295267e73d6023e125164ad94d8eb
@@ -32,37 +45,100 @@ flow:
         sha512: 57b8026a3c3c433cf6123d63dc6ce7e11f6d480a72926370db1fc7f2b06059bc16a753ecd7e7af659c19e90b592103196b0e89585ce4f0744a4ca433f59bcf1a
       - url: https://cdn.modrinth.com/data/sk9rgfiA/versions/J7b96IEd/embeddium-1.0.15%2Bmc1.21.1.jar
         sha512: d073cf52dcf2aeec3ac9f746d4571c7b4b1ad746fa11d4bcc5a21a264ae3119ac6d341d08cc9a70042cf0ddffc3b3ef3329ed30217035d4551c9d6788b6dc1e6
+  - do: stage_modpack
+    name: stage TouchController (root IModFileReader) + Kotlin-for-Forge into the modpack folder
+    when:
+      target: [1.21.10-neoforge, 26.1-neoforge]
+    mods:
+      # one jar covers both targets; its combine/common/api sub-mods are bundled inside and
+      # only reachable through its own IModFileReader
+      - url: https://cdn.modrinth.com/data/U7KwGAnT/versions/m7LbcM1C/TouchController-0.3.1-alpha12%2Bneoforge.jar
+        sha512: eda011fa72c3adc79e8d3986659e7aeae29b960ceb5634be28351d8098a1ceffeff4a285b8a4304b432171631c007857e86914c4abd497e6496e7599a91d0f06
+      - url: https://cdn.modrinth.com/data/ordsPcFz/versions/WSKgpZoB/kotlinforforge-6.3.0-all.jar
+        sha512: 0092fc7b4db1e35e53e7ddb5e7b4fa1dc5654c9100cdb298ad1b802308a470e75da21019d25774e643ff43bb79e9fb11d03170321504e0e471b4c36c00fad339
   - do: launch_client
     name: boot the client against the pre-staged modpack
   - do: wait_for
-    name: Monocle's reader forwarded in place and Iris loaded through it
+    name: the in-place IModFileReader was forwarded into mod discovery
     timeout: 420s
     until:
       log:
         container: client
         matches_all:
           - 'Bootstrapping \d+ early-service'
-          # the IModFileReader (IrisModParser) is spliced into the live discovery pipeline
+          - 'Forwarded \d+ in-place IModFileReader'
+  - do: wait_for
+    name: Monocle's reader + locator ran and Iris loaded through them (fml4)
+    when:
+      target: [1.21.1-neoforge]
+    timeout: 60s
+    until:
+      log:
+        container: client
+        matches_all:
           - 'Forwarded \d+ in-place IModFileReader.*monocle'
           # Monocle's own candidate locator runs in place
           - 'Running in-place candidate locator.*MonocleModLocator'
           # Iris and Embeddium end up in the final mod list (Iris only loads via Monocle's reader)
           - 'Iris.*\(iris\)'
           - 'Embeddium.*\(embeddium\)'
+  - do: wait_for
+    name: TouchController's reader reached mod discovery (fml10/fml11)
+    when:
+      target: [1.21.10-neoforge, 26.1-neoforge]
+    timeout: 120s
+    until:
+      log:
+        container: client
+        matches_all:
+          - 'Forwarded \d+ in-place IModFileReader.*TouchController'
+          # its dependency locator (same in-place jar) runs too
+          - 'Running in-place dependency locator.*TouchController'
   - do: wait_exit
-    name: let the client run through to its (headless-GL) exit
+    name: let the client run through to its (headless-GL) exit, or stay alive
     expect: any
+    or_alive: true
     timeout: 300s
+  # fml10/fml11 print no "Name (modid)" mod-list line and TouchController's headless init is
+  # silent, so the positive proof comes from debug.log: FML validated the jar as a real mod AND
+  # the multijar locator (the reader's sub-mod machinery) actually ran. If the reader hadn't
+  # worked, touchcontroller's required sub-mods (combine, touchcontroller_common/api - bundled,
+  # only reachable through it) would be missing and FML would abort with mandatory-dependency
+  # errors instead of reaching the main menu.
   - do: assert
-    name: Monocle/Iris loaded in place cleanly - no reader failure, no missing classes
+    name: TouchController parsed as a mod and its multijar machinery ran (fml10/fml11)
+    when:
+      target: [1.21.10-neoforge, 26.1-neoforge]
+    that:
+      log:
+        file: logs/debug.log
+        matches_all:
+          - 'Found valid mod file TouchController.*\{touchcontroller\}'
+          - 'MultiJar loader on Minecraft'
+  # Gated: on fml10/fml11 TouchController ships BOTH generations' readers and the wrong-era one
+  # (NeoV3) always fails to instantiate - native FML logs the identical ServiceConfigurationError
+  # for it, so that line is expected noise there, but on 1.21.1 any instantiation failure is real.
+  - do: assert
+    name: Monocle's reader instantiated cleanly (fml4)
+    when:
+      target: [1.21.1-neoforge]
+    that:
+      log:
+        container: client
+        not_matches:
+          - 'Failed to instantiate IModFileReader'
+  - do: assert
+    name: reader-shipping mod loaded in place cleanly - no reader failure, no missing classes
     that:
       log:
         container: client
         not_matches:
           - 'Could not forward IModFileReader'
-          - 'Failed to instantiate IModFileReader'
           - 'NoClassDefFoundError.*monocle'
           - 'ClassNotFoundException.*monocle'
+          - 'NoClassDefFoundError.*touchcontroller'
+          - 'ClassNotFoundException.*touchcontroller'
+          - 'Missing or unsupported mandatory dependencies'
 
 serverFiles:
   modpackName: amp-autotest
