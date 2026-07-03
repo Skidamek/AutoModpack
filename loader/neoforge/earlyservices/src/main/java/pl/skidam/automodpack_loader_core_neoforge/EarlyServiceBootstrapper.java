@@ -2,17 +2,12 @@ package pl.skidam.automodpack_loader_core_neoforge;
 
 import net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper;
 import pl.skidam.automodpack_core.Constants;
-import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-import java.io.InputStream;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -43,7 +38,6 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
     @Override
     public void bootstrap(String[] arguments) {
         try {
-            Path gameDir = gameDir(arguments);
             EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
             EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
             String launchTarget = argValue(arguments, "--launchTarget");
@@ -58,13 +52,16 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             // that changes which mods are early-service mods is already reflected in the folder we
             // scan below, in the same boot - no restart needed. NeoForge fml4 does the same from its
             // own GraphicsBootstrapper (a separate implementation, since it still has a competing
-            // ITransformationService.onLoad phase and its own module-layer bridge).
+            // ITransformationService.onLoad phase and its own module-layer bridge). It also loads
+            // the config and publishes Constants.selectedModpackDir / Constants.MODS_DIR, which
+            // everything below reads.
             net.neoforged.fml.loading.progress.ProgressMeter progress =
                     net.neoforged.fml.loading.progress.StartupNotificationManager.prependProgressBar("[Automodpack] Preload", 0);
             new pl.skidam.automodpack_loader_core.Preload();
             progress.complete();
 
-            Path modpackMods = resolveSelectedModpackMods(gameDir);
+            // Set by Preload only when a modpack is selected on a client - null means nothing to do.
+            Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
             if (modpackMods == null || !Files.isDirectory(modpackMods)) {
                 return;
             }
@@ -82,7 +79,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
                         continue;
                     }
                     if (standardModHashes == null) {
-                        standardModHashes = hashStandardMods(gameDir);
+                        standardModHashes = HashUtils.getJarHashes(Constants.MODS_DIR);
                     }
                     String hash = HashUtils.getHash(jar);
                     if (hash != null && standardModHashes.contains(hash)) {
@@ -100,7 +97,22 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
             ClassLoader childLoader = appendToFmlClassLoaderChain(earlyServiceJars);
             if (childLoader == null) {
-                return; // logged inside
+                // The batched append failed (logged inside) - e.g. one unreadable jar poisoning the
+                // whole JarContents list. Retry each jar on its own so only the jars that actually
+                // fail stay out; each append parents onto the current chain, so the last returned
+                // loader resolves every successfully appended jar.
+                List<Path> appended = new ArrayList<>();
+                for (Path jar : earlyServiceJars) {
+                    ClassLoader loader = appendToFmlClassLoaderChain(List.of(jar));
+                    if (loader != null) {
+                        childLoader = loader;
+                        appended.add(jar);
+                    }
+                }
+                earlyServiceJars = appended;
+                if (earlyServiceJars.isEmpty()) {
+                    return;
+                }
             }
 
             EarlyServiceLayer.register(earlyServiceJars, childLoader);
@@ -156,65 +168,13 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
             Method getCurrentClassLoader = fmlLoaderClass.getMethod("getCurrentClassLoader");
             return (ClassLoader) getCurrentClassLoader.invoke(current);
         } catch (Throwable t) {
-            Constants.LOGGER.error("[AutoModpack] Could not append the early-service jars to FMLLoader's classloader chain; none of them will be bootstrapped in place", t);
+            Constants.LOGGER.error("[AutoModpack] Could not append early-service jar(s) {} to FMLLoader's classloader chain", jars.stream().map(Path::getFileName).toList(), t);
             return null;
         }
     }
 
     private static boolean isJar(Path path) {
         return Files.isRegularFile(path) && path.getFileName().toString().toLowerCase().endsWith(".jar");
-    }
-
-    private Path resolveSelectedModpackMods(Path gameDir) {
-        String selected = null;
-
-        try (InputStream is = getClass().getResourceAsStream("/" + Constants.clientConfigFileOverrideResource)) {
-            if (is != null) {
-                String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                Jsons.ClientConfigFieldsV2 config = ConfigTools.load(json, Jsons.ClientConfigFieldsV2.class);
-                if (config != null) selected = config.selectedModpack;
-            }
-        } catch (Exception ignored) {
-        }
-
-        if (selected == null) {
-            Jsons.ClientConfigFieldsV2 config = ConfigTools.load(gameDir.resolve(Constants.clientConfigFile), Jsons.ClientConfigFieldsV2.class);
-            if (config != null) selected = config.selectedModpack;
-        }
-
-        if (selected == null || selected.isBlank()) {
-            return null;
-        }
-
-        return gameDir.resolve(Constants.modpacksDir).resolve(selected).resolve("mods");
-    }
-
-    private Set<String> hashStandardMods(Path gameDir) {
-        Set<String> hashes = new HashSet<>();
-        Path modsDir = gameDir.resolve("mods");
-        if (!Files.isDirectory(modsDir)) {
-            return hashes;
-        }
-        try (Stream<Path> stream = Files.list(modsDir)) {
-            stream.filter(EarlyServiceBootstrapper::isJar).forEach(jar -> {
-                String hash = HashUtils.getHash(jar);
-                if (hash != null) hashes.add(hash);
-            });
-        } catch (Exception e) {
-            Constants.LOGGER.debug("[AutoModpack] Failed to list standard mods directory while bootstrapping early services", e);
-        }
-        return hashes;
-    }
-
-    private static Path gameDir(String[] arguments) {
-        if (arguments != null) {
-            for (int i = 0; i < arguments.length - 1; i++) {
-                if ("--gameDir".equals(arguments[i])) {
-                    return Path.of(arguments[i + 1]).toAbsolutePath().normalize();
-                }
-            }
-        }
-        return Path.of(".").toAbsolutePath().normalize();
     }
 
     private static String argValue(String[] arguments, String name) {

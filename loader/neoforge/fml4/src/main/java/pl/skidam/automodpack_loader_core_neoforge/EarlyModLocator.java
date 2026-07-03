@@ -23,6 +23,13 @@ public class EarlyModLocator implements IModFileCandidateLocator {
             // loader skips SERVICE-layer jars during normal discovery.
             if (EarlyServiceLayer.isEarlyServiceJar(path)) {
                 boolean coremod = EarlyServiceLayer.isCoremodJar(path);
+                // Deliberately coremod-only, NOT every standalone jar: this mirrors native NeoForge,
+                // which claims any mods/ jar shipping a TransformerDiscovererConstants service for
+                // the SERVICE layer and excludes it from mod discovery - even if it has a root
+                // neoforge.mods.toml. Standalone non-coremod service jars (asynclogger, Monocle)
+                // ship their real mod behind their own dependency/candidate locator (replayed
+                // below); addPath-ing their outer jar too would load the mod twice. ICoreMod is not
+                // in that service set, so a standalone coremod jar DOES load natively as a mod.
                 if (coremod && EarlyServiceLayer.isStandaloneModFile(path)) {
                     // A jar that ships a coremod AND is itself a mod (root neoforge.mods.toml) -
                     // a regular mod with an inline coremod. It loads here as its real self, mods.toml

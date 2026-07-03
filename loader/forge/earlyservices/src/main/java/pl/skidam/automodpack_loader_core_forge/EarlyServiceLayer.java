@@ -48,12 +48,11 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
  * because Forge's own SPI surface is smaller/older than NeoForge's:
  *
  * <ul>
- *   <li>No {@code GraphicsBootstrapper} equivalent - Forge's {@code ImmediateWindowProvider} is not
- *       one of the loader's own early-scanned services, so there is no hook to build the child
- *       layer before mod discovery starts the way {@link pl.skidam.automodpack_loader_core_forge}
- *       (NeoForge's) {@code EarlyServiceBootstrapper} does. Instead {@link #bootstrap} runs from
- *       {@link EarlyModLocator#scanMods}, the earliest point AutoModpack itself is invoked (it is
- *       itself found early via its own {@code IModLocator} service file).</li>
+ *   <li>No {@code GraphicsBootstrapper} equivalent - Forge has no pre-ModLauncher hook at all, so
+ *       there is no way to build the child layer before ModLauncher's own service lifecycle the way
+ *       NeoForge's {@code EarlyServiceBootstrapper} does. Instead {@link #bootstrap} runs from
+ *       {@link AutoModpackTransformationService#onLoad}, the earliest point ModLauncher hands
+ *       control to AutoModpack (confirmed live to fire before the {@code IModLocator} pass).</li>
  *   <li>No {@code ICoreMod} equivalent worth supporting - Forge's coremod system
  *       ({@code ICoreModProvider}) is a JavaScript-transformer mechanism, not a per-jar SPI, and is
  *       vanishingly rare in modern mods; skipped entirely.</li>
@@ -88,10 +87,16 @@ public final class EarlyServiceLayer {
             .concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
             .collect(Collectors.toUnmodifiableSet());
 
-    // Every service the running Forge version actually promotes to the SERVICE layer before mod
-    // discovery - read from the loader itself (ModDirTransformerDiscoverer.SERVICES on 1.20.1+;
-    // older versions, e.g. 1.18.2, hardcode the check instead of exposing a field) so it is exact
-    // for THIS version rather than a hand-maintained list.
+    // The services the running Forge version's own ModDirTransformerDiscoverer scans for - a
+    // mods/-dir jar shipping ANY of these at its root is claimed for the SERVICE layer and EXCLUDED
+    // from mod discovery by ModsFolderLocator (it filters allExcluded()), even when the jar has a
+    // root mods.toml (verified against fmlloader 1.18.2 and 1.20.1 bytecode). Read from the loader
+    // itself (the SERVICES field on 1.20.1+; 1.18.2 hardcodes the check instead of exposing a
+    // field, hence the fallback) so it is exact for THIS version rather than a hand-maintained list.
+    private static final Set<String> NATIVE_EXCLUSION_SERVICES = computeNativeExclusionServices();
+
+    // Every service the running Forge version actually handles: the natively-excluded set above,
+    // plus IDependencyLocator (run from the SERVICE layer after discovery) and language providers.
     private static final Set<String> HANDLED_SERVICES = computeHandledServices();
 
     /** Service files this loader version actually discovers/runs; superset of {@link #HANDLEABLE_SERVICES}. */
@@ -99,8 +104,8 @@ public final class EarlyServiceLayer {
         return HANDLED_SERVICES;
     }
 
-    private static Set<String> computeHandledServices() {
-        Set<String> handled = new HashSet<>();
+    private static Set<String> computeNativeExclusionServices() {
+        Set<String> excluded = new HashSet<>();
         try {
             Class<?> discoverer = Class.forName("net.minecraftforge.fml.loading.ModDirTransformerDiscoverer");
             java.lang.reflect.Field field = discoverer.getDeclaredField("SERVICES");
@@ -108,16 +113,23 @@ public final class EarlyServiceLayer {
             Object services = field.get(null);
             if (services instanceof Set<?> names) {
                 for (Object name : names) {
-                    handled.add(String.valueOf(name));
+                    // SERVICES holds dotted class names (e.g. "cpw.mods.modlauncher.api.
+                    // ITransformationService"); everywhere else we compare full service-file paths.
+                    excluded.add("META-INF/services/" + name);
                 }
             }
         } catch (Throwable t) {
             // No SERVICES field on this Forge version (e.g. 1.18.2, which hardcodes the check
-            // instead): fall back to the services we know Forge handles.
+            // instead): fall back to the services we know it excludes on.
             LOGGER.warn("[AutoModpack] Could not read the loader's early-service list; using the built-in fallback", t);
-            handled.add(CANDIDATE_LOCATOR_SERVICE);
-            handled.add(TRANSFORMATION_SERVICE);
+            excluded.add(CANDIDATE_LOCATOR_SERVICE);
+            excluded.add(TRANSFORMATION_SERVICE);
         }
+        return Set.copyOf(excluded);
+    }
+
+    private static Set<String> computeHandledServices() {
+        Set<String> handled = new HashSet<>(NATIVE_EXCLUSION_SERVICES);
         handled.add(DEPENDENCY_LOCATOR_SERVICE);
         handled.add(LANGUAGE_LOADER_SERVICE);
         return Set.copyOf(handled);
@@ -126,8 +138,9 @@ public final class EarlyServiceLayer {
     // The classloader of a handled modpack jar's child SERVICE layer (which holds its early-service
     // classes) plus that layer itself (so the GAME-layer bridge can wire up JPMS read edges between
     // the child module(s) and the GAME modules) - always written together by register() and mostly
-    // read together, so one map keyed by jar keeps them from drifting out of sync.
-    private record JarService(ClassLoader classLoader, ModuleLayer layer) {}
+    // read together, so one map keyed by jar keeps them from drifting out of sync. moduleName is the
+    // jar's own module on that (shared) layer, so the bridge can scope its work to this jar alone.
+    private record JarService(ClassLoader classLoader, ModuleLayer layer, String moduleName) {}
 
     // Maps each handled modpack jar to its child-layer classloader/layer. Populated by bootstrap().
     private static final Map<Path, JarService> JAR_SERVICES = new ConcurrentHashMap<>();
@@ -153,11 +166,14 @@ public final class EarlyServiceLayer {
      * locators so their real (inner) mods are discovered. Idempotent - safe to call from every
      * {@link EarlyModLocator#scanMods} invocation.
      */
-    public static void bootstrap(Path gameDir) {
+    public static void bootstrap() {
         if (!BOOTSTRAPPED.compareAndSet(false, true)) return;
 
         try {
-            Path modpackMods = resolveSelectedModpackMods(gameDir);
+            // Preload (run just before this from AutoModpackTransformationService#onLoad) loaded the
+            // config and published Constants.selectedModpackDir / Constants.MODS_DIR; selectedModpackDir
+            // is set only when a modpack is selected on a client - null means nothing to do.
+            Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
             if (modpackMods == null || !Files.isDirectory(modpackMods)) {
                 return;
             }
@@ -170,7 +186,7 @@ public final class EarlyServiceLayer {
                         continue;
                     }
                     if (standardModHashes == null) {
-                        standardModHashes = hashStandardMods(gameDir);
+                        standardModHashes = HashUtils.getJarHashes(Constants.MODS_DIR);
                     }
                     String hash = HashUtils.getHash(jar);
                     if (hash != null && standardModHashes.contains(hash)) {
@@ -220,6 +236,21 @@ public final class EarlyServiceLayer {
      * dependent on, more than one modpack-folder jar resolve exactly as it would on the real layer.
      */
     private static void buildChildLayer(List<Path> jars, ModuleLayer serviceLayer) {
+        if (buildAndRegister(jars, serviceLayer)) return;
+        // The shared resolution failed (e.g. two jars deriving the same automatic module name throw
+        // a ResolutionException for the whole batch). Retry each jar on its own layer so one bad jar
+        // doesn't take every other early-service mod down with it - cross-jar `requires` edges are
+        // lost in this degraded mode, but only the jars that actually fail resolution stay out.
+        for (Path jar : jars) {
+            buildAndRegister(List.of(jar), serviceLayer);
+        }
+    }
+
+    /**
+     * Resolves the given jars into one child configuration/layer/classloader and registers each in
+     * {@link #JAR_SERVICES}. Returns false - with nothing registered - if resolution fails.
+     */
+    private static boolean buildAndRegister(List<Path> jars, ModuleLayer serviceLayer) {
         try {
             SecureJar[] secureJars = new SecureJar[jars.size()];
             List<String> moduleNames = new ArrayList<>(jars.size());
@@ -238,11 +269,13 @@ public final class EarlyServiceLayer {
             classLoader.setFallbackClassLoader(EarlyServiceLayer.class.getClassLoader());
             ModuleLayer childLayer = ModuleLayer.defineModules(configuration, List.of(serviceLayer), name -> classLoader).layer();
 
-            for (Path jar : jars) {
-                JAR_SERVICES.put(canonical(jar), new JarService(classLoader, childLayer));
+            for (int i = 0; i < jars.size(); i++) {
+                JAR_SERVICES.put(canonical(jars.get(i)), new JarService(classLoader, childLayer, moduleNames.get(i)));
             }
+            return true;
         } catch (Throwable t) {
-            LOGGER.error("[AutoModpack] Could not build a shared service layer for the early-service mods; none of them will be bootstrapped in place", t);
+            LOGGER.error("[AutoModpack] Could not build a service layer for early-service jar(s) {}", jars.stream().map(Path::getFileName).toList(), t);
+            return false;
         }
     }
 
@@ -264,49 +297,6 @@ public final class EarlyServiceLayer {
         return Files.isRegularFile(path) && path.getFileName().toString().toLowerCase().endsWith(".jar");
     }
 
-    private static Path resolveSelectedModpackMods(Path gameDir) {
-        String selected = null;
-
-        try (InputStream is = EarlyServiceLayer.class.getResourceAsStream("/" + Constants.clientConfigFileOverrideResource)) {
-            if (is != null) {
-                String json = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                pl.skidam.automodpack_core.config.Jsons.ClientConfigFieldsV2 config =
-                        pl.skidam.automodpack_core.config.ConfigTools.load(json, pl.skidam.automodpack_core.config.Jsons.ClientConfigFieldsV2.class);
-                if (config != null) selected = config.selectedModpack;
-            }
-        } catch (Exception ignored) {
-        }
-
-        if (selected == null) {
-            pl.skidam.automodpack_core.config.Jsons.ClientConfigFieldsV2 config =
-                    pl.skidam.automodpack_core.config.ConfigTools.load(gameDir.resolve(Constants.clientConfigFile), pl.skidam.automodpack_core.config.Jsons.ClientConfigFieldsV2.class);
-            if (config != null) selected = config.selectedModpack;
-        }
-
-        if (selected == null || selected.isBlank()) {
-            return null;
-        }
-
-        return gameDir.resolve(Constants.modpacksDir).resolve(selected).resolve("mods");
-    }
-
-    private static Set<String> hashStandardMods(Path gameDir) {
-        Set<String> hashes = new HashSet<>();
-        Path modsDir = gameDir.resolve("mods");
-        if (!Files.isDirectory(modsDir)) {
-            return hashes;
-        }
-        try (Stream<Path> stream = Files.list(modsDir)) {
-            stream.filter(EarlyServiceLayer::isJar).forEach(jar -> {
-                String hash = HashUtils.getHash(jar);
-                if (hash != null) hashes.add(hash);
-            });
-        } catch (Exception e) {
-            LOGGER.debug("[AutoModpack] Failed to list standard mods directory while bootstrapping early services", e);
-        }
-        return hashes;
-    }
-
     public static boolean isEarlyServiceJar(Path jar) {
         return jar != null && JAR_SERVICES.containsKey(canonical(jar));
     }
@@ -325,7 +315,7 @@ public final class EarlyServiceLayer {
     }
 
     // Per-jar facts derived from a single jar mount, cached for the JVM's life.
-    private record JarInfo(boolean activelyRunInPlace, Set<String> services, Map<String, List<String>> serviceImpls, boolean standalone) {}
+    private record JarInfo(boolean activelyRunInPlace, Set<String> services, Map<String, List<String>> serviceImpls) {}
 
     private static final Map<Path, JarInfo> JAR_INFO = new ConcurrentHashMap<>();
 
@@ -337,13 +327,11 @@ public final class EarlyServiceLayer {
         boolean activelyRun = false;
         Set<String> services = Set.of();
         Map<String, List<String>> impls = new HashMap<>();
-        boolean standalone = false;
         try (FileSystem fs = FileSystems.newFileSystem(jar)) {
             // Explicit "forge": this can run before Constants.LOADER is set, so we must name the
             // live service namespace ourselves.
             services = FileInspection.getSpecificServices(fs, "forge");
             services.retainAll(knownServices());
-            standalone = Files.exists(fs.getPath("META-INF/mods.toml"));
             for (String service : ACTIVELY_RUN_SERVICES) {
                 if (Files.exists(fs.getPath(service))) {
                     activelyRun = true;
@@ -353,7 +341,7 @@ public final class EarlyServiceLayer {
         } catch (Exception e) {
             LOGGER.warn("[AutoModpack] Could not inspect {}; not handling it in place", jar.getFileName(), e);
         }
-        return new JarInfo(activelyRun, services, impls, standalone);
+        return new JarInfo(activelyRun, services, impls);
     }
 
     /** The impl class names of an {@link #ACTIVELY_RUN_SERVICES} service declared at the jar's root. */
@@ -361,20 +349,32 @@ public final class EarlyServiceLayer {
         return info(jar).serviceImpls().getOrDefault(serviceFile, List.of());
     }
 
+    /**
+     * Whether this jar's early services can all be run from the modpack folder. It must (a) declare
+     * at its root at least one service we actively run in place, (b) ship no service outside
+     * {@link #HANDLEABLE_SERVICES}, and (c) be a jar native Forge would itself claim for the SERVICE
+     * layer and exclude from mod discovery ({@code ModsFolderLocator} filters {@code
+     * ModDirTransformerDiscoverer.allExcluded()} - even for jars with a root {@code mods.toml}).
+     * (c) is what makes the in-place treatment safe: such a jar never loads as a plain mod natively,
+     * so replaying its locators and bridging its outer classes cannot double-load or shadow anything
+     * - its real mod only ever arrives through its own locators (e.g. CrashAssistant's outer and
+     * inner jar share one modId; loading both would be a duplicate-mod crash). A jar NOT natively
+     * excluded is not an early-service jar at all here: it loads as an ordinary mod, exactly as it
+     * would natively.
+     */
     public static boolean eligibleForInPlace(Path jar) {
         JarInfo info = info(jar);
-        return info.activelyRunInPlace() && HANDLEABLE_SERVICES.containsAll(info.services());
+        return info.activelyRunInPlace()
+                && HANDLEABLE_SERVICES.containsAll(info.services())
+                && nativelyServiceClaimed(info);
     }
 
-    /**
-     * Whether the jar is itself a loadable mod - it declares a root {@code mods.toml} - as opposed to
-     * a thin outer jar whose real mod is nested or absent (a split-jar shim). A standalone
-     * early-service jar is added to the GAME layer as its real self by {@link EarlyModLocator} (like
-     * any other mod), so it is excluded from the GAME-layer bridge; a non-standalone one has its outer
-     * classes bridged there instead.
-     */
-    public static boolean isStandaloneModFile(Path jar) {
-        return info(jar).standalone();
+    /** Whether native Forge would claim this jar for the SERVICE layer (see {@link #eligibleForInPlace}). */
+    private static boolean nativelyServiceClaimed(JarInfo info) {
+        for (String service : info.serviceImpls().keySet()) {
+            if (NATIVE_EXCLUSION_SERVICES.contains(service)) return true;
+        }
+        return false;
     }
 
     /**
@@ -515,16 +515,24 @@ public final class EarlyServiceLayer {
         for (Map.Entry<Path, JarService> entry : JAR_SERVICES.entrySet()) {
             Path jar = entry.getKey();
             ClassLoader childLoader = entry.getValue().classLoader();
+            // Every registered jar is one native Forge would exclude from mod discovery (see
+            // eligibleForInPlace), so none of them has a GAME-layer twin to shadow - bridge them all.
             if (!(childLoader instanceof ModuleClassLoader)) continue;
 
             try {
+                // All jars share ONE child loader/layer (see buildChildLayer), so scope the bridge
+                // to THIS jar's own module - iterating the loader's whole packageLookup would also
+                // bridge the packages of jars skipped above.
+                Module module = entry.getValue().layer().findModule(entry.getValue().moduleName()).orElse(null);
+                if (module == null) continue;
                 int bridged = 0;
-                for (String pkg : ModuleClassLoaderAccess.packageLookup(childLoader).keySet()) {
+                for (String pkg : module.getPackages()) {
                     gameParentLoaders.put(pkg, childLoader);
                     gamePackageLookup.remove(pkg);
                     bridged++;
                 }
-                gameResolvedRoots.putAll(ModuleClassLoaderAccess.resolvedRoots(childLoader));
+                Object root = ModuleClassLoaderAccess.resolvedRoots(childLoader).get(entry.getValue().moduleName());
+                if (root != null) gameResolvedRoots.put(entry.getValue().moduleName(), root);
                 ((ModuleClassLoader) childLoader).setFallbackClassLoader(gameClassLoader);
                 LOGGER.info("[AutoModpack] Bridged {} outer package(s) of {} to its early-service layer for in-place class/resource sharing", bridged, jar.getFileName());
                 linkModuleReads(gameLayer, entry.getValue().layer(), jar);

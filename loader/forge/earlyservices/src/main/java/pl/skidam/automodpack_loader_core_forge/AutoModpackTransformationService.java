@@ -27,8 +27,8 @@ import java.util.Set;
  * <p>{@code onLoad} is also where AutoModpack runs its own update/reconcile step ({@code Preload})
  * and builds the shared child layer for the modpack folder's early-service jars ({@link
  * EarlyServiceLayer#bootstrap}) - confirmed live to be the earliest hook Forge gives any mod
- * (fires before {@link EarlyModLocator#scanCandidates}, and {@code FMLPaths.GAMEDIR} is already
- * populated by this point). Running the update here, before anything scans the modpack folder,
+ * (fires before {@link EarlyModLocator#scanCandidates}). Running the update here, before
+ * anything scans the modpack folder,
  * means an update that changes which mods are early-service mods is already reflected in the
  * folder mod discovery sees later in the same boot - no restart needed.
  */
@@ -71,7 +71,7 @@ public class AutoModpackTransformationService implements ITransformationService 
         }
 
         new pl.skidam.automodpack_loader_core.Preload();
-        EarlyServiceLayer.bootstrap(net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get());
+        EarlyServiceLayer.bootstrap();
         EarlyServiceLayer.forwardOnLoad(env, otherServices);
     }
 

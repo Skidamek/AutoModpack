@@ -5,11 +5,32 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.Set;
+import java.util.stream.Stream;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 public class HashUtils {
+
+    /** The {@link #getHash} of every {@code .jar} file directly in {@code dir}; empty if it isn't a directory. */
+    public static Set<String> getJarHashes(Path dir) {
+        Set<String> hashes = new HashSet<>();
+        if (dir == null || !Files.isDirectory(dir)) {
+            return hashes;
+        }
+        try (Stream<Path> stream = Files.list(dir)) {
+            stream.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().toLowerCase().endsWith(".jar"))
+                    .forEach(jar -> {
+                        String hash = getHash(jar);
+                        if (hash != null) hashes.add(hash);
+                    });
+        } catch (Exception e) {
+            LOGGER.debug("Failed to list directory for jar hashes: {}", dir, e);
+        }
+        return hashes;
+    }
 
     public static String getHash(Path path) {
         try {

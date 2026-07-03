@@ -129,8 +129,9 @@ public final class EarlyServiceLayer {
     // The classloader of a handled modpack jar's child SERVICE layer (which holds its early-service
     // classes) plus that layer itself (so the GAME-layer bridge can wire up JPMS read edges between
     // the child module(s) and the GAME modules) - always written together by register() and mostly
-    // read together, so one map keyed by jar keeps them from drifting out of sync.
-    private record JarService(ClassLoader classLoader, ModuleLayer layer) {}
+    // read together, so one map keyed by jar keeps them from drifting out of sync. moduleName is the
+    // jar's own module on that (shared) layer, so the bridge can scope its work to this jar alone.
+    private record JarService(ClassLoader classLoader, ModuleLayer layer, String moduleName) {}
 
     // Maps each handled modpack jar to its child-layer classloader/layer. Populated by EarlyServiceBootstrapper.
     private static final Map<Path, JarService> JAR_SERVICES = new ConcurrentHashMap<>();
@@ -144,15 +145,15 @@ public final class EarlyServiceLayer {
     // initializeLaunch (see EarlyServiceBridgePlugin), before Mixin loads any outer class.
     private static final AtomicBoolean GAME_BRIDGE_DONE = new AtomicBoolean(false);
 
-    static void register(Path jar, ClassLoader serviceClassLoader, ModuleLayer childLayer) {
-        JAR_SERVICES.put(canonical(jar), new JarService(serviceClassLoader, childLayer));
+    static void register(Path jar, ClassLoader serviceClassLoader, ModuleLayer childLayer, String moduleName) {
+        JAR_SERVICES.put(canonical(jar), new JarService(serviceClassLoader, childLayer, moduleName));
     }
 
     public static boolean isEarlyServiceJar(Path jar) {
         return jar != null && JAR_SERVICES.containsKey(canonical(jar));
     }
 
-    private static ClassLoader classLoaderFor(Path jar) {
+    static ClassLoader classLoaderFor(Path jar) {
         if (jar == null) return null;
         JarService service = JAR_SERVICES.get(canonical(jar));
         return service == null ? null : service.classLoader();
@@ -535,8 +536,8 @@ public final class EarlyServiceLayer {
         ClassLoader gameClassLoader = resolveGameClassLoader();
         if (!(gameClassLoader instanceof cpw.mods.cl.ModuleClassLoader)) {
             // The GAME TransformingClassLoader is not in scope yet (e.g. a launch plugin's
-            // addResources runs before it is built). A later caller - our launch plugin's
-            // initializeLaunch, or the coremod fallback - retries, so do NOT consume the one-shot flag.
+            // addResources runs before it is built). Our launch plugin's initializeLaunch retries
+            // later, so do NOT consume the one-shot flag.
             return;
         }
 
@@ -556,14 +557,20 @@ public final class EarlyServiceLayer {
             ClassLoader childLoader = entry.getValue().classLoader();
             // A standalone coremod that is itself a mod (root neoforge.mods.toml) was added to the
             // GAME layer as its real self by EarlyModLocator, so its outer classes already resolve
-            // there - bridging would redirect them to the child. Everything else - plain early
-            // services (Sodium) AND non-standalone coremods whose outer jar owns the mixins (Sinytra
-            // Connector) - resolves through the bridge, with no game-library copy.
+            // there - bridging would redirect them to the child, whose loader does NOT transform
+            // classes (mixins into that mod would silently stop applying). Everything else - plain
+            // early services (Sodium) AND non-standalone coremods whose outer jar owns the mixins
+            // (Sinytra Connector) - resolves through the bridge, with no game-library copy.
             if ((isCoremodJar(jar) && isStandaloneModFile(jar)) || !(childLoader instanceof cpw.mods.cl.ModuleClassLoader)) continue;
 
             try {
+                // All jars share ONE child loader/layer (see EarlyServiceBootstrapper#bootstrapJars),
+                // so scope the bridge to THIS jar's own module - iterating the loader's whole
+                // packageLookup would also bridge the packages of jars skipped above.
+                Module module = entry.getValue().layer().findModule(entry.getValue().moduleName()).orElse(null);
+                if (module == null) continue;
                 int bridged = 0;
-                for (String pkg : ModuleClassLoaderAccess.packageLookup(childLoader).keySet()) {
+                for (String pkg : module.getPackages()) {
                     // Classes: route the outer package to the child (single class identity). remove()
                     // clears any stale GAME mapping (normally none, since we add no copy).
                     gameParentLoaders.put(pkg, childLoader);
@@ -571,10 +578,11 @@ public final class EarlyServiceLayer {
                     bridged++;
                 }
                 // Resources: findResourceList never consults parentLoaders, only the loader's own
-                // resolvedRoots, so add the child's jar references too. Without this, Mixin can't read
+                // resolvedRoots, so add this jar's reference too. Without this, Mixin can't read
                 // an outer-jar mixin class's bytecode (a resource) and config prep crashes - the sole
                 // reason coremods like Connector needed a GAME-library copy on resolvedRoots before.
-                gameResolvedRoots.putAll(ModuleClassLoaderAccess.resolvedRoots(childLoader));
+                Object root = ModuleClassLoaderAccess.resolvedRoots(childLoader).get(entry.getValue().moduleName());
+                if (root != null) gameResolvedRoots.put(entry.getValue().moduleName(), root);
                 // The child layer was built at the early-window phase, before the GAME layer existed,
                 // so its parents are only [SERVICE, BOOT] - it cannot see minecraft/neoforge. Now that
                 // GAME is built, point the child's fallback at it, so an outer class loaded on the

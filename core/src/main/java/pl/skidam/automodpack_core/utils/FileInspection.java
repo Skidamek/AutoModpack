@@ -427,7 +427,7 @@ public class FileInspection {
     }
 
     /**
-     * The {@link #knownServices() known} loader-service files this jar provides, both at its
+     * The known ({@link #knownServices(String)}) loader-service files this jar provides, both at its
      * root and inside any {@code META-INF/jarjar} nested jars. Used to decide whether a mod
      * needs the copy-to-standard workaround: a mod is left in the modpack folder only when
      * <em>every</em> service it ships can be handled in place by the loader

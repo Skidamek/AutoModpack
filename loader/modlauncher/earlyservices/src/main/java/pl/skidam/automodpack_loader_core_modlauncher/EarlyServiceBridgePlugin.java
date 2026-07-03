@@ -83,8 +83,13 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
     @Override
     public void initializeLaunch(ITransformerLoader transformerLoader, NamedPath[] specialPaths) {
         Runnable bridge = onInitializeLaunch;
-        if (bridge != null) {
+        if (bridge == null) return;
+        try {
             bridge.run();
+        } catch (Throwable t) {
+            // Both bridge implementations guard themselves, but an escape here would propagate into
+            // ModLauncher's plugin loop and abort the launch instead of degrading to a bridge miss.
+            Constants.LOGGER.error("[AutoModpack] GAME-layer bridge failed; in-place early-service mods may not resolve", t);
         }
     }
 }
