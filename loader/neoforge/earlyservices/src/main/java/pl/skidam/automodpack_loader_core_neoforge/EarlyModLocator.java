@@ -6,6 +6,8 @@ import net.neoforged.neoforgespi.locating.*;
 import pl.skidam.automodpack_loader_core_neoforge.mods.ModpackLoader;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 @SuppressWarnings("unused")
 public class EarlyModLocator implements IModFileCandidateLocator {
@@ -15,6 +17,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
 
         // Preload runs from EarlyServiceBootstrapper's GraphicsBootstrapper phase, which always
         // fires before mod discovery, so ModpackLoader.modsToLoad is already populated here.
+        List<Path> earlyServiceJars = new ArrayList<>();
         for (Path path : ModpackLoader.modsToLoad) {
             // A standalone early-service jar (own root neoforge.mods.toml, e.g. modern Sodium) is
             // added as a regular mod file - its classes are already visible via FMLLoader's chain
@@ -35,7 +38,7 @@ public class EarlyModLocator implements IModFileCandidateLocator {
                 // Run IModFileReader first so custom-format candidates from the locators below
                 // can be interpreted by it.
                 EarlyServiceLayer.runModFileReaders(path, pipeline);
-                EarlyServiceLayer.runCandidateLocators(path, context, pipeline);
+                earlyServiceJars.add(path);
                 continue;
             }
 
@@ -47,6 +50,8 @@ public class EarlyModLocator implements IModFileCandidateLocator {
                 throw new RuntimeException(e);
             }
         }
+        // Replay all early-service candidate locators together, priority-ordered (see the method).
+        EarlyServiceLayer.runCandidateLocators(earlyServiceJars, context, pipeline);
     }
 
     @Override

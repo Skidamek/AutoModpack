@@ -219,17 +219,30 @@ public final class EarlyServiceLayer {
      * real (inner) mod jar - the loader would otherwise only run this from its SERVICE
      * layer, which AutoModpack never reaches.
      */
-    public static void runCandidateLocators(Path jar, ILaunchContext context, IDiscoveryPipeline pipeline) {
-        ClassLoader cl = classLoaderFor(jar);
-        if (cl == null) return;
-        for (String impl : serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE)) {
+    public static void runCandidateLocators(List<Path> jars, ILaunchContext context, IDiscoveryPipeline pipeline) {
+        List<IModFileCandidateLocator> locators = new ArrayList<>();
+        for (Path jar : jars) {
+            ClassLoader cl = classLoaderFor(jar);
+            if (cl == null) continue;
+            for (String impl : serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE)) {
+                try {
+                    locators.add((IModFileCandidateLocator) Class.forName(impl, true, cl)
+                            .getDeclaredConstructor().newInstance());
+                } catch (Throwable t) {
+                    LOGGER.error("[AutoModpack] Failed to load candidate locator {} from {}", impl, jar.getFileName(), t);
+                }
+            }
+        }
+        // Run highest-priority first (IOrderedProvider order) across ALL early-service jars, so a
+        // replayed locator's declared priority is honoured relative to the others; raw modsToLoad
+        // (filesystem) order would silently drop it.
+        locators.sort(Comparator.comparingInt(IModFileCandidateLocator::getPriority).reversed());
+        for (IModFileCandidateLocator locator : locators) {
             try {
-                IModFileCandidateLocator locator = (IModFileCandidateLocator) Class.forName(impl, true, cl)
-                        .getDeclaredConstructor().newInstance();
-                LOGGER.debug("[AutoModpack] Running in-place candidate locator {} from {}", impl, jar.getFileName());
+                LOGGER.debug("[AutoModpack] Running in-place candidate locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
                 locator.findCandidates(context, pipeline);
             } catch (Throwable t) {
-                LOGGER.error("[AutoModpack] Failed to run candidate locator {} from {}", impl, jar.getFileName(), t);
+                LOGGER.error("[AutoModpack] Failed to run candidate locator {}", locator.getClass().getName(), t);
             }
         }
     }
@@ -238,19 +251,29 @@ public final class EarlyServiceLayer {
      * Runs the {@code IDependencyLocator}s declared inside an early-service jar. This is
      * how mods like Ixeris load their real (inner) mod jar.
      */
-    public static void runDependencyLocators(Path jar, List<?> loadedMods, IDiscoveryPipeline pipeline) {
-        ClassLoader cl = classLoaderFor(jar);
-        if (cl == null) return;
+    public static void runDependencyLocators(List<Path> jars, List<?> loadedMods, IDiscoveryPipeline pipeline) {
         @SuppressWarnings("unchecked")
         List<IModFile> mods = (List<IModFile>) loadedMods;
-        for (String impl : serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE)) {
+        List<IDependencyLocator> locators = new ArrayList<>();
+        for (Path jar : jars) {
+            ClassLoader cl = classLoaderFor(jar);
+            if (cl == null) continue;
+            for (String impl : serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE)) {
+                try {
+                    locators.add((IDependencyLocator) Class.forName(impl, true, cl)
+                            .getDeclaredConstructor().newInstance());
+                } catch (Throwable t) {
+                    LOGGER.error("[AutoModpack] Failed to load dependency locator {} from {}", impl, jar.getFileName(), t);
+                }
+            }
+        }
+        locators.sort(Comparator.comparingInt(IDependencyLocator::getPriority).reversed());
+        for (IDependencyLocator locator : locators) {
             try {
-                IDependencyLocator locator = (IDependencyLocator) Class.forName(impl, true, cl)
-                        .getDeclaredConstructor().newInstance();
-                LOGGER.debug("[AutoModpack] Running in-place dependency locator {} from {}", impl, jar.getFileName());
+                LOGGER.debug("[AutoModpack] Running in-place dependency locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
                 locator.scanMods(mods, pipeline);
             } catch (Throwable t) {
-                LOGGER.error("[AutoModpack] Failed to run dependency locator {} from {}", impl, jar.getFileName(), t);
+                LOGGER.error("[AutoModpack] Failed to run dependency locator {}", locator.getClass().getName(), t);
             }
         }
     }
