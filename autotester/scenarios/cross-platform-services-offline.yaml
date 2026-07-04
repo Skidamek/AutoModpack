@@ -1,0 +1,85 @@
+id: cross-platform-services-offline
+description: |
+  Offline / client-only proof that two mods which used to be force-copied on NeoForge 1.21.1
+  now load straight from AutoModpack's modpack folder, with NO copy into standard mods/.
+
+  - Async Logger ships a NeoForge GraphicsBootstrapper + IDependencyLocator, but ALSO ships
+    Forge-namespace service files (net.minecraftforge.forgespi.*) for cross-platform builds.
+    NeoForge never reads those, yet the copy decision used to count them and force a copy.
+    Now the service set is scoped to the running loader, so Async Logger is eligible and its
+    GraphicsBootstrapper fires in place - which is what activates its async log4j context.
+  - spark ships only relocated library service files (no loader service), so it loads as an
+    ordinary modpack-folder mod.
+
+  Crash-tolerant: headless software GL may kill the client after load.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientRunSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage Async Logger + spark into the modpack folder (NOT standard mods/)
+    mods:
+      - url: https://cdn.modrinth.com/data/zvNzKfGF/versions/jTWBuKYG/asynclogger-2.1.1%2B1.21.1-neoforge.jar
+        sha512: bc4ce4a3ff47d11bba5f369b310b5d218179134515ccb840da0afa5d1b8926ff63f7f10858861261bf532708989c89219fda839f6c5139d51abe5a07ad65a37e
+      - url: https://cdn.modrinth.com/data/l6YH9Als/versions/v5qtqRQi/spark-1.10.124-neoforge.jar
+        sha512: f86ce34f2759c69df82578c397ff55b666c84626229a98f598458b960c21b38c95d6bfef4772af7f963c4f4868e5e2d9aef6b99c1d51bab55bf45e0e6e6b5ed4
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  - do: wait_for
+    name: both mods loaded in place (Async Logger bootstrapped, spark discovered)
+    timeout: 600s
+    until:
+      all:
+        - log:
+            container: client
+            matches_all:
+              - 'Bootstrapping \d+ early-service'
+              # ...and it actually does its job in place: the async log4j context is installed.
+              - 'Successfully configured async logger context'
+              # spark ships no loader service, so AutoModpack's locator discovers it in the modpack
+              # folder and loads it as an ordinary mod (never copied to standard mods/).
+              - 'Found mod file.*spark.*EarlyModLocator'
+        - log:
+            # bootstrap/bridge bookkeeping is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches_all:
+              # Async Logger's NeoForge GraphicsBootstrapper is fired in place - only reached when
+              # the loader-scoped service set makes it eligible (the inert Forge files no longer block it).
+              - 'in-place GraphicsBootstrapper.*asynclogger'
+              # Once the GAME layer is up, AutoModpack bridges its classloader to Async Logger's child
+              # layer, so the inner mod's mixin into Main.main reads the SAME LoggerConfigurator the
+              # GraphicsBootstrapper initialised - instead of an uninitialised second copy (the split
+              # that used to NPE in place). Reaching this proves the in-place class identity is fixed.
+              - 'Bridged \d+ outer package.*asynclogger'
+  - do: wait_exit
+    name: tolerate the client exiting (headless GL) or staying alive
+    expect: any
+    or_alive: true
+    timeout: 60s
+  - do: assert
+    name: no copy-to-standard workaround, and no in-place split-state crash
+    that:
+      log:
+        container: client
+        not_matches:
+          - 'Applying workaround for asynclogger'
+          - 'Applying workaround for spark'
+          # The in-place split-state regression: Async Logger's mixin reads an uninitialised
+          # second copy of LoggerConfigurator on the GAME layer (config == null), crashing in
+          # LoggerConfigurator.<clinit> at Main.main start. The async file log drops the tail, but
+          # the exception still hits the container's stdout - assert it is absent. These strings
+          # appear only on that crash, so they catch a "loads then crashes" regression the early
+          # markers (which all fire before Main.main) cannot.
+          - 'ExceptionInInitializerError'
+          - 'ringBufferSize'
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json

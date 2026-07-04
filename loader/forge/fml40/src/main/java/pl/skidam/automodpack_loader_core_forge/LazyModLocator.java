@@ -11,7 +11,9 @@ import java.net.URL;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import static cpw.mods.modlauncher.api.LamdbaExceptionUtils.uncheck;
 
@@ -24,6 +26,10 @@ public class LazyModLocator extends AbstractJarFileDependencyLocator {
             list.add(getMainMod());
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+
+        for (Path jar : EarlyServiceLayer.registeredJars()) {
+            EarlyServiceLayer.runDependencyLocators(jar, loadedMods, list);
         }
 
         return list;

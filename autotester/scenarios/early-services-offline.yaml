@@ -1,0 +1,110 @@
+id: early-services-offline
+description: |
+  Offline / client-only proof that an early-service mod (Sodium) loads straight from
+  AutoModpack's modpack folder - with NO copy into the standard mods/ directory - across
+  every NeoForge generation this feature supports.
+
+  Pre-stages a per-target Sodium build into the client game dir and boots just the client
+  (no server, no cert/download/restart dance). Verification is log-based and tolerant of
+  either outcome after boot: 1.21.1's older Sodium build drives real OpenGL (GL fence
+  objects) the headless container's software GL can't satisfy, so that client may crash at
+  the first rendered frame right after the service has run and the inner mod has loaded;
+  newer Sodium builds on 1.21.10/26.1 just idle once fully booted. Both count as pass
+  (`expect: any` + `or_alive: true`).
+
+  1.21.1 (fml4) uses ModLauncher module layers: Sodium ships as a split shim jar with its
+  own IModFileCandidateLocator that loads a nested real mod jar, needing a GAME-classloader
+  bridge to resolve the outer jar's classes/Mixin resources from the inner one - asserted
+  below via the target-gated bridge/locator log lines. 1.21.10 (fml10) and 26.1 (fml11)
+  removed ModLauncher/securejarhandler in favor of FMLLoader's own flat, growable
+  classloader chain: their Sodium builds are single standalone jars (a real root
+  neoforge.mods.toml) that also register a GraphicsBootstrapper, and appending the jar to
+  that chain before the game content loader is built is by itself enough for its own
+  classes to resolve everywhere - no separate bridge, and no split-locator replay either.
+
+# Host networking: this sandbox only allows --network host. No server is launched anyway.
+network: host
+mode: client-only
+
+# First run downloads MC + NeoForge via HMC into an ephemeral cache, so allow generous time.
+timeouts:
+  clientRunSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+  - 1.21.10-neoforge
+  - 26.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage Sodium into the modpack folder (NOT standard mods/)
+    mods:
+      - url:
+          1.21.1-neoforge: https://cdn.modrinth.com/data/AANobbMI/versions/7XOIgnrf/sodium-neoforge-0.8.12-beta.2%2Bmc1.21.1.jar
+          1.21.10-neoforge: https://cdn.modrinth.com/data/AANobbMI/versions/PdQpfqPZ/sodium-neoforge-0.7.3%2Bmc1.21.10.jar
+          26.1-neoforge: https://cdn.modrinth.com/data/AANobbMI/versions/Fg5Mk6Y3/sodium-neoforge-0.8.9%2Bmc26.1.1.jar
+        sha512:
+          1.21.1-neoforge: 62242a3b7a8f1c564fd267e0dce71e587d8615083b8da69c3bb585eb93d0f6590d8df231104c4dca1c64c513e5d73b56661930af9c88d7ac869afe792996631f
+          1.21.10-neoforge: 26e9ab3d61b06987fad5d2334625bb74e780f4e87588057ab836e9b784b813ad0c1f015ffdf83e50a3a72211a0a06005970ccc0ad9d01d92839bf93567615797
+          26.1-neoforge: 1e63fa06189d013db57c8c1875e2c3ea5114e00ab82f0b6540f8e9ed6007fdef9ea2ab90721ce2a55b55e3484fa1696e9a582b33fdf271308c8717db4958629d
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  # Common to every target: the bootstrapper fired in place, and Sodium's GraphicsBootstrapper
+  # ran. 1.21.1 additionally proves its split-jar locator replay and GAME-layer bridge; the
+  # other two need neither (see description) - gated so a passing/failing bridge assertion on
+  # fml10/fml11 (which have no such log line at all) can't produce a false result either way.
+  - do: wait_for
+    name: Sodium loaded in place (bootstrap + in-place mod discovery)
+    timeout: 420s
+    until:
+      all:
+        - log:
+            container: client
+            matches: 'Bootstrapping \d+ early-service'
+        - log:
+            # routine per-launch bootstrap noise, now logged at DEBUG only
+            file: logs/debug.log
+            matches: 'in-place GraphicsBootstrapper.*SodiumWorkarounds'
+  - do: wait_for
+    name: 1.21.1 split-jar locator ran and the GAME layer was bridged to Sodium's child layer
+    when:
+      target: 1.21.1-neoforge
+    timeout: 60s
+    until:
+      all:
+        - log:
+            # locator/bridge bookkeeping is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches_all:
+              - 'Running in-place candidate locator.*SodiumServiceModLocator'
+              - 'Bridged \d+ outer package.*sodium'
+        - log:
+            container: client
+            matches: 'Loaded configuration file for Sodium'
+  - do: wait_for
+    name: 1.21.10/26.1 mod discovery picked up the in-place jar as a real mod
+    when:
+      target: [1.21.10-neoforge, 26.1-neoforge]
+    timeout: 60s
+    until:
+      log:
+        container: client
+        matches: 'Sodium .* \(sodium\)'
+  - do: wait_exit
+    name: let the client run through to exit, or stay alive idling (both acceptable)
+    expect: any
+    or_alive: true
+    timeout: 300s
+  - do: assert
+    name: Sodium's classes resolved in place (no ClassNotFoundException)
+    that:
+      log:
+        container: client
+        # the CNF the GAME-layer bridge fixed; checked on the full post-exit log so it
+        # covers the render stage where the missing-class mixin previously crashed on 1.21.1.
+        not_matches:
+          - 'ClassNotFoundException.*[Ww]orkarounds'
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json

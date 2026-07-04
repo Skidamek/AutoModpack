@@ -1,0 +1,198 @@
+id: connector-coremod-offline
+description: |
+  Offline / client-only proof that Sinytra Connector - which ships an ICoreMod (a coremod),
+  an IModFileCandidateLocator and an IDependencyLocator, and loads Fabric mods - runs straight
+  from AutoModpack's modpack folder, with NO copy into the standard mods/ directory.
+
+  This is the hard case the GraphicsBootstrapper trick alone couldn't reach, and the one that
+  used to need a game-library copy. Now it loads with NO copy: AutoModpack's ICoreMod forwards
+  Connector's coremod transformers from the SERVICE layer, and the GAME classloader is bridged to
+  Connector's child layer for both classes (parentLoaders) and resources (resolvedRoots), with the
+  child's fallback pointed at the GAME loader so Connector's own mixin/loader classes resolve
+  net.minecraft.* - exactly what living on the GAME layer gave the copy.
+
+  Staged together: Connector, Forgified Fabric API + Kotlin-for-Forge (Connector's hard deps),
+  Connector Extras, and explosive-enhancement (a Fabric mod loaded *through* Connector).
+  Crash-tolerant: headless software GL may kill the client at the first frame, after load.
+
+  Runs on NeoForge 1.21.1 (Connector 2.x) and Forge 1.20.1 (Connector 1.x). Forge 1.20.1 has
+  no ICoreMod SPI (Connector 1.x uses mixin-transmog instead of a coremod) and no
+  "Name (modid)" mod-list stdout line, so those assertions are gated per target.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientRunSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+  - 1.20.1-forge
+
+flow:
+  - do: stage_modpack
+    name: stage Connector + deps + a Connector-loaded Fabric mod into the modpack folder
+    mods:
+      - url:
+          1.21.1-neoforge: https://cdn.modrinth.com/data/u58R1TMW/versions/1i8teo7m/connector-2.0.0-beta.14%2B1.21.1-full.jar
+          1.20.1-forge: https://cdn.modrinth.com/data/u58R1TMW/versions/dmW0aite/Connector-1.0.0-beta.48%2B1.20.1.jar
+        sha512:
+          1.21.1-neoforge: 6ed3168c2c7dad2606ada1fdf63ee412bb8bb5620718a702f6ac51310e671f2f93ab46fc96400e258f4433e51b96f9dd21441e1a8963d8b356c75b578e156dcc
+          1.20.1-forge: b931040133c096d1d00051b92cb8c96b158bb2e4677bf8c85d6c43c692eb3e74b11e0277b2ed5b72baa9b861d447106d462376d996e158846cc8d2a17ed3a440
+      - url:
+          1.21.1-neoforge: https://cdn.modrinth.com/data/Aqlf1Shp/versions/7nHK7hMg/forgified-fabric-api-0.116.7%2B2.2.4%2B1.21.1.jar
+          1.20.1-forge: https://cdn.modrinth.com/data/Aqlf1Shp/versions/XweDEycJ/fabric-api-0.92.6%2B1.11.14%2B1.20.1.jar
+        sha512:
+          1.21.1-neoforge: 858acb32a79e7ed1f37472bd7c50e3d2f47c7d7f6e734a8cece3800eb30d565a09580c261778ea73a0ae25e10e9eb9b16866012fe61d24f671b0ffe3ae2377dd
+          1.20.1-forge: 3b84ea415d9255861bcbf78cfda3987b78aa452361bf44ba6a0223501a25ab5c5c55cb0eac6f460c88b8cec958f2b59211e488277c26e3432a08196f62049e7c
+      - url:
+          1.21.1-neoforge: https://cdn.modrinth.com/data/ordsPcFz/versions/uhJhCT7X/kotlinforforge-5.12.0-all.jar
+          1.20.1-forge: https://cdn.modrinth.com/data/ordsPcFz/versions/Zsh14XeQ/kotlinforforge-4.12.0-all.jar
+        sha512:
+          1.21.1-neoforge: b8c3942f4d33179edf3f102f3d870b99dd436f8b8236dbbd31aa51b888162c692cfd88927295f24dc8b4375232f4c6c17360c5d6c4823f93cbcd7cf4bdc8bd14
+          1.20.1-forge: 767f40030ed4b370a3838fa65ae1b79974f31979342fff7cc834a0d5f39eb28612642519352ff2a1dd5226ce1f745f8b3156ee3625ffde01219137d064c1ee40
+      - url:
+          1.21.1-neoforge: https://cdn.modrinth.com/data/FYpiwiBR/versions/dgLCqZyo/ConnectorExtras-1.12.1%2B1.21.1.jar
+          1.20.1-forge: https://cdn.modrinth.com/data/FYpiwiBR/versions/d28gpPn6/ConnectorExtras-1.11.2%2B1.20.1.jar
+        sha512:
+          1.21.1-neoforge: ff9fc5d48a81e820c8c26b8a045e0ab7a3b0e9b5eaee7369b2eadb3f93d7eb423255073dfc327d131cb667df93be066560f3704b4cc8a12b07486b98a12bad1d
+          1.20.1-forge: a318841ce2c42e8ba2058d47ad323bcb8ca500515c391f3f31b6468e8d4d974a53effe8a0a801b7fafd60d9845be514696bd9b095a3cc5d014bde02ce531bada
+      - url:
+          1.21.1-neoforge: https://cdn.modrinth.com/data/OSQ8mw2r/versions/LEeJnb8j/explosive-enhancement-1.3.2-1.21-1.21.1.jar
+          1.20.1-forge: https://cdn.modrinth.com/data/OSQ8mw2r/versions/t5vUyiRo/explosive-enhancement-1.3.2-1.20-1.20.4.jar
+        sha512:
+          1.21.1-neoforge: 57692e93c1c8b331884c63e213e3dac5cb19ce2f3bf818f6db1c2cbcdff1d1b8a5ea107f01c6bca79882962df6cf8332a96c5e1adda864345371faff7a6d747a
+          1.20.1-forge: 8ec4c24a4f20e3d5d06842c0fa355914d49ddcb119ddd89ceab77085c90245424bb225bcd35523951f9b0e2c19a2f5843255877e8cb82cdd2438c86067534636
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  - do: wait_for
+    name: Connector loaded in place - common to every target
+    timeout: 600s
+    until:
+      all:
+        - log:
+            container: client
+            matches: 'Bootstrapping \d+ early-service'
+        - log:
+            # bridge/JPMS bookkeeping is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches_all:
+              # the outer jar's classes/resources reach the GAME layer via the bridge (no copy)
+              - 'Bridged \d+ outer package.*connector'
+              # the JPMS read edges a real ancestor layer would give are wired up, so the inner
+              # 'connector' module can actually access the outer classes (not just load them)
+              - 'Linked JPMS module reads for connector'
+  - do: wait_for
+    name: the Connector-loaded Fabric mod ends up in the final mod list (NeoForge fml4)
+    when:
+      target: [1.21.1-neoforge]
+    timeout: 600s
+    until:
+      log:
+        container: client
+        matches: 'Explosive Enhancement.*\(explosiveenhancement\)'
+  - do: wait_for
+    name: the Connector-loaded Fabric mod actually ran its own init code (Forge fml47)
+    # Forge never prints the "Name (modid)" mod-list line to the container's stdout the way
+    # NeoForge does, so use a positive signal from the mod's own runtime code instead - it only
+    # logs this if it made it through FML mod-loading and its main class actually executed.
+    when:
+      target: [1.20.1-forge]
+    timeout: 600s
+    until:
+      log:
+        container: client
+        matches: '\[explosiveenhancement/\]:.*Explosive Enhancement'
+  - do: wait_for
+    name: Connector's coremod + ITransformationService lifecycle ran in place (ModLauncher/NeoForge fml4)
+    when:
+      target: [1.21.1-neoforge]
+    timeout: 600s
+    until:
+      all:
+        - log:
+            # coremod-forwarding/transformation-service lifecycle bookkeeping is routine
+            # per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches_all:
+              # AutoModpack's ICoreMod forwards Connector's coremod transformers from the SERVICE
+              # layer - this is what makes Connector's own mixins apply in place
+              - 'Forwarding \d+ transformer.*ConnectorCoremods'
+              # Connector's ITransformationService lifecycle runs in place, driven by AutoModpackTransformationService
+              # (a real, natively ServiceLoader-discovered ITransformationService) at ModLauncher's own native
+              # batch times - initialize() in particular must run after NeoForge's window-provider assignment,
+              # which native discovery guarantees for free. Its completeScan then moves authlib/brigadier into
+              # the transformable set (ModuleLayerMigrator) and contributes its FabricASMFixer jar - the
+              # machinery its Fabric mods' mixins actually need.
+              - 'Ran in-place transformation-service initialize for.*ConnectorLoaderService'
+              - 'Forwarded \d+ completeScan result.*ConnectorLoaderService'
+        - log:
+            container: client
+            matches: 'Successfully made module authlib transformable'
+  - do: wait_for
+    name: Connector's ITransformationService lifecycle ran in place (Forge fml47 - no ICoreMod SPI, so no coremod-forwarding line)
+    when:
+      target: [1.20.1-forge]
+    timeout: 600s
+    until:
+      log:
+        # transformation-service lifecycle bookkeeping is routine per-launch noise now
+        # logged at DEBUG only
+        file: logs/debug.log
+        matches_all:
+          - 'Ran in-place transformation-service initialize for.*ConnectorLoaderService'
+          - 'Forwarded \d+ completeScan result.*ConnectorLoaderService'
+  - do: wait_exit
+    name: tolerate the client exiting (headless GL/audio) or staying alive
+    expect: any
+    or_alive: true
+    timeout: 60s
+  - do: assert
+    name: Connector fully initialised in place - no CNF and no failed coremod/mixin apply
+    that:
+      log:
+        container: client
+        not_matches:
+          # the original blocker: inner mod couldn't see the outer jar's classes in place
+          - 'NoClassDefFoundError.*ConnectorEarlyLoader'
+          - 'ClassNotFoundException.*ConnectorEarlyLoader'
+          # if Connector's coremod didn't run, its own mixins (e.g. KeyMappingMixin) fail here
+          - 'Mixin apply for mod connector failed'
+          # JPMS read edge missing: inner 'connector' module can't access an outer class even
+          # though it loads. Surfaces when ImmediateWindowHandler.updateModuleReads force-loads
+          # mixin-plugin classes - the headless DummyProvider does this too, so it reproduces here.
+          - 'does not read module'
+          - 'IllegalAccessError.*connector'
+  # Positive check, not just absence-of-error: the Connector-loaded Fabric mod's own mixin
+  # must actually apply, not merely load without exception. This is the exact failure mode
+  # of a prior live-only-detectable regression (ITransformationService.initialize() run too
+  # early silently broke Connector's Fabric mixin registration, with no error anywhere) that
+  # the checks above would NOT have caught - only a positive application signal does. Mixin's
+  # apply-tracing is DEBUG-level and not on the container's stdout, so read it from the file.
+  - do: assert
+    name: Connector-loaded Fabric mod's mixin actually applied (NeoForge fml4)
+    when:
+      target: [1.21.1-neoforge]
+    that:
+      log:
+        file: logs/debug.log
+        matches: 'Mixing ExplosionMixin from explosiveenhancement\.mixins\.json into net\.minecraft\.world\.level\.Explosion'
+  # On 1.20.1 the same positive-apply check can't use ExplosionMixin: the 1.20 build of
+  # explosive-enhancement registers only that one client mixin, and its target class
+  # (net.minecraft.world.level.Explosion) is never classloaded during a headless main-menu
+  # boot, so Mixin never applies it - verified from a real run's debug.log (zero 'explosion'
+  # hits anywhere). Instead assert (a) explosiveenhancement's mixin config was registered and
+  # prepared through Connector's Fabric mixin bootstrap, and (b) a Connector-loaded Fabric
+  # mod's mixin DID actually apply into a vanilla class at boot: amecsapi (bundled by
+  # ConnectorExtras) mixes into net.minecraft.client.Minecraft - quoted from a real run:
+  #   'Mixing MixinMinecraftClient from amecsapi.mixins.json into net.minecraft.client.Minecraft'
+  - do: assert
+    name: Connector-loaded Fabric mods' mixins registered and actually applied (Forge fml47)
+    when:
+      target: [1.20.1-forge]
+    that:
+      log:
+        file: logs/debug.log
+        matches_all:
+          - 'Preparing explosiveenhancement\.mixins\.json \(1\)'
+          - 'Mixing MixinMinecraftClient from amecsapi\.mixins\.json into net\.minecraft\.client\.Minecraft'

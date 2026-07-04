@@ -9,6 +9,13 @@ A condition is a mapping; all keys must hold (AND). Keys:
   no_element    a selector that must match nothing
   file          path (relative to the client game dir) exists
   file_gone     path does not exist
+  only_files    { dir, patterns } - dir (relative to the client game dir) contains only
+                files matching one of the glob patterns (and nothing else)
+  target        the running target id equals this (str) or is one of these (list) -
+                lets one scenario file gate a step to specific targets, e.g. an
+                assertion that only makes sense on loader generations that need a
+                GAME-classloader bridge
+  target_not    the running target id is none of these
   log           a log/text match (see ``_log`` below)
   all / any     combine a list of sub-conditions
   not           negate a sub-condition
@@ -43,7 +50,7 @@ _GUI_KEYS = {"screen", "screen_not", "screen_none", "element", "no_element"}
 
 # Every valid top-level condition key (used by `do`/`until`/`when`/`that`). Kept
 # in sync with `_check`; consumed by the scenario validator.
-KEYS = _GUI_KEYS | {"file", "file_gone", "log", "all", "any", "not"}
+KEYS = _GUI_KEYS | {"file", "file_gone", "only_files", "target", "target_not", "log", "all", "any", "not"}
 
 
 def evaluate(ctx, cond: dict, gui: dict | None = None) -> bool:
@@ -90,9 +97,30 @@ def _check(ctx, key, val, gui) -> bool:
         return ctx.path(val).exists()
     if key == "file_gone":
         return not ctx.path(val).exists()
+    if key == "target":
+        needles = [val] if isinstance(val, str) else list(val)
+        return getattr(ctx.target, "id", None) in needles
+    if key == "target_not":
+        needles = [val] if isinstance(val, str) else list(val)
+        return getattr(ctx.target, "id", None) not in needles
+    if key == "only_files":
+        return _only_files(ctx, val)
     if key == "log":
         return _log(ctx, val)
     raise ValueError(f"unknown condition key: {key!r}")
+
+
+def _only_files(ctx, spec: dict) -> bool:
+    from fnmatch import fnmatch
+    directory = ctx.path(spec["dir"])
+    patterns = spec["patterns"]
+    patterns = [patterns] if isinstance(patterns, str) else list(patterns)
+    if not directory.is_dir():
+        return False
+    for entry in directory.iterdir():
+        if not entry.is_file() or not any(fnmatch(entry.name, ctx.resolve(p)) for p in patterns):
+            return False
+    return True
 
 
 def _screen(gui: dict, val) -> bool:

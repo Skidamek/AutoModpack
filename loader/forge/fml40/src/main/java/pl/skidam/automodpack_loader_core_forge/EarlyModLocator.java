@@ -1,11 +1,14 @@
 package pl.skidam.automodpack_loader_core_forge;
 
+import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileModLocator;
+import net.minecraftforge.forgespi.locating.IModFile;
+import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
+
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
-import net.minecraftforge.fml.loading.moddiscovery.AbstractJarFileModLocator;
-import pl.skidam.automodpack_loader_core.Preload;
-import pl.skidam.automodpack_loader_core_forge.mods.ModpackLoader;
 
 @SuppressWarnings("unused")
 public class EarlyModLocator extends AbstractJarFileModLocator {
@@ -20,8 +23,29 @@ public class EarlyModLocator extends AbstractJarFileModLocator {
 
     @Override
     public Stream<Path> scanCandidates() {
-        new Preload();
+        // Preload and the early-service child-layer bootstrap run from
+        // AutoModpackTransformationService#onLoad, before this IModLocator pass, so
+        // ModpackLoader.modsToLoad and EarlyServiceLayer's registered jars are already populated.
+        //
+        // Early-service jars must NOT load as mods here: native Forge excludes them from mod
+        // discovery too, and their real mod arrives through their own IModLocator, replayed in
+        // scanMods() below - loading the outer jar too would double-load it (shared modId).
+        return ModpackLoader.modsToLoad.stream()
+                .filter(path -> !EarlyServiceLayer.isEarlyServiceJar(path));
+    }
 
-        return ModpackLoader.modsToLoad.stream();
+    // Forge 1.18.2's IModLocator#scanMods() returns List<IModFile> directly; no ModFileOrException
+    // wrapper here (added in a later forgespi version), unlike fml47's override.
+    @Override
+    public List<IModFile> scanMods() {
+        List<IModFile> results = new ArrayList<>(super.scanMods());
+        for (Path jar : EarlyServiceLayer.registeredJars()) {
+            List<Object> extra = new ArrayList<>();
+            EarlyServiceLayer.runCandidateLocators(jar, extra);
+            for (Object o : extra) {
+                results.add((IModFile) o);
+            }
+        }
+        return results;
     }
 }

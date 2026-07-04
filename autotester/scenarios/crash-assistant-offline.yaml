@@ -1,0 +1,107 @@
+id: crash-assistant-offline
+description: |
+  Offline / client-only proof that CrashAssistant - a mod whose only "early service" is a no-op
+  cpw.mods.modlauncher.api.ITransformationService plus an IDependencyLocator that jar-in-jars the
+  real mod - loads straight from AutoModpack's modpack folder, in place, with NO copy into the
+  standard mods/ directory, across every loader generation this feature supports.
+
+  On the ModLauncher generations (NeoForge fml4 = 1.21.1, Forge fml47 = 1.20.1, fml40 = 1.18.2)
+  the outer jar's classes resolve through the GAME-layer bridge, just like a split early-service
+  mod (Sodium): the transformation service is only a vehicle to load early, so nothing depends on
+  modlauncher registering it at boot. On NeoForge fml10/fml11 (1.21.10, 26.1) there is no bridge -
+  the jar is appended to FMLLoader's flat classloader chain - but the same dependency-locator
+  replay loads the inner mod in place.
+
+  The outer and inner jar share one modId (crash_assistant), so this scenario also proves the
+  outer jar is NOT loaded as a mod in addition to the locator replay - that would be a
+  duplicate-mod crash (native Forge/NeoForge likewise exclude service-claimed jars from mod
+  discovery even when they carry a root mods.toml).
+
+network: host
+mode: client-only
+
+timeouts:
+  clientRunSeconds: 1200
+
+targets:
+  - 1.21.1-neoforge
+  - 1.21.10-neoforge
+  - 26.1-neoforge
+  - 1.20.1-forge
+  - 1.18.2-forge
+
+flow:
+  - do: stage_modpack
+    name: stage CrashAssistant into the modpack folder (NOT standard mods/)
+    mods:
+      - url:
+          1.21.1-neoforge: https://cdn.modrinth.com/data/ix1qq8Ux/versions/znBtgMA0/CrashAssistant-neoforge-1.20.6-1.21.4-1.11.10.jar
+          1.21.10-neoforge: https://cdn.modrinth.com/data/ix1qq8Ux/versions/t2TPgbKP/CrashAssistant-neoforge-1.21.9-1.21.11-1.11.10.jar
+          26.1-neoforge: https://cdn.modrinth.com/data/ix1qq8Ux/versions/JRuZj0MJ/CrashAssistant-neoforge-26.1-1.11.10.jar
+          1.20.1-forge: https://cdn.modrinth.com/data/ix1qq8Ux/versions/Nl7TL6nT/CrashAssistant-forge-1.19-1.20.1-1.11.10.jar
+          1.18.2-forge: https://cdn.modrinth.com/data/ix1qq8Ux/versions/FRiww6hz/CrashAssistant-forge-1.18.2-1.11.10.jar
+        sha512:
+          1.21.1-neoforge: e374979e5f191961e6f1bc2c265c5735c5e1546363ae505e235ff9a482e28a4b2aa816e6a6552e042480f6f4b4c6fd31ce8ef710097159e2469b6e7161638ae1
+          1.21.10-neoforge: 9c2be93be88b018aa1fd68fd69b493405c16f5e97ebd2f0b8b530370b6df504619ef4596df593c982a4c2fc0a92165e5efae3bfbf89392cf2fe1d48d3e856c38
+          26.1-neoforge: 1abac7ddfe34f156cb62d03aa53b30739fc25446bebb6e7208066c3bb3d47ac1dafabbdb8c7f413fa82468643ef565bea5ce37e9bb2965570ce384ac56f693e7
+          1.20.1-forge: 7748ed84271a44f9a58528cb571ce9229b00762cbaa9daa012414af5ff1ed4df3f3a33dffcf68d4411d0f4414afa5d25d7fcb6bbc583b595a52ee66ad61f7ecc
+          1.18.2-forge: cb6ea560637e9d4011a0c8baa4fd7519d2efa7fe9de3139473cc2f7fd9e9b4fdfc2d0e77de8bc0ca9767f985bd2ff15c64de3bd992c1220a064c39f1cf42ddef
+  - do: launch_client
+    name: boot the client against the pre-staged modpack
+  # Common to every target: the bootstrap fired in place and the jar's own locator was replayed
+  # (this is what loads the real, inner crash_assistant mod jar). On 1.18.2-forge the standalone
+  # IDependencyLocator SPI does not exist, so CrashAssistant ships the same locator as an
+  # IModLocator and the replay logs "candidate locator" instead of "dependency locator".
+  - do: wait_for
+    name: CrashAssistant bootstrapped in place and its locator ran
+    timeout: 420s
+    until:
+      all:
+        - log:
+            container: client
+            matches: 'Bootstrapping \d+ early-service'
+        - log:
+            # locator replay is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches: 'Running in-place (dependency|candidate) locator.*CrashAssistant'
+  # ModLauncher generations only: the outer jar's classes are bridged to the GAME layer.
+  # fml10/fml11 have no bridge (flat classloader chain) and no such log line at all.
+  - do: wait_for
+    name: outer jar bridged to the GAME layer (ModLauncher generations)
+    when:
+      target: [1.21.1-neoforge, 1.20.1-forge, 1.18.2-forge]
+    timeout: 60s
+    until:
+      log:
+        # bridge bookkeeping is routine per-launch noise now logged at DEBUG only
+        file: logs/debug.log
+        matches: 'Bridged \d+ outer package.*CrashAssistant'
+  # The inner mod actually made it into the mod list.
+  - do: wait_for
+    name: the inner crash_assistant mod loaded
+    timeout: 120s
+    until:
+      log:
+        # FML's "Found valid mod file ... with {crash_assistant} mods - versions {1.11.10}"
+        # is DEBUG on every generation; neoforge additionally echoes "(crash_assistant)" to
+        # stdout, but forge (fml40/47) does not - so assert on debug.log for cross-loader parity.
+        file: logs/debug.log
+        matches: 'crash_assistant\} mods - versions \{1\.11\.10'
+  - do: wait_exit
+    name: tolerate the client exiting (headless GL/audio) or staying alive at the main menu
+    expect: any
+    or_alive: true
+    timeout: 60s
+  - do: assert
+    name: no split-classloader or duplicate-mod failure
+    that:
+      log:
+        container: client
+        not_matches:
+          - 'NoClassDefFoundError.*crash_assistant'
+          - 'ClassNotFoundException.*crash_assistant'
+          - '[Dd]uplicate mods'
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json

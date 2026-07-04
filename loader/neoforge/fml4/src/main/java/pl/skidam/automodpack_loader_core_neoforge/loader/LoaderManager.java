@@ -5,6 +5,7 @@ import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.fml.loading.LoadingModList;
 import net.neoforged.fml.loading.moddiscovery.ModInfo;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_loader_core_neoforge.EarlyServiceBootstrapper;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
@@ -29,11 +30,19 @@ public class LoaderManager implements LoaderManagerService {
 
     @Override
     public String getLoaderVersion() {
+        if (preload && EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION != null) {
+            return EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION;
+        }
         return FMLLoader.versionInfo().neoForgeVersion();
     }
 
     @Override
     public EnvironmentType getEnvironmentType() {
+        // FMLLoader.getDist() is unreliable during preload (see EarlyServiceBootstrapper) - prefer
+        // the dist captured from --launchTarget on the command line when it's available.
+        if (EarlyServiceBootstrapper.EARLY_IS_CLIENT != null) {
+            return EarlyServiceBootstrapper.EARLY_IS_CLIENT ? EnvironmentType.CLIENT : EnvironmentType.SERVER;
+        }
         if (FMLLoader.getDist() == Dist.CLIENT) {
             return EnvironmentType.CLIENT;
         } else {
@@ -45,6 +54,9 @@ public class LoaderManager implements LoaderManagerService {
     public String getModVersion(String modId) {
         if (preload) {
             if (modId.equals("minecraft")) {
+                if (EarlyServiceBootstrapper.EARLY_MC_VERSION != null) {
+                    return EarlyServiceBootstrapper.EARLY_MC_VERSION;
+                }
                 return FMLLoader.versionInfo().mcVersion();
             }
 

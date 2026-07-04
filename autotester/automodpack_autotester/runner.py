@@ -506,7 +506,7 @@ def _v_stage_modpack(ctx: Context, step):
     if mods:
         (root / "mods").mkdir(parents=True, exist_ok=True)
         for m in mods:
-            mp = resolve_mod(m, ctx.resolve)
+            mp = resolve_mod(m, ctx.resolve, target_id=getattr(ctx.target, "id", None))
             shutil.copy2(mp, root / "mods" / mp.name)
 
     # A client config that selects the staged pack and disables the launch update,

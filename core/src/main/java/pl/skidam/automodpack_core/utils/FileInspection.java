@@ -9,11 +9,13 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -135,7 +137,7 @@ public class FileInspection {
         return file == null || !Files.exists(file) || !file.getFileName().toString().endsWith(".jar");
     }
 
-    private static <T> T extractBasicInfo(Path file, java.util.function.Function<ModMetadata, T> extractor) {
+    private static <T> T extractBasicInfo(Path file, Function<ModMetadata, T> extractor) {
         if (isJarInvalid(file)) return null;
         try (FileSystem fs = FileSystems.newFileSystem(file)) {
             ModMetadata meta = getModMetadata(fs);
@@ -354,64 +356,86 @@ public class FileInspection {
         return name.endsWith("mods.toml") || name.endsWith("mod.json");
     }
 
-    private static final Set<String> KNOWN_SERVICES = Set.of(
-            "META-INF/services/net.minecraftforge.forgespi.locating.IModLocator",
-            "META-INF/services/net.minecraftforge.forgespi.locating.IDependencyLocator",
-            "META-INF/services/net.minecraftforge.forgespi.language.IModLanguageProvider",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModLocator",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IDependencyLocator",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModLanguageLoader",
-            "META-INF/services/net.neoforged.neoforgespi.locating.IModFileCandidateLocator",
-            "META-INF/services/net.neoforged.neoforgespi.earlywindow.GraphicsBootstrapper"
-    );
-
+    /**
+     * Whether this jar ships any recognized loader-service file, root or nested - used to tell a
+     * service mod apart from a plain mod. Recognition is loader-agnostic (the running loader isn't
+     * known yet in all callers), so this checks the full cross-loader union.
+     */
     public static boolean hasSpecificServices(FileSystem fs) {
-        // Fast Check: Look in the root FileSystem
-        for (String service : KNOWN_SERVICES) {
+        Set<String> known = LoaderServicePaths.ALL_SERVICES;
+        // Short-circuit on the first root match (the common case for service mods) before paying
+        // for the nested jarjar scan - isMod/isModCompatible call this over every mod.
+        for (String service : known) {
             if (Files.exists(fs.getPath(service))) {
                 return true;
             }
         }
-
-        // Slow Check: Scan nested JARs in META-INF/jarjar
-        return hasSpecificServicesNested(fs);
+        Set<String> nested = new HashSet<>();
+        collectSpecificServicesNested(fs, known, nested, true);
+        return !nested.isEmpty();
     }
 
-    private static boolean hasSpecificServicesNested(FileSystem fs) {
+    /**
+     * The {@code ofInterest} loader-service files this jar provides, both at its root and inside any
+     * {@code META-INF/jarjar} nested jars. Callers pass whichever set is relevant to them (e.g. a
+     * loader module's own known/handleable services) instead of a hardcoded loader namespace.
+     */
+    public static Set<String> getServices(FileSystem fs, Set<String> ofInterest) {
+        Set<String> found = new HashSet<>();
+
+        // Root FileSystem
+        for (String service : ofInterest) {
+            if (Files.exists(fs.getPath(service))) {
+                found.add(service);
+            }
+        }
+
+        // Nested JARs in META-INF/jarjar
+        collectSpecificServicesNested(fs, ofInterest, found, false);
+
+        return found;
+    }
+
+    /**
+     * @param stopAtFirst {@code true} to stop at the first match (the {@link #hasSpecificServices}
+     *                     hot path), {@code false} to collect every match ({@link #getServices}).
+     */
+    private static void collectSpecificServicesNested(FileSystem fs, Set<String> known, Set<String> found, boolean stopAtFirst) {
         Path jarJarDir = fs.getPath("META-INF", "jarjar");
 
         if (Files.notExists(jarJarDir)) {
-            return false;
+            return;
         }
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(jarJarDir, "*.jar")) {
             for (Path nestedJar : stream) {
-                if (scanNestedJar(nestedJar)) {
-                    return true;
+                collectNestedJarServices(nestedJar, known, found, stopAtFirst);
+                if (stopAtFirst && !found.isEmpty()) {
+                    return;
                 }
             }
         } catch (IOException e) {
             LOGGER.error("Error examining JarJar directory in {}", fs, e);
         }
-
-        return false;
     }
 
-    private static boolean scanNestedJar(Path nestedJarPath) {
+    private static void collectNestedJarServices(Path nestedJarPath, Set<String> known, Set<String> found, boolean stopAtFirst) {
         try (InputStream is = Files.newInputStream(nestedJarPath);
              BufferedInputStream bis = new BufferedInputStream(is);
              ZipInputStream zip = new ZipInputStream(bis)) {
 
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
-                if (KNOWN_SERVICES.contains(entry.getName())) {
-                    return true;
+                if (known.contains(entry.getName())) {
+                    found.add(entry.getName());
+                    if (stopAtFirst) {
+                        return;
+                    }
                 }
             }
         } catch (IOException e) {
             LOGGER.error("Error reading nested JAR {}: {}", nestedJarPath, e.getMessage());
         }
-        return false;
     }
 
     private static final String forbiddenChars = "\\/:*\"<>|!?&%$;=+";

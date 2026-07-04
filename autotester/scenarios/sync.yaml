@@ -10,6 +10,12 @@ flow:
   - use: download_modpack
   - do: verify_files
     name: verify all synced files are present
+  - do: assert
+    name: standard mods/ dir holds only the AutoModpack loader jar (modpack mods stay in the modpack folder)
+    that:
+      only_files:
+        dir: mods
+        patterns: ["automodpack.jar"]
   - use: restart_client
   - use: rejoin
   - do: quit

@@ -20,6 +20,11 @@ def make_ctx(tmp_path):
     def _make(**overrides) -> Context:
         game_dir = overrides.pop("game_dir", tmp_path / "game")
         game_dir.mkdir(parents=True, exist_ok=True)
+        # Every real client has the loader jar in standard mods/ from the start (it's how
+        # AutoModpack itself loads) - mirror that so `only_files`-style assertions on mods/
+        # see the same baseline a real run would.
+        (game_dir / "mods").mkdir(parents=True, exist_ok=True)
+        (game_dir / "mods" / "automodpack.jar").write_bytes(b"")
         defaults = dict(
             target=types.SimpleNamespace(
                 id="1.21-fabric", minecraft="1.21", loader="fabric", java=21
