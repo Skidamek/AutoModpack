@@ -56,11 +56,14 @@ flow:
     name: CrashAssistant bootstrapped in place and its locator ran
     timeout: 420s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'Bootstrapping \d+ early-service'
-          - 'Running in-place (dependency|candidate) locator.*CrashAssistant'
+      all:
+        - log:
+            container: client
+            matches: 'Bootstrapping \d+ early-service'
+        - log:
+            # locator replay is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches: 'Running in-place (dependency|candidate) locator.*CrashAssistant'
   # ModLauncher generations only: the outer jar's classes are bridged to the GAME layer.
   # fml10/fml11 have no bridge (flat classloader chain) and no such log line at all.
   - do: wait_for
@@ -70,7 +73,8 @@ flow:
     timeout: 60s
     until:
       log:
-        container: client
+        # bridge bookkeeping is routine per-launch noise now logged at DEBUG only
+        file: logs/debug.log
         matches: 'Bridged \d+ outer package.*CrashAssistant'
   # The inner mod actually made it into the mod list.
   - do: wait_for
@@ -78,8 +82,11 @@ flow:
     timeout: 120s
     until:
       log:
-        container: client
-        matches: '\(crash_assistant\)|crash_assistant.*1\.11\.10'
+        # FML's "Found valid mod file ... with {crash_assistant} mods - versions {1.11.10}"
+        # is DEBUG on every generation; neoforge additionally echoes "(crash_assistant)" to
+        # stdout, but forge (fml40/47) does not - so assert on debug.log for cross-loader parity.
+        file: logs/debug.log
+        matches: 'crash_assistant\} mods - versions \{1\.11\.10'
   - do: wait_exit
     name: tolerate the client exiting (headless GL/audio) or staying alive at the main menu
     expect: any

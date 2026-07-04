@@ -172,7 +172,7 @@ public final class EarlyServiceLayer {
             try {
                 IModFileCandidateLocator locator = (IModFileCandidateLocator) Class.forName(impl, true, cl)
                         .getDeclaredConstructor().newInstance();
-                LOGGER.info("[AutoModpack] Running in-place candidate locator {} from {}", impl, jar.getFileName());
+                LOGGER.debug("[AutoModpack] Running in-place candidate locator {} from {}", impl, jar.getFileName());
                 locator.findCandidates(context, pipeline);
             } catch (Throwable t) {
                 LOGGER.error("[AutoModpack] Failed to run candidate locator {} from {}", impl, jar.getFileName(), t);
@@ -189,7 +189,7 @@ public final class EarlyServiceLayer {
             try {
                 IDependencyLocator locator = (IDependencyLocator) Class.forName(impl, true, cl)
                         .getDeclaredConstructor().newInstance();
-                LOGGER.info("[AutoModpack] Running in-place dependency locator {} from {}", impl, jar.getFileName());
+                LOGGER.debug("[AutoModpack] Running in-place dependency locator {} from {}", impl, jar.getFileName());
                 locator.scanMods(mods, pipeline);
             } catch (Throwable t) {
                 LOGGER.error("[AutoModpack] Failed to run dependency locator {} from {}", impl, jar.getFileName(), t);
@@ -226,7 +226,7 @@ public final class EarlyServiceLayer {
             merged.addAll(readers);
             merged.sort(Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
             readersField.set(modDiscoverer, List.copyOf(merged));
-            LOGGER.info("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), jar.getFileName());
+            LOGGER.debug("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), jar.getFileName());
         } catch (Throwable t) {
             LOGGER.error("[AutoModpack] Could not forward IModFileReader(s) from {} into mod discovery; a mod relying on that reader may need copy-to-standard", jar.getFileName(), t);
         }

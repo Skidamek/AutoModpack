@@ -36,23 +36,28 @@ flow:
     name: both mods loaded in place (Async Logger bootstrapped, spark discovered)
     timeout: 600s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'Bootstrapping \d+ early-service'
-          # Async Logger's NeoForge GraphicsBootstrapper is fired in place - only reached when
-          # the loader-scoped service set makes it eligible (the inert Forge files no longer block it).
-          - 'in-place GraphicsBootstrapper.*asynclogger'
-          # ...and it actually does its job in place: the async log4j context is installed.
-          - 'Successfully configured async logger context'
-          # Once the GAME layer is up, AutoModpack bridges its classloader to Async Logger's child
-          # layer, so the inner mod's mixin into Main.main reads the SAME LoggerConfigurator the
-          # GraphicsBootstrapper initialised - instead of an uninitialised second copy (the split
-          # that used to NPE in place). Reaching this proves the in-place class identity is fixed.
-          - 'Bridged \d+ outer package.*asynclogger'
-          # spark ships no loader service, so AutoModpack's locator discovers it in the modpack
-          # folder and loads it as an ordinary mod (never copied to standard mods/).
-          - 'Found mod file.*spark.*EarlyModLocator'
+      all:
+        - log:
+            container: client
+            matches_all:
+              - 'Bootstrapping \d+ early-service'
+              # ...and it actually does its job in place: the async log4j context is installed.
+              - 'Successfully configured async logger context'
+              # spark ships no loader service, so AutoModpack's locator discovers it in the modpack
+              # folder and loads it as an ordinary mod (never copied to standard mods/).
+              - 'Found mod file.*spark.*EarlyModLocator'
+        - log:
+            # bootstrap/bridge bookkeeping is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches_all:
+              # Async Logger's NeoForge GraphicsBootstrapper is fired in place - only reached when
+              # the loader-scoped service set makes it eligible (the inert Forge files no longer block it).
+              - 'in-place GraphicsBootstrapper.*asynclogger'
+              # Once the GAME layer is up, AutoModpack bridges its classloader to Async Logger's child
+              # layer, so the inner mod's mixin into Main.main reads the SAME LoggerConfigurator the
+              # GraphicsBootstrapper initialised - instead of an uninitialised second copy (the split
+              # that used to NPE in place). Reaching this proves the in-place class identity is fixed.
+              - 'Bridged \d+ outer package.*asynclogger'
   - do: wait_exit
     name: tolerate the client exiting (headless GL) or staying alive
     expect: any

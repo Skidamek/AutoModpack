@@ -107,7 +107,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
                 try {
                     GraphicsBootstrapper bootstrapper = (GraphicsBootstrapper) Class.forName(impl, true, EarlyServiceLayer.classLoaderFor(jar))
                             .getDeclaredConstructor().newInstance();
-                    Constants.LOGGER.info("[AutoModpack] Invoking in-place GraphicsBootstrapper {} ({}) from {}", impl, bootstrapper.name(), jar.getFileName());
+                    Constants.LOGGER.debug("[AutoModpack] Invoking in-place GraphicsBootstrapper {} ({}) from {}", impl, bootstrapper.name(), jar.getFileName());
                     bootstrapper.bootstrap(arguments);
                 } catch (Throwable t) {
                     Constants.LOGGER.error("[AutoModpack] In-place GraphicsBootstrapper {} from {} failed", impl, jar.getFileName(), t);

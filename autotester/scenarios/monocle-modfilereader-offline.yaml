@@ -62,26 +62,34 @@ flow:
     name: the in-place IModFileReader was forwarded into mod discovery
     timeout: 420s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'Bootstrapping \d+ early-service'
-          - 'Forwarded \d+ in-place IModFileReader'
+      all:
+        - log:
+            container: client
+            matches: 'Bootstrapping \d+ early-service'
+        - log:
+            # reader-forwarding bookkeeping is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches: 'Forwarded \d+ in-place IModFileReader'
   - do: wait_for
     name: Monocle's reader + locator ran and Iris loaded through them (fml4)
     when:
       target: [1.21.1-neoforge]
     timeout: 60s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'Forwarded \d+ in-place IModFileReader.*monocle'
-          # Monocle's own candidate locator runs in place
-          - 'Running in-place candidate locator.*MonocleModLocator'
-          # Iris and Embeddium end up in the final mod list (Iris only loads via Monocle's reader)
-          - 'Iris.*\(iris\)'
-          - 'Embeddium.*\(embeddium\)'
+      all:
+        - log:
+            # reader/locator bookkeeping is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches_all:
+              - 'Forwarded \d+ in-place IModFileReader.*monocle'
+              # Monocle's own candidate locator runs in place
+              - 'Running in-place candidate locator.*MonocleModLocator'
+        - log:
+            container: client
+            matches_all:
+              # Iris and Embeddium end up in the final mod list (Iris only loads via Monocle's reader)
+              - 'Iris.*\(iris\)'
+              - 'Embeddium.*\(embeddium\)'
   - do: wait_for
     name: TouchController's reader reached mod discovery (fml10/fml11)
     when:
@@ -89,7 +97,8 @@ flow:
     timeout: 120s
     until:
       log:
-        container: client
+        # reader/locator bookkeeping is routine per-launch noise now logged at DEBUG only
+        file: logs/debug.log
         matches_all:
           - 'Forwarded \d+ in-place IModFileReader.*TouchController'
           # its dependency locator (same in-place jar) runs too

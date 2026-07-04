@@ -69,15 +69,19 @@ flow:
     name: Connector loaded in place - common to every target
     timeout: 600s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'Bootstrapping \d+ early-service'
-          # the outer jar's classes/resources reach the GAME layer via the bridge (no copy)
-          - 'Bridged \d+ outer package.*connector'
-          # the JPMS read edges a real ancestor layer would give are wired up, so the inner
-          # 'connector' module can actually access the outer classes (not just load them)
-          - 'Linked JPMS module reads for connector'
+      all:
+        - log:
+            container: client
+            matches: 'Bootstrapping \d+ early-service'
+        - log:
+            # bridge/JPMS bookkeeping is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches_all:
+              # the outer jar's classes/resources reach the GAME layer via the bridge (no copy)
+              - 'Bridged \d+ outer package.*connector'
+              # the JPMS read edges a real ancestor layer would give are wired up, so the inner
+              # 'connector' module can actually access the outer classes (not just load them)
+              - 'Linked JPMS module reads for connector'
   - do: wait_for
     name: the Connector-loaded Fabric mod ends up in the final mod list (NeoForge fml4)
     when:
@@ -105,21 +109,26 @@ flow:
       target: [1.21.1-neoforge]
     timeout: 600s
     until:
-      log:
-        container: client
-        matches_all:
-          # AutoModpack's ICoreMod forwards Connector's coremod transformers from the SERVICE
-          # layer - this is what makes Connector's own mixins apply in place
-          - 'Forwarding \d+ transformer.*ConnectorCoremods'
-          # Connector's ITransformationService lifecycle runs in place, driven by AutoModpackTransformationService
-          # (a real, natively ServiceLoader-discovered ITransformationService) at ModLauncher's own native
-          # batch times - initialize() in particular must run after NeoForge's window-provider assignment,
-          # which native discovery guarantees for free. Its completeScan then moves authlib/brigadier into
-          # the transformable set (ModuleLayerMigrator) and contributes its FabricASMFixer jar - the
-          # machinery its Fabric mods' mixins actually need.
-          - 'Ran in-place transformation-service initialize for.*ConnectorLoaderService'
-          - 'Forwarded \d+ completeScan result.*ConnectorLoaderService'
-          - 'Successfully made module authlib transformable'
+      all:
+        - log:
+            # coremod-forwarding/transformation-service lifecycle bookkeeping is routine
+            # per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches_all:
+              # AutoModpack's ICoreMod forwards Connector's coremod transformers from the SERVICE
+              # layer - this is what makes Connector's own mixins apply in place
+              - 'Forwarding \d+ transformer.*ConnectorCoremods'
+              # Connector's ITransformationService lifecycle runs in place, driven by AutoModpackTransformationService
+              # (a real, natively ServiceLoader-discovered ITransformationService) at ModLauncher's own native
+              # batch times - initialize() in particular must run after NeoForge's window-provider assignment,
+              # which native discovery guarantees for free. Its completeScan then moves authlib/brigadier into
+              # the transformable set (ModuleLayerMigrator) and contributes its FabricASMFixer jar - the
+              # machinery its Fabric mods' mixins actually need.
+              - 'Ran in-place transformation-service initialize for.*ConnectorLoaderService'
+              - 'Forwarded \d+ completeScan result.*ConnectorLoaderService'
+        - log:
+            container: client
+            matches: 'Successfully made module authlib transformable'
   - do: wait_for
     name: Connector's ITransformationService lifecycle ran in place (Forge fml47 - no ICoreMod SPI, so no coremod-forwarding line)
     when:
@@ -127,7 +136,9 @@ flow:
     timeout: 600s
     until:
       log:
-        container: client
+        # transformation-service lifecycle bookkeeping is routine per-launch noise now
+        # logged at DEBUG only
+        file: logs/debug.log
         matches_all:
           - 'Ran in-place transformation-service initialize for.*ConnectorLoaderService'
           - 'Forwarded \d+ completeScan result.*ConnectorLoaderService'

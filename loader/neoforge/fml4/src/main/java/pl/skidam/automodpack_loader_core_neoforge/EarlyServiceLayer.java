@@ -19,7 +19,9 @@ import pl.skidam.automodpack_loader_core_modlauncher.EarlyServiceBridgePlugin;
 import pl.skidam.automodpack_loader_core_modlauncher.ModuleClassLoaderAccess;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
@@ -29,6 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -139,6 +142,12 @@ public final class EarlyServiceLayer {
     // initializeLaunch (see EarlyServiceBridgePlugin), before Mixin loads any outer class.
     private static final AtomicBoolean GAME_BRIDGE_DONE = new AtomicBoolean(false);
 
+    // Every package routed from GAME's parentLoaders into a child SERVICE layer, across all bridged
+    // jars. Shared (not per-jar) so a child's fallback wrapper (see NonReentrantGameFallback) refuses
+    // ANY package we routed away from GAME, regardless of which child loader owns it - otherwise
+    // GAME -> childA -> (fallback) -> GAME -> childB could still ping-pong.
+    private static final Set<String> BRIDGED_PACKAGES = ConcurrentHashMap.newKeySet();
+
     static void register(Path jar, ClassLoader serviceClassLoader, ModuleLayer childLayer, String moduleName) {
         JAR_SERVICES.put(canonical(jar), new JarService(serviceClassLoader, childLayer, moduleName));
     }
@@ -217,7 +226,7 @@ public final class EarlyServiceLayer {
             try {
                 IModFileCandidateLocator locator = (IModFileCandidateLocator) Class.forName(impl, true, cl)
                         .getDeclaredConstructor().newInstance();
-                LOGGER.info("[AutoModpack] Running in-place candidate locator {} from {}", impl, jar.getFileName());
+                LOGGER.debug("[AutoModpack] Running in-place candidate locator {} from {}", impl, jar.getFileName());
                 locator.findCandidates(context, pipeline);
             } catch (Throwable t) {
                 LOGGER.error("[AutoModpack] Failed to run candidate locator {} from {}", impl, jar.getFileName(), t);
@@ -238,7 +247,7 @@ public final class EarlyServiceLayer {
             try {
                 IDependencyLocator locator = (IDependencyLocator) Class.forName(impl, true, cl)
                         .getDeclaredConstructor().newInstance();
-                LOGGER.info("[AutoModpack] Running in-place dependency locator {} from {}", impl, jar.getFileName());
+                LOGGER.debug("[AutoModpack] Running in-place dependency locator {} from {}", impl, jar.getFileName());
                 locator.scanMods(mods, pipeline);
             } catch (Throwable t) {
                 LOGGER.error("[AutoModpack] Failed to run dependency locator {} from {}", impl, jar.getFileName(), t);
@@ -286,7 +295,7 @@ public final class EarlyServiceLayer {
             // ModDiscoverer sorts readers by IOrderedProvider.getPriority(), highest first.
             merged.sort(Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
             readersField.set(modDiscoverer, List.copyOf(merged));
-            LOGGER.info("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), jar.getFileName());
+            LOGGER.debug("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), jar.getFileName());
         } catch (Throwable t) {
             LOGGER.error("[AutoModpack] Could not forward IModFileReader(s) from {} into mod discovery; a mod relying on that reader may need copy-to-standard", jar.getFileName(), t);
         }
@@ -346,7 +355,7 @@ public final class EarlyServiceLayer {
                     ITransformationService service = (ITransformationService) Class.forName(impl, true, cl)
                             .getDeclaredConstructor().newInstance();
                     TRANSFORMATION_SERVICES.computeIfAbsent(jar, k -> new ArrayList<>()).add(service);
-                    LOGGER.info("[AutoModpack] Instantiated in-place transformation service {} ({})", impl, jar.getFileName());
+                    LOGGER.debug("[AutoModpack] Instantiated in-place transformation service {} ({})", impl, jar.getFileName());
                 } catch (Throwable t) {
                     LOGGER.error("[AutoModpack] Failed to instantiate in-place transformation service {} from {}", impl, jar.getFileName(), t);
                 }
@@ -373,7 +382,7 @@ public final class EarlyServiceLayer {
             for (ITransformationService service : entry.getValue()) {
                 try {
                     action.run(service);
-                    LOGGER.info("[AutoModpack] Ran in-place transformation-service {} for {} ({})", verb, service.getClass().getName(), entry.getKey().getFileName());
+                    LOGGER.debug("[AutoModpack] Ran in-place transformation-service {} for {} ({})", verb, service.getClass().getName(), entry.getKey().getFileName());
                 } catch (Throwable t) {
                     LOGGER.error("[AutoModpack] In-place transformation service {} {} failed ({})", service.getClass().getName(), verb, entry.getKey().getFileName(), t);
                 }
@@ -390,7 +399,7 @@ public final class EarlyServiceLayer {
                     List<R> produced = query.run(service);
                     if (produced != null && !produced.isEmpty()) {
                         results.addAll(produced);
-                        LOGGER.info("[AutoModpack] Forwarded {} {} result(s) from in-place transformation service {} ({})",
+                        LOGGER.debug("[AutoModpack] Forwarded {} {} result(s) from in-place transformation service {} ({})",
                                 produced.size(), verb, service.getClass().getName(), entry.getKey().getFileName());
                     }
                 } catch (Throwable t) {
@@ -473,7 +482,7 @@ public final class EarlyServiceLayer {
                     for (ITransformer<?> transformer : coremod.getTransformers()) {
                         transformers.add(transformer);
                     }
-                    LOGGER.info("[AutoModpack] Forwarding {} transformer(s) from in-place coremod {} ({})",
+                    LOGGER.debug("[AutoModpack] Forwarding {} transformer(s) from in-place coremod {} ({})",
                             transformers.size() - before, impl, jar.getFileName());
                 } catch (Throwable t) {
                     LOGGER.error("[AutoModpack] Failed to run in-place coremod {} from {}", impl, jar.getFileName(), t);
@@ -551,12 +560,39 @@ public final class EarlyServiceLayer {
                 // packageLookup would also bridge the packages of jars skipped above.
                 Module module = entry.getValue().layer().findModule(entry.getValue().moduleName()).orElse(null);
                 if (module == null) continue;
+                Set<String> childServable = ModuleClassLoaderAccess.packageLookup(childLoader).keySet();
                 int bridged = 0;
+                int skipped = 0;
+                int nativeRouted = 0;
+                int unservable = 0;
                 for (String pkg : module.getPackages()) {
-                    // Classes: route the outer package to the child (single class identity). remove()
-                    // clears any stale GAME mapping (normally none, since we add no copy).
+                    // A package GAME's packageLookup already owns is a real GAME module (e.g. an
+                    // inner mod jar added by its own IDependencyLocator) - packageLookup has
+                    // precedence over parentLoaders in loadClass, so leave it alone. Stealing it here
+                    // would make GAME route the package to us while the inner class actually lives on
+                    // GAME, and our fallback would bounce right back (StackOverflowError - seen live
+                    // with Ixeris' outer bootstrapper vs. its inner ...-mod.jar).
+                    if (gamePackageLookup.containsKey(pkg)) {
+                        skipped++;
+                        continue;
+                    }
+                    // GAME's parentLoaders may already route this package natively (an
+                    // ancestor-layer module owns it - e.g. a duplicate installation of the same
+                    // mod sitting in standard mods/, claimed by the SERVICE layer). Native
+                    // resolution predates us and works; the bridge only ever ADDS routes.
+                    if (gameParentLoaders.containsKey(pkg)) {
+                        nativeRouted++;
+                        continue;
+                    }
+                    // The child's live packageLookup is what its loadClass consults; a package it
+                    // doesn't claim can never be served by it, so routing it there is a dead end.
+                    if (!childServable.contains(pkg)) {
+                        unservable++;
+                        continue;
+                    }
+                    // Route the outer package to the child (single class identity).
                     gameParentLoaders.put(pkg, childLoader);
-                    gamePackageLookup.remove(pkg);
+                    BRIDGED_PACKAGES.add(pkg);
                     bridged++;
                 }
                 // Resources: findResourceList never consults parentLoaders, only the loader's own
@@ -565,16 +601,42 @@ public final class EarlyServiceLayer {
                 Object root = ModuleClassLoaderAccess.resolvedRoots(childLoader).get(entry.getValue().moduleName());
                 if (root != null) gameResolvedRoots.put(entry.getValue().moduleName(), root);
                 // The child layer's parents are only [SERVICE, BOOT] (built before GAME existed), so
-                // it can't see minecraft/neoforge; point its fallback at GAME now that GAME exists,
-                // so an outer class referencing net.minecraft.* resolves.
-                ((ModuleClassLoader) childLoader).setFallbackClassLoader(gameClassLoader);
-                LOGGER.info("[AutoModpack] Bridged {} outer package(s) of {} to its early-service layer for in-place class/resource sharing", bridged, jar.getFileName());
+                // it can't see minecraft/neoforge; point its fallback at a wrapper around GAME now
+                // that GAME exists, so an outer class referencing net.minecraft.* resolves - but a
+                // class in a package WE routed to some child never bounces back into GAME (see
+                // NonReentrantGameFallback).
+                ((ModuleClassLoader) childLoader).setFallbackClassLoader(new NonReentrantGameFallback(gameClassLoader, childLoader, BRIDGED_PACKAGES));
+                LOGGER.debug("[AutoModpack] Bridged {} outer package(s) of {} to its early-service layer for in-place class/resource sharing{}",
+                        bridged, jar.getFileName(), skipped > 0 ? " (" + skipped + " shared package(s) left to the GAME layer)" : "");
+                logBridgeDiagnostics(jar, entry.getValue().moduleName(), childLoader, module, bridged, skipped, nativeRouted, unservable);
                 // Classloader routing makes the outer classes loadable; JPMS still checks module
                 // readability at access time, so wire the read edges a real ancestor layer would give.
                 linkModuleReads(gameLayer, entry.getValue().layer(), jar);
             } catch (Throwable t) {
                 LOGGER.error("[AutoModpack] Failed to bridge {} to the GAME layer", jar.getFileName(), t);
             }
+        }
+    }
+
+    /**
+     * One-pass bridge-time verification: {@code module.getPackages()} (what we just routed) and the
+     * child loader's LIVE {@code packageLookup} (what its {@code loadClass} will actually consult)
+     * are built from the same {@code Configuration}, so a "ghost" package (in the descriptor but
+     * not the live map) should be statically impossible per securejarhandler's constructor. Ghosts
+     * are never routed (see the loop guards); this logs them to pin any live divergence.
+     */
+    private static void logBridgeDiagnostics(Path jar, String moduleName, ClassLoader childLoader, Module module, int bridged, int skipped, int nativeRouted, int unservable) {
+        try {
+            Set<String> ghosts = new HashSet<>(module.getPackages());
+            ghosts.removeAll(ModuleClassLoaderAccess.packageLookup(childLoader).keySet());
+            LOGGER.debug("[AutoModpack] Bridge diag: jar={} module={} childLoader=0x{} routed={} skippedGameOwned={} skippedNativeRoute={} skippedUnservable={} ghost={}",
+                    jar.getFileName(), moduleName, Integer.toHexString(System.identityHashCode(childLoader)), bridged, skipped, nativeRouted, unservable, ghosts.size());
+            if (!ghosts.isEmpty()) {
+                LOGGER.warn("[AutoModpack] Bridge diag: {} ghost package(s) of {} exist in the module descriptor but not in the child loader's live packageLookup - left unrouted (first 10): {}",
+                        ghosts.size(), jar.getFileName(), ghosts.stream().sorted().limit(10).collect(Collectors.toList()));
+            }
+        } catch (Throwable t) {
+            LOGGER.warn("[AutoModpack] Bridge diag failed for {}", jar.getFileName(), t);
         }
     }
 
@@ -600,7 +662,7 @@ public final class EarlyServiceLayer {
                 ModuleClassLoaderAccess.addReads(child, game); // outer class -> minecraft/neoforge
             }
         }
-        LOGGER.info("[AutoModpack] Linked JPMS module reads for {}: {} child module(s) <-> {} game module(s)",
+        LOGGER.debug("[AutoModpack] Linked JPMS module reads for {}: {} child module(s) <-> {} game module(s)",
                 jar.getFileName(), childModules.size(), gameModules.size());
     }
 
@@ -657,6 +719,79 @@ public final class EarlyServiceLayer {
      */
     public static boolean isCoremodJar(Path jar) {
         return info(jar).coremod();
+    }
+
+    /**
+     * A child SERVICE layer's fallback classloader (replaces GAME itself as the direct fallback).
+     * Delegates to GAME normally, but refuses outright (no delegation) a class whose package is one
+     * WE routed into {@code gameParentLoaders} ({@link #BRIDGED_PACKAGES}): that package's authority
+     * is a child loader, which already had first crack at the class (via its own {@code
+     * packageLookup}/{@code findClass}) and fell through here BECAUSE it failed - GAME would only
+     * route the same package straight back to a child (itself or another sharing this same set),
+     * so bouncing there again can only recurse. Breaking that hop here makes the cycle structurally
+     * impossible instead of merely unlikely.
+     *
+     * <p>Resources are unaffected: {@code ModuleClassLoader.findResourceList} never consults {@code
+     * parentLoaders} or the fallback loader, only {@code resolvedRoots}, so {@link #getResource} and
+     * {@link #getResources} delegate to GAME unconditionally.
+     */
+    private static final class NonReentrantGameFallback extends ClassLoader {
+        private final ClassLoader gameClassLoader;
+        private final ClassLoader childLoader; // the loader whose fallback this wrapper is (diagnostics only)
+        private final Set<String> bridgedPackages;
+        // Packages already reported by the refusal diagnostics (rate limit: one WARN per package).
+        private final Set<String> reportedPackages = ConcurrentHashMap.newKeySet();
+
+        NonReentrantGameFallback(ClassLoader gameClassLoader, ClassLoader childLoader, Set<String> bridgedPackages) {
+            super(null); // only the two delegation paths below matter; no JDK platform-loader parent needed
+            this.gameClassLoader = gameClassLoader;
+            this.childLoader = childLoader;
+            this.bridgedPackages = bridgedPackages;
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            int lastDot = name.lastIndexOf('.');
+            String pkg = lastDot < 0 ? "" : name.substring(0, lastDot);
+            if (bridgedPackages.contains(pkg)) {
+                logRefusal(name, pkg);
+                throw new ClassNotFoundException(name); // a child was already the authority for this package
+            }
+            return gameClassLoader.loadClass(name);
+        }
+
+        /**
+         * A refusal here means the child that owns this bridged package could not serve the class -
+         * normally impossible for a class that exists in the jar. Log (once per package) the three
+         * facts that discriminate the possible causes: whether OUR child's live {@code packageLookup}
+         * claims the package at this moment (false = the map diverged from bridge time), and which
+         * loader GAME's {@code parentLoaders} currently routes the package to (not our child = an
+         * identity mismatch; the class fell through the wrong child's fallback).
+         */
+        private void logRefusal(String name, String pkg) {
+            if (!reportedPackages.add(pkg)) return;
+            try {
+                boolean childOwnsPkg = ModuleClassLoaderAccess.packageLookup(childLoader).containsKey(pkg);
+                ClassLoader routed = ModuleClassLoaderAccess.parentLoaders(gameClassLoader).get(pkg);
+                LOGGER.warn("[AutoModpack] Fallback refused {} (package {}): wrapper's child=0x{}, child packageLookup containsKey(pkg)={}, GAME parentLoaders maps pkg to {}",
+                        name, pkg,
+                        Integer.toHexString(System.identityHashCode(childLoader)),
+                        childOwnsPkg,
+                        routed == null ? "null" : "0x" + Integer.toHexString(System.identityHashCode(routed)));
+            } catch (Throwable t) {
+                LOGGER.warn("[AutoModpack] Fallback refused {} (package {}); diagnostics failed", name, pkg, t);
+            }
+        }
+
+        @Override
+        public URL getResource(String name) {
+            return gameClassLoader.getResource(name);
+        }
+
+        @Override
+        public Enumeration<URL> getResources(String name) throws IOException {
+            return gameClassLoader.getResources(name);
+        }
     }
 
     /** Reads the implementation class names listed in a {@code META-INF/services/...} file. */

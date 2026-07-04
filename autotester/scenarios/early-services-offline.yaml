@@ -57,23 +57,30 @@ flow:
     name: Sodium loaded in place (bootstrap + in-place mod discovery)
     timeout: 420s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'Bootstrapping \d+ early-service'
-          - 'in-place GraphicsBootstrapper.*SodiumWorkarounds'
+      all:
+        - log:
+            container: client
+            matches: 'Bootstrapping \d+ early-service'
+        - log:
+            # routine per-launch bootstrap noise, now logged at DEBUG only
+            file: logs/debug.log
+            matches: 'in-place GraphicsBootstrapper.*SodiumWorkarounds'
   - do: wait_for
     name: 1.21.1 split-jar locator ran and the GAME layer was bridged to Sodium's child layer
     when:
       target: 1.21.1-neoforge
     timeout: 60s
     until:
-      log:
-        container: client
-        matches_all:
-          - 'Running in-place candidate locator.*SodiumServiceModLocator'
-          - 'Bridged \d+ outer package.*sodium'
-          - 'Loaded configuration file for Sodium'
+      all:
+        - log:
+            # locator/bridge bookkeeping is routine per-launch noise now logged at DEBUG only
+            file: logs/debug.log
+            matches_all:
+              - 'Running in-place candidate locator.*SodiumServiceModLocator'
+              - 'Bridged \d+ outer package.*sodium'
+        - log:
+            container: client
+            matches: 'Loaded configuration file for Sodium'
   - do: wait_for
     name: 1.21.10/26.1 mod discovery picked up the in-place jar as a real mod
     when:

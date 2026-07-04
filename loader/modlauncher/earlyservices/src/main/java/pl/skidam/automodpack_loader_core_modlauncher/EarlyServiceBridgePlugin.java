@@ -46,7 +46,7 @@ public class EarlyServiceBridgePlugin implements ILaunchPluginService {
             PriorityPluginMap ordered = new PriorityPluginMap(NAME, plugins);
             ordered.putIfAbsent(NAME, new EarlyServiceBridgePlugin());
             ModuleClassLoaderAccess.writeField(pluginHandler, "plugins", ordered);
-            Constants.LOGGER.info("[AutoModpack] Injected early-service bridge launch plugin '{}' (ModLauncher discovers launch plugins only from the BOOT layer, so SERVICE-layer service files would never be seen)", NAME);
+            Constants.LOGGER.debug("[AutoModpack] Injected early-service bridge launch plugin '{}' (ModLauncher discovers launch plugins only from the BOOT layer, so SERVICE-layer service files would never be seen)", NAME);
         } catch (Throwable t) {
             Constants.LOGGER.warn("[AutoModpack] Could not inject the early-service bridge launch plugin; in-place graphics-service mods may fail", t);
         }
