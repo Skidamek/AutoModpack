@@ -632,7 +632,13 @@ public final class EarlyServiceLayer {
             LOGGER.debug("[AutoModpack] Bridge diag: jar={} module={} childLoader=0x{} routed={} skippedGameOwned={} skippedNativeRoute={} skippedUnservable={} ghost={}",
                     jar.getFileName(), moduleName, Integer.toHexString(System.identityHashCode(childLoader)), bridged, skipped, nativeRouted, unservable, ghosts.size());
             if (!ghosts.isEmpty()) {
-                LOGGER.warn("[AutoModpack] Bridge diag: {} ghost package(s) of {} exist in the module descriptor but not in the child loader's live packageLookup - left unrouted (first 10): {}",
+                // Packages present in the module descriptor but absent from the child loader's
+                // construction-time packageLookup - a securejarhandler lazy-metadata scan-timing quirk
+                // seen only with automatic modules (e.g. Ixeris/asynclogger) under live multi-module
+                // resolution. Benign: the additive bridge never touches unrouted packages, so their
+                // native resolution is untouched and the classes still load (verified in prod). DEBUG
+                // only, so it does not spam production every boot.
+                LOGGER.debug("[AutoModpack] Bridge diag: {} ghost package(s) of {} left unrouted (in descriptor, absent from live packageLookup; served natively). First 10: {}",
                         ghosts.size(), jar.getFileName(), ghosts.stream().sorted().limit(10).collect(Collectors.toList()));
             }
         } catch (Throwable t) {
