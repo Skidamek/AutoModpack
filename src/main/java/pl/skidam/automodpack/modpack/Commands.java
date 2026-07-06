@@ -20,6 +20,7 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack_core.config.ConfigUtils;
+import pl.skidam.automodpack_core.protocol.HostDoctor;
 
 import static net.minecraft.commands.Commands.literal;
 import static pl.skidam.automodpack_core.Constants.*;
@@ -57,6 +58,10 @@ public class Commands {
                                         .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::fingerprint)
                                 )
+                                .then(literal("doctor")
+                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                        .executes(Commands::doctor)
+                                )
                         )
                         .then(literal("config")
                                 .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
@@ -89,6 +94,30 @@ public class Commands {
         } else {
             send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
         }
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int doctor(CommandContext<CommandSourceStack> context) {
+        int minecraftPort = context.getSource().getServer().getPort();
+        send(context, "Running AutoModpack host diagnosis...", ChatFormatting.YELLOW, false);
+        Util.backgroundExecutor().execute(() -> {
+            for (var result : HostDoctor.run(minecraftPort)) {
+                ChatFormatting color = switch (result.status()) {
+                    case OK -> ChatFormatting.GREEN;
+                    case INFO -> ChatFormatting.GRAY;
+                    case WARN -> ChatFormatting.YELLOW;
+                    case FAIL -> ChatFormatting.RED;
+                };
+
+                String label = "[" + result.status() + "] " + result.name();
+                if (result.detail().isEmpty()) {
+                    send(context, label, color, false);
+                } else {
+                    send(context, label, color, result.detail(), ChatFormatting.WHITE, false);
+                }
+            }
+        });
 
         return Command.SINGLE_SUCCESS;
     }
@@ -200,7 +229,7 @@ public class Commands {
     private static int about(CommandContext<CommandSourceStack> context) {
         send(context, "AutoModpack", ChatFormatting.GREEN, AM_VERSION, ChatFormatting.WHITE, false);
         send(context, "/automodpack generate", ChatFormatting.YELLOW, false);
-        send(context, "/automodpack host start/stop/restart/connections/fingerprint", ChatFormatting.YELLOW, false);
+        send(context, "/automodpack host start/stop/restart/connections/fingerprint/doctor", ChatFormatting.YELLOW, false);
         send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
         return Command.SINGLE_SUCCESS;
     }
