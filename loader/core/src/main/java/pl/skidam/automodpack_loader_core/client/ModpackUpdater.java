@@ -41,6 +41,8 @@ public class ModpackUpdater {
     private Jsons.ModpackContentFields serverModpackContent;
     private String serverModpackContentJson; // TODO: remove this variable and use serverModpackContent directly
     public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
+    // Mods refused by the downloadModsOnlyFromPlatforms policy (not found on modrinth/curseforge)
+    public final List<String> blockedDownloads = new ArrayList<>();
     private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
     private final Jsons.ModpackAddresses modpackAddresses;
     private final Secrets.Secret modpackSecret;
@@ -260,7 +262,12 @@ public class ModpackUpdater {
 
             LegacyClientCacheUtils.deleteDummyFiles();
 
-            if (!failedDownloads.isEmpty()) {
+            if (!blockedDownloads.isEmpty()) {
+                LOGGER.error("Mods blocked by downloadModsOnlyFromPlatforms (not found on modrinth/curseforge): {}", blockedDownloads);
+                new ScreenManager().error("automodpack.error.files",
+                        "Blocked by your downloadModsOnlyFromPlatforms setting (not on Modrinth/CurseForge): " + String.join(", ", blockedDownloads),
+                        "automodpack.error.logs");
+            } else if (!failedDownloads.isEmpty()) {
                 StringBuilder failedFiles = new StringBuilder();
                 for (var download : failedDownloads.entrySet()) {
                     var item = download.getKey();
@@ -330,6 +337,13 @@ public class ModpackUpdater {
                 urls.addAll(fetchManager.getFetchDatas().get(serverFileHash).fetchedData().urls());
             }
 
+            boolean platformsOnly = clientConfig != null && clientConfig.downloadModsOnlyFromPlatforms && "mod".equals(serverItem.type);
+            if (platformsOnly && urls.isEmpty()) {
+                LOGGER.warn("Refusing to download {} from the server host - not found on modrinth/curseforge (downloadModsOnlyFromPlatforms)", serverFilePath);
+                blockedDownloads.add(serverFilePath);
+                continue;
+            }
+
             Runnable failureCallback = () -> {
                 failedDownloads.put(serverItem, urls);
             };
@@ -352,7 +366,8 @@ public class ModpackUpdater {
             };
 
 
-            downloadManager.download(downloadFile, serverFileHash, urls, serverFileSize, successCallback, failureCallback);
+            // Under the platforms-only policy a transient url failure must not fall back to the host
+            downloadManager.download(downloadFile, serverFileHash, urls, serverFileSize, successCallback, failureCallback, !platformsOnly);
         }
 
         downloadManager.joinAll();

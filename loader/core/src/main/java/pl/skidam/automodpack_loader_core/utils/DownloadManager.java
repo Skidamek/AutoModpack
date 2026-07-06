@@ -59,10 +59,14 @@ public class DownloadManager {
     }
 
     public synchronized void download(Path file, String sha1, List<String> urls, long fileSize, Runnable successCallback, Runnable failureCallback) {
+        download(file, sha1, urls, fileSize, successCallback, failureCallback, true);
+    }
+
+    public synchronized void download(Path file, String sha1, List<String> urls, long fileSize, Runnable successCallback, Runnable failureCallback, boolean allowHostFallback) {
         FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
         if (queuedDownloads.containsKey(hashPathPair)) return;
 
-        QueuedDownload task = new QueuedDownload(file, urls, fileSize, 0, successCallback, failureCallback);
+        QueuedDownload task = new QueuedDownload(file, urls, fileSize, 0, successCallback, failureCallback, allowHostFallback);
         queuedDownloads.put(hashPathPair, task);
         totalFilesAdded++;
         downloadNext();
@@ -262,7 +266,7 @@ public class DownloadManager {
         try {
             if (url != null && !Objects.equals(url, "host") && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
                 httpDownloader.download(url, tempStoreFile, this::updateNetworkProgress);
-            } else if (downloadClient != null) {
+            } else if (downloadClient != null && task.allowHostFallback) {
                 hostDownloadFile(hashPathPair, tempStoreFile, this::updateNetworkProgress);
             } else {
                 return false;
@@ -321,7 +325,8 @@ public class DownloadManager {
         } catch (IOException ignored) {}
         SmartFileUtils.executeOrder66(task.file);
 
-        if (task.attempts < (task.urls.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
+        int sources = task.urls.size() + (task.allowHostFallback ? 1 : 0);
+        if (task.attempts < sources * MAX_DOWNLOAD_ATTEMPTS) {
             LOGGER.warn("Retrying download: {}", task.file.getFileName());
             task.attempts++;
             queuedDownloads.put(key, task);
@@ -395,9 +400,11 @@ public class DownloadManager {
         public int attempts;
         public final Runnable successCallback;
         public final Runnable failureCallback;
+        // false = platforms-only policy: never fall back to the modpack host for this file
+        public final boolean allowHostFallback;
 
-        public QueuedDownload(Path f, List<String> u, long size, int a, Runnable s, Runnable fa) {
-            file = f; urls = u; fileSize = size; attempts = a; successCallback = s; failureCallback = fa;
+        public QueuedDownload(Path f, List<String> u, long size, int a, Runnable s, Runnable fa, boolean allowHost) {
+            file = f; urls = u; fileSize = size; attempts = a; successCallback = s; failureCallback = fa; allowHostFallback = allowHost;
         }
     }
 

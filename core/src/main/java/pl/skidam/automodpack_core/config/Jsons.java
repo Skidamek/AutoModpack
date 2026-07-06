@@ -31,6 +31,9 @@ public class Jsons {
         public boolean syncLoaderVersion = true;
         public boolean playMusic = true;
         public boolean allowRemoteNonModpackDeletions = true;
+        // When true, mods are downloaded exclusively from modrinth/curseforge (verified by hash).
+        // Mods not available there are refused instead of being downloaded from the server host.
+        public boolean downloadModsOnlyFromPlatforms = false;
     }
 
     public static class ModpackAddresses {
