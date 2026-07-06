@@ -6,7 +6,7 @@ import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_loader_core.SelfUpdater;
-import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;

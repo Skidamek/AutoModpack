@@ -167,6 +167,10 @@ public class Jsons {
             public final boolean forceCopy;
             public final String sha1;
             public final String murmur;
+            // Optional, filled by the server at generation time so clients don't need to query
+            // the modrinth/curseforge APIs themselves (they still do as a fallback when absent).
+            public List<String> dlUrls;
+            public List<String> pageUrls;
 
             public ModpackContentItem(String file, String size, String type, boolean editable, boolean forceCopy, String sha1, String murmur) {
                 this.file = file;

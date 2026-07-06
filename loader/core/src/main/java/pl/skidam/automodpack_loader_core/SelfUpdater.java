@@ -6,7 +6,7 @@ import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
-import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;

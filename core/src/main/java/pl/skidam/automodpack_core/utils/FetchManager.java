@@ -1,7 +1,7 @@
-package pl.skidam.automodpack_loader_core.utils;
+package pl.skidam.automodpack_core.utils;
 
-import pl.skidam.automodpack_loader_core.platforms.CurseForgeAPI;
-import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 
 import java.util.*;
 import java.util.concurrent.CancellationException;

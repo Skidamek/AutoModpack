@@ -129,6 +129,9 @@ public class ModpackContent {
             return false;
         }
 
+        // Embed platform urls so clients don't have to query the APIs themselves
+        ContentUrlPrefetcher.prefetch(list);
+
         saveModpackContent(computedFilesToDelete);
         if (hostServer != null) {
             hostServer.setPaths(pathsMap);

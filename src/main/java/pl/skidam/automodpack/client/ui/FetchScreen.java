@@ -6,7 +6,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
-import pl.skidam.automodpack_loader_core.utils.FetchManager;
+import pl.skidam.automodpack_core.utils.FetchManager;
 
 public class FetchScreen extends VersionedScreen {
 

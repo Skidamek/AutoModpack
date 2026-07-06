@@ -15,7 +15,7 @@ import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
-import pl.skidam.automodpack_loader_core.utils.FetchManager;
+import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.io.IOException;
@@ -228,6 +228,10 @@ public class ModpackUpdater {
 
                 // Check if the file is mod, shaderpack or resourcepack is available to download from modrinth or curseforge
                 if (fileType.equals("mod") || fileType.equals("shader") || fileType.equals("resourcepack")) {
+                    // Skip the API round-trip when the server already embedded the urls
+                    if (serverItem.dlUrls != null && !serverItem.dlUrls.isEmpty()) {
+                        continue;
+                    }
                     fetchDatas.add(new FetchManager.FetchData(serverItem.file, serverItem.sha1, serverItem.murmur, serverItem.size, fileType));
                 }
             }
@@ -319,7 +323,10 @@ public class ModpackUpdater {
             }
 
             List<String> urls = new ArrayList<>();
-            if (fetchManager != null && fetchManager.getFetchDatas().containsKey(serverFileHash)) {
+            if (serverItem.dlUrls != null) {
+                urls.addAll(serverItem.dlUrls);
+            }
+            if (urls.isEmpty() && fetchManager != null && fetchManager.getFetchDatas().containsKey(serverFileHash)) {
                 urls.addAll(fetchManager.getFetchDatas().get(serverFileHash).fetchedData().urls());
             }
 
@@ -329,7 +336,9 @@ public class ModpackUpdater {
 
             Runnable successCallback = () -> {
                 List<String> mainPageUrls = new LinkedList<>();
-                if (fetchManager != null && fetchManager.getFetchDatas().get(serverFileHash) != null) {
+                if (serverItem.pageUrls != null && !serverItem.pageUrls.isEmpty()) {
+                    mainPageUrls = serverItem.pageUrls;
+                } else if (fetchManager != null && fetchManager.getFetchDatas().get(serverFileHash) != null) {
                     mainPageUrls = fetchManager.getFetchDatas().get(serverFileHash).fetchedData().mainPageUrls();
                 }
 
