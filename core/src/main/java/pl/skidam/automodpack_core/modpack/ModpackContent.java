@@ -184,9 +184,30 @@ public class ModpackContent {
             modpackContent.loaderVersion = LOADER_VERSION;
             modpackContent.loader = LOADER;
             modpackContent.modpackName = MODPACK_NAME;
+            modpackContent.changelog = readAuthoredChangelog();
             modpackContent.nonModpackFilesToDelete = nonModpackFilesToDelete;
 
             ConfigTools.saveModpackContent(hostModpackContentFile, modpackContent);
+        }
+    }
+
+    // Admin-authored changelog, shipped inside the content json and shown to clients on update
+    private static String readAuthoredChangelog() {
+        try {
+            if (!Files.isRegularFile(hostChangelogFile)) {
+                return "";
+            }
+
+            String changelog = Files.readString(hostChangelogFile).strip();
+            int maxLength = 16 * 1024;
+            if (changelog.length() > maxLength) {
+                LOGGER.warn("{} is longer than {} characters, truncating", hostChangelogFile, maxLength);
+                changelog = changelog.substring(0, maxLength);
+            }
+            return changelog;
+        } catch (Exception e) {
+            LOGGER.warn("Failed to read {}", hostChangelogFile, e);
+            return "";
         }
     }
 

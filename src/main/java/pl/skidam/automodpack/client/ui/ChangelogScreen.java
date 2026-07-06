@@ -1,7 +1,7 @@
 package pl.skidam.automodpack.client.ui;
 
 import java.nio.file.Path;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
@@ -158,7 +158,7 @@ public class ChangelogScreen extends VersionedScreen {
         if (this.searchField.getValue().isEmpty()) {
             formattedChanges = reFormatChanges();
         } else {
-            Map<String, String> filteredChangelogs = new HashMap<>();
+            Map<String, String> filteredChangelogs = new LinkedHashMap<>();
             for (Map.Entry<String, String> changelog : reFormatChanges().entrySet()) {
                 if (changelog.getKey().toLowerCase().contains(this.searchField.getValue().toLowerCase())) {
                     filteredChangelogs.put(changelog.getKey(), changelog.getValue());
@@ -173,7 +173,17 @@ public class ChangelogScreen extends VersionedScreen {
     }
 
     private Map<String, String> reFormatChanges() {
-        Map<String, String> reFormattedChanges = new HashMap<>();
+        // Linked so the admin-written changelog stays on top, in its original order
+        Map<String, String> reFormattedChanges = new LinkedHashMap<>();
+
+        if (changelogs.authoredChangelog != null && !changelogs.authoredChangelog.isBlank()) {
+            for (String line : changelogs.authoredChangelog.split("\n")) {
+                line = line.strip();
+                if (!line.isEmpty()) {
+                    reFormattedChanges.put(line, null);
+                }
+            }
+        }
 
         for (var changelog : changelogs.changesAddedList.entrySet()) {
             String modPageUrl = null;

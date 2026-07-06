@@ -2,6 +2,7 @@ package pl.skidam.automodpack.modpack;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 /*? if >= 1.21.11 {*/
 import net.minecraft.server.permissions.Permission;
@@ -12,6 +13,8 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
@@ -21,6 +24,7 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 
+import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
 import static pl.skidam.automodpack_core.Constants.*;
 
@@ -56,6 +60,20 @@ public class Commands {
                                 .then(literal("fingerprint")
                                         .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::fingerprint)
+                                )
+                        )
+                        .then(literal("changelog")
+                                .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                .executes(Commands::showChangelog)
+                                .then(literal("set")
+                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                        .then(argument("text", StringArgumentType.greedyString())
+                                                .executes(Commands::setChangelog)
+                                        )
+                                )
+                                .then(literal("clear")
+                                        .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                        .executes(Commands::clearChangelog)
                                 )
                         )
                         .then(literal("config")
@@ -112,6 +130,45 @@ public class Commands {
                 send(context, String.format("Player: %s (%s) is downloading modpack using %d connections", GameHelpers.getPlayerName(profile), playerId, connNum), ChatFormatting.GREEN, false);
             }
         });
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int showChangelog(CommandContext<CommandSourceStack> context) {
+        try {
+            if (Files.isRegularFile(hostChangelogFile)) {
+                send(context, Files.readString(hostChangelogFile).strip(), ChatFormatting.WHITE, false);
+            } else {
+                send(context, "No changelog set. Use '/automodpack changelog set <text>' or edit " + hostChangelogFile, ChatFormatting.YELLOW, false);
+            }
+        } catch (IOException e) {
+            send(context, "Failed to read " + hostChangelogFile, ChatFormatting.RED, false);
+        }
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int setChangelog(CommandContext<CommandSourceStack> context) {
+        // \n in chat input becomes a real line break in the changelog
+        String text = StringArgumentType.getString(context, "text").replace("\\n", "\n").strip();
+        try {
+            Files.createDirectories(hostModpackDir);
+            Files.writeString(hostChangelogFile, text);
+            send(context, "Changelog saved to " + hostChangelogFile + " - run '/automodpack generate' to publish it with the next modpack update", ChatFormatting.GREEN, false);
+        } catch (IOException e) {
+            send(context, "Failed to write " + hostChangelogFile, ChatFormatting.RED, false);
+        }
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int clearChangelog(CommandContext<CommandSourceStack> context) {
+        try {
+            Files.deleteIfExists(hostChangelogFile);
+            send(context, "Changelog cleared - run '/automodpack generate' to publish the change", ChatFormatting.GREEN, false);
+        } catch (IOException e) {
+            send(context, "Failed to delete " + hostChangelogFile, ChatFormatting.RED, false);
+        }
 
         return Command.SINGLE_SUCCESS;
     }
@@ -201,6 +258,7 @@ public class Commands {
         send(context, "AutoModpack", ChatFormatting.GREEN, AM_VERSION, ChatFormatting.WHITE, false);
         send(context, "/automodpack generate", ChatFormatting.YELLOW, false);
         send(context, "/automodpack host start/stop/restart/connections/fingerprint", ChatFormatting.YELLOW, false);
+        send(context, "/automodpack changelog [set <text>/clear]", ChatFormatting.YELLOW, false);
         send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
         return Command.SINGLE_SUCCESS;
     }

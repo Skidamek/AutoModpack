@@ -61,6 +61,10 @@ public class ModpackUpdater {
         this.modpackSecret = secret;
         this.modpackDir = modpackPath;
 
+        if (modpackContent != null && modpackContent.changelog != null) {
+            this.changelogs.authoredChangelog = modpackContent.changelog;
+        }
+
         if (this.modpackAddresses == null || this.modpackAddresses.isAnyEmpty()) {
             throw new IllegalArgumentException("modpackAddresses is null or empty");
         }

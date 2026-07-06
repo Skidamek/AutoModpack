@@ -144,6 +144,7 @@ public class Jsons {
 
     public static class ModpackContentFields {
         public String modpackName = "";
+        public String changelog = ""; // admin-authored, read from host-modpack/changelog.md on generation
         public String automodpackVersion = "";
         public String loader = "";
         public String loaderVersion = "";
