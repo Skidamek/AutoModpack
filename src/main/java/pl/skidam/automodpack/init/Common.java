@@ -6,6 +6,7 @@ import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.protocol.HostDoctor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.util.HashMap;
@@ -52,6 +53,11 @@ public class Common {
         }
 
         hostServer.start();
+
+        if (serverConfig.modpackHost && !hostServer.isRunning()) {
+            LOGGER.error("Modpack host failed to start - running diagnosis:");
+            HostDoctor.logReport(-1);
+        }
     }
 
     public static void beforeShutdownServer() {

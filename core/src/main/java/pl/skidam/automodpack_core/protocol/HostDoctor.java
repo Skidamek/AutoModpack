@@ -27,6 +27,19 @@ public class HostDoctor {
 
     public record CheckResult(Status status, String name, String detail) {}
 
+    // Logs the checklist - used when hosting fails at boot, where no command source exists.
+    // Pass minecraftPort -1 when unknown.
+    public static void logReport(int minecraftPort) {
+        for (CheckResult result : run(minecraftPort)) {
+            String line = "[" + result.status() + "] " + result.name() + (result.detail().isEmpty() ? "" : " - " + result.detail());
+            switch (result.status()) {
+                case FAIL -> LOGGER.error(line);
+                case WARN -> LOGGER.warn(line);
+                default -> LOGGER.info(line);
+            }
+        }
+    }
+
     public static List<CheckResult> run(int minecraftPort) {
         List<CheckResult> results = new ArrayList<>();
 
@@ -101,8 +114,9 @@ public class HostDoctor {
 
     private static void checkPorts(List<CheckResult> results, int minecraftPort) {
         if (serverConfig.bindPort == -1) {
+            String mcPort = minecraftPort > 0 ? String.valueOf(minecraftPort) : "?";
             results.add(new CheckResult(Status.INFO, "Port setup",
-                    "sharing the Minecraft port (" + minecraftPort + ") using magic packets - proxies and DDoS protection (Velocity, BungeeCord, TCPShield...) usually break this; if clients get connection errors, set bindPort to a free port and portToSend to how it is reachable from outside"));
+                    "sharing the Minecraft port (" + mcPort + ") using magic packets - proxies and DDoS protection (Velocity, BungeeCord, TCPShield...) usually break this; if clients get connection errors, set bindPort to a free port and portToSend to how it is reachable from outside"));
         } else if (serverConfig.portToSend == -1) {
             results.add(new CheckResult(Status.FAIL, "Port setup",
                     "bindPort is " + serverConfig.bindPort + " but portToSend is -1, so clients will try the Minecraft port and fail - set portToSend to " + serverConfig.bindPort + " (or to the externally forwarded port)"));
