@@ -672,9 +672,24 @@ public class ModpackUtils {
                     blockingValidationCallback(modpackAddresses.hostAddress, allowAskingUser)
             ).get();
         } catch (Exception e) {
-            LOGGER.error("Error while getting server modpack content", e);
+            if (isAuthFailure(e)) {
+                // Not an error: the stored session secret went stale (e.g. long absence or the
+                // server pruned it). Joining the minecraft server issues a fresh one automatically.
+                LOGGER.warn("Server rejected the stored session secret - it will be refreshed automatically when you join the server");
+            } else {
+                LOGGER.error("Error while getting server modpack content", e);
+            }
             return Optional.empty();
         }
+    }
+
+    private static boolean isAuthFailure(Throwable e) {
+        while (e != null) {
+            if (e.getMessage() != null && e.getMessage().contains("Authentication failed"))
+                return true;
+            e = e.getCause();
+        }
+        return false;
     }
 
     public static boolean canConnectModpackHost(Jsons.ModpackAddresses modpackAddresses) {

@@ -206,6 +206,13 @@ public class Preload {
                 LOGGER.info("Changed modpack name to {}", serverConfig.modpackName);
             }
 
+            // 336 was the pre-5.0 default and is indistinguishable from an explicit choice;
+            // treat it as the default and move it to the new one (expiry is sliding now anyway)
+            if (serverConfig.secretLifetime == 336) {
+                serverConfig.secretLifetime = 2160;
+                LOGGER.info("Updated secretLifetime from the old default (336h) to the new default (2160h)");
+            }
+
             ConfigUtils.normalizeServerConfig(serverConfig);
 
             // Save changes

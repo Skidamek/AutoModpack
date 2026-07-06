@@ -30,6 +30,10 @@ public class Secrets {
             return timestamp;
         }
 
+        public void refreshTimestamp() {
+            this.timestamp = System.currentTimeMillis() / 1000;
+        }
+
         @Override
         public String toString() {
             return "Secret{" +
@@ -81,6 +85,14 @@ public class Secrets {
 
         if (!valid)
             return false;
+
+        // Sliding expiry: every use of a secret extends its lifetime, so actively playing
+        // players never see "Authentication failed". Persisting is throttled - the in-memory
+        // timestamp always moves, but the file is only rewritten once per hour per secret.
+        boolean persist = currentTime - secret.timestamp() > 3600;
+        secret.refreshTimestamp();
+        if (persist)
+            SecretsStore.persistHostSecrets();
 
         cachedValidSecrets.add(secretStr);
 

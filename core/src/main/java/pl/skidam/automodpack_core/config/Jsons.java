@@ -112,7 +112,7 @@ public class Jsons {
         public boolean updateIpsOnEveryStart = false;
         public int bandwidthLimit = 0;
         public boolean validateSecrets = true;
-        public long secretLifetime = 336; // 336 hours = 14 days
+        public long secretLifetime = 2160; // 2160 hours = 90 days, sliding - refreshed on every use
         public boolean selfUpdater = false;
         public Set<String> acceptedLoaders = new HashSet<>();
 
@@ -134,8 +134,14 @@ public class Jsons {
         public String mcVersion = "";
     }
 
-    public static class SecretsFields {
+    // Legacy (pre-5.0) secrets file format: single secret per key. Any join from a second
+    // instance overwrote the previous secret, invalidating it. Kept only for migration.
+    public static class SecretsFieldsV1 {
         public Map<String, Secrets.Secret> secrets = new HashMap<>();
+    }
+
+    public static class SecretsFields {
+        public Map<String, List<Secrets.Secret>> secrets = new HashMap<>();
     }
 
     public static class KnownHostsFields {
