@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import org.jetbrains.annotations.NotNull;
+import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -708,6 +709,11 @@ public class ModpackUtils {
             }
             if (Objects.equals(knownHosts.hosts.get(address.getHostString()), fingerprint))
                 return true;
+
+            var dnsVerdict = checkDnsPin(address, fingerprint);
+            if (dnsVerdict.isPresent())
+                return dnsVerdict.get();
+
             LOGGER.warn("Received untrusted certificate from server {}!", address.getHostString());
             if (allowAskingUser) {
                 boolean trusted = askUserAboutCertificate(address, fingerprint);
@@ -720,6 +726,32 @@ public class ModpackUtils {
 
             return false;
         };
+    }
+
+    /**
+     * Checks the certificate against a pin the admin published in DNS
+     * ({@code _automodpack.<host>. TXT "v=amp1;fp=<sha256>"}, DNSSEC-validated).
+     *
+     * @return true (trust and persist), false (a validated pin exists but does NOT match -
+     * wrong server or wrong certificate, fail closed without asking the user), or empty
+     * (no usable DNS pin - fall back to the regular flow).
+     */
+    private static Optional<Boolean> checkDnsPin(InetSocketAddress address, String fingerprint) {
+        String host = address.getHostString();
+        Optional<String> dnsPin = DnsPinResolver.resolvePin(host);
+        if (dnsPin.isEmpty()) {
+            return Optional.empty();
+        }
+
+        if (dnsPin.get().equals(fingerprint)) {
+            LOGGER.info("Trusting certificate of {} - fingerprint matches its DNSSEC-validated DNS pin", host);
+            knownHosts.hosts.put(host, fingerprint);
+            ConfigTools.save(knownHostsFile, knownHosts);
+            return Optional.of(true);
+        }
+
+        LOGGER.error("Certificate of {} does NOT match the pin published in its DNS record! Refusing to connect.", host);
+        return Optional.of(false);
     }
 
     private static Boolean askUserAboutCertificate(InetSocketAddress address, String fingerprint) {
@@ -831,12 +863,18 @@ public class ModpackUtils {
             }
             if (Objects.equals(knownHosts.hosts.get(address.getHostString()), fingerprint))
                 return CompletableFuture.completedFuture(true);
-            LOGGER.warn("Received untrusted certificate from server {}!", address.getHostString());
-            if (allowAskingUser) {
-                return askUserAboutCertificateAsync(address, fingerprint);
-            }
 
-            return CompletableFuture.completedFuture(false);
+            return CompletableFuture.supplyAsync(() -> checkDnsPin(address, fingerprint)).thenCompose(dnsVerdict -> {
+                if (dnsVerdict.isPresent())
+                    return CompletableFuture.completedFuture(dnsVerdict.get());
+
+                LOGGER.warn("Received untrusted certificate from server {}!", address.getHostString());
+                if (allowAskingUser) {
+                    return askUserAboutCertificateAsync(address, fingerprint);
+                }
+
+                return CompletableFuture.completedFuture(false);
+            });
         };
     }
 

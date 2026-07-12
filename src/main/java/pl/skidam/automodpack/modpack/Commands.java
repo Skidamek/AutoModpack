@@ -9,6 +9,7 @@ import net.minecraft.server.permissions.PermissionLevel;
 /*?}*/
 import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -56,6 +57,10 @@ public class Commands {
                                 .then(literal("fingerprint")
                                         .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::fingerprint)
+                                        .then(literal("dns")
+                                                .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
+                                                .executes(Commands::fingerprintDnsRecord)
+                                        )
                                 )
                         )
                         .then(literal("config")
@@ -89,6 +94,32 @@ public class Commands {
         } else {
             send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
         }
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static int fingerprintDnsRecord(CommandContext<CommandSourceStack> context) {
+        String fingerprint = hostServer.getCertificateFingerprint();
+        if (fingerprint == null) {
+            send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
+            return Command.SINGLE_SUCCESS;
+        }
+
+        String host = serverConfig.addressToSend == null ? "" : serverConfig.addressToSend.trim();
+        if (host.isEmpty()) {
+            host = "<your-server-address>";
+        }
+
+        String record = DnsPinResolver.RECORD_PREFIX + host + ". IN TXT \"" + DnsPinResolver.RECORD_VERSION + ";" + DnsPinResolver.RECORD_FINGERPRINT_PREFIX + fingerprint + "\"";
+        MutableComponent recordText = VersionedText.literal(record).withStyle(style -> style
+                /*? if >=1.21.5 {*/
+                .withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
+                .withClickEvent(new ClickEvent.CopyToClipboard(record)));
+                 /*?} else {*/
+                /*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
+                .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, record)));
+        *//*?}*/
+        send(context, "Publish this DNS record - the zone must be DNSSEC-signed for clients to trust it", ChatFormatting.WHITE, recordText, ChatFormatting.YELLOW, false);
 
         return Command.SINGLE_SUCCESS;
     }
