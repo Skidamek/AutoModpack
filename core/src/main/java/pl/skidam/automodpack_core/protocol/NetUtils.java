@@ -22,6 +22,7 @@ import java.util.Base64;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HexFormat;
+import java.util.Locale;
 
 public class NetUtils {
 
@@ -56,13 +57,21 @@ public class NetUtils {
     public static final int MIN_CHUNK_SIZE = 8 * 1024; // 8 KB
     public static final int MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
 
+	private static final Provider BC_PROVIDER = new BouncyCastleProvider();
+
+	static {
+		if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
+			Security.addProvider(BC_PROVIDER);
+		}
+	}
+
     public static String getFingerprint(X509Certificate cert) throws CertificateEncodingException {
         byte[] certificate = cert.getEncoded();
 
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] fingerprint = digest.digest(certificate);
-            return HexFormat.of().formatHex(fingerprint);
+            return HexFormat.of().formatHex(fingerprint).toLowerCase(Locale.ROOT);
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
@@ -75,31 +84,28 @@ public class NetUtils {
     }
 
     public static X509Certificate selfSign(KeyPair keyPair) throws Exception {
-        Provider bcProvider = new BouncyCastleProvider();
-        Security.addProvider(bcProvider);
-
         long now = System.currentTimeMillis();
         Date startDate = new Date(now);
 
         X500Name dnName = new X500Name("CN=AutoModpack Self Signed Certificate");
-        BigInteger certSerialNumber = new BigInteger(Long.toString(now)); // <-- Using the current timestamp as the certificate serial number
+	    BigInteger certSerialNumber = new BigInteger(159, new SecureRandom());
 
         Calendar calendar = Calendar.getInstance();
         calendar.setTime(startDate);
-        calendar.add(Calendar.YEAR, 1); // <-- 1 Yr validity, does not matter, we don't validate it anyway
+        calendar.add(Calendar.YEAR, 1);
         Date endDate = calendar.getTime();
 
-        String signatureAlgorithm = "SHA256WithRSA"; // <-- Use appropriate signature algorithm based on your keyPair algorithm.
+        String signatureAlgorithm = "SHA256WithRSA";
         ContentSigner contentSigner = new JcaContentSignerBuilder(signatureAlgorithm).build(keyPair.getPrivate());
         JcaX509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(dnName, certSerialNumber, startDate, endDate, dnName, keyPair.getPublic());
 
-        return new JcaX509CertificateConverter().setProvider(bcProvider).getCertificate(certBuilder.build(contentSigner));
+        return new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certBuilder.build(contentSigner));
     }
 
     public static void saveCertificate(X509Certificate cert, Path path) throws Exception {
         String certPem = "-----BEGIN CERTIFICATE-----\n"
-                + formatBase64(Base64.getEncoder().encodeToString(cert.getEncoded()))
-                + "-----END CERTIFICATE-----";
+                + formatBase64(cert.getEncoded())
+                + "-----END CERTIFICATE-----\n";
         SmartFileUtils.createParentDirs(path);
         Files.writeString(path, certPem);
     }
@@ -115,18 +121,14 @@ public class NetUtils {
     public static void savePrivateKey(PrivateKey key, Path path) throws Exception {
         PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(key.getEncoded());
         String keyPem = "-----BEGIN PRIVATE KEY-----\n"
-                + formatBase64(Base64.getEncoder().encodeToString(keySpec.getEncoded()))
-                + "-----END PRIVATE KEY-----";
+                + formatBase64(keySpec.getEncoded())
+                + "-----END PRIVATE KEY-----\n";
         SmartFileUtils.createParentDirs(path);
         Files.writeString(path, keyPem);
     }
 
-    private static String formatBase64(String base64) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < base64.length(); i += 64) {
-            sb.append(base64, i, Math.min(i + 64, base64.length()));
-            sb.append("\n");
-        }
-        return sb.toString();
-    }
+	private static String formatBase64(byte[] derEncodedBytes) {
+		Base64.Encoder encoder = Base64.getMimeEncoder(64, new byte[]{'\n'});
+		return encoder.encodeToString(derEncodedBytes) + "\n";
+	}
 }
