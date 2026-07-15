@@ -10,11 +10,12 @@ import java.util.*;
 public class FileTreeScanner {
 
 	// Volatile snapshot pattern allows non-blocking reads during scanning
-	private volatile Map<String, Path> wildcardMatches = Map.of();
+	private volatile Map<String, Path> matchedPaths = Map.of();
 	private final Object lock = new Object();
 
-	private final List<PathMatcher> whiteListMatchers = new ArrayList<>();
-	private final List<PathMatcher> blackListMatchers = new ArrayList<>();
+	private final List<PathMatcher> whitelistMatchers = new ArrayList<>();
+	private final List<PathMatcher> blacklistMatchers = new ArrayList<>();
+	private final List<PathMatcher> blacklistedSubtreeMatchers = new ArrayList<>();
 	private final List<PruningRule> pruningRules = new ArrayList<>();
 	private final Set<Path> startDirectories;
 	private final FileSystem fs;
@@ -32,16 +33,16 @@ public class FileTreeScanner {
 	}
 
 	public Map<String, Path> getMatchedPaths() {
-		return wildcardMatches;
+		return matchedPaths;
 	}
 
 	public boolean hasMatch(String pathStr) {
-		return pathStr != null && wildcardMatches.containsKey(pathStr);
+		return pathStr != null && matchedPaths.containsKey(pathStr);
 	}
 
 	public void scan() {
 		synchronized (lock) {
-			if (whiteListMatchers.isEmpty()) return;
+			if (whitelistMatchers.isEmpty()) return;
 
 			Map<String, Path> localMatches = new HashMap<>(512);
 			var options = EnumSet.of(FileVisitOption.FOLLOW_LINKS);
@@ -58,7 +59,7 @@ public class FileTreeScanner {
 				}
 			}
 			// Atomic swap for thread safety
-			this.wildcardMatches = Map.copyOf(localMatches);
+			this.matchedPaths = Map.copyOf(localMatches);
 		}
 	}
 
@@ -75,13 +76,11 @@ public class FileTreeScanner {
 	private class Visitor extends SimpleFileVisitor<Path> {
 		private final Path startDir;
 		private final Path absStartDir;
-		private final int startDirCount;
 		private final Map<String, Path> targetMap;
 
 		Visitor(Path startDir, Path absStartDir, Map<String, Path> targetMap) {
 			this.startDir = startDir;
 			this.absStartDir = absStartDir;
-			this.startDirCount = startDir.getNameCount();
 			this.targetMap = targetMap;
 		}
 
@@ -99,37 +98,20 @@ public class FileTreeScanner {
 				return FileVisitResult.SKIP_SUBTREE;
 			}
 
+			Path relativeDir = startDir.relativize(dir);
+			if (matchesAny(blacklistedSubtreeMatchers, relativeDir)) return FileVisitResult.SKIP_SUBTREE;
+
 			// Optimization: Pruning check to skip irrelevant subtrees
 			Path fileNamePath = dir.getFileName();
-			if (fileNamePath != null) {
-				int depth = dir.getNameCount() - startDirCount;
-				if (!couldMatchStructure(fileNamePath.toString(), depth)) { return FileVisitResult.SKIP_SUBTREE; }
-			}
+			if (fileNamePath != null && !couldMatchStructure(fileNamePath.toString(), relativeDir.getNameCount())) { return FileVisitResult.SKIP_SUBTREE; }
 
 			return FileVisitResult.CONTINUE;
 		}
 
 		@Override
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
-			Path relative;
-			try {
-				relative = startDir.relativize(file);
-			} catch (IllegalArgumentException e) {
-				return FileVisitResult.CONTINUE;
-			}
-
-			// Indexed loops used for performance over Iterators
-			int whiteSize = whiteListMatchers.size();
-			for (int i = 0; i < whiteSize; i++) {
-				if (whiteListMatchers.get(i).matches(relative)) {
-					int blackSize = blackListMatchers.size();
-					for (int j = 0; j < blackSize; j++) {
-						if (blackListMatchers.get(j).matches(relative)) return FileVisitResult.CONTINUE;
-					}
-					targetMap.put(formatOutputKey(relative), file);
-					return FileVisitResult.CONTINUE;
-				}
-			}
+			Path relative = startDir.relativize(file);
+			if (matchesAny(whitelistMatchers, relative) && !matchesAny(blacklistMatchers, relative)) { targetMap.put(formatOutputKey(relative), file); }
 			return FileVisitResult.CONTINUE;
 		}
 
@@ -151,6 +133,14 @@ public class FileTreeScanner {
 		}
 	}
 
+	private static boolean matchesAny(List<PathMatcher> matchers, Path path) {
+		int size = matchers.size();
+		for (int i = 0; i < size; i++) {
+			if (matchers.get(i).matches(path)) return true;
+		}
+		return false;
+	}
+
 	// =================================================================================
 	// RULE PARSING & GLOB LOGIC
 	// =================================================================================
@@ -170,13 +160,17 @@ public class FileTreeScanner {
 			try {
 				PathMatcher matcher = fs.getPathMatcher("glob:" + clean);
 				if (isBlacklist) {
-					blackListMatchers.add(matcher);
+					blacklistMatchers.add(matcher);
+					if (clean.endsWith("/**")) {
+						String subtreePattern = clean.substring(0, clean.length() - 3);
+						if (!subtreePattern.isEmpty()) { blacklistedSubtreeMatchers.add(fs.getPathMatcher("glob:" + subtreePattern)); }
+					}
 				} else {
-					whiteListMatchers.add(matcher);
+					whitelistMatchers.add(matcher);
 					// Add collapsed variant for "foo/**/bar" -> "foo/bar" boundary cases
 					if (clean.contains("/**/")) {
 						String collapsed = clean.replace("/**/", "/");
-						whiteListMatchers.add(fs.getPathMatcher("glob:" + collapsed));
+						whitelistMatchers.add(fs.getPathMatcher("glob:" + collapsed));
 					}
 					// Generate Pruning Rule
 					pruningRules.add(PruningRule.compile(clean, fs, isCaseInsensitive));
@@ -272,8 +266,7 @@ public class FileTreeScanner {
 				char tc = t.charAt(tIdx);
 				char pc = pIdx < pLen ? p[pIdx] : '\0';
 
-				boolean isSlashMismatch = (pc == '/' && tc == '\\');
-				boolean charsMatch = (pc == tc) || isSlashMismatch || (caseInsensitive && Character.toLowerCase(pc) == Character.toLowerCase(tc));
+				boolean charsMatch = (pc == tc) || (caseInsensitive && Character.toLowerCase(pc) == Character.toLowerCase(tc));
 
 				if (pIdx < pLen && (pc == '?' || charsMatch)) {
 					pIdx++;
