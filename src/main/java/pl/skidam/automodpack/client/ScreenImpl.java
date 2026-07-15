@@ -1,11 +1,11 @@
 package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenService;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
-import pl.skidam.automodpack_loader_core.utils.FetchManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 import java.nio.file.Path;

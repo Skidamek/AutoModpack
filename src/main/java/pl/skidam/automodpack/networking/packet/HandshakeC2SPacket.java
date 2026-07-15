@@ -13,9 +13,9 @@ import net.minecraft.network.FriendlyByteBuf;
 import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_loader_core.SelfUpdater;
-import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 
 public class HandshakeC2SPacket {
 

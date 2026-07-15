@@ -1,7 +1,8 @@
 package pl.skidam.automodpack_core.utils;
 
-import static pl.skidam.automodpack_core.Constants.AM_VERSION;
-import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.Constants.*;
+import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.API_HOST;
+import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.summonKey;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -134,10 +135,15 @@ public class Json {
 
 		HttpURLConnection connection;
 		URL url = new URL(requestUrl);
+		if (!"https".equalsIgnoreCase(url.getProtocol()) || !API_HOST.equalsIgnoreCase(url.getHost()) || url.getUserInfo() != null
+				|| (url.getPort() != -1 && url.getPort() != 443)) {
+			throw new IOException("Refusing to send the CurseForge API key to an untrusted endpoint");
+		}
 		connection = (HttpURLConnection) url.openConnection();
+		connection.setInstanceFollowRedirects(false);
 		connection.addRequestProperty("Content-Type", "application/json");
 		connection.addRequestProperty("Accept", "application/json");
-		connection.addRequestProperty("x-api-key", "$2a$10$skl4d4Y2MR6c.nZhV3uVK.GBeKd3ML4RKyMns8DZqj91Hjf/HYrcS");
+		connection.addRequestProperty("x-api-key", summonKey());
 		connection.setConnectTimeout(3000);
 		connection.setReadTimeout(10000);
 		connection.setRequestMethod("POST");
@@ -152,6 +158,8 @@ public class Json {
 			try (InputStreamReader isr = new InputStreamReader(connection.getInputStream())) {
 				element = new JsonParser().parse(isr); // Needed to parse by deprecated method because of older minecraft versions (<1.17.1)
 			}
+		} else if (code == HttpURLConnection.HTTP_UNAUTHORIZED) {
+			LOGGER.error("CurseForge API authorization failed with HTTP 401");
 		} else {
 			LOGGER.warn("{} responded {} code", url, code);
 		}

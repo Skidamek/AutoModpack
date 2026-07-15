@@ -1,7 +1,9 @@
-package pl.skidam.automodpack_loader_core.platforms;
+package pl.skidam.automodpack_core.platforms;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +17,10 @@ import pl.skidam.automodpack_core.utils.Json;
 public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVersion, String fileName, String fileSize, String releaseType, String murmurHash,
 		String sha1Hash) {
 
-	public static final String BASE_URL = "https://api.curseforge.com/v1";
+	private static final String KEY = "JDJhJDEwJHNrbDRkNFkyTVI2Yy5uWmhWM3VWSy5HQmVLZDNNTDRSS3lNbnM4RFpxajkxSGpmL0hZcmNT";
+	public static final String API_HOST = "api.curseforge.com";
+	public static final String CDN_HOST = "edge.forgecdn.net";
+	public static final String BASE_URL = "https://" + API_HOST + "/v1";
 
 	// key - sha1, value - murmur
 	// https://docs.curseforge.com/?java#get-fingerprints-matches
@@ -89,6 +94,10 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 		String murmur = hashes.get(sha1);
 
 		return new CurseForgeAPI(null, downloadUrl, fileVersion, fileName, fileSize, releaseType, murmur, sha1);
+	}
+
+	public static String summonKey() {
+		return new String(Base64.getDecoder().decode(KEY), StandardCharsets.UTF_8);
 	}
 
 }

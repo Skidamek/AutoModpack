@@ -18,11 +18,12 @@ import java.util.zip.ZipInputStream;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
-import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -173,7 +174,8 @@ public class SelfUpdater {
 			DownloadManager downloadManager = new DownloadManager();
 			new ScreenManager().download(downloadManager, "AutoModpack " + automodpack.fileVersion());
 
-			downloadManager.download(automodpackUpdateJar, automodpack.SHA1Hash(), List.of(automodpack.downloadUrl()), automodpack.fileSize(),
+			downloadManager.download(automodpackUpdateJar, automodpack.SHA1Hash(),
+					List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
 					() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
 
 			downloadManager.joinAll();

@@ -21,6 +21,8 @@ import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.utils.DownloadSource;
+import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
@@ -30,7 +32,6 @@ import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
-import pl.skidam.automodpack_loader_core.utils.FetchManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 // TODO: clean up this mess
@@ -303,12 +304,12 @@ public class ModpackUpdater {
 
 			if (!Files.exists(downloadFile)) { newDownloadedFiles.add(serverFilePath); }
 
-			List<String> urls = new ArrayList<>();
+			List<DownloadSource> sources = new ArrayList<>();
 			if (fetchManager != null && fetchManager.getFetchDatas().containsKey(serverFileHash)) {
-				urls.addAll(fetchManager.getFetchDatas().get(serverFileHash).fetchedData().urls());
+				sources.addAll(fetchManager.getFetchDatas().get(serverFileHash).fetchedData().sources());
 			}
 
-			Runnable failureCallback = () -> failedDownloads.put(serverItem, urls);
+			Runnable failureCallback = () -> failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
 
 			Runnable successCallback = () -> {
 				List<String> mainPageUrls = new LinkedList<>();
@@ -325,7 +326,7 @@ public class ModpackUpdater {
 				}
 			};
 
-			downloadManager.download(downloadFile, serverFileHash, urls, serverFileSize, successCallback, failureCallback);
+			downloadManager.download(downloadFile, serverFileHash, sources, serverFileSize, successCallback, failureCallback);
 		}
 
 		downloadManager.joinAll();

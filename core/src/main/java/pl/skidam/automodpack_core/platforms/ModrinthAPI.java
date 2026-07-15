@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core.platforms;
+package pl.skidam.automodpack_core.platforms;
 
 import static pl.skidam.automodpack_core.Constants.*;
 

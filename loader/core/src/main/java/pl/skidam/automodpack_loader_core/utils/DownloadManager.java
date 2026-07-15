@@ -3,6 +3,7 @@ package pl.skidam.automodpack_loader_core.utils;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.io.*;
+import java.net.HttpURLConnection;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +14,7 @@ import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
@@ -56,11 +58,11 @@ public class DownloadManager {
 		this.downloadClient = downloadClient;
 	}
 
-	public synchronized void download(Path file, String sha1, List<String> urls, long fileSize, Runnable successCallback, Runnable failureCallback) {
+	public synchronized void download(Path file, String sha1, List<DownloadSource> sources, long fileSize, Runnable successCallback, Runnable failureCallback) {
 		FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
 		if (queuedDownloads.containsKey(hashPathPair)) return;
 
-		QueuedDownload task = new QueuedDownload(file, urls, fileSize, 0, successCallback, failureCallback);
+		QueuedDownload task = new QueuedDownload(file, sources, fileSize, 0, successCallback, failureCallback);
 		queuedDownloads.put(hashPathPair, task);
 		totalFilesAdded++;
 		downloadNext();
@@ -199,12 +201,9 @@ public class DownloadManager {
 	}
 
 	private String predictSource(QueuedDownload task) {
-		int numberOfIndexes = task.urls.size();
-		int urlIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
-		if (task.urls.size() > urlIndex) {
-			String url = task.urls.get(urlIndex);
-			if (!Objects.equals(url, "host")) { return getDomainFromUrl(url); }
-		}
+		int numberOfIndexes = task.sources.size();
+		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
+		if (task.sources.size() > sourceIndex) { return getDomainFromUrl(task.sources.get(sourceIndex).url()); }
 		return "internal_client";
 	}
 
@@ -248,14 +247,14 @@ public class DownloadManager {
 	}
 
 	private boolean attemptDownload(FileInspection.HashPathPair hashPathPair, QueuedDownload task, Path storeFile) throws InterruptedException {
-		int numberOfIndexes = task.urls.size();
-		int urlIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
-		String url = (task.urls.size() > urlIndex) ? task.urls.get(urlIndex) : null;
+		int numberOfIndexes = task.sources.size();
+		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
+		DownloadSource source = (task.sources.size() > sourceIndex) ? task.sources.get(sourceIndex) : null;
 		Path tempStoreFile = storeDir.resolve(hashPathPair.hash() + ".tmp");
 
 		try {
-			if (url != null && !Objects.equals(url, "host") && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
-				httpDownloader.download(url, tempStoreFile, this::updateNetworkProgress);
+			if (source != null && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
+				httpDownloader.download(source, tempStoreFile, this::updateNetworkProgress);
 			} else if (downloadClient != null) {
 				hostDownloadFile(hashPathPair, tempStoreFile, this::updateNetworkProgress);
 			} else {
@@ -270,6 +269,13 @@ public class DownloadManager {
 				SmartFileUtils.executeOrder66(tempStoreFile);
 				return false;
 			}
+		} catch (HttpFileDownloader.HttpStatusException e) {
+			if (source != null && source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
+				LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
+				task.attempts = (sourceIndex + 1) * MAX_DOWNLOAD_ATTEMPTS - 1;
+			}
+			SmartFileUtils.executeOrder66(tempStoreFile);
+			return false;
 		} catch (IOException e) {
 			SmartFileUtils.executeOrder66(tempStoreFile);
 			return false;
@@ -314,7 +320,7 @@ public class DownloadManager {
 		}
 		SmartFileUtils.executeOrder66(task.file);
 
-		if (task.attempts < (task.urls.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
+		if (task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
 			LOGGER.warn("Retrying download: {}", task.file.getFileName());
 			task.attempts++;
 			queuedDownloads.put(key, task);
@@ -402,15 +408,15 @@ public class DownloadManager {
 
 	public static class QueuedDownload {
 		public final Path file;
-		public final List<String> urls;
+		public final List<DownloadSource> sources;
 		public final long fileSize;
 		public int attempts;
 		public final Runnable successCallback;
 		public final Runnable failureCallback;
 
-		public QueuedDownload(Path f, List<String> u, long size, int a, Runnable s, Runnable fa) {
+		public QueuedDownload(Path f, List<DownloadSource> sources, long size, int a, Runnable s, Runnable fa) {
 			file = f;
-			urls = u;
+			this.sources = sources;
 			fileSize = size;
 			attempts = a;
 			successCallback = s;

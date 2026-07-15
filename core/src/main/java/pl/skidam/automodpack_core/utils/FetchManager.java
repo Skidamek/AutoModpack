@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_loader_core.utils;
+package pl.skidam.automodpack_core.utils;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
@@ -8,8 +8,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import pl.skidam.automodpack_loader_core.platforms.CurseForgeAPI;
-import pl.skidam.automodpack_loader_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.platforms.CurseForgeAPI;
+import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 
 public class FetchManager {
 
@@ -19,7 +19,7 @@ public class FetchManager {
 	// Return the results i guess
 
 	public record FetchData(String file, String sha1, String murmur, String fileSize, String fileType) {}
-	public record FetchedData(List<String> urls, List<String> mainPageUrls) {}
+	public record FetchedData(List<DownloadSource> sources, List<String> mainPageUrls) {}
 	public record Datas(FetchData fetchData, FetchedData fetchedData) {}
 	private final Map<String, Datas> fetchDatas = new HashMap<>();
 
@@ -65,13 +65,13 @@ public class FetchManager {
 	private void randomizeFinalOrder() {
 		ThreadLocalRandom rng = ThreadLocalRandom.current();
 		for (Datas data : fetchDatas.values()) {
-			List<String> urls = data.fetchedData().urls();
+			List<DownloadSource> sources = data.fetchedData().sources();
 
 			// Coin filp order
-			if (urls.size() == 2 && rng.nextBoolean()) {
-				String first = urls.get(0);
-				urls.set(0, urls.get(1));
-				urls.set(1, first);
+			if (sources.size() == 2 && rng.nextBoolean()) {
+				DownloadSource first = sources.get(0);
+				sources.set(0, sources.get(1));
+				sources.set(1, first);
 			}
 		}
 	}
@@ -83,7 +83,7 @@ public class FetchManager {
 		for (ModrinthAPI info : results) {
 			Datas datas = fetchDatas.get(info.SHA1Hash());
 			if (datas != null) {
-				datas.fetchedData().urls().add(info.downloadUrl());
+				datas.fetchedData().sources().add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.MODRINTH));
 				String mainPageUrl = ModrinthAPI.getMainPageUrl(info.modrinthID(), datas.fetchData.fileType);
 				datas.fetchedData().mainPageUrls().add(mainPageUrl);
 				fetchesDone.incrementAndGet();
@@ -98,7 +98,7 @@ public class FetchManager {
 		for (CurseForgeAPI info : results) {
 			Datas datas = fetchDatas.get(info.sha1Hash());
 			if (datas != null) {
-				datas.fetchedData().urls().add(info.downloadUrl());
+				datas.fetchedData().sources().add(new DownloadSource(info.downloadUrl(), DownloadSource.Provider.CURSEFORGE));
 				fetchesDone.incrementAndGet();
 			}
 		}

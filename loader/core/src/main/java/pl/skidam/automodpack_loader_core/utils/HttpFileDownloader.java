@@ -1,6 +1,8 @@
 package pl.skidam.automodpack_loader_core.utils;
 
 import static pl.skidam.automodpack_core.Constants.AM_VERSION;
+import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.CDN_HOST;
+import static pl.skidam.automodpack_core.platforms.CurseForgeAPI.summonKey;
 
 import java.io.*;
 import java.net.URI;
@@ -17,23 +19,23 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public class HttpFileDownloader {
 
 	private static final Logger LOGGER = LogManager.getLogger();
 
-	// Shared Client for HTTP/2 Multiplexing and Connection Pooling
-	private static final HttpClient CLIENT = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2) // Auto-negotiate HTTP/2
-			.followRedirects(HttpClient.Redirect.NORMAL).connectTimeout(Duration.ofSeconds(10)).executor(Executors.newCachedThreadPool()) // Async handler
-			.build();
+	// Shared Clients for HTTP/2 Multiplexing and Connection Pooling
+	private static final HttpClient DIRECT_CLIENT = createClient(HttpClient.Redirect.NEVER);
+	private static final HttpClient REDIRECT_CLIENT = createClient(HttpClient.Redirect.NORMAL);
 
 	/**
 	 * Downloads a file from a URL to a target path using HTTP/2 if available.
 	 * Blocks the calling thread (designed for use in Worker Threads).
 	 *
-	 * @param url
-	 *            The source URL.
+	 * @param source
+	 *            The source URL and provider.
 	 * @param target
 	 *            The destination file path.
 	 * @param progressAction
@@ -43,42 +45,94 @@ public class HttpFileDownloader {
 	 * @throws InterruptedException
 	 *             If the download is cancelled.
 	 */
-	public void download(String url, Path target, IntConsumer progressAction) throws IOException, InterruptedException {
+	public void download(DownloadSource source, Path target, IntConsumer progressAction) throws IOException, InterruptedException {
 		SmartFileUtils.createParentDirs(target);
 
-		HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).header("User-Agent", "github/skidamek/automodpack/" + AM_VERSION)
-				.header("Accept-Encoding", "gzip").timeout(Duration.ofSeconds(10)).GET().build();
+		URI uri;
+		try {
+			uri = URI.create(source.url());
+		} catch (IllegalArgumentException e) {
+			throw new IOException("Invalid download URI", e);
+		}
+
+		boolean authenticate = isAuthenticatedCurseForgeTarget(source, uri);
+		HttpResponse<InputStream> response = send(source, uri, authenticate, authenticate ? DIRECT_CLIENT : REDIRECT_CLIENT, target);
+
+		if (authenticate && response.statusCode() >= 300 && response.statusCode() < 400) {
+			try (InputStream ignored = response.body()) {
+				String location = response.headers().firstValue("Location").orElseThrow(() -> new IOException("HTTP redirect missing Location header"));
+				try {
+					uri = uri.resolve(location);
+				} catch (IllegalArgumentException e) {
+					throw new IOException("Invalid HTTP redirect URI", e);
+				}
+				if (!"https".equalsIgnoreCase(uri.getScheme())) throw new IOException("Refusing CurseForge HTTPS downgrade redirect");
+			}
+			response = send(source, uri, false, REDIRECT_CLIENT, target);
+		}
+
+		int statusCode = response.statusCode();
+		if (statusCode != 200) {
+			try (InputStream ignored = response.body()) {
+				throw new HttpStatusException(statusCode);
+			}
+		}
+
+		boolean isGzip = "gzip".equalsIgnoreCase(response.headers().firstValue("Content-Encoding").orElse(""));
+
+		try (InputStream rawIn = response.body();
+				InputStream in = isGzip ? new GZIPInputStream(rawIn) : rawIn;
+				OutputStream out = new BufferedOutputStream(new FileOutputStream(target.toFile()), 64 * 1024)) {
+
+			byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
+			int bytesRead;
+			while ((bytesRead = in.read(buffer)) != -1) {
+				if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+				out.write(buffer, 0, bytesRead);
+
+				if (progressAction != null) { progressAction.accept(bytesRead); }
+			}
+		}
+	}
+
+	private HttpResponse<InputStream> send(DownloadSource source, URI uri, boolean authenticate, HttpClient client, Path target)
+			throws IOException, InterruptedException {
+		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", "github/skidamek/automodpack/" + AM_VERSION)
+				.header("Accept-Encoding", "gzip").timeout(Duration.ofSeconds(10)).GET();
+		if (authenticate) { request.header("x-api-key", summonKey()); }
 
 		try {
-			HttpResponse<InputStream> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
-
-			LOGGER.info("HTTPS Download {}: Source={} Protocol={} Status={}", target.getFileName(), url, response.version(), response.statusCode());
-
-			if (response.statusCode() != 200) { throw new IOException("HTTP Error " + response.statusCode() + " for " + url); }
-
-			boolean isGzip = "gzip".equalsIgnoreCase(response.headers().firstValue("Content-Encoding").orElse(""));
-
-			try (InputStream rawIn = response.body();
-					InputStream in = isGzip ? new GZIPInputStream(rawIn) : rawIn;
-					OutputStream out = new BufferedOutputStream(new FileOutputStream(target.toFile()), 64 * 1024)) {
-
-				byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
-				int bytesRead;
-				while ((bytesRead = in.read(buffer)) != -1) {
-					if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-					out.write(buffer, 0, bytesRead);
-
-					if (progressAction != null) { progressAction.accept(bytesRead); }
-				}
-			}
-
-		} catch (InterruptedException e) {
-			throw e; // Rethrow to handle cancellation
-		} catch (IOException e) {
-			throw e; // Rethrow IO errors
+			HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());
+			LOGGER.info("HTTPS Download {}: Provider={} Host={} Protocol={} Status={}", target.getFileName(), source.provider(), uri.getHost(),
+					response.version(), response.statusCode());
+			return response;
+		} catch (InterruptedException | IOException e) {
+			throw e;
 		} catch (Exception e) {
-			// Wrap unexpected HTTP client errors
 			throw new IOException("HTTP Client Protocol Error", e);
+		}
+	}
+
+	private static HttpClient createClient(HttpClient.Redirect redirects) {
+		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_2).followRedirects(redirects).connectTimeout(Duration.ofSeconds(10))
+				.executor(Executors.newCachedThreadPool()).build();
+	}
+
+	private static boolean isAuthenticatedCurseForgeTarget(DownloadSource source, URI uri) {
+		return source.provider() == DownloadSource.Provider.CURSEFORGE && "https".equalsIgnoreCase(uri.getScheme()) && CDN_HOST.equalsIgnoreCase(uri.getHost())
+				&& uri.getUserInfo() == null && (uri.getPort() == -1 || uri.getPort() == 443);
+	}
+
+	public static class HttpStatusException extends IOException {
+		private final int statusCode;
+
+		HttpStatusException(int statusCode) {
+			super("HTTP request failed with status " + statusCode);
+			this.statusCode = statusCode;
+		}
+
+		public int statusCode() {
+			return statusCode;
 		}
 	}
 }

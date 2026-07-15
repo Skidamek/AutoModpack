@@ -65,4 +65,5 @@ public class Constants {
 	public static String clientConfigOverride; // read from inside a jar file on preload, used instead of clientConfigFile if exists
 
 	public static Path selectedModpackDir;
+
 }
