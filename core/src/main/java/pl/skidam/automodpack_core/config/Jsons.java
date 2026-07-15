@@ -34,8 +34,8 @@ public class Jsons {
     }
 
     public static class ModpackAddresses {
-        public InetSocketAddress hostAddress; // modpack host address
-        public InetSocketAddress serverAddress; // minecraft server address
+        public InetSocketAddress hostAddress; // server-advertised modpack route; not an authenticated identity
+        public InetSocketAddress serverAddress; // immutable player-selected Minecraft origin; certificate trust root
         public boolean requiresMagic; // if true, client will use magic packets to connect to the modpack host
 
         public ModpackAddresses() {

@@ -12,18 +12,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.*;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
 import java.util.stream.IntStream;
 import javax.net.ssl.*;
+import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
@@ -50,11 +51,7 @@ public class DownloadClient implements AutoCloseable {
      */
     private record ProbeResult(InitialConnectionResult success, X509Certificate untrustedCert, IOException error, KeyStore keyStore) {}
 
-    /**
-     * Package-private constructor for the async {@link #createAsync} path.
-     * Accepts a pre-hydrated connection pool.
-     */
-    DownloadClient(List<Connection> connections) {
+    private DownloadClient(List<Connection> connections) {
         this.connections.addAll(connections);
     }
 
@@ -72,60 +69,132 @@ public class DownloadClient implements AutoCloseable {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Pool size must be greater than 0"));
         }
 
-        return CompletableFuture.supplyAsync(() -> {
-                    KeyStore keyStore = loadDefaultKeyStore();
-                    AtomicReference<X509Certificate[]> capturedChain = new AtomicReference<>();
-                    SSLContext context = createSSLContext(keyStore, capturedChain::set);
-
-                    try {
-                        PreValidationConnection probe = getPreValidationConnection(addresses, context);
-                        return new ProbeResult(new InitialConnectionResult(probe, context), null, null, keyStore);
-                    } catch (IOException e) {
-                        X509Certificate[] chain = capturedChain.get();
-                        X509Certificate untrusted = (chain != null && chain.length > 0) ? chain[0] : null;
-                        return new ProbeResult(null, untrusted, e, keyStore);
+        return CompletableFuture.supplyAsync(() -> probeConnection(addresses), NET_EXECUTOR)
+                .thenCompose(probe -> {
+                    if (probe.success != null) {
+                        return finishConnection(probe.success, secretBytes, poolSize, addresses);
                     }
-                }, NET_EXECUTOR).thenCompose(pr -> {
-                    if (pr.success != null) {
-                        try {
-                            return CompletableFuture.completedFuture(
-                                    new DownloadClient(hydratePool(pr.success, secretBytes, poolSize, addresses)));
-                        } catch (IOException e) {
-                            return CompletableFuture.failedFuture(e);
-                        }
+                    if (probe.untrustedCert == null) {
+                        return CompletableFuture.failedFuture(probe.error);
                     }
-                    if (pr.untrustedCert == null || trustCallback == null) {
-                        return CompletableFuture.failedFuture(pr.error);
+                    if (!isSelfSigned(probe.untrustedCert)) {
+                        return requestManualTrust(probe, addresses, secretBytes, poolSize, trustCallback);
                     }
 
-                    return trustCallback.apply(pr.untrustedCert)
-                            .thenComposeAsync(trusted -> {
-                                if (!trusted) {
-                                    return CompletableFuture.failedFuture(new IOException("User rejected certificate"));
-                                }
-                                return CompletableFuture.supplyAsync(() -> {
+                    return DnsPinResolver.resolvePinAsync(addresses.serverAddress.getHostString())
+                            .thenCompose(result -> {
+                                if (result instanceof DnsPinResolver.Authoritative authoritative) {
                                     try {
-                                        pr.keyStore.setCertificateEntry(addresses.hostAddress.getHostString(), pr.untrustedCert);
-                                        SSLContext trustedCtx = createSSLContext(pr.keyStore, null);
-                                        PreValidationConnection retry = getPreValidationConnection(addresses, trustedCtx);
-                                        return new DownloadClient(hydratePool(
-                                                new InitialConnectionResult(retry, trustedCtx),
-                                                secretBytes, poolSize, addresses));
-                                    } catch (Exception e) {
-                                        throw new CompletionException(new IOException("Failed to reconnect after trust", e));
+                                        if (!authoritative.fingerprint().equals(getFingerprint(probe.untrustedCert))) {
+                                            return CompletableFuture.failedFuture(new IOException(
+                                                    "Certificate does not match the DNSSEC fingerprint for "
+                                                            + addresses.serverAddress.getHostString()));
+                                        }
+                                    } catch (CertificateEncodingException e) {
+                                        return CompletableFuture.failedFuture(new IOException(
+                                                "Failed to fingerprint the server certificate", e));
                                     }
-                                }, NET_EXECUTOR);
-                            }, NET_EXECUTOR)
-                            .orTimeout(120, TimeUnit.SECONDS)
-                            .exceptionally(e -> {
-                                throw new CompletionException(new IOException("Certificate not trusted", e));
+
+                                    LOGGER.info("Trusting the self-signed certificate from {} because it matches the DNSSEC fingerprint for {}",
+                                            addresses.hostAddress.getHostString(), addresses.serverAddress.getHostString());
+                                    return retryWithTrustedCertificate(probe, addresses, secretBytes, poolSize);
+                                }
+                                if (result instanceof DnsPinResolver.Misconfigured misconfigured) {
+                                    return CompletableFuture.failedFuture(new IOException(
+                                            "Invalid DNSSEC AutoModpack fingerprint for "
+                                                    + addresses.serverAddress.getHostString() + ": " + misconfigured.reason()));
+                                }
+                                return requestManualTrust(probe, addresses, secretBytes, poolSize, trustCallback);
                             });
                 });
     }
 
+    private static ProbeResult probeConnection(Jsons.ModpackAddresses addresses) {
+        KeyStore keyStore = loadDefaultKeyStore();
+        AtomicReference<X509Certificate[]> capturedChain = new AtomicReference<>();
+        SSLContext context = createSSLContext(keyStore, capturedChain::set);
+
+        try {
+            PreValidationConnection probe = getPreValidationConnection(addresses, context);
+            return new ProbeResult(new InitialConnectionResult(probe, context), null, null, keyStore);
+        } catch (IOException e) {
+            X509Certificate[] chain = capturedChain.get();
+            X509Certificate untrusted = (chain != null && chain.length > 0) ? chain[0] : null;
+            return new ProbeResult(null, untrusted, e, keyStore);
+        }
+    }
+
+    private static CompletableFuture<DownloadClient> finishConnection(
+            InitialConnectionResult connection,
+            byte[] secretBytes,
+            int poolSize,
+            Jsons.ModpackAddresses addresses) {
+        try {
+            return CompletableFuture.completedFuture(
+                    new DownloadClient(hydratePool(connection, secretBytes, poolSize, addresses)));
+        } catch (IOException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
+    private static CompletableFuture<DownloadClient> requestManualTrust(
+            ProbeResult probe,
+            Jsons.ModpackAddresses addresses,
+            byte[] secretBytes,
+            int poolSize,
+            Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
+        if (trustCallback == null) {
+            return CompletableFuture.failedFuture(probe.error);
+        }
+
+        return trustCallback.apply(probe.untrustedCert)
+                .thenComposeAsync(trusted -> {
+                    if (!trusted) {
+                        return CompletableFuture.failedFuture(new IOException("User rejected certificate"));
+                    }
+                    return retryWithTrustedCertificate(probe, addresses, secretBytes, poolSize);
+                }, NET_EXECUTOR)
+                .orTimeout(120, TimeUnit.SECONDS)
+                .exceptionally(e -> {
+                    throw new CompletionException(new IOException("Certificate not trusted", e));
+                });
+    }
+
+    private static CompletableFuture<DownloadClient> retryWithTrustedCertificate(
+            ProbeResult probe,
+            Jsons.ModpackAddresses addresses,
+            byte[] secretBytes,
+            int poolSize) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                probe.keyStore.setCertificateEntry(addresses.hostAddress.getHostString(), probe.untrustedCert);
+                SSLContext trustedContext = createSSLContext(probe.keyStore, null);
+                PreValidationConnection retry = getPreValidationConnection(addresses, trustedContext);
+                return new DownloadClient(hydratePool(
+                        new InitialConnectionResult(retry, trustedContext),
+                        secretBytes, poolSize, addresses));
+            } catch (Exception e) {
+                throw new CompletionException(new IOException("Failed to reconnect after trust", e));
+            }
+        }, NET_EXECUTOR);
+    }
+
+    static boolean isSelfSigned(X509Certificate certificate) {
+        if (certificate == null
+                || !certificate.getSubjectX500Principal().equals(certificate.getIssuerX500Principal())) {
+            return false;
+        }
+
+        try {
+            certificate.verify(certificate.getPublicKey());
+            return true;
+        } catch (GeneralSecurityException e) {
+            return false;
+        }
+    }
+
     /**
-     * Hydrates the connection pool from a successful probe + SSL context.
-     * Shared by both sync and async construction paths.
+     * Hydrates the connection pool from a successful probe and SSL context.
      */
     private static List<Connection> hydratePool(InitialConnectionResult probe, byte[] secretBytes, int poolSize, Jsons.ModpackAddresses addresses) throws IOException {
         List<Connection> conns = new ArrayList<>();
@@ -293,7 +362,8 @@ class PreValidationConnection {
         }
 
         SSLSocketFactory factory = sslContext.getSocketFactory();
-        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, resolvedHostAddress.getHostString(), resolvedHostAddress.getPort(), true);
+        String originHost = modpackAddresses.serverAddress.getHostString();
+        SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, originHost, resolvedHostAddress.getPort(), true);
 
         sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
         sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});

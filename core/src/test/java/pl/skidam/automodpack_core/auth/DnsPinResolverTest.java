@@ -2,54 +2,95 @@ package pl.skidam.automodpack_core.auth;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.Optional;
+import java.util.Collections;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class DnsPinResolverTest {
+class DnsPinResolverTest {
 
-    private static final String FP = "a".repeat(64);
+    private static final String FP_A = "a".repeat(64);
+    private static final String FP_B = "b".repeat(64);
 
     @Test
-    void parsesValidRecord() {
-        assertEquals(Optional.of(FP), DnsPinResolver.parsePin("v=amp1;fp=" + FP));
+    void parsesSingleFingerprint() {
+        assertEquals(FP_A, DnsPinResolver.parsePin("v=amp1;fp=" + FP_A));
     }
 
     @Test
-    void parsesColonSeparatedUppercaseFingerprint() {
-        StringBuilder pretty = new StringBuilder();
-        for (int i = 0; i < 64; i += 2) {
-            if (i > 0) pretty.append(':');
-            pretty.append("AB");
-        }
-        assertEquals(Optional.of("ab".repeat(32)), DnsPinResolver.parsePin("v=amp1; fp=" + pretty));
+    void normalizesColonSeparatedUppercaseFingerprint() {
+        String pretty = String.join(":", Collections.nCopies(32, "AB"));
+
+        assertEquals("ab".repeat(32), DnsPinResolver.parsePin("v=amp1;fp=" + pretty));
     }
 
     @Test
-    void ignoresExtraFields() {
-        assertEquals(Optional.of(FP), DnsPinResolver.parsePin("v=amp1;foo=bar;fp=" + FP + ";baz=1"));
+    void rejectsMissingMalformedAndUnknownFields() {
+        assertThrows(IllegalArgumentException.class,
+                () -> DnsPinResolver.parsePin("fp=" + FP_A));
+        assertThrows(IllegalArgumentException.class,
+                () -> DnsPinResolver.parsePin("v=amp2;fp=" + FP_A));
+        assertThrows(IllegalArgumentException.class,
+                () -> DnsPinResolver.parsePin("v=amp1"));
+        assertThrows(IllegalArgumentException.class,
+                () -> DnsPinResolver.parsePin("v=amp1;fp=" + "a".repeat(63)));
+        assertThrows(IllegalArgumentException.class,
+                () -> DnsPinResolver.parsePin("v=amp1;fp=" + FP_A + ";host=downloads.example.com"));
     }
 
     @Test
-    void rejectsMissingOrWrongVersion() {
-        assertTrue(DnsPinResolver.parsePin("fp=" + FP).isEmpty());
-        assertTrue(DnsPinResolver.parsePin("v=amp2;fp=" + FP).isEmpty());
+    void rejectsDuplicateFields() {
+        assertThrows(IllegalArgumentException.class,
+                () -> DnsPinResolver.parsePin("v=amp1;v=amp1;fp=" + FP_A));
+        assertThrows(IllegalArgumentException.class,
+                () -> DnsPinResolver.parsePin("v=amp1;fp=" + FP_A + ";fp=" + FP_B));
     }
 
     @Test
-    void rejectsMalformedFingerprints() {
-        assertTrue(DnsPinResolver.parsePin("v=amp1;fp=zz" + "a".repeat(62)).isEmpty());
-        assertTrue(DnsPinResolver.parsePin("v=amp1;fp=" + "a".repeat(63)).isEmpty());
-        assertTrue(DnsPinResolver.parsePin("v=amp1;fp=").isEmpty());
-        assertTrue(DnsPinResolver.parsePin("v=amp1").isEmpty());
+    void rejectsMultipleAmp1Records() {
+        var result = DnsPinResolver.parseTxtRecords(List.of(
+                "v=amp1;fp=" + FP_A,
+                "v=amp1;fp=" + FP_B));
+
+        assertInstanceOf(DnsPinResolver.ResolverMisconfigured.class, result);
     }
 
     @Test
-    void skipsIpLiterals() {
+    void ignoresUnrelatedTxtRecords() {
+        var result = DnsPinResolver.parseTxtRecords(List.of(
+                "google-site-verification=example",
+                "v=amp1;fp=" + FP_A));
+
+        var pin = assertInstanceOf(DnsPinResolver.ResolverPin.class, result);
+        assertEquals(FP_A, pin.fingerprint());
+    }
+
+    @Test
+    void decodesSplitTxtChunks() {
+        assertEquals(
+                "v=amp1;fp=" + FP_A,
+                DnsPinResolver.decodeTxtData("\"v=amp1;\" \"fp=" + FP_A + "\""));
+    }
+
+    @Test
+    void formatsCanonicalRecord() {
+        assertEquals(
+                "_automodpack.play.example.com. IN TXT \"v=amp1;fp=" + FP_A + "\"",
+                DnsPinResolver.formatRecord("Play.Example.COM.", FP_A));
+    }
+
+    @Test
+    void rejectsIpIdentityWhenFormatting() {
+        assertThrows(IllegalArgumentException.class,
+                () -> DnsPinResolver.formatRecord("192.0.2.1", FP_A));
+    }
+
+    @Test
+    void detectsOnlyValidIpLiterals() {
         assertTrue(DnsPinResolver.isIpLiteral("192.168.1.1"));
         assertTrue(DnsPinResolver.isIpLiteral("::1"));
-        assertTrue(DnsPinResolver.isIpLiteral("2001:db8::1"));
+        assertTrue(DnsPinResolver.isIpLiteral("[2001:db8::1]"));
+        assertFalse(DnsPinResolver.isIpLiteral("999.168.1.1"));
         assertFalse(DnsPinResolver.isIpLiteral("example.com"));
-        assertFalse(DnsPinResolver.isIpLiteral("mc.my-server.net"));
     }
 }

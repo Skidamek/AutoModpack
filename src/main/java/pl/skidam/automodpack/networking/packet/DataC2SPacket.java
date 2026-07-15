@@ -53,9 +53,8 @@ public class DataC2SPacket {
             // 2. Dont disconnect and join server
         }
 
-        InetSocketAddress serverAddress = ModPackets.getOriginalServerAddress();
-        ModPackets.setOriginalServerAddress(null); // Reset for next server reconnection
-        if (serverAddress == null) {
+        InetSocketAddress originAddress = ModPackets.getOriginalServerAddress();
+        if (originAddress == null) {
             LOGGER.error("Server address is null! Something gone very wrong! Please report this issue! https://github.com/Skidamek/AutoModpack/issues");
             return CompletableFuture.completedFuture(buildResponse(null));
         }
@@ -91,7 +90,7 @@ public class DataC2SPacket {
             LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(), requiresMagic);
 
             modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
-            modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, serverAddress, requiresMagic);
+            modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, originAddress, requiresMagic);
         } catch (Exception e) {
             LOGGER.error("Error preparing modpack address from data packet", e);
             return CompletableFuture.completedFuture(buildResponse(null));
@@ -140,9 +139,7 @@ public class DataC2SPacket {
                 }, DownloadClient.NET_EXECUTOR)
                 .exceptionally(e -> {
                     LOGGER.error("Error while handling data packet", e);
-                    FriendlyByteBuf response = new FriendlyByteBuf(Unpooled.buffer());
-                    response.writeUtf("null", Short.MAX_VALUE);
-                    return response;
+                    return buildResponse(null);
                 });
     }
 

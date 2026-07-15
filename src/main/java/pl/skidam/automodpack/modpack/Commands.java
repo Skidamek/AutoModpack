@@ -2,6 +2,7 @@ package pl.skidam.automodpack.modpack;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 /*? if >= 1.21.11 {*/
 import net.minecraft.server.permissions.Permission;
@@ -22,6 +23,7 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 
+import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
 import static pl.skidam.automodpack_core.Constants.*;
 
@@ -58,8 +60,10 @@ public class Commands {
                                         .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
                                         .executes(Commands::fingerprint)
                                         .then(literal("dns")
-                                                .requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
-                                                .executes(Commands::fingerprintDnsRecord)
+                                                .executes(Commands::fingerprintDnsUsage)
+                                                .then(argument("minecraft-hostname", StringArgumentType.word())
+                                                        .executes(Commands::fingerprintDnsRecord)
+                                                )
                                         )
                                 )
                         )
@@ -98,6 +102,11 @@ public class Commands {
         return Command.SINGLE_SUCCESS;
     }
 
+    private static int fingerprintDnsUsage(CommandContext<CommandSourceStack> context) {
+        send(context, "Usage: /automodpack host fingerprint dns <minecraft-hostname>", ChatFormatting.RED, false);
+        return Command.SINGLE_SUCCESS;
+    }
+
     private static int fingerprintDnsRecord(CommandContext<CommandSourceStack> context) {
         String fingerprint = hostServer.getCertificateFingerprint();
         if (fingerprint == null) {
@@ -105,12 +114,15 @@ public class Commands {
             return Command.SINGLE_SUCCESS;
         }
 
-        String host = serverConfig.addressToSend == null ? "" : serverConfig.addressToSend.trim();
-        if (host.isEmpty()) {
-            host = "<your-server-address>";
+        final String record;
+        try {
+            record = DnsPinResolver.formatRecord(
+                    StringArgumentType.getString(context, "minecraft-hostname"), fingerprint);
+        } catch (IllegalArgumentException e) {
+            send(context, e.getMessage(), ChatFormatting.RED, false);
+            return Command.SINGLE_SUCCESS;
         }
 
-        String record = DnsPinResolver.RECORD_PREFIX + host + ". IN TXT \"" + DnsPinResolver.RECORD_VERSION + ";" + DnsPinResolver.RECORD_FINGERPRINT_PREFIX + fingerprint + "\"";
         MutableComponent recordText = VersionedText.literal(record).withStyle(style -> style
                 /*? if >=1.21.5 {*/
                 .withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
@@ -119,7 +131,7 @@ public class Commands {
                 /*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
                 .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, record)));
         *//*?}*/
-        send(context, "Publish this DNS record - the zone must be DNSSEC-signed for clients to trust it", ChatFormatting.WHITE, recordText, ChatFormatting.YELLOW, false);
+        send(context, "Publish this record in the DNSSEC-signed zone for the Minecraft hostname players use.", ChatFormatting.WHITE, recordText, ChatFormatting.YELLOW, false);
 
         return Command.SINGLE_SUCCESS;
     }

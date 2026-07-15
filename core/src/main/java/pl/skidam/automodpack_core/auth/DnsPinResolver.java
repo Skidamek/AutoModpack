@@ -4,6 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import java.net.IDN;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -11,172 +12,291 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 /**
- * Resolves an admin-published certificate pin from DNS:
- * {@code _automodpack.<host>. TXT "v=amp1;fp=<sha256-hex>"}
- *
- * The record is fetched over DNS-over-HTTPS from two independent resolvers and is only
- * used when BOTH report the answer as DNSSEC-validated (AD flag) and agree on the pin.
- * Trust is therefore anchored out-of-band: in the WebPKI certificates of the resolvers
- * and in the DNSSEC chain of the server's zone - never in anything the modpack host
- * itself sends. Anything less than full agreement yields empty, falling back to the
- * regular manual fingerprint verification.
+ * Resolves an admin-published certificate fingerprint from DNS under the
+ * Minecraft hostname selected by the user.
  */
-public class DnsPinResolver {
+public final class DnsPinResolver {
 
-	public static final String RECORD_PREFIX = "_automodpack.";
-	public static final String RECORD_VERSION = "v=amp1";
-	public static final String RECORD_FINGERPRINT_PREFIX = "fp=";
+    public static final String RECORD_PREFIX = "_automodpack.";
+    public static final String RECORD_VERSION = "amp1";
 
-	private static final List<String> DOH_RESOLVERS = List.of(
-			"https://cloudflare-dns.com/dns-query",
-			"https://doh.mullvad.net/dns-query"
-	);
-	private static final Duration TIMEOUT = Duration.ofSeconds(5);
-	private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
-	private static final Map<String, CompletableFuture<Optional<String>>> CACHE = new ConcurrentHashMap<>();
+    private static final List<String> DOH_RESOLVERS = List.of(
+            "https://cloudflare-dns.com/dns-query",
+            "https://doh.mullvad.net/dns-query"
+    );
+    private static final Duration TIMEOUT = Duration.ofSeconds(5);
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
 
-	public static Optional<String> resolvePin(String host) {
-		if (host == null || host.isBlank() || isIpLiteral(host)) {
-			return Optional.empty();
-		}
+    private DnsPinResolver() {}
 
-		String normalizedHost = host.trim().toLowerCase(Locale.ROOT);
+    public sealed interface LookupResult permits Authoritative, NoPolicy, Misconfigured {}
 
-		return CACHE.computeIfAbsent(
-				normalizedHost,
-				DnsPinResolver::queryAllResolversAsync
-		).join();
-	}
+    public record Authoritative(String fingerprint) implements LookupResult {}
 
-	private static CompletableFuture<Optional<String>> queryAllResolversAsync(String host) {
-		String name = RECORD_PREFIX + host;
+    public record NoPolicy(NoPolicyReason reason) implements LookupResult {}
 
-		List<CompletableFuture<Optional<String>>> futures = DOH_RESOLVERS.stream()
-				.map(resolver -> queryValidatedPinAsync(resolver, name))
-				.toList();
+    public record Misconfigured(String reason) implements LookupResult {}
 
-		return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
-				.thenApply(v -> {
-					String agreedPin = null;
+    public enum NoPolicyReason {
+        IP_LITERAL,
+        ABSENT,
+        UNAVAILABLE
+    }
 
-					for (CompletableFuture<Optional<String>> future : futures) {
-						Optional<String> pin = future.join();
+    sealed interface ResolverResult permits ResolverPin, ResolverAbsent, ResolverUnavailable, ResolverMisconfigured {}
 
-						if (pin.isEmpty()) {
-							return Optional.empty();
-						}
+    record ResolverPin(String fingerprint) implements ResolverResult {}
 
-						if (agreedPin == null) {
-							agreedPin = pin.get();
-						} else if (!agreedPin.equals(pin.get())) {
-							LOGGER.warn("DNS resolvers disagree on the certificate pin for {}", host);
-							return Optional.empty();
-						}
-					}
+    record ResolverAbsent() implements ResolverResult {}
 
-					return Optional.ofNullable(agreedPin);
-				});
-	}
+    record ResolverUnavailable() implements ResolverResult {}
 
-	private static CompletableFuture<Optional<String>> queryValidatedPinAsync(String resolver, String name) {
-		try {
-			HttpRequest request = HttpRequest.newBuilder()
-					.uri(URI.create(resolver + "?name=" + URLEncoder.encode(name, StandardCharsets.UTF_8) + "&type=TXT"))
-					.header("Accept", "application/dns-json")
-					.timeout(TIMEOUT)
-					.GET()
-					.build();
+    record ResolverMisconfigured(String reason) implements ResolverResult {}
 
-			return HTTP_CLIENT
-					.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-					.thenApply(HttpResponse::body)
-					.thenApply(DnsPinResolver::parseDnsResponse)
-					.exceptionally(e -> {
-						LOGGER.debug("DNS pin lookup for {} via {} failed", name, resolver, e);
-						return Optional.empty();
-					});
+    public static CompletableFuture<LookupResult> resolvePinAsync(String minecraftHost) {
+        Optional<String> normalizedHost = normalizeDnsHost(minecraftHost);
+        if (normalizedHost.isEmpty()) {
+            return CompletableFuture.completedFuture(new NoPolicy(NoPolicyReason.IP_LITERAL));
+        }
 
-		} catch (Exception e) {
-			LOGGER.debug("Failed to build or initialize request for {} via {}", name, resolver, e);
-			return CompletableFuture.completedFuture(Optional.empty());
-		}
-	}
+        String host = normalizedHost.get();
+        String name = RECORD_PREFIX + host;
+        List<CompletableFuture<ResolverResult>> futures = DOH_RESOLVERS.stream()
+                .map(resolver -> queryResolverAsync(resolver, name))
+                .toList();
 
-	private static Optional<String> parseDnsResponse(String body) {
-		try {
-			JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+        return CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
+                .thenApply(ignored -> combineResolverResults(host, futures.stream().map(CompletableFuture::join).toList()));
+    }
 
-			if (json.get("Status").getAsInt() != 0) {
-				return Optional.empty();
-			}
+    private static LookupResult combineResolverResults(String host, List<ResolverResult> results) {
+        if (results.stream().allMatch(ResolverAbsent.class::isInstance)) {
+            return new NoPolicy(NoPolicyReason.ABSENT);
+        }
 
-			boolean hasAnswer = json.has("Answer") && !json.getAsJsonArray("Answer").isEmpty();
-			boolean isAuthenticData = json.has("AD") && json.get("AD").getAsBoolean();
+        if (results.stream().allMatch(ResolverMisconfigured.class::isInstance)) {
+            String reason = ((ResolverMisconfigured) results.get(0)).reason();
+            LOGGER.error("DNSSEC AutoModpack fingerprint for {} is invalid: {}", host, reason);
+            return new Misconfigured(reason);
+        }
 
-			if (hasAnswer && !isAuthenticData) {
-				LOGGER.warn("Found automodpack TXT record, but the zone is NOT DNSSEC-validated (AD flag missing). Ignoring unsafe record.");
-				return Optional.empty();
-			}
+        if (results.stream().allMatch(ResolverPin.class::isInstance)) {
+            String expected = ((ResolverPin) results.get(0)).fingerprint();
+            boolean agrees = results.stream()
+                    .map(ResolverPin.class::cast)
+                    .allMatch(result -> result.fingerprint().equals(expected));
+            if (agrees) {
+                return new Authoritative(expected);
+            }
+            LOGGER.warn("DNS resolvers disagree on the AutoModpack fingerprint for {}", host);
+        }
 
-			if (!isAuthenticData || !hasAnswer) {
-				return Optional.empty();
-			}
+        return new NoPolicy(NoPolicyReason.UNAVAILABLE);
+    }
 
-			for (JsonElement element : json.getAsJsonArray("Answer")) {
-				JsonObject answer = element.getAsJsonObject();
+    private static CompletableFuture<ResolverResult> queryResolverAsync(String resolver, String name) {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(resolver + "?name=" + URLEncoder.encode(name, StandardCharsets.UTF_8) + "&type=TXT"))
+                    .header("Accept", "application/dns-json")
+                    .timeout(TIMEOUT)
+                    .GET()
+                    .build();
 
-				if (answer.get("type").getAsInt() != 16) {
-					continue;
-				}
+            return HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                    .thenApply(response -> {
+                        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                            return new ResolverUnavailable();
+                        }
+                        return parseDnsResponse(response.body());
+                    })
+                    .exceptionally(error -> {
+                        LOGGER.debug("DNS fingerprint lookup for {} via {} failed", name, resolver, error);
+                        return new ResolverUnavailable();
+                    });
+        } catch (Exception e) {
+            LOGGER.debug("Failed to build DNS fingerprint request for {} via {}", name, resolver, e);
+            return CompletableFuture.completedFuture(new ResolverUnavailable());
+        }
+    }
 
-				Optional<String> pin = parsePin(
-						answer.get("data").getAsString()
-								.replace("\"", "")
-								.trim()
-				);
+    static ResolverResult parseDnsResponse(String body) {
+        try {
+            JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+            int status = json.has("Status") ? json.get("Status").getAsInt() : -1;
+            boolean authenticated = json.has("AD") && json.get("AD").getAsBoolean();
 
-				if (pin.isPresent()) {
-					return pin;
-				}
-			}
-		} catch (Exception e) {
-			LOGGER.debug("Failed to parse DNS response body JSON structure", e);
-		}
+            if (!authenticated) {
+                return new ResolverUnavailable();
+            }
 
-		return Optional.empty();
-	}
+            if (status == 3) {
+                return new ResolverAbsent();
+            }
+            if (status != 0) {
+                return new ResolverUnavailable();
+            }
 
-	static Optional<String> parsePin(String txt) {
-		if (txt == null || !txt.startsWith(RECORD_VERSION)) {
-			return Optional.empty();
-		}
+            List<String> txtRecords = new ArrayList<>();
+            if (json.has("Answer")) {
+                for (JsonElement element : json.getAsJsonArray("Answer")) {
+                    JsonObject answer = element.getAsJsonObject();
+                    if (answer.has("type") && answer.get("type").getAsInt() == 16 && answer.has("data")) {
+                        txtRecords.add(decodeTxtData(answer.get("data").getAsString()));
+                    }
+                }
+            }
+            return parseTxtRecords(txtRecords);
+        } catch (Exception e) {
+            LOGGER.debug("Failed to parse DNS fingerprint response", e);
+            return new ResolverUnavailable();
+        }
+    }
 
-		for (String part : txt.split(";")) {
-			part = part.trim();
-			if (!part.startsWith(RECORD_FINGERPRINT_PREFIX)) {
-				continue;
-			}
+    static ResolverResult parseTxtRecords(List<String> txtRecords) {
+        String fingerprint = null;
+        for (String txt : txtRecords) {
+            if (!isAmp1Record(txt)) {
+                continue;
+            }
+            if (fingerprint != null) {
+                return new ResolverMisconfigured("multiple amp1 records are not allowed");
+            }
 
-			String fingerprint = part.substring(3).replace(":", "").toLowerCase(Locale.ROOT);
-			if (fingerprint.matches("[0-9a-f]{64}")) {
-				return Optional.of(fingerprint);
-			}
-		}
+            try {
+                fingerprint = parsePin(txt);
+            } catch (IllegalArgumentException e) {
+                return new ResolverMisconfigured(e.getMessage());
+            }
+        }
 
-		return Optional.empty();
-	}
+        return fingerprint == null ? new ResolverAbsent() : new ResolverPin(fingerprint);
+    }
 
-	static boolean isIpLiteral(String host) {
-		return host.contains(":") || host.matches("\\d{1,3}(\\.\\d{1,3}){3}");
-	}
+    static String parsePin(String txt) {
+        if (txt == null) {
+            throw new IllegalArgumentException("empty amp1 record");
+        }
+
+        String version = null;
+        String fingerprint = null;
+
+        for (String rawPart : txt.split(";", -1)) {
+            String part = rawPart.trim();
+            int separator = part.indexOf('=');
+            if (separator <= 0) {
+                throw new IllegalArgumentException("invalid amp1 field: " + part);
+            }
+
+            String key = part.substring(0, separator).trim().toLowerCase(Locale.ROOT);
+            String value = part.substring(separator + 1).trim();
+            switch (key) {
+                case "v" -> {
+                    if (version != null) throw new IllegalArgumentException("duplicate amp1 version");
+                    version = value;
+                }
+                case "fp" -> {
+                    if (fingerprint != null) throw new IllegalArgumentException("duplicate amp1 fingerprint");
+                    fingerprint = normalizeFingerprint(value);
+                }
+                default -> throw new IllegalArgumentException("unknown amp1 field: " + key);
+            }
+        }
+
+        if (!RECORD_VERSION.equals(version)) throw new IllegalArgumentException("unsupported amp1 version");
+        if (fingerprint == null) throw new IllegalArgumentException("amp1 fingerprint is missing");
+        return fingerprint;
+    }
+
+    public static String formatRecord(String minecraftHost, String fingerprint) {
+        String owner = normalizeDnsHost(minecraftHost)
+                .orElseThrow(() -> new IllegalArgumentException("Minecraft address must be a DNS hostname"));
+        return RECORD_PREFIX + owner + ". IN TXT \"v=" + RECORD_VERSION
+                + ";fp=" + normalizeFingerprint(fingerprint) + "\"";
+    }
+
+    static String decodeTxtData(String data) {
+        if (data == null) return "";
+        String trimmed = data.trim();
+        StringBuilder decoded = new StringBuilder();
+        boolean quoted = false;
+        boolean escaping = false;
+
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (escaping) {
+                decoded.append(c);
+                escaping = false;
+            } else if (c == '\\' && quoted) {
+                escaping = true;
+            } else if (c == '"') {
+                quoted = !quoted;
+            } else if (!quoted && Character.isWhitespace(c)) {
+                continue;
+            } else {
+                decoded.append(c);
+            }
+        }
+        if (quoted || escaping) throw new IllegalArgumentException("malformed TXT quoting");
+        return decoded.toString().trim();
+    }
+
+    static boolean isIpLiteral(String host) {
+        if (host == null) return false;
+        String value = stripIpv6Brackets(host.trim());
+        if (value.contains(":")) return true;
+        if (!value.matches("\\d{1,3}(\\.\\d{1,3}){3}")) return false;
+        for (String octet : value.split("\\.")) {
+            if (Integer.parseInt(octet) > 255) return false;
+        }
+        return true;
+    }
+
+    private static Optional<String> normalizeDnsHost(String host) {
+        if (host == null) return Optional.empty();
+        String normalized = host.trim();
+        if (normalized.isEmpty() || isIpLiteral(normalized)) return Optional.empty();
+        if (normalized.endsWith(".")) normalized = normalized.substring(0, normalized.length() - 1);
+        try {
+            normalized = IDN.toASCII(normalized, IDN.USE_STD3_ASCII_RULES).toLowerCase(Locale.ROOT);
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+        return normalized.isBlank() ? Optional.empty() : Optional.of(normalized);
+    }
+
+    private static String normalizeFingerprint(String fingerprint) {
+        String normalized = fingerprint == null ? "" : fingerprint.replace(":", "").trim().toLowerCase(Locale.ROOT);
+        if (!normalized.matches("[0-9a-f]{64}")) {
+            throw new IllegalArgumentException("invalid amp1 fingerprint");
+        }
+        return normalized;
+    }
+
+    private static boolean isAmp1Record(String txt) {
+        if (txt == null) return false;
+        for (String rawPart : txt.split(";", -1)) {
+            String part = rawPart.trim();
+            int separator = part.indexOf('=');
+            if (separator > 0
+                    && part.substring(0, separator).trim().equalsIgnoreCase("v")
+                    && part.substring(separator + 1).trim().equalsIgnoreCase(RECORD_VERSION)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String stripIpv6Brackets(String host) {
+        return host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
+    }
 }

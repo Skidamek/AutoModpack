@@ -1,42 +1,70 @@
-### How to verify the certificate fingerprint?
-To verify, simply **copy the fingerprint from your server console to the game.** This is a one-time verification, meaning you won't need to repeat it after the initial connection. This process helps prevent security threats like [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack). **The fingerprint is the same for everyone on your server, and it never changes, it's recommended to share it with players ahead of time.**
+### Automatic verification for self-signed certificates with DNSSEC
 
-If you can't find the fingerprint in the console, you can retrieve it at any time using the **`/automodpack host fingerprint` [command](../commands/commands)**.
+AutoModpack normally verifies CA-signed certificates through the standard Java trust store, just like HTTPS. No DNSSEC record is needed for a valid CA-signed certificate.
 
-However, please do not think of it like a password to the modpack, it's not a password or any secret, it's a public verifiable piece of server certificate, **anyone could download** your modpack without previous knowledge of such fingerprint.
+When the modpack host uses AutoModpack's self-signed certificate, a server owner with a DNSSEC-enabled domain can publish its fingerprint in DNS. Clients then verify it automatically instead of showing the first-connection fingerprint prompt.
 
-If you don't want players to explicitly verify the certificate manually, and you own a domain (required), you can provide your own CA signed certificate.
+Run this command on the server:
 
-### How to provide your own CA signed certificate?
+```text
+/automodpack host fingerprint dns <minecraft-hostname>
+```
 
-You can use tools like [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html).
+Use the hostname players enter in Minecraft, including the public name that owns any Minecraft SRV record. The command prints a record like:
 
-After obtaining the certificate, on the server in the `~/automodpack/.private/` directory, replace the `cert.crt` (with the full chain certificate) and `key.pem` files ([key has to be in PKCS#8 (PEM) format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) - here be cautious as interception of these files may result in impersonation of the server, [read more](https://security.stackexchange.com/a/16694).
-If you're hosting modpack on different sub/domain than your minecraft server, make sure that your certificate verifies both of the sub/domains.
+```dns
+_automodpack.play.example.com. IN TXT "v=amp1;fp=<certificate-sha256>"
+```
 
-### Little tutorial on how to obtain a certificate using Certbot
+Publish exactly that TXT record in the DNSSEC-signed zone. The record contains one SHA-256 fingerprint and does not contain a download address or port. `addressToSend` and `portToSend` still select the modpack endpoint; DNS only authenticates the self-signed certificate presented by that endpoint.
 
-Install Certbot on your pc or server, then run the example command and follow further certbot instructions to obtain a certificate for your domain:
+On each new AutoModpack connection, the client first attempts normal CA verification. DNS is queried only when that verification fails and the presented leaf certificate is genuinely self-signed. Its lifetime fields are not used for exact-fingerprint trust. Clients ask both Cloudflare and Mullvad over DNS-over-HTTPS and use the fingerprint only when both resolvers report DNSSEC validation and agree.
+
+The resulting behavior is:
+
+- a valid CA-signed certificate is accepted normally without using the DNS record;
+- a self-signed certificate matching the DNSSEC fingerprint is accepted automatically for that connection and is not saved in the known-hosts file;
+- an authoritative DNSSEC fingerprint mismatch or malformed AutoModpack record fails closed without a manual override prompt;
+- when no usable record is available, AutoModpack falls back to the existing saved/manual fingerprint flow.
+
+If the self-signed certificate changes, replace the single `fp` value with the new fingerprint. Allow for DNS TTL and resolver cache propagation when planning the change; clients seeing an old fingerprint will safely refuse the new certificate until the record has propagated.
+
+### Manual fingerprint verification
+
+When automatic CA or DNSSEC verification is unavailable, copy the fingerprint from the server console into the game. Manual verification and the explicit Skip action both save the presented fingerprint permanently for the original Minecraft hostname. A route or port change keeps working while the exact certificate remains unchanged; a certificate change requires another trust decision.
+
+You can retrieve the current fingerprint at any time with:
+
+```text
+/automodpack host fingerprint
+```
+
+A fingerprint is public verification data, not a password. Anyone who can reach the modpack host may still be able to download public modpack data; the fingerprint protects clients from accepting an impersonating host. The fingerprint changes whenever the leaf certificate changes.
+
+### Providing a CA-signed certificate
+
+A publicly trusted certificate allows standard WebPKI verification without a DNSSEC AutoModpack record. You can obtain one with tools such as [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html).
+
+After obtaining the certificate, replace `cert.crt` (the full certificate chain) and `key.pem` in `~/automodpack/.private/`. The private key must use [PKCS#8 PEM format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html). Protect these files carefully: access to the private key permits server impersonation.
+
+The certificate must be valid for the Minecraft hostname players enter. A different modpack endpoint hostname is only a TCP route and does not need to appear in the certificate.
+
+### Certbot example
+
+Install Certbot, then request a certificate for the Minecraft hostname players use:
 
 ```bash
-# certbot certonly --manual --preferred-challenges dns -d <modpack-host-domain> -d <minecraft-server-domain>
+# certbot certonly --manual --preferred-challenges dns -d <minecraft-server-domain>
 ```
-If you're hosting modpack on the same port as your minecraft server, in most cases these domains will match, if so you don't need to provide the second domain.
 
 <Callout variant="warning">
-Never copy-paste random commands from the internet, always read the documentation of the tool you're using!
+Never copy-paste random commands from the internet. Always read the documentation of the tool you are using.
 </Callout>
 
-After obtaining the certificate, the files you need are `fullchain.pem` (the full chain certificate, copy and rename to `cert.crt`) and `privkey.pem` (the private key, copy and rename to `key.pem`).
+The files needed by AutoModpack are `fullchain.pem` (copy and rename it to `cert.crt`) and `privkey.pem` (copy and rename it to `key.pem`).
 
-### Wait but why do I need all this? It's just a modpack for my friends!
+### Why is this necessary?
 
-If someone could easily take control over the automodpack connection, they could download on your (or your friends) computers anything they want.
-Minecraft isn't sandboxed in any way and mods **can run any arbitrary code** so if someone could easily inject some malicious piece of code to any automodpack modpack no matter who the victim is, that would be a huge win for them anyway, they could steal passwords from your browser, accounts to various services or even delete your very important folder with funny cat memes, there are many possibilities.
-That's why we believe it's important to have some security measures.
+If an attacker could take control of the AutoModpack connection, they could deliver arbitrary files to players. Minecraft mods can execute arbitrary code, so authenticating the modpack host is an important part of protecting every client that joins the server.
 
-### Hmm... ok but nobody knows about my server besides my friends, why should I care?
-
-Even if you think that nobody knows about your server, it may not be true. There are many ways how someone could find out about your server.
-For example there are many minecraft server scanners which scan the entire internet for minecraft servers, and you could be a victim if your server would be found vulnerable, and we wouldn't verify the certificate.
-However nothing we do here stops someone from taking control over your server in different ways, (e.g. gaining access to it via ssh or your server hosting panel) that's why it's very important that you as a server owner take your security seriously and use strong passwords, enable two-factor authentication and keep your server software up to date.
+A private or little-known server is not automatically safe. Internet scanners can discover exposed Minecraft servers, and local DNS or network attacks can target players before they reach the intended server. Certificate verification does not replace secure server administration: continue using strong passwords, two-factor authentication, restricted file permissions, and up-to-date software.

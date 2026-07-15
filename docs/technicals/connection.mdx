@@ -6,7 +6,7 @@ This is the same security standard used by HTTPS, the protocol which you're usin
 
 TLS has method of verifying the server's identity using a certificate which is crucial to prevent attacks such as [Man-in-the-middle](https://en.wikipedia.org/wiki/Man-in-the-middle_attack).
 
-That's why AutoModpack requires you to verify the server's certificate fingerprint when connecting to the server for the first time. Read [how to verify the certificate fingerprint](certificate) for more details.
+AutoModpack treats the original Minecraft hostname selected by the player as the server identity. SRV targets, server transfers, and the server-advertised modpack address and port do not replace that identity; they are routing information only. A CA-signed certificate must be valid for the original Minecraft hostname, while clients can authenticate a self-signed certificate through a DNSSEC fingerprint under the same hostname. When neither automatic method is available, AutoModpack uses permanent origin-scoped fingerprint trust. Read [certificate verification](certificate) for setup and fallback details.
 
 ### Direct Downloads
 
