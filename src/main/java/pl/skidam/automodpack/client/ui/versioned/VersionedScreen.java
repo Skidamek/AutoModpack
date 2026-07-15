@@ -47,8 +47,8 @@ public class VersionedScreen extends Screen {
 
 	/*? if <1.20 {*/
 	/*@Override
-    public void render(PoseStack matrix, int mouseX, int mouseY, float delta) {
-        VersionedMatrices matrices = new VersionedMatrices();
+	public void render(PoseStack matrix, int mouseX, int mouseY, float delta) {
+		VersionedMatrices matrices = new VersionedMatrices();
 	*//*?} elif >=26.1 {*/
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor matrix, int mouseX, int mouseY, float delta) {
@@ -61,9 +61,9 @@ public class VersionedScreen extends Screen {
 
 		// Render background
 		/*? if <1.20.2 {*/
-        /*super.renderBackground(matrices.getContext());
+		/*super.renderBackground(matrices.getContext());
 		*//*?} elif <1.20.6 {*/
-        /*super.renderBackground(matrices.getContext(), mouseX, mouseY, delta);
+		/*super.renderBackground(matrices.getContext(), mouseX, mouseY, delta);
 		*//*?} elif >=26.1 {*/
 		super.extractRenderState(matrix, mouseX, mouseY, delta);
 		/*?} else {*/
@@ -115,31 +115,31 @@ public class VersionedScreen extends Screen {
 	public static Button buttonWidget(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
 		return Button.builder(message, onPress).pos(x, y).size(width, height).build();
 	}
-    /*?}*/
+	/*?}*/
 
-    /*? if >= 1.20.2 {*/
-    public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
-        Button button = SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), spriteWidth, spriteWidth).size(buttonWidth, buttonWidth).build();
-        button.setPosition(x, y);
-        return button;
-    }
-    /*?} else {*/
-    /*public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
-        return new ImageButton(x, y, buttonWidth, buttonWidth, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), buttonWidth, buttonWidth, onPress);
-    }
-    *//*?}*/
+	/*? if >= 1.20.2 {*/
+	public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
+		Button button = SpriteIconButton.builder(Component.empty(), onPress, true).sprite(Common.id(spritePath), spriteWidth, spriteWidth).size(buttonWidth, buttonWidth).build();
+		button.setPosition(x, y);
+		return button;
+	}
+	/*?} else {*/
+	/*public static Button iconButtonWidget(int x, int y, int buttonWidth, int spriteWidth, Button.OnPress onPress, String spritePath) {
+		return new ImageButton(x, y, buttonWidth, buttonWidth, 0, 0, 0, Common.id("textures/gui/sprites/" + spritePath + ".png"), buttonWidth, buttonWidth, onPress);
+	}
+	*//*?}*/
 
-    /*? > 1.19.2 {*/
-    public static void setTooltip(Button button, Component tooltip) {
-        button.setTooltip(Tooltip.create(tooltip));
-    }
-    /*?} else {*/
-    /*public static void setTooltip(Button button, Component tooltip) {
-        button.setMessage(tooltip);
-    }
-    *//*?}*/
+	/*? > 1.19.2 {*/
+	public static void setTooltip(Button button, Component tooltip) {
+		button.setTooltip(Tooltip.create(tooltip));
+	}
+	/*?} else {*/
+	/*public static void setTooltip(Button button, Component tooltip) {
+		button.setMessage(tooltip);
+	}
+	*//*?}*/
 
-    /*? if <=1.20 {*/
+	/*? if <=1.20 {*/
 	/*public static void drawTexture(Identifier textureID, VersionedMatrices matrices, int x, int y, int u, int v, int width, int height, int textureWidth, int textureHeight) {
 		/^? if <=1.16.5 {^/
 		/^Minecraft.getInstance().getTextureManager().bindTexture(textureID);
@@ -161,26 +161,26 @@ public class VersionedScreen extends Screen {
 	}
 	/*?}*/
 
-    /*? if >= 1.21.9 {*/
-    @Override
-    public boolean keyPressed(KeyEvent event) {
-        return onKeyPress(event.key(), event.scancode(), event.modifiers());
-    }
+	/*? if >= 1.21.9 {*/
+	@Override
+	public boolean keyPressed(KeyEvent event) {
+		return onKeyPress(event.key(), event.scancode(), event.modifiers());
+	}
 
-    // use this method in code
-    public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
-        KeyEvent event = new KeyEvent(keyCode, scanCode, modifiers);
-        return super.keyPressed(event);
-    }
-    /*?} else {*/
-    /*@Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        return onKeyPress(keyCode, scanCode, modifiers);
-    }
+	// use this method in code
+	public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
+		KeyEvent event = new KeyEvent(keyCode, scanCode, modifiers);
+		return super.keyPressed(event);
+	}
+	/*?} else {*/
+	/*@Override
+	public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+		return onKeyPress(keyCode, scanCode, modifiers);
+	}
 
-    // use this method in code
-    public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-    *//*?}*/
+	// use this method in code
+	public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
+		return super.keyPressed(keyCode, scanCode, modifiers);
+	}
+	*//*?}*/
 }

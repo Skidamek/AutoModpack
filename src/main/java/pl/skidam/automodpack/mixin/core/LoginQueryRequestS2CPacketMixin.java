@@ -23,14 +23,14 @@ import pl.skidam.automodpack_core.Constants;
 @Mixin(value = ClientboundCustomQueryPacket.class, priority = 300)
 public class LoginQueryRequestS2CPacketMixin {
 
-    /*? if >=1.20.2 {*/
-    @Shadow @Final private static int MAX_PAYLOAD_SIZE;
+	/*? if >=1.20.2 {*/
+	@Shadow @Final private static int MAX_PAYLOAD_SIZE;
 
-    @Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
-    private static void readPayload(Identifier id, FriendlyByteBuf buf, CallbackInfoReturnable<CustomQueryPayload> cir) {
-        if (id.getNamespace().equals(Constants.MOD_ID)) {
-            cir.setReturnValue(new LoginRequestPayload(id, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE)));
-        }
-    }
-    /*?}*/
+	@Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
+	private static void readPayload(Identifier id, FriendlyByteBuf buf, CallbackInfoReturnable<CustomQueryPayload> cir) {
+		if (id.getNamespace().equals(Constants.MOD_ID)) {
+			cir.setReturnValue(new LoginRequestPayload(id, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE)));
+		}
+	}
+	/*?}*/
 }

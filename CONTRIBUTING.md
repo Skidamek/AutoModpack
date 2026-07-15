@@ -11,8 +11,19 @@ If you're a developer, you can contribute to the AutoModpack project by writing 
 2. Fork the repository and create a new branch for your feature or bug fix.
 3. Make your code changes.
 4. Build code with `./gradlew build` command.
-5. Test your changes thoroughly to prevent regressions.
+5. Run `./gradlew formatApply`, then test your changes thoroughly to prevent regressions.
 6. Submit a pull request, describing your changes and providing relevant context.
+
+#### Code formatting
+
+Gradle is the formatting authority:
+
+- `./gradlew formatApply` formats authored Java, Gradle Kotlin, and text files.
+- `./gradlew formatCheck` checks formatting without modifying files.
+
+The style uses tabs displayed at four columns and a compact 160-column limit for Java and Kotlin. Stonecutter templates receive tab and whitespace normalization without parser-based reflow, which preserves their comment directives exactly. Generated files under `versions/` are never formatted.
+
+IntelliJ IDEA reads `.editorconfig` automatically. For matching Java formatting in the IDE, install the Eclipse Code Formatter plugin and import `config/format/eclipse-java.xml`. Before committing, use the Gradle task so the result exactly matches CI.
 
 ### 2. Documentation
 Clear and comprehensive documentation is essential. You can contribute by improving existing documentation or creating new guides:

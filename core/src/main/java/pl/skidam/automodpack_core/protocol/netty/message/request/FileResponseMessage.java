@@ -1,24 +1,24 @@
 package pl.skidam.automodpack_core.protocol.netty.message.request;
 
-import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
-
 import static pl.skidam.automodpack_core.protocol.NetUtils.FILE_RESPONSE_TYPE;
 
+import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
+
 public class FileResponseMessage extends ProtocolMessage {
-    private final int dataLength;
-    private final byte[] data;
+	private final int dataLength;
+	private final byte[] data;
 
-    public FileResponseMessage(byte version, byte[] secret, byte[] data) {
-        super(version, FILE_RESPONSE_TYPE, secret);
-        this.dataLength = data.length;
-        this.data = data;
-    }
+	public FileResponseMessage(byte version, byte[] secret, byte[] data) {
+		super(version, FILE_RESPONSE_TYPE, secret);
+		this.dataLength = data.length;
+		this.data = data;
+	}
 
-    public int getDataLength() {
-        return dataLength;
-    }
+	public int getDataLength() {
+		return dataLength;
+	}
 
-    public byte[] getData() {
-        return data;
-    }
+	public byte[] getData() {
+		return data;
+	}
 }

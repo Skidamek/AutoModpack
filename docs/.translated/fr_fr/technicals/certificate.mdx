@@ -14,7 +14,7 @@ Si vous ne souhaitez pas que les joueurs valident manuellement le certificat et 
 
 Vous pouvez utiliser des outils comme [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html).
 
-Une fois le certificat obtenu, sur le serveur dans le dossier `~/automodpack/.private/`, remplacez les fichiers `cert.crt` (avec le certificat complet en chaîne) et `key.pem` ([la clé doit être au format PKCS#8 (PEM)](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) – attention : l’interception de ces fichiers pourrait permettre l’usurpation de votre serveur, [en savoir plus](https://security.stackexchange.com/a/16694).  
+Une fois le certificat obtenu, sur le serveur dans le dossier `~/automodpack/.private/`, remplacez les fichiers `cert.crt` (avec le certificat complet en chaîne) et `key.pem` ([la clé doit être au format PKCS#8 (PEM)](https://netty.io/wiki/sslcontextbuilder-and-private-key.html)) – attention : l’interception de ces fichiers pourrait permettre l’usurpation de votre serveur, [en savoir plus](https://security.stackexchange.com/a/16694).
 Si vous hébergez le modpack sur un sous-domaine ou domaine différent de celui de votre serveur Minecraft, assurez-vous que votre certificat couvre bien les deux.
 
 ### Petit tutoriel pour obtenir un certificat avec Certbot

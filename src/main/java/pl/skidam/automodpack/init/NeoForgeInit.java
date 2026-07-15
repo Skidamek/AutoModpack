@@ -20,36 +20,36 @@ import static pl.skidam.automodpack_core.Constants.*;
 
 @Mod(MOD_ID + "_mod")
 public class NeoForgeInit {
-    public NeoForgeInit(IEventBus eventBus) {
-         preload = false;
-         ScreenManager.INSTANCE = new ScreenImpl();
+	public NeoForgeInit(IEventBus eventBus) {
+		preload = false;
+		ScreenManager.INSTANCE = new ScreenImpl();
 
-         long start = System.currentTimeMillis();
-         LOGGER.info("Launching AutoModpack...");
+		long start = System.currentTimeMillis();
+		LOGGER.info("Launching AutoModpack...");
 
-         Common.init();
+		Common.init();
 
-         if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
-            Common.serverInit();
-         } else {
-             ModPackets.registerC2SPackets();
-             new AudioManager(eventBus);
-         }
+		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
+			Common.serverInit();
+		} else {
+			ModPackets.registerC2SPackets();
+			new AudioManager(eventBus);
+		}
 
 
-         LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
-    }
+		LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
+	}
 
 /^? if >1.20.5 {^/
-   @EventBusSubscriber(modid = MOD_ID + "_mod")
+@EventBusSubscriber(modid = MOD_ID + "_mod")
 /^?} else {^/
-   /^@Mod.EventBusSubscriber(modid = MOD_ID + "_mod")
+/^@Mod.EventBusSubscriber(modid = MOD_ID + "_mod")
 ^//^?}^/
-    public static class events {
-        @SubscribeEvent
-        public static void onCommandsRegister(RegisterCommandsEvent event) {
-            Commands.register(event.getDispatcher());
-        }
-    }
+	public static class events {
+		@SubscribeEvent
+		public static void onCommandsRegister(RegisterCommandsEvent event) {
+			Commands.register(event.getDispatcher());
+		}
+	}
 }
 *//*?}*/

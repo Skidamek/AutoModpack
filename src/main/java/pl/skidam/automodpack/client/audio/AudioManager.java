@@ -28,85 +28,85 @@ import net.minecraft.core.Registry;
 /*?}*/
 
 public class AudioManager {
-    private static CustomSoundInstance SOUND_INSTANCE;
-    private static SoundManager soundManager;
-    private static boolean playing = false;
+	private static CustomSoundInstance SOUND_INSTANCE;
+	private static SoundManager soundManager;
+	private static boolean playing = false;
 
-    private static final Identifier WAITING_MUSIC_ID = Common.id("waiting_music");
+	private static final Identifier WAITING_MUSIC_ID = Common.id("waiting_music");
 
-    /*? if >= 1.19.3 {*/
-    public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.createVariableRangeEvent(WAITING_MUSIC_ID);
-     /*?} else {*/
-    /*private static final SoundEvent WAITING_MUSIC_EVENT = new SoundEvent(WAITING_MUSIC_ID);
+	/*? if >= 1.19.3 {*/
+	public static final SoundEvent WAITING_MUSIC_EVENT = SoundEvent.createVariableRangeEvent(WAITING_MUSIC_ID);
+	/*?} else {*/
+	/*private static final SoundEvent WAITING_MUSIC_EVENT = new SoundEvent(WAITING_MUSIC_ID);
 *//*?}*/
 
-    private static Supplier<SoundEvent> WAITING_MUSIC;
+	private static Supplier<SoundEvent> WAITING_MUSIC;
 
 /*? if forge {*/
-    /*public AudioManager(IEventBus eventBus) {
-        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, Constants.MOD_ID);
-        SOUND_REGISTER.register(eventBus);
-        WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
-    }
+	/*public AudioManager(IEventBus eventBus) {
+		DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(ForgeRegistries.SOUND_EVENTS, Constants.MOD_ID);
+		SOUND_REGISTER.register(eventBus);
+		WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
+	}
 *//*?}*/
 
 /*? if neoforge {*/
-    /*public AudioManager(IEventBus eventBus) {
-        DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(BuiltInRegistries.SOUND_EVENT, Constants.MOD_ID);
-        SOUND_REGISTER.register(eventBus);
-        WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
-    }
+	/*public AudioManager(IEventBus eventBus) {
+		DeferredRegister<SoundEvent> SOUND_REGISTER = DeferredRegister.create(BuiltInRegistries.SOUND_EVENT, Constants.MOD_ID);
+		SOUND_REGISTER.register(eventBus);
+		WAITING_MUSIC = SOUND_REGISTER.register(WAITING_MUSIC_ID.getPath(),()-> WAITING_MUSIC_EVENT);
+	}
 *//*?}*/
 
-    /*? if fabric {*/
-    public AudioManager() {
-        SoundEvent waiting_music = register();
-        WAITING_MUSIC = () -> waiting_music;
-    }
+	/*? if fabric {*/
+	public AudioManager() {
+		SoundEvent waiting_music = register();
+		WAITING_MUSIC = () -> waiting_music;
+	}
 
-    private SoundEvent register() {
-        Identifier id = Common.id("waiting_music");
+	private SoundEvent register() {
+		Identifier id = Common.id("waiting_music");
 /*? if >=1.19.3 {*/
-        Registry<SoundEvent> register = BuiltInRegistries.SOUND_EVENT;
-         /*?} else {*/
-        /*Registry<SoundEvent> register = Registry.SOUND_EVENT;
+		Registry<SoundEvent> register = BuiltInRegistries.SOUND_EVENT;
+		/*?} else {*/
+		/*Registry<SoundEvent> register = Registry.SOUND_EVENT;
 *//*?}*/
 
-        return Registry.register(register, id, WAITING_MUSIC_EVENT);
-    }
+		return Registry.register(register, id, WAITING_MUSIC_EVENT);
+	}
 /*?}*/
 
 
-    public static void playMusic() {
-        if (playing) return;
-        if (WAITING_MUSIC == null || WAITING_MUSIC.get() == null) {
-            Constants.LOGGER.error("WAITING_MUSIC is null?!");
-            return;
-        }
-        if (SOUND_INSTANCE == null) {
-            SOUND_INSTANCE = new CustomSoundInstance(WAITING_MUSIC);
-        }
+	public static void playMusic() {
+		if (playing) return;
+		if (WAITING_MUSIC == null || WAITING_MUSIC.get() == null) {
+			Constants.LOGGER.error("WAITING_MUSIC is null?!");
+			return;
+		}
+		if (SOUND_INSTANCE == null) {
+			SOUND_INSTANCE = new CustomSoundInstance(WAITING_MUSIC);
+		}
 
-        getSoundManager().stop();
-        getSoundManager().play(SOUND_INSTANCE);
-        playing = true;
-    }
+		getSoundManager().stop();
+		getSoundManager().play(SOUND_INSTANCE);
+		playing = true;
+	}
 
-    public static void stopMusic() {
-        if (!playing || SOUND_INSTANCE == null) return;
+	public static void stopMusic() {
+		if (!playing || SOUND_INSTANCE == null) return;
 
-        getSoundManager().stop();
-        playing = false;
-    }
+		getSoundManager().stop();
+		playing = false;
+	}
 
-    private static SoundManager getSoundManager() {
-        if(soundManager == null) {
-            soundManager = Minecraft.getInstance().getSoundManager();
-        }
-        return soundManager;
-    }
+	private static SoundManager getSoundManager() {
+		if(soundManager == null) {
+			soundManager = Minecraft.getInstance().getSoundManager();
+		}
+		return soundManager;
+	}
 
-    public static boolean isMusicPlaying() {
-        return playing;
-    }
+	public static boolean isMusicPlaying() {
+		return playing;
+	}
 }

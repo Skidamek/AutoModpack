@@ -47,43 +47,43 @@ public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
 		return text;
 	}
 
-    /*? if >= 26.1 {*/
-    @Override
-    public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-        VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
-        versionedRender(versionedMatrices, this.getContentX(), this.getContentY(), this.getContentWidth(), this.getContentHeight());
-    }
-    /*?} elif >= 1.21.9 {*/
-    /*@Override
-    public void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-        VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
-        int x = this.getX();
-        int y = this.getY();
-        versionedRender(versionedMatrices, x, y, guiGraphics.guiWidth(), this.getHeight());
-    }
-    *//*?} else {*/
+	/*? if >= 26.1 {*/
+	@Override
+	public void extractContent(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+		VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
+		versionedRender(versionedMatrices, this.getContentX(), this.getContentY(), this.getContentWidth(), this.getContentHeight());
+	}
+	/*?} elif >= 1.21.9 {*/
 	/*@Override
-    /^? if <1.20 {^/
-    /^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+	public void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, boolean hovered, float tickDelta) {
+		VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
+		int x = this.getX();
+		int y = this.getY();
+		versionedRender(versionedMatrices, x, y, guiGraphics.guiWidth(), this.getHeight());
+	}
+	*//*?} else {*/
+	/*@Override
+	/^? if <1.20 {^/
+	/^public void render(PoseStack matrices, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 		VersionedMatrices versionedMatrices = new VersionedMatrices();
-    ^//^?} else {^/
+	^//^?} else {^/
 	public void render(GuiGraphics guiGraphics, int index, int y, int x, int entryWidth, int entryHeight, int mouseX, int mouseY, boolean hovered, float tickDelta) {
 		VersionedMatrices versionedMatrices = new VersionedMatrices(guiGraphics);
 	/^?}^/
 		versionedRender(versionedMatrices, x, y, entryWidth, entryHeight);
 	}
-    *//*?}*/
+	*//*?}*/
 
 	public void versionedRender(VersionedMatrices versionedMatrices, int x, int y, int entryWidth, int entryHeight) {
 		versionedMatrices.pushPose();
 
-        /*? if >= 26.1 {*/
-        int centeredX = x + entryWidth / 2;
-        /*?} elif >= 1.21.9 {*/
+		/*? if >= 26.1 {*/
+		int centeredX = x + entryWidth / 2;
+		/*?} elif >= 1.21.9 {*/
 		/*int centeredX = entryWidth / 2;
-        *//*?} else {*/
-        /*int centeredX = x + entryWidth / 2;
-        *//*?}*/
+		*//*?} else {*/
+		/*int centeredX = x + entryWidth / 2;
+		*//*?}*/
 		int centeredY = y + entryHeight / 2;
 		if (bigFont) {
 			float scale = 1.5f;
@@ -117,23 +117,23 @@ public class ListEntry extends ObjectSelectionList.Entry<ListEntry> {
 		return mainPageUrl;
 	}
 
-    /*? if >= 1.21.9 {*/
-    @Override
-    public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean bl) {
-        return !bigFont;
-    }
-    /*?} else {*/
-    /*@Override
+	/*? if >= 1.21.9 {*/
+	@Override
+	public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean bl) {
+		return !bigFont;
+	}
+	/*?} else {*/
+	/*@Override
 	public boolean mouseClicked(double mouseX, double mouseY, int button) {
 		return !bigFont;
 	}
-    *//*?}*/
+	*//*?}*/
 
 
-    /*? if < 1.21.9 {*/
+	/*? if < 1.21.9 {*/
 	/*@Override
 	public boolean mouseReleased(double mouseX, double mouseY, int button) {
 		return false;
 	}
-    *//*?}*/
+	*//*?}*/
 }

@@ -1,48 +1,118 @@
 plugins {
-    id("dev.kikugie.stonecutter")
-    kotlin("jvm") version "2.3.21" apply false
-    id("net.fabricmc.fabric-loom-remap") version "1.17-SNAPSHOT" apply false
-    id("net.fabricmc.fabric-loom") version "1.17-SNAPSHOT" apply false
-    id("net.neoforged.moddev") version "2.0.141" apply false
-    id("com.gradleup.shadow") version "9.4.3" apply false
-    id("org.moddedmc.wiki.toolkit") version "0.4+"
+	id("dev.kikugie.stonecutter")
+	kotlin("jvm") version "2.3.21" apply false
+	id("net.fabricmc.fabric-loom-remap") version "1.17-SNAPSHOT" apply false
+	id("net.fabricmc.fabric-loom") version "1.17-SNAPSHOT" apply false
+	id("net.neoforged.moddev") version "2.0.141" apply false
+	id("com.gradleup.shadow") version "9.4.3" apply false
+	id("org.moddedmc.wiki.toolkit") version "0.4+"
+	id("com.diffplug.spotless") version "8.8.0"
+}
+
+repositories {
+	mavenCentral()
 }
 
 wiki {
-    docs.create("automodpack") {
-        root = file("docs")
-    }
+	docs.create("automodpack") {
+		root = file("docs")
+	}
 }
 
-stonecutter active "26.2-fabric" /* [SC] DO NOT EDIT */
+stonecutter active "26.2-fabric" // [SC] DO NOT EDIT
 
 stonecutter.parameters {
-    val (version, loader) = current.project.split('-', limit = 2)
+	val (version, loader) = current.project.split('-', limit = 2)
 
-    constants.match(loader, "fabric", "neoforge", "forge")
-    properties.tags(version, loader)
+	constants.match(loader, "fabric", "neoforge", "forge")
+	properties.tags(version, loader)
 
-    replacements {
-        string(current.parsed >= "1.20.2") {
-            replace("ServerboundCustomQueryPacket", "ServerboundCustomQueryAnswerPacket")
-            replace(".SystemToastIds.", ".SystemToastId.")
-        }
+	replacements {
+		string(current.parsed >= "1.20.2") {
+			replace("ServerboundCustomQueryPacket", "ServerboundCustomQueryAnswerPacket")
+			replace(".SystemToastIds.", ".SystemToastId.")
+		}
 
-        regex(current.parsed >= "1.21.11") {
-            replace("\\bResourceLocation\\b" to "Identifier", "\\bIdentifier\\b" to "ResourceLocation")
-        }
+		regex(current.parsed >= "1.21.11") {
+			replace("\\bResourceLocation\\b" to "Identifier", "\\bIdentifier\\b" to "ResourceLocation")
+		}
 
-        string(current.parsed >= "1.21.11") {
-            replace("net.minecraft.Util", "net.minecraft.util.Util")
-            replace(
-                "source.hasPermission(3))",
-                "source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))"
-            )
-        }
+		string(current.parsed >= "1.21.11") {
+			replace("net.minecraft.Util", "net.minecraft.util.Util")
+			replace(
+				"source.hasPermission(3))",
+				"source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))",
+			)
+		}
 
-        string(current.parsed >= "26.2") {
-            replace("minecraft.setScreen(", "minecraft.gui.setScreen(")
-            replace("minecraft.getToastManager()", "minecraft.gui.toastManager()")
-        }
-    }
+		string(current.parsed >= "26.2") {
+			replace("minecraft.setScreen(", "minecraft.gui.setScreen(")
+			replace("minecraft.getToastManager()", "minecraft.gui.toastManager()")
+		}
+	}
+}
+
+val stonecutterJava =
+	files(
+		providers.provider {
+			fileTree("src/main/java") {
+				include("**/*.java")
+			}.files.filter { it.readText().contains("/*?") }
+		},
+	)
+val miscExtensions = setOf("md", "mdx", "json", "json5", "yml", "yaml", "toml", "xml", "properties", "py", "sh")
+val trackedMiscFiles =
+	files(
+		providers
+			.exec {
+				commandLine("git", "ls-files", "-z")
+			}.standardOutput.asText
+			.map { output ->
+				output.split('\u0000').filter { path -> path == ".gitignore" || path.substringAfterLast('.', "") in miscExtensions }
+			},
+	)
+
+spotless {
+	java {
+		target("src/main/java/**/*.java", "core/src/**/*.java", "loader/**/src/**/*.java")
+		targetExclude("versions/**", stonecutterJava)
+		eclipse().configFile("config/format/eclipse-java.xml")
+		importOrder("java", "javax", "org", "com", "", "pl.skidam")
+		trimTrailingWhitespace()
+		endWithNewline()
+	}
+
+	format("stonecutterJava") {
+		target(stonecutterJava)
+		leadingSpacesToTabs(4)
+		trimTrailingWhitespace()
+		endWithNewline()
+	}
+
+	kotlinGradle {
+		target("**/*.gradle.kts")
+		targetExclude("versions/**", ".gradle/**", "**/build/**")
+		ktlint()
+		trimTrailingWhitespace()
+		endWithNewline()
+	}
+
+	format("misc") {
+		target(trackedMiscFiles)
+		targetExclude("versions/**", "autotester/uv.lock")
+		trimTrailingWhitespace()
+		endWithNewline()
+	}
+}
+
+tasks.register("formatApply") {
+	group = "formatting"
+	description = "Formats all authored source files."
+	dependsOn("spotlessApply")
+}
+
+tasks.register("formatCheck") {
+	group = "verification"
+	description = "Checks formatting without changing files."
+	dependsOn("spotlessCheck")
 }

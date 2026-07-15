@@ -16,117 +16,117 @@ import net.minecraft.client.gui.screens.TitleScreen;
 
 public class ScreenImpl implements ScreenService {
 
-    private static void executeOnClient(Runnable task) {
-        Minecraft.getInstance().execute(task);
-    }
+	private static void executeOnClient(Runnable task) {
+		Minecraft.getInstance().execute(task);
+	}
 
-    @Override
-    public void download(Object... args) {
-        executeOnClient(() -> Screens.download(args[0], args[1]));
-    }
+	@Override
+	public void download(Object... args) {
+		executeOnClient(() -> Screens.download(args[0], args[1]));
+	}
 
-    @Override
-    public void fetch(Object... args) {
-        executeOnClient(() -> Screens.fetch(args[0]));
-    }
+	@Override
+	public void fetch(Object... args) {
+		executeOnClient(() -> Screens.fetch(args[0]));
+	}
 
-    @Override
-    public void changelog(Object... args) {
-        executeOnClient(() -> Screens.changelog(args[0], args[1], args[2]));
-    }
+	@Override
+	public void changelog(Object... args) {
+		executeOnClient(() -> Screens.changelog(args[0], args[1], args[2]));
+	}
 
-    @Override
-    public void restart(Object... args) {
-        executeOnClient(() -> Screens.restart(args[0], args[1], args[2]));
-    }
+	@Override
+	public void restart(Object... args) {
+		executeOnClient(() -> Screens.restart(args[0], args[1], args[2]));
+	}
 
-    @Override
-    public void danger(Object... args) {
-        executeOnClient(() -> Screens.danger(args[0], args[1]));
-    }
+	@Override
+	public void danger(Object... args) {
+		executeOnClient(() -> Screens.danger(args[0], args[1]));
+	}
 
-    @Override
-    public void error(String... args) {
-        executeOnClient(() -> Screens.error(args));
-    }
+	@Override
+	public void error(String... args) {
+		executeOnClient(() -> Screens.error(args));
+	}
 
-    @Override
-    public void menu(Object... args) {
-        executeOnClient(Screens::menu);
-    }
+	@Override
+	public void menu(Object... args) {
+		executeOnClient(Screens::menu);
+	}
 
-    @Override
-    public void title(Object... args) {
-        executeOnClient(Screens::title);
-    }
+	@Override
+	public void title(Object... args) {
+		executeOnClient(Screens::title);
+	}
 
-    @Override
-    public void validation(Object... args) {
-        executeOnClient(() -> Screens.validation(args[0], args[1], args[2], args[3]));
-    }
+	@Override
+	public void validation(Object... args) {
+		executeOnClient(() -> Screens.validation(args[0], args[1], args[2], args[3]));
+	}
 
-    @Override
-    public Optional<String> getScreenString() {
-        Screen screen = Screens.getScreen();
-        return Optional.of(screen.getTitle().getString().toLowerCase());
-    }
+	@Override
+	public Optional<String> getScreenString() {
+		Screen screen = Screens.getScreen();
+		return Optional.of(screen.getTitle().getString().toLowerCase());
+	}
 
-    @Override
-    public Optional<Object> getScreen() {
-        return Optional.ofNullable(Screens.getScreen());
-    }
+	@Override
+	public Optional<Object> getScreen() {
+		return Optional.ofNullable(Screens.getScreen());
+	}
 
-    private static class Screens {
-        private static Screen getScreen() {
-            /*? if >=26.2 {*/
-            return Minecraft.getInstance().gui.screen();
-            /*?} else {*/
-            /*return Minecraft.getInstance().screen;
-            *//*?}*/
-        }
+	private static class Screens {
+		private static Screen getScreen() {
+			/*? if >=26.2 {*/
+			return Minecraft.getInstance().gui.screen();
+			/*?} else {*/
+			/*return Minecraft.getInstance().screen;
+			*//*?}*/
+		}
 
-        public static void setScreen(Screen screen) {
-            /*? if >=26.2 {*/
-            Minecraft.getInstance().gui.setScreen(screen);
-            /*?} else {*/
-            /*Minecraft.getInstance().setScreen(screen);
-            *//*?}*/
-        }
+		public static void setScreen(Screen screen) {
+			/*? if >=26.2 {*/
+			Minecraft.getInstance().gui.setScreen(screen);
+			/*?} else {*/
+			/*Minecraft.getInstance().setScreen(screen);
+			*//*?}*/
+		}
 
-        public static void download(Object downloadManager, Object header) {
-            Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
-        }
+		public static void download(Object downloadManager, Object header) {
+			Screens.setScreen(new DownloadScreen((DownloadManager) downloadManager, (String) header));
+		}
 
-        public static void fetch(Object fetchManager) {
-            Screens.setScreen(new FetchScreen((FetchManager) fetchManager));
-        }
+		public static void fetch(Object fetchManager) {
+			Screens.setScreen(new FetchScreen((FetchManager) fetchManager));
+		}
 
-        public static void changelog(Object parent, Object modpackDir, Object changelog) {
-            Screens.setScreen(new ChangelogScreen((Screen) parent, (Path) modpackDir, (Changelogs) changelog));
-        }
+		public static void changelog(Object parent, Object modpackDir, Object changelog) {
+			Screens.setScreen(new ChangelogScreen((Screen) parent, (Path) modpackDir, (Changelogs) changelog));
+		}
 
-        public static void restart(Object modpackDir, Object updateType, Object changelogs) {
-            Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
-        }
+		public static void restart(Object modpackDir, Object updateType, Object changelogs) {
+			Screens.setScreen(new RestartScreen((Path) modpackDir, (UpdateType) updateType, (Changelogs) changelogs));
+		}
 
-        public static void danger(Object parent, Object modpackUpdaterInstance) {
-            Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
-        }
+		public static void danger(Object parent, Object modpackUpdaterInstance) {
+			Screens.setScreen(new DangerScreen((Screen) parent, (ModpackUpdater) modpackUpdaterInstance));
+		}
 
-        public static void error(String... errors) {
-            Screens.setScreen(new ErrorScreen(errors));
-        }
+		public static void error(String... errors) {
+			Screens.setScreen(new ErrorScreen(errors));
+		}
 
-        public static void title() {
-            Screens.setScreen(new TitleScreen());
-        }
+		public static void title() {
+			Screens.setScreen(new TitleScreen());
+		}
 
-        public static void menu() {
+		public static void menu() {
 //            Screens.setScreen(new MenuScreen());
-        }
+		}
 
-        public static void validation(Object parent, Object serverFingerprint, Object validatedCallback, Object canceledCallback) {
-            Screens.setScreen(new FingerprintVerificationScreen((Screen) parent, (String) serverFingerprint, (Runnable) validatedCallback, (Runnable) canceledCallback));
-        }
-    }
+		public static void validation(Object parent, Object serverFingerprint, Object validatedCallback, Object canceledCallback) {
+			Screens.setScreen(new FingerprintVerificationScreen((Screen) parent, (String) serverFingerprint, (Runnable) validatedCallback, (Runnable) canceledCallback));
+		}
+	}
 }

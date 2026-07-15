@@ -1,5 +1,5 @@
 
-**AutoModpack** is a Minecraft modification designed to **improve your private server modpack management**. Say goodbye to the days of 
+**AutoModpack** is a Minecraft modification designed to **improve your private server modpack management**. Say goodbye to the days of
 struggling to get everyone on the same version! This mod **automatically synchronizes** players with the server's modpack, making playing with friends incredibly smooth and hassle-free.
 
 <p align="center">
@@ -29,27 +29,27 @@ struggling to get everyone on the same version! This mod **automatically synchro
 
 ## 🛠️ How the Magic Happens
 
-AutoModpack works by generating a modpack (a metadata file) from your files on the server, which contains description of all the files. 
+AutoModpack works by generating a modpack (a metadata file) from your files on the server, which contains description of all the files.
 The server then hosts that metadata and each modpack file indexed by its hash.
 
 When a client connects to the server:
 
 1. AutoModpack establishes a secure connection and prompts you to [verify the server's certificate fingerprint](https://moddedmc.wiki/en/project/automodpack/docs/technicals/certificate).
-2. It fetches the APIs for direct downloads of your modpack's files from Modrinth and CurseForge, where possible (mods, 
+2. It fetches the APIs for direct downloads of your modpack's files from Modrinth and CurseForge, where possible (mods,
    resource packs, shaders).
 3. Downloads all files to the client's automodpack folder.
 4. After game restart AutoModpack loads the modpack, and the client is perfectly synced and ready to play!
 
-On subsequent game launches, AutoModpack checks for updates. If changes are detected, it updates the modpack in the background - no 
+On subsequent game launches, AutoModpack checks for updates. If changes are detected, it updates the modpack in the background - no
 additional restarts are required! (unless there's an update detected while you are already in-game, there's no way around that :/)
 
 ## ⚠️ Security and Trust!
 
 > With great power comes great responsibility.
 
-Be aware that this mod allows remote servers to download *arbitrary executable* files directly into your computer. It's crucial to 
-**only use it on servers you absolutely trust**. A malicious administrator or a compromised server *can* include harmful files such as 
-malware - to protect against this, please use sandboxed launchers such as [Pandora](https://pandora.moulberry.com/) or if you are on 
+Be aware that this mod allows remote servers to download *arbitrary executable* files directly into your computer. It's crucial to
+**only use it on servers you absolutely trust**. A malicious administrator or a compromised server *can* include harmful files such as
+malware - to protect against this, please use sandboxed launchers such as [Pandora](https://pandora.moulberry.com/) or if you are on
 Linux, use launchers installed via Flatpak.
 
 While AutoModpack itself tries to be as secure as possible, due to the nature of the internet, the creators and contributors of AutoModpack are not responsible for any harm, damage, loss, or issues that may result from using the mod. **By using AutoModpack, you acknowledge and accept this risk.**
@@ -59,7 +59,7 @@ While AutoModpack itself tries to be as secure as possible, due to the nature of
 ## 🚀 Getting Started is a Breeze!
 Installing AutoModpack is as simple as installing any other mod.
 
-0.  If you have anything valuable in your Minecraft installation, **make a backup** before proceeding, just in case, if you are using 
+0.  If you have anything valuable in your Minecraft installation, **make a backup** before proceeding, just in case, if you are using
     launcher which supports multiple instances, create a new instance for AutoModpack.
 1.  Download the AutoModpack from the releases page on [GitHub](https://github.com/Skidamek/AutoModpack/releases), [CurseForge](https://www.curseforge.com/minecraft/mc-mods/automodpack), or [Modrinth](https://modrinth.com/mod/automodpack).
 2.  Place the downloaded file into the `/mods/` folder of both your server and client Minecraft installations.

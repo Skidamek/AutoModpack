@@ -23,26 +23,26 @@ import pl.skidam.automodpack.networking.client.LoginResponsePayload;
 @Mixin(value = ServerboundCustomQueryAnswerPacket.class, priority = 300)
 public class LoginQueryResponseC2SPacketMixin {
 
-    /*? if >=1.20.2 {*/
-    @Shadow
-    @Final
-    private static int MAX_PAYLOAD_SIZE;
+	/*? if >=1.20.2 {*/
+	@Shadow
+	@Final
+	private static int MAX_PAYLOAD_SIZE;
 
-    @Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
-    private static void readResponse(int queryId, FriendlyByteBuf buf, CallbackInfoReturnable<CustomQueryAnswerPayload> cir) {
-        Identifier automodpackID = LoginNetworkingIDs.getByValue(queryId);
-        if (automodpackID == null) {
-            return;
-        }
+	@Inject(method = "readPayload", at = @At("HEAD"), cancellable = true)
+	private static void readResponse(int queryId, FriendlyByteBuf buf, CallbackInfoReturnable<CustomQueryAnswerPayload> cir) {
+		Identifier automodpackID = LoginNetworkingIDs.getByValue(queryId);
+		if (automodpackID == null) {
+			return;
+		}
 
-        boolean hasPayload = buf.readBoolean();
+		boolean hasPayload = buf.readBoolean();
 
-        if (!hasPayload) {
-            cir.setReturnValue(null);
-            return;
-        }
+		if (!hasPayload) {
+			cir.setReturnValue(null);
+			return;
+		}
 
-        cir.setReturnValue(new LoginResponsePayload(automodpackID, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE)));
-    }
-    /*?}*/
+		cir.setReturnValue(new LoginResponsePayload(automodpackID, PayloadHelper.read(buf, MAX_PAYLOAD_SIZE)));
+	}
+	/*?}*/
 }

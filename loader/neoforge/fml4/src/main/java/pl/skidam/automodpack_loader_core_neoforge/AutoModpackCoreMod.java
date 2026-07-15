@@ -10,7 +10,8 @@ import net.neoforged.neoforgespi.coremod.ICoreMod;
  * {@link AutoModpackTransformationService} - a natively ServiceLoader-discovered service, not this
  * FML-collected one.)
  *
- * <p>{@code ICoreMod} is an FML SPI, not a ModLauncher one: FML's own {@code transformers()} pass
+ * <p>
+ * {@code ICoreMod} is an FML SPI, not a ModLauncher one: FML's own {@code transformers()} pass
  * collects it directly from the layers that already exist (BOOT/SERVICE/PLUGIN) before the GAME layer
  * is built, so a modpack jar's own coremod is never seen there. AutoModpack itself is on the SERVICE
  * layer and IS scanned - so it instantiates those modpack coremods from the child SERVICE layers
@@ -20,8 +21,8 @@ import net.neoforged.neoforgespi.coremod.ICoreMod;
 @SuppressWarnings("unused")
 public class AutoModpackCoreMod implements ICoreMod {
 
-    @Override
-    public Iterable<? extends ITransformer<?>> getTransformers() {
-        return EarlyServiceLayer.collectForwardedTransformers();
-    }
+	@Override
+	public Iterable<? extends ITransformer<?>> getTransformers() {
+		return EarlyServiceLayer.collectForwardedTransformers();
+	}
 }

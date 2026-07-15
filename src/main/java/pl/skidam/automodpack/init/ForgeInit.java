@@ -18,32 +18,32 @@ import static pl.skidam.automodpack_core.Constants.*;
 @Mod(MOD_ID + "_mod")
 public class ForgeInit {
 
-    public ForgeInit() {
-        preload = false;
-        ScreenManager.INSTANCE = new ScreenImpl();
+	public ForgeInit() {
+		preload = false;
+		ScreenManager.INSTANCE = new ScreenImpl();
 
-        long start = System.currentTimeMillis();
-        LOGGER.info("Launching AutoModpack...");
+		long start = System.currentTimeMillis();
+		LOGGER.info("Launching AutoModpack...");
 
-         Common.init();
+		Common.init();
 
-        if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
-            Common.serverInit();
-        } else {
-            ModPackets.registerC2SPackets();
-            new AudioManager(FMLJavaModLoadingContext.get().getModEventBus());
-        }
+		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
+			Common.serverInit();
+		} else {
+			ModPackets.registerC2SPackets();
+			new AudioManager(FMLJavaModLoadingContext.get().getModEventBus());
+		}
 
 
-        LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
-    }
+		LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
+	}
 
-    @Mod.EventBusSubscriber(modid = MOD_ID + "_mod")
-    public static class events {
-        @SubscribeEvent
-        public static void onCommandsRegister(RegisterCommandsEvent event) {
-            Commands.register(event.getDispatcher());
-        }
-    }
+	@Mod.EventBusSubscriber(modid = MOD_ID + "_mod")
+	public static class events {
+		@SubscribeEvent
+		public static void onCommandsRegister(RegisterCommandsEvent event) {
+			Commands.register(event.getDispatcher());
+		}
+	}
 }
 *//*?}*/

@@ -2,6 +2,15 @@ package pl.skidam.automodpack_core.protocol.netty;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyPair;
+import java.security.cert.X509Certificate;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.epoll.Epoll;
@@ -14,14 +23,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.KeyPair;
-import java.security.cert.X509Certificate;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.protocol.NetUtils;
@@ -32,222 +33,202 @@ import pl.skidam.automodpack_core.utils.ObservableMap;
 
 public class NettyServer {
 
-    public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
-    public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("COMPRESSION_TYPE");
-    public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
-    public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
-    private final Map<Channel, String> connections = new ConcurrentHashMap<>();
-    private final Map<String, Path> paths = new ConcurrentHashMap<>();
-    private MultithreadEventLoopGroup eventLoopGroup;
-    private ChannelFuture serverChannel;
-    private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
-    private String certificateFingerprint;
-    private SslContext sslCtx;
+	public static final AttributeKey<SocketAddress> REAL_REMOTE_ADDR = AttributeKey.valueOf("REAL_REMOTE_ADDR");
+	public static final AttributeKey<Byte> COMPRESSION_TYPE = AttributeKey.valueOf("COMPRESSION_TYPE");
+	public static final AttributeKey<Integer> CHUNK_SIZE = AttributeKey.valueOf("CHUNK_SIZE");
+	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
+	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
+	private final Map<String, Path> paths = new ConcurrentHashMap<>();
+	private MultithreadEventLoopGroup eventLoopGroup;
+	private ChannelFuture serverChannel;
+	private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
+	private String certificateFingerprint;
+	private SslContext sslCtx;
 
-    public void addConnection(Channel channel, String secret) {
-        synchronized (connections) {
-            connections.put(channel, secret);
-        }
-    }
+	public void addConnection(Channel channel, String secret) {
+		synchronized (connections) {
+			connections.put(channel, secret);
+		}
+	}
 
-    public void removeConnection(Channel channel) {
-        synchronized (connections) {
-            connections.remove(channel);
-        }
-    }
+	public void removeConnection(Channel channel) {
+		synchronized (connections) {
+			connections.remove(channel);
+		}
+	}
 
-    public Map<Channel, String> getConnections() {
-        return connections;
-    }
+	public Map<Channel, String> getConnections() {
+		return connections;
+	}
 
-    public String getCertificateFingerprint() {
-        return certificateFingerprint;
-    }
+	public String getCertificateFingerprint() {
+		return certificateFingerprint;
+	}
 
-    public void setPaths(ObservableMap<String, Path> paths) {
-        this.paths.putAll(paths.getMap());
-        paths.addOnPutCallback(this.paths::put);
-        paths.addOnRemoveCallback(this.paths::remove);
-    }
+	public void setPaths(ObservableMap<String, Path> paths) {
+		this.paths.putAll(paths.getMap());
+		paths.addOnPutCallback(this.paths::put);
+		paths.addOnRemoveCallback(this.paths::remove);
+	}
 
-    public void removePaths(ObservableMap<String, Path> paths) {
-        paths.getMap().forEach(this.paths::remove);
-    }
+	public void removePaths(ObservableMap<String, Path> paths) {
+		paths.getMap().forEach(this.paths::remove);
+	}
 
-    public Optional<Path> getPath(String hash) {
-        return Optional.ofNullable(paths.get(hash));
-    }
+	public Optional<Path> getPath(String hash) {
+		return Optional.ofNullable(paths.get(hash));
+	}
 
-    public Optional<ChannelFuture> start() {
-        if (!serverConfig.modpackHost) {
-            LOGGER.warn("Modpack hosting is disabled in config");
-            return Optional.empty();
-        }
+	public Optional<ChannelFuture> start() {
+		if (!serverConfig.modpackHost) {
+			LOGGER.warn("Modpack hosting is disabled in config");
+			return Optional.empty();
+		}
 
-        try {
-            if (serverConfig.disableInternalTLS && serverConfig.bindPort != -1) {
-                LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use e.g. a reverse proxy with TLS.");
-            } else {
-                if (serverConfig.disableInternalTLS) {
-                    LOGGER.error("Internal TLS cannot be disabled. You have to bind modpack host on a separate port, preferably also on a loopback address or atleast some private one.");
-                }
+		try {
+			if (serverConfig.disableInternalTLS && serverConfig.bindPort != -1) {
+				LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use e.g. a reverse proxy with TLS.");
+			} else {
+				if (serverConfig.disableInternalTLS) {
+					LOGGER.error(
+							"Internal TLS cannot be disabled. You have to bind modpack host on a separate port, preferably also on a loopback address or atleast some private one.");
+				}
 
-                if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
-                    // Create a self-signed certificate
-                    KeyPair keyPair = NetUtils.generateKeyPair();
-                    X509Certificate cert = NetUtils.selfSign(keyPair);
+				if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
+					// Create a self-signed certificate
+					KeyPair keyPair = NetUtils.generateKeyPair();
+					X509Certificate cert = NetUtils.selfSign(keyPair);
 
-                    // save it to the file
-                    NetUtils.saveCertificate(cert, serverCertFile);
-                    NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
-                }
+					// save it to the file
+					NetUtils.saveCertificate(cert, serverCertFile);
+					NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+				}
 
-                X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
+				X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
 
-                if (cert == null) {
-                    throw new IllegalStateException("Server certificate couldn't be loaded");
-                }
+				if (cert == null) { throw new IllegalStateException("Server certificate couldn't be loaded"); }
 
-                // Shiny TLS 1.3
-                sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile())
-                        .sslProvider(SslProvider.JDK)
-                        .protocols("TLSv1.3")
-                        .ciphers(Arrays.asList(
-                                "TLS_AES_128_GCM_SHA256",
-                                "TLS_AES_256_GCM_SHA384",
-                                "TLS_CHACHA20_POLY1305_SHA256"))
-                        .sessionTimeout(1800)
-                        .build();
+				// Shiny TLS 1.3
+				sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
+						.ciphers(Arrays.asList("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256")).sessionTimeout(1800)
+						.build();
 
-                // generate sha256 from cert as a fingerprint
-                certificateFingerprint = NetUtils.getFingerprint(cert);
-                if (certificateFingerprint != null) {
-                    LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
-                }
-            }
+				// generate sha256 from cert as a fingerprint
+				certificateFingerprint = NetUtils.getFingerprint(cert);
+				if (certificateFingerprint != null) { LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint); }
+			}
 
-            if (!canStart()) {
-                new TrafficShaper(null);
-                return Optional.empty();
-            }
+			if (!canStart()) {
+				new TrafficShaper(null);
+				return Optional.empty();
+			}
 
-            String address = serverConfig.bindAddress;
-            int port = serverConfig.bindPort;
-            InetSocketAddress bindAddress = null;
-            if (port != -1) {
-                if (address == null || address.isBlank()) {
-                    bindAddress = new InetSocketAddress(port);
-                } else {
-                    bindAddress = new InetSocketAddress(address, port);
-                }
-            }
+			String address = serverConfig.bindAddress;
+			int port = serverConfig.bindPort;
+			InetSocketAddress bindAddress = null;
+			if (port != -1) {
+				if (address == null || address.isBlank()) {
+					bindAddress = new InetSocketAddress(port);
+				} else {
+					bindAddress = new InetSocketAddress(address, port);
+				}
+			}
 
-            LOGGER.info("Starting modpack host server on {}", bindAddress);
+			LOGGER.info("Starting modpack host server on {}", bindAddress);
 
-            Class<? extends ServerChannel> socketChannelClass;
-            if (Epoll.isAvailable()) {
-                socketChannelClass = EpollServerSocketChannel.class;
-                eventLoopGroup = new EpollEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
-            } else {
-                socketChannelClass = NioServerSocketChannel.class;
-                eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
-            }
+			Class<? extends ServerChannel> socketChannelClass;
+			if (Epoll.isAvailable()) {
+				socketChannelClass = EpollServerSocketChannel.class;
+				eventLoopGroup = new EpollEventLoopGroup(
+						new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
+			} else {
+				socketChannelClass = NioServerSocketChannel.class;
+				eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
+			}
 
-            new TrafficShaper(eventLoopGroup);
+			new TrafficShaper(eventLoopGroup);
 
-            serverChannel = new ServerBootstrap()
-                    .channel(socketChannelClass)
-                    .childOption(ChannelOption.TCP_NODELAY, true)
-                    .childHandler(new ChannelInitializer<SocketChannel>() {
-                        @Override
-                        protected void initChannel(SocketChannel ch) {
-                            ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(sslCtx));
-                        }
-                    })
-                    .group(eventLoopGroup)
-                    .localAddress(bindAddress)
-                    .bind()
-                    .syncUninterruptibly();
-        } catch (Exception e) {
-            LOGGER.error("Failed to start Netty server", e);
-            return Optional.empty();
-        }
+			serverChannel = new ServerBootstrap().channel(socketChannelClass).childOption(ChannelOption.TCP_NODELAY, true)
+					.childHandler(new ChannelInitializer<SocketChannel>() {
+						@Override
+						protected void initChannel(SocketChannel ch) {
+							ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(sslCtx));
+						}
+					}).group(eventLoopGroup).localAddress(bindAddress).bind().syncUninterruptibly();
+		} catch (Exception e) {
+			LOGGER.error("Failed to start Netty server", e);
+			return Optional.empty();
+		}
 
-        return Optional.ofNullable(serverChannel);
-    }
+		return Optional.ofNullable(serverChannel);
+	}
 
-    public boolean shouldHost() {
-        return shouldHost;
-    }
+	public boolean shouldHost() {
+		return shouldHost;
+	}
 
-    // Returns true if stopped successfully
-    public boolean stop() {
-        try {
-            if (serverChannel != null) {
-                serverChannel.channel().close().sync();
-                serverChannel = null;
-            }
+	// Returns true if stopped successfully
+	public boolean stop() {
+		try {
+			if (serverChannel != null) {
+				serverChannel.channel().close().sync();
+				serverChannel = null;
+			}
 
-            shouldHost = false;
+			shouldHost = false;
 
-            TrafficShaper.close();
+			TrafficShaper.close();
 
-            if (eventLoopGroup != null) {
-                eventLoopGroup.shutdownGracefully().sync();
-            }
-        } catch (InterruptedException e) {
-            LOGGER.error("Interrupted server channel", e);
-            return false;
-        }
+			if (eventLoopGroup != null) { eventLoopGroup.shutdownGracefully().sync(); }
+		} catch (InterruptedException e) {
+			LOGGER.error("Interrupted server channel", e);
+			return false;
+		}
 
-        return true;
-    }
+		return true;
+	}
 
-    public boolean isRunning() {
-        if (serverChannel == null) {
-            return shouldHost;
-        }
+	public boolean isRunning() {
+		if (serverChannel == null) { return shouldHost; }
 
-        return serverChannel.channel().isOpen();
-    }
+		return serverChannel.channel().isOpen();
+	}
 
-    public SslContext getSslCtx() {
-        return sslCtx;
-    }
+	public SslContext getSslCtx() {
+		return sslCtx;
+	}
 
-    private boolean canStart() {
-        if (isRunning() || !serverConfig.modpackHost) {
-            return false;
-        }
+	private boolean canStart() {
+		if (isRunning() || !serverConfig.modpackHost) { return false; }
 
-        if (paths.isEmpty()) {
-            LOGGER.warn("No file to host. Can't start modpack host server.");
-            return false;
-        }
+		if (paths.isEmpty()) {
+			LOGGER.warn("No file to host. Can't start modpack host server.");
+			return false;
+		}
 
-        if (serverConfig.updateIpsOnEveryStart) {
-            String publicIp = AddressHelpers.getPublicIp();
-            if (publicIp != null) {
-                serverConfig.addressToSend = publicIp;
-                LOGGER.warn("Setting Host IP to {}", serverConfig.addressToSend);
-            } else {
-                LOGGER.error("Couldn't get public IP, please change it manually! ");
-            }
+		if (serverConfig.updateIpsOnEveryStart) {
+			String publicIp = AddressHelpers.getPublicIp();
+			if (publicIp != null) {
+				serverConfig.addressToSend = publicIp;
+				LOGGER.warn("Setting Host IP to {}", serverConfig.addressToSend);
+			} else {
+				LOGGER.error("Couldn't get public IP, please change it manually! ");
+			}
 
-            try {
-                ConfigTools.save(serverConfigFile, serverConfig);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
+			try {
+				ConfigTools.save(serverConfigFile, serverConfig);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
 
-        shouldHost = true; // At this point we know that we want to host the modpack
+		shouldHost = true; // At this point we know that we want to host the modpack
 
-        if (serverConfig.bindPort == -1) {
-            LOGGER.info("Hosting modpack on Minecraft port");
-            return false; // Dont start separate server for modpack hosting, use minecraft port instead
-        } else {
-            return true; // Start separate server for modpack hosting
-        }
-    }
+		if (serverConfig.bindPort == -1) {
+			LOGGER.info("Hosting modpack on Minecraft port");
+			return false; // Dont start separate server for modpack hosting, use minecraft port instead
+		} else {
+			return true; // Start separate server for modpack hosting
+		}
+	}
 }

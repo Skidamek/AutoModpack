@@ -10,9 +10,9 @@ import net.minecraft.network.protocol.login.custom.CustomQueryAnswerPayload;
 import pl.skidam.automodpack.networking.PayloadHelper;
 
 public record LoginResponsePayload(Identifier id, FriendlyByteBuf data) implements CustomQueryAnswerPayload {
-    @Override
-    public void write(FriendlyByteBuf buf) {
-        PayloadHelper.write(buf, data());
-    }
+	@Override
+	public void write(FriendlyByteBuf buf) {
+		PayloadHelper.write(buf, data());
+	}
 }
 /*?}*/

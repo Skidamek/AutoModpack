@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.protocol.netty.handler;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
+
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -13,32 +14,32 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
  */
 public class CompressionEncoder extends MessageToByteEncoder<ByteBuf> {
 
-    private CompressionCodec codec;
+	private CompressionCodec codec;
 
-    @Override
-    protected void encode(ChannelHandlerContext ctx, ByteBuf msg, ByteBuf out) throws Exception {
-        var comp = ctx.channel().attr(NettyServer.COMPRESSION_TYPE).get();
-        codec = CompressionFactory.getCodec(comp);
+	@Override
+	protected void encode(ChannelHandlerContext ctx, ByteBuf msg, ByteBuf out) throws Exception {
+		var comp = ctx.channel().attr(NettyServer.COMPRESSION_TYPE).get();
+		codec = CompressionFactory.getCodec(comp);
 
-        // Read the input data
-        byte[] input = new byte[msg.readableBytes()];
-        msg.readBytes(input);
+		// Read the input data
+		byte[] input = new byte[msg.readableBytes()];
+		msg.readBytes(input);
 
-        // Compress the data using the codec
-        byte[] compressed = codec.compress(input);
+		// Compress the data using the codec
+		byte[] compressed = codec.compress(input);
 
-        // Write framed compressed data: [compressedLength][originalLength][compressed data]
-        out.writeInt(compressed.length);
-        out.writeInt(input.length);
-        out.writeBytes(compressed);
-    }
+		// Write framed compressed data: [compressedLength][originalLength][compressed data]
+		out.writeInt(compressed.length);
+		out.writeInt(input.length);
+		out.writeBytes(compressed);
+	}
 
-    /**
-     * Gets the compression codec used by this encoder.
-     *
-     * @return the compression codec
-     */
-    public CompressionCodec getCodec() {
-        return codec;
-    }
+	/**
+	 * Gets the compression codec used by this encoder.
+	 *
+	 * @return the compression codec
+	 */
+	public CompressionCodec getCodec() {
+		return codec;
+	}
 }

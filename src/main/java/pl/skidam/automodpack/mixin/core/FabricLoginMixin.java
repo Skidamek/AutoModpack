@@ -13,20 +13,20 @@ import pl.skidam.automodpack.networking.LoginNetworkingIDs;
 @Mixin(targets = "net.fabricmc.fabric.impl.networking.server.ServerLoginNetworkAddon", remap = false)
 public class FabricLoginMixin {
 
-    @Inject(
-            method = "registerOutgoingPacket",
-            at = @At(value = "HEAD"),
-            cancellable = true
-    )
-    private void dontRemoveAutoModpackChannels(ClientboundCustomQueryPacket packet, CallbackInfo ci) {
-        /*? if <1.20.2 {*/
-        /*Identifier id = packet.getIdentifier();
-        *//*?} else {*/
-        Identifier id = packet.payload().id();
-        /*?}*/
-        // Cancel if it's one of our channels
-        if (LoginNetworkingIDs.getByKey(id) != null) {
-            ci.cancel();
-        }
-    }
+	@Inject(
+			method = "registerOutgoingPacket",
+			at = @At(value = "HEAD"),
+			cancellable = true
+	)
+	private void dontRemoveAutoModpackChannels(ClientboundCustomQueryPacket packet, CallbackInfo ci) {
+		/*? if <1.20.2 {*/
+		/*Identifier id = packet.getIdentifier();
+		*//*?} else {*/
+		Identifier id = packet.payload().id();
+		/*?}*/
+		// Cancel if it's one of our channels
+		if (LoginNetworkingIDs.getByKey(id) != null) {
+			ci.cancel();
+		}
+	}
 }

@@ -17,18 +17,18 @@ import net.minecraft.sounds.Music;
 @Mixin(MusicManager.class)
 public class MusicTrackerMixin {
 
-    @Inject(
-            method = "startPlaying",
-            at = @At("HEAD"),
-            cancellable = true
-    )
-    /*? if >=1.21.4 && <1.21.11 {*/
-    /*private void play(MusicInfo music, CallbackInfo ci) {
-    *//*?} else {*/
-    private void play(Music music, CallbackInfo ci) {
-    /*?}*/
-        if (AudioManager.isMusicPlaying()) {
-            ci.cancel();
-        }
-    }
+	@Inject(
+			method = "startPlaying",
+			at = @At("HEAD"),
+			cancellable = true
+	)
+	/*? if >=1.21.4 && <1.21.11 {*/
+	/*private void play(MusicInfo music, CallbackInfo ci) {
+	*//*?} else {*/
+	private void play(Music music, CallbackInfo ci) {
+	/*?}*/
+		if (AudioManager.isMusicPlaying()) {
+			ci.cancel();
+		}
+	}
 }

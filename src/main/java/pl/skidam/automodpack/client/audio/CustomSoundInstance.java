@@ -10,29 +10,29 @@ import net.minecraft.util.RandomSource;
 
 public class CustomSoundInstance extends AbstractSoundInstance {
 
-    public CustomSoundInstance(Supplier<SoundEvent> event) {
-        /*? if >=1.21.2 {*/
-        super(event.get().location(), SoundSource.MUSIC, RandomSource.create());
-        /*?} else if >=1.19.1 {*/
-        /*super(event.get().getLocation(), SoundSource.MUSIC, RandomSource.create());
-        *//*?} else {*/
-        /*super(event.get().getLocation(), SoundSource.MUSIC);
-        *//*?}*/
-        this.attenuation = Attenuation.NONE;
-    }
+	public CustomSoundInstance(Supplier<SoundEvent> event) {
+		/*? if >=1.21.2 {*/
+		super(event.get().location(), SoundSource.MUSIC, RandomSource.create());
+		/*?} else if >=1.19.1 {*/
+		/*super(event.get().getLocation(), SoundSource.MUSIC, RandomSource.create());
+		*//*?} else {*/
+		/*super(event.get().getLocation(), SoundSource.MUSIC);
+		*//*?}*/
+		this.attenuation = Attenuation.NONE;
+	}
 
-    @Override
-    public float getVolume() {
-        return 0.25f;
-    }
+	@Override
+	public float getVolume() {
+		return 0.25f;
+	}
 
-    @Override
-    public float getPitch() {
-        return 1.0F;
-    }
+	@Override
+	public float getPitch() {
+		return 1.0F;
+	}
 
-    @Override
-    public boolean isLooping() {
-        return true;
-    }
+	@Override
+	public boolean isLooping() {
+		return true;
+	}
 }

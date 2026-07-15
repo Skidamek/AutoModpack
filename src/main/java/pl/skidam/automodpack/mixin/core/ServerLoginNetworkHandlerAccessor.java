@@ -9,16 +9,16 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(ServerLoginPacketListenerImpl.class)
 public interface ServerLoginNetworkHandlerAccessor {
-    /*? if >= 1.20.2 {*/
-    @Accessor("authenticatedProfile")
-    /*?} else {*/
-    /*@Accessor("gameProfile")
-    *//*?}*/
-    GameProfile getGameProfile();
+	/*? if >= 1.20.2 {*/
+	@Accessor("authenticatedProfile")
+	/*?} else {*/
+	/*@Accessor("gameProfile")
+	*//*?}*/
+	GameProfile getGameProfile();
 
-    @Accessor
-    Connection getConnection();
+	@Accessor
+	Connection getConnection();
 
-    @Accessor
-    MinecraftServer getServer();
+	@Accessor
+	MinecraftServer getServer();
 }

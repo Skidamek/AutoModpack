@@ -1,7 +1,7 @@
 plugins {
-    kotlin("jvm")
-    id("automodpack.utils")
-    id("net.neoforged.moddev.legacyforge")
+	kotlin("jvm")
+	id("automodpack.utils")
+	id("net.neoforged.moddev.legacyforge")
 }
 
 // Compile-only stubs for cpw.mods.cl/cpw.mods.modlauncher (the third-party ModLauncher/
@@ -13,30 +13,30 @@ plugins {
 // so this module's compiled output is equally valid raw .class input for both
 // :loader-forge-earlyservices' and :loader-neoforge-fml4's shadowJar merges.
 base {
-    archivesName = property("mod.id") as String + "-" + project.name
-    version = property("mod_version") as String
-    group = property("mod.group") as String
+	archivesName = property("mod.id") as String + "-" + project.name
+	version = property("mod_version") as String
+	group = property("mod.group") as String
 }
 
 legacyForge {
-    enable {
-        forgeVersion = property("deps.forge") as String
-        isDisableRecompilation = true
-    }
+	enable {
+		forgeVersion = property("deps.forge") as String
+		isDisableRecompilation = true
+	}
 }
 
 dependencies {
-    compileOnly(project(":core"))
+	compileOnly(project(":core"))
 }
 
 java {
-    // Floor of every consumer's minimum runtime (legacy Forge 1.18.2-1.20.1 needs 17; NeoForge fml4
-    // needs 21 but happily loads older bytecode).
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
-    toolchain.languageVersion.set(JavaLanguageVersion.of(17))
+	// Floor of every consumer's minimum runtime (legacy Forge 1.18.2-1.20.1 needs 17; NeoForge fml4
+	// needs 21 but happily loads older bytecode).
+	sourceCompatibility = JavaVersion.VERSION_17
+	targetCompatibility = JavaVersion.VERSION_17
+	toolchain.languageVersion.set(JavaLanguageVersion.of(17))
 }
 
 tasks.withType<JavaCompile> {
-    options.encoding = "UTF-8"
+	options.encoding = "UTF-8"
 }

@@ -13,28 +13,28 @@ import net.fabricmc.fabric.api.command./*? if <1.19.1 {*/ /*v1 *//*?} else {*/ v
 
 public class FabricInit {
 
-    public static void onInitialize() {
+	public static void onInitialize() {
 
-        preload = false;
-        ScreenManager.INSTANCE = new ScreenImpl();
+		preload = false;
+		ScreenManager.INSTANCE = new ScreenImpl();
 
-        long start = System.currentTimeMillis();
-        LOGGER.info("Launching AutoModpack...");
+		long start = System.currentTimeMillis();
+		LOGGER.info("Launching AutoModpack...");
 
-        Common.init();
+		Common.init();
 
-        if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
-            Common.serverInit();
-        } else {
-            ModPackets.registerC2SPackets();
-            new AudioManager();
-        }
+		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
+			Common.serverInit();
+		} else {
+			ModPackets.registerC2SPackets();
+			new AudioManager();
+		}
 
-    CommandRegistrationCallback.EVENT.register((dispatcher, /*? if >=1.19.1 {*/ w, /*?}*/ dedicated) -> {
-       Commands.register(dispatcher);
-   });
+	CommandRegistrationCallback.EVENT.register((dispatcher, /*? if >=1.19.1 {*/ w, /*?}*/ dedicated) -> {
+	Commands.register(dispatcher);
+});
 
-        LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
-    }
+		LOGGER.info("AutoModpack launched! took " + (System.currentTimeMillis() - start) + "ms");
+	}
 }
 /*?}*/

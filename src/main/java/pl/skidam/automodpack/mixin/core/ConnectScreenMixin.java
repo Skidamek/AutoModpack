@@ -21,22 +21,22 @@ import net.minecraft.client.multiplayer.ServerData;
 
 @Mixin(ConnectScreen.class)
 public abstract class ConnectScreenMixin {
-    /*? if >= 1.20.5 {*/
-    @Inject(method = "connect", at = @At("HEAD"))
-    public void onConnect(Minecraft client, ServerAddress address, ServerData info, TransferState transferState, CallbackInfo ci) {
-    /*?} else if > 1.19.3 {*/
-    /*@Inject(method = "connect", at = @At("HEAD"))
-    public void onConnect(Minecraft client, ServerAddress address, ServerData info, CallbackInfo ci) {
-    *//*?} else {*/
-    /*@Inject(method = "connect", at = @At("HEAD"))
-    public void onConnect(Minecraft client, ServerAddress address, CallbackInfo ci) {
-    *//*?}*/
-        /*? if >= 1.20.5 {*/
-        if (transferState == null || ModPackets.getOriginalServerAddress() == null) {
-            ModPackets.setOriginalServerAddress(AddressHelpers.format(address.getHost(), address.getPort()));
-        }
-        /*?} else {*/
-        /*ModPackets.setOriginalServerAddress(AddressHelpers.format(address.getHost(), address.getPort()));
-        *//*?}*/
-    }
+	/*? if >= 1.20.5 {*/
+	@Inject(method = "connect", at = @At("HEAD"))
+	public void onConnect(Minecraft client, ServerAddress address, ServerData info, TransferState transferState, CallbackInfo ci) {
+	/*?} else if > 1.19.3 {*/
+	/*@Inject(method = "connect", at = @At("HEAD"))
+	public void onConnect(Minecraft client, ServerAddress address, ServerData info, CallbackInfo ci) {
+	*//*?} else {*/
+	/*@Inject(method = "connect", at = @At("HEAD"))
+	public void onConnect(Minecraft client, ServerAddress address, CallbackInfo ci) {
+	*//*?}*/
+		/*? if >= 1.20.5 {*/
+		if (transferState == null || ModPackets.getOriginalServerAddress() == null) {
+			ModPackets.setOriginalServerAddress(AddressHelpers.format(address.getHost(), address.getPort()));
+		}
+		/*?} else {*/
+		/*ModPackets.setOriginalServerAddress(AddressHelpers.format(address.getHost(), address.getPort()));
+		*//*?}*/
+	}
 }

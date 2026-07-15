@@ -1,0 +1,33 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.{java,kt,kts}]
+indent_style = tab
+indent_size = 4
+tab_width = 4
+max_line_length = 160
+
+[*.java]
+ij_java_use_single_class_imports = true
+ij_java_class_count_to_use_import_on_demand = 999
+ij_java_names_count_to_use_import_on_demand = 999
+
+[*.py]
+indent_style = space
+indent_size = 4
+max_line_length = 120
+
+[*.{json,json5,yml,yaml,toml,xml,md,mdx}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[gradlew.bat]
+end_of_line = crlf

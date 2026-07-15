@@ -28,8 +28,8 @@ public class LoginQueryParser {
 			/*? if <1.20.2 {*/
 			/*this.queryId = packetS2C.getTransactionId();
 			this.buf = packetS2C.getData();
-		    this.channelName = packetS2C.getIdentifier();
-            *//*?} else {*/
+			this.channelName = packetS2C.getIdentifier();
+			*//*?} else {*/
 			this.queryId = packetS2C.transactionId();
 			CustomQueryPayload payload = packetS2C.payload();
 			if (payload instanceof LoginRequestPayload loginRequestPayload) {
@@ -40,8 +40,8 @@ public class LoginQueryParser {
 		} else if (packet instanceof ServerboundCustomQueryAnswerPacket packetC2S) {
 			this.packet = packetC2S;
 			/*? if <1.20.2 {*/
-            /*this.queryId = packetC2S.getTransactionId();
-            this.buf = packetC2S.getData();
+			/*this.queryId = packetC2S.getTransactionId();
+			this.buf = packetC2S.getData();
 			*//*?} else {*/
 			this.queryId = packetC2S.transactionId();
 			CustomQueryAnswerPayload payload = packetC2S.payload();
@@ -51,8 +51,8 @@ public class LoginQueryParser {
 			}
 			/*?}*/
 		} else {
-            success = false;
-            LOGGER.error("Invalid packet type: {}", packet.getClass().getName());
-        }
+			success = false;
+			LOGGER.error("Invalid packet type: {}", packet.getClass().getName());
+		}
 	}
 }

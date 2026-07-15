@@ -26,112 +26,112 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 // credits to fabric api
 public class ServerLoginNetworkAddon implements PacketSender {
 
-    private final ServerLoginPacketListenerImpl handler;
-    private final Connection connection;
-    private final MinecraftServer server;
-    private final Collection<Future<?>> synchronizers = new ConcurrentLinkedQueue<>();
-    public final Map<Integer, Identifier> channels = new ConcurrentHashMap<>();
-    private final AtomicInteger processingCount = new AtomicInteger(0);
-    private boolean firstTick = true;
+	private final ServerLoginPacketListenerImpl handler;
+	private final Connection connection;
+	private final MinecraftServer server;
+	private final Collection<Future<?>> synchronizers = new ConcurrentLinkedQueue<>();
+	public final Map<Integer, Identifier> channels = new ConcurrentHashMap<>();
+	private final AtomicInteger processingCount = new AtomicInteger(0);
+	private boolean firstTick = true;
 
-    public ServerLoginNetworkAddon(ServerLoginPacketListenerImpl serverLoginNetworkHandler) {
-        this.handler = serverLoginNetworkHandler;
-        this.connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
-        this.server = ((ServerLoginNetworkHandlerAccessor) handler).getServer();
-    }
+	public ServerLoginNetworkAddon(ServerLoginPacketListenerImpl serverLoginNetworkHandler) {
+		this.handler = serverLoginNetworkHandler;
+		this.connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
+		this.server = ((ServerLoginNetworkHandlerAccessor) handler).getServer();
+	}
 
-    // returns true if we should move to another login stage
-    public boolean queryTick() {
-        if (this.firstTick) {
+	// returns true if we should move to another login stage
+	public boolean queryTick() {
+		if (this.firstTick) {
 
-            // Fire onReady event
-            ModPackets.onReady(this.handler, this.server, this.synchronizers::add, this);
+			// Fire onReady event
+			ModPackets.onReady(this.handler, this.server, this.synchronizers::add, this);
 
-            this.firstTick = false;
-        }
+			this.firstTick = false;
+		}
 
-        this.synchronizers.removeIf(future -> {
-            if (!future.isDone()) {
-                return false;
-            }
+		this.synchronizers.removeIf(future -> {
+			if (!future.isDone()) {
+				return false;
+			}
 
-            try {
-                future.get();
-            } catch (Exception ignored) {
-            }
+			try {
+				future.get();
+			} catch (Exception ignored) {
+			}
 
-            return true;
-        });
+			return true;
+		});
 
-        return this.processingCount.get() == 0 && this.channels.isEmpty() && this.synchronizers.isEmpty();
-    }
+		return this.processingCount.get() == 0 && this.channels.isEmpty() && this.synchronizers.isEmpty();
+	}
 
-    /**
-     * Handles an incoming query response during login.
-     *
-     * @param packet the packet to handle
-     * @return true if the packet was handled
-     */
-    public boolean handle(ServerboundCustomQueryAnswerPacket packet) {
-        this.processingCount.incrementAndGet();
-        try {
-            LoginQueryParser loginQuery = new LoginQueryParser(packet);
-            if (loginQuery.success) return handle(loginQuery.queryId, loginQuery.buf);
-            return false;
-        } finally {
-            this.processingCount.decrementAndGet();
-        }
-    }
+	/**
+	 * Handles an incoming query response during login.
+	 *
+	 * @param packet the packet to handle
+	 * @return true if the packet was handled
+	 */
+	public boolean handle(ServerboundCustomQueryAnswerPacket packet) {
+		this.processingCount.incrementAndGet();
+		try {
+			LoginQueryParser loginQuery = new LoginQueryParser(packet);
+			if (loginQuery.success) return handle(loginQuery.queryId, loginQuery.buf);
+			return false;
+		} finally {
+			this.processingCount.decrementAndGet();
+		}
+	}
 
-    private boolean handle(int queryId, @Nullable FriendlyByteBuf originalBuf) {
+	private boolean handle(int queryId, @Nullable FriendlyByteBuf originalBuf) {
 
-        Identifier channel = this.channels.remove(queryId);
+		Identifier channel = this.channels.remove(queryId);
 
-        if (channel == null) {
-            // Not an AutoModpack packet.
-            return false;
-        }
+		if (channel == null) {
+			// Not an AutoModpack packet.
+			return false;
+		}
 
-        boolean understood = originalBuf != null;
-        @Nullable ServerLoginNetworking.LoginQueryResponseHandler handler = ServerLoginNetworking.getHandler(channel);
+		boolean understood = originalBuf != null;
+		@Nullable ServerLoginNetworking.LoginQueryResponseHandler handler = ServerLoginNetworking.getHandler(channel);
 
-        if (handler == null) {
-            return false;
-        }
+		if (handler == null) {
+			return false;
+		}
 
-        FriendlyByteBuf buf = understood ? new FriendlyByteBuf(originalBuf.slice()) : new FriendlyByteBuf(Unpooled.EMPTY_BUFFER);
+		FriendlyByteBuf buf = understood ? new FriendlyByteBuf(originalBuf.slice()) : new FriendlyByteBuf(Unpooled.EMPTY_BUFFER);
 
-        try {
-            handler.receive(this.server, this.handler, understood, buf, this.synchronizers::add, this);
-        } catch (Throwable e) {
-            LOGGER.error("Encountered exception while handling in channel \"{}\"", channel, e);
-            throw e;
-        }
+		try {
+			handler.receive(this.server, this.handler, understood, buf, this.synchronizers::add, this);
+		} catch (Throwable e) {
+			LOGGER.error("Encountered exception while handling in channel \"{}\"", channel, e);
+			throw e;
+		}
 
-        return true;
-    }
+		return true;
+	}
 
-    @Override
-    public ClientboundCustomQueryPacket createPacket(Identifier channelName, FriendlyByteBuf buf) {
-        Integer queryId = LoginNetworkingIDs.getByKey(channelName);
+	@Override
+	public ClientboundCustomQueryPacket createPacket(Identifier channelName, FriendlyByteBuf buf) {
+		Integer queryId = LoginNetworkingIDs.getByKey(channelName);
 
-        if (queryId == null) {
-            return null;
-        }
+		if (queryId == null) {
+			return null;
+		}
 
-        return new ClientboundCustomQueryPacket(queryId, /*? if <1.20.2 {*/ /*channelName, buf *//*?} else {*/ new LoginRequestPayload(channelName, buf) /*?}*/);
-    }
+		return new ClientboundCustomQueryPacket(queryId, /*? if <1.20.2 {*/ /*channelName, buf *//*?} else {*/ new LoginRequestPayload(channelName, buf) /*?}*/);
+	}
 
-    @Override
-    public void sendPacket(ClientboundCustomQueryPacket packet) {
-        Objects.requireNonNull(packet, "Connection cannot be null");
+	@Override
+	public void sendPacket(ClientboundCustomQueryPacket packet) {
+		Objects.requireNonNull(packet, "Connection cannot be null");
 
-        LoginQueryParser loginQuery = new LoginQueryParser(packet);
-        if (loginQuery.success) {
-            this.channels.put(loginQuery.queryId, loginQuery.channelName);
-            this.connection.send(packet);
-        } else {
-            LOGGER.error("Failed to send packet: {}", packet);
-        }
-    }
+		LoginQueryParser loginQuery = new LoginQueryParser(packet);
+		if (loginQuery.success) {
+			this.channels.put(loginQuery.queryId, loginQuery.channelName);
+			this.connection.send(packet);
+		} else {
+			LOGGER.error("Failed to send packet: {}", packet);
+		}
+	}
 }
