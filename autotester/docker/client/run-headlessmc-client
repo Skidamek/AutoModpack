@@ -124,8 +124,5 @@ timeout 20 hmc --command "download ${minecraft}" 2>/dev/null || true
 hmc --command "config -refresh" 2>/dev/null || true
 
 # ── Launch ─────────────────────────────────────────────────────────
-# xvfb-run: newer FancyModLoader's fatal-error Swing dialog needs a real X display even with
-# -Djava.awt.headless=true (see Dockerfile) - give it a virtual one so a genuine fatal error
-# reports its real cause instead of crashing on top of it with an unrelated X11/AWT error.
-exec timeout "$client_timeout" xvfb-run -a hmc \
+exec timeout "$client_timeout" hmc \
   --command "launch ${launch_target} -lwjgl -offline --jvm \"${jvmargs}\" ${gameargs}"

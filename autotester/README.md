@@ -87,18 +87,14 @@ The client image builds its HeadlessMC launcher from the git repo and ref in
 
 ```yaml
 headlessmc:
-  repo: "https://github.com/Skidamek/headlessmc.git"
-  ref: "64d3c126e72bbfccf95e71afaa6536f50bc64097"  # branch, tag, or commit SHA
+  repo: "https://github.com/headlesshq/headlessmc.git"
+  ref: "2.10.0"  # branch, tag, or commit SHA
 ```
 
-`ref` may be a branch, tag, or commit SHA; it is pinned to a SHA here for
-reproducible image builds. This default ref carries the patch required to launch
-**MC 26.2** headlessly
-(stock HeadlessMC can't yet — its LWJGL stubs don't satisfy 26.2's new render
-backend); it does not change behavior on other versions. Point `repo`/`ref` at
-any other HeadlessMC build and rebuild the image
-(`uv --project autotester run autotester build-images`). If they are unset, the
-build falls back to upstream HeadlessMC (`headlesshq/headlessmc`).
+`ref` may be a branch, tag, or commit SHA; the default uses the immutable
+upstream 2.10.0 release for reproducible image builds and Minecraft 26.2
+support. Point `repo`/`ref` at another HeadlessMC build and rebuild the image
+with `uv --project autotester run autotester build-images`.
 
 ## Scenarios
 

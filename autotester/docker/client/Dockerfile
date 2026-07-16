@@ -1,10 +1,8 @@
 # Git repository and ref the HeadlessMC launcher is built from. These are
 # normally supplied by `autotester build-images` from settings.yaml
-# (headlessmc.repo/ref). The defaults below are only a fallback for a bare
-# `docker build` and point at upstream HeadlessMC; set headlessmc.repo/ref in
-# settings.yaml to build a patched launcher (e.g. for MC 26.2 headless).
+# (headlessmc.repo/ref). The defaults also use the pinned upstream release.
 ARG HEADLESSMC_REPO=https://github.com/headlesshq/headlessmc.git
-ARG HEADLESSMC_REF=main
+ARG HEADLESSMC_REF=2.10.0
 
 # ── Builder: compile the HeadlessMC launcher wrapper jar ──────────────
 # HeadlessMC must be built with JDK 21 (its Gradle build rejects newer JDKs).
@@ -35,15 +33,7 @@ FROM ubuntu:26.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV HMC_HOME=/work/hmc-cache
 
-# Install Java 17, 21, 25 from repos. Two things newer FancyModLoader (21.10+/26.x) needs that
-# the previous headless-only setup didn't provide:
-#  - The full (non-headless) *-jre packages: FatalErrorReporting.reportFatalError tries a Swing
-#    dialog even in headless mode - if it can't (java.desktop's libawt_xawt.so is only shipped
-#    by the non-headless package), that UnsatisfiedLinkError itself crashes the client and
-#    replaces the real error in the log, making any such failure undiagnosable.
-#  - xvfb (below): even with -Djava.awt.headless=true, this JDK's HeadlessGraphicsEnvironment
-#    still wraps a real X11GraphicsEnvironment internally on Linux and fails without a display
-#    to connect to - so Swing dialogs need a (virtual) X server regardless of the headless flag.
+# HeadlessMC's LWJGL transformer does not need an X server or desktop Java runtime.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -51,21 +41,10 @@ RUN apt-get update \
         unzip \
         bash \
         procps \
-        xvfb \
         libatomic1 \
-        libx11-6 \
-        libxext6 \
-        libxrender1 \
-        libxtst6 \
-        libxi6 \
-        libxrandr2 \
-        libxxf86vm1 \
-        libgl1 \
-        libglx-mesa0 \
-        libasound2t64 \
-        openjdk-17-jre \
-        openjdk-21-jre \
-        openjdk-25-jre \
+        openjdk-17-jre-headless \
+        openjdk-21-jre-headless \
+        openjdk-25-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/headlessmc /opt/automodpack /work/game /work/hmc-cache \
