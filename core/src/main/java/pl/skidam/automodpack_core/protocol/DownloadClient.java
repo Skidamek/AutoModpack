@@ -12,7 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.*;
-import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.*;
@@ -30,6 +29,7 @@ import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 public class DownloadClient implements AutoCloseable {
@@ -58,8 +58,8 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	/**
-	 * Async factory. If the certificate needs user approval, no thread blocks: the returned future
-	 * completes when the trust callback's future completes (via UI callbacks on the render thread).
+	 * Opens a client using the server-origin trust policy, in order: mandatory explicit pin/TOFU, WebPKI, DNSSEC for a valid self-signed certificate.
+	 * The advertised modpack address is only the TCP route and never selects certificate trust.
 	 */
 	public static CompletableFuture<DownloadClient> createAsync(Jsons.ModpackAddresses addresses, byte[] secretBytes, int poolSize,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
@@ -68,18 +68,23 @@ public class DownloadClient implements AutoCloseable {
 
 		return CompletableFuture.supplyAsync(() -> probeConnection(addresses), NET_EXECUTOR).thenCompose(probe -> {
 			if (probe.success != null) { return finishConnection(probe.success, secretBytes, poolSize, addresses); }
+
+			CertificatePinMismatchException pinMismatch = findCause(probe.error, CertificatePinMismatchException.class);
+			if (pinMismatch != null) return CompletableFuture.failedFuture(pinMismatch);
 			if (probe.untrustedCert == null) { return CompletableFuture.failedFuture(probe.error); }
+
 			if (!isSelfSigned(probe.untrustedCert)) { return requestManualTrust(probe, addresses, secretBytes, poolSize, trustCallback); }
 
 			return DnsPinResolver.resolvePinAsync(addresses.serverAddress.getHostString()).thenCompose(result -> {
 				if (result instanceof DnsPinResolver.Authoritative authoritative) {
 					try {
+						probe.untrustedCert.checkValidity();
 						if (!authoritative.fingerprint().equals(getFingerprint(probe.untrustedCert))) {
 							return CompletableFuture.failedFuture(
 									new IOException("Certificate does not match the DNSSEC fingerprint for " + addresses.serverAddress.getHostString()));
 						}
-					} catch (CertificateEncodingException e) {
-						return CompletableFuture.failedFuture(new IOException("Failed to fingerprint the server certificate", e));
+					} catch (CertificateException e) {
+						return CompletableFuture.failedFuture(new IOException("DNSSEC-pinned certificate is not valid", e));
 					}
 
 					LOGGER.info("Trusting the self-signed certificate from {} because it matches the DNSSEC fingerprint for {}",
@@ -98,7 +103,7 @@ public class DownloadClient implements AutoCloseable {
 	private static ProbeResult probeConnection(Jsons.ModpackAddresses addresses) {
 		KeyStore keyStore = loadDefaultKeyStore();
 		AtomicReference<X509Certificate[]> capturedChain = new AtomicReference<>();
-		SSLContext context = createSSLContext(keyStore, capturedChain::set);
+		SSLContext context = createSSLContext(keyStore, capturedChain::set, addresses);
 
 		try {
 			PreValidationConnection probe = getPreValidationConnection(addresses, context);
@@ -134,7 +139,7 @@ public class DownloadClient implements AutoCloseable {
 		return CompletableFuture.supplyAsync(() -> {
 			try {
 				probe.keyStore.setCertificateEntry(addresses.hostAddress.getHostString(), probe.untrustedCert);
-				SSLContext trustedContext = createSSLContext(probe.keyStore, null);
+				SSLContext trustedContext = createSSLContext(probe.keyStore, null, addresses);
 				PreValidationConnection retry = getPreValidationConnection(addresses, trustedContext);
 				return new DownloadClient(hydratePool(new InitialConnectionResult(retry, trustedContext), secretBytes, poolSize, addresses));
 			} catch (Exception e) {
@@ -204,6 +209,15 @@ public class DownloadClient implements AutoCloseable {
 		}
 	}
 
+	public static <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
+		Throwable current = throwable;
+		while (current != null) {
+			if (type.isInstance(current)) return type.cast(current);
+			current = current.getCause();
+		}
+		return null;
+	}
+
 	private static KeyStore loadDefaultKeyStore() {
 		try {
 			KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
@@ -221,10 +235,12 @@ public class DownloadClient implements AutoCloseable {
 		return new PreValidationConnection(address, modpackAddresses, sharedContext);
 	}
 
-	private static SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating) {
+	private static SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating, Jsons.ModpackAddresses addresses) {
 		try {
 			SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
-			X509ExtendedTrustManager trustManager = new CustomizableTrustManager(trustedCertificates, onValidating);
+			String expectedFingerprint = addresses.certificateFingerprint == null ? null : normalizeFingerprint(addresses.certificateFingerprint);
+			X509ExtendedTrustManager trustManager = new CustomizableTrustManager(trustedCertificates, onValidating,
+					AddressHelpers.formatAddress(addresses.serverAddress), expectedFingerprint);
 
 			sslContext.init(null, new TrustManager[]{trustManager}, new SecureRandom());
 

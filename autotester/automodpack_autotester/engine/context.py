@@ -47,7 +47,7 @@ class Context:
     def namespace(self) -> dict:
         return {
             "target": self.target,
-            "server": {"host": self.server_host or self.srv_name, "port": 25565},
+            "server": {"host": f"{self.server_host or self.srv_name}:25565"},
             "client": {"game_dir": str(self.game_dir)},
             "modpack": self.modpack_name,
             "modpack_dir": f"automodpack/modpacks/{self.modpack_name}",

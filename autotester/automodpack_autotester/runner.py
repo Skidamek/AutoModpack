@@ -376,15 +376,14 @@ def _v_wait_bridge(ctx: Context, step):
 
 @verb("connect")
 def _v_connect(ctx: Context, step):
-    host = ctx.resolve(step.get("host") or ctx.server_host or ctx.srv_name)
-    port = int(step.get("port", 25565))
+    host = ctx.resolve(step.get("host") or "${server.host}")
     timeout = parse_duration(step.get("timeout"), default=90)
     deadline = time.monotonic() + timeout
     _TITLE = ("TitleScreen", "class_442")
     _CONNECT = ("ConnectScreen", "class_397")
     while time.monotonic() < deadline:
         _assert_running(ctx.cli_name)
-        ctx.bridge.connect(host, port)
+        ctx.bridge.connect(host)
         poll_dl = time.monotonic() + min(deadline - time.monotonic(), 45)
         while time.monotonic() < poll_dl:
             screen = str(ctx.bridge.gui().get("screenClass") or "")
@@ -395,7 +394,7 @@ def _v_connect(ctx: Context, step):
             _jitter_sleep(0.5)
         ctx.bridge.request("disconnect")
         _jitter_sleep(1)
-    raise RuntimeError(f"Could not connect to {host}:{port} after multiple attempts")
+    raise RuntimeError(f"Could not connect to {host} after multiple attempts")
 
 
 @verb("disconnect")

@@ -54,8 +54,8 @@ public class DataC2SPacket {
 			// 2. Dont disconnect and join server
 		}
 
-		InetSocketAddress originAddress = ModPackets.getOriginalServerAddress();
-		if (originAddress == null) {
+		ModPackets.ConnectionAttempt connectionAttempt = ModPackets.getConnectionAttempt();
+		if (connectionAttempt == null) {
 			LOGGER.error("Server address is null! Something gone very wrong! Please report this issue! https://github.com/Skidamek/AutoModpack/issues");
 			return CompletableFuture.completedFuture(buildResponse(null));
 		}
@@ -92,7 +92,8 @@ public class DataC2SPacket {
 					requiresMagic);
 
 			modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
-			modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, originAddress, requiresMagic);
+			modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, connectionAttempt.serverAddress(), connectionAttempt.certificateFingerprint(),
+					connectionAttempt.certificatePinReason(), requiresMagic);
 		} catch (Exception e) {
 			LOGGER.error("Error preparing modpack address from data packet", e);
 			return CompletableFuture.completedFuture(buildResponse(null));

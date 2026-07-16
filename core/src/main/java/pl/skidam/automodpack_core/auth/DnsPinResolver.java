@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.auth;
 
 import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.protocol.NetUtils.normalizeFingerprint;
 
 import java.net.IDN;
 import java.net.URI;
@@ -233,12 +234,6 @@ public final class DnsPinResolver {
 			return Optional.empty();
 		}
 		return normalized.isBlank() ? Optional.empty() : Optional.of(normalized);
-	}
-
-	private static String normalizeFingerprint(String fingerprint) {
-		String normalized = fingerprint == null ? "" : fingerprint.replace(":", "").trim().toLowerCase(Locale.ROOT);
-		if (!normalized.matches("[0-9a-f]{64}")) { throw new IllegalArgumentException("invalid amp1 fingerprint"); }
-		return normalized;
 	}
 
 	private static boolean isAmp1Record(String txt) {

@@ -76,6 +76,17 @@ public class NetUtils {
 		}
 	}
 
+	public static String normalizeFingerprint(String fingerprint) {
+		String normalized = fingerprint == null ? "" : fingerprint.replace(":", "").trim().toLowerCase(Locale.ROOT);
+		if (!normalized.matches("[0-9a-f]{64}")) { throw new IllegalArgumentException("Certificate fingerprint must be 64 hexadecimal characters"); }
+		return normalized;
+	}
+
+	public static String shortenFingerprint(String fingerprint) {
+		if (fingerprint == null || fingerprint.length() <= 19) return fingerprint;
+		return fingerprint.substring(0, 8) + "…" + fingerprint.substring(fingerprint.length() - 8);
+	}
+
 	public static KeyPair generateKeyPair() throws Exception {
 		KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
 		keyPairGenerator.initialize(2048);

@@ -19,6 +19,10 @@
     "core.ClientLoginNetworkHandlerAccessor",
     "core.ClientLoginNetworkHandlerMixin",
     "core.ConnectScreenMixin",
+    "core.DirectJoinServerScreenMixin",
+    "core.EditServerScreenMixin",
+    "core.ServerAddressMixin",
+    "core.ServerDataMixin",
     "core.MusicTrackerMixin",
     "dev.MinecraftMixin",
     "dev.ResourceLoadStateTrackerMixin"

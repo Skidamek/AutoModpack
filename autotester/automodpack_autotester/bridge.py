@@ -43,5 +43,5 @@ class BridgeClient:
     def text(self, element_id: int, value: str, timeout: float = 30) -> dict:
         return self.request("text", timeout=timeout, id=element_id, text=value)
 
-    def connect(self, host: str, port: int = 25565, timeout: float = 30) -> dict:
-        return self.request("connect", timeout=timeout, host=host, port=port)
+    def connect(self, host: str, timeout: float = 30) -> dict:
+        return self.request("connect", timeout=timeout, host=host)

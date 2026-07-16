@@ -1,10 +1,48 @@
-### Automatic verification for self-signed certificates with DNSSEC
+### Choose a certificate verification method
 
-AutoModpack normally verifies CA-signed certificates through the standard Java trust store, just like HTTPS. No DNSSEC record is needed for a valid CA-signed certificate.
+AutoModpack always authenticates the modpack host as the **Minecraft server address selected by the player**. `addressToSend` and `portToSend` may route the TCP connection elsewhere, but that advertised route never chooses the trusted identity.
 
-When the modpack host uses AutoModpack's self-signed certificate, a server owner with a DNSSEC-enabled domain can publish its fingerprint in DNS. Clients then verify it automatically instead of showing the first-connection fingerprint prompt.
+Use the first method that fits your server:
 
-Run this command on the server:
+| Method | Best for | Saved by AutoModpack | Certificate rotation | Verification |
+| --- | --- | --- | --- | --- |
+| **CA-signed certificate** | Public servers with a domain; recommended default | No | Renew normally through the CA | Standard PKIX validity and Minecraft-hostname verification |
+| **DNSSEC AMP1** | Self-signed certificates on a DNSSEC-enabled domain | No | Update DNS and allow for TTL propagation | DNSSEC fingerprint match plus certificate validity |
+| **Pinned server address** | Private communities distributing an authenticated join address | Yes, per Minecraft `host:port` | Redistribute the new pinned address | Exact leaf-certificate fingerprint |
+| **Manual verification / TOFU** | Last-resort setup without a CA, DNSSEC, or pinned address | Yes, per Minecraft `host:port` | Remove the old pin and verify the replacement | Exact leaf-certificate fingerprint after acceptance |
+
+The trust order is deliberate:
+
+1. Any pending or saved certificate pin is mandatory, whether it came from an address or a player decision. A mismatch always fails closed.
+2. With no saved pin, AutoModpack tries normal CA/WebPKI verification.
+3. A valid self-signed certificate may be authenticated through DNSSEC AMP1.
+4. If no automatic method applies, AutoModpack asks the player and saves the accepted certificate as a pin.
+
+### CA-signed certificate
+
+A publicly trusted certificate provides the simplest player experience and is the recommended default for public servers. AutoModpack uses the standard Java trust store, checks the certificate validity period, and verifies it against the Minecraft hostname players entered.
+
+You can obtain a certificate with tools such as [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html). Replace `cert.crt` with the full certificate chain and `key.pem` with the private key in `~/automodpack/.private/`. The private key must use [PKCS#8 PEM format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html).
+
+The certificate must be valid for the original Minecraft hostname. A different modpack endpoint hostname is only a TCP route and does not need to appear in the certificate.
+
+#### Certbot example
+
+```bash
+# certbot certonly --manual --preferred-challenges dns -d <minecraft-server-domain>
+```
+
+<Callout variant="warning">
+Never copy-paste random commands from the internet. Always read the documentation of the tool you are using.
+</Callout>
+
+Use `fullchain.pem` as `cert.crt` and `privkey.pem` as `key.pem`. Protect the private key carefully: access to it permits server impersonation.
+
+### DNSSEC AMP1 for self-signed certificates
+
+If you want to keep AutoModpack's self-signed certificate and control a DNSSEC-enabled domain, publish its fingerprint in DNS. Clients can then authenticate it automatically without storing a local pin or showing the first-connection prompt.
+
+Run:
 
 ```text
 /automodpack host fingerprint dns <minecraft-hostname>
@@ -16,55 +54,59 @@ Use the hostname players enter in Minecraft, including the public name that owns
 _automodpack.play.example.com. IN TXT "v=amp1;fp=<certificate-sha256>"
 ```
 
-Publish exactly that TXT record in the DNSSEC-signed zone. The record contains one SHA-256 fingerprint and does not contain a download address or port. `addressToSend` and `portToSend` still select the modpack endpoint; DNS only authenticates the self-signed certificate presented by that endpoint.
+Publish exactly one AMP1 record in the DNSSEC-signed zone. [deSEC](https://desec.io/) is a strong free managed DNS option when your current DNS provider does not offer DNSSEC; you can host a domain or delegate a subdomain to it. AutoModpack does not depend on deSEC specifically—any correctly configured DNSSEC provider works.
 
-On each new AutoModpack connection, the client first attempts normal CA verification. DNS is queried only when that verification fails and the presented leaf certificate is genuinely self-signed. Its lifetime fields are not used for exact-fingerprint trust. Clients ask both Cloudflare and Mullvad over DNS-over-HTTPS and use the fingerprint only when both resolvers report DNSSEC validation and agree.
+When normal CA verification fails for a genuinely self-signed leaf, clients query both Cloudflare and Mullvad over DNS-over-HTTPS. The certificate is accepted only when both resolvers report DNSSEC validation, agree on the AMP1 fingerprint, the fingerprint matches, and the certificate is currently valid.
 
-The resulting behavior is:
+- A match authorizes that connection but is not saved locally.
+- An authoritative mismatch, malformed record, or conflicting AMP1 records fail closed without a manual override.
+- An absent or unavailable record falls back to manual verification.
 
-- a valid CA-signed certificate is accepted normally without using the DNS record;
-- a self-signed certificate matching the DNSSEC fingerprint is accepted automatically for that connection and is not saved in the known-hosts file;
-- an authoritative DNSSEC fingerprint mismatch or malformed AutoModpack record fails closed without a manual override prompt;
-- when no usable record is available, AutoModpack falls back to the existing saved/manual fingerprint flow.
+When the certificate changes, update the single `fp` value and allow for DNS TTL and resolver-cache propagation before deploying the new certificate.
 
-If the self-signed certificate changes, replace the single `fp` value with the new fingerprint. Allow for DNS TTL and resolver cache propagation when planning the change; clients seeing an old fingerprint will safely refuse the new certificate until the record has propagated.
+### Shareable pinned server addresses
 
-### Manual fingerprint verification
+For a simple authenticated copy/paste flow, generate both the normal address and a pinned AutoModpack address:
 
-When automatic CA or DNSSEC verification is unavailable, copy the fingerprint from the server console into the game. Manual verification and the explicit Skip action both save the presented fingerprint permanently for the original Minecraft hostname. A route or port change keeps working while the exact certificate remains unchanged; a certificate change requires another trust decision.
+```text
+/automodpack host fingerprint share <minecraft-address>
+```
 
-You can retrieve the current fingerprint at any time with:
+The pinned form looks like:
+
+```text
+play.example.com:25565#amp1=<certificate-sha256>
+```
+
+Supporting clients import the public fingerprint into AutoModpack's certificate trust store and save only the normal Minecraft address. Removing AutoModpack therefore leaves a usable vanilla server entry.
+
+The imported fingerprint becomes the origin's certificate pin. The exact presented leaf certificate must match even if another certificate would otherwise be accepted by a CA or DNSSEC. A mismatch has no Verify or Skip bypass. To rotate the certificate, distribute a newly generated pinned address.
+
+Metadata owned by another mod can coexist as another `#key=value` segment in either order. AutoModpack removes only its `amp1` segment and preserves the rest:
+
+```text
+play.example.com:25565#amp1=<fingerprint>#othermod1=<value>
+play.example.com:25565#othermod1=<value>#amp1=<fingerprint>
+```
+
+The pinned address is only as trustworthy as the channel used to distribute it. Provide the plain address for vanilla and older clients.
+
+### Manual verification and TOFU
+
+When no automatic method is available, AutoModpack shows the presented fingerprint. Players can paste a fingerprint obtained from the server operator, or explicitly choose the higher-risk Skip flow. A successful decision becomes an exact certificate pin for that Minecraft `host:port`, using the same enforcement and storage as an imported address pin.
+
+The acceptance reason is retained as `TOFU` or `ADDRESS_PIN` for UI and future migration purposes, but both behave identically after they are saved: the certificate must match before CA or DNSSEC is considered. A changed certificate requires removing/replacing the old pin or importing a newly pinned address.
+
+Retrieve the current public fingerprint with:
 
 ```text
 /automodpack host fingerprint
 ```
 
-A fingerprint is public verification data, not a password. Anyone who can reach the modpack host may still be able to download public modpack data; the fingerprint protects clients from accepting an impersonating host. The fingerprint changes whenever the leaf certificate changes.
+A fingerprint is public verification data, not a password. It protects clients from accepting an impersonating host; it does not grant access to the private key.
 
-### Providing a CA-signed certificate
+### Why certificate verification matters
 
-A publicly trusted certificate allows standard WebPKI verification without a DNSSEC AutoModpack record. You can obtain one with tools such as [Certbot](https://eff-certbot.readthedocs.io/en/stable/install.html).
+If an attacker controls the AutoModpack connection, they can provide arbitrary mod files. Minecraft mods can access local files and execute arbitrary code, so authenticating the modpack host protects every connecting player.
 
-After obtaining the certificate, replace `cert.crt` (the full certificate chain) and `key.pem` in `~/automodpack/.private/`. The private key must use [PKCS#8 PEM format](https://netty.io/wiki/sslcontextbuilder-and-private-key.html). Protect these files carefully: access to the private key permits server impersonation.
-
-The certificate must be valid for the Minecraft hostname players enter. A different modpack endpoint hostname is only a TCP route and does not need to appear in the certificate.
-
-### Certbot example
-
-Install Certbot, then request a certificate for the Minecraft hostname players use:
-
-```bash
-# certbot certonly --manual --preferred-challenges dns -d <minecraft-server-domain>
-```
-
-<Callout variant="warning">
-Never copy-paste random commands from the internet. Always read the documentation of the tool you are using.
-</Callout>
-
-The files needed by AutoModpack are `fullchain.pem` (copy and rename it to `cert.crt`) and `privkey.pem` (copy and rename it to `key.pem`).
-
-### Why is this necessary?
-
-If an attacker could take control of the AutoModpack connection, they could deliver arbitrary files to players. Minecraft mods can execute arbitrary code, so authenticating the modpack host is an important part of protecting every client that joins the server.
-
-A private or little-known server is not automatically safe. Internet scanners can discover exposed Minecraft servers, and local DNS or network attacks can target players before they reach the intended server. Certificate verification does not replace secure server administration: continue using strong passwords, two-factor authentication, restricted file permissions, and up-to-date software.
+Certificate verification does not replace secure server administration. Continue using strong passwords, two-factor authentication, restricted file permissions, current software, and careful private-key handling.

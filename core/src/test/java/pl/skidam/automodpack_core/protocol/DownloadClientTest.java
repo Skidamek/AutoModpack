@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManagerFactory;
@@ -53,7 +54,7 @@ class DownloadClientTest {
 	}
 
 	@Test
-	void acceptsExpiredSelfSignedCertificateForDnsFallback() throws Exception {
+	void recognizesExpiredCertificateAsSelfSigned() throws Exception {
 		KeyPair keyPair = NetUtils.generateKeyPair();
 		X500Name subject = new X500Name("CN=Expired AutoModpack Certificate");
 		X509Certificate certificate = issueCertificate(subject, subject, null, keyPair, keyPair, Instant.now().minusSeconds(7200),
@@ -79,6 +80,20 @@ class DownloadClientTest {
 				connection.getSocket().close();
 			});
 		});
+	}
+
+	@Test
+	void exactPinConstrainsOtherwiseTrustedCertificate() throws Exception {
+		X509Certificate certificate = NetUtils.selfSign(NetUtils.generateKeyPair());
+		KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
+		trustStore.load(null);
+
+		var matching = new CustomizableTrustManager(trustStore, null, "origin.example", NetUtils.getFingerprint(certificate));
+		assertDoesNotThrow(() -> matching.checkServerTrusted(new X509Certificate[]{certificate}, "RSA"));
+
+		var mismatching = new CustomizableTrustManager(trustStore, null, "origin.example", "0".repeat(64));
+		assertThrows(CertificatePinMismatchException.class, () -> mismatching.checkServerTrusted(new X509Certificate[]{certificate}, "RSA"));
+		assertThrows(CertificatePinMismatchException.class, () -> mismatching.checkServerTrusted(new X509Certificate[]{certificate}, "RSA", (SSLEngine) null));
 	}
 
 	@Test

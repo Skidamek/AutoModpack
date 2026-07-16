@@ -25,6 +25,9 @@ dependencies {
 	implementation(project(":core")) { isTransitive = false }
 	implementation(project(":loader-core")) { isTransitive = false }
 
+	compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:0.5.4")!!)
+	implementation(jarJar("io.github.llamalad7:mixinextras-forge:0.5.4")!!)
+
 	annotationProcessor("org.spongepowered:mixin:0.8.5:processor") // Required to generate refmaps
 }
 

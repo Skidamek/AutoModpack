@@ -58,5 +58,13 @@
   "automodpack.back": "Back",
   "automodpack.wait": "Please wait...",
   "automodpack.skip": "Skip",
-  "automodpack.learnmore": "Learn more"
+  "automodpack.learnmore": "Learn more",
+
+  "automodpack.pin.active": "Certificate pin (%s): %s (click to remove)",
+  "automodpack.pin.reason.address": "address",
+  "automodpack.pin.reason.tofu": "manual/TOFU",
+  "automodpack.pin.removed": "Certificate pin removed",
+  "automodpack.pin.invalid": "Invalid pinned address. Paste the complete address provided by the server operator.",
+  "automodpack.pin.mismatch": "Pinned certificate mismatch!",
+  "automodpack.pin.mismatch.help": "Ask the server operator for a new pinned address. Do not bypass this warning."
 }

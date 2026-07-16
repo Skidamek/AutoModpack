@@ -7,13 +7,14 @@ import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
+import com.llamalad7.mixinextras.MixinExtrasBootstrap;
+
 public class MixinPlugin implements IMixinConfigPlugin {
 	private static final boolean AUTOTEST_ENABLED = Boolean.getBoolean("automodpack.autotest");
 
 	@Override
 	public void onLoad(String mixinPackage) {
-		// Needed for versions < 1.18
-//        MixinExtrasBootstrap.init();
+		MixinExtrasBootstrap.init();
 	}
 
 	@Override

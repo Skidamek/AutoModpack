@@ -36,6 +36,8 @@ public class Jsons {
 	public static class ModpackAddresses {
 		public InetSocketAddress hostAddress; // server-advertised modpack route; not an authenticated identity
 		public InetSocketAddress serverAddress; // immutable player-selected Minecraft origin; certificate trust root
+		public transient String certificateFingerprint; // runtime-only exact certificate pin bound to serverAddress
+		public transient String certificatePinReason; // non-null only while importing new trust
 		public boolean requiresMagic; // if true, client will use magic packets to connect to the modpack host
 
 		public ModpackAddresses() {
@@ -52,8 +54,19 @@ public class Jsons {
 		 *            which client uses to connect. This value CANNOT be manipulated by the server.
 		 */
 		public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, boolean requiresMagic) {
+			this(hostAddress, serverAddress, null, null, requiresMagic);
+		}
+
+		public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, String certificateFingerprint, boolean requiresMagic) {
+			this(hostAddress, serverAddress, certificateFingerprint, null, requiresMagic);
+		}
+
+		public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, String certificateFingerprint, String certificatePinReason,
+				boolean requiresMagic) {
 			this.hostAddress = hostAddress;
 			this.serverAddress = serverAddress;
+			this.certificateFingerprint = certificateFingerprint;
+			this.certificatePinReason = certificatePinReason;
 			this.requiresMagic = requiresMagic;
 		}
 
@@ -141,7 +154,19 @@ public class Jsons {
 	}
 
 	public static class KnownHostsFields {
-		public Map<String, String> hosts; // host, fingerprint
+		public Map<String, CertificateTrustEntry> hosts; // canonical Minecraft origin, exact certificate trust
+	}
+
+	public static class CertificateTrustEntry {
+		public String fingerprint;
+		public String reason;
+
+		public CertificateTrustEntry() {}
+
+		public CertificateTrustEntry(String fingerprint, String reason) {
+			this.fingerprint = fingerprint;
+			this.reason = reason;
+		}
 	}
 
 	public static class ModpackContentFields {

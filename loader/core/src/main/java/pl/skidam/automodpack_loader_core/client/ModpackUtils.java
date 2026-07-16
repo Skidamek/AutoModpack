@@ -12,7 +12,6 @@ import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
@@ -24,6 +23,7 @@ import org.jetbrains.annotations.NotNull;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -636,7 +636,7 @@ public class ModpackUtils {
 		if (modpackAddresses.isAnyEmpty()) throw new IllegalArgumentException("Modpack addresses are empty!");
 
 		try {
-			return fetchModpackContentAsync(modpackAddresses, secret, operation, blockingManualValidationCallback(modpackAddresses, allowAskingUser)).get();
+			return fetchModpackContentAsync(modpackAddresses, secret, operation, manualValidationCallbackAsync(modpackAddresses, allowAskingUser)).get();
 		} catch (Exception e) {
 			LOGGER.error("Error while getting server modpack content", e);
 			return Optional.empty();
@@ -646,7 +646,7 @@ public class ModpackUtils {
 	public static boolean canConnectModpackHost(Jsons.ModpackAddresses modpackAddresses) {
 		if (modpackAddresses.isAnyEmpty()) throw new IllegalArgumentException("Modpack addresses are empty!");
 
-		try (DownloadClient client = DownloadClient.createAsync(modpackAddresses, null, 1, manualValidationCallbackAsync(modpackAddresses, false)).get()) {
+		try (DownloadClient client = createDownloadClient(modpackAddresses, null, 1, manualValidationCallbackAsync(modpackAddresses, false)).get()) {
 			return client != null;
 		} catch (Exception e) {
 			LOGGER.error("Error while pinging AutoModpack host server", e);
@@ -667,60 +667,14 @@ public class ModpackUtils {
 	 * @return the callback
 	 */
 	public static Function<X509Certificate, Boolean> manualValidationCallback(Jsons.ModpackAddresses addresses, boolean allowAskingUser) {
-		String originHost = addresses.serverAddress.getHostString();
+		Function<X509Certificate, CompletableFuture<Boolean>> callback = manualValidationCallbackAsync(addresses, allowAskingUser);
 		return certificate -> {
-			String fingerprint;
 			try {
-				fingerprint = NetUtils.getFingerprint(certificate);
-			} catch (CertificateEncodingException e) {
+				return callback.apply(certificate).get(120, TimeUnit.SECONDS);
+			} catch (Exception e) {
 				return false;
 			}
-			if (Objects.equals(knownHosts.hosts.get(originHost), fingerprint)) return true;
-
-			LOGGER.warn("Received untrusted certificate for Minecraft server {} from modpack route {}:{}!", originHost, addresses.hostAddress.getHostString(),
-					addresses.hostAddress.getPort());
-			if (allowAskingUser) {
-				boolean trusted = askUserAboutCertificate(addresses, fingerprint);
-				if (trusted) {
-					knownHosts.hosts.put(originHost, fingerprint);
-					ConfigTools.save(knownHostsFile, knownHosts);
-				}
-				return trusted;
-			}
-
-			return false;
 		};
-	}
-
-	private static Boolean askUserAboutCertificate(Jsons.ModpackAddresses addresses, String fingerprint) {
-		LOGGER.info("Asking user to verify certificate for Minecraft server {} from modpack route {}:{}", addresses.serverAddress.getHostString(),
-				addresses.hostAddress.getHostString(), addresses.hostAddress.getPort());
-
-		var parent = new ScreenManager().getScreen().orElse(null);
-		if (parent == null) {
-			LOGGER.warn("No screen available, cannot ask user");
-			return false;
-		}
-
-		CountDownLatch latch = new CountDownLatch(1);
-
-		AtomicBoolean accepted = new AtomicBoolean(false);
-		Runnable trustCallback = () -> {
-			accepted.set(true);
-			latch.countDown();
-		};
-		Runnable cancelCallback = latch::countDown;
-		new ScreenManager().validation(parent, fingerprint, trustCallback, cancelCallback);
-		try {
-			if (!latch.await(120, TimeUnit.SECONDS)) {
-				LOGGER.warn("Certificate validation timed out for {}", addresses.serverAddress.getHostString());
-				return false;
-			}
-		} catch (InterruptedException e) {
-			return false;
-		}
-
-		return accepted.get();
 	}
 
 	// ---- Async versions (non-blocking, used by login packet flow) ----
@@ -740,7 +694,7 @@ public class ModpackUtils {
 		if (secret == null) return CompletableFuture.completedFuture(Optional.empty());
 		if (modpackAddresses.isAnyEmpty()) { return CompletableFuture.failedFuture(new IllegalArgumentException("Modpack addresses are empty!")); }
 
-		return DownloadClient.createAsync(modpackAddresses, secret.secretBytes(), 1, trustCallback).thenCompose(client -> {
+		return createDownloadClient(modpackAddresses, secret.secretBytes(), 1, trustCallback).thenCompose(client -> {
 			CompletableFuture<Path> operationFuture;
 			try {
 				operationFuture = operation.apply(client);
@@ -771,15 +725,30 @@ public class ModpackUtils {
 				}
 			});
 		}).exceptionally(e -> {
+			showPinMismatch(e);
 			LOGGER.error("Error while getting server modpack content", e);
 			return Optional.empty();
 		});
 	}
 
-	private static Function<X509Certificate, CompletableFuture<Boolean>> blockingManualValidationCallback(Jsons.ModpackAddresses addresses,
-			boolean allowAskingUser) {
-		Function<X509Certificate, Boolean> callback = manualValidationCallback(addresses, allowAskingUser);
-		return certificate -> CompletableFuture.completedFuture(callback.apply(certificate));
+	private static CompletableFuture<DownloadClient> createDownloadClient(Jsons.ModpackAddresses addresses, byte[] secret, int poolSize,
+			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
+		return DownloadClient.createAsync(addresses, secret, poolSize, trustCallback).thenApply(client -> {
+			if (addresses.certificatePinReason != null) {
+				CertificateTrustStore.save(addresses.serverAddress, addresses.certificateFingerprint,
+						CertificateTrustStore.Reason.valueOf(addresses.certificatePinReason));
+			}
+			return client;
+		});
+	}
+
+	private static void showPinMismatch(Throwable throwable) {
+		CertificatePinMismatchException mismatch = DownloadClient.findCause(throwable, CertificatePinMismatchException.class);
+		if (mismatch == null) return;
+
+		new ScreenManager().error("automodpack.pin.mismatch", "Origin: " + mismatch.getOrigin(),
+				"Expected: " + NetUtils.shortenFingerprint(mismatch.getExpectedFingerprint()),
+				"Presented: " + NetUtils.shortenFingerprint(mismatch.getPresentedFingerprint()), "automodpack.pin.mismatch.help");
 	}
 
 	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(Jsons.ModpackAddresses addresses,
@@ -792,7 +761,7 @@ public class ModpackUtils {
 			} catch (CertificateEncodingException e) {
 				return CompletableFuture.completedFuture(false);
 			}
-			if (Objects.equals(knownHosts.hosts.get(originHost), fingerprint)) return CompletableFuture.completedFuture(true);
+			if (CertificateTrustStore.matches(addresses.serverAddress, fingerprint)) return CompletableFuture.completedFuture(true);
 
 			LOGGER.warn("Received untrusted certificate for Minecraft server {} from modpack route {}:{}!", originHost, addresses.hostAddress.getHostString(),
 					addresses.hostAddress.getPort());
@@ -807,28 +776,20 @@ public class ModpackUtils {
 		LOGGER.info("Asking user to verify certificate for Minecraft server {} from modpack route {}:{}", originHost, addresses.hostAddress.getHostString(),
 				addresses.hostAddress.getPort());
 
-		return CompletableFuture.supplyAsync(() -> {
-			var parent = new ScreenManager().getScreen().orElse(null);
-			if (parent == null) {
-				LOGGER.warn("No screen available, cannot ask user");
-				return false;
-			}
+		var parent = new ScreenManager().getScreen().orElse(null);
+		if (parent == null) {
+			LOGGER.warn("No screen available, cannot ask user");
+			return CompletableFuture.completedFuture(false);
+		}
 
-			CompletableFuture<Boolean> future = new CompletableFuture<>();
-			Runnable trustAction = () -> {
-				knownHosts.hosts.put(originHost, fingerprint);
-				ConfigTools.save(knownHostsFile, knownHosts);
-				future.complete(true);
-			};
-			Runnable cancelAction = () -> future.complete(false);
-			new ScreenManager().validation(parent, fingerprint, trustAction, cancelAction);
-
-			try {
-				return future.get(120, TimeUnit.SECONDS);
-			} catch (Exception e) {
-				return false;
-			}
-		}, DownloadClient.NET_EXECUTOR);
+		CompletableFuture<Boolean> result = new CompletableFuture<>();
+		Runnable trustAction = () -> {
+			CertificateTrustStore.save(addresses.serverAddress, fingerprint, CertificateTrustStore.Reason.TOFU);
+			result.complete(true);
+		};
+		Runnable cancelAction = () -> result.complete(false);
+		new ScreenManager().validation(parent, fingerprint, trustAction, cancelAction);
+		return result.orTimeout(120, TimeUnit.SECONDS).exceptionally(e -> false);
 	}
 
 	public static boolean potentiallyMalicious(Jsons.ModpackContentFields serverModpackContent) {

@@ -276,7 +276,7 @@ Targeting `file:` lets you assert on the rich evidence in `logs/debug.log`
 ### Templating and variables
 
 Strings expand `${...}` against the scenario context: `${target.id}`,
-`${server.host}`, `${modpack}`, `${marker}`, plus any captured variables. The
+`${server.host}` (the complete `host:port` address), `${modpack}`, `${marker}`, plus any captured variables. The
 `log` condition can capture regex groups into variables for later steps:
 
 ```yaml

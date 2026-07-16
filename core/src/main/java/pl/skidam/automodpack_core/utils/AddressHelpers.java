@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 
 import java.net.*;
 import java.util.Enumeration;
+import java.util.Locale;
 import java.util.Objects;
 
 public class AddressHelpers {
@@ -81,8 +82,15 @@ public class AddressHelpers {
 		if (host.endsWith(".")) { // It breaks our checks and looks ugly, but its a valid domain...
 			host = host.substring(0, host.length() - 1);
 		}
-		host = host.toLowerCase(); // #382
+		host = host.toLowerCase(Locale.ROOT); // #382
 		return InetSocketAddress.createUnresolved(host, port);
+	}
+
+	public static String formatAddress(InetSocketAddress address) {
+		InetSocketAddress normalized = format(address.getHostString().trim(), address.getPort());
+		String host = normalized.getHostString();
+		if (host.contains(":") && !(host.startsWith("[") && host.endsWith("]"))) host = "[" + host + "]";
+		return host + ":" + normalized.getPort();
 	}
 
 	public static InetSocketAddress parse(String address) {

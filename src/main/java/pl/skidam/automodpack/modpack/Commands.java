@@ -12,6 +12,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedCommandSource;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import java.util.Set;
@@ -65,6 +66,12 @@ public class Commands {
 														.executes(Commands::fingerprintDnsRecord)
 												)
 										)
+										.then(literal("share")
+												.executes(Commands::fingerprintShareUsage)
+												.then(argument("minecraft-address", StringArgumentType.greedyString())
+														.executes(Commands::fingerprintShareAddress)
+												)
+										)
 								)
 						)
 						.then(literal("config")
@@ -86,15 +93,7 @@ public class Commands {
 	private static int fingerprint(CommandContext<CommandSourceStack> context) {
 		String fingerprint = hostServer.getCertificateFingerprint();
 		if (fingerprint != null) {
-			MutableComponent fingerprintText = VersionedText.literal(fingerprint).withStyle(style -> style
-					/*? if >=1.21.5 {*/
-					.withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
-					.withClickEvent(new ClickEvent.CopyToClipboard(fingerprint)));
-					/*?} else {*/
-					/*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
-					.withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, fingerprint)));
-			*//*?}*/
-			send(context, "Certificate fingerprint", ChatFormatting.WHITE, fingerprintText, ChatFormatting.YELLOW, false);
+			send(context, "Certificate fingerprint", ChatFormatting.WHITE, copyable(fingerprint), ChatFormatting.YELLOW, false);
 		} else {
 			send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
 		}
@@ -123,17 +122,48 @@ public class Commands {
 			return Command.SINGLE_SUCCESS;
 		}
 
-		MutableComponent recordText = VersionedText.literal(record).withStyle(style -> style
-				/*? if >=1.21.5 {*/
-				.withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
-				.withClickEvent(new ClickEvent.CopyToClipboard(record)));
-				/*?} else {*/
-				/*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
-				.withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, record)));
-		*//*?}*/
-		send(context, "Publish this record in the DNSSEC-signed zone for the Minecraft hostname players use.", ChatFormatting.WHITE, recordText, ChatFormatting.YELLOW, false);
+		send(context, "Publish this record in the DNSSEC-signed zone for the Minecraft hostname players use.", ChatFormatting.WHITE, copyable(record),
+				ChatFormatting.YELLOW, false);
 
 		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int fingerprintShareUsage(CommandContext<CommandSourceStack> context) {
+		send(context, "Usage: /automodpack host fingerprint share <minecraft-address>", ChatFormatting.RED, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int fingerprintShareAddress(CommandContext<CommandSourceStack> context) {
+		String fingerprint = hostServer.getCertificateFingerprint();
+		if (fingerprint == null) {
+			send(context, "Certificate fingerprint is not available. Make sure the server is running with TLS enabled.", ChatFormatting.RED, false);
+			return Command.SINGLE_SUCCESS;
+		}
+
+		String address = StringArgumentType.getString(context, "minecraft-address");
+		final String pinnedAddress;
+		try {
+			pinnedAddress = ServerAddressPin.format(address, fingerprint);
+		} catch (IllegalArgumentException e) {
+			send(context, e.getMessage(), ChatFormatting.RED, false);
+			return Command.SINGLE_SUCCESS;
+		}
+
+		send(context, "Plain Minecraft address (vanilla and older clients):", ChatFormatting.WHITE, copyable(address), ChatFormatting.YELLOW, false);
+		send(context, "Pinned AutoModpack address:", ChatFormatting.WHITE, copyable(pinnedAddress), ChatFormatting.GREEN, false);
+		send(context, "Compatible AutoModpack clients import the public fingerprint and save a clean Minecraft address.", ChatFormatting.GRAY, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static MutableComponent copyable(String value) {
+		return VersionedText.literal(value).withStyle(style -> style
+				/*? if >=1.21.5 {*/
+				.withHoverEvent(new HoverEvent.ShowText(VersionedText.translatable("chat.copy.click")))
+				.withClickEvent(new ClickEvent.CopyToClipboard(value)));
+				/*?} else {*/
+				/*.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, VersionedText.translatable("chat.copy.click")))
+				.withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, value)));
+		*//*?}*/
 	}
 
 	private static int connections(CommandContext<CommandSourceStack> context) {

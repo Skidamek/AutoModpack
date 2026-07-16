@@ -22,14 +22,16 @@ public class ModPackets {
 	public static final Identifier HANDSHAKE = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.HANDSHAKE);
 	public static final Identifier DATA = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.DATA);
 
-	private static InetSocketAddress originalServerAddress;
+	public record ConnectionAttempt(InetSocketAddress serverAddress, String certificateFingerprint, String certificatePinReason) {}
 
-	public static void setOriginalServerAddress(InetSocketAddress address) {
-		originalServerAddress = address;
+	private static ConnectionAttempt connectionAttempt;
+
+	public static void setConnectionAttempt(ConnectionAttempt attempt) {
+		connectionAttempt = attempt;
 	}
 
-	public static InetSocketAddress getOriginalServerAddress() {
-		return originalServerAddress;
+	public static ConnectionAttempt getConnectionAttempt() {
+		return connectionAttempt;
 	}
 
 	public static void registerC2SPackets() {

@@ -153,7 +153,7 @@ def test_selector_no_match():
 def test_resolve_builtins_and_vars(make_ctx):
     ctx = make_ctx(vars={"who": "world"})
     assert ctx.resolve("${target.id}") == "1.21-fabric"
-    assert ctx.resolve("${server.host}:${server.port}") == "srv-container:25565"
+    assert ctx.resolve("${server.host}") == "srv-container:25565"
     assert ctx.resolve("${modpack}") == "amp-autotest"
     assert ctx.resolve("${marker}") == "config/amp-autotest-marker.json"
     assert ctx.resolve("hello ${who}") == "hello world"
@@ -364,9 +364,9 @@ def test_log_file_target_reads_game_dir_artifact(make_ctx):
 
 def test_server_host_overrides_namespace(make_ctx):
     ctx = make_ctx(server_host="127.0.0.1")
-    assert ctx.resolve("${server.host}") == "127.0.0.1"
+    assert ctx.resolve("${server.host}") == "127.0.0.1:25565"
     # Falls back to the container name when unset (bridge transport).
-    assert make_ctx().resolve("${server.host}") == "srv-container"
+    assert make_ctx().resolve("${server.host}") == "srv-container:25565"
 
 
 # ── target / target_not / only_files conditions ──────────────────────────

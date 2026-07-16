@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.utils.*;
+import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
@@ -51,11 +52,13 @@ public class Preload {
 		selectedModpackDir = optionalSelectedModpackDir.get();
 		InetSocketAddress selectedModpackAddress = null;
 		InetSocketAddress selectedServerAddress = null;
+		String certificateFingerprint = null;
 		boolean requiresMagic = true; // Default to true
 		if (!clientConfig.selectedModpack.isBlank() && clientConfig.installedModpacks.containsKey(clientConfig.selectedModpack)) {
 			var entry = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
 			selectedModpackAddress = entry.hostAddress;
 			selectedServerAddress = entry.serverAddress;
+			certificateFingerprint = CertificateTrustStore.getFingerprint(selectedServerAddress);
 			requiresMagic = entry.requiresMagic;
 		}
 
@@ -65,7 +68,8 @@ public class Preload {
 			LegacyClientCacheUtils.deleteDummyFiles();
 		} else {
 			Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
-			Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress, requiresMagic);
+			Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress, certificateFingerprint,
+					requiresMagic);
 
 			// When update-on-launch is disabled, just load the already-installed
 			// modpack: don't contact the server and don't reconcile local files,
@@ -221,7 +225,7 @@ public class Preload {
 		}
 
 		knownHosts = ConfigTools.load(knownHostsFile, Jsons.KnownHostsFields.class);
-		if (knownHosts != null && knownHosts.hosts == null) { knownHosts.hosts = new HashMap<>(); }
+		if (knownHosts != null && knownHosts.hosts == null) knownHosts.hosts = new HashMap<>();
 
 		try {
 			Files.createDirectories(privateDir);

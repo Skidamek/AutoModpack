@@ -16,7 +16,8 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 public class ConfigTools {
 
 	public static Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
-			.registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter()).create();
+			.registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())
+			.registerTypeAdapter(Jsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter()).create();
 
 	private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress>, JsonDeserializer<InetSocketAddress> {
 		@Override
@@ -28,6 +29,16 @@ public class ConfigTools {
 		public InetSocketAddress deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
 			String address = json.getAsString();
 			return AddressHelpers.parse(address);
+		}
+	}
+
+	private static class CertificateTrustEntryTypeAdapter implements JsonDeserializer<Jsons.CertificateTrustEntry> {
+		@Override
+		public Jsons.CertificateTrustEntry deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+			if (json.isJsonPrimitive()) return new Jsons.CertificateTrustEntry(json.getAsString(), "TOFU");
+			JsonObject object = json.getAsJsonObject();
+			String reason = object.has("reason") ? object.get("reason").getAsString() : "TOFU";
+			return new Jsons.CertificateTrustEntry(object.get("fingerprint").getAsString(), reason);
 		}
 	}
 
