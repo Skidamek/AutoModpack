@@ -77,6 +77,11 @@ spotless {
 		target("src/main/java/**/*.java", "core/src/**/*.java", "loader/**/src/**/*.java")
 		targetExclude("versions/**", stonecutterJava)
 		eclipse().configFile("config/format/eclipse-java.xml")
+		replaceRegex(
+			"Remove braces from one-line if statements",
+			"""(?m)^(\s*)if (\(.*\)) \{ ([^{}\r\n]+;) \}$""",
+			"\$1if \$2 \$3",
+		)
 		importOrder("java", "javax", "org", "com", "", "pl.skidam")
 		trimTrailingWhitespace()
 		endWithNewline()

@@ -26,7 +26,7 @@ public class SmartFileUtils {
 
 		if (Files.isRegularFile(file)) {
 			LegacyClientCacheUtils.dummyIT(file);
-			if (saveDummyFiles) { LegacyClientCacheUtils.saveDummyFiles(); }
+			if (saveDummyFiles) LegacyClientCacheUtils.saveDummyFiles();
 		}
 	}
 
@@ -103,7 +103,7 @@ public class SmartFileUtils {
 
 	public static void createParentDirs(Path file) throws IOException {
 		Path parent = file.getParent();
-		if (parent != null && !Files.exists(parent)) { Files.createDirectories(parent); }
+		if (parent != null && !Files.exists(parent)) Files.createDirectories(parent);
 	}
 
 	public static void createParentDirsNoEx(Path file) {
@@ -148,7 +148,7 @@ public class SmartFileUtils {
 	}
 
 	public static String formatPath(final Path modpackFile, final Path modpackPath) {
-		if (modpackPath == null || modpackFile == null) { throw new IllegalArgumentException("Arguments cannot be null"); }
+		if (modpackPath == null || modpackFile == null) throw new IllegalArgumentException("Arguments cannot be null");
 
 		String modpackFileStrAbs = modpackFile.toAbsolutePath().normalize().toString();
 		String modpackPathStrAbs = modpackPath.toAbsolutePath().normalize().toString();

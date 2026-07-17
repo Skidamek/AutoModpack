@@ -60,7 +60,7 @@ public final class DnsPinResolver {
 
 	public static CompletableFuture<LookupResult> resolvePinAsync(String minecraftHost) {
 		Optional<String> normalizedHost = normalizeDnsHost(minecraftHost);
-		if (normalizedHost.isEmpty()) { return CompletableFuture.completedFuture(new NoPolicy(NoPolicyReason.IP_LITERAL)); }
+		if (normalizedHost.isEmpty()) return CompletableFuture.completedFuture(new NoPolicy(NoPolicyReason.IP_LITERAL));
 
 		String host = normalizedHost.get();
 		String name = RECORD_PREFIX + host;
@@ -71,7 +71,7 @@ public final class DnsPinResolver {
 	}
 
 	private static LookupResult combineResolverResults(String host, List<ResolverResult> results) {
-		if (results.stream().allMatch(ResolverAbsent.class::isInstance)) { return new NoPolicy(NoPolicyReason.ABSENT); }
+		if (results.stream().allMatch(ResolverAbsent.class::isInstance)) return new NoPolicy(NoPolicyReason.ABSENT);
 
 		if (results.stream().allMatch(ResolverMisconfigured.class::isInstance)) {
 			String reason = ((ResolverMisconfigured) results.get(0)).reason();
@@ -82,7 +82,7 @@ public final class DnsPinResolver {
 		if (results.stream().allMatch(ResolverPin.class::isInstance)) {
 			String expected = ((ResolverPin) results.get(0)).fingerprint();
 			boolean agrees = results.stream().map(ResolverPin.class::cast).allMatch(result -> result.fingerprint().equals(expected));
-			if (agrees) { return new Authoritative(expected); }
+			if (agrees) return new Authoritative(expected);
 			LOGGER.warn("DNS resolvers disagree on the AutoModpack fingerprint for {}", host);
 		}
 
@@ -95,7 +95,7 @@ public final class DnsPinResolver {
 					.header("Accept", "application/dns-json").timeout(TIMEOUT).GET().build();
 
 			return HTTP_CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString()).thenApply(response -> {
-				if (response.statusCode() < 200 || response.statusCode() >= 300) { return new ResolverUnavailable(); }
+				if (response.statusCode() < 200 || response.statusCode() >= 300) return new ResolverUnavailable();
 				return parseDnsResponse(response.body());
 			}).exceptionally(error -> {
 				LOGGER.debug("DNS fingerprint lookup for {} via {} failed", name, resolver, error);
@@ -113,10 +113,10 @@ public final class DnsPinResolver {
 			int status = json.has("Status") ? json.get("Status").getAsInt() : -1;
 			boolean authenticated = json.has("AD") && json.get("AD").getAsBoolean();
 
-			if (!authenticated) { return new ResolverUnavailable(); }
+			if (!authenticated) return new ResolverUnavailable();
 
-			if (status == 3) { return new ResolverAbsent(); }
-			if (status != 0) { return new ResolverUnavailable(); }
+			if (status == 3) return new ResolverAbsent();
+			if (status != 0) return new ResolverUnavailable();
 
 			List<String> txtRecords = new ArrayList<>();
 			if (json.has("Answer")) {
@@ -137,8 +137,8 @@ public final class DnsPinResolver {
 	static ResolverResult parseTxtRecords(List<String> txtRecords) {
 		String fingerprint = null;
 		for (String txt : txtRecords) {
-			if (!isAmp1Record(txt)) { continue; }
-			if (fingerprint != null) { return new ResolverMisconfigured("multiple amp1 records are not allowed"); }
+			if (!isAmp1Record(txt)) continue;
+			if (fingerprint != null) return new ResolverMisconfigured("multiple amp1 records are not allowed");
 
 			try {
 				fingerprint = parsePin(txt);
@@ -151,7 +151,7 @@ public final class DnsPinResolver {
 	}
 
 	static String parsePin(String txt) {
-		if (txt == null) { throw new IllegalArgumentException("empty amp1 record"); }
+		if (txt == null) throw new IllegalArgumentException("empty amp1 record");
 
 		String version = null;
 		String fingerprint = null;
@@ -159,7 +159,7 @@ public final class DnsPinResolver {
 		for (String rawPart : txt.split(";", -1)) {
 			String part = rawPart.trim();
 			int separator = part.indexOf('=');
-			if (separator <= 0) { throw new IllegalArgumentException("invalid amp1 field: " + part); }
+			if (separator <= 0) throw new IllegalArgumentException("invalid amp1 field: " + part);
 
 			String key = part.substring(0, separator).trim().toLowerCase(Locale.ROOT);
 			String value = part.substring(separator + 1).trim();

@@ -25,7 +25,7 @@ public record CurseForgeAPI(String requestUrl, String downloadUrl, String fileVe
 	// key - sha1, value - murmur
 	// https://docs.curseforge.com/?java#get-fingerprints-matches
 	public static List<CurseForgeAPI> getModInfosFromFingerPrints(Map<String, String> hashes) {
-		if (hashes == null || hashes.isEmpty()) { return null; }
+		if (hashes == null || hashes.isEmpty()) return null;
 
 		String requestUrl = BASE_URL + "/fingerprints";
 		List<CurseForgeAPI> curseForgeAPIList = new LinkedList<>();

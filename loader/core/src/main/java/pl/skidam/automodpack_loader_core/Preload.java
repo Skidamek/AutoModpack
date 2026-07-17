@@ -93,7 +93,7 @@ public class Preload {
 				latestModpackContent = optionalLatestModpackContent.get();
 
 				// Update AutoModpack to server version only if we can get newest modpack content
-				if (SelfUpdater.update(latestModpackContent)) { return; }
+				if (SelfUpdater.update(latestModpackContent)) return;
 			}
 
 			// Delete dummy files
@@ -216,9 +216,9 @@ public class Preload {
 
 		if (clientConfig != null) {
 			// Very important to have this map initialized
-			if (clientConfig.installedModpacks == null) { clientConfig.installedModpacks = new HashMap<>(); }
+			if (clientConfig.installedModpacks == null) clientConfig.installedModpacks = new HashMap<>();
 
-			if (clientConfig.selectedModpack == null) { clientConfig.selectedModpack = ""; }
+			if (clientConfig.selectedModpack == null) clientConfig.selectedModpack = "";
 
 			// Save changes
 			ConfigTools.save(clientConfigFile, clientConfig);
@@ -244,7 +244,7 @@ public class Preload {
 			LOGGER.error("Failed to create private directory", e);
 		}
 
-		if (serverConfig == null || clientConfig == null) { throw new RuntimeException("Failed to load config!"); }
+		if (serverConfig == null || clientConfig == null) throw new RuntimeException("Failed to load config!");
 
 		LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
 	}

@@ -20,7 +20,7 @@ public class CompressionDecoder extends ByteToMessageDecoder {
 
 	@Override
 	protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-		if (in.readableBytes() < 8) { return; }
+		if (in.readableBytes() < 8) return;
 
 		var comp = ctx.channel().attr(NettyServer.COMPRESSION_TYPE).get();
 		codec = CompressionFactory.getCodec(comp);

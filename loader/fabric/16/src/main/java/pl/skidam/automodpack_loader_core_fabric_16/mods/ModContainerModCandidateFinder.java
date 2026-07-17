@@ -17,7 +17,7 @@ public class ModContainerModCandidateFinder extends ClasspathModCandidateFinder 
 	public void findCandidates(ModCandidateConsumer out) {
 		containers.forEach((ModContainer container) -> {
 			// Nested are added in ModResolver#resolve
-			if (container.getOrigin().getKind().equals(ModOrigin.Kind.PATH)) { out.accept(container.getOrigin().getPaths(), false); }
+			if (container.getOrigin().getKind().equals(ModOrigin.Kind.PATH)) out.accept(container.getOrigin().getPaths(), false);
 		});
 	}
 }

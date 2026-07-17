@@ -17,7 +17,7 @@ public class HashUtils {
 	/** The {@link #getHash} of every {@code .jar} file directly in {@code dir}; empty if it isn't a directory. */
 	public static Set<String> getJarHashes(Path dir) {
 		Set<String> hashes = new HashSet<>();
-		if (dir == null || !Files.isDirectory(dir)) { return hashes; }
+		if (dir == null || !Files.isDirectory(dir)) return hashes;
 		try (Stream<Path> stream = Files.list(dir)) {
 			stream.filter(p -> Files.isRegularFile(p) && p.getFileName().toString().toLowerCase().endsWith(".jar")).forEach(jar -> {
 				String hash = getHash(jar);
@@ -68,7 +68,7 @@ public class HashUtils {
 			int bytesRead;
 			while ((bytesRead = is.read(buffer)) != -1) {
 				for (int i = 0; i < bytesRead; i++) {
-					if (!isWhitespace(buffer[i])) { validLength++; }
+					if (!isWhitespace(buffer[i])) validLength++;
 				}
 			}
 		}

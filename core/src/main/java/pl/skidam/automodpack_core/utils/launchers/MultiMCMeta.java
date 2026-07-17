@@ -23,7 +23,7 @@ public class MultiMCMeta {
 		if (targetUid == null) return false;
 
 		return LauncherVersionSwapper.modifyJson(MMC_PACK_PATH, json -> {
-			if (!json.has("formatVersion") || json.get("formatVersion").getAsInt() != 1) { return false; }
+			if (!json.has("formatVersion") || json.get("formatVersion").getAsInt() != 1) return false;
 
 			JsonArray components = json.getAsJsonArray("components");
 			if (components == null) return false;
@@ -41,7 +41,7 @@ public class MultiMCMeta {
 						component.addProperty("version", newVersion);
 
 						// What's this for?!
-						if (component.has("cachedVersion")) { component.addProperty("cachedVersion", newVersion); }
+						if (component.has("cachedVersion")) component.addProperty("cachedVersion", newVersion);
 
 						changed = true;
 					}

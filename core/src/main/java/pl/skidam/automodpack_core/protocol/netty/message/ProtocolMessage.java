@@ -6,7 +6,7 @@ public abstract class ProtocolMessage {
 	private final byte[] secret; // 32 bytes
 
 	public ProtocolMessage(byte version, byte type, byte[] secret) {
-		if (secret.length != 32) { throw new IllegalArgumentException("Secret must be 32 bytes"); }
+		if (secret.length != 32) throw new IllegalArgumentException("Secret must be 32 bytes");
 		this.version = version;
 		this.type = type;
 		this.secret = secret;

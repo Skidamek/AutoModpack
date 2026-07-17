@@ -85,7 +85,7 @@ public class FileMetadataCache implements AutoCloseable {
 		synchronized (locks[lockIndex]) {
 			// Check if another thread has already updated the cache
 			cached = fileMetadataMap.get(pathKey);
-			if (isCacheValid(cached, currentSize, currentTime, currentFileKey)) { return cached.contentHash(); }
+			if (isCacheValid(cached, currentSize, currentTime, currentFileKey)) return cached.contentHash();
 
 			// Actual work happens here
 			String newHash = HashUtils.getHash(absPath);

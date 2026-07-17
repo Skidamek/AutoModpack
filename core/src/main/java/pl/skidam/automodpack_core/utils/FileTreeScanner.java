@@ -103,7 +103,7 @@ public class FileTreeScanner {
 
 			// Optimization: Pruning check to skip irrelevant subtrees
 			Path fileNamePath = dir.getFileName();
-			if (fileNamePath != null && !couldMatchStructure(fileNamePath.toString(), relativeDir.getNameCount())) { return FileVisitResult.SKIP_SUBTREE; }
+			if (fileNamePath != null && !couldMatchStructure(fileNamePath.toString(), relativeDir.getNameCount())) return FileVisitResult.SKIP_SUBTREE;
 
 			return FileVisitResult.CONTINUE;
 		}
@@ -111,7 +111,7 @@ public class FileTreeScanner {
 		@Override
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
 			Path relative = startDir.relativize(file);
-			if (matchesAny(whitelistMatchers, relative) && !matchesAny(blacklistMatchers, relative)) { targetMap.put(formatOutputKey(relative), file); }
+			if (matchesAny(whitelistMatchers, relative) && !matchesAny(blacklistMatchers, relative)) targetMap.put(formatOutputKey(relative), file);
 			return FileVisitResult.CONTINUE;
 		}
 
@@ -163,7 +163,7 @@ public class FileTreeScanner {
 					blacklistMatchers.add(matcher);
 					if (clean.endsWith("/**")) {
 						String subtreePattern = clean.substring(0, clean.length() - 3);
-						if (!subtreePattern.isEmpty()) { blacklistedSubtreeMatchers.add(fs.getPathMatcher("glob:" + subtreePattern)); }
+						if (!subtreePattern.isEmpty()) blacklistedSubtreeMatchers.add(fs.getPathMatcher("glob:" + subtreePattern));
 					}
 				} else {
 					whitelistMatchers.add(matcher);
@@ -177,7 +177,7 @@ public class FileTreeScanner {
 					// Allow traversal into root of recursive patterns
 					if (clean.contains("/**/")) {
 						String prefix = clean.substring(0, clean.indexOf("/**/"));
-						if (!prefix.isEmpty()) { pruningRules.add(PruningRule.compile(prefix, fs, isCaseInsensitive)); }
+						if (!prefix.isEmpty()) pruningRules.add(PruningRule.compile(prefix, fs, isCaseInsensitive));
 					}
 				}
 			} catch (Exception e) {

@@ -64,7 +64,7 @@ public class CustomThreadFactoryBuilder {
 			} else {
 				thread = new Thread(runnable);
 			}
-			if (nameFormat != null) { thread.setName(String.format(nameFormat, threadNumber.getAndIncrement())); }
+			if (nameFormat != null) thread.setName(String.format(nameFormat, threadNumber.getAndIncrement()));
 			thread.setDaemon(daemon);
 
 			if (priority != 0) {

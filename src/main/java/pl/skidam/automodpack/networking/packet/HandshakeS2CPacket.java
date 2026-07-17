@@ -40,7 +40,7 @@ public class HandshakeS2CPacket {
 		GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 		String playerName = GameHelpers.getPlayerName(profile);
 
-		if (playerName == null) { throw new IllegalStateException("Player name is null"); }
+		if (playerName == null) throw new IllegalStateException("Player name is null");
 
 		if (GameHelpers.getPlayerUUID(profile) == null) {
 //            if (server.isOnlineMode()) { This may happen with mods like 'easyauth', its possible to have an offline mode player join an online server
@@ -56,7 +56,7 @@ public class HandshakeS2CPacket {
 //            LOGGER.warn("Connection is not encrypted for player: {}", playerName);
 //        }
 
-		if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), profile)) { return; }
+		if (!GameHelpers.isPlayerAuthorized(connection.getRemoteAddress(), profile)) return;
 
 		if (!understood) {
 			Common.players.put(playerName, false);
@@ -137,14 +137,14 @@ public class HandshakeS2CPacket {
 
 	private static boolean isClientVersionHigher(String clientVersion) {
 		String versionPattern = "\\d+\\.\\d+\\.\\d+";
-		if (!clientVersion.matches(versionPattern)) { return false; }
+		if (!clientVersion.matches(versionPattern)) return false;
 
 		if (!clientVersion.equals(AM_VERSION)) {
 			String[] clientVersionComponents = clientVersion.split("\\.");
 			String[] serverVersionComponents = AM_VERSION.split("\\.");
 
 			for (int i = 0, n = clientVersionComponents.length; i < n; i++) {
-				if (clientVersionComponents[i].compareTo(serverVersionComponents[i]) > 0) { return true; }
+				if (clientVersionComponents[i].compareTo(serverVersionComponents[i]) > 0) return true;
 			}
 		}
 

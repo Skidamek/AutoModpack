@@ -29,7 +29,7 @@ public class ZstdCompression implements CompressionCodec {
 		try {
 			Path tempJar = Files.createTempFile("zstd-jni-", ".jar");
 			try (InputStream in = ZstdCompression.class.getResourceAsStream("/META-INF/jarjar/zstd-jni.jar")) {
-				if (in == null) { throw new IOException("Failed to open stream to embedded /META-INF/jarjar/zstd-jni.jar"); }
+				if (in == null) throw new IOException("Failed to open stream to embedded /META-INF/jarjar/zstd-jni.jar");
 				Files.copy(in, tempJar, StandardCopyOption.REPLACE_EXISTING);
 			}
 			tempJar.toFile().deleteOnExit();

@@ -17,11 +17,11 @@ public abstract class ServerNetworkIoMixin {
 
 	@Inject(method = "initChannel", at = @At("TAIL"))
 	private void injectAutoModpackHost(Channel channel, CallbackInfo ci) {
-		if (serverConfig.bindPort != -1) { return; }
+		if (serverConfig.bindPort != -1) return;
 
-		if (!serverConfig.modpackHost) { return; }
+		if (!serverConfig.modpackHost) return;
 
-		if (!hostServer.shouldHost()) { return; }
+		if (!hostServer.shouldHost()) return;
 
 		channel.pipeline().addFirst(MOD_ID, new ProtocolServerHandler(Constants.hostServer.getSslCtx()));
 	}

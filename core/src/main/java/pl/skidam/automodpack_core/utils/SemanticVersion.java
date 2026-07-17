@@ -21,7 +21,7 @@ public record SemanticVersion(int major, int minor, int patch, String label, int
 		if (versionString == null || versionString.isBlank()) throw new IllegalArgumentException("Version cannot be empty");
 
 		Matcher matcher = VERSION_PATTERN.matcher(versionString);
-		if (!matcher.matches()) { throw new IllegalArgumentException("Invalid version format: " + versionString); }
+		if (!matcher.matches()) throw new IllegalArgumentException("Invalid version format: " + versionString);
 
 		int major = Integer.parseInt(matcher.group(1));
 		int minor = Integer.parseInt(matcher.group(2));
@@ -42,7 +42,7 @@ public record SemanticVersion(int major, int minor, int patch, String label, int
 		if (preMatcher.find()) {
 			label = preMatcher.group(1).toLowerCase();
 			String numPart = preMatcher.group(2);
-			if (numPart != null) { preVer = Integer.parseInt(numPart); }
+			if (numPart != null) preVer = Integer.parseInt(numPart);
 		}
 
 		return new SemanticVersion(major, minor, patch, label, preVer);
@@ -77,7 +77,7 @@ public record SemanticVersion(int major, int minor, int patch, String label, int
 		int thisWeight = this.getLabelWeight();
 		int otherWeight = o.getLabelWeight();
 
-		if (thisWeight != otherWeight) { return Integer.compare(thisWeight, otherWeight); }
+		if (thisWeight != otherWeight) return Integer.compare(thisWeight, otherWeight);
 
 		// Labels are same type (e.g. both beta), check the pre-version number (beta.2 > beta.1)
 		return Integer.compare(this.preVersion, o.preVersion);

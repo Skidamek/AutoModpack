@@ -50,7 +50,7 @@ public class AutoModpackTransformationService implements ITransformationService 
 		EARLY_MC_VERSION = argValue(processArgs, "--fml.mcVersion");
 		EARLY_FORGE_VERSION = argValue(processArgs, "--fml.forgeVersion");
 		String launchTarget = argValue(processArgs, "--launchTarget");
-		if (launchTarget != null) { EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server"); }
+		if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
 
 		new Preload();
 		EarlyServiceLayer.bootstrap();
@@ -60,8 +60,8 @@ public class AutoModpackTransformationService implements ITransformationService 
 	private static String argValue(String[] arguments, String name) {
 		String prefix = name + "=";
 		for (int i = 0; i < arguments.length; i++) {
-			if (name.equals(arguments[i]) && i + 1 < arguments.length) { return arguments[i + 1]; }
-			if (arguments[i].startsWith(prefix)) { return arguments[i].substring(prefix.length()); }
+			if (name.equals(arguments[i]) && i + 1 < arguments.length) return arguments[i + 1];
+			if (arguments[i].startsWith(prefix)) return arguments[i].substring(prefix.length());
 		}
 		return null;
 	}

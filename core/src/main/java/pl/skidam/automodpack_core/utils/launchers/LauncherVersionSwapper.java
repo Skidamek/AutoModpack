@@ -19,7 +19,7 @@ public class LauncherVersionSwapper {
 		if (!clientConfig.syncLoaderVersion) return false;
 		if (serverLoaderType == null || serverLoaderVersion == null) return false;
 
-		if (!serverLoaderType.equalsIgnoreCase(LOADER)) { return false; }
+		if (!serverLoaderType.equalsIgnoreCase(LOADER)) return false;
 
 		boolean updated = false;
 

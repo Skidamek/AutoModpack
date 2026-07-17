@@ -44,7 +44,7 @@ public final class ProcessSignalIO {
 	 * If the target file already exists, it will be overwritten.
 	 */
 	public static void post(String name, String data) {
-		if (!Files.exists(BASE_DIR)) { return; }
+		if (!Files.exists(BASE_DIR)) return;
 
 		String fileName = name + "_pid" + getCurrentProcessId() + ".tmp";
 		Path filePath = BASE_DIR.resolve(fileName);
@@ -72,7 +72,7 @@ public final class ProcessSignalIO {
 	 *            process ID to target
 	 */
 	public static void postAsOtherProcess(String name, String data, long pid) {
-		if (!Files.exists(BASE_DIR)) { return; }
+		if (!Files.exists(BASE_DIR)) return;
 
 		String fileName = name + "_pid" + pid + ".tmp";
 		Path filePath = BASE_DIR.resolve(fileName);
@@ -100,7 +100,7 @@ public final class ProcessSignalIO {
 		String fileName = name + "_pid" + pid + ".tmp";
 		Path filePath = BASE_DIR.resolve(fileName);
 
-		if (!Files.isReadable(filePath)) { return Optional.empty(); }
+		if (!Files.isReadable(filePath)) return Optional.empty();
 		try {
 			byte[] bytes = Files.readAllBytes(filePath);
 			String content = new String(bytes, StandardCharsets.UTF_8);
@@ -132,7 +132,7 @@ public final class ProcessSignalIO {
 	 *            payload to store
 	 */
 	public static void postInfo(String name, String data) {
-		if (!Files.exists(BASE_DIR)) { return; }
+		if (!Files.exists(BASE_DIR)) return;
 
 		String fileName = name + ".info";
 		Path filePath = BASE_DIR.resolve(fileName);
@@ -154,7 +154,7 @@ public final class ProcessSignalIO {
 		String fileName = name + ".info";
 		Path filePath = BASE_DIR.resolve(fileName);
 
-		if (!Files.isReadable(filePath)) { return Optional.empty(); }
+		if (!Files.isReadable(filePath)) return Optional.empty();
 		try {
 			byte[] bytes = Files.readAllBytes(filePath);
 			String content = new String(bytes, StandardCharsets.UTF_8);

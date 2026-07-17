@@ -58,7 +58,7 @@ public final class UpdateLoopDetector {
 
 	private State load() {
 		try {
-			if (!Files.isRegularFile(stateFile)) { return null; }
+			if (!Files.isRegularFile(stateFile)) return null;
 			State state = GSON.fromJson(Files.readString(stateFile), State.class);
 			return isValid(state) ? state : null;
 		} catch (Exception e) {
@@ -70,7 +70,7 @@ public final class UpdateLoopDetector {
 	private void write(State state) {
 		try {
 			Path parent = stateFile.getParent();
-			if (parent != null) { Files.createDirectories(parent); }
+			if (parent != null) Files.createDirectories(parent);
 			Files.writeString(stateFile, GSON.toJson(state), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 		} catch (Exception e) {
 			LOGGER.warn("Failed to save restart-loop state; allowing restart", e);
@@ -78,7 +78,8 @@ public final class UpdateLoopDetector {
 	}
 
 	private static boolean isValid(State state) {
-		return state != null && state.version == STATE_VERSION && state.fingerprint != null && !state.fingerprint.isBlank() && state.allowedRestarts > 0 && state.allowedRestarts <= MAX_ALLOWED_RESTARTS && state.lastAllowedRestartMillis >= 0;
+		return state != null && state.version == STATE_VERSION && state.fingerprint != null && !state.fingerprint.isBlank() && state.allowedRestarts > 0 && state.allowedRestarts <= MAX_ALLOWED_RESTARTS
+				&& state.lastAllowedRestartMillis >= 0;
 	}
 
 	public enum Decision {

@@ -57,7 +57,7 @@ public interface CompressionCodec {
 		// Default implementation for backward compatibility or simple codecs:
 		// Create a slice and delegate to the simple method.
 		// Subclasses (GZIP/Zstd) should override this to avoid the copy.
-		if (offset == 0 && length == compressedBuffer.length) { return decompress(compressedBuffer, originalLength); }
+		if (offset == 0 && length == compressedBuffer.length) return decompress(compressedBuffer, originalLength);
 		byte[] slice = new byte[length];
 		System.arraycopy(compressedBuffer, offset, slice, 0, length);
 		return decompress(slice, originalLength);

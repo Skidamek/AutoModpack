@@ -50,7 +50,7 @@ public class HandshakeC2SPacket {
 			return;
 		}
 
-		if (!serverMCVersion.equals(MC_VERSION)) { return; }
+		if (!serverMCVersion.equals(MC_VERSION)) return;
 
 		if (AM_VERSION.equals(serverAMVersion)) {
 			LOGGER.info("Versions match {}", AM_VERSION);

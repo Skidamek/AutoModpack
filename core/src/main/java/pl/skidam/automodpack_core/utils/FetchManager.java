@@ -43,7 +43,7 @@ public class FetchManager {
 		List<String> moHashes = new ArrayList<>();
 
 		for (Datas data : fetchDatas.values()) {
-			if (data.fetchData.murmur != null && !data.fetchData.murmur.isBlank()) { cfHashes.put(data.fetchData.sha1, data.fetchData.murmur); }
+			if (data.fetchData.murmur != null && !data.fetchData.murmur.isBlank()) cfHashes.put(data.fetchData.sha1, data.fetchData.murmur);
 			moHashes.add(data.fetchData.sha1);
 		}
 

@@ -24,7 +24,7 @@ public class SecretsStore {
 		public synchronized void load() {
 			if (db != null) return;
 			db = ConfigTools.load(configFile, Jsons.SecretsFields.class);
-			if (db != null && db.secrets != null && !db.secrets.isEmpty()) { cache.putAll(db.secrets); }
+			if (db != null && db.secrets != null && !db.secrets.isEmpty()) cache.putAll(db.secrets);
 		}
 
 		public synchronized void save() {
@@ -41,7 +41,7 @@ public class SecretsStore {
 				throw new IllegalArgumentException("Key or secret cannot be null or blank");
 			load();
 			cache.put(key, secret);
-			if (db == null) { db = new Jsons.SecretsFields(); }
+			if (db == null) db = new Jsons.SecretsFields();
 			db.secrets.put(key, secret);
 			save();
 		}
@@ -54,7 +54,7 @@ public class SecretsStore {
 		hostSecrets.load();
 		for (var entry : hostSecrets.cache.entrySet()) {
 			var thisSecret = entry.getValue().secret();
-			if (Objects.equals(thisSecret, secret)) { return entry; }
+			if (Objects.equals(thisSecret, secret)) return entry;
 		}
 
 		return null;

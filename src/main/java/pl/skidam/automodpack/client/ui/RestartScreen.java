@@ -28,7 +28,7 @@ public class RestartScreen extends VersionedScreen {
 		this.updateType = updateType;
 		this.changelogs = changelogs;
 
-		if (AudioManager.isMusicPlaying()) { AudioManager.stopMusic(); }
+		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
 	}
 
 	@Override
@@ -41,7 +41,7 @@ public class RestartScreen extends VersionedScreen {
 		this.addRenderableWidget(restartButton);
 		this.addRenderableWidget(changelogsButton);
 
-		if (changelogs == null || (changelogs.changesAddedList.isEmpty() && changelogs.changesDeletedList.isEmpty())) { changelogsButton.active = false; }
+		if (changelogs == null || (changelogs.changesAddedList.isEmpty() && changelogs.changesDeletedList.isEmpty())) changelogsButton.active = false;
 	}
 
 	public void initWidgets() {

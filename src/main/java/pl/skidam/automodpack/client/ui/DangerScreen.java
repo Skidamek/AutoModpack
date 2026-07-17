@@ -23,7 +23,7 @@ public class DangerScreen extends VersionedScreen {
 		this.parent = parent;
 		this.modpackUpdaterInstance = modpackUpdaterInstance;
 
-		if (AudioManager.isMusicPlaying()) { AudioManager.stopMusic(); }
+		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
 	}
 
 	@Override

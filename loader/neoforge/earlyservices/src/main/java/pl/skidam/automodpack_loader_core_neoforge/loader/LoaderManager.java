@@ -34,7 +34,7 @@ public class LoaderManager implements LoaderManagerService {
 		// getVersionInfo() is still null when Preload runs from GraphicsBootstrapper (see
 		// EarlyServiceBootstrapper) - fall back to the value it captured straight off the command
 		// line for that window; by the time preload is false, getVersionInfo() is always populated.
-		if (preload && EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION != null) { return EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION; }
+		if (preload && EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION != null) return EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION;
 		return FMLLoader.getCurrent().getVersionInfo().neoForgeVersion();
 	}
 
@@ -57,7 +57,7 @@ public class LoaderManager implements LoaderManagerService {
 	public String getModVersion(String modId) {
 		if (preload) {
 			if (modId.equals("minecraft")) {
-				if (EarlyServiceBootstrapper.EARLY_MC_VERSION != null) { return EarlyServiceBootstrapper.EARLY_MC_VERSION; }
+				if (EarlyServiceBootstrapper.EARLY_MC_VERSION != null) return EarlyServiceBootstrapper.EARLY_MC_VERSION;
 				return FMLLoader.getCurrent().getVersionInfo().mcVersion();
 			}
 
@@ -66,7 +66,7 @@ public class LoaderManager implements LoaderManagerService {
 
 		ModInfo modInfo = FMLLoader.getCurrent().getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
 
-		if (modInfo == null) { return null; }
+		if (modInfo == null) return null;
 
 		return modInfo.getVersion().toString();
 	}

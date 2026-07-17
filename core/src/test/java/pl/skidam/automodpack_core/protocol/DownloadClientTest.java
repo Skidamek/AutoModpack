@@ -162,7 +162,7 @@ class DownloadClientTest {
 	private static X509Certificate issueCertificate(X500Name issuer, X500Name subject, String dnsName, KeyPair subjectKeyPair, KeyPair signingKeyPair,
 			Instant notBefore, Instant notAfter) throws Exception {
 		var builder = new JcaX509v3CertificateBuilder(issuer, BigInteger.ONE, Date.from(notBefore), Date.from(notAfter), subject, subjectKeyPair.getPublic());
-		if (dnsName != null) { builder.addExtension(Extension.subjectAlternativeName, false, new GeneralNames(new GeneralName(GeneralName.dNSName, dnsName))); }
+		if (dnsName != null) builder.addExtension(Extension.subjectAlternativeName, false, new GeneralNames(new GeneralName(GeneralName.dNSName, dnsName)));
 		var signer = new JcaContentSignerBuilder("SHA256WithRSA").build(signingKeyPair.getPrivate());
 		return new JcaX509CertificateConverter().getCertificate(builder.build(signer));
 	}

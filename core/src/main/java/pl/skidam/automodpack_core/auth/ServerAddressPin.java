@@ -72,9 +72,9 @@ public final class ServerAddressPin {
 	}
 
 	public static String format(String address, String fingerprint) {
-		if (address == null || address.isBlank()) { throw new IllegalArgumentException("Minecraft address is invalid"); }
+		if (address == null || address.isBlank()) throw new IllegalArgumentException("Minecraft address is invalid");
 		Parsed parsed = parse(address.trim());
-		if (parsed.isMalformed() || parsed.hasPin()) { throw new IllegalArgumentException("Minecraft address already contains AutoModpack metadata"); }
+		if (parsed.isMalformed() || parsed.hasPin()) throw new IllegalArgumentException("Minecraft address already contains AutoModpack metadata");
 		return address.trim() + MARKER + NetUtils.normalizeFingerprint(fingerprint);
 	}
 }

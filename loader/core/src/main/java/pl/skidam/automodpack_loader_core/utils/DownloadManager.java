@@ -69,7 +69,7 @@ public class DownloadManager {
 	}
 
 	private synchronized void downloadNext() {
-		if (downloadsInProgress.size() >= MAX_DOWNLOADS_IN_PROGRESS || queuedDownloads.isEmpty()) { return; }
+		if (downloadsInProgress.size() >= MAX_DOWNLOADS_IN_PROGRESS || queuedDownloads.isEmpty()) return;
 
 		// --- 1. CALCULATE METRICS ---
 
@@ -203,7 +203,7 @@ public class DownloadManager {
 	private String predictSource(QueuedDownload task) {
 		int numberOfIndexes = task.sources.size();
 		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
-		if (task.sources.size() > sourceIndex) { return getDomainFromUrl(task.sources.get(sourceIndex).url()); }
+		if (task.sources.size() > sourceIndex) return getDomainFromUrl(task.sources.get(sourceIndex).url());
 		return "internal_client";
 	}
 
@@ -306,7 +306,7 @@ public class DownloadManager {
 			handleRetry(key, task, interrupted);
 		}
 
-		if (!interrupted) { downloadNext(); }
+		if (!interrupted) downloadNext();
 	}
 
 	private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {

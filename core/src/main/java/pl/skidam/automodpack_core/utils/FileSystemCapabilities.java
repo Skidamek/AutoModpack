@@ -59,7 +59,7 @@ public final class FileSystemCapabilities {
 			// contract of Path.equals():
 			// "Whether or not two path objects are equal depends on the file system implementation.
 			// In some cases the paths are compared without regard to case."
-			if (p1.equals(p2)) { return true; }
+			if (p1.equals(p2)) return true;
 
 			// Paranoia check: Some implementations might rely on hashCode for fast lookup
 			// but implement equals strictly.

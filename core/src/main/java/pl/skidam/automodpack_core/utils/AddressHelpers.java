@@ -37,12 +37,12 @@ public class AddressHelpers {
 			Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
 			while (interfaces.hasMoreElements()) {
 				NetworkInterface networkInterface = interfaces.nextElement();
-				if (!networkInterface.isUp() || networkInterface.isLoopback()) { continue; }
+				if (!networkInterface.isUp() || networkInterface.isLoopback()) continue;
 
 				Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
 				while (addresses.hasMoreElements()) {
 					InetAddress addr = addresses.nextElement();
-					if (ipClass.isInstance(addr) && !addr.isLinkLocalAddress()) { return addr.getHostAddress().split("%")[0]; }
+					if (ipClass.isInstance(addr) && !addr.isLinkLocalAddress()) return addr.getHostAddress().split("%")[0];
 				}
 			}
 		} catch (SocketException e) {
@@ -63,17 +63,17 @@ public class AddressHelpers {
 	}
 
 	public static String normalizeIp(String ip) {
-		if (ip == null) { return null; }
+		if (ip == null) return null;
 
 		ip = ip.trim();
-		if (ip.startsWith("/")) { ip = ip.substring(1); }
+		if (ip.startsWith("/")) ip = ip.substring(1);
 
 		if (ip.contains(":")) {
 			int portIndex = ip.lastIndexOf(":");
 			ip = ip.substring(0, portIndex);
 		}
 
-		if (ip.startsWith("[") && ip.endsWith("]")) { ip = ip.substring(1, ip.length() - 1); }
+		if (ip.startsWith("[") && ip.endsWith("]")) ip = ip.substring(1, ip.length() - 1);
 
 		return ip;
 	}
@@ -101,9 +101,9 @@ public class AddressHelpers {
 			if (portIndex != -1) {
 				String host = address.substring(0, portIndex);
 				String port = address.substring(portIndex + 1);
-				if (port.matches("\\d+")) { socketAddress = format(host, Integer.parseInt(port)); }
+				if (port.matches("\\d+")) socketAddress = format(host, Integer.parseInt(port));
 			}
-			if (socketAddress == null) { socketAddress = format(address, 0); }
+			if (socketAddress == null) socketAddress = format(address, 0);
 		} catch (Exception e) {
 			LOGGER.error("Error while parsing address", e);
 		}
@@ -112,10 +112,10 @@ public class AddressHelpers {
 	}
 
 	public static boolean isLocal(String address) {
-		if (address == null) { return true; }
+		if (address == null) return true;
 
 		address = normalizeIp(address);
-		if (address.startsWith("192.168.") || address.startsWith("127.") || address.startsWith("::1") || address.startsWith("0:0:0:0:")) { return true; }
+		if (address.startsWith("192.168.") || address.startsWith("127.") || address.startsWith("::1") || address.startsWith("0:0:0:0:")) return true;
 
 		String localIp = getLocalIp();
 		String localIpv6 = getLocalIpv6();

@@ -66,7 +66,7 @@ public class ConfigTools {
 
 	public static <T> T load(Path configFile, Class<T> configClass) {
 		try {
-			if (!Files.isDirectory(configFile.getParent())) { Files.createDirectories(configFile.getParent()); }
+			if (!Files.isDirectory(configFile.getParent())) Files.createDirectories(configFile.getParent());
 
 			if (Files.isRegularFile(configFile)) {
 				String json = Files.readString(configFile);
@@ -102,7 +102,7 @@ public class ConfigTools {
 
 	public static <T> T load(String json, Class<T> configClass) {
 		try {
-			if (json != null) { return GSON.fromJson(json, configClass); }
+			if (json != null) return GSON.fromJson(json, configClass);
 		} catch (Exception e) {
 			LOGGER.error("Couldn't load config! " + configClass);
 			e.printStackTrace();
@@ -112,10 +112,10 @@ public class ConfigTools {
 	}
 
 	public static void save(Path configFile, Object configObject) {
-		if (clientConfigOverride != null) { return; }
+		if (clientConfigOverride != null) return;
 
 		try {
-			if (!Files.isDirectory(configFile.getParent())) { Files.createDirectories(configFile.getParent()); }
+			if (!Files.isDirectory(configFile.getParent())) Files.createDirectories(configFile.getParent());
 
 			Files.writeString(configFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 		} catch (Exception e) {
@@ -139,7 +139,7 @@ public class ConfigTools {
 
 	public static void saveModpackContent(Path modpackContentFile, Jsons.ModpackContentFields configObject) {
 		try {
-			if (!Files.isDirectory(modpackContentFile.getParent())) { Files.createDirectories(modpackContentFile.getParent()); }
+			if (!Files.isDirectory(modpackContentFile.getParent())) Files.createDirectories(modpackContentFile.getParent());
 
 			Files.writeString(modpackContentFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
 		} catch (Exception e) {

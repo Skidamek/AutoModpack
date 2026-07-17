@@ -27,7 +27,7 @@ public class LoaderManager implements LoaderManagerService {
 		// versionInfo() is still null when Preload runs from onLoad() (see
 		// AutoModpackTransformationService) - fall back to the value it captured from the JVM's
 		// own process arguments for that window; once preload is false, versionInfo() is populated.
-		if (preload && AutoModpackTransformationService.EARLY_FORGE_VERSION != null) { return AutoModpackTransformationService.EARLY_FORGE_VERSION; }
+		if (preload && AutoModpackTransformationService.EARLY_FORGE_VERSION != null) return AutoModpackTransformationService.EARLY_FORGE_VERSION;
 		return FMLLoader.versionInfo().forgeVersion();
 	}
 
@@ -49,7 +49,7 @@ public class LoaderManager implements LoaderManagerService {
 	public String getModVersion(String modId) {
 		if (preload) {
 			if (modId.equals("minecraft")) {
-				if (AutoModpackTransformationService.EARLY_MC_VERSION != null) { return AutoModpackTransformationService.EARLY_MC_VERSION; }
+				if (AutoModpackTransformationService.EARLY_MC_VERSION != null) return AutoModpackTransformationService.EARLY_MC_VERSION;
 				return FMLLoader.versionInfo().mcVersion();
 			}
 
@@ -58,7 +58,7 @@ public class LoaderManager implements LoaderManagerService {
 
 		ModInfo modInfo = FMLLoader.getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
 
-		if (modInfo == null) { return null; }
+		if (modInfo == null) return null;
 
 		return modInfo.getVersion().toString();
 	}

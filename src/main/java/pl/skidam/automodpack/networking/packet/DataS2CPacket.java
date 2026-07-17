@@ -21,7 +21,7 @@ public class DataS2CPacket {
 
 	public static void receive(MinecraftServer server, ServerLoginPacketListenerImpl handler, boolean understood, FriendlyByteBuf buf,
 			ServerLoginNetworking.LoginSynchronizer loginSynchronizer, PacketSender sender) {
-		if (!understood) { return; }
+		if (!understood) return;
 
 		loginSynchronizer.waitFor(server.submit(() -> handlePacket(handler, buf)));
 	}
@@ -30,7 +30,7 @@ public class DataS2CPacket {
 		try {
 			GameProfile profile = ((ServerLoginNetworkHandlerAccessor) handler).getGameProfile();
 
-			if (buf.readableBytes() == 0) { return; }
+			if (buf.readableBytes() == 0) return;
 
 			String clientHasUpdate = buf.readUtf(Short.MAX_VALUE);
 

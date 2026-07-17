@@ -66,7 +66,7 @@ public class ModpackUpdater {
 		this.modpackSecret = secret;
 		this.modpackDir = modpackPath;
 
-		if (this.modpackAddresses == null || this.modpackAddresses.isAnyEmpty()) { throw new IllegalArgumentException("modpackAddresses is null or empty"); }
+		if (this.modpackAddresses == null || this.modpackAddresses.isAnyEmpty()) throw new IllegalArgumentException("modpackAddresses is null or empty");
 	}
 
 	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result) {
@@ -85,7 +85,7 @@ public class ModpackUpdater {
 			serverModpackContentJson = GSON.toJson(serverModpackContent);
 
 			// Create directories if they don't exist
-			if (!Files.exists(modpackDir)) { Files.createDirectories(modpackDir); }
+			if (!Files.exists(modpackDir)) Files.createDirectories(modpackDir);
 
 			// Handle new modpack
 			if (!Files.exists(modpackContentFile)) {
@@ -101,7 +101,7 @@ public class ModpackUpdater {
 				modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
 				modpackContentFile = modpackDir.resolve(modpackContentFile.getFileName());
 
-				if (result == null) { result = ModpackUtils.isUpdate(serverModpackContent, modpackDir); }
+				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
 				// Update or load the modpack
 				if (result.requiresUpdate()) {
@@ -311,7 +311,7 @@ public class ModpackUpdater {
 
 		DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(wholeQueue, 5),
 				ModpackUtils.manualValidationCallback(modpackAddresses, false));
-		if (downloadClient == null) { return; }
+		if (downloadClient == null) return;
 
 		downloadManager = new DownloadManager(totalBytesToDownload);
 		new ScreenManager().download(downloadManager, getModpackName());
@@ -325,7 +325,7 @@ public class ModpackUpdater {
 
 			Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
 
-			if (!Files.exists(downloadFile)) { newDownloadedFiles.add(serverFilePath); }
+			if (!Files.exists(downloadFile)) newDownloadedFiles.add(serverFilePath);
 
 			List<DownloadSource> sources = new ArrayList<>();
 			if (fetchManager != null && fetchManager.getFetchDatas().containsKey(serverFileHash)) {
@@ -364,7 +364,7 @@ public class ModpackUpdater {
 		downloadManager.cancelAllAndShutdown();
 		totalBytesToDownload = 0;
 
-		if (failedDownloads.isEmpty()) { return; }
+		if (failedDownloads.isEmpty()) return;
 
 		Map<String, String> hashesToRefresh = new HashMap<>(); // File name, hash
 		var failedDownloadsSecMap = new HashMap<>(failedDownloads);
@@ -374,7 +374,7 @@ public class ModpackUpdater {
 			totalBytesToDownload += Long.parseLong(k.size);
 		});
 
-		if (hashesToRefresh.isEmpty()) { return; }
+		if (hashesToRefresh.isEmpty()) return;
 
 		LOGGER.warn("Failed to download {} files", hashesToRefresh.size());
 
@@ -400,11 +400,11 @@ public class ModpackUpdater {
 
 			// filter list to only the failed downloads
 			var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
-			if (refreshedFilteredList.isEmpty()) { return; }
+			if (refreshedFilteredList.isEmpty()) return;
 
 			downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5),
 					ModpackUtils.manualValidationCallback(modpackAddresses, false));
-			if (downloadClient == null) { return; }
+			if (downloadClient == null) return;
 
 			downloadManager = new DownloadManager(totalBytesToDownload);
 			new ScreenManager().download(downloadManager, getModpackName());
@@ -489,7 +489,7 @@ public class ModpackUpdater {
 					stream.forEach(path -> {
 						modpackMods.add(path);
 						FileInspection.Mod mod = modCache.getModOrNull(path, cache);
-						if (mod != null) { modpackModList.add(mod); }
+						if (mod != null) modpackModList.add(mod);
 					});
 				}
 			}
@@ -499,7 +499,7 @@ public class ModpackUpdater {
 				try (Stream<Path> stream = Files.list(standardModsDir)) {
 					stream.forEach(path -> {
 						FileInspection.Mod mod = modCache.getModOrNull(path, cache);
-						if (mod != null) { standardModList.add(mod); }
+						if (mod != null) standardModList.add(mod);
 					});
 				}
 			}
@@ -577,14 +577,14 @@ public class ModpackUpdater {
 	private Set<String> getForceCopyMods(Jsons.ModpackContentFields modpackContentFields) throws IOException {
 		Set<String> forceCopyServices = MODPACK_LOADER.forceCopyServices();
 		Set<String> forceCopyMods = new HashSet<>();
-		if (forceCopyServices.isEmpty()) { return forceCopyMods; }
+		if (forceCopyServices.isEmpty()) return forceCopyMods;
 
 		for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
-			if (!item.type.equals("mod")) { continue; }
+			if (!item.type.equals("mod")) continue;
 
 			Path modPath = SmartFileUtils.getPath(modpackDir, item.file);
 			try (FileSystem fs = FileSystems.newFileSystem(modPath)) {
-				if (!FileInspection.getServices(fs, forceCopyServices).isEmpty()) { forceCopyMods.add(item.file); }
+				if (!FileInspection.getServices(fs, forceCopyServices).isEmpty()) forceCopyMods.add(item.file);
 			}
 		}
 
@@ -597,14 +597,14 @@ public class ModpackUpdater {
 
 		// Make list of files which we do not copy to the running directory
 		for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentItems) {
-			if (item.forceCopy) { continue; }
+			if (item.forceCopy) continue;
 
 			// We only want to copy editable file if its downloaded first time
 			// So we add to ignored any other editable file
-			if (item.editable && !newDownloadedFiles.contains(item.file)) { filesNotToCopy.add(item.file); }
+			if (item.editable && !newDownloadedFiles.contains(item.file)) filesNotToCopy.add(item.file);
 
 			// We only want to copy mods which need a workaround
-			if (item.type.equals("mod") && !workaroundMods.contains(item.file)) { filesNotToCopy.add(item.file); }
+			if (item.type.equals("mod") && !workaroundMods.contains(item.file)) filesNotToCopy.add(item.file);
 		}
 
 		return filesNotToCopy;
@@ -620,10 +620,10 @@ public class ModpackUpdater {
 		boolean needsRestart = false;
 
 		for (Path path : pathList) {
-			if (Files.isDirectory(path) || path.equals(modpackContentFile)) { continue; }
+			if (Files.isDirectory(path) || path.equals(modpackContentFile)) continue;
 
 			String formattedFile = SmartFileUtils.formatPath(path, modpackDir);
-			if (modpackFiles.contains(formattedFile)) { continue; }
+			if (modpackFiles.contains(formattedFile)) continue;
 
 			Path runPath = SmartFileUtils.getPathFromCWD(formattedFile);
 			if (cache.fastHashCompare(path, runPath)) {
@@ -651,7 +651,7 @@ public class ModpackUpdater {
 	}
 
 	private void deleteEmptyParentDirectoriesRecursively(Path directory) throws IOException {
-		if (directory == null || !SmartFileUtils.isEmptyDirectory(directory)) { return; }
+		if (directory == null || !SmartFileUtils.isEmptyDirectory(directory)) return;
 
 		LOGGER.info("Deleting empty directory {}", directory);
 		SmartFileUtils.executeOrder66(directory);

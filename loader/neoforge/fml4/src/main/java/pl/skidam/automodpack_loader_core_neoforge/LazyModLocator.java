@@ -29,7 +29,7 @@ public class LazyModLocator implements IDependencyLocator {
 		// standard mods directory.
 		List<Path> earlyServiceJars = new ArrayList<>();
 		for (Path path : ModpackLoader.modsToLoad) {
-			if (EarlyServiceLayer.isEarlyServiceJar(path)) { earlyServiceJars.add(path); }
+			if (EarlyServiceLayer.isEarlyServiceJar(path)) earlyServiceJars.add(path);
 		}
 		EarlyServiceLayer.runDependencyLocators(earlyServiceJars, loadedMods, pipeline);
 	}

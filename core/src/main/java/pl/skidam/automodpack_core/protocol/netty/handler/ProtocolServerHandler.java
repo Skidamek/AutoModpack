@@ -46,20 +46,20 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 	protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
 		if (!proxyCheckFinished) {
 			MatchResult res = handleProxyCheck(ctx, in);
-			if (res == MatchResult.PARTIAL) { return; }
+			if (res == MatchResult.PARTIAL) return;
 			proxyCheckFinished = true;
 		}
 
 		if (!magicCheckFinished) {
 			MatchResult res = handleMagicCheck(ctx, in, out);
-			if (res == MatchResult.PARTIAL) { return; }
+			if (res == MatchResult.PARTIAL) return;
 			magicCheckFinished = true;
 		}
 	}
 
 	private MatchResult handleProxyCheck(ChannelHandlerContext ctx, ByteBuf in) {
 		MatchResult result = HAProxyDetector.check(in);
-		if (result != MatchResult.MATCHED) { return result; }
+		if (result != MatchResult.MATCHED) return result;
 
 		HAProxyDetector.DecodeResult decodeResult = HAProxyDetector.decode(in);
 		if (decodeResult == null) return MatchResult.PARTIAL;
@@ -125,7 +125,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 	}
 
 	private ByteBuf reconstructPayload(ChannelHandlerContext ctx, ByteBuf in) {
-		if (originalBuffer == null) { return in.readRetainedSlice(in.readableBytes()); }
+		if (originalBuffer == null) return in.readRetainedSlice(in.readableBytes());
 
 		CompositeByteBuf composite = ctx.alloc().compositeBuffer();
 		// Add originalBuffer (Proxy header bytes)
@@ -165,7 +165,7 @@ public class ProtocolServerHandler extends ByteToMessageDecoder {
 		safeReleaseOriginalBuffer();
 		setupPipeline(ctx);
 
-		if (ctx.pipeline().context(this) != null) { ctx.pipeline().remove(this); }
+		if (ctx.pipeline().context(this) != null) ctx.pipeline().remove(this);
 	}
 
 	private void setupPipeline(ChannelHandlerContext ctx) {

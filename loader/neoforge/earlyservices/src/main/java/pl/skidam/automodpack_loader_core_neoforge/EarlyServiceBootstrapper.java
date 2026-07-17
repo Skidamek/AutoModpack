@@ -40,7 +40,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			EARLY_MC_VERSION = argValue(arguments, "--fml.mcVersion");
 			EARLY_NEOFORGE_VERSION = argValue(arguments, "--fml.neoForgeVersion");
 			String launchTarget = argValue(arguments, "--launchTarget");
-			if (launchTarget != null) { EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server"); }
+			if (launchTarget != null) EARLY_IS_CLIENT = !launchTarget.toLowerCase(Locale.ROOT).contains("server");
 
 			// Run the update/reconcile step before anything below reads the modpack folder, so an
 			// update that changes which mods are early-service mods is reflected in the same boot.
@@ -51,11 +51,11 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 
 			// Set by Preload only when a modpack is selected on a client - null means nothing to do.
 			Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
-			if (modpackMods == null || !Files.isDirectory(modpackMods)) { return; }
+			if (modpackMods == null || !Files.isDirectory(modpackMods)) return;
 
 			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, EarlyServiceLayer::eligibleForInPlace);
 
-			if (earlyServiceJars.isEmpty()) { return; }
+			if (earlyServiceJars.isEmpty()) return;
 
 			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the modpack folder in place", earlyServiceJars.size());
 
@@ -72,7 +72,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 					}
 				}
 				earlyServiceJars = appended;
-				if (earlyServiceJars.isEmpty()) { return; }
+				if (earlyServiceJars.isEmpty()) return;
 			}
 
 			EarlyServiceLayer.register(earlyServiceJars, childLoader);
@@ -136,8 +136,8 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 		if (arguments != null) {
 			String prefix = name + "=";
 			for (int i = 0; i < arguments.length; i++) {
-				if (name.equals(arguments[i]) && i + 1 < arguments.length) { return arguments[i + 1]; }
-				if (arguments[i].startsWith(prefix)) { return arguments[i].substring(prefix.length()); }
+				if (name.equals(arguments[i]) && i + 1 < arguments.length) return arguments[i + 1];
+				if (arguments[i].startsWith(prefix)) return arguments[i].substring(prefix.length());
 			}
 		}
 		return null;

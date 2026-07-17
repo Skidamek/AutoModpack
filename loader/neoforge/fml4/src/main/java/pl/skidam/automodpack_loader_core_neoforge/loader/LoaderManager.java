@@ -31,7 +31,7 @@ public class LoaderManager implements LoaderManagerService {
 
 	@Override
 	public String getLoaderVersion() {
-		if (preload && EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION != null) { return EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION; }
+		if (preload && EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION != null) return EarlyServiceBootstrapper.EARLY_NEOFORGE_VERSION;
 		return FMLLoader.versionInfo().neoForgeVersion();
 	}
 
@@ -53,7 +53,7 @@ public class LoaderManager implements LoaderManagerService {
 	public String getModVersion(String modId) {
 		if (preload) {
 			if (modId.equals("minecraft")) {
-				if (EarlyServiceBootstrapper.EARLY_MC_VERSION != null) { return EarlyServiceBootstrapper.EARLY_MC_VERSION; }
+				if (EarlyServiceBootstrapper.EARLY_MC_VERSION != null) return EarlyServiceBootstrapper.EARLY_MC_VERSION;
 				return FMLLoader.versionInfo().mcVersion();
 			}
 
@@ -62,7 +62,7 @@ public class LoaderManager implements LoaderManagerService {
 
 		ModInfo modInfo = FMLLoader.getLoadingModList().getMods().stream().filter(mod -> mod.getModId().equals(modId)).findFirst().orElse(null);
 
-		if (modInfo == null) { return null; }
+		if (modInfo == null) return null;
 
 		return modInfo.getVersion().toString();
 	}

@@ -91,7 +91,7 @@ public final class ModuleClassLoaderAccess {
 	 * already reads {@code to}, or the internal API could not be resolved.
 	 */
 	public static void addReads(Module from, Module to) {
-		if (ADD_READS == null || from == null || to == null || from == to || !from.isNamed() || from.canRead(to)) { return; }
+		if (ADD_READS == null || from == null || to == null || from == to || !from.isNamed() || from.canRead(to)) return;
 		try {
 			ADD_READS.invoke(from, to);
 		} catch (Throwable ignored) {

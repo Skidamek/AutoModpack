@@ -9,7 +9,7 @@ public class ConfigUtils {
 
 	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config, boolean saveAfter) {
 		normalizeServerConfig(config);
-		if (saveAfter) { ConfigTools.save(serverConfigFile, config); }
+		if (saveAfter) ConfigTools.save(serverConfigFile, config);
 	}
 
 	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config) {
@@ -98,12 +98,12 @@ public class ConfigUtils {
 	}
 
 	public static String prefixSlash(String path) {
-		if (path == null) { return null; }
-		if (path.isEmpty()) { return path; }
-		if (path.startsWith("/!/")) { return path.substring(1); }
-		if (path.startsWith("/")) { return path; }
-		if (path.startsWith("!/")) { return path; }
-		if (path.charAt(0) == '!') { return "!/" + path.substring(1); }
+		if (path == null) return null;
+		if (path.isEmpty()) return path;
+		if (path.startsWith("/!/")) return path.substring(1);
+		if (path.startsWith("/")) return path;
+		if (path.startsWith("!/")) return path;
+		if (path.charAt(0) == '!') return "!/" + path.substring(1);
 		return "/" + path;
 	}
 }

@@ -11,7 +11,7 @@ public class JarUtils {
 	public static Path getJarPath(Class<?> clazz) {
 		try {
 			CodeSource codeSource = clazz.getProtectionDomain().getCodeSource();
-			if (codeSource == null || codeSource.getLocation() == null) { throw new IllegalStateException("CodeSource is null for " + clazz.getSimpleName()); }
+			if (codeSource == null || codeSource.getLocation() == null) throw new IllegalStateException("CodeSource is null for " + clazz.getSimpleName());
 
 			Path path = Path.of(codeSource.getLocation().toURI());
 			return resolvePhysicalPath(path);
@@ -28,7 +28,7 @@ public class JarUtils {
 			Method method = fs.getClass().getMethod("getPrimaryPath");
 			Object result = method.invoke(fs);
 
-			if (result instanceof Path) { return (Path) result; }
+			if (result instanceof Path) return (Path) result;
 		} catch (NoSuchMethodException ignored) { // Method doesn't exist, likely not a virtual FS (e.g Fabric)
 		} catch (Exception e) {
 			LOGGER.error("Failed to resolve physical path for {}", path, e);

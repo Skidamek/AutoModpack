@@ -78,7 +78,7 @@ public class ModFileCache implements AutoCloseable {
 			// Actual work happens here
 			FileInspection.Mod modFile = FileInspection.getMod(absPath, cache);
 
-			if (modFile != null) { modFileMap.put(pathKey, modFile); }
+			if (modFile != null) modFileMap.put(pathKey, modFile);
 
 			return modFile;
 		}

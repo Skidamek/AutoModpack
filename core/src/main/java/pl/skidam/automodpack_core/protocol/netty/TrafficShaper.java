@@ -42,7 +42,7 @@ public class TrafficShaper {
 	public static void close() {
 		if (TrafficShaper.trafficShaper != null) {
 			TrafficShaper.trafficShaper.getTrafficShapingHandler().release();
-			if (TrafficShaper.trafficShaper.getExecutor() != null) { TrafficShaper.trafficShaper.getExecutor().shutdown(); }
+			if (TrafficShaper.trafficShaper.getExecutor() != null) TrafficShaper.trafficShaper.getExecutor().shutdown();
 			TrafficShaper.trafficShaper = null;
 		}
 	}

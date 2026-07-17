@@ -24,14 +24,14 @@ public class LegacyClientCacheUtils {
 
 	// Dummy
 	public static void deleteDummyFiles() {
-		if (cacheDummyFiles == null || cacheDummyFiles.files.isEmpty()) { return; }
+		if (cacheDummyFiles == null || cacheDummyFiles.files.isEmpty()) return;
 
 		var iterator = cacheDummyFiles.files.iterator();
 		while (iterator.hasNext()) {
 			try {
 				String filePath = iterator.next();
 				Path file = Path.of(filePath);
-				if (SmartFileUtils.compareSmallFile(file, smallDummyJar)) { SmartFileUtils.executeOrder66(file, false); }
+				if (SmartFileUtils.compareSmallFile(file, smallDummyJar)) SmartFileUtils.executeOrder66(file, false);
 				iterator.remove();
 			} catch (Exception e) {
 				LOGGER.error("Failed to delete dummy file", e);
@@ -47,7 +47,7 @@ public class LegacyClientCacheUtils {
 			fos.write(smallDummyJar);
 			fos.flush();
 
-			if (cacheDummyFiles == null) { throw new IllegalStateException("clientDummyFiles is null"); }
+			if (cacheDummyFiles == null) throw new IllegalStateException("clientDummyFiles is null");
 
 			cacheDummyFiles.files.add(file.toAbsolutePath().normalize().toString());
 		} catch (IOException e) {
@@ -56,7 +56,7 @@ public class LegacyClientCacheUtils {
 	}
 
 	public static void saveDummyFiles() {
-		if (cacheDummyFiles == null) { return; }
+		if (cacheDummyFiles == null) return;
 		ConfigTools.save(clientDummyFilesFile, cacheDummyFiles);
 	}
 
@@ -73,7 +73,7 @@ public class LegacyClientCacheUtils {
 	}
 
 	public static void saveDeletedFilesTimestamps() {
-		if (clientDeletedNonModpackFilesTimestamps == null) { return; }
+		if (clientDeletedNonModpackFilesTimestamps == null) return;
 		ConfigTools.save(clientDeletionTimeStamps, clientDeletedNonModpackFilesTimestamps);
 	}
 }

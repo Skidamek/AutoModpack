@@ -35,7 +35,7 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 
 		// Pre-calculate merged issuers to avoid overhead on every handshake
 		List<X509Certificate> issuers = new ArrayList<>(Arrays.asList(defaultTrustManager.getAcceptedIssuers()));
-		if (this.customTrustManager != null) { issuers.addAll(Arrays.asList(this.customTrustManager.getAcceptedIssuers())); }
+		if (this.customTrustManager != null) issuers.addAll(Arrays.asList(this.customTrustManager.getAcceptedIssuers()));
 		this.cachedAcceptedIssuers = issuers.toArray(new X509Certificate[0]);
 	}
 
@@ -47,7 +47,7 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 			TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
 			tmf.init(keyStore);
 			for (TrustManager tm : tmf.getTrustManagers()) {
-				if (tm instanceof X509ExtendedTrustManager) { return (X509ExtendedTrustManager) tm; }
+				if (tm instanceof X509ExtendedTrustManager) return (X509ExtendedTrustManager) tm;
 			}
 			throw new IllegalStateException("No X509ExtendedTrustManager found");
 		} catch (NoSuchAlgorithmException e) {
@@ -64,10 +64,10 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 
 	private boolean checkPin(X509Certificate[] chain) throws CertificateException {
 		if (expectedFingerprint == null) return false;
-		if (chain == null || chain.length == 0) { throw new CertificateException("Server did not present a certificate"); }
+		if (chain == null || chain.length == 0) throw new CertificateException("Server did not present a certificate");
 
 		String presentedFingerprint = NetUtils.getFingerprint(chain[0]);
-		if (!expectedFingerprint.equals(presentedFingerprint)) { throw new CertificatePinMismatchException(origin, expectedFingerprint, presentedFingerprint); }
+		if (!expectedFingerprint.equals(presentedFingerprint)) throw new CertificatePinMismatchException(origin, expectedFingerprint, presentedFingerprint);
 		return true;
 	}
 

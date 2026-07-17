@@ -90,7 +90,7 @@ public class HttpFileDownloader {
 				if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
 				out.write(buffer, 0, bytesRead);
 
-				if (progressAction != null) { progressAction.accept(bytesRead); }
+				if (progressAction != null) progressAction.accept(bytesRead);
 			}
 		}
 	}
@@ -99,7 +99,7 @@ public class HttpFileDownloader {
 			throws IOException, InterruptedException {
 		HttpRequest.Builder request = HttpRequest.newBuilder().uri(uri).header("User-Agent", "github/skidamek/automodpack/" + AM_VERSION)
 				.header("Accept-Encoding", "gzip").timeout(Duration.ofSeconds(10)).GET();
-		if (authenticate) { request.header("x-api-key", summonKey()); }
+		if (authenticate) request.header("x-api-key", summonKey());
 
 		try {
 			HttpResponse<InputStream> response = client.send(request.build(), HttpResponse.BodyHandlers.ofInputStream());

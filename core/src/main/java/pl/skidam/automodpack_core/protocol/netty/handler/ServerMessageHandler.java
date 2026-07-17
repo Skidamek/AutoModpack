@@ -101,13 +101,13 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 				ModpackContent modpack = null;
 
 				for (var content : modpackExecutor.modpacks.values()) {
-					if (!content.pathsMap.getMap().containsKey(hash)) { continue; }
+					if (!content.pathsMap.getMap().containsKey(hash)) continue;
 
 					modpack = content;
 					break;
 				}
 
-				if (modpack == null) { continue; }
+				if (modpack == null) continue;
 
 				modpacks.add(modpack);
 				creationFutures.add(modpack.replaceAsync(path, cache));
@@ -142,7 +142,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
 		boolean valid = Secrets.isSecretValid(decodedSecret, address);
 
-		if (addConnection && valid) { hostServer.addConnection(ctx.channel(), decodedSecret); }
+		if (addConnection && valid) hostServer.addConnection(ctx.channel(), decodedSecret);
 
 		return valid;
 	}
@@ -198,7 +198,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 	}
 
 	public Optional<Path> resolvePath(final String sha1) {
-		if (sha1.isBlank()) { return Optional.of(hostModpackContentFile); }
+		if (sha1.isBlank()) return Optional.of(hostModpackContentFile);
 		return hostServer.getPath(sha1);
 	}
 

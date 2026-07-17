@@ -97,7 +97,7 @@ public class ModpackContent {
 					.map(entry -> CompletableFuture.supplyAsync(() -> {
 						try {
 							var contentEntry = generateContent(entry.getValue(), entry.getKey(), cache);
-							if (contentEntry == null) { return null; }
+							if (contentEntry == null) return null;
 							LOGGER.debug("Generated modpack content for {}", entry.getValue());
 							tempPathMap.put(contentEntry.sha1, entry.getValue());
 							return contentEntry;
@@ -129,7 +129,7 @@ public class ModpackContent {
 		}
 
 		saveModpackContent(computedFilesToDelete);
-		if (hostServer != null) { hostServer.setPaths(pathsMap); }
+		if (hostServer != null) hostServer.setPaths(pathsMap);
 
 		return true;
 	}
@@ -159,7 +159,7 @@ public class ModpackContent {
 			}
 		}
 
-		if (hostServer != null) { hostServer.setPaths(pathsMap); }
+		if (hostServer != null) hostServer.setPaths(pathsMap);
 
 		saveModpackContent(previousModpackContent.nonModpackFilesToDelete);
 
@@ -167,7 +167,7 @@ public class ModpackContent {
 	}
 
 	public synchronized void saveModpackContent(Set<Jsons.ModpackContentFields.FileToDelete> nonModpackFilesToDelete) {
-		if (nonModpackFilesToDelete == null) { throw new IllegalArgumentException("filesToDelete is null"); }
+		if (nonModpackFilesToDelete == null) throw new IllegalArgumentException("filesToDelete is null");
 
 		synchronized (list) {
 			Jsons.ModpackContentFields modpackContent = new Jsons.ModpackContentFields(list);
@@ -239,9 +239,9 @@ public class ModpackContent {
 			return null;
 		}
 
-		if (isInnerFile(file)) { return null; }
+		if (isInnerFile(file)) return null;
 
-		if (formattedFile.startsWith("/automodpack/")) { return null; }
+		if (formattedFile.startsWith("/automodpack/")) return null;
 
 		final String size = String.valueOf(Files.size(file));
 
@@ -303,7 +303,7 @@ public class ModpackContent {
 		String murmur = null;
 		if (type.equals("mod") || type.equals("shader") || type.equals("resourcepack")) {
 			murmur = sha1MurmurMapPreviousContent.get(sha1); // Get from cache
-			if (murmur == null) { murmur = HashUtils.getCurseforgeMurmurHash(file); }
+			if (murmur == null) murmur = HashUtils.getCurseforgeMurmurHash(file);
 		}
 
 		boolean isEditable = false;

@@ -36,7 +36,7 @@ public class FetchScreen extends VersionedScreen {
 	}
 
 	private int getFetchesDone() {
-		if (fetchManager == null) { return -1; }
+		if (fetchManager == null) return -1;
 		return fetchManager.fetchesDone.get();
 	}
 
@@ -44,7 +44,7 @@ public class FetchScreen extends VersionedScreen {
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		int lineHeight = 12; // Consistent line spacing
 
-		if (fetchManager == null) { cancelButton.active = false; }
+		if (fetchManager == null) cancelButton.active = false;
 
 		// Title
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.fetch").withStyle(ChatFormatting.BOLD), this.width / 2,
@@ -66,7 +66,7 @@ public class FetchScreen extends VersionedScreen {
 
 	public void cancelFetch() {
 		try {
-			if (fetchManager != null) { fetchManager.cancel(); }
+			if (fetchManager != null) fetchManager.cancel();
 
 			new ScreenManager().title();
 		} catch (Exception e) {

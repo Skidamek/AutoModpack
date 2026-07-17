@@ -51,7 +51,7 @@ public class LoaderManager implements LoaderManagerService {
 
 	private EnvironmentType getModEnvironment(String modId) {
 		var container = FabricLoader.getInstance().getModContainer(modId);
-		if (container.isEmpty()) { return EnvironmentType.UNIVERSAL; }
+		if (container.isEmpty()) return EnvironmentType.UNIVERSAL;
 		ModEnvironment env = container.get().getMetadata().getEnvironment();
 		if (env == ModEnvironment.CLIENT) {
 			return EnvironmentType.CLIENT;

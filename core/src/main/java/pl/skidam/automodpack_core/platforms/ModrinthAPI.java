@@ -19,9 +19,9 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 	private static final String BASE_URL = "https://api.modrinth.com/v2";
 
 	public static List<ModrinthAPI> getModInfosFromID(String modrinthID) {
-		if (modrinthID == null) { return null; }
+		if (modrinthID == null) return null;
 
-		if (modrinthID.isBlank()) { return null; }
+		if (modrinthID.isBlank()) return null;
 
 		String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
 		String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + MC_VERSION + "\"]";
@@ -62,9 +62,9 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 	}
 
 	public static ModrinthAPI getModSpecificVersion(String modrinthID, String modVersion, String mcVersion) {
-		if (modrinthID == null || modVersion == null || mcVersion == null) { return null; }
+		if (modrinthID == null || modVersion == null || mcVersion == null) return null;
 
-		if (modrinthID.isBlank() || modVersion.isBlank() || mcVersion.isBlank()) { return null; }
+		if (modrinthID.isBlank() || modVersion.isBlank() || mcVersion.isBlank()) return null;
 
 		String modLoader = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
 		String requestUrl = BASE_URL + "/project/" + modrinthID + "/version?loaders=[\"" + modLoader + "\"]&game_versions=[\"" + mcVersion + "\"]";
@@ -107,7 +107,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 
 	// https://docs.modrinth.com/#tag/version-files/operation/versionsFromHashes
 	public static List<ModrinthAPI> getModsInfosFromListOfSHA1(List<String> listOfSha1) {
-		if (listOfSha1 == null || listOfSha1.isEmpty()) { return null; }
+		if (listOfSha1 == null || listOfSha1.isEmpty()) return null;
 
 		String requestUrl = BASE_URL + "/version_files";
 		List<ModrinthAPI> modrinthAPIList = new LinkedList<>();
@@ -127,7 +127,7 @@ public record ModrinthAPI(String modrinthID, String requestUrl, String downloadU
 	}
 
 	private static ModrinthAPI parseJsonObject(JsonObject JSONObject, List<String> listOfSha1) {
-		if (JSONObject == null) { return null; }
+		if (JSONObject == null) return null;
 
 		String modrinthID = JSONObject.get("project_id").getAsString();
 		String fileVersion = JSONObject.get("version_number").getAsString();

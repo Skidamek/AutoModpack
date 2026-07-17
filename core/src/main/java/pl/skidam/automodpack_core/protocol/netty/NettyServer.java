@@ -106,7 +106,7 @@ public class NettyServer {
 
 				X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
 
-				if (cert == null) { throw new IllegalStateException("Server certificate couldn't be loaded"); }
+				if (cert == null) throw new IllegalStateException("Server certificate couldn't be loaded");
 
 				// Shiny TLS 1.3
 				sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
@@ -179,7 +179,7 @@ public class NettyServer {
 
 			TrafficShaper.close();
 
-			if (eventLoopGroup != null) { eventLoopGroup.shutdownGracefully().sync(); }
+			if (eventLoopGroup != null) eventLoopGroup.shutdownGracefully().sync();
 		} catch (InterruptedException e) {
 			LOGGER.error("Interrupted server channel", e);
 			return false;
@@ -189,7 +189,7 @@ public class NettyServer {
 	}
 
 	public boolean isRunning() {
-		if (serverChannel == null) { return shouldHost; }
+		if (serverChannel == null) return shouldHost;
 
 		return serverChannel.channel().isOpen();
 	}
@@ -199,7 +199,7 @@ public class NettyServer {
 	}
 
 	private boolean canStart() {
-		if (isRunning() || !serverConfig.modpackHost) { return false; }
+		if (isRunning() || !serverConfig.modpackHost) return false;
 
 		if (paths.isEmpty()) {
 			LOGGER.warn("No file to host. Can't start modpack host server.");

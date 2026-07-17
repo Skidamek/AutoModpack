@@ -6,17 +6,18 @@
         <setting id="org.eclipse.jdt.core.formatter.indentation.size" value="4"/>
         <setting id="org.eclipse.jdt.core.formatter.continuation_indentation" value="2"/>
         <setting id="org.eclipse.jdt.core.formatter.continuation_indentation_for_array_initializer" value="2"/>
-        <setting id="org.eclipse.jdt.core.formatter.lineSplit" value="160"/>
-        <setting id="org.eclipse.jdt.core.formatter.comment.line_length" value="160"/>
-        <setting id="org.eclipse.jdt.core.formatter.join_wrapped_lines" value="true"/>
+        <setting id="org.eclipse.jdt.core.formatter.lineSplit" value="220"/>
+        <setting id="org.eclipse.jdt.core.formatter.comment.line_length" value="220"/>
+        <setting id="org.eclipse.jdt.core.formatter.join_wrapped_lines" value="false"/>
+        <setting id="org.eclipse.jdt.core.formatter.alignment_for_enum_constants" value="48"/>
         <setting id="org.eclipse.jdt.core.formatter.join_lines_in_comments" value="false"/>
         <setting id="org.eclipse.jdt.core.formatter.format_line_comment_starting_on_first_column" value="false"/>
         <setting id="org.eclipse.jdt.core.formatter.format_block_comment" value="false"/>
         <setting id="org.eclipse.jdt.core.formatter.format_javadoc_comment" value="false"/>
-        <setting id="org.eclipse.jdt.core.formatter.format_guardian_clause_on_one_line" value="true"/>
+        <setting id="org.eclipse.jdt.core.formatter.format_guardian_clause_on_one_line" value="false"/>
         <setting id="org.eclipse.jdt.core.formatter.keep_simple_if_on_one_line" value="true"/>
         <setting id="org.eclipse.jdt.core.formatter.keep_then_statement_on_same_line" value="true"/>
-        <setting id="org.eclipse.jdt.core.formatter.keep_if_then_body_block_on_one_line" value="one_line_if_single_item"/>
+        <setting id="org.eclipse.jdt.core.formatter.keep_if_then_body_block_on_one_line" value="one_line_preserve"/>
         <setting id="org.eclipse.jdt.core.formatter.keep_simple_for_body_on_same_line" value="true"/>
         <setting id="org.eclipse.jdt.core.formatter.keep_simple_while_body_on_same_line" value="true"/>
         <setting id="org.eclipse.jdt.core.formatter.keep_simple_do_while_body_on_same_line" value="true"/>

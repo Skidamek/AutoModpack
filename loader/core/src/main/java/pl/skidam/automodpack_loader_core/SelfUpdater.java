@@ -206,7 +206,7 @@ public class SelfUpdater {
 		try (InputStream fileStream = new LockFreeInputStream(jarFilePath); ZipInputStream zipStream = new ZipInputStream(fileStream)) {
 			ZipEntry entry;
 			while ((entry = zipStream.getNextEntry()) != null) {
-				if (entry.getName().equals(entryName)) { return Optional.of(zipStream); }
+				if (entry.getName().equals(entryName)) return Optional.of(zipStream);
 			}
 		}
 
@@ -214,7 +214,7 @@ public class SelfUpdater {
 	}
 
 	public static void addOverridesToJar(Path jarFilePath) throws IOException {
-		if (clientConfigOverride == null || clientConfigOverride.isBlank()) { return; }
+		if (clientConfigOverride == null || clientConfigOverride.isBlank()) return;
 
 		if (!Files.isRegularFile(jarFilePath) || !Files.isRegularFile(THIS_MOD_JAR)) {
 			LOGGER.error("Jar file of updated AutoModpack not found!");

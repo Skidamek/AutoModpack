@@ -17,7 +17,7 @@ public class ErrorScreen extends VersionedScreen {
 		super(VersionedText.literal("ErrorScreen"));
 		this.errorMessages = errorMessages;
 
-		if (AudioManager.isMusicPlaying()) { AudioManager.stopMusic(); }
+		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
 	}
 
 	@Override

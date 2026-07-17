@@ -64,16 +64,16 @@ public class DownloadClient implements AutoCloseable {
 	public static CompletableFuture<DownloadClient> createAsync(Jsons.ModpackAddresses addresses, byte[] secretBytes, int poolSize,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
 
-		if (poolSize < 1) { return CompletableFuture.failedFuture(new IllegalArgumentException("Pool size must be greater than 0")); }
+		if (poolSize < 1) return CompletableFuture.failedFuture(new IllegalArgumentException("Pool size must be greater than 0"));
 
 		return CompletableFuture.supplyAsync(() -> probeConnection(addresses), NET_EXECUTOR).thenCompose(probe -> {
-			if (probe.success != null) { return finishConnection(probe.success, secretBytes, poolSize, addresses); }
+			if (probe.success != null) return finishConnection(probe.success, secretBytes, poolSize, addresses);
 
 			CertificatePinMismatchException pinMismatch = findCause(probe.error, CertificatePinMismatchException.class);
 			if (pinMismatch != null) return CompletableFuture.failedFuture(pinMismatch);
-			if (probe.untrustedCert == null) { return CompletableFuture.failedFuture(probe.error); }
+			if (probe.untrustedCert == null) return CompletableFuture.failedFuture(probe.error);
 
-			if (!isSelfSigned(probe.untrustedCert)) { return requestManualTrust(probe, addresses, secretBytes, poolSize, trustCallback); }
+			if (!isSelfSigned(probe.untrustedCert)) return requestManualTrust(probe, addresses, secretBytes, poolSize, trustCallback);
 
 			return DnsPinResolver.resolvePinAsync(addresses.serverAddress.getHostString()).thenCompose(result -> {
 				if (result instanceof DnsPinResolver.Authoritative authoritative) {
@@ -126,10 +126,10 @@ public class DownloadClient implements AutoCloseable {
 
 	private static CompletableFuture<DownloadClient> requestManualTrust(ProbeResult probe, Jsons.ModpackAddresses addresses, byte[] secretBytes, int poolSize,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		if (trustCallback == null) { return CompletableFuture.failedFuture(probe.error); }
+		if (trustCallback == null) return CompletableFuture.failedFuture(probe.error);
 
 		return trustCallback.apply(probe.untrustedCert).thenComposeAsync(trusted -> {
-			if (!trusted) { return CompletableFuture.failedFuture(new IOException("User rejected certificate")); }
+			if (!trusted) return CompletableFuture.failedFuture(new IOException("User rejected certificate"));
 			return retryWithTrustedCertificate(probe, addresses, secretBytes, poolSize);
 		}, NET_EXECUTOR).orTimeout(120, TimeUnit.SECONDS).exceptionally(e -> { throw new CompletionException(new IOException("Certificate not trusted", e)); });
 	}
@@ -149,7 +149,7 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	static boolean isSelfSigned(X509Certificate certificate) {
-		if (certificate == null || !certificate.getSubjectX500Principal().equals(certificate.getIssuerX500Principal())) { return false; }
+		if (certificate == null || !certificate.getSubjectX500Principal().equals(certificate.getIssuerX500Principal())) return false;
 
 		try {
 			certificate.verify(certificate.getPublicKey());
@@ -231,7 +231,7 @@ public class DownloadClient implements AutoCloseable {
 	private static PreValidationConnection getPreValidationConnection(Jsons.ModpackAddresses modpackAddresses, SSLContext sharedContext) throws IOException {
 		String hostName = modpackAddresses.hostAddress.getHostString();
 		InetSocketAddress address = new InetSocketAddress(hostName, modpackAddresses.hostAddress.getPort());
-		if (address.isUnresolved()) { throw new IOException("Failed to resolve host address: " + hostName); }
+		if (address.isUnresolved()) throw new IOException("Failed to resolve host address: " + hostName);
 		return new PreValidationConnection(address, modpackAddresses, sharedContext);
 	}
 
@@ -262,7 +262,7 @@ public class DownloadClient implements AutoCloseable {
 					: certificate -> CompletableFuture.completedFuture(trustedByUserCallback.apply(certificate));
 			return createAsync(modpackAddresses, secretBytes, poolSize, asyncCallback).get();
 		} catch (Exception e) {
-			if (e instanceof InterruptedException) { Thread.currentThread().interrupt(); }
+			if (e instanceof InterruptedException) Thread.currentThread().interrupt();
 			Throwable cause = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
 			LOGGER.error("Failed to create download client: {}", cause.getMessage());
 			LOGGER.debug(cause);
@@ -325,7 +325,7 @@ class PreValidationConnection {
 				plainOut.flush();
 
 				int handshakeResponse = plainIn.readInt();
-				if (handshakeResponse != MAGIC_AMOK) { throw new IOException("Invalid response from server: " + handshakeResponse); }
+				if (handshakeResponse != MAGIC_AMOK) throw new IOException("Invalid response from server: " + handshakeResponse);
 			} catch (IOException e) {
 				try {
 					plainSocket.close();
@@ -389,7 +389,7 @@ class Connection implements AutoCloseable {
 		this.out = new DataOutputStream(new BufferedOutputStream(this.socket.getOutputStream()));
 
 		try {
-			if (!PlatformUtils.canUseZstd()) { this.compressionType = COMPRESSION_GZIP; }
+			if (!PlatformUtils.canUseZstd()) this.compressionType = COMPRESSION_GZIP;
 			this.compressionType = sendCompressionConfig(compressionType);
 			this.chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
 			sendEchoConfig();
@@ -514,7 +514,7 @@ class Connection implements AutoCloseable {
 			throw new IOException("Frame original length (" + originalLength + ") exceeds chunk size (" + this.chunkSize + ")");
 		}
 
-		if (compressedLength > networkInputBuffer.length) { throw new IOException("Compressed length exceeds buffer capacity"); }
+		if (compressedLength > networkInputBuffer.length) throw new IOException("Compressed length exceeds buffer capacity");
 
 		in.readFully(networkInputBuffer, 0, compressedLength);
 
@@ -535,9 +535,9 @@ class Connection implements AutoCloseable {
 			throw new IOException("Server error: " + new String(errBytes, StandardCharsets.UTF_8));
 		}
 
-		if (messageType == END_OF_TRANSMISSION) { return destination; }
+		if (messageType == END_OF_TRANSMISSION) return destination;
 
-		if (messageType != FILE_RESPONSE_TYPE) { throw new IOException("Unexpected message type: " + messageType); }
+		if (messageType != FILE_RESPONSE_TYPE) throw new IOException("Unexpected message type: " + messageType);
 
 		long expectedFileSize = headerWrap.getLong();
 		long receivedBytes = 0;
@@ -555,7 +555,7 @@ class Connection implements AutoCloseable {
 		}
 
 		byte[] eotData = readProtocolMessageFrame();
-		if (eotData.length < 2 || eotData[0] != version || eotData[1] != END_OF_TRANSMISSION) { throw new IOException("Invalid EOT frame"); }
+		if (eotData.length < 2 || eotData[0] != version || eotData[1] != END_OF_TRANSMISSION) throw new IOException("Invalid EOT frame");
 		return destination;
 	}
 
@@ -570,7 +570,7 @@ class Connection implements AutoCloseable {
 		out.flush();
 
 		byte version = in.readByte();
-		if (version >= 1 && version < protocolVersion) { protocolVersion = version; }
+		if (version >= 1 && version < protocolVersion) protocolVersion = version;
 
 		byte type = in.readByte();
 		if (type != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected response: " + type);
@@ -593,13 +593,13 @@ class Connection implements AutoCloseable {
 		out.flush();
 
 		byte version = in.readByte();
-		if (version >= 1 && version < protocolVersion) { protocolVersion = version; }
+		if (version >= 1 && version < protocolVersion) protocolVersion = version;
 
 		byte type = in.readByte();
 		if (type != CONFIGURATION_CHUNK_SIZE_TYPE) throw new IOException("Unexpected response: " + type);
 
 		int negotiated = in.readInt();
-		if (negotiated < MIN_CHUNK_SIZE || negotiated > MAX_CHUNK_SIZE) { throw new IOException("Chunk size out of bounds: " + negotiated); }
+		if (negotiated < MIN_CHUNK_SIZE || negotiated > MAX_CHUNK_SIZE) throw new IOException("Chunk size out of bounds: " + negotiated);
 		return negotiated;
 	}
 

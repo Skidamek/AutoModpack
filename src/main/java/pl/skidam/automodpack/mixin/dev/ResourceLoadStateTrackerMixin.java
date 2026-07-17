@@ -17,6 +17,6 @@ public class ResourceLoadStateTrackerMixin {
 	@Inject(method = "finishReload", at = @At("RETURN"))
 	private void onFinishReload(CallbackInfo ci) {
 		AutoTestBridge.markReloadFinished();
-		if (new ScreenManager().getScreen().orElse(null) instanceof TitleScreen) { AutoTestBridge.onClientReady(); }
+		if (new ScreenManager().getScreen().orElse(null) instanceof TitleScreen) AutoTestBridge.onClientReady();
 	}
 }

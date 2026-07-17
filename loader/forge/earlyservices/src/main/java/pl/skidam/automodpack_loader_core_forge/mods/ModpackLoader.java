@@ -22,7 +22,7 @@ public class ModpackLoader implements ModpackLoaderService {
 	public void loadModpack(List<Path> modpackMods) {
 		try {
 			for (Path modpackMod : modpackMods) {
-				if (FileInspection.isModCompatible(modpackMod)) { modsToLoad.add(modpackMod); }
+				if (FileInspection.isModCompatible(modpackMod)) modsToLoad.add(modpackMod);
 			}
 
 			// set for connector

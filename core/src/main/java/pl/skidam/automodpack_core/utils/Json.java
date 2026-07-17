@@ -40,12 +40,12 @@ public class Json {
 			e.printStackTrace();
 		}
 
-		if (element != null && element.isJsonArray()) { return element.getAsJsonArray(); }
+		if (element != null && element.isJsonArray()) return element.getAsJsonArray();
 		return null;
 	}
 
 	public static JsonObject fromFile(Path path) throws IOException {
-		if (!Files.exists(path) || !Files.isRegularFile(path)) { return null; }
+		if (!Files.exists(path) || !Files.isRegularFile(path)) return null;
 
 		JsonParser parser = new JsonParser();
 		byte[] bytes = Files.readAllBytes(path);
@@ -78,13 +78,13 @@ public class Json {
 
 		connection.disconnect();
 
-		if (element != null && !element.isJsonArray()) { return element.getAsJsonObject(); }
+		if (element != null && !element.isJsonArray()) return element.getAsJsonObject();
 
 		return null;
 	}
 
 	public static JsonObject fromModrinthUrl(final String requestUrl, List<String> listOfSha1) throws IOException {
-		if (listOfSha1 == null || listOfSha1.isEmpty()) { return null; }
+		if (listOfSha1 == null || listOfSha1.isEmpty()) return null;
 
 		JsonObject jsonObject = new JsonObject();
 		jsonObject.add("hashes", new Gson().toJsonTree(listOfSha1));
@@ -117,7 +117,7 @@ public class Json {
 
 		connection.disconnect();
 
-		if (element != null && !element.isJsonArray()) { return element.getAsJsonObject(); }
+		if (element != null && !element.isJsonArray()) return element.getAsJsonObject();
 
 		return null;
 
@@ -125,7 +125,7 @@ public class Json {
 
 	public static JsonObject fromCurseForgeUrl(final String requestUrl, List<String> listOfMurmur) throws IOException {
 
-		if (listOfMurmur == null || listOfMurmur.isEmpty()) { return null; }
+		if (listOfMurmur == null || listOfMurmur.isEmpty()) return null;
 
 		JsonObject jsonObject = new JsonObject();
 		Gson gson = new Gson().newBuilder().setPrettyPrinting().create();
@@ -166,7 +166,7 @@ public class Json {
 
 		connection.disconnect();
 
-		if (element != null && !element.isJsonArray()) { return element.getAsJsonObject(); }
+		if (element != null && !element.isJsonArray()) return element.getAsJsonObject();
 
 		return null;
 	}

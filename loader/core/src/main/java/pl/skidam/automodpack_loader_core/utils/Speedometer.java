@@ -70,7 +70,7 @@ public class Speedometer {
 		if (history.isEmpty()) return 0;
 
 		// Force an update if no data came in recently (handle stall)
-		if (System.currentTimeMillis() - history.getLast().time > 1000) { return 0; }
+		if (System.currentTimeMillis() - history.getLast().time > 1000) return 0;
 		return (long) visualSpeed;
 	}
 

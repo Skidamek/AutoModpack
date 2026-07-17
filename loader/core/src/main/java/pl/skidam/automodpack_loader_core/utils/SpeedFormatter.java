@@ -9,7 +9,7 @@ public class SpeedFormatter {
 		if (bytesPerSec < 1024) return bytesPerSec + " B/s";
 
 		double kb = bytesPerSec / 1024.0;
-		if (kb < 1024) { return String.format(Locale.ROOT, "%.1f KB/s", kb); }
+		if (kb < 1024) return String.format(Locale.ROOT, "%.1f KB/s", kb);
 
 		double mb = kb / 1024.0;
 		return String.format(Locale.ROOT, "%.1f MB/s", mb);

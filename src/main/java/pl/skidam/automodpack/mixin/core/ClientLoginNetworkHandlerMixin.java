@@ -29,7 +29,7 @@ public class ClientLoginNetworkHandlerMixin {
 
 	@Inject(method = "handleCustomQuery", at = @At(value = "HEAD"), cancellable = true)
 	private void handleQueryRequest(ClientboundCustomQueryPacket packet, CallbackInfo ci) {
-		if (this.autoModpack$addon == null) { return; }
+		if (this.autoModpack$addon == null) return;
 
 		if (this.autoModpack$addon.handlePacket(packet)) {
 			// We have handled it, cancel vanilla behavior

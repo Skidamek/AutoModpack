@@ -78,7 +78,7 @@ public class FileInspection {
 
 				Set<Mod> nestedMods = scanForNestedMods(fs);
 
-				if (meta.version() != null) { return new Mod(ids, hash, meta.version(), file, meta.deps(), nestedMods); }
+				if (meta.version() != null) return new Mod(ids, hash, meta.version(), file, meta.deps(), nestedMods);
 				LOGGER.error("Incomplete mod info for file: {} (ID: {}, Ver: {})", file, meta.modId(), meta.version());
 			}
 		} catch (IOException e) {
@@ -108,9 +108,9 @@ public class FileInspection {
 				default -> null;
 			};
 
-			if (entryPathString != null && Files.exists(fs.getPath(entryPathString))) { return true; }
+			if (entryPathString != null && Files.exists(fs.getPath(entryPathString))) return true;
 
-			if (("forge".equals(loader) || "neoforge".equals(loader)) && hasSpecificServices(fs)) { return true; }
+			if (("forge".equals(loader) || "neoforge".equals(loader)) && hasSpecificServices(fs)) return true;
 		} catch (IOException e) {
 			LOGGER.error("Error examining JarJar in {}", e);
 		}
@@ -247,7 +247,7 @@ public class FileInspection {
 				if (v != null && !v.equals("${file.jarVersion}")) version = v;
 
 				TomlArray prov = modTable.getArray("provides");
-				if (prov != null) { for (int j = 0; j < prov.size(); j++) provides.add(prov.getString(j)); }
+				if (prov != null) for (int j = 0; j < prov.size(); j++) provides.add(prov.getString(j));
 			}
 
 			if (modId != null) {
@@ -361,7 +361,7 @@ public class FileInspection {
 		// Short-circuit on the first root match (the common case for service mods) before paying
 		// for the nested jarjar scan - isMod/isModCompatible call this over every mod.
 		for (String service : known) {
-			if (Files.exists(fs.getPath(service))) { return true; }
+			if (Files.exists(fs.getPath(service))) return true;
 		}
 		Set<String> nested = new HashSet<>();
 		collectSpecificServicesNested(fs, known, nested, true);
@@ -378,7 +378,7 @@ public class FileInspection {
 
 		// Root FileSystem
 		for (String service : ofInterest) {
-			if (Files.exists(fs.getPath(service))) { found.add(service); }
+			if (Files.exists(fs.getPath(service))) found.add(service);
 		}
 
 		// Nested JARs in META-INF/jarjar
@@ -395,12 +395,12 @@ public class FileInspection {
 	private static void collectSpecificServicesNested(FileSystem fs, Set<String> known, Set<String> found, boolean stopAtFirst) {
 		Path jarJarDir = fs.getPath("META-INF", "jarjar");
 
-		if (Files.notExists(jarJarDir)) { return; }
+		if (Files.notExists(jarJarDir)) return;
 
 		try (DirectoryStream<Path> stream = Files.newDirectoryStream(jarJarDir, "*.jar")) {
 			for (Path nestedJar : stream) {
 				collectNestedJarServices(nestedJar, known, found, stopAtFirst);
-				if (stopAtFirst && !found.isEmpty()) { return; }
+				if (stopAtFirst && !found.isEmpty()) return;
 			}
 		} catch (IOException e) {
 			LOGGER.error("Error examining JarJar directory in {}", fs, e);
@@ -416,7 +416,7 @@ public class FileInspection {
 			while ((entry = zip.getNextEntry()) != null) {
 				if (known.contains(entry.getName())) {
 					found.add(entry.getName());
-					if (stopAtFirst) { return; }
+					if (stopAtFirst) return;
 				}
 			}
 		} catch (IOException e) {
@@ -428,18 +428,18 @@ public class FileInspection {
 
 	public static boolean isInValidFileName(String fileName) {
 		for (char c : forbiddenChars.toCharArray()) {
-			if (fileName.indexOf(c) != -1) { return true; }
+			if (fileName.indexOf(c) != -1) return true;
 		}
 
 		for (char c : fileName.toCharArray()) {
-			if (c < 32 || c == 127) { return true; }
+			if (c < 32 || c == 127) return true;
 		}
 		return fileName.trim().isEmpty();
 	}
 
 	public static String fixFileName(String fileName) {
 		for (char c : fileName.toCharArray()) {
-			if (c < 32 || c == 127 || forbiddenChars.indexOf(c) != -1) { fileName = fileName.replace(c, '-'); }
+			if (c < 32 || c == 127 || forbiddenChars.indexOf(c) != -1) fileName = fileName.replace(c, '-');
 		}
 		return fileName.trim();
 	}

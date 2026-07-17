@@ -27,7 +27,7 @@ public enum LoginNetworkingIDs {
 	public static Integer getByKey(Identifier key) {
 		if (key.getNamespace().equalsIgnoreCase(MOD_ID)) {
 			for (var ID : LoginNetworkingIDs.values()) {
-				if (ID.name().equalsIgnoreCase(key.getPath())) { return ID.getValue(); }
+				if (ID.name().equalsIgnoreCase(key.getPath())) return ID.getValue();
 			}
 		}
 		return null;
@@ -35,7 +35,7 @@ public enum LoginNetworkingIDs {
 
 	public static Identifier getByValue(int value) {
 		for (var ID : LoginNetworkingIDs.values()) {
-			if (ID.getValue() == value) { return getResourceLocation(ID); }
+			if (ID.getValue() == value) return getResourceLocation(ID);
 		}
 		return null;
 	}

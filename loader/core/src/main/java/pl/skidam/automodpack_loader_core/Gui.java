@@ -89,7 +89,7 @@ public class Gui {
 		frame.setAlwaysOnTop(true);
 		frame.setVisible(true);
 
-		if (semaphore != null) { semaphore.release(); }
+		if (semaphore != null) semaphore.release();
 
 		try {
 			windowSemaphore.acquire(); // wait for user interaction to close the gui
@@ -126,7 +126,7 @@ public class Gui {
 			int rVal = process.waitFor();
 			Runtime.getRuntime().removeShutdownHook(shutdownHook);
 
-			if (semaphore != null) { semaphore.release(); }
+			if (semaphore != null) semaphore.release();
 
 			if (rVal != 0) throw new IOException("subprocess exited with code " + rVal);
 		} catch (IOException | InterruptedException e) {
@@ -137,7 +137,7 @@ public class Gui {
 	public static void main(String[] args) throws Exception {
 		String text = "Failed to load text";
 		for (String arg : args) {
-			if (arg.startsWith("--AM.text=")) { text = arg.substring(10); }
+			if (arg.startsWith("--AM.text=")) text = arg.substring(10);
 		}
 		Gui gui = new Gui();
 		gui.text = text;

@@ -164,11 +164,11 @@ public final class EarlyServiceLayer {
 			// selectedModpackDir is published by Preload (run just before this) and set only when a
 			// modpack is selected on a client.
 			Path modpackMods = Constants.selectedModpackDir == null ? null : Constants.selectedModpackDir.resolve("mods");
-			if (modpackMods == null || !Files.isDirectory(modpackMods)) { return; }
+			if (modpackMods == null || !Files.isDirectory(modpackMods)) return;
 
 			List<Path> earlyServiceJars = EarlyServiceScan.eligibleJars(modpackMods, EarlyServiceLayer::eligibleForInPlace);
 
-			if (earlyServiceJars.isEmpty()) { return; }
+			if (earlyServiceJars.isEmpty()) return;
 
 			Constants.LOGGER.info("[AutoModpack] Bootstrapping {} early-service mod(s) from the modpack folder in place", earlyServiceJars.size());
 
@@ -492,7 +492,7 @@ public final class EarlyServiceLayer {
 		if (GAME_BRIDGE_DONE.get()) return;
 
 		ClassLoader gameClassLoader = resolveGameClassLoader();
-		if (!(gameClassLoader instanceof ModuleClassLoader)) { return; }
+		if (!(gameClassLoader instanceof ModuleClassLoader)) return;
 
 		if (!GAME_BRIDGE_DONE.compareAndSet(false, true)) return;
 

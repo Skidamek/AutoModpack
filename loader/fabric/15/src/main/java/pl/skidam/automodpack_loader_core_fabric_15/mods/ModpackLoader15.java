@@ -38,7 +38,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 			break;
 		}
 
-		if (modpackModsDir == null) { return; }
+		if (modpackModsDir == null) return;
 
 		try {
 			LOGGER.info("Discovering mods from {}", modpackModsDir.getParent().getFileName() + "/" + modpackModsDir.getFileName());
@@ -69,7 +69,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 			candidates.forEach(it -> applyPaths(it, false));
 
 			for (ModCandidate candidate : candidates) {
-				if (!candidate.isRoot()) { continue; }
+				if (!candidate.isRoot()) continue;
 
 				List<ModCandidate> nestedMods = getNestedMods(candidate);
 				nestedMods = getOnlyNewestMods(nestedMods);
@@ -95,7 +95,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 			for (ModCandidate modpackNestedMod : modpackNestedMods) {
 				if (!standardNestedMod.getId().equals(modpackNestedMod.getId())) continue;
 
-				if (modpackNestedMod.getVersion().compareTo(standardNestedMod.getVersion()) > 0) { conflictingNestedModsImpl.add(modpackNestedMod); }
+				if (modpackNestedMod.getVersion().compareTo(standardNestedMod.getVersion()) > 0) conflictingNestedModsImpl.add(modpackNestedMod);
 			}
 		}
 
@@ -181,7 +181,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 
 		for (ModDependency dep : nestedMod.getDependencies()) {
 			ModCandidate candidate = originMod.getNestedMods().stream().filter(it -> it.getId().equals(dep.getModId())).findFirst().orElse(null);
-			if (candidate == null) { continue; }
+			if (candidate == null) continue;
 
 			deps.add(candidate);
 		}
@@ -201,7 +201,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 				return hasSameId && hasGreaterOrEqualVersion;
 			});
 
-			if (alreadyExists) { continue; }
+			if (alreadyExists) continue;
 
 			latestMods.removeIf(existingMod -> existingMod.getId().equals(standardNestedMod.getId()));
 
@@ -262,7 +262,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 
 		FIELD_MOD_MAP.set(FabricLoaderImpl.INSTANCE, modMap);
 
-		if (!candidate.hasPath() && !candidate.isBuiltin()) { applyPaths(candidate, true); }
+		if (!candidate.hasPath() && !candidate.isBuiltin()) applyPaths(candidate, true);
 
 		for (Path it : candidate.getPaths()) {
 			FabricLauncherBase.getLauncher().addToClassPath(it);
@@ -278,7 +278,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 				RuntimeModRemapper.remap(Collections.singleton(candidate), cacheDir.resolve("tmp"), processedModsDir);
 			}
 
-			if (!candidate.hasPath() && !candidate.isBuiltin()) { candidate.setPaths(Collections.singletonList(candidate.copyToDir(processedModsDir, false))); }
+			if (!candidate.hasPath() && !candidate.isBuiltin()) candidate.setPaths(Collections.singletonList(candidate.copyToDir(processedModsDir, false)));
 		} catch (Exception e) {
 			FabricGuiEntry.displayCriticalError(e, true);
 		}
@@ -289,7 +289,7 @@ public class ModpackLoader15 implements ModpackLoaderService {
 		for (ModCandidate candidate : candidates) {
 
 			var definitions = candidate.getMetadata().getLanguageAdapterDefinitions();
-			if (definitions.isEmpty()) { continue; }
+			if (definitions.isEmpty()) continue;
 
 			LOGGER.info("Setting up language adapter for {}", candidate.getId());
 

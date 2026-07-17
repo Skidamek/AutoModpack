@@ -29,10 +29,10 @@ public final class EarlyServiceScan {
 		Set<String> standardModHashes = null;
 		try (Stream<Path> stream = Files.list(modpackMods)) {
 			for (Path jar : stream.filter(EarlyServiceScan::isJar).toList()) {
-				if (!eligibleForInPlace.test(jar)) { continue; }
-				if (standardModHashes == null) { standardModHashes = HashUtils.getJarHashes(Constants.MODS_DIR); }
+				if (!eligibleForInPlace.test(jar)) continue;
+				if (standardModHashes == null) standardModHashes = HashUtils.getJarHashes(Constants.MODS_DIR);
 				String hash = HashUtils.getHash(jar);
-				if (hash != null && standardModHashes.contains(hash)) { continue; }
+				if (hash != null && standardModHashes.contains(hash)) continue;
 				earlyServiceJars.add(jar);
 			}
 		}
