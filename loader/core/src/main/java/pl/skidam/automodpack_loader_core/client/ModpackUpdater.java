@@ -24,8 +24,10 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileInspection;
+import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
+import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
@@ -43,10 +45,10 @@ public class ModpackUpdater {
 	private Jsons.ModpackContentFields serverModpackContent;
 	private String serverModpackContentJson; // TODO: remove this variable and use serverModpackContent directly
 	public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
-	private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and
-																	// be updated.
+	private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
 	private final Jsons.ModpackAddresses modpackAddresses;
 	private final Secrets.Secret modpackSecret;
+	private final UpdateLoopDetector updateLoopDetector = new UpdateLoopDetector();
 	private Path modpackDir;
 	private Path modpackContentFile;
 
@@ -136,16 +138,37 @@ public class ModpackUpdater {
 	private void checkAndLoadModpack(FileMetadataCache cache) throws Exception {
 		if (!Files.exists(modpackDir)) return;
 
-		boolean requiresRestart = applyModpack(cache);
+		ApplyResult applyResult = applyModpack(cache);
 
-		if (requiresRestart) {
+		if (applyResult.requiresRestart()) {
+			String fingerprint = updateStateFingerprint(applyResult);
+			if (updateLoopDetector.evaluateAndRecord(fingerprint) == UpdateLoopDetector.Decision.SUPPRESS) {
+				LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
+				LOGGER.error("Corrections were applied during this launch but still require a restart: {}",
+						String.join(", ", applyResult.reasonDescriptions()));
+				LOGGER.error(
+						"Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
+				return;
+			}
+
 			LOGGER.info("Modpack is not loaded");
 			UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 			new ReLauncher(modpackDir, updateType, changelogs).restart(true);
 			return;
 		}
 
+		updateLoopDetector.clear();
 		loadModpackMods(cache);
+	}
+
+	private String updateStateFingerprint(ApplyResult applyResult) {
+		String contentHash = HashUtils.getHash(modpackContentFile);
+		if (contentHash == null) {
+			LOGGER.warn("Cannot track rapid modpack restarts because the content hash is unavailable: {}", modpackContentFile);
+			return null;
+		}
+
+		return String.join("\n", modpackDir.toAbsolutePath().normalize().toString(), contentHash, String.join(",", applyResult.reasonIds()));
 	}
 
 	// Load the modpack mods that aren't already present in the standard mods
@@ -260,7 +283,7 @@ public class ModpackUpdater {
 				LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
 				checkAndLoadModpack(cache);
 			} else {
-				boolean requiredRestart = applyModpack(cache);
+				boolean requiredRestart = applyModpack(cache).requiresRestart();
 				LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);
 				UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 				new ReLauncher(modpackDir, updateType, changelogs).restart(false);
@@ -428,8 +451,7 @@ public class ModpackUpdater {
 	}
 
 	// this is run every time we modpack is updated
-	// returns true if restart is required
-	private boolean applyModpack(FileMetadataCache cache) throws Exception {
+	private ApplyResult applyModpack(FileMetadataCache cache) throws Exception {
 		ModpackUtils.selectModpack(modpackDir, modpackAddresses, newDownloadedFiles);
 		try { // try catch this error there because we don't want to stop the whole method just because of that
 			SecretsStore.saveClientSecret(clientConfig.selectedModpack, modpackSecret);
@@ -505,7 +527,48 @@ public class ModpackUpdater {
 
 		boolean needsRestart6 = LauncherVersionSwapper.swapLoaderVersion(modpackContent.loader, modpackContent.loaderVersion);
 
-		return needsRestart0 || needsRestart1 || needsRestart2 || needsRestart3 || needsRestart4 || needsRestart5 || needsRestart6;
+		EnumSet<RestartReason> restartReasons = EnumSet.noneOf(RestartReason.class);
+		if (needsRestart0) restartReasons.add(RestartReason.REMOVED_NON_MODPACK_FILES);
+		if (needsRestart1) restartReasons.add(RestartReason.CORRECTED_FILE_LOCATIONS);
+		if (needsRestart2) restartReasons.add(RestartReason.FIXED_NESTED_MODS);
+		if (needsRestart3) restartReasons.add(RestartReason.REMOVED_DUPLICATE_MODS);
+		if (needsRestart4) restartReasons.add(RestartReason.REMOVED_STANDARD_MODS);
+		if (needsRestart5) restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
+		if (needsRestart6) restartReasons.add(RestartReason.CHANGED_LOADER_VERSION);
+
+		ApplyResult result = new ApplyResult(restartReasons);
+		if (result.requiresRestart()) LOGGER.info("Restart required because: {}", String.join(", ", result.reasonDescriptions()));
+		return result;
+	}
+
+	private enum RestartReason {
+		REMOVED_NON_MODPACK_FILES("files removed from the modpack were deleted from the game directory"),
+		CORRECTED_FILE_LOCATIONS("standard-directory mods were copied or updated"),
+		FIXED_NESTED_MODS("conflicting nested mods were copied to the standard mods directory"),
+		REMOVED_DUPLICATE_MODS("duplicate standard-directory mods were removed"),
+		REMOVED_STANDARD_MODS("modpack-owned mods were removed from the standard mods directory"),
+		APPLIED_SERVER_DELETIONS("server-requested mod deletions were applied"),
+		CHANGED_LOADER_VERSION("launcher loader-version metadata changed");
+
+		private final String description;
+
+		RestartReason(String description) {
+			this.description = description;
+		}
+	}
+
+	private record ApplyResult(EnumSet<RestartReason> restartReasons) {
+		private boolean requiresRestart() {
+			return !restartReasons.isEmpty();
+		}
+
+		private List<String> reasonIds() {
+			return restartReasons.stream().map(Enum::name).toList();
+		}
+
+		private List<String> reasonDescriptions() {
+			return restartReasons.stream().map(reason -> reason.description).toList();
+		}
 	}
 
 	// Returns the modpack mods that ship a service file this loader's running version cannot host
