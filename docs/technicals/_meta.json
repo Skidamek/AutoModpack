@@ -11,6 +11,10 @@
     "name": "Modpack Creation",
     "icon": null
   },
+  "editable-file-update-policy.mdx": {
+    "name": "Editable File Update Policy",
+    "icon": null
+  },
   "file-structure.mdx": {
     "name": "File Structure",
     "icon": null

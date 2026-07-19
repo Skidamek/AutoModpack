@@ -49,6 +49,7 @@ Restart your game. Your server's modpack should now be loaded, and you should be
   "allowEditsInFiles": [
     "/options.txt"
   ],
+  "overwriteEditableFiles": [],
   "forceCopyFilesToStandardLocation": [],
   "autoExcludeServerSideMods": true,
   "requireAutoModpackOnClient": true
@@ -70,6 +71,7 @@ Restart your game. Your server's modpack should now be loaded, and you should be
       "!/config/fancymenu/**"
     ]
     ```
+- **`overwriteEditableFiles`**: Editable files to overwrite once when their server version changes. These paths must also match `allowEditsInFiles`; otherwise they have no effect
 - **`forceCopyFilesToStandardLocation`**: Use with caution. Forces files to be copied to the standard Minecraft folders (breaks seamless updates)
 - **Other options**: See the [full configuration page](configuration/server-config) for detailed explanations of all settings
 
@@ -104,6 +106,7 @@ After installation, restart Minecraft to load the modpack.
 ## Maintaining Updates
 
 - Files listed in `allowEditsInFiles` are only downloaded once and not updated. Use this for files that players should be able to customize
+- Files listed in both `allowEditsInFiles` and `overwriteEditableFiles` keep local edits until the server changes its version, then are overwritten with that new version
 - For files that must always be in sync (e.g., specific configs), ensure they are in `syncedFiles` and not in `allowEditsInFiles`
 
 **Example for FancyMenu configs:**
@@ -117,6 +120,19 @@ After installation, restart Minecraft to load the modpack.
 ```
 
 This ensures FancyMenu configs are always updated, while players can still edit their options.
+
+**Example for editable configs with server-controlled changes:**
+
+```json
+"allowEditsInFiles": [
+  "/config/**"
+],
+"overwriteEditableFiles": [
+  "/config/fancymenu/**"
+]
+```
+
+Players can edit these FancyMenu files normally. AutoModpack overwrites them only after the server changes the file's content; local changes alone never trigger an update.
 
 ---
 

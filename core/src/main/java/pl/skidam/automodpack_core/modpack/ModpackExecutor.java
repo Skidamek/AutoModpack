@@ -35,7 +35,7 @@ public class ModpackExecutor {
 		}
 
 		return new ModpackContent(serverConfig.modpackName, SmartFileUtils.CWD, hostContentModpackDir, serverConfig.syncedFiles, serverConfig.allowEditsInFiles,
-				serverConfig.forceCopyFilesToStandardLocation, CREATION_EXECUTOR);
+				serverConfig.overwriteEditableFiles, serverConfig.forceCopyFilesToStandardLocation, CREATION_EXECUTOR);
 	}
 
 	public boolean generateNew(ModpackContent content) {

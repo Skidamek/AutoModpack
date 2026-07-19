@@ -13,10 +13,8 @@ public class ConfigUtils {
 	}
 
 	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config) {
-		Set<String> fixedSyncedFiles = new HashSet<>(config.syncedFiles.size());
-		Set<String> fixedAllowEditsInFiles = new HashSet<>(config.allowEditsInFiles.size());
-		Set<String> fixedForceCopyFilesToStandardLocation = new HashSet<>(config.forceCopyFilesToStandardLocation.size());
-		Map<String, String> fixedNonModpackFilesToDelete = new HashMap<>(config.nonModpackFilesToDelete.size());
+		Set<String> fixedSyncedFiles = new LinkedHashSet<>(config.syncedFiles.size());
+		Map<String, String> fixedNonModpackFilesToDelete = new LinkedHashMap<>(config.nonModpackFilesToDelete.size());
 
 		String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";
 		Pattern pattern = Pattern.compile(prefixPattern);
@@ -38,39 +36,9 @@ public class ConfigUtils {
 			}
 		}
 
-		for (var file : config.allowEditsInFiles) {
-			if (file == null) {
-				LOGGER.warn("Ignored null entry in allowEditsInFiles.");
-				continue;
-			}
-			var trimmed = file.trim();
-			if (trimmed.isEmpty()) {
-				LOGGER.warn("Ignored empty entry in allowEditsInFiles.");
-				continue;
-			}
-			var fixed = pattern.matcher(trimmed).replaceFirst("");
-			if (!fixed.equals(trimmed)) {
-				LOGGER.info("Normalized allowEditsInFiles entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", file, fixed);
-			}
-			fixedAllowEditsInFiles.add(prefixSlash(fixed));
-		}
-
-		for (var file : config.forceCopyFilesToStandardLocation) {
-			if (file == null) {
-				LOGGER.warn("Ignored null entry in forceCopyFilesToStandardLocation.");
-				continue;
-			}
-			var trimmed = file.trim();
-			if (trimmed.isEmpty()) {
-				LOGGER.warn("Ignored empty entry in forceCopyFilesToStandardLocation.");
-				continue;
-			}
-			var fixed = pattern.matcher(trimmed).replaceFirst("");
-			if (!fixed.equals(trimmed)) {
-				LOGGER.info("Normalized forceCopyFilesToStandardLocation entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", file, fixed);
-			}
-			fixedForceCopyFilesToStandardLocation.add(prefixSlash(fixed));
-		}
+		Set<String> fixedAllowEditsInFiles = normalizePathRules(config.allowEditsInFiles, "allowEditsInFiles", pattern);
+		Set<String> fixedOverwriteEditableFiles = normalizePathRules(config.overwriteEditableFiles, "overwriteEditableFiles", pattern);
+		Set<String> fixedForceCopyFilesToStandardLocation = normalizePathRules(config.forceCopyFilesToStandardLocation, "forceCopyFilesToStandardLocation", pattern);
 
 		for (var entry : config.nonModpackFilesToDelete.entrySet()) {
 			var file = entry.getKey();
@@ -93,8 +61,32 @@ public class ConfigUtils {
 
 		config.syncedFiles = fixedSyncedFiles;
 		config.allowEditsInFiles = fixedAllowEditsInFiles;
+		config.overwriteEditableFiles = fixedOverwriteEditableFiles;
 		config.forceCopyFilesToStandardLocation = fixedForceCopyFilesToStandardLocation;
 		config.nonModpackFilesToDelete = fixedNonModpackFilesToDelete;
+	}
+
+	private static Set<String> normalizePathRules(Set<String> files, String configKey, Pattern hostModpackPattern) {
+		if (files == null || files.isEmpty()) return new LinkedHashSet<>();
+
+		Set<String> normalizedFiles = new LinkedHashSet<>(files.size());
+		for (var file : files) {
+			if (file == null) {
+				LOGGER.warn("Ignored null entry in {}.", configKey);
+				continue;
+			}
+			var trimmed = file.trim();
+			if (trimmed.isEmpty()) {
+				LOGGER.warn("Ignored empty entry in {}.", configKey);
+				continue;
+			}
+			var fixed = hostModpackPattern.matcher(trimmed).replaceFirst("");
+			if (!fixed.equals(trimmed)) {
+				LOGGER.info("Normalized {} entry: '{}' -> '{}'. Removed '/automodpack/host-modpack/' prefix.", configKey, file, fixed);
+			}
+			normalizedFiles.add(prefixSlash(fixed));
+		}
+		return normalizedFiles;
 	}
 
 	public static String prefixSlash(String path) {

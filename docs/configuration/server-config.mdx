@@ -26,12 +26,13 @@ These settings control which files are sent to the client and which files the cl
 |------------------------------------|----------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `syncedFiles`                      | `["/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*"]` | List of relative paths to sync to the client. Supports wildcards.                                                                                                                                 |
 | `allowEditsInFiles`                | `["/options.txt", "/config/**"]`                                           | Files clients download once but can edit locally. Updates to these files on the server are ignored by the client. Supports wildcards.                                                             |
+| `overwriteEditableFiles`           | `[]`                                                                       | Editable files to overwrite when their server version changes. Paths must also match `allowEditsInFiles`. Local edits are otherwise preserved. Supports wildcards.                                |
 | `forceCopyFilesToStandardLocation` | `[]`                                                                       | Forces specific files to copy to the standard Minecraft folder instead of the AutoModpack instance folder. Supports wildcards. Avoid using this option when possible, it breaks seamless updates. |
 | `nonModpackFilesToDelete`          | `[]`                                                                       | List of files to request deletion from the client (e.g., old mods). See Deleting Files below.                                                                                                     |
 
 ## Globbing wildcards
 
-For `syncedFiles`, `allowEditsInFiles` and `forceCopyFilesToStandardLocation`, use the following patterns relative to the server root:
+For `syncedFiles`, `allowEditsInFiles`, `overwriteEditableFiles` and `forceCopyFilesToStandardLocation`, use the following patterns relative to the server root:
 
 - `*` : Matches files in a single directory (e.g., `/mods/*.jar`).
 - `**` : Matches files recursively in all subdirectories (e.g., `/kubejs/**`).

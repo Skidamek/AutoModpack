@@ -61,7 +61,8 @@ public class Server {
 
 		ModpackExecutor modpackExecutor = new ModpackExecutor();
 		ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles,
-				serverConfig.allowEditsInFiles, serverConfig.forceCopyFilesToStandardLocation, modpackExecutor.getExecutor());
+				serverConfig.allowEditsInFiles, serverConfig.overwriteEditableFiles, serverConfig.forceCopyFilesToStandardLocation,
+				modpackExecutor.getExecutor());
 		boolean generated = modpackExecutor.generateNew(modpackContent);
 
 		if (generated) {

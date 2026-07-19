@@ -115,6 +115,7 @@ public class Jsons {
 		public boolean generateModpackOnStart = true;
 		public Set<String> syncedFiles = Set.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
 		public Set<String> allowEditsInFiles = Set.of("/options.txt", "/config/**");
+		public Set<String> overwriteEditableFiles = Set.of();
 		public Set<String> forceCopyFilesToStandardLocation = Set.of();
 		public Map<String, String> nonModpackFilesToDelete = Map.of();
 		public boolean autoExcludeServerSideMods = true;
@@ -198,15 +199,17 @@ public class Jsons {
 			public final String size;
 			public final String type;
 			public final boolean editable;
+			public final boolean overwriteEditable;
 			public final boolean forceCopy;
 			public final String sha1;
 			public final String murmur;
 
-			public ModpackContentItem(String file, String size, String type, boolean editable, boolean forceCopy, String sha1, String murmur) {
+			public ModpackContentItem(String file, String size, String type, boolean editable, boolean overwriteEditable, boolean forceCopy, String sha1, String murmur) {
 				this.file = file;
 				this.size = size;
 				this.type = type;
 				this.editable = editable;
+				this.overwriteEditable = overwriteEditable;
 				this.forceCopy = forceCopy;
 				this.sha1 = sha1;
 				this.murmur = murmur;

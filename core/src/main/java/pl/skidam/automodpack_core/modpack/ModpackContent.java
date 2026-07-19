@@ -24,6 +24,7 @@ public class ModpackContent {
 	private final String MODPACK_NAME;
 	private final FileTreeScanner SYNCED_FILES_CARDS;
 	private final FileTreeScanner EDITABLE_CARDS;
+	private final FileTreeScanner OVERWRITE_EDITABLE_CARDS;
 	private final FileTreeScanner FORCE_COPY_FILES_TO_STANDARD_LOCATION;
 	private final Path MODPACK_DIR;
 	private final ThreadPoolExecutor CREATION_EXECUTOR;
@@ -31,7 +32,7 @@ public class ModpackContent {
 	private Optional<Jsons.ModpackContentFields> cachedPreviousContent;
 
 	public ModpackContent(String modpackName, Path cwd, Path modpackDir, Set<String> syncedFiles, Set<String> allowEditsInFiles,
-			Set<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR) {
+			Set<String> overwriteEditableFiles, Set<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR) {
 		this.MODPACK_NAME = modpackName;
 		this.MODPACK_DIR = modpackDir;
 		this.cachedPreviousContent = getPreviousContent();
@@ -46,6 +47,7 @@ public class ModpackContent {
 			this.SYNCED_FILES_CARDS = new FileTreeScanner(syncedFiles, Set.of());
 		}
 		this.EDITABLE_CARDS = new FileTreeScanner(allowEditsInFiles, directoriesToSearch);
+		this.OVERWRITE_EDITABLE_CARDS = new FileTreeScanner(overwriteEditableFiles, directoriesToSearch);
 		this.FORCE_COPY_FILES_TO_STANDARD_LOCATION = new FileTreeScanner(forceCopyFilesToStandardLocation, directoriesToSearch);
 	}
 
@@ -333,12 +335,15 @@ public class ModpackContent {
 			LOGGER.info("File {} is editable!", formattedFile);
 		}
 
+		boolean overwriteEditable = isEditable && OVERWRITE_EDITABLE_CARDS.matches(formattedFile);
+		if (overwriteEditable) LOGGER.debug("Editable file {} is overwritten when the server changes it!", formattedFile);
+
 		boolean forcedToCopy = false;
 		if (FORCE_COPY_FILES_TO_STANDARD_LOCATION.hasMatch(formattedFile)) {
 			forcedToCopy = true;
 			LOGGER.info("File {} is forced to copy to standard location!", formattedFile);
 		}
 
-		return new Jsons.ModpackContentFields.ModpackContentItem(formattedFile, size, type, isEditable, forcedToCopy, sha1, murmur);
+		return new Jsons.ModpackContentFields.ModpackContentItem(formattedFile, size, type, isEditable, overwriteEditable, forcedToCopy, sha1, murmur);
 	}
 }

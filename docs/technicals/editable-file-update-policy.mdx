@@ -1,0 +1,20 @@
+# Editable File Update Policy
+
+## Decision
+
+`overwriteEditableFiles` adds a middle ground between regular synced files and `allowEditsInFiles`:
+
+- A file must match `allowEditsInFiles` before this option applies.
+- Players can edit the file without AutoModpack restoring the server copy.
+- The client compares the server manifest with the previously installed manifest, not with the player's file.
+- If the server SHA-1 changed (or the file is new), the client downloads the new server copy and overwrites the active file once.
+- After the new manifest is saved, later local edits are preserved until the server changes the file again.
+
+This preserves player customization while still giving a server operator a reliable way to publish a replacement configuration.
+
+## Glossary
+
+- **Editable file:** A file matched by `allowEditsInFiles`; after installation, changes on the client are normally preserved.
+- **Overwrite-editable file:** An editable file also matched by `overwriteEditableFiles`. It is overwritten only when its server manifest SHA-1 changes.
+- **Installed manifest:** The `automodpack-content.json` stored with the selected modpack. It records the server version last applied by the client.
+- **Active file:** The copy in the standard Minecraft directory that the game uses at runtime.

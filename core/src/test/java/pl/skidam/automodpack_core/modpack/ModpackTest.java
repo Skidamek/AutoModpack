@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,14 +106,18 @@ class ModpackTest {
 		Constants.serverConfig = new Jsons.ServerConfigFieldsV2();
 		Constants.serverConfig.autoExcludeUnnecessaryFiles = false;
 
-		ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable), new HashSet<>(),
+		ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable),
+				Set.of("/config/random-options.txt"), new HashSet<>(),
 				new ModpackExecutor().getExecutor());
 		content.create(null);
 		Jsons.ModpackContentFields firstManifest = ConfigTools.loadModpackContent(Constants.hostModpackContentFile);
 		assertNotNull(firstManifest);
 		assertTrue(ModpackId.isValid(firstManifest.modpackId));
+		assertTrue(firstManifest.list.stream().filter(item -> item.file.equals("/config/random-options.txt")).findFirst().orElseThrow().overwriteEditable);
+		assertFalse(firstManifest.list.stream().filter(item -> item.file.equals("/config/config.json")).findFirst().orElseThrow().overwriteEditable);
 
-		ModpackContent renamedContent = new ModpackContent("Renamed Pack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable), new HashSet<>(),
+		ModpackContent renamedContent = new ModpackContent("Renamed Pack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable),
+				Set.of("/config/random-options.txt"), new HashSet<>(),
 				new ModpackExecutor().getExecutor());
 		renamedContent.create(null);
 		Jsons.ModpackContentFields renamedManifest = ConfigTools.loadModpackContent(Constants.hostModpackContentFile);

@@ -40,6 +40,16 @@ public class FileTreeScanner {
 		return pathStr != null && matchedPaths.containsKey(pathStr);
 	}
 
+	public boolean matches(String pathStr) {
+		if (pathStr == null || pathStr.isBlank()) return false;
+		String relativePath = pathStr.startsWith("/") ? pathStr.substring(1) : pathStr;
+		return matches(fs.getPath(relativePath));
+	}
+
+	private boolean matches(Path path) {
+		return matchesAny(whitelistMatchers, path) && !matchesAny(blacklistMatchers, path);
+	}
+
 	public void scan() {
 		synchronized (lock) {
 			if (whitelistMatchers.isEmpty()) return;
@@ -111,7 +121,7 @@ public class FileTreeScanner {
 		@Override
 		public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
 			Path relative = startDir.relativize(file);
-			if (matchesAny(whitelistMatchers, relative) && !matchesAny(blacklistMatchers, relative)) targetMap.put(formatOutputKey(relative), file);
+			if (matches(relative)) targetMap.put(formatOutputKey(relative), file);
 			return FileVisitResult.CONTINUE;
 		}
 

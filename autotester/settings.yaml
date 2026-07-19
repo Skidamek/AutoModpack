@@ -65,6 +65,7 @@ automodpack:
       - "/emotes/*"
     allowEditsInFiles:
       - "/config/**"
+    overwriteEditableFiles: []
     forceCopyFilesToStandardLocation: []
     nonModpackFilesToDelete: {}
     autoExcludeServerSideMods: true

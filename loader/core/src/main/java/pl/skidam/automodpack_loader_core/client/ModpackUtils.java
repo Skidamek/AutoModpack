@@ -11,7 +11,6 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
@@ -39,7 +38,8 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 public class ModpackUtils {
 
 	// Modpack may require update even if there's no files to update, because some files may need to be deleted
-	public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {}
+	public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate,
+			Set<String> changedOverwriteEditableFiles) {}
 
 	// Fast and friendly method to check if the modpack is up to date without modifying anything on disk
 	public static UpdateCheckResult isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
@@ -47,16 +47,17 @@ public class ModpackUtils {
 
 		var optionalClientModpackContentFile = ModpackContentTools.getModpackContentFile(modpackDir);
 		if (optionalClientModpackContentFile.isEmpty() || !Files.exists(optionalClientModpackContentFile.get())) {
-			return new UpdateCheckResult(true, serverModpackContent.list);
+			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 		}
 
 		Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
-		if (clientModpackContent == null) return new UpdateCheckResult(true, serverModpackContent.list);
+		if (clientModpackContent == null) return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 
 		LOGGER.info("Verifying content against server list...");
 		var start = System.currentTimeMillis();
 
-		Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = ConcurrentHashMap.newKeySet();
+		Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate = new HashSet<>();
+		Set<String> changedOverwriteEditableFiles = findChangedOverwriteEditableFiles(serverModpackContent.list, clientModpackContent);
 
 		// Group & Sort Server Files (Optimizes Disk Seek Pattern)
 		// Grouping by parent folder ensures we process the disk sequentially (Dir A, then Dir B).
@@ -112,9 +113,13 @@ public class ModpackUtils {
 						// File does not exist in the directory map
 						filesToUpdate.add(serverItem);
 					} else {
-						if (serverItem.editable) { // TODO check if this is enough of a check, what if user already had a file but there's provided the same by
-													// a new modpack version which wasn't in the modpack before?
-							LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
+						if (serverItem.editable) {
+							if (changedOverwriteEditableFiles.contains(serverItem.file)) {
+								LOGGER.info("Server changed overwrite-editable file: {}", serverItem.file);
+								filesToUpdate.add(serverItem);
+							} else {
+								LOGGER.debug("Skipping editable file hash check: {}", serverItem.file);
+							}
 							continue;
 						}
 
@@ -135,12 +140,12 @@ public class ModpackUtils {
 		} catch (Exception e) {
 			LOGGER.error("Error during update check", e);
 			// Fail-safe: assume update needed if process crashes
-			return new UpdateCheckResult(true, serverModpackContent.list);
+			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 		}
 
 		if (!filesToUpdate.isEmpty()) {
 			LOGGER.info("Modpack {} requires update! Took {} ms", modpackDir, System.currentTimeMillis() - start);
-			return new UpdateCheckResult(true, filesToUpdate);
+			return new UpdateCheckResult(true, filesToUpdate, changedOverwriteEditableFiles);
 		}
 
 		LOGGER.info("Checking for deleted files...");
@@ -150,12 +155,36 @@ public class ModpackUtils {
 		for (Jsons.ModpackContentFields.ModpackContentItem clientItem : clientModpackContent.list) {
 			if (!serverFileSet.contains(clientItem.file)) {
 				LOGGER.info("Found file marked for deletion: {}", clientItem.file);
-				return new UpdateCheckResult(true, Set.of());
+				return new UpdateCheckResult(true, Set.of(), Set.of());
 			}
 		}
 
 		LOGGER.info("Modpack {} is up to date! Took {} ms", modpackDir, System.currentTimeMillis() - start);
-		return new UpdateCheckResult(false, Set.of());
+		return new UpdateCheckResult(false, Set.of(), Set.of());
+	}
+
+	static Set<String> findChangedOverwriteEditableFiles(Collection<Jsons.ModpackContentFields.ModpackContentItem> serverItems,
+			Jsons.ModpackContentFields installedContent) {
+		if (installedContent == null || installedContent.list == null) return Set.of();
+
+		Set<String> overwriteEditablePaths = new HashSet<>();
+		for (var item : serverItems) {
+			if (item.editable && item.overwriteEditable) overwriteEditablePaths.add(item.file);
+		}
+		if (overwriteEditablePaths.isEmpty()) return Set.of();
+
+		Map<String, String> installedHashes = new HashMap<>(overwriteEditablePaths.size());
+		for (var item : installedContent.list) {
+			if (overwriteEditablePaths.contains(item.file)) installedHashes.put(item.file, item.sha1);
+		}
+
+		Set<String> changedPaths = new HashSet<>();
+		for (var item : serverItems) {
+			if (!item.editable || !item.overwriteEditable) continue;
+			String installedHash = installedHashes.get(item.file);
+			if (!item.sha1.equalsIgnoreCase(installedHash)) changedPaths.add(item.file);
+		}
+		return changedPaths;
 	}
 
 	// Scans for files missing from the store. If found in the CWD (and the hash matches), copies them to the store.
