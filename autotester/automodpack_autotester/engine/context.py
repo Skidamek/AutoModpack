@@ -1,6 +1,7 @@
 """Execution context shared by every step: data, variables, templating, bridge access."""
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -11,6 +12,7 @@ from ..bridge import BridgeClient
 from .util import ClientExited
 
 _VAR = re.compile(r"\$\{([^}]+)\}")
+_MODPACK_ID = re.compile(r"[a-z0-9]{7}")
 
 
 @dataclass
@@ -50,10 +52,39 @@ class Context:
             "server": {"host": f"{self.server_host or self.srv_name}:25565"},
             "client": {"game_dir": str(self.game_dir)},
             "modpack": self.modpack_name,
-            "modpack_dir": f"automodpack/modpacks/{self.modpack_name}",
+            "modpack_dir": self.selected_modpack_dir(),
             "marker": str(self.marker_rel),
             **self.vars,
         }
+
+    def selected_modpack_dir(self) -> str:
+        if modpack_dir := self.vars.get("modpack_dir"):
+            return str(modpack_dir)
+
+        config_file = self.game_dir / "automodpack" / "automodpack-client.json"
+        try:
+            config = json.loads(config_file.read_text())
+            selected = config.get("selectedModpackId")
+            if selected:
+                modpack_dir = f"automodpack/modpacks/{selected}"
+                self.vars["modpack_dir"] = modpack_dir
+                return modpack_dir
+        except (OSError, ValueError, TypeError):
+            pass
+
+        modpacks_dir = self.game_dir / "automodpack" / "modpacks"
+        try:
+            stable_dirs = []
+            for path in modpacks_dir.iterdir():
+                if path.is_dir() and _MODPACK_ID.fullmatch(path.name):
+                    stable_dirs.append(path.name)
+            if len(stable_dirs) == 1:
+                modpack_dir = f"automodpack/modpacks/{stable_dirs[0]}"
+                self.vars["modpack_dir"] = modpack_dir
+                return modpack_dir
+        except OSError:
+            pass
+        return f"automodpack/modpacks/{self.modpack_name}"
 
     def resolve(self, value: Any) -> Any:
         """Recursively expand ``${var}`` / ``${var.attr}`` in strings, lists, dicts."""

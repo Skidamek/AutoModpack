@@ -123,8 +123,7 @@ public class HandshakeS2CPacket {
 
 			LOGGER.info("Sending {} modpack host address: {}:{}", GameHelpers.getPlayerName(profile), addressToSend, portToSend);
 
-			DataPacket dataPacket = new DataPacket(addressToSend, portToSend, serverConfig.modpackName, secret, serverConfig.requireAutoModpackOnClient,
-					requiresMagic);
+			DataPacket dataPacket = new DataPacket(addressToSend, portToSend, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
 			String packetContentJson = dataPacket.toJson();
 
 			FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());

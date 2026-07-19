@@ -111,16 +111,18 @@ public class ConfigTools {
 		return null;
 	}
 
-	public static void save(Path configFile, Object configObject) {
-		if (clientConfigOverride != null) return;
+	public static boolean save(Path configFile, Object configObject) {
+		if (clientConfigOverride != null) return false;
 
 		try {
 			if (!Files.isDirectory(configFile.getParent())) Files.createDirectories(configFile.getParent());
 
 			Files.writeString(configFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+			return true;
 		} catch (Exception e) {
 			LOGGER.error("Couldn't save config! " + configObject.getClass());
 			e.printStackTrace();
+			return false;
 		}
 	}
 
@@ -137,14 +139,16 @@ public class ConfigTools {
 		return null;
 	}
 
-	public static void saveModpackContent(Path modpackContentFile, Jsons.ModpackContentFields configObject) {
+	public static boolean saveModpackContent(Path modpackContentFile, Jsons.ModpackContentFields configObject) {
 		try {
 			if (!Files.isDirectory(modpackContentFile.getParent())) Files.createDirectories(modpackContentFile.getParent());
 
 			Files.writeString(modpackContentFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+			return true;
 		} catch (Exception e) {
 			LOGGER.error("Couldn't save modpack content! " + configObject.getClass());
 			e.printStackTrace();
+			return false;
 		}
 	}
 }

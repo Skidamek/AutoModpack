@@ -30,7 +30,7 @@ public class Constants {
 	public static ModpackExecutor modpackExecutor;
 	public static NettyServer hostServer;
 	public static Jsons.ServerConfigFieldsV2 serverConfig;
-	public static Jsons.ClientConfigFieldsV2 clientConfig;
+	public static Jsons.ClientConfigFieldsV3 clientConfig;
 	public static Jsons.KnownHostsFields knownHosts;
 	public static final Path automodpackDir = Path.of("automodpack");
 	public static final Path storeDir = automodpackDir.resolve("store");

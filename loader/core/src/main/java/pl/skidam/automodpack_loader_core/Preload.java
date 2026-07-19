@@ -18,6 +18,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
+import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -42,64 +43,70 @@ public class Preload {
 	}
 
 	private void updateAll() {
-		var optionalSelectedModpackDir = ModpackContentTools.getModpackDir(clientConfig.selectedModpack);
-
-		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER || optionalSelectedModpackDir.isEmpty()) {
+		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
 			SelfUpdater.update();
 			return;
 		}
 
-		selectedModpackDir = optionalSelectedModpackDir.get();
-		InetSocketAddress selectedModpackAddress = null;
-		InetSocketAddress selectedServerAddress = null;
-		String certificateFingerprint = null;
-		boolean requiresMagic = true; // Default to true
-		if (!clientConfig.selectedModpack.isBlank() && clientConfig.installedModpacks.containsKey(clientConfig.selectedModpack)) {
-			var entry = clientConfig.installedModpacks.get(clientConfig.selectedModpack);
-			selectedModpackAddress = entry.hostAddress;
-			selectedServerAddress = entry.serverAddress;
-			certificateFingerprint = CertificateTrustStore.getFingerprint(selectedServerAddress);
-			requiresMagic = entry.requiresMagic;
+		Jsons.ModpackAddresses storedAddresses = null;
+		if (clientConfig.selectedModpackId != null && !clientConfig.selectedModpackId.isBlank()) {
+			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
+				LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
+				clientConfig.selectedModpackId = "";
+				ConfigTools.save(clientConfigFile, clientConfig);
+			} else {
+				storedAddresses = clientConfig.installedModpacks.get(clientConfig.selectedModpackId);
+				selectedModpackDir = ModpackUtils.getModpackPath(clientConfig.selectedModpackId);
+			}
 		}
 
-		// Only selfupdate if no modpack is selected
-		if (selectedModpackAddress == null) {
+		if (storedAddresses == null || storedAddresses.isAnyEmpty()) {
 			SelfUpdater.update();
 			LegacyClientCacheUtils.deleteDummyFiles();
-		} else {
-			Secrets.Secret secret = SecretsStore.getClientSecret(clientConfig.selectedModpack);
-			Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(selectedModpackAddress, selectedServerAddress, certificateFingerprint,
-					requiresMagic);
+			return;
+		}
 
-			// When update-on-launch is disabled, just load the already-installed
-			// modpack: don't contact the server and don't reconcile local files,
-			// so the user can freely add/remove mods (e.g. a binary search).
-			if (!clientConfig.updateSelectedModpackOnLaunch) {
+		String certificateFingerprint = CertificateTrustStore.getFingerprint(storedAddresses.serverAddress);
+		Jsons.ModpackAddresses modpackAddresses = new Jsons.ModpackAddresses(storedAddresses.hostAddress, storedAddresses.serverAddress, certificateFingerprint, storedAddresses.requiresMagic);
+		Secrets.Secret secret = SecretsStore.getClientSecret(storedAddresses.serverAddress);
+
+		// When update-on-launch is disabled, just load the already-installed
+		// modpack: don't contact the server and don't reconcile local files,
+		// so the user can freely add/remove mods (e.g. a binary search).
+		if (!clientConfig.updateSelectedModpackOnLaunch) {
+			if (Files.isDirectory(selectedModpackDir)) {
+				loadLocalModpack(modpackAddresses, secret);
+			} else {
+				SelfUpdater.update();
 				LegacyClientCacheUtils.deleteDummyFiles();
-				var localModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
-				try {
-					new ModpackUpdater(localModpackContent, modpackAddresses, secret, selectedModpackDir).loadModpack();
-				} catch (Exception e) {
-					LOGGER.error("Failed to load modpack", e);
-				}
+			}
+			return;
+		}
+
+		var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
+		var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+		if (optionalLatestModpackContent.isPresent()) {
+			latestModpackContent = optionalLatestModpackContent.get();
+			if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
+				LOGGER.error("Selected modpack manifest changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
+				loadLocalModpack(modpackAddresses, secret);
 				return;
 			}
+			selectedModpackDir = ModpackUtils.getModpackPath(latestModpackContent.modpackId);
+			if (SelfUpdater.update(latestModpackContent)) return;
+		}
 
-			var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(modpackAddresses, secret, false);
-			var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+		LegacyClientCacheUtils.deleteDummyFiles();
+		new ModpackUpdater(latestModpackContent, modpackAddresses, secret, selectedModpackDir).processModpackUpdate(null);
+	}
 
-			// Use the latest modpack content if available
-			if (optionalLatestModpackContent.isPresent()) {
-				latestModpackContent = optionalLatestModpackContent.get();
-
-				// Update AutoModpack to server version only if we can get newest modpack content
-				if (SelfUpdater.update(latestModpackContent)) return;
-			}
-
-			// Delete dummy files
-			LegacyClientCacheUtils.deleteDummyFiles();
-
-			new ModpackUpdater(latestModpackContent, modpackAddresses, secret, selectedModpackDir).processModpackUpdate(null);
+	private void loadLocalModpack(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret) {
+		LegacyClientCacheUtils.deleteDummyFiles();
+		var localModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+		try {
+			new ModpackUpdater(localModpackContent, modpackAddresses, secret, selectedModpackDir).loadModpack();
+		} catch (Exception e) {
+			LOGGER.error("Failed to load local modpack", e);
 		}
 	}
 
@@ -136,29 +143,24 @@ public class Preload {
 		// load client config
 		if (clientConfigOverride == null) {
 			var clientConfigVersion = ConfigTools.softLoad(clientConfigFile, Jsons.VersionConfigField.class);
-			if (clientConfigVersion != null) {
-				if (clientConfigVersion.DO_NOT_CHANGE_IT == 1) {
-					// Update the configs schemes to not crash the game if loaded with old config!
-					var clientConfigV1 = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV1.class);
-					if (clientConfigV1 != null) { // update to V2 - just delete the installedModpacks
-						clientConfigVersion.DO_NOT_CHANGE_IT = 2;
-						clientConfigV1.DO_NOT_CHANGE_IT = 2;
-						clientConfigV1.installedModpacks = null;
-					}
-
-					ConfigTools.save(clientConfigFile, clientConfigV1);
-					LOGGER.info("Updated client config version to {}", clientConfigVersion.DO_NOT_CHANGE_IT);
-				}
+			if (clientConfigVersion != null && clientConfigVersion.DO_NOT_CHANGE_IT < 3) {
+				clientConfig = new Jsons.ClientConfigFieldsV3();
+				LOGGER.warn("Legacy client config detected. Stable modpack IDs require a one-time modpack redownload.");
+				LOGGER.warn("Old name-based modpack directories were left untouched and can be removed manually after the new modpack is installed.");
+			} else {
+				clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV3.class);
 			}
-
-			clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV2.class);
 		} else {
 			// TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
 			LOGGER.warn("You are using unofficial {} mod", MOD_ID);
 			LOGGER.warn("Using client config overrides! Editing the {} file will have no effect", clientConfigFile);
 			LOGGER.warn("Remove the {} file from inside the jar or remove and download fresh {} mod jar from modrinth/curseforge",
 					clientConfigFileOverrideResource, MOD_ID);
-			clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV2.class);
+			var overrideVersion = ConfigTools.load(clientConfigOverride, Jsons.VersionConfigField.class);
+			if (overrideVersion == null || overrideVersion.DO_NOT_CHANGE_IT < 3) {
+				throw new IllegalStateException("Legacy client config overrides are unsupported; install an unmodified AutoModpack jar");
+			}
+			clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV3.class);
 		}
 
 		var serverConfigVersion = ConfigTools.softLoad(serverConfigFile, Jsons.VersionConfigField.class);
@@ -202,12 +204,6 @@ public class Preload {
 				serverConfig.acceptedLoaders.add(LOADER);
 			}
 
-			// Check modpack name and fix it if needed, because it will be used for naming a folder on client
-			if (!serverConfig.modpackName.isEmpty() && FileInspection.isInValidFileName(serverConfig.modpackName)) {
-				serverConfig.modpackName = FileInspection.fixFileName(serverConfig.modpackName);
-				LOGGER.info("Changed modpack name to {}", serverConfig.modpackName);
-			}
-
 			ConfigUtils.normalizeServerConfig(serverConfig);
 
 			// Save changes
@@ -215,13 +211,9 @@ public class Preload {
 		}
 
 		if (clientConfig != null) {
-			// Very important to have this map initialized
 			if (clientConfig.installedModpacks == null) clientConfig.installedModpacks = new HashMap<>();
-
-			if (clientConfig.selectedModpack == null) clientConfig.selectedModpack = "";
-
-			// Save changes
-			ConfigTools.save(clientConfigFile, clientConfig);
+			if (clientConfig.selectedModpackId == null) clientConfig.selectedModpackId = "";
+			if (clientConfigOverride == null) ConfigTools.save(clientConfigFile, clientConfig);
 		}
 
 		knownHosts = ConfigTools.load(knownHostsFile, Jsons.KnownHostsFields.class);

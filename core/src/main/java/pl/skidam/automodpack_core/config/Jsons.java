@@ -14,23 +14,29 @@ public class Jsons {
 		public int DO_NOT_CHANGE_IT = 0; // file version
 	}
 
-	public static class ClientConfigFieldsV1 {
-		public int DO_NOT_CHANGE_IT = 1; // file version
-		public String selectedModpack = ""; // modpack name
-		public Map<String, String> installedModpacks; // modpack name, <modpack host address, minecraft server address>
-		public boolean selfUpdater = false;
-	}
-
-	public static class ClientConfigFieldsV2 {
-		public int DO_NOT_CHANGE_IT = 2; // file version
-		public String selectedModpack = ""; // modpack name
-		public Map<String, ModpackAddresses> installedModpacks; // modpack name, <modpack host address, minecraft server address>
+	public static class ClientConfigFieldsV3 {
+		public int DO_NOT_CHANGE_IT = 3; // file version
+		public String selectedModpackId = "";
+		public Map<String, ModpackAddresses> installedModpacks = new HashMap<>(); // modpack ID, current server connection details
 		public boolean updateSelectedModpackOnLaunch = true;
 		public boolean selfUpdater = false;
 		public boolean syncAutoModpackVersion = true;
 		public boolean syncLoaderVersion = true;
 		public boolean playMusic = true;
 		public boolean allowRemoteNonModpackDeletions = true;
+
+		public ClientConfigFieldsV3() {}
+
+		public ClientConfigFieldsV3(ClientConfigFieldsV3 source) {
+			this.selectedModpackId = source.selectedModpackId;
+			this.installedModpacks = source.installedModpacks == null ? new HashMap<>() : new HashMap<>(source.installedModpacks);
+			this.updateSelectedModpackOnLaunch = source.updateSelectedModpackOnLaunch;
+			this.selfUpdater = source.selfUpdater;
+			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
+			this.syncLoaderVersion = source.syncLoaderVersion;
+			this.playMusic = source.playMusic;
+			this.allowRemoteNonModpackDeletions = source.allowRemoteNonModpackDeletions;
+		}
 	}
 
 	public static class ModpackAddresses {
@@ -170,6 +176,7 @@ public class Jsons {
 	}
 
 	public static class ModpackContentFields {
+		public String modpackId = "";
 		public String modpackName = "";
 		public String automodpackVersion = "";
 		public String loader = "";

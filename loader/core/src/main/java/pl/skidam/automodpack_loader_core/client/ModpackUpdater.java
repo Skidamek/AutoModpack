@@ -17,7 +17,6 @@ import java.util.stream.Stream;
 import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -97,10 +96,6 @@ public class ModpackUpdater {
 				}
 			} else {
 				// Handle existing modpack
-				// Rename the modpack if the name has changed
-				modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
-				modpackContentFile = modpackDir.resolve(modpackContentFile.getFileName());
-
 				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
 				// Update or load the modpack
@@ -224,10 +219,6 @@ public class ModpackUpdater {
 			// Don't download files which already exist
 			ModpackUtils.populateStoreFromCWD(filesToUpdate, cache);
 			var finalFilesToUpdate = ModpackUtils.identifyUncachedFiles(filesToUpdate);
-
-			// Rename modpack
-			modpackDir = ModpackUtils.renameModpackDir(serverModpackContent, modpackDir);
-			modpackContentFile = modpackDir.resolve(modpackContentFile.getFileName());
 
 			// FETCH
 			long startFetching = System.currentTimeMillis();
@@ -395,6 +386,11 @@ public class ModpackUpdater {
 			// or fail and then show the error
 
 			var refreshedContent = refreshedContentOptional.get();
+			if (!Objects.equals(serverModpackContent.modpackId, refreshedContent.modpackId)) {
+				LOGGER.error("Refreshed manifest changed modpack ID from {} to {}", serverModpackContent.modpackId, refreshedContent.modpackId);
+				failedDownloads.putAll(failedDownloadsSecMap);
+				return;
+			}
 			this.serverModpackContent = refreshedContent;
 			this.serverModpackContentJson = GSON.toJson(refreshedContent);
 
@@ -452,12 +448,7 @@ public class ModpackUpdater {
 
 	// this is run every time we modpack is updated
 	private ApplyResult applyModpack(FileMetadataCache cache) throws Exception {
-		ModpackUtils.selectModpack(modpackDir, modpackAddresses, newDownloadedFiles);
-		try { // try catch this error there because we don't want to stop the whole method just because of that
-			SecretsStore.saveClientSecret(clientConfig.selectedModpack, modpackSecret);
-		} catch (IllegalArgumentException e) {
-			LOGGER.error("Failed to save client secret", e);
-		}
+		ModpackUtils.selectModpack(serverModpackContent.modpackId, serverModpackContent.modpackName, modpackDir, modpackAddresses, newDownloadedFiles);
 		Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
 
 		if (modpackContent == null) {

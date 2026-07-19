@@ -151,7 +151,7 @@ Three scenario-header keys decouple *how* a scenario runs from *what* it tests:
 `mode: client-only` is the fast loader-debugging path: stage a modpack, boot just
 the client, and assert on the launch log — seconds per iteration instead of a
 multi-minute gameplay round trip. The `stage_modpack` verb lays the modpack into
-`automodpack/modpacks/<name>/` and writes a client config that selects it with
+`automodpack/modpacks/<modpackId>/` and writes a client config that selects it with
 `updateSelectedModpackOnLaunch=false`, so the client loads it on boot without
 contacting a server:
 

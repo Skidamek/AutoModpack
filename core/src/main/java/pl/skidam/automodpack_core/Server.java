@@ -17,7 +17,7 @@ public class Server {
 	public static void main(String[] args) {
 
 		if (args.length < 1) {
-			LOGGER.error("Modpack id not provided!");
+			LOGGER.error("Modpack directory not provided!");
 			return;
 		}
 

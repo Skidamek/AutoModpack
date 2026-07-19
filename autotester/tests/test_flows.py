@@ -130,7 +130,7 @@ def test_download_only_flow(make_ctx):
 
     assert all(r["ok"] for r in results), [r for r in results if not r["ok"]]
     assert ctx.bridge.fingerprint == "AB:CD:EF:01:23"
-    root = ctx.game_dir / "automodpack" / "modpacks" / ctx.modpack_name
+    root = ctx.game_dir / ctx.selected_modpack_dir()
     for rel, _ in ctx.scenario_files:
         assert (root / rel).exists(), f"missing synced file {rel}"
 

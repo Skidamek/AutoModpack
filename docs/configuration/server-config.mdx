@@ -9,7 +9,7 @@ This configuration file controls the behavior of the AutoModpack server-side com
 | Setting                       | Default         | Description                                                                                                                             |
 |-------------------------------|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------|
 | `DO_NOT_CHANGE_IT`            | `<version>`     | Internal Use Only. Used to auto-migrate config versions during updates. Do not modify this manually.                                    |
-| `modpackName`                 | `""`            | The display name of the modpack shown during download. This also determines the folder name inside `~/automodpack/modpacks/` on client. |
+| `modpackName`                 | `""`            | The display name of the modpack shown in AutoModpack user interfaces. It does not determine pack identity or client storage paths.      |
 | `modpackHost`                 | `true`          | Enables or disables the internal host server that serves the modpack.                                                                   |
 | `generateModpackOnStart`      | `true`          | Automatically scans files and regenerates modpack metadata every time the server starts.                                                |
 | `autoExcludeServerSideMods`   | `true`          | Automatically excludes mods marked as "Server Side Only" in their metadata.                                                             |

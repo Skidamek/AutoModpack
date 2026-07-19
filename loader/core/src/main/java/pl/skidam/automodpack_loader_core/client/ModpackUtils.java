@@ -23,9 +23,11 @@ import org.jetbrains.annotations.NotNull;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -506,66 +508,49 @@ public class ModpackUtils {
 		}
 	}
 
-	public static Path renameModpackDir(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
-		String currentName = clientConfig.selectedModpack;
-		String newName = serverModpackContent.modpackName;
+	// Returns true if selection changed
+	public static boolean selectModpack(String modpackId, String displayName, Path modpackDirToSelect, Jsons.ModpackAddresses modpackAddresses, Set<String> newDownloadedFiles) throws IOException {
+		ModpackId.requireValid(modpackId);
+		if (!modpackDirToSelect.getFileName().toString().equals(modpackId)) throw new IllegalArgumentException("Modpack directory does not match its ID");
+		if (modpackAddresses == null || modpackAddresses.isAnyEmpty()) throw new IllegalArgumentException("Modpack addresses are empty");
 
-		if (clientConfig.installedModpacks == null || clientConfig.selectedModpack == null || clientConfig.selectedModpack.isBlank()) return modpackDir;
-
-		if (newName.isEmpty() || newName.equals(currentName)) return modpackDir;
-
-		var installedAddresses = clientConfig.installedModpacks.get(currentName);
-		if (installedAddresses == null) return modpackDir;
-
-		Path newModpackDir = modpackDir.getParent().resolve(newName);
-
-		try {
-			LOGGER.info("Renaming modpack directory: {} -> {}", modpackDir.getFileName(), newName);
-			Files.move(modpackDir, newModpackDir, StandardCopyOption.REPLACE_EXISTING);
-
-			removeModpackFromList(currentName);
-			selectModpack(newModpackDir, installedAddresses, Set.of());
-
-			LOGGER.info("Successfully renamed and reselected modpack: {}", newName);
-			return newModpackDir;
-		} catch (DirectoryNotEmptyException ignored) {
-			LOGGER.warn("Could not rename: Target directory {} not empty", newName);
-		} catch (IOException e) {
-			LOGGER.error("Failed to rename modpack directory", e);
-		}
-
-		return modpackDir;
-	}
-
-	// Returns true if value changed
-	public static boolean selectModpack(Path modpackDirToSelect, Jsons.ModpackAddresses modpackAddresses, Set<String> newDownloadedFiles) {
-		String newName = modpackDirToSelect.getFileName().toString();
-		String oldName = clientConfig.selectedModpack;
-
-		// If nothing changed, update list only and return early to avoid I/O.
-		if (Objects.equals(newName, oldName)) {
-			ModpackUtils.addModpackToList(newName, modpackAddresses);
+		String oldModpackId = clientConfig.selectedModpackId;
+		if (Objects.equals(modpackId, oldModpackId)) {
+			if (!sameAddresses(clientConfig.installedModpacks.get(modpackId), modpackAddresses)) {
+				Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
+				updatedConfig.installedModpacks.put(modpackId, modpackAddresses);
+				persistClientConfig(updatedConfig, "Failed to persist updated modpack addresses");
+			}
 			return false;
 		}
 
 		LOGGER.info("Preserving editable files from old modpack and copying to new modpack...");
-
-		// Preserve files from the OLD modpack (if it existed)
-		if (oldName != null && !oldName.isBlank()) {
-			processEditableFiles(modpacksDir.resolve(oldName), (dir, files) -> ModpackUtils.preserveEditableFiles(dir, files, newDownloadedFiles));
+		if (oldModpackId != null && !oldModpackId.isBlank()) {
+			Path oldModpackDir = getModpackPath(oldModpackId);
+			processEditableFiles(oldModpackDir, (dir, files) -> ModpackUtils.preserveEditableFiles(dir, files, newDownloadedFiles));
 		}
-
-		// Restore/Copy files to the NEW modpack
 		processEditableFiles(modpackDirToSelect, (dir, files) -> ModpackUtils.copyPreviousEditableFiles(dir, files, newDownloadedFiles));
 
-		// Update Configuration and Save
-		clientConfig.selectedModpack = newName;
-		ConfigTools.save(clientConfigFile, clientConfig);
-		ModpackUtils.addModpackToList(newName, modpackAddresses);
+		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
+		updatedConfig.selectedModpackId = modpackId;
+		updatedConfig.installedModpacks.put(modpackId, modpackAddresses);
+		persistClientConfig(updatedConfig, "Failed to persist selected modpack");
 
-		LOGGER.info("Selected modpack: {}", newName);
-
+		LOGGER.info("Selected modpack: {} ({})", displayName, modpackId);
 		return true;
+	}
+
+	private static void persistClientConfig(Jsons.ClientConfigFieldsV3 updatedConfig, String errorMessage) throws IOException {
+		if (!ConfigTools.save(clientConfigFile, updatedConfig)) throw new IOException(errorMessage);
+		clientConfig = updatedConfig;
+	}
+
+	private static boolean sameAddresses(Jsons.ModpackAddresses first, Jsons.ModpackAddresses second) {
+		if (first == null || second == null || first.hostAddress == null || first.serverAddress == null || second.hostAddress == null
+				|| second.serverAddress == null)
+			return false;
+		return first.requiresMagic == second.requiresMagic && AddressHelpers.formatAddress(first.hostAddress).equals(AddressHelpers.formatAddress(second.hostAddress))
+				&& AddressHelpers.formatAddress(first.serverAddress).equals(AddressHelpers.formatAddress(second.serverAddress));
 	}
 
 	private static void processEditableFiles(Path modpackDir, BiConsumer<Path, Set<String>> action) {
@@ -578,46 +563,8 @@ public class ModpackUtils {
 		}
 	}
 
-	public static void removeModpackFromList(String modpackName) {
-		if (modpackName == null || modpackName.isEmpty()) return;
-
-		if (clientConfig.installedModpacks != null && clientConfig.installedModpacks.containsKey(modpackName)) {
-			Map<String, Jsons.ModpackAddresses> modpacks = new HashMap<>(clientConfig.installedModpacks);
-			modpacks.remove(modpackName);
-			clientConfig.installedModpacks = modpacks;
-			ConfigTools.save(clientConfigFile, clientConfig);
-		}
-	}
-
-	public static void addModpackToList(String modpackName, Jsons.ModpackAddresses modpackAddresses) {
-		if (modpackName == null || modpackName.isEmpty() || modpackAddresses.isAnyEmpty()) return;
-
-		Map<String, Jsons.ModpackAddresses> modpacks = new HashMap<>(clientConfig.installedModpacks);
-		modpacks.put(modpackName, modpackAddresses);
-		clientConfig.installedModpacks = modpacks;
-
-		ConfigTools.save(clientConfigFile, clientConfig);
-	}
-
-	// Returns modpack name formatted for path or url if server doesn't provide modpack name
-	public static Path getModpackPath(InetSocketAddress address, String modpackName) {
-
-		String strAddress = address.getHostString() + ":" + address.getPort();
-		String correctedName = strAddress;
-
-		if (FileInspection.isInValidFileName(strAddress)) correctedName = FileInspection.fixFileName(strAddress);
-
-		Path modpackDir = SmartFileUtils.getPath(modpacksDir, correctedName);
-
-		if (!modpackName.isEmpty()) {
-			String nameFromName = modpackName;
-
-			if (FileInspection.isInValidFileName(modpackName)) nameFromName = FileInspection.fixFileName(modpackName);
-
-			modpackDir = SmartFileUtils.getPath(modpacksDir, nameFromName);
-		}
-
-		return modpackDir;
+	public static Path getModpackPath(String modpackId) {
+		return modpacksDir.resolve(ModpackId.requireValid(modpackId));
 	}
 
 	public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret,
@@ -793,8 +740,8 @@ public class ModpackUtils {
 	}
 
 	public static boolean potentiallyMalicious(Jsons.ModpackContentFields serverModpackContent) {
-		if (isUnsafePath(serverModpackContent.modpackName, true)) {
-			LOGGER.error("Modpack content is invalid: modpack name '{}' is unsafe/malicious", serverModpackContent.modpackName);
+		if (!ModpackId.isValid(serverModpackContent.modpackId)) {
+			LOGGER.error("Modpack content has an invalid modpack ID: '{}'", serverModpackContent.modpackId);
 			return true;
 		}
 

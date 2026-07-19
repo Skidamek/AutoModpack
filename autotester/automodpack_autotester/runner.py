@@ -468,7 +468,7 @@ def _v_wait_join(ctx: Context, step):
 def _v_stage_modpack(ctx: Context, step):
     """Pre-stage a modpack into the client game dir for offline / client-only runs.
 
-    Lays down ``automodpack/modpacks/<name>/`` and writes a client config that
+    Lays down ``automodpack/modpacks/<modpackId>/`` and writes a client config that
     selects it with ``updateSelectedModpackOnLaunch=false``, so the client loads
     the staged modpack on boot without ever contacting a server. Run this before
     ``launch_client`` in a ``mode: client-only`` scenario.
@@ -480,7 +480,9 @@ def _v_stage_modpack(ctx: Context, step):
     overrides).
     """
     game = ctx.game_dir
-    root = game / "automodpack" / "modpacks" / ctx.modpack_name
+    modpack_id = "".join(secrets.choice("abcdefghijklmnopqrstuvwxyz0123456789") for _ in range(7))
+    root = game / "automodpack" / "modpacks" / modpack_id
+    ctx.vars["modpack_dir"] = f"automodpack/modpacks/{modpack_id}"
     root.mkdir(parents=True, exist_ok=True)
 
     src = step.get("from")
@@ -501,6 +503,12 @@ def _v_stage_modpack(ctx: Context, step):
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(content)
 
+    manifest_path = root / "automodpack-content.json"
+    if manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text())
+        manifest["modpackId"] = modpack_id
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
     mods = step.get("mods") or []
     if mods:
         (root / "mods").mkdir(parents=True, exist_ok=True)
@@ -515,11 +523,11 @@ def _v_stage_modpack(ctx: Context, step):
     host = ctx.server_host or "127.0.0.1"
     addr = host if ":" in host else f"{host}:25565"
     cfg = {
-        "DO_NOT_CHANGE_IT": 2,
-        "selectedModpack": ctx.modpack_name,
+        "DO_NOT_CHANGE_IT": 3,
+        "selectedModpackId": modpack_id,
         "updateSelectedModpackOnLaunch": False,
         "installedModpacks": {
-            ctx.modpack_name: {
+            modpack_id: {
                 "hostAddress": addr,
                 "serverAddress": addr,
                 "requiresMagic": False,

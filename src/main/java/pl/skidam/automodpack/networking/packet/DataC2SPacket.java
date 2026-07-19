@@ -1,8 +1,8 @@
 package pl.skidam.automodpack.networking.packet;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,6 +20,7 @@ import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -43,7 +44,6 @@ public class DataC2SPacket {
 
 		String packetAddress = dataPacket.address == null ? "" : dataPacket.address;
 		int packetPort = dataPacket.port;
-		String modpackName = dataPacket.modpackName == null ? "" : dataPacket.modpackName;
 		Secrets.Secret secret = dataPacket.secret;
 		boolean modRequired = dataPacket.modRequired;
 		boolean requiresMagic = dataPacket.requiresMagic;
@@ -60,7 +60,6 @@ public class DataC2SPacket {
 			return CompletableFuture.completedFuture(buildResponse(null));
 		}
 
-		Path modpackDir;
 		Jsons.ModpackAddresses modpackAddresses;
 		try {
 			// Get actual address of the server client have connected to and format it
@@ -91,7 +90,6 @@ public class DataC2SPacket {
 			LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(),
 					requiresMagic);
 
-			modpackDir = ModpackUtils.getModpackPath(modpackAddress, modpackName);
 			modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, connectionAttempt.serverAddress(), connectionAttempt.certificateFingerprint(),
 					connectionAttempt.certificatePinReason(), requiresMagic);
 		} catch (Exception e) {
@@ -103,25 +101,34 @@ public class DataC2SPacket {
 			Boolean needsDisconnecting = null;
 
 			if (optionalServerModpackContent.isPresent()) {
-				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(optionalServerModpackContent.get(), modpackDir);
+				Jsons.ModpackContentFields serverModpackContent = optionalServerModpackContent.get();
+				Path modpackDir = ModpackUtils.getModpackPath(serverModpackContent.modpackId);
+				try {
+					SecretsStore.saveClientSecret(modpackAddresses.serverAddress, secret);
+				} catch (Exception e) {
+					LOGGER.error("Failed to persist client secret", e);
+					disconnectImmediately(handler);
+					return buildResponse(true);
+				}
 
+				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 				if (updateCheckResult.requiresUpdate()) {
 					disconnectImmediately(handler);
-					new ModpackUpdater(optionalServerModpackContent.get(), modpackAddresses, secret, modpackDir).processModpackUpdate(updateCheckResult);
+					new ModpackUpdater(serverModpackContent, modpackAddresses, secret, modpackDir).processModpackUpdate(updateCheckResult);
 					needsDisconnecting = true;
 				} else {
-					boolean selectedModpackChanged = ModpackUtils.selectModpack(modpackDir, modpackAddresses, Set.of());
-
-					var modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
-					if (Files.exists(modpackContentFile)) {
-						try {
-							Files.writeString(modpackContentFile, GSON.toJson(optionalServerModpackContent.get()));
-						} catch (Exception ignored) {
-						}
+					boolean selectedModpackChanged;
+					try {
+						selectedModpackChanged = ModpackUtils.selectModpack(serverModpackContent.modpackId, serverModpackContent.modpackName, modpackDir, modpackAddresses, Set.of());
+					} catch (IOException e) {
+						LOGGER.error("Failed to select stable modpack installation", e);
+						disconnectImmediately(handler);
+						return buildResponse(true);
 					}
+					var modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
+					if (Files.exists(modpackContentFile)) ConfigTools.saveModpackContent(modpackContentFile, serverModpackContent);
 
 					if (selectedModpackChanged) {
-						SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
 						disconnectImmediately(handler);
 						new ReLauncher(modpackDir, UpdateType.SELECT, null).restart(false);
 						needsDisconnecting = true;
@@ -132,10 +139,6 @@ public class DataC2SPacket {
 			} else if (ModpackUtils.canConnectModpackHost(modpackAddresses)) {
 				// Couldn't download the modpack content (e.g. certificate not verified) but the host is reachable
 				needsDisconnecting = true;
-			}
-
-			if (clientConfig.selectedModpack != null && !clientConfig.selectedModpack.isBlank()) {
-				SecretsStore.saveClientSecret(clientConfig.selectedModpack, secret);
 			}
 
 			return buildResponse(needsDisconnecting);

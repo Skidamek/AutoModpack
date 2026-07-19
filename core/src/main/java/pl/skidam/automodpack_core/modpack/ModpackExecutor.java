@@ -44,7 +44,7 @@ public class ModpackExecutor {
 		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 			generated = content.create(cache);
 		}
-		modpacks.put(content.getModpackName(), content);
+		if (generated) register(content);
 		return generated;
 	}
 
@@ -55,7 +55,7 @@ public class ModpackExecutor {
 		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 			generated = content.create(cache);
 		}
-		modpacks.put(content.getModpackName(), content);
+		if (generated) register(content);
 		return generated;
 	}
 
@@ -63,8 +63,13 @@ public class ModpackExecutor {
 		ModpackContent content = init();
 		if (content == null) return false;
 		boolean generated = content.loadPreviousContent();
-		modpacks.put(content.getModpackName(), content);
+		if (generated) register(content);
 		return generated;
+	}
+
+	private void register(ModpackContent content) {
+		modpacks.clear();
+		modpacks.put(content.getModpackId(), content);
 	}
 
 	public boolean isGenerating() {
