@@ -15,7 +15,7 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 /** Exact certificate pins owned by the original Minecraft server identity. */
 public final class CertificateTrustStore {
 	public enum Reason {
-		ADDRESS_PIN, TOFU
+		ADDRESS_PIN, TOFU, SEED
 	}
 
 	private CertificateTrustStore() {}

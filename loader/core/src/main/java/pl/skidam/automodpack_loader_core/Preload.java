@@ -14,11 +14,13 @@ import java.util.zip.ZipInputStream;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -34,6 +36,7 @@ public class Preload {
 			LOGGER.info("Prelaunching AutoModpack...");
 			initializeConstants();
 			loadConfigs();
+			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) importBootstrap();
 			updateAll();
 			LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
 		} catch (Exception e) {
@@ -78,6 +81,10 @@ public class Preload {
 		Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(storedConnectionInfo.origin, storedConnectionInfo.endpoint,
 				storedConnectionInfo.requiresMagic, expectedFingerprint, null);
 		Secrets.Secret secret = SecretsStore.getClientSecret(storedConnectionInfo.origin);
+		if (secret == null) {
+			secret = Secrets.anonymousSecret();
+			LOGGER.info("No saved secret for seeded/selected origin {}; using an anonymous preload secret", AddressHelpers.formatAddress(storedConnectionInfo.origin));
+		}
 
 		// When update-on-launch is disabled, just load the already-installed
 		// modpack: don't contact the server and don't reconcile local files,
@@ -236,7 +243,6 @@ public class Preload {
 			knownHosts.hosts = new HashMap<>();
 			writeConfig(knownHostsFile, knownHosts);
 		}
-
 		try {
 			Files.createDirectories(privateDir);
 			String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
@@ -257,5 +263,57 @@ public class Preload {
 		if (serverConfig == null || clientConfig == null) throw new RuntimeException("Failed to load config!");
 
 		LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
+	}
+	private void importBootstrap() {
+		if (!Files.isRegularFile(knownHostsBootstrapFile)) return;
+
+		Jsons.KnownHostsBootstrapFields fields = ConfigTools.read(knownHostsBootstrapFile, Jsons.KnownHostsBootstrapFields.class)
+				.orElseThrow(() -> new ConfigTools.ConfigException("Bootstrap file is not a regular file"));
+		final BootstrapConfig.Validated bootstrap;
+		try {
+			bootstrap = BootstrapConfig.validate(fields);
+		} catch (IllegalArgumentException e) {
+			throw new ConfigTools.ConfigException("Invalid bootstrap file " + knownHostsBootstrapFile.toAbsolutePath().normalize(), e);
+		}
+
+		Jsons.KnownHostsFields updatedKnownHosts = new Jsons.KnownHostsFields();
+		updatedKnownHosts.hosts = new HashMap<>(knownHosts.hosts);
+		String originKey = AddressHelpers.formatAddress(bootstrap.origin());
+		Jsons.CertificateTrustEntry previousTrust = updatedKnownHosts.hosts.put(originKey,
+				new Jsons.CertificateTrustEntry(bootstrap.fingerprint(), CertificateTrustStore.Reason.SEED.name()));
+
+		String previousSelectedModpackId = clientConfig.selectedModpackId;
+		Jsons.ClientConfigFieldsV3 updatedClientConfig = clientConfig;
+		Jsons.ConnectionInfo previousConnection = null;
+		if (bootstrap.installsModpack()) {
+			updatedClientConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
+			previousConnection = updatedClientConfig.modpackConnections.put(bootstrap.modpackId(),
+					new Jsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.requiresMagic(), null, null));
+			updatedClientConfig.selectedModpackId = bootstrap.modpackId();
+		}
+
+		writeConfig(knownHostsFile, updatedKnownHosts);
+		if (bootstrap.installsModpack()) writeConfig(clientConfigFile, updatedClientConfig);
+
+		knownHosts = updatedKnownHosts;
+		clientConfig = updatedClientConfig;
+		try {
+			Files.delete(knownHostsBootstrapFile);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Bootstrap state was saved but the bootstrap file could not be deleted", e);
+		}
+
+		if (previousTrust == null) {
+			LOGGER.info("Imported seeded certificate pin for origin {} ({})", originKey, NetUtils.shortenFingerprint(bootstrap.fingerprint()));
+		} else {
+			LOGGER.info("Replaced seeded certificate pin for origin {}: {} -> {}", originKey, NetUtils.shortenFingerprint(previousTrust.fingerprint),
+					NetUtils.shortenFingerprint(bootstrap.fingerprint()));
+		}
+		if (bootstrap.installsModpack()) {
+			String oldOrigin = previousConnection == null || previousConnection.origin == null ? "none" : AddressHelpers.formatAddress(previousConnection.origin);
+			String oldEndpoint = previousConnection == null || previousConnection.endpoint == null ? "none" : AddressHelpers.formatAddress(previousConnection.endpoint);
+			LOGGER.info("Seed selection {} -> {}; connection origin {} -> {}; endpoint {} -> {}", previousSelectedModpackId, bootstrap.modpackId(), oldOrigin,
+					AddressHelpers.formatAddress(bootstrap.origin()), oldEndpoint, AddressHelpers.formatAddress(bootstrap.endpoint()));
+		}
 	}
 }

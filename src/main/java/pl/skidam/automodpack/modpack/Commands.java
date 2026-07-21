@@ -2,6 +2,7 @@ package pl.skidam.automodpack.modpack;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 /*? if >= 1.21.11 {*/
@@ -13,8 +14,15 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.auth.ServerAddressPin;
+import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.ModpackContentTools;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
@@ -70,6 +78,24 @@ public class Commands {
 												.executes(Commands::fingerprintShareUsage)
 												.then(argument("minecraft-address", StringArgumentType.greedyString())
 														.executes(Commands::fingerprintShareAddress)
+												)
+										)
+								)
+								.then(literal("bootstrap")
+										.then(literal("pin")
+												.then(argument("origin", StringArgumentType.word())
+														.executes(Commands::bootstrapPin)
+												)
+										)
+										.then(literal("install")
+												.then(argument("origin", StringArgumentType.word())
+														.executes(Commands::bootstrapInstallConfiguredEndpoint)
+														.then(argument("endpoint", StringArgumentType.word())
+																.executes(Commands::bootstrapInstallExplicitEndpointDefault)
+																.then(argument("requires-magic", BoolArgumentType.bool())
+																		.executes(Commands::bootstrapInstallExplicitEndpointWithMagic)
+																)
+														)
 												)
 										)
 								)
@@ -152,6 +178,84 @@ public class Commands {
 		send(context, "Plain Minecraft origin (vanilla and older clients):", ChatFormatting.WHITE, copyable(origin), ChatFormatting.YELLOW, false);
 		send(context, "Pinned AutoModpack origin:", ChatFormatting.WHITE, copyable(pinnedOrigin), ChatFormatting.GREEN, false);
 		send(context, "Compatible AutoModpack clients import the public fingerprint and save a clean Minecraft origin.", ChatFormatting.GRAY, false);
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int bootstrapPin(CommandContext<CommandSourceStack> context) {
+		try {
+			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
+			return writeBootstrap(context, BootstrapConfig.pin(origin, requireBootstrapFingerprint()), false);
+		} catch (IllegalArgumentException e) {
+			send(context, e.getMessage(), ChatFormatting.RED, false);
+			return 0;
+		}
+	}
+
+	private static int bootstrapInstallConfiguredEndpoint(CommandContext<CommandSourceStack> context) {
+		try {
+			if (serverConfig.advertisedEndpointHost == null || serverConfig.advertisedEndpointHost.isBlank()
+					|| serverConfig.advertisedEndpointPort == -1)
+				throw new IllegalArgumentException("Configured bootstrap install requires explicit advertisedEndpointHost and advertisedEndpointPort values");
+			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
+			InetSocketAddress endpoint = AddressHelpers.parseEndpoint(
+					AddressHelpers.formatAddress(AddressHelpers.format(serverConfig.advertisedEndpointHost, serverConfig.advertisedEndpointPort)));
+			boolean requiresMagic = (serverConfig.bindPort == -1 && hostServer.isRunning()) || serverConfig.requireMagicPackets;
+			return writeBootstrap(context, BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, requiresMagic), true);
+		} catch (IllegalArgumentException e) {
+			send(context, e.getMessage(), ChatFormatting.RED, false);
+			return 0;
+		}
+	}
+
+	private static int bootstrapInstallExplicitEndpointDefault(CommandContext<CommandSourceStack> context) {
+		return bootstrapInstallExplicitEndpoint(context, true);
+	}
+
+	private static int bootstrapInstallExplicitEndpointWithMagic(CommandContext<CommandSourceStack> context) {
+		return bootstrapInstallExplicitEndpoint(context, BoolArgumentType.getBool(context, "requires-magic"));
+	}
+
+	private static int bootstrapInstallExplicitEndpoint(CommandContext<CommandSourceStack> context, boolean requiresMagic) {
+		try {
+			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
+			InetSocketAddress endpoint = AddressHelpers.parseEndpoint(StringArgumentType.getString(context, "endpoint"));
+			return writeBootstrap(context, BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, requiresMagic), true);
+		} catch (IllegalArgumentException e) {
+			send(context, e.getMessage(), ChatFormatting.RED, false);
+			return 0;
+		}
+	}
+
+	private static String requireBootstrapFingerprint() {
+		if (serverConfig.disableInternalTLS) throw new IllegalArgumentException("Bootstrap export requires AutoModpack TLS to be enabled");
+		String fingerprint = hostServer.getCertificateFingerprint();
+		if (fingerprint == null) throw new IllegalArgumentException("Certificate fingerprint is unavailable; start the AutoModpack host with TLS enabled first");
+		return fingerprint;
+	}
+
+	private static String requirePublishedModpackId() {
+		Jsons.ModpackContentFields content = ModpackContentTools.read(hostModpackContentFile);
+		if (content == null || !ModpackId.isValid(content.modpackId)) throw new IllegalArgumentException("No valid published modpack ID is available; generate the modpack first");
+		return content.modpackId;
+	}
+
+	private static int writeBootstrap(CommandContext<CommandSourceStack> context, Jsons.KnownHostsBootstrapFields fields, boolean install) {
+		try {
+			ConfigTools.writeAtomic(knownHostsBootstrapFile, fields);
+		} catch (IOException e) {
+			LOGGER.error("Failed to export bootstrap file", e);
+			send(context, "Failed to write bootstrap file: " + e.getMessage(), ChatFormatting.RED, false);
+			return 0;
+		}
+
+		String absolutePath = knownHostsBootstrapFile.toAbsolutePath().normalize().toString();
+		send(context, "Bootstrap file exported", ChatFormatting.GREEN, copyable(absolutePath), ChatFormatting.YELLOW, false);
+		send(context, "Package it on clients at", ChatFormatting.WHITE, copyable("automodpack/automodpack-bootstrap.json"), ChatFormatting.YELLOW, false);
+		if (install && serverConfig.validateSecrets) {
+			send(context,
+					"WARNING: validateSecrets=true. Fresh clients without an existing secret for this origin will fail preload download; disable validation or provision a normal login first.",
+					ChatFormatting.RED, false);
+		}
 		return Command.SINGLE_SUCCESS;
 	}
 
@@ -273,7 +377,7 @@ public class Commands {
 	private static int about(CommandContext<CommandSourceStack> context) {
 		send(context, "AutoModpack", ChatFormatting.GREEN, AM_VERSION, ChatFormatting.WHITE, false);
 		send(context, "/automodpack generate", ChatFormatting.YELLOW, false);
-		send(context, "/automodpack host start/stop/restart/connections/fingerprint", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
 	}

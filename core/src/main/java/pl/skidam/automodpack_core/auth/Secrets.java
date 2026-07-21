@@ -36,6 +36,10 @@ public class Secrets {
 		}
 	}
 
+	public static Secret anonymousSecret() {
+		return new Secret(Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]), 0L);
+	}
+
 	public static Secret generateSecret() {
 		SecureRandom random = new SecureRandom();
 		byte[] bytes = new byte[32]; // 32 bytes = 256 bits

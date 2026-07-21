@@ -163,6 +163,15 @@ public class Jsons {
 		}
 	}
 
+	public static class KnownHostsBootstrapFields {
+		public Integer schemaVersion;
+		public String origin;
+		public String fingerprint;
+		public String modpackId;
+		public String endpoint;
+		public Boolean requiresMagic;
+	}
+
 	public static class ModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";

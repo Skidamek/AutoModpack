@@ -62,6 +62,7 @@
 
   "automodpack.pin.active": "Certificate pin (%s): %s (click to remove)",
   "automodpack.pin.reason.address": "address",
+  "automodpack.pin.reason.seed": "bootstrap seed",
   "automodpack.pin.reason.tofu": "manual/TOFU",
   "automodpack.pin.removed": "Certificate pin removed",
   "automodpack.pin.invalid": "Invalid pinned address. Paste the complete address provided by the server operator.",

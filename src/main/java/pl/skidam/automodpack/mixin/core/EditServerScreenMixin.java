@@ -55,9 +55,11 @@ public abstract class EditServerScreenMixin extends Screen {
 		if (trust == null) return;
 
 		String shortened = NetUtils.shortenFingerprint(trust.fingerprint);
-		Component reason = CertificateTrustStore.Reason.ADDRESS_PIN.name().equals(trust.reason)
-				? VersionedText.translatable("automodpack.pin.reason.address")
-				: VersionedText.translatable("automodpack.pin.reason.tofu");
+		Component reason = switch (trust.reason) {
+			case "ADDRESS_PIN" -> VersionedText.translatable("automodpack.pin.reason.address");
+			case "SEED" -> VersionedText.translatable("automodpack.pin.reason.seed");
+			default -> VersionedText.translatable("automodpack.pin.reason.tofu");
+		};
 		Button button = VersionedScreen.buttonWidget(width / 2 - 110, height / 2 + 105, 220, 20,
 				VersionedText.translatable("automodpack.pin.active", reason, shortened), pressed -> {
 					CertificateTrustStore.remove(origin);
