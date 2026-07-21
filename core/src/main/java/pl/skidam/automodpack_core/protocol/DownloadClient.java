@@ -34,10 +34,8 @@ import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 public class DownloadClient implements AutoCloseable {
 
-	// Dedicated daemon pool for the blocking network/login stages (pool
-	// hydration, and the up-to-120s certificate prompt). Keeps long downloads
-	// and that prompt off ForkJoinPool.commonPool, which is shared JVM-wide and
-	// also drives the parallel streams used here and in ModpackContent.
+	// Dedicated daemon pool for blocking network/login stages and pool hydration.
+	// Human certificate decisions intentionally have no AutoModpack deadline.
 	public static final ExecutorService NET_EXECUTOR = Executors.newCachedThreadPool(r -> {
 		Thread t = new Thread(r, "automodpack-net");
 		t.setDaemon(true);
@@ -131,7 +129,7 @@ public class DownloadClient implements AutoCloseable {
 		return trustCallback.apply(probe.untrustedCert).thenComposeAsync(trusted -> {
 			if (!trusted) return CompletableFuture.failedFuture(new IOException("User rejected certificate"));
 			return retryWithTrustedCertificate(probe, connectionInfo, secretBytes, poolSize);
-		}, NET_EXECUTOR).orTimeout(120, TimeUnit.SECONDS).exceptionally(e -> { throw new CompletionException(new IOException("Certificate not trusted", e)); });
+		}, NET_EXECUTOR);
 	}
 
 	private static CompletableFuture<DownloadClient> retryWithTrustedCertificate(ProbeResult probe, Jsons.ConnectionInfo connectionInfo, byte[] secretBytes,

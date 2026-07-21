@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Set;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -74,6 +75,11 @@ public class LegacyClientCacheUtils {
 	public static boolean wasThisTimestampEvaluatedBefore(String timestamp) {
 		if (clientDeletedNonModpackFilesTimestamps == null) return false;
 		return clientDeletedNonModpackFilesTimestamps.timestamps.contains(timestamp);
+	}
+
+	public static Set<String> getEvaluatedDeletionTimestamps() {
+		if (clientDeletedNonModpackFilesTimestamps == null) return Set.of();
+		return Set.copyOf(clientDeletedNonModpackFilesTimestamps.timestamps);
 	}
 
 	public static void markTimestampAsEvaluated(String timestamp) {

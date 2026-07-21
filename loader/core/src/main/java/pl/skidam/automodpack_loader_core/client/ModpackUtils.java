@@ -11,16 +11,12 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.jetbrains.annotations.NotNull;
 
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
@@ -32,7 +28,6 @@ import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
-import pl.skidam.automodpack_core.utils.cache.ModFileCache;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class ModpackUtils {
@@ -238,368 +233,15 @@ public class ModpackUtils {
 		return uncachedFiles;
 	}
 
-	// Installs independent live copies from verified store objects.
-	public static void installModpack(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, FileMetadataCache cache) throws IOException {
-		for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
-			Path modpackFile = SmartFileUtils.getPath(modpackDir, contentItem.file);
-			long expectedSize = Long.parseLong(contentItem.size);
-			if (SmartFileUtils.isValidFile(modpackFile, expectedSize, contentItem.sha1)) continue;
-
-			Path storeFile = SmartFileUtils.getPath(storeDir, contentItem.sha1);
-			if (!SmartFileUtils.isValidFile(storeFile, expectedSize, contentItem.sha1))
-				throw new IOException("Required CAS object is missing or corrupt: " + contentItem.sha1);
-
-			LOGGER.debug("Installing independent copy of {} from CAS", contentItem.file);
-			SmartFileUtils.copyVerifiedAtomic(storeFile, modpackFile, expectedSize, contentItem.sha1);
-			cache.overwriteCache(modpackFile, contentItem.sha1);
-		}
-	}
-
-	public static boolean deleteFilesMarkedForDeletionByTheServer(Set<Jsons.ModpackContentFields.FileToDelete> filesToDeleteOnClient, FileMetadataCache cache) {
-		if (!clientConfig.allowRemoteNonModpackDeletions) {
-			if (!filesToDeleteOnClient.isEmpty()) {
-				LOGGER.warn("Server requested deletion of {} files, but remote deletions are disabled in client config! Consider deleting them manually.",
-						filesToDeleteOnClient.size());
-				for (var entry : filesToDeleteOnClient) {
-					LOGGER.warn("File marked for deletion: {} (sha1: {})", entry.file, entry.sha1);
-				}
-			}
-			return false;
-		}
-
-		AtomicBoolean deletedAnyModFile = new AtomicBoolean(false);
-		for (var entry : filesToDeleteOnClient) {
-			if (wasThisTimestampEvaluatedBefore(entry.timestamp)) {
-				LOGGER.info("Skipping deletion of {} - already evaluated", entry.file);
-				continue;
-			}
-
-			String filePath = entry.file;
-			String expectedHash = entry.sha1;
-
-			// If the matching file path exists, and it is in fact a file, target it directly
-			Path fileInCWD = SmartFileUtils.getPathFromCWD(filePath);
-			if (Files.isRegularFile(fileInCWD)) {
-				LOGGER.info("Found exact file to delete: {}", filePath);
-				String diskHash = cache.getHashOrNull(fileInCWD);
-				if (diskHash.equalsIgnoreCase(expectedHash)) {
-					boolean isModFile = FileInspection.isMod(fileInCWD);
-					LOGGER.warn("Deleting file marked for deletion by server: {}", filePath);
-					SmartFileUtils.executeOrder66(fileInCWD);
-					if (isModFile) deletedAnyModFile.set(true);
-				}
-			} else { // Otherwise, search the (parent) directory for matching files
-				Path parentDir;
-				if (Files.isDirectory(fileInCWD)) {
-					parentDir = fileInCWD;
-				} else {
-					parentDir = fileInCWD.getParent();
-				}
-
-				LOGGER.info("Searching directory {} for files to delete matching: {}", parentDir, filePath);
-
-				try (var stream = Files.list(parentDir)) {
-					stream.forEach(path -> {
-						if (!Files.isRegularFile(path)) return;
-						String diskHash = cache.getHashOrNull(path);
-						if (diskHash.equalsIgnoreCase(expectedHash)) {
-							boolean isModFile = FileInspection.isMod(path);
-							LOGGER.warn("Deleting file marked for deletion by server: {}", path);
-							SmartFileUtils.executeOrder66(path);
-							if (isModFile) deletedAnyModFile.set(true);
-						}
-					});
-				} catch (Exception e) {
-					LOGGER.error("Error while searching for files to delete in directory: {}", parentDir, e);
-				}
-			}
-		}
-
-		for (var entry : filesToDeleteOnClient) {
-			markTimestampAsEvaluated(entry.timestamp);
-		}
-
-		saveDeletedFilesTimestamps();
-
-		return deletedAnyModFile.get();
-	}
-
-	public static boolean correctFilesLocations(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy,
-			FileMetadataCache cache) throws IOException {
-		boolean needsRestart = false;
-
-		// correct the files locations
-		for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
-			String formattedFile = contentItem.file;
-			Path modpackFile = SmartFileUtils.getPath(modpackDir, formattedFile);
-			Path runFile = SmartFileUtils.getPathFromCWD(formattedFile);
-			boolean isMod = "mod".equals(contentItem.type);
-
-			if (isMod) { // Make it into standardized mods directory, for support custom launchers
-				runFile = SmartFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
-			}
-
-			boolean modpackFileExists = Files.exists(modpackFile);
-			boolean runFileExists = Files.exists(runFile);
-			boolean runFileHashMatch = false;
-			if (runFileExists) runFileHashMatch = Objects.equals(contentItem.sha1, cache.getHashOrNull(runFile));
-
-			// We only copy mods to the run directory which are not ignored - which need a workaround
-			// If its any other file type, always copy
-			if (filesNotToCopy.contains(formattedFile)) continue;
-
-			if (modpackFileExists && !runFileExists) {
-				SmartFileUtils.copyFile(modpackFile, runFile);
-
-				if (isMod) {
-					needsRestart = true;
-					LOGGER.warn("Applying workaround for {} mod", formattedFile);
-				}
-			} else if (!modpackFileExists) { // This should never happen, since we previously verified that whole modpack is downloaded
-				LOGGER.error(
-						"File {} doesn't exist!? If you see this please report this to the automodpack repo and attach this log https://github.com/Skidamek/AutoModpack/issues",
-						formattedFile);
-				Thread.dumpStack();
-			} else if (!runFileHashMatch) {
-				SmartFileUtils.copyFile(modpackFile, runFile);
-				if (isMod) {
-					needsRestart = true;
-					LOGGER.warn("Overwriting mod {} file to modpack version", formattedFile);
-				} else {
-					LOGGER.info("Overwriting {} file to the modpack version", formattedFile);
-				}
-			}
-		}
-
-		return needsRestart;
-	}
-
-	public static boolean removeRestModsNotToCopy(Jsons.ModpackContentFields serverModpackContent, Set<String> filesNotToCopy, Set<Path> modsToKeep,
-			FileMetadataCache cache) {
-		boolean needsRestart = false;
-
-		for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
-			String formattedFile = contentItem.file;
-			Path runFile = SmartFileUtils.getPathFromCWD(formattedFile);
-			boolean isMod = "mod".equals(contentItem.type);
-
-			if (isMod) { // Make it into standardized mods directory, for support custom launchers
-				runFile = SmartFileUtils.getPath(MODS_DIR, formattedFile.replaceFirst("/mods/", ""));
-			}
-
-			if (modsToKeep.contains(runFile)) {
-				LOGGER.info("Keeping {} file in the standard mods directory", formattedFile);
-				continue;
-			}
-
-			boolean runFileExists = Files.exists(runFile);
-			boolean runFileHashMatch = false;
-			if (runFileExists) runFileHashMatch = contentItem.sha1.equalsIgnoreCase(cache.getHashOrNull(runFile));
-
-			if (runFileHashMatch && isMod && filesNotToCopy.contains(formattedFile)) {
-				LOGGER.info("Deleting {} file from standard mods directory", formattedFile);
-				SmartFileUtils.executeOrder66(runFile);
-				needsRestart = true;
-			}
-		}
-
-		return needsRestart;
-	}
-
-	// Copies necessary nested mods from modpack mods to standard mods folder
-	// Returns true if requires client restart
-	public static boolean fixNestedMods(List<FileInspection.Mod> conflictingNestedMods, Collection<FileInspection.Mod> standardModList, FileMetadataCache cache,
-			ModFileCache modCache) throws IOException {
-		if (conflictingNestedMods.isEmpty()) return false;
-
-		final List<String> standardModIDs = standardModList.stream().flatMap(mod -> mod.IDs().stream()).toList();
-		boolean needsRestart = false;
-
-		for (FileInspection.Mod mod : conflictingNestedMods) {
-			// Check mods provides, if there's some mod which is named with the same id as some other mod 'provides' remove the mod which provides that id as
-			// well, otherwise loader will crash
-			if (standardModIDs.stream().anyMatch(mod.IDs()::contains)) continue;
-
-			Path modPath = mod.path();
-			Path standardModPath = MODS_DIR.resolve(modPath.getFileName());
-			if (!Files.exists(standardModPath) || !mod.hash().equalsIgnoreCase(cache.getHashOrNull(standardModPath))) {
-				needsRestart = true;
-				LOGGER.info("Copying nested mod {} to standard mods folder", standardModPath.getFileName());
-				SmartFileUtils.copyFile(modPath, standardModPath);
-				var newMod = modCache.getModOrNull(standardModPath, cache);
-				if (newMod != null) standardModList.add(newMod); // important
-			}
-		}
-
-		return needsRestart;
-	}
-
-	// Returns ignored files list, which is conflicting nested mods + workarounds set
-	public static Set<String> getIgnoredFiles(List<FileInspection.Mod> conflictingNestedMods, Set<String> workarounds) {
-		Set<String> newIgnoredFiles = new HashSet<>(workarounds);
-
-		for (FileInspection.Mod mod : conflictingNestedMods) {
-			newIgnoredFiles.add(SmartFileUtils.formatPath(mod.path(), modpacksDir));
-		}
-
-		return newIgnoredFiles;
-	}
-
-	// Checks if in standard mods folder are any mods that are in modpack
-	// Returns map of modpack mods and standard mods that have the same mod id they dont necessarily have to be the same*
-	public static Map<FileInspection.Mod, FileInspection.Mod> getDupeMods(Path modpackDir, Set<String> ignoredMods,
-			Collection<FileInspection.Mod> standardModList, Collection<FileInspection.Mod> modpackModList, Set<String> forceCopyFiles) {
-		final Map<FileInspection.Mod, FileInspection.Mod> duplicates = new HashMap<>();
-
-		for (FileInspection.Mod modpackMod : modpackModList) {
-			FileInspection.Mod standardMod = standardModList.stream().filter(mod -> mod.IDs().stream().anyMatch(modpackMod.IDs()::contains)).findFirst()
-					.orElse(null);
-			if (standardMod != null) {
-				String formattedFile = SmartFileUtils.formatPath(modpackMod.path(), modpackDir);
-				if (ignoredMods.contains(formattedFile) || forceCopyFiles.contains(formattedFile)) continue;
-
-				duplicates.put(modpackMod, standardMod);
-			}
-		}
-
-		return duplicates;
-	}
-
-	public record RemoveDupeModsResult(boolean requiresRestart, Set<Path> modsToKeep) {}
-
-	// Returns true if removed any mod from standard mods folder
-	// If the client mod is a duplicate of what modpack contains then it removes it from client so that you dont need to restart game just when you launched it
-	// and modpack get updated - basically having these mods separately allows for seamless updates
-	// If you have client mods which require specific mod which is also a duplicate of what modpack contains it should stay
-	public static RemoveDupeModsResult removeDupeMods(Path modpackDir, Collection<FileInspection.Mod> standardModList,
-			Collection<FileInspection.Mod> modpackModList, Set<String> ignoredMods, Set<String> workaroundMods, Set<String> forceCopyFiles) throws IOException {
-		var dupeMods = ModpackUtils.getDupeMods(modpackDir, ignoredMods, standardModList, modpackModList, forceCopyFiles);
-
-		if (dupeMods.isEmpty()) return new RemoveDupeModsResult(false, Set.of());
-
-		Set<FileInspection.Mod> modsToKeep = new HashSet<>();
-
-		// Fill out the sets with mods that are not duplicates and their dependencies
-		for (FileInspection.Mod standardMod : standardModList) {
-			if (!dupeMods.containsValue(standardMod)) {
-				modsToKeep.add(standardMod);
-				addDependenciesRecursively(standardMod, standardModList, modsToKeep);
-			}
-		}
-
-		// Mods may provide more IDs
-		Set<String> idsToKeep = new HashSet<>();
-		modsToKeep.forEach(mod -> idsToKeep.addAll(mod.IDs()));
-
-		boolean requiresRestart = false;
-		Set<Path> dependentMods = new HashSet<>();
-
-		// Remove dupe mods unless they need to stay - workaround mods
-		for (var dupeMod : dupeMods.entrySet()) {
-			FileInspection.Mod modpackMod = dupeMod.getKey();
-			FileInspection.Mod standardMod = dupeMod.getValue();
-			Path modpackModPath = modpackMod.path();
-			Path standardModPath = standardMod.path();
-			String formatedPath = SmartFileUtils.formatPath(standardModPath, MODS_DIR.getParent());
-			List<String> IDs = new ArrayList<>(modpackMod.IDs());
-			String modId = IDs.get(0);
-
-			boolean isDependent = IDs.stream().anyMatch(idsToKeep::contains);
-			boolean isWorkaround = workaroundMods.contains(formatedPath);
-			boolean isForceCopy = forceCopyFiles.contains(formatedPath);
-
-			if (isDependent) {
-				Path newStandardModPath = standardModPath.getParent().resolve(modpackModPath.getFileName());
-				dependentMods.add(newStandardModPath);
-
-				// Check if hashes are the same, if not remove the mod and copy the modpack mod from modpack to make sure we achieve parity,
-				// If we break mod compat there that's up to the user to fix it, because they added their own mods, we need to guarantee that server modpack is
-				// working.
-				if (!Objects.equals(modpackMod.hash(), standardMod.hash())) {
-					LOGGER.warn("Changing duplicated mod {} - {} to modpack version - {}", modId, standardMod.version(), modpackMod.version());
-					SmartFileUtils.executeOrder66(standardModPath, false);
-					SmartFileUtils.copyFile(modpackModPath, newStandardModPath); // TODO make sure we dont copy an empty invalid file there
-					requiresRestart = true;
-				}
-			} else if (!isWorkaround && !isForceCopy) {
-				LOGGER.warn("Removing {} mod. It is duplicated modpack mod and no other mods are dependent on it!", modId);
-				SmartFileUtils.executeOrder66(standardModPath, false);
-				requiresRestart = true;
-			}
-		}
-
-		LegacyClientCacheUtils.saveDummyFiles();
-
-		return new RemoveDupeModsResult(requiresRestart, dependentMods);
-	}
-
-	private static void addDependenciesRecursively(FileInspection.Mod mod, Collection<FileInspection.Mod> modList, Set<FileInspection.Mod> modsToKeep) {
-		for (String depId : mod.deps()) {
-			for (FileInspection.Mod modItem : modList) {
-				if (modItem.IDs().stream().anyMatch(s -> s.equalsIgnoreCase(depId)) && modsToKeep.add(modItem)) {
-					addDependenciesRecursively(modItem, modList, modsToKeep);
-				}
-			}
-		}
-	}
-
-	// Returns true if selection changed
-	public static boolean selectModpack(String modpackId, String displayName, Path modpackDirToSelect, Jsons.ConnectionInfo connectionInfo, Set<String> newDownloadedFiles) throws IOException {
+	public static Jsons.ClientConfigFieldsV3 planModpackSelection(String modpackId, Path modpackDirToSelect, Jsons.ConnectionInfo connectionInfo) {
 		ModpackId.requireValid(modpackId);
 		if (!modpackDirToSelect.getFileName().toString().equals(modpackId)) throw new IllegalArgumentException("Modpack directory does not match its ID");
 		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing");
 
-		String oldModpackId = clientConfig.selectedModpackId;
-		if (Objects.equals(modpackId, oldModpackId)) {
-			if (!sameConnectionInfo(clientConfig.modpackConnections.get(modpackId), connectionInfo)) {
-				Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
-				updatedConfig.modpackConnections.put(modpackId, connectionInfo);
-				persistClientConfig(updatedConfig, "Failed to persist updated modpack connection information");
-			}
-			return false;
-		}
-
-		LOGGER.info("Preserving editable files from old modpack and copying to new modpack...");
-		if (oldModpackId != null && !oldModpackId.isBlank()) {
-			Path oldModpackDir = getModpackPath(oldModpackId);
-			processEditableFiles(oldModpackDir, (dir, files) -> ModpackUtils.preserveEditableFiles(dir, files, newDownloadedFiles));
-		}
-		processEditableFiles(modpackDirToSelect, (dir, files) -> ModpackUtils.copyPreviousEditableFiles(dir, files, newDownloadedFiles));
-
 		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
 		updatedConfig.selectedModpackId = modpackId;
 		updatedConfig.modpackConnections.put(modpackId, connectionInfo);
-		persistClientConfig(updatedConfig, "Failed to persist selected modpack");
-
-		LOGGER.info("Selected modpack: {} ({})", displayName, modpackId);
-		return true;
-	}
-
-	private static void persistClientConfig(Jsons.ClientConfigFieldsV3 updatedConfig, String errorMessage) throws IOException {
-		try {
-			ConfigTools.writeAtomic(clientConfigFile, updatedConfig);
-		} catch (IOException e) {
-			throw new IOException(errorMessage, e);
-		}
-		clientConfig = updatedConfig;
-	}
-
-	private static boolean sameConnectionInfo(Jsons.ConnectionInfo first, Jsons.ConnectionInfo second) {
-		if (first == null || second == null || first.endpoint == null || first.origin == null || second.endpoint == null
-				|| second.origin == null)
-			return false;
-		return first.requiresMagic == second.requiresMagic && AddressHelpers.formatAddress(first.endpoint).equals(AddressHelpers.formatAddress(second.endpoint))
-				&& AddressHelpers.formatAddress(first.origin).equals(AddressHelpers.formatAddress(second.origin));
-	}
-
-	private static void processEditableFiles(Path modpackDir, BiConsumer<Path, Set<String>> action) {
-		Path contentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
-		Jsons.ModpackContentFields content = ModpackContentTools.read(contentFile);
-
-		if (content != null) {
-			Set<String> editableFiles = getEditableFiles(content.list);
-			action.accept(modpackDir, editableFiles);
-		}
+		return updatedConfig;
 	}
 
 	public static Path getModpackPath(String modpackId) {
@@ -656,7 +298,7 @@ public class ModpackUtils {
 		Function<X509Certificate, CompletableFuture<Boolean>> callback = manualValidationCallbackAsync(connectionInfo, allowAskingUser);
 		return certificate -> {
 			try {
-				return callback.apply(certificate).get(120, TimeUnit.SECONDS);
+				return callback.apply(certificate).get();
 			} catch (Exception e) {
 				return false;
 			}
@@ -775,7 +417,7 @@ public class ModpackUtils {
 		};
 		Runnable cancelAction = () -> result.complete(false);
 		new ScreenManager().validation(parent, fingerprint, trustAction, cancelAction);
-		return result.orTimeout(120, TimeUnit.SECONDS).exceptionally(e -> false);
+		return result;
 	}
 
 	public static boolean potentiallyMalicious(Jsons.ModpackContentFields serverModpackContent) {
@@ -848,52 +490,5 @@ public class ModpackUtils {
 		}
 
 		return false;
-	}
-
-	public static void preserveEditableFiles(Path modpackDir, Set<String> editableFiles, Set<String> newDownloadedFiles) {
-		for (String file : editableFiles) {
-			if (newDownloadedFiles.contains(file)) // Don't mess with new downloaded files here
-				continue;
-
-			// Here, mods can be copied, no problem
-
-			Path path = SmartFileUtils.getPathFromCWD(file);
-			if (Files.exists(path)) {
-				try {
-					SmartFileUtils.copyFile(path, SmartFileUtils.getPath(modpackDir, file));
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}
-	}
-
-	public static void copyPreviousEditableFiles(Path modpackDir, Set<String> editableFiles, Set<String> newDownloadedFiles) {
-		for (String file : editableFiles) {
-			if (newDownloadedFiles.contains(file)) // Don't mess with new downloaded files here
-				continue;
-
-			if (file.contains("/mods/") && file.endsWith(".jar")) // Don't mess with mods here, it will cause issues
-				continue;
-
-			Path path = SmartFileUtils.getPath(modpackDir, file);
-			if (Files.exists(path)) {
-				try {
-					SmartFileUtils.copyFile(path, SmartFileUtils.getPathFromCWD(file));
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-		}
-	}
-
-	static Set<String> getEditableFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> modpackContentItems) {
-		Set<String> editableFiles = new HashSet<>();
-
-		for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : modpackContentItems) {
-			if (modpackContentItem.editable) editableFiles.add(modpackContentItem.file);
-		}
-
-		return editableFiles;
 	}
 }
