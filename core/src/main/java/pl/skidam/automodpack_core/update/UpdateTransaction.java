@@ -14,6 +14,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+import pl.skidam.automodpack_core.utils.LegacyDummyFiles;
 
 public final class UpdateTransaction {
 	public static final int CURRENT_SCHEMA_VERSION = 1;
@@ -65,6 +66,19 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
+	public static UpdateTransaction createLegacyDummyCleanup(List<LegacyDummyTarget> targets) {
+		UpdateTransaction transaction = base(Purpose.LEGACY_DUMMY_CLEANUP);
+		transaction.operations = targets.stream().map(target -> new Operation(target.root(), target.relativePath(), OperationType.DELETE, null, -1, LegacyDummyFiles.SHA1))
+				.sorted(Comparator.comparing((Operation operation) -> operation.operation().ordinal()).thenComparing(operation -> operation.root().ordinal())
+						.thenComparing(Operation::relativePath))
+				.toList();
+		transaction.projectedFinalState = targets.stream().map(target -> new ProjectedFile(target.root(), target.relativePath(), false, null, -1))
+				.sorted(Comparator.comparing((ProjectedFile projected) -> projected.root().ordinal()).thenComparing(ProjectedFile::relativePath)).toList();
+		transaction.plannedDeletionTimestamps = List.of();
+		transaction.restartReasons = List.of();
+		return transaction;
+	}
+
 	private static UpdateTransaction base(Purpose purpose) {
 		UpdateTransaction transaction = new UpdateTransaction();
 		transaction.schemaVersion = CURRENT_SCHEMA_VERSION;
@@ -77,8 +91,11 @@ public final class UpdateTransaction {
 		return ConfigTools.parse(targetManifestJson, Jsons.ModpackContentFields.class);
 	}
 
+	public record LegacyDummyTarget(Root root, String relativePath) {}
+
 	public enum Purpose {
 		MODPACK_UPDATE,
-		SELF_UPDATE
+		SELF_UPDATE,
+		LEGACY_DUMMY_CLEANUP
 	}
 }

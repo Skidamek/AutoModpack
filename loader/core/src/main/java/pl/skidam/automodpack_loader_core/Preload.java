@@ -40,7 +40,10 @@ public class Preload {
 			DetachedUpdateHelper.consumeResult();
 			DetachedUpdateHelper.cleanupOldHelperJars();
 			recoverPendingTransaction();
-			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) importBootstrap();
+			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) {
+				LegacyDummyCleanup.migrate();
+				importBootstrap();
+			}
 			updateAll();
 			LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
 		} catch (Exception e) {
@@ -121,7 +124,6 @@ public class Preload {
 
 		if (storedConnectionInfo == null || !storedConnectionInfo.isComplete()) {
 			SelfUpdater.update();
-			LegacyClientCacheUtils.deleteDummyFiles();
 			return;
 		}
 
@@ -142,7 +144,6 @@ public class Preload {
 				loadLocalModpack(connectionInfo, secret);
 			} else {
 				SelfUpdater.update();
-				LegacyClientCacheUtils.deleteDummyFiles();
 			}
 			return;
 		}
@@ -160,12 +161,10 @@ public class Preload {
 			if (SelfUpdater.update(latestModpackContent)) return;
 		}
 
-		LegacyClientCacheUtils.deleteDummyFiles();
 		new ModpackUpdater(latestModpackContent, connectionInfo, secret, selectedModpackDir).processModpackUpdate(null);
 	}
 
 	private void loadLocalModpack(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
-		LegacyClientCacheUtils.deleteDummyFiles();
 		var localModpackContent = ModpackContentTools.read(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 		try {
 			new ModpackUpdater(localModpackContent, connectionInfo, secret, selectedModpackDir).loadModpack();

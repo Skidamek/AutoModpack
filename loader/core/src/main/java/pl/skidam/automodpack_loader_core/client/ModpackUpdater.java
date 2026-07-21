@@ -280,7 +280,6 @@ public class ModpackUpdater {
 			}
 
 			ApplyResult applyResult = applyModpack(cache, serverModpackContent);
-			LegacyClientCacheUtils.deleteDummyFiles();
 
 			if (preload) {
 				LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);

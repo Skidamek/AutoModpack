@@ -15,22 +15,6 @@ public class SmartFileUtils {
 
 	// --- File Operations (Delete / Copy / Move) ---
 
-	public static void executeOrder66(Path file) {
-		executeOrder66(file, true);
-	}
-
-	public static void executeOrder66(Path file, boolean saveDummyFiles) {
-		try {
-			Files.deleteIfExists(file);
-		} catch (IOException ignored) {
-		}
-
-		if (Files.isRegularFile(file)) {
-			LegacyClientCacheUtils.dummyIT(file);
-			if (saveDummyFiles) LegacyClientCacheUtils.saveDummyFiles();
-		}
-	}
-
 	public static boolean isValidFile(Path file, long expectedSize, String expectedSha1) {
 		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
 		try {
@@ -233,18 +217,6 @@ public class SmartFileUtils {
 		if (!Files.isDirectory(parentPath)) return false;
 		try (Stream<Path> pathStream = Files.list(parentPath)) {
 			return pathStream.findAny().isEmpty();
-		}
-	}
-
-	public static boolean compareSmallFile(Path path, byte[] referenceBytes) {
-		try {
-			if (Files.size(path) != referenceBytes.length) return false;
-			try (InputStream is = new LockFreeInputStream(path)) {
-				return Arrays.equals(is.readNBytes(referenceBytes.length), referenceBytes);
-			}
-		} catch (Exception e) {
-			LOGGER.error("Error comparing file: {}", path, e);
-			return false;
 		}
 	}
 

@@ -10,6 +10,7 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
+import pl.skidam.automodpack_core.utils.LegacyDummyFiles;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
@@ -116,6 +117,7 @@ public final class UpdateTransactionExecutor {
 				validateOrderedMetadata(transaction);
 			}
 			case SELF_UPDATE -> validateSelfUpdateMetadata(transaction);
+			case LEGACY_DUMMY_CLEANUP -> validateLegacyDummyCleanupMetadata(transaction);
 		}
 
 		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.projectedFinalState, transaction.modpackId, transaction.purpose);
@@ -130,7 +132,7 @@ public final class UpdateTransactionExecutor {
 			String relative = normalizeOperationPath(operation.relativePath());
 			FileKey key = new FileKey(operation.root(), relative);
 			if (!operationKeys.add(key)) throw new IOException("Duplicate transaction operation target");
-			Path physicalTarget = validateRootAndPath(operation.root(), relative, transaction.modpackId);
+			Path physicalTarget = validateRootAndPath(operation.root(), relative, transaction.modpackId, transaction.purpose);
 			if (!operationTargets.add(physicalTarget)) throw new IOException("Transaction operations alias the same physical target");
 			ProjectedFile projected = finalState.get(key);
 			if (projected == null) throw new IOException("Operation target is missing from projected final state");
@@ -140,8 +142,8 @@ public final class UpdateTransactionExecutor {
 				case CREATE_DIRECTORY, REMOVE_EMPTY_DIRECTORY -> validateDirectoryOperation(operation);
 			}
 		}
-		if (transaction.purpose == UpdateTransaction.Purpose.SELF_UPDATE && !operationKeys.equals(finalState.keySet()))
-			throw new IOException("Self-update operations and projected final state must match exactly");
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !operationKeys.equals(finalState.keySet()))
+			throw new IOException("Special-purpose transaction operations and projected final state must match exactly");
 		if (manifest != null) validateManifestProjection(manifest, finalState);
 	}
 
@@ -169,13 +171,26 @@ public final class UpdateTransactionExecutor {
 			throw new IOException("Self-update transaction must contain one install and at most one deletion");
 	}
 
+	private static void validateLegacyDummyCleanupMetadata(UpdateTransaction transaction) throws IOException {
+		if (transaction.modpackId != null || transaction.targetManifestJson != null || transaction.canonicalModpackDirectory != null
+				|| transaction.plannedClientConfig != null || !transaction.plannedDeletionTimestamps.isEmpty() || !transaction.restartReasons.isEmpty())
+			throw new IOException("Legacy dummy cleanup transaction contains modpack metadata");
+		if (transaction.operations.isEmpty()) throw new IOException("Legacy dummy cleanup transaction has no targets");
+	}
+
 	private static void validatePurposeOperation(UpdateTransaction.Purpose purpose, Operation operation) throws IOException {
-		if (purpose != UpdateTransaction.Purpose.SELF_UPDATE) return;
-		if (operation.root() != Root.MODS_DIR || (operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE))
-			throw new IOException("Self-update operations are restricted to JAR replacement in the mods directory");
-		Path relative = Path.of(operation.relativePath());
-		if (relative.getNameCount() != 1 || !relative.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
-			throw new IOException("Self-update target must be a direct JAR child of the mods directory");
+		if (purpose == UpdateTransaction.Purpose.SELF_UPDATE) {
+			if (operation.root() != Root.MODS_DIR || (operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE))
+				throw new IOException("Self-update operations are restricted to JAR replacement in the mods directory");
+			Path relative = Path.of(operation.relativePath());
+			if (relative.getNameCount() != 1 || !relative.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+				throw new IOException("Self-update target must be a direct JAR child of the mods directory");
+		} else if (purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP) {
+			if (operation.operation() != OperationType.DELETE
+					|| (operation.root() != Root.GAME_DIR && operation.root() != Root.MODS_DIR && operation.root() != Root.AUTOMODPACK_DIR)
+					|| !LegacyDummyFiles.SHA1.equals(operation.expectedExistingHash()))
+				throw new IOException("Legacy dummy cleanup operations are restricted to verified constrained deletions");
+		}
 	}
 
 	private void validateManifest(Jsons.ModpackContentFields manifest, String modpackId) throws IOException {
@@ -231,9 +246,13 @@ public final class UpdateTransactionExecutor {
 				if (entry.root() != Root.MODS_DIR || selfUpdatePath.getNameCount() != 1
 						|| !selfUpdatePath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
 					throw new IOException("Self-update projected state is restricted to direct JAR children of the mods directory");
-			}
+			} else
+				if (purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP
+						&& (entry.present() || (entry.root() != Root.GAME_DIR && entry.root() != Root.MODS_DIR && entry.root() != Root.AUTOMODPACK_DIR))) {
+							throw new IOException("Legacy dummy cleanup projected state is restricted to constrained absences");
+						}
 			String relative = normalizeOperationPath(entry.relativePath());
-			Path physicalTarget = validateRootAndPath(entry.root(), relative, modpackId);
+			Path physicalTarget = validateRootAndPath(entry.root(), relative, modpackId, purpose);
 			if (!physicalTargets.add(physicalTarget)) throw new IOException("Projected entries alias the same physical target");
 			FileKey key = new FileKey(entry.root(), relative);
 			if (previous != null && compareFileKeys(previous, key) >= 0) throw new IOException("Projected final state is not uniquely ordered");
@@ -320,9 +339,15 @@ public final class UpdateTransactionExecutor {
 				if (operation.operation() != OperationType.DELETE) continue;
 				current = operation;
 				Path target = resolve(operation);
-				if (Files.exists(target)) {
-					if (operation.expectedExistingHash() == null || !operation.expectedExistingHash().equalsIgnoreCase(HashUtils.getHash(target)))
+				boolean targetExists = transaction.purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP
+						? Files.exists(target, LinkOption.NOFOLLOW_LINKS)
+						: Files.exists(target);
+				if (targetExists) {
+					if (transaction.purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP) {
+						if (!LegacyDummyFiles.matches(target)) throw new IOException("Legacy dummy cleanup target no longer matches the known signature: " + target);
+					} else if (operation.expectedExistingHash() == null || !operation.expectedExistingHash().equalsIgnoreCase(HashUtils.getHash(target))) {
 						throw new IOException("Deletion target changed after planning: " + target);
+					}
 					Files.delete(target);
 				}
 			}
@@ -332,13 +357,18 @@ public final class UpdateTransactionExecutor {
 				Path target = resolve(operation);
 				if (SmartFileUtils.isEmptyDirectory(target)) Files.deleteIfExists(target);
 			}
-			verifyFinalState(transaction.projectedFinalState);
+			verifyFinalState(transaction.projectedFinalState, transaction.purpose);
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 				ConfigTools.writeAtomic(context.clientConfigFile(), transaction.plannedClientConfig);
 				persistDeletionTimestamps(transaction.plannedDeletionTimestamps);
 				if (context.beforeManifestAction() != null) context.beforeManifestAction().run(transaction);
-				verifyFinalState(transaction.projectedFinalState);
+				verifyFinalState(transaction.projectedFinalState, transaction.purpose);
 				ModpackContentTools.write(context.installedManifestFile(), transaction.targetManifest());
+			} else if (transaction.purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP) {
+				current = null;
+				blockedPath = context.automodpackDirectory().resolve("automodpack-dummy-files.json");
+				pruneLegacyDummyRegistry(transaction.operations);
+				blockedPath = null;
 			}
 			Files.deleteIfExists(context.transactionFile());
 			Files.deleteIfExists(context.transactionResultFile());
@@ -356,15 +386,54 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	private void verifyFinalState(List<ProjectedFile> finalState) throws IOException {
+	private void verifyFinalState(List<ProjectedFile> finalState, UpdateTransaction.Purpose purpose) throws IOException {
 		for (ProjectedFile projected : finalState) {
 			Path target = resolve(projected.root(), projected.relativePath());
 			if (projected.present()) {
 				if (!SmartFileUtils.isValidFile(target, projected.expectedSize(), projected.expectedHash()))
 					throw new IOException("Projected final target verification failed: " + target);
-			} else if (Files.exists(target)) {
-				throw new IOException("Projected absent target exists: " + target);
-			}
+			} else
+				if (purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP
+						? Files.exists(target, LinkOption.NOFOLLOW_LINKS)
+						: Files.exists(target)) {
+							throw new IOException("Projected absent target exists: " + target);
+						}
+		}
+	}
+
+	private void pruneLegacyDummyRegistry(List<Operation> operations) throws IOException {
+		Path registryPath = context.automodpackDirectory().resolve("automodpack-dummy-files.json");
+		Jsons.ClientDummyFiles registry;
+		try {
+			registry = ConfigTools.read(registryPath, Jsons.ClientDummyFiles.class).orElse(null);
+		} catch (RuntimeException e) {
+			throw new IOException("Failed to read legacy dummy registry", e);
+		}
+		if (registry == null) return;
+		if (registry.files == null) registry.files = new LinkedHashSet<>();
+		Set<Path> completedTargets = new HashSet<>();
+		for (Operation operation : operations) completedTargets.add(resolve(operation));
+		Set<String> remaining = new LinkedHashSet<>();
+		for (String entry : registry.files) {
+			Path registered = resolveLegacyRegistryEntry(entry);
+			if (registered == null || !completedTargets.contains(registered) || Files.exists(registered, LinkOption.NOFOLLOW_LINKS)) remaining.add(entry);
+		}
+		if (!remaining.equals(registry.files)) {
+			registry.files = remaining;
+			ConfigTools.writeAtomic(registryPath, registry);
+		}
+		if (remaining.isEmpty()) Files.deleteIfExists(registryPath);
+	}
+
+	private Path resolveLegacyRegistryEntry(String entry) {
+		if (entry == null || entry.isBlank() || entry.indexOf('\0') >= 0) return null;
+		try {
+			Path parsed = Path.of(entry);
+			Path resolved = (parsed.isAbsolute() ? parsed : context.gameDirectory().resolve(parsed)).toAbsolutePath().normalize();
+			Path gameDirectory = context.gameDirectory().toAbsolutePath().normalize();
+			return resolved.startsWith(gameDirectory) ? resolved : null;
+		} catch (RuntimeException e) {
+			return null;
 		}
 	}
 
@@ -413,7 +482,7 @@ public final class UpdateTransactionExecutor {
 		return path;
 	}
 
-	private Path validateRootAndPath(Root root, String relativePath, String currentModpackId) throws IOException {
+	private Path validateRootAndPath(Root root, String relativePath, String currentModpackId, UpdateTransaction.Purpose purpose) throws IOException {
 
 		if (root == Root.STORE_DIR) throw new IOException("Transactions may not mutate the content-addressed store");
 		Path constrainedRoot = root(root).toAbsolutePath().normalize();
@@ -425,7 +494,16 @@ public final class UpdateTransactionExecutor {
 			throw new IOException("GAME_DIR operation must use the narrower constrained root");
 		if (context.installedManifestFile() != null && resolved.equals(context.installedManifestFile().toAbsolutePath().normalize()))
 			throw new IOException("Installed manifest may only be published by the executor");
-		if (root == Root.AUTOMODPACK_DIR) validateModpackStoragePath(relativePath, currentModpackId);
+		if (root == Root.AUTOMODPACK_DIR) {
+			if (purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
+				validateModpackStoragePath(relativePath, currentModpackId);
+			} else if (purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP) {
+				Path relative = Path.of(relativePath);
+				if (relative.startsWith("store") || relative.startsWith(".private") || relative.startsWith(Path.of("cache", "update-helper"))
+						|| relative.equals(Path.of("automodpack-dummy-files.json")))
+					throw new IOException("Legacy dummy cleanup target is protected AutoModpack state");
+			}
+		}
 		return resolved;
 	}
 
@@ -477,7 +555,7 @@ public final class UpdateTransactionExecutor {
 		return root != 0 ? root : first.relativePath().compareTo(second.relativePath());
 	}
 
-	private static boolean isLockFailure(IOException exception) {
+	public static boolean isLockFailure(IOException exception) {
 		Throwable current = exception;
 		while (current != null) {
 			if (current instanceof FileSystemException fileSystemException) {
