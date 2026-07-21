@@ -169,6 +169,7 @@ public class SelfUpdater {
 
 			downloadManager.joinAll();
 			downloadManager.cancelAllAndShutdown();
+			SmartFileUtils.copyVerifiedAtomic(storeDir.resolve(automodpack.SHA1Hash()), automodpackUpdateJar, automodpack.fileSize(), automodpack.SHA1Hash());
 
 			newAutomodpackJar = THIS_MOD_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
 

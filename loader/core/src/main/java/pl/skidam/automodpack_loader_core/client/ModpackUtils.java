@@ -191,61 +191,67 @@ public class ModpackUtils {
 	public static void populateStoreFromCWD(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, FileMetadataCache cache) {
 		for (var entry : filesToUpdate) {
 			Path storeFile = SmartFileUtils.getPath(storeDir, entry.sha1);
+			long expectedSize = Long.parseLong(entry.size);
 
-			if (Files.exists(storeFile)) {
-				LOGGER.debug("File already exists in store: {}", entry.file);
+			if (SmartFileUtils.isValidFile(storeFile, expectedSize, entry.sha1)) {
+				LOGGER.debug("Verified file already exists in store: {}", entry.file);
+				continue;
+			}
+			try {
+				if (Files.exists(storeFile)) {
+					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
+					Files.delete(storeFile);
+				}
+			} catch (IOException e) {
+				LOGGER.error("Failed to evict corrupt store object {}", entry.sha1, e);
 				continue;
 			}
 
 			Path fileInCWD = SmartFileUtils.getPathFromCWD(entry.file);
-			if (Files.isRegularFile(fileInCWD)) {
-				String diskHash = cache.getHashOrNull(fileInCWD);
-				if (diskHash.equalsIgnoreCase(entry.sha1)) {
-					LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
-					try {
-						SmartFileUtils.copyFile(fileInCWD, storeFile);
-					} catch (IOException e) {
-						LOGGER.error("Failed to copy file from CWD to store: {}", entry.file, e);
-					}
+			if (SmartFileUtils.isValidFile(fileInCWD, expectedSize, entry.sha1)) {
+				LOGGER.info("Copying existing file from CWD to store: {}", entry.file);
+				try {
+					SmartFileUtils.copyVerifiedAtomic(fileInCWD, storeFile, expectedSize, entry.sha1);
+				} catch (IOException e) {
+					LOGGER.error("Failed to copy file from CWD to store: {}", entry.file, e);
 				}
 			}
 		}
 	}
 
-	// Returns the set of files that are missing from the store.
+	// Returns the set of files that are missing or corrupt in the store.
 	public static Set<Jsons.ModpackContentFields.ModpackContentItem> identifyUncachedFiles(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToCheck) {
-		Set<Jsons.ModpackContentFields.ModpackContentItem> nonExistingFiles = new HashSet<>();
+		Set<Jsons.ModpackContentFields.ModpackContentItem> uncachedFiles = new HashSet<>();
 		for (var entry : filesToCheck) {
 			Path storeFile = SmartFileUtils.getPath(storeDir, entry.sha1);
-
-			if (!Files.exists(storeFile)) nonExistingFiles.add(entry);
-		}
-		return nonExistingFiles;
-	}
-
-	// Installs files from the store (storeDir/<sha1>) to the instance (modpackDir/<file>).
-	// Attempts to hardlink first, falls back to a copy if that fails.
-	public static void hardlinkModpack(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, FileMetadataCache cache) throws IOException {
-		for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
-			String formattedFile = contentItem.file;
-			Path modpackFile = SmartFileUtils.getPath(modpackDir, formattedFile);
-			Path storeFile = SmartFileUtils.getPath(storeDir, contentItem.sha1);
-
-			if (!Files.exists(storeFile)) {
-				LOGGER.debug("File {} not found in store, can't hardlink", formattedFile);
-				return;
-			}
-
-			if (!Files.exists(modpackFile)) {
-				LOGGER.debug("Hard-linking {} file to the modpack directory", formattedFile);
-				SmartFileUtils.hardlinkFile(storeFile, modpackFile);
-			} else {
-				String modpackFileHash = cache.getHashOrNull(modpackFile);
-				if (!contentItem.sha1.equalsIgnoreCase(modpackFileHash)) {
-					LOGGER.debug("Over-hard-linking {} file in the modpack directory", formattedFile);
-					SmartFileUtils.hardlinkFile(storeFile, modpackFile);
+			if (SmartFileUtils.isValidFile(storeFile, Long.parseLong(entry.size), entry.sha1)) continue;
+			if (Files.exists(storeFile)) {
+				try {
+					LOGGER.warn("Evicting corrupt store object {}", entry.sha1);
+					Files.delete(storeFile);
+				} catch (IOException e) {
+					LOGGER.warn("Failed to evict corrupt store object {}", entry.sha1, e);
 				}
 			}
+			uncachedFiles.add(entry);
+		}
+		return uncachedFiles;
+	}
+
+	// Installs independent live copies from verified store objects.
+	public static void installModpack(Path modpackDir, Jsons.ModpackContentFields serverModpackContent, FileMetadataCache cache) throws IOException {
+		for (Jsons.ModpackContentFields.ModpackContentItem contentItem : serverModpackContent.list) {
+			Path modpackFile = SmartFileUtils.getPath(modpackDir, contentItem.file);
+			long expectedSize = Long.parseLong(contentItem.size);
+			if (SmartFileUtils.isValidFile(modpackFile, expectedSize, contentItem.sha1)) continue;
+
+			Path storeFile = SmartFileUtils.getPath(storeDir, contentItem.sha1);
+			if (!SmartFileUtils.isValidFile(storeFile, expectedSize, contentItem.sha1))
+				throw new IOException("Required CAS object is missing or corrupt: " + contentItem.sha1);
+
+			LOGGER.debug("Installing independent copy of {} from CAS", contentItem.file);
+			SmartFileUtils.copyVerifiedAtomic(storeFile, modpackFile, expectedSize, contentItem.sha1);
+			cache.overwriteCache(modpackFile, contentItem.sha1);
 		}
 	}
 
@@ -541,14 +547,14 @@ public class ModpackUtils {
 	public static boolean selectModpack(String modpackId, String displayName, Path modpackDirToSelect, Jsons.ConnectionInfo connectionInfo, Set<String> newDownloadedFiles) throws IOException {
 		ModpackId.requireValid(modpackId);
 		if (!modpackDirToSelect.getFileName().toString().equals(modpackId)) throw new IllegalArgumentException("Modpack directory does not match its ID");
-		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IllegalArgumentException("Modpack addresses are empty");
+		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing");
 
 		String oldModpackId = clientConfig.selectedModpackId;
 		if (Objects.equals(modpackId, oldModpackId)) {
-			if (!sameAddresses(clientConfig.modpackConnections.get(modpackId), connectionInfo)) {
+			if (!sameConnectionInfo(clientConfig.modpackConnections.get(modpackId), connectionInfo)) {
 				Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
 				updatedConfig.modpackConnections.put(modpackId, connectionInfo);
-				persistClientConfig(updatedConfig, "Failed to persist updated modpack addresses");
+				persistClientConfig(updatedConfig, "Failed to persist updated modpack connection information");
 			}
 			return false;
 		}
@@ -578,7 +584,7 @@ public class ModpackUtils {
 		clientConfig = updatedConfig;
 	}
 
-	private static boolean sameAddresses(Jsons.ConnectionInfo first, Jsons.ConnectionInfo second) {
+	private static boolean sameConnectionInfo(Jsons.ConnectionInfo first, Jsons.ConnectionInfo second) {
 		if (first == null || second == null || first.endpoint == null || first.origin == null || second.endpoint == null
 				|| second.origin == null)
 			return false;
@@ -613,7 +619,7 @@ public class ModpackUtils {
 	private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			Function<DownloadClient, CompletableFuture<Path>> operation, boolean allowAskingUser) {
 		if (secret == null) return Optional.empty();
-		if (!connectionInfo.isComplete()) throw new IllegalArgumentException("Modpack addresses are empty!");
+		if (!connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing!");
 
 		try {
 			return fetchModpackContentAsync(connectionInfo, secret, operation, manualValidationCallbackAsync(connectionInfo, allowAskingUser)).get();
@@ -624,7 +630,7 @@ public class ModpackUtils {
 	}
 
 	public static boolean canConnectModpackHost(Jsons.ConnectionInfo connectionInfo) {
-		if (!connectionInfo.isComplete()) throw new IllegalArgumentException("Modpack addresses are empty!");
+		if (!connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing!");
 
 		try (DownloadClient client = createDownloadClient(connectionInfo, null, 1, manualValidationCallbackAsync(connectionInfo, false)).get()) {
 			return client != null;
@@ -637,17 +643,17 @@ public class ModpackUtils {
 
 	/**
 	 * Returns a callback for use with {@link DownloadClient} that checks for trusted fingerprints in the known hosts
-	 * list of the client config. Trust is owned by the player-selected Minecraft origin; the advertised modpack
-	 * endpoint is routing information only.
+	 * list of the client config. Trust is owned by the player-selected Minecraft origin; the advertised endpoint is
+	 * routing information only.
 	 *
-	 * @param addresses
-	 *            the authenticated Minecraft origin and advertised modpack route
+	 * @param connectionInfo
+	 *            the authenticated Minecraft origin and advertised endpoint
 	 * @param allowAskingUser
 	 *            whether the user should be prompted if a certificate is not trusted
 	 * @return the callback
 	 */
-	public static Function<X509Certificate, Boolean> manualValidationCallback(Jsons.ConnectionInfo addresses, boolean allowAskingUser) {
-		Function<X509Certificate, CompletableFuture<Boolean>> callback = manualValidationCallbackAsync(addresses, allowAskingUser);
+	public static Function<X509Certificate, Boolean> manualValidationCallback(Jsons.ConnectionInfo connectionInfo, boolean allowAskingUser) {
+		Function<X509Certificate, CompletableFuture<Boolean>> callback = manualValidationCallbackAsync(connectionInfo, allowAskingUser);
 		return certificate -> {
 			try {
 				return callback.apply(certificate).get(120, TimeUnit.SECONDS);
@@ -662,7 +668,7 @@ public class ModpackUtils {
 	public static CompletableFuture<Optional<Jsons.ModpackContentFields>> requestServerModpackContentAsync(Jsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, boolean allowAskingUser) {
 		if (secret == null) return CompletableFuture.completedFuture(Optional.empty());
-		if (!connectionInfo.isComplete()) return CompletableFuture.failedFuture(new IllegalArgumentException("Modpack addresses are empty!"));
+		if (!connectionInfo.isComplete()) return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing!"));
 
 		return fetchModpackContentAsync(connectionInfo, secret, (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
 				manualValidationCallbackAsync(connectionInfo, allowAskingUser));
@@ -672,7 +678,7 @@ public class ModpackUtils {
 			Secrets.Secret secret, Function<DownloadClient, CompletableFuture<Path>> operation,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
 		if (secret == null) return CompletableFuture.completedFuture(Optional.empty());
-		if (!connectionInfo.isComplete()) return CompletableFuture.failedFuture(new IllegalArgumentException("Modpack addresses are empty!"));
+		if (!connectionInfo.isComplete()) return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing!"));
 
 		return createDownloadClient(connectionInfo, secret.secretBytes(), 1, trustCallback).thenCompose(client -> {
 			CompletableFuture<Path> operationFuture;
@@ -711,12 +717,12 @@ public class ModpackUtils {
 		});
 	}
 
-	private static CompletableFuture<DownloadClient> createDownloadClient(Jsons.ConnectionInfo addresses, byte[] secret, int poolSize,
+	private static CompletableFuture<DownloadClient> createDownloadClient(Jsons.ConnectionInfo connectionInfo, byte[] secret, int poolSize,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		return DownloadClient.createAsync(addresses, secret, poolSize, trustCallback).thenApply(client -> {
-			if (addresses.trustReason != null) {
-				CertificateTrustStore.save(addresses.origin, addresses.expectedFingerprint,
-						CertificateTrustStore.Reason.valueOf(addresses.trustReason));
+		return DownloadClient.createAsync(connectionInfo, secret, poolSize, trustCallback).thenApply(client -> {
+			if (connectionInfo.trustReason != null) {
+				CertificateTrustStore.save(connectionInfo.origin, connectionInfo.expectedFingerprint,
+						CertificateTrustStore.Reason.valueOf(connectionInfo.trustReason));
 			}
 			return client;
 		});
@@ -731,9 +737,9 @@ public class ModpackUtils {
 				"Presented: " + NetUtils.shortenFingerprint(mismatch.getPresentedFingerprint()), "automodpack.pin.mismatch.help");
 	}
 
-	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(Jsons.ConnectionInfo addresses,
+	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(Jsons.ConnectionInfo connectionInfo,
 			boolean allowAskingUser) {
-		String originHost = addresses.origin.getHostString();
+		String originHost = connectionInfo.origin.getHostString();
 		return certificate -> {
 			String fingerprint;
 			try {
@@ -741,20 +747,20 @@ public class ModpackUtils {
 			} catch (CertificateEncodingException e) {
 				return CompletableFuture.completedFuture(false);
 			}
-			if (CertificateTrustStore.matches(addresses.origin, fingerprint)) return CompletableFuture.completedFuture(true);
+			if (CertificateTrustStore.matches(connectionInfo.origin, fingerprint)) return CompletableFuture.completedFuture(true);
 
-			LOGGER.warn("Received untrusted certificate for Minecraft server {} from modpack route {}:{}!", originHost, addresses.endpoint.getHostString(),
-					addresses.endpoint.getPort());
-			if (allowAskingUser) return askUserAboutCertificateAsync(addresses, fingerprint);
+			LOGGER.warn("Received untrusted certificate for Minecraft server {} from AutoModpack endpoint {}:{}!", originHost, connectionInfo.endpoint.getHostString(),
+					connectionInfo.endpoint.getPort());
+			if (allowAskingUser) return askUserAboutCertificateAsync(connectionInfo, fingerprint);
 
 			return CompletableFuture.completedFuture(false);
 		};
 	}
 
-	private static CompletableFuture<Boolean> askUserAboutCertificateAsync(Jsons.ConnectionInfo addresses, String fingerprint) {
-		String originHost = addresses.origin.getHostString();
-		LOGGER.info("Asking user to verify certificate for Minecraft server {} from modpack route {}:{}", originHost, addresses.endpoint.getHostString(),
-				addresses.endpoint.getPort());
+	private static CompletableFuture<Boolean> askUserAboutCertificateAsync(Jsons.ConnectionInfo connectionInfo, String fingerprint) {
+		String originHost = connectionInfo.origin.getHostString();
+		LOGGER.info("Asking user to verify certificate for Minecraft server {} from AutoModpack endpoint {}:{}", originHost, connectionInfo.endpoint.getHostString(),
+				connectionInfo.endpoint.getPort());
 
 		var parent = new ScreenManager().getScreen().orElse(null);
 		if (parent == null) {
@@ -764,7 +770,7 @@ public class ModpackUtils {
 
 		CompletableFuture<Boolean> result = new CompletableFuture<>();
 		Runnable trustAction = () -> {
-			CertificateTrustStore.save(addresses.origin, fingerprint, CertificateTrustStore.Reason.TOFU);
+			CertificateTrustStore.save(connectionInfo.origin, fingerprint, CertificateTrustStore.Reason.TOFU);
 			result.complete(true);
 		};
 		Runnable cancelAction = () -> result.complete(false);

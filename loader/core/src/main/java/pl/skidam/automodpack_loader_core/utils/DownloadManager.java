@@ -16,7 +16,6 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public class DownloadManager {
@@ -35,6 +34,7 @@ public class DownloadManager {
 	// --- QUEUES ---
 	private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
 	public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
+	private final Map<FileInspection.HashPathPair, Path> activeTemporaryFiles = new ConcurrentHashMap<>();
 
 	private final Map<String, Integer> activeDownloadsPerSource = new ConcurrentHashMap<>();
 
@@ -225,16 +225,16 @@ public class DownloadManager {
 		boolean interrupted = false;
 
 		try {
-			if (verifyFile(storeFile, hashPathPair.hash())) {
+			if (SmartFileUtils.isValidFile(storeFile, task.fileSize, hashPathPair.hash())) {
 				// CACHE HIT
-				long size = Files.size(storeFile);
-				totalBytesDownloaded.addAndGet(size);
+				totalBytesDownloaded.addAndGet(task.fileSize);
 				// IMPORTANT: Do NOT add cached bytes to Speedometer.
 				// It would fake a massive speed spike.
 
 				success = true;
 			} else {
-				// DOWNLOAD REQUIRED
+				// DOWNLOAD REQUIRED. A corrupt object is never a cache hit.
+				if (Files.exists(storeFile)) Files.delete(storeFile);
 				success = attemptDownload(hashPathPair, task, storeFile);
 			}
 		} catch (InterruptedException e) {
@@ -250,9 +250,12 @@ public class DownloadManager {
 		int numberOfIndexes = task.sources.size();
 		int sourceIndex = Math.min(task.attempts / MAX_DOWNLOAD_ATTEMPTS, numberOfIndexes);
 		DownloadSource source = (task.sources.size() > sourceIndex) ? task.sources.get(sourceIndex) : null;
-		Path tempStoreFile = storeDir.resolve(hashPathPair.hash() + ".tmp");
+		Path tempStoreFile = null;
 
 		try {
+			Files.createDirectories(storeDir);
+			tempStoreFile = Files.createTempFile(storeDir, "." + hashPathPair.hash() + ".", ".tmp");
+			activeTemporaryFiles.put(hashPathPair, tempStoreFile);
 			if (source != null && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
 				httpDownloader.download(source, tempStoreFile, this::updateNetworkProgress);
 			} else if (downloadClient != null) {
@@ -261,24 +264,30 @@ public class DownloadManager {
 				return false;
 			}
 
-			if (verifyFile(tempStoreFile, hashPathPair.hash())) {
-				SmartFileUtils.moveFile(tempStoreFile, storeFile);
-				return true;
-			} else {
-				LOGGER.warn("Hash mismatch for downloaded file {}", task.file.getFileName());
-				SmartFileUtils.executeOrder66(tempStoreFile);
+			if (!SmartFileUtils.isValidFile(tempStoreFile, task.fileSize, hashPathPair.hash())) {
+				LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
 				return false;
 			}
+			SmartFileUtils.promoteVerifiedAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash());
+			tempStoreFile = null;
+			return true;
 		} catch (HttpFileDownloader.HttpStatusException e) {
 			if (source != null && source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
 				LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
 				task.attempts = (sourceIndex + 1) * MAX_DOWNLOAD_ATTEMPTS - 1;
 			}
-			SmartFileUtils.executeOrder66(tempStoreFile);
 			return false;
 		} catch (IOException e) {
-			SmartFileUtils.executeOrder66(tempStoreFile);
+			LOGGER.warn("Failed to acquire CAS object {}", hashPathPair.hash(), e);
 			return false;
+		} finally {
+			activeTemporaryFiles.remove(hashPathPair);
+			if (tempStoreFile != null) {
+				try {
+					Files.deleteIfExists(tempStoreFile);
+				} catch (IOException ignored) {
+				}
+			}
 		}
 	}
 
@@ -292,16 +301,10 @@ public class DownloadManager {
 		}
 
 		if (success) {
-			try {
-				SmartFileUtils.copyFile(storeFile, task.file);
-				downloadedCount++;
-				LOGGER.info("Finished: {} -> {}", storeFile.getFileName(), task.file.getFileName());
-				task.successCallback.run();
-				semaphore.release();
-			} catch (IOException e) {
-				LOGGER.error("Failed to copy from store to destination: {}", task.file, e);
-				handleRetry(key, task, interrupted);
-			}
+			downloadedCount++;
+			LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
+			task.successCallback.run();
+			semaphore.release();
 		} else {
 			handleRetry(key, task, interrupted);
 		}
@@ -311,15 +314,6 @@ public class DownloadManager {
 
 	private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {
 		if (interrupted) return;
-		try {
-			if (Files.exists(task.file)) {
-				totalBytesToDownload.addAndGet(Files.size(task.file));
-				speedometer.setExpectedBytes(totalBytesToDownload.get());
-			}
-		} catch (IOException ignored) {
-		}
-		SmartFileUtils.executeOrder66(task.file);
-
 		if (task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
 			LOGGER.warn("Retrying download: {}", task.file.getFileName());
 			task.attempts++;
@@ -340,15 +334,6 @@ public class DownloadManager {
 	private void updateNetworkProgress(long bytes) {
 		totalBytesDownloaded.addAndGet(bytes);
 		speedometer.addBytes(bytes);
-	}
-
-	private boolean verifyFile(Path file, String expectedHash) {
-		if (!Files.exists(file)) return false;
-		try {
-			return Objects.equals(HashUtils.getHash(file), expectedHash);
-		} catch (Exception e) {
-			return false;
-		}
 	}
 
 	public void joinAll() throws InterruptedException {
@@ -385,10 +370,14 @@ public class DownloadManager {
 	public void cancelAllAndShutdown() {
 		cancelled = true;
 		queuedDownloads.clear();
-		downloadsInProgress.forEach((k, v) -> {
-			v.future.cancel(true);
-			SmartFileUtils.executeOrder66(v.file);
+		downloadsInProgress.forEach((k, v) -> v.future.cancel(true));
+		activeTemporaryFiles.values().forEach(path -> {
+			try {
+				Files.deleteIfExists(path);
+			} catch (IOException ignored) {
+			}
 		});
+		activeTemporaryFiles.clear();
 		semaphore.release(totalFilesAdded);
 		downloadsInProgress.clear();
 		downloadedCount = 0;

@@ -5,7 +5,8 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.*;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
-import java.util.Arrays;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Stream;
 
 public class SmartFileUtils {
@@ -30,13 +31,115 @@ public class SmartFileUtils {
 		}
 	}
 
-	public static void hardlinkFile(Path sourceFile, Path targetFile) throws IOException {
-		createParentDirs(targetFile);
+	public static boolean isValidFile(Path file, long expectedSize, String expectedSha1) {
+		if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return false;
 		try {
-			Files.createLink(targetFile, sourceFile);
+			return Files.size(file) == expectedSize && expectedSha1.equalsIgnoreCase(HashUtils.getHash(file));
 		} catch (IOException e) {
-			LOGGER.warn("Failed to create hardlink from {} to {}, falling back to copy", sourceFile, targetFile, e);
-			copyFile(sourceFile, targetFile);
+			return false;
+		}
+	}
+
+	public static boolean copyVerifiedAtomic(Path sourceFile, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
+		if (isValidFile(targetFile, expectedSize, expectedSha1)) return false;
+		if (!isValidFile(sourceFile, expectedSize, expectedSha1)) throw new IOException("Source file failed size/SHA-1 verification: " + sourceFile);
+
+		createParentDirs(targetFile);
+		Path parent = targetFile.toAbsolutePath().normalize().getParent();
+		if (parent == null) throw new IOException("Target path has no parent: " + targetFile);
+		Path temporary = Files.createTempFile(parent, "." + targetFile.getFileName() + ".", ".tmp");
+		try {
+			Files.copy(sourceFile, temporary, StandardCopyOption.REPLACE_EXISTING);
+			forceFile(temporary);
+			if (!isValidFile(temporary, expectedSize, expectedSha1)) throw new IOException("Copied file failed size/SHA-1 verification: " + temporary);
+			moveAtomicReplace(temporary, targetFile);
+			return true;
+		} finally {
+			Files.deleteIfExists(temporary);
+		}
+	}
+
+	public record CopyRequest(Path source, Path target, long expectedSize, String expectedSha1) {}
+
+	public static class CopyBatchException extends IOException {
+		private final Path target;
+
+		public CopyBatchException(Path target, Throwable cause) {
+			super("Failed to install " + target, cause);
+			this.target = target;
+		}
+
+		public Path target() {
+			return target;
+		}
+	}
+
+	public static void copyVerifiedAtomicBatch(Collection<CopyRequest> requests, int maxConcurrency) throws IOException {
+		if (requests.isEmpty()) return;
+		if (maxConcurrency < 1) throw new IllegalArgumentException("Copy concurrency must be positive");
+		List<CopyRequest> orderedRequests = List.copyOf(requests);
+		ExecutorService executor = Executors.newFixedThreadPool(Math.min(maxConcurrency, orderedRequests.size()));
+		List<Callable<Void>> tasks = orderedRequests.stream().map(request -> (Callable<Void>) () -> {
+			try {
+				copyVerifiedAtomic(request.source(), request.target(), request.expectedSize(), request.expectedSha1());
+				return null;
+			} catch (Throwable failure) {
+				throw new CopyBatchException(request.target(), failure);
+			}
+		}).toList();
+		IOException failure = null;
+		boolean interrupted = false;
+		try {
+			List<Future<Void>> futures = executor.invokeAll(tasks);
+			for (int index = 0; index < futures.size(); index++) {
+				try {
+					futures.get(index).get();
+				} catch (ExecutionException e) {
+					Throwable cause = e.getCause();
+					if (failure == null)
+						failure = cause instanceof CopyBatchException copyFailure
+								? copyFailure
+								: new CopyBatchException(orderedRequests.get(index).target(), cause);
+				} catch (CancellationException e) {
+					if (failure == null) failure = new CopyBatchException(orderedRequests.get(index).target(), e);
+				}
+			}
+		} catch (InterruptedException e) {
+			interrupted = true;
+			failure = new IOException("Interrupted while installing files", e);
+		} finally {
+			executor.shutdownNow();
+			while (!executor.isTerminated()) {
+				try {
+					executor.awaitTermination(1, TimeUnit.DAYS);
+				} catch (InterruptedException e) {
+					interrupted = true;
+					if (failure == null) failure = new IOException("Interrupted while waiting for file installation to stop", e);
+				}
+			}
+			if (interrupted) Thread.currentThread().interrupt();
+		}
+		if (failure != null) throw failure;
+	}
+
+	public static void promoteVerifiedAtomic(Path temporary, Path targetFile, long expectedSize, String expectedSha1) throws IOException {
+		forceFile(temporary);
+		if (!isValidFile(temporary, expectedSize, expectedSha1)) throw new IOException("Downloaded file failed size/SHA-1 verification: " + temporary);
+		createParentDirs(targetFile);
+		moveAtomicReplace(temporary, targetFile);
+	}
+
+	private static void moveAtomicReplace(Path sourceFile, Path targetFile) throws IOException {
+		try {
+			Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		} catch (AtomicMoveNotSupportedException e) {
+			throw new IOException("Atomic replacement is unsupported for " + targetFile, e);
+		}
+	}
+
+	private static void forceFile(Path file) throws IOException {
+		try (FileChannel channel = FileChannel.open(file, StandardOpenOption.WRITE)) {
+			channel.force(true);
 		}
 	}
 

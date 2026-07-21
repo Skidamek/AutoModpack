@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -62,5 +63,42 @@ class SmartFileUtilsTest {
 		String result = HashUtils.getHash(missingFile);
 
 		assertNull(result, "Should return null for missing file");
+	}
+
+	@Test
+	void copyBatchWrapsRuntimeFailuresAndPreservesInterruption() throws Exception {
+		Path source = Files.writeString(tempDir.resolve("batch-source"), "content");
+		Path failedTarget = tempDir.resolve("failed-target");
+		SmartFileUtils.CopyBatchException runtimeFailure = assertThrows(SmartFileUtils.CopyBatchException.class,
+				() -> SmartFileUtils.copyVerifiedAtomicBatch(List.of(new SmartFileUtils.CopyRequest(source, failedTarget, Files.size(source), null)), 1));
+		assertEquals(failedTarget, runtimeFailure.target());
+		assertInstanceOf(NullPointerException.class, runtimeFailure.getCause());
+
+		String hash = HashUtils.getHash(source);
+		Thread.currentThread().interrupt();
+		try {
+			assertThrows(IOException.class, () -> SmartFileUtils.copyVerifiedAtomicBatch(
+					List.of(new SmartFileUtils.CopyRequest(source, tempDir.resolve("interrupted-target"), Files.size(source), hash)), 1));
+			assertTrue(Thread.currentThread().isInterrupted());
+		} finally {
+			Thread.interrupted();
+		}
+	}
+
+	@Test
+	void verifiedAtomicCopySkipsCorrectTargetAndReplacesCorruptTarget() throws IOException {
+		Path source = tempDir.resolve("store-object");
+		Path target = tempDir.resolve("mods/example.jar");
+		Files.writeString(source, "verified content");
+		String hash = HashUtils.getHash(source);
+		long size = Files.size(source);
+
+		assertTrue(SmartFileUtils.copyVerifiedAtomic(source, target, size, hash));
+		assertFalse(Files.isSameFile(source, target));
+		assertFalse(SmartFileUtils.copyVerifiedAtomic(source, target, size, hash));
+
+		Files.writeString(target, "corrupt");
+		assertTrue(SmartFileUtils.copyVerifiedAtomic(source, target, size, hash));
+		assertTrue(SmartFileUtils.isValidFile(target, size, hash));
 	}
 }

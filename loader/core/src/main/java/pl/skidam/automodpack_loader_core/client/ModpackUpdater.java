@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
 import java.io.IOException;
 import java.net.ConnectException;
@@ -43,7 +42,6 @@ public class ModpackUpdater {
 	public long totalBytesToDownload = 0;
 	public boolean fullDownload = false;
 	private Jsons.ModpackContentFields serverModpackContent;
-	private String serverModpackContentJson; // TODO: remove this variable and use serverModpackContent directly
 	public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
 	private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
 	private final Set<String> overwrittenEditableFiles = new HashSet<>();
@@ -82,9 +80,6 @@ public class ModpackUpdater {
 				return;
 			}
 
-			// Prepare for modpack update
-			serverModpackContentJson = GSON.toJson(serverModpackContent);
-
 			// Create directories if they don't exist
 			if (!Files.exists(modpackDir)) Files.createDirectories(modpackDir);
 
@@ -104,7 +99,7 @@ public class ModpackUpdater {
 				if (result.requiresUpdate()) {
 					startUpdate(result.filesToUpdate(), result.changedOverwriteEditableFiles());
 				} else {
-					Files.writeString(modpackContentFile, serverModpackContentJson);
+					ModpackContentTools.write(modpackContentFile, serverModpackContent);
 					try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 						checkAndLoadModpack(cache);
 					}
@@ -276,7 +271,7 @@ public class ModpackUpdater {
 
 			ApplyResult applyResult = applyModpack(cache, serverModpackContent);
 			LOGGER.info("Done, saving {}", modpackContentFile);
-			Files.writeString(modpackContentFile, serverModpackContentJson);
+			ModpackContentTools.write(modpackContentFile, serverModpackContent);
 
 			if (preload) {
 				LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
@@ -340,12 +335,6 @@ public class ModpackUpdater {
 				}
 
 				changelogs.changesAddedList.put(downloadFile.getFileName().toString(), mainPageUrls);
-
-				try {
-					cache.overwriteCache(downloadFile, serverFileHash);
-				} catch (Exception e) {
-					LOGGER.error("Failed to update cache for {}", downloadFile, e);
-				}
 			};
 
 			downloadManager.download(downloadFile, serverFileHash, sources, serverFileSize, successCallback, failureCallback);
@@ -402,7 +391,6 @@ public class ModpackUpdater {
 				return false;
 			}
 			this.serverModpackContent = refreshedContent;
-			this.serverModpackContentJson = GSON.toJson(refreshedContent);
 
 			// filter list to only the failed downloads
 			var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
@@ -441,15 +429,7 @@ public class ModpackUpdater {
 
 				Runnable failureCallback = () -> failedDownloads.put(serverItem, List.of());
 
-				Runnable successCallback = () -> {
-					changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
-
-					try {
-						cache.overwriteCache(downloadFile, serverFileHash);
-					} catch (Exception e) {
-						LOGGER.error("Failed to update cache for {}", downloadFile, e);
-					}
-				};
+				Runnable successCallback = () -> changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
 
 				downloadManager.download(downloadFile, serverFileHash, List.of(), serverFileSize, successCallback, failureCallback);
 			}
@@ -491,7 +471,7 @@ public class ModpackUpdater {
 	private ApplyResult applyModpack(FileMetadataCache cache, Jsons.ModpackContentFields modpackContent) throws Exception {
 		ModpackUtils.selectModpack(serverModpackContent.modpackId, serverModpackContent.modpackName, modpackDir, connectionInfo, newDownloadedFiles);
 
-		ModpackUtils.hardlinkModpack(modpackDir, modpackContent, cache);
+		ModpackUtils.installModpack(modpackDir, modpackContent, cache);
 
 		// Prepare modpack, analyze nested mods
 		List<FileInspection.Mod> conflictingNestedMods = MODPACK_LOADER.getModpackNestedConflicts(modpackDir, cache);
