@@ -42,8 +42,8 @@ public class DataC2SPacket {
 			return CompletableFuture.completedFuture(error);
 		}
 
-		String packetAddress = dataPacket.address == null ? "" : dataPacket.address;
-		int packetPort = dataPacket.port;
+		String packetEndpointHost = dataPacket.endpointHost == null ? "" : dataPacket.endpointHost;
+		int packetEndpointPort = dataPacket.endpointPort;
 		Secrets.Secret secret = dataPacket.secret;
 		boolean modRequired = dataPacket.modRequired;
 		boolean requiresMagic = dataPacket.requiresMagic;
@@ -60,7 +60,7 @@ public class DataC2SPacket {
 			return CompletableFuture.completedFuture(buildResponse(null));
 		}
 
-		Jsons.ModpackAddresses modpackAddresses;
+		Jsons.ConnectionInfo connectionInfo;
 		try {
 			// Get actual address of the server client have connected to and format it
 			InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
@@ -71,40 +71,38 @@ public class DataC2SPacket {
 			// Important! Use getAddress().getHostAddress() instead of getHostString()
 			// because Minecraft creates connectedAddress instance through a constructor which attempts a reverse DNS lookup
 			// which resolves PTR record for the IP address and stores the resolved hostname in the hostname field.
-			if (packetAddress.isBlank()) {
+			if (packetEndpointHost.isBlank()) {
 				var connectedInetAddress = connectedAddress.getAddress();
 				effectiveHost = connectedInetAddress == null ? connectedAddress.getHostString() : connectedInetAddress.getHostAddress();
 			} else {
-				effectiveHost = packetAddress;
+				effectiveHost = packetEndpointHost;
 			}
 
-			if (packetPort == -1) {
+			if (packetEndpointPort == -1) {
 				effectivePort = connectedAddress.getPort();
 			} else {
-				effectivePort = packetPort;
+				effectivePort = packetEndpointPort;
 			}
 
-			// Construct the final modpack address
-			InetSocketAddress modpackAddress = AddressHelpers.format(effectiveHost, effectivePort);
+			InetSocketAddress endpoint = AddressHelpers.format(effectiveHost, effectivePort);
 
-			LOGGER.info("Modpack address: {}:{} Requires to follow magic protocol: {}", modpackAddress.getHostString(), modpackAddress.getPort(),
-					requiresMagic);
+			LOGGER.info("AutoModpack endpoint: {}:{}; requires magic protocol: {}", endpoint.getHostString(), endpoint.getPort(), requiresMagic);
 
-			modpackAddresses = new Jsons.ModpackAddresses(modpackAddress, connectionAttempt.serverAddress(), connectionAttempt.certificateFingerprint(),
-					connectionAttempt.certificatePinReason(), requiresMagic);
+			connectionInfo = new Jsons.ConnectionInfo(connectionAttempt.origin(), endpoint, requiresMagic, connectionAttempt.expectedFingerprint(),
+					connectionAttempt.trustReason());
 		} catch (Exception e) {
-			LOGGER.error("Error preparing modpack address from data packet", e);
+			LOGGER.error("Error preparing AutoModpack endpoint from data packet", e);
 			return CompletableFuture.completedFuture(buildResponse(null));
 		}
 
-		return ModpackUtils.requestServerModpackContentAsync(modpackAddresses, secret, true).thenApplyAsync(optionalServerModpackContent -> {
+		return ModpackUtils.requestServerModpackContentAsync(connectionInfo, secret, true).thenApplyAsync(optionalServerModpackContent -> {
 			Boolean needsDisconnecting = null;
 
 			if (optionalServerModpackContent.isPresent()) {
 				Jsons.ModpackContentFields serverModpackContent = optionalServerModpackContent.get();
 				Path modpackDir = ModpackUtils.getModpackPath(serverModpackContent.modpackId);
 				try {
-					SecretsStore.saveClientSecret(modpackAddresses.serverAddress, secret);
+					SecretsStore.saveClientSecret(connectionInfo.origin, secret);
 				} catch (Exception e) {
 					LOGGER.error("Failed to persist client secret", e);
 					disconnectImmediately(handler);
@@ -114,12 +112,12 @@ public class DataC2SPacket {
 				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 				if (updateCheckResult.requiresUpdate()) {
 					disconnectImmediately(handler);
-					new ModpackUpdater(serverModpackContent, modpackAddresses, secret, modpackDir).processModpackUpdate(updateCheckResult);
+					new ModpackUpdater(serverModpackContent, connectionInfo, secret, modpackDir).processModpackUpdate(updateCheckResult);
 					needsDisconnecting = true;
 				} else {
 					boolean selectedModpackChanged;
 					try {
-						selectedModpackChanged = ModpackUtils.selectModpack(serverModpackContent.modpackId, serverModpackContent.modpackName, modpackDir, modpackAddresses, Set.of());
+						selectedModpackChanged = ModpackUtils.selectModpack(serverModpackContent.modpackId, serverModpackContent.modpackName, modpackDir, connectionInfo, Set.of());
 					} catch (IOException e) {
 						LOGGER.error("Failed to select stable modpack installation", e);
 						disconnectImmediately(handler);
@@ -136,7 +134,7 @@ public class DataC2SPacket {
 						needsDisconnecting = false;
 					}
 				}
-			} else if (ModpackUtils.canConnectModpackHost(modpackAddresses)) {
+			} else if (ModpackUtils.canConnectModpackHost(connectionInfo)) {
 				// Couldn't download the modpack content (e.g. certificate not verified) but the host is reachable
 				needsDisconnecting = true;
 			}

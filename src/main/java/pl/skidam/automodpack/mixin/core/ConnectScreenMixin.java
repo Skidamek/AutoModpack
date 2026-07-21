@@ -44,8 +44,8 @@ public abstract class ConnectScreenMixin {
 
 		var originAddress = AddressHelpers.format(address.getHost(), address.getPort());
 		var savedTrust = CertificateTrustStore.get(originAddress);
-		String fingerprint = parsed.hasPin() ? parsed.fingerprint() : savedTrust == null ? null : savedTrust.fingerprint;
-		String reason = parsed.hasPin() ? CertificateTrustStore.Reason.ADDRESS_PIN.name() : null;
-		ModPackets.setConnectionAttempt(new ModPackets.ConnectionAttempt(originAddress, fingerprint, reason));
+		String expectedFingerprint = parsed.hasPin() ? parsed.fingerprint() : savedTrust == null ? null : savedTrust.fingerprint;
+		String trustReason = parsed.hasPin() ? CertificateTrustStore.Reason.ADDRESS_PIN.name() : null;
+		ModPackets.setConnectionAttempt(new ModPackets.ConnectionAttempt(originAddress, expectedFingerprint, trustReason));
 	}
 }

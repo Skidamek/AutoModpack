@@ -46,7 +46,7 @@ public class ModpackUpdater {
 	public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
 	private final Set<String> newDownloadedFiles = new HashSet<>(); // Only files which did not exist before. Because some files may have the same name/path and be updated.
 	private final Set<String> overwrittenEditableFiles = new HashSet<>();
-	private final Jsons.ModpackAddresses modpackAddresses;
+	private final Jsons.ConnectionInfo connectionInfo;
 	private final Secrets.Secret modpackSecret;
 	private final UpdateLoopDetector updateLoopDetector = new UpdateLoopDetector();
 	private Path modpackDir;
@@ -60,13 +60,13 @@ public class ModpackUpdater {
 		return serverModpackContent.list;
 	}
 
-	public ModpackUpdater(Jsons.ModpackContentFields modpackContent, Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret, Path modpackPath) {
+	public ModpackUpdater(Jsons.ModpackContentFields modpackContent, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, Path modpackPath) {
 		this.serverModpackContent = modpackContent;
-		this.modpackAddresses = modpackAddresses;
+		this.connectionInfo = connectionInfo;
 		this.modpackSecret = secret;
 		this.modpackDir = modpackPath;
 
-		if (this.modpackAddresses == null || this.modpackAddresses.isAnyEmpty()) throw new IllegalArgumentException("modpackAddresses is null or empty");
+		if (this.connectionInfo == null || !this.connectionInfo.isComplete()) throw new IllegalArgumentException("connectionInfo is null or empty");
 	}
 
 	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result) {
@@ -287,7 +287,7 @@ public class ModpackUpdater {
 				new ReLauncher(modpackDir, updateType, changelogs).restart(false);
 			}
 		} catch (SocketTimeoutException | ConnectException e) {
-			LOGGER.error("{} is not responding", "Modpack host of " + modpackAddresses.hostAddress.getHostString(), e);
+			LOGGER.error("{} is not responding", "Modpack host of " + connectionInfo.endpoint.getHostString(), e);
 		} catch (InterruptedException e) {
 			LOGGER.info("Interrupted the download");
 		} catch (Exception e) {
@@ -307,8 +307,8 @@ public class ModpackUpdater {
 
 		LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
-		DownloadClient downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(wholeQueue, 5),
-				ModpackUtils.manualValidationCallback(modpackAddresses, false));
+		DownloadClient downloadClient = DownloadClient.tryCreate(connectionInfo, modpackSecret.secretBytes(), Math.min(wholeQueue, 5),
+				ModpackUtils.manualValidationCallback(connectionInfo, false));
 		if (downloadClient == null) return false;
 
 		downloadManager = new DownloadManager(totalBytesToDownload);
@@ -383,7 +383,7 @@ public class ModpackUpdater {
 		// TODO set client to a waiting for the server to respond screen
 		LOGGER.warn("Trying to refresh the modpack content");
 		LOGGER.info("Sending hashes to refresh: {}", hashesToRefresh.values());
-		var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(modpackAddresses, modpackSecret, hashesArray, false);
+		var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(connectionInfo, modpackSecret, hashesArray, false);
 		if (refreshedContentOptional.isEmpty()) {
 			LOGGER.error("Failed to refresh the modpack content");
 			failedDownloads.putAll(failedDownloadsSecMap);
@@ -416,7 +416,7 @@ public class ModpackUpdater {
 				else overwrittenEditableFiles.remove(item.file);
 			}
 
-			downloadClient = DownloadClient.tryCreate(modpackAddresses, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.manualValidationCallback(modpackAddresses, false));
+			downloadClient = DownloadClient.tryCreate(connectionInfo, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.manualValidationCallback(connectionInfo, false));
 			if (downloadClient == null) {
 				failedDownloads.putAll(failedDownloadsSecMap);
 				return false;
@@ -436,7 +436,7 @@ public class ModpackUpdater {
 
 				Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
 
-				LOGGER.info("Retrying to download {} from {}", serverFilePath, modpackAddresses.hostAddress.getHostString());
+				LOGGER.info("Retrying to download {} from {}", serverFilePath, connectionInfo.endpoint.getHostString());
 
 				Runnable failureCallback = () -> failedDownloads.put(serverItem, List.of());
 
@@ -488,7 +488,7 @@ public class ModpackUpdater {
 
 	// this is run every time we modpack is updated
 	private ApplyResult applyModpack(FileMetadataCache cache, Jsons.ModpackContentFields modpackContent) throws Exception {
-		ModpackUtils.selectModpack(serverModpackContent.modpackId, serverModpackContent.modpackName, modpackDir, modpackAddresses, newDownloadedFiles);
+		ModpackUtils.selectModpack(serverModpackContent.modpackId, serverModpackContent.modpackName, modpackDir, connectionInfo, newDownloadedFiles);
 
 		ModpackUtils.hardlinkModpack(modpackDir, modpackContent, cache);
 

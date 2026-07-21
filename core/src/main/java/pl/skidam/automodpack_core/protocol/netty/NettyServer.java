@@ -209,8 +209,8 @@ public class NettyServer {
 		if (serverConfig.updateIpsOnEveryStart) {
 			String publicIp = AddressHelpers.getPublicIp();
 			if (publicIp != null) {
-				serverConfig.addressToSend = publicIp;
-				LOGGER.warn("Setting Host IP to {}", serverConfig.addressToSend);
+				serverConfig.advertisedEndpointHost = publicIp;
+				LOGGER.warn("Setting Host IP to {}", serverConfig.advertisedEndpointHost);
 			} else {
 				LOGGER.error("Couldn't get public IP, please change it manually! ");
 			}

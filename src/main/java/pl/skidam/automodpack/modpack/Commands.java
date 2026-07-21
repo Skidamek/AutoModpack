@@ -140,18 +140,18 @@ public class Commands {
 			return Command.SINGLE_SUCCESS;
 		}
 
-		String address = StringArgumentType.getString(context, "minecraft-address");
-		final String pinnedAddress;
+		String origin = StringArgumentType.getString(context, "minecraft-address");
+		final String pinnedOrigin;
 		try {
-			pinnedAddress = ServerAddressPin.format(address, fingerprint);
+			pinnedOrigin = ServerAddressPin.format(origin, fingerprint);
 		} catch (IllegalArgumentException e) {
 			send(context, e.getMessage(), ChatFormatting.RED, false);
 			return Command.SINGLE_SUCCESS;
 		}
 
-		send(context, "Plain Minecraft address (vanilla and older clients):", ChatFormatting.WHITE, copyable(address), ChatFormatting.YELLOW, false);
-		send(context, "Pinned AutoModpack address:", ChatFormatting.WHITE, copyable(pinnedAddress), ChatFormatting.GREEN, false);
-		send(context, "Compatible AutoModpack clients import the public fingerprint and save a clean Minecraft address.", ChatFormatting.GRAY, false);
+		send(context, "Plain Minecraft origin (vanilla and older clients):", ChatFormatting.WHITE, copyable(origin), ChatFormatting.YELLOW, false);
+		send(context, "Pinned AutoModpack origin:", ChatFormatting.WHITE, copyable(pinnedOrigin), ChatFormatting.GREEN, false);
+		send(context, "Compatible AutoModpack clients import the public fingerprint and save a clean Minecraft origin.", ChatFormatting.GRAY, false);
 		return Command.SINGLE_SUCCESS;
 	}
 

@@ -8,7 +8,7 @@ La plupart des proxys Minecraft ne fonctionneront pas avec AutoModpack en raison
 | Waterfall                                         | ❌             | Non supporté  |
 | BungeeCord                                        | ❌             | Non supporté  |
 
-Lorsque vous utilisez Gate Lite, il est crucial de configurer correctement `portToSend`. Par défaut, les clients tentent de se connecter à l'hôte du modpack en utilisant le même port que celui utilisé pour se connecter à votre serveur Minecraft. Cependant, lorsque vous utilisez un proxy comme Gate, ce port diffère du port réel de votre serveur Minecraft, empêchant les clients de se connecter pour télécharger le modpack.
+Lorsque vous utilisez Gate Lite, il est crucial de configurer correctement `advertisedEndpointPort`. Par défaut, les clients tentent de se connecter à l'hôte du modpack en utilisant le même port que celui utilisé pour se connecter à votre serveur Minecraft. Cependant, lorsque vous utilisez un proxy comme Gate, ce port diffère du port réel de votre serveur Minecraft, empêchant les clients de se connecter pour télécharger le modpack.
 
-Par conséquent, si votre modpack est hébergé avec `bindPort` défini sur `-1`, `portToSend` doit être défini sur le port depuis lequel votre serveur Minecraft est accessible (généralement, ce sera le même port sur lequel le serveur Minecraft écoute).
-De même, si `bindPort` est défini sur un port spécifique, `portToSend` doit être défini sur le port depuis lequel l'hôte du modpack est accessible (généralement, ce sera le même que `bindPort`).
+Par conséquent, si votre modpack est hébergé avec `bindPort` défini sur `-1`, `advertisedEndpointPort` doit être défini sur le port depuis lequel votre serveur Minecraft est accessible (généralement, ce sera le même port sur lequel le serveur Minecraft écoute).
+De même, si `bindPort` est défini sur un port spécifique, `advertisedEndpointPort` doit être défini sur le port depuis lequel l'hôte du modpack est accessible (généralement, ce sera le même que `bindPort`).

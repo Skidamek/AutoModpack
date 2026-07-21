@@ -518,18 +518,18 @@ def _v_stage_modpack(ctx: Context, step):
 
     # A client config that selects the staged pack and disables the launch update,
     # so Preload loads it locally (no server contact, no file reconciliation). The
-    # installedModpacks entry needs a non-null host address or Preload self-updates
-    # instead of loading; the address is never dialed when update-on-launch is off.
+    # modpackConnections entry needs a complete origin/endpoint pair or Preload self-updates
+    # instead of loading; the endpoint is never dialed when update-on-launch is off.
     host = ctx.server_host or "127.0.0.1"
     addr = host if ":" in host else f"{host}:25565"
     cfg = {
         "DO_NOT_CHANGE_IT": 3,
         "selectedModpackId": modpack_id,
         "updateSelectedModpackOnLaunch": False,
-        "installedModpacks": {
+        "modpackConnections": {
             modpack_id: {
-                "hostAddress": addr,
-                "serverAddress": addr,
+                "origin": addr,
+                "endpoint": addr,
                 "requiresMagic": False,
             }
         },

@@ -23,10 +23,10 @@ Gate Lite forwards the packets out of the box. Your issue here is routing.
 
 Clients default to downloading the modpack on the same port they used to connect to the server. The proxy changes that port. If you leave it alone, the client tries to pull files from the wrong place and the connection fails.
 
-You override this behavior with the `portToSend` setting.
+You override this behavior with the `advertisedEndpointPort` setting.
 
 If your `bindPort` is set to `-1`
-- Set `portToSend` to the port your backend Minecraft server uses to listen for connections.
+- Set `advertisedEndpointPort` to the port your backend Minecraft server uses to listen for connections.
 
 If your `bindPort` is set to a specific number:
-- Set `portToSend` to the port your modpack host uses. This is usually the exact same number you used for `bindPort`.
+- Set `advertisedEndpointPort` to the port your modpack host uses. This is usually the exact same number you used for `bindPort`.

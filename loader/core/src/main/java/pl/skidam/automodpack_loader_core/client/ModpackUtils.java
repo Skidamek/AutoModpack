@@ -538,16 +538,16 @@ public class ModpackUtils {
 	}
 
 	// Returns true if selection changed
-	public static boolean selectModpack(String modpackId, String displayName, Path modpackDirToSelect, Jsons.ModpackAddresses modpackAddresses, Set<String> newDownloadedFiles) throws IOException {
+	public static boolean selectModpack(String modpackId, String displayName, Path modpackDirToSelect, Jsons.ConnectionInfo connectionInfo, Set<String> newDownloadedFiles) throws IOException {
 		ModpackId.requireValid(modpackId);
 		if (!modpackDirToSelect.getFileName().toString().equals(modpackId)) throw new IllegalArgumentException("Modpack directory does not match its ID");
-		if (modpackAddresses == null || modpackAddresses.isAnyEmpty()) throw new IllegalArgumentException("Modpack addresses are empty");
+		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IllegalArgumentException("Modpack addresses are empty");
 
 		String oldModpackId = clientConfig.selectedModpackId;
 		if (Objects.equals(modpackId, oldModpackId)) {
-			if (!sameAddresses(clientConfig.installedModpacks.get(modpackId), modpackAddresses)) {
+			if (!sameAddresses(clientConfig.modpackConnections.get(modpackId), connectionInfo)) {
 				Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
-				updatedConfig.installedModpacks.put(modpackId, modpackAddresses);
+				updatedConfig.modpackConnections.put(modpackId, connectionInfo);
 				persistClientConfig(updatedConfig, "Failed to persist updated modpack addresses");
 			}
 			return false;
@@ -562,7 +562,7 @@ public class ModpackUtils {
 
 		Jsons.ClientConfigFieldsV3 updatedConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
 		updatedConfig.selectedModpackId = modpackId;
-		updatedConfig.installedModpacks.put(modpackId, modpackAddresses);
+		updatedConfig.modpackConnections.put(modpackId, connectionInfo);
 		persistClientConfig(updatedConfig, "Failed to persist selected modpack");
 
 		LOGGER.info("Selected modpack: {} ({})", displayName, modpackId);
@@ -574,12 +574,12 @@ public class ModpackUtils {
 		clientConfig = updatedConfig;
 	}
 
-	private static boolean sameAddresses(Jsons.ModpackAddresses first, Jsons.ModpackAddresses second) {
-		if (first == null || second == null || first.hostAddress == null || first.serverAddress == null || second.hostAddress == null
-				|| second.serverAddress == null)
+	private static boolean sameAddresses(Jsons.ConnectionInfo first, Jsons.ConnectionInfo second) {
+		if (first == null || second == null || first.endpoint == null || first.origin == null || second.endpoint == null
+				|| second.origin == null)
 			return false;
-		return first.requiresMagic == second.requiresMagic && AddressHelpers.formatAddress(first.hostAddress).equals(AddressHelpers.formatAddress(second.hostAddress))
-				&& AddressHelpers.formatAddress(first.serverAddress).equals(AddressHelpers.formatAddress(second.serverAddress));
+		return first.requiresMagic == second.requiresMagic && AddressHelpers.formatAddress(first.endpoint).equals(AddressHelpers.formatAddress(second.endpoint))
+				&& AddressHelpers.formatAddress(first.origin).equals(AddressHelpers.formatAddress(second.origin));
 	}
 
 	private static void processEditableFiles(Path modpackDir, BiConsumer<Path, Set<String>> action) {
@@ -596,33 +596,33 @@ public class ModpackUtils {
 		return modpacksDir.resolve(ModpackId.requireValid(modpackId));
 	}
 
-	public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret,
+	public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			boolean allowAskingUser) {
-		return fetchModpackContent(modpackAddresses, secret, (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null), allowAskingUser);
+		return fetchModpackContent(connectionInfo, secret, (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null), allowAskingUser);
 	}
 
-	public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret,
+	public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			byte[][] fileHashes, boolean allowAskingUser) {
-		return fetchModpackContent(modpackAddresses, secret, (client) -> client.requestRefresh(fileHashes, modpackContentTempFile), allowAskingUser);
+		return fetchModpackContent(connectionInfo, secret, (client) -> client.requestRefresh(fileHashes, modpackContentTempFile), allowAskingUser);
 	}
 
-	private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ModpackAddresses modpackAddresses, Secrets.Secret secret,
+	private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
 			Function<DownloadClient, CompletableFuture<Path>> operation, boolean allowAskingUser) {
 		if (secret == null) return Optional.empty();
-		if (modpackAddresses.isAnyEmpty()) throw new IllegalArgumentException("Modpack addresses are empty!");
+		if (!connectionInfo.isComplete()) throw new IllegalArgumentException("Modpack addresses are empty!");
 
 		try {
-			return fetchModpackContentAsync(modpackAddresses, secret, operation, manualValidationCallbackAsync(modpackAddresses, allowAskingUser)).get();
+			return fetchModpackContentAsync(connectionInfo, secret, operation, manualValidationCallbackAsync(connectionInfo, allowAskingUser)).get();
 		} catch (Exception e) {
 			LOGGER.error("Error while getting server modpack content", e);
 			return Optional.empty();
 		}
 	}
 
-	public static boolean canConnectModpackHost(Jsons.ModpackAddresses modpackAddresses) {
-		if (modpackAddresses.isAnyEmpty()) throw new IllegalArgumentException("Modpack addresses are empty!");
+	public static boolean canConnectModpackHost(Jsons.ConnectionInfo connectionInfo) {
+		if (!connectionInfo.isComplete()) throw new IllegalArgumentException("Modpack addresses are empty!");
 
-		try (DownloadClient client = createDownloadClient(modpackAddresses, null, 1, manualValidationCallbackAsync(modpackAddresses, false)).get()) {
+		try (DownloadClient client = createDownloadClient(connectionInfo, null, 1, manualValidationCallbackAsync(connectionInfo, false)).get()) {
 			return client != null;
 		} catch (Exception e) {
 			LOGGER.error("Error while pinging AutoModpack host server", e);
@@ -642,7 +642,7 @@ public class ModpackUtils {
 	 *            whether the user should be prompted if a certificate is not trusted
 	 * @return the callback
 	 */
-	public static Function<X509Certificate, Boolean> manualValidationCallback(Jsons.ModpackAddresses addresses, boolean allowAskingUser) {
+	public static Function<X509Certificate, Boolean> manualValidationCallback(Jsons.ConnectionInfo addresses, boolean allowAskingUser) {
 		Function<X509Certificate, CompletableFuture<Boolean>> callback = manualValidationCallbackAsync(addresses, allowAskingUser);
 		return certificate -> {
 			try {
@@ -655,22 +655,22 @@ public class ModpackUtils {
 
 	// ---- Async versions (non-blocking, used by login packet flow) ----
 
-	public static CompletableFuture<Optional<Jsons.ModpackContentFields>> requestServerModpackContentAsync(Jsons.ModpackAddresses modpackAddresses,
+	public static CompletableFuture<Optional<Jsons.ModpackContentFields>> requestServerModpackContentAsync(Jsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, boolean allowAskingUser) {
 		if (secret == null) return CompletableFuture.completedFuture(Optional.empty());
-		if (modpackAddresses.isAnyEmpty()) return CompletableFuture.failedFuture(new IllegalArgumentException("Modpack addresses are empty!"));
+		if (!connectionInfo.isComplete()) return CompletableFuture.failedFuture(new IllegalArgumentException("Modpack addresses are empty!"));
 
-		return fetchModpackContentAsync(modpackAddresses, secret, (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
-				manualValidationCallbackAsync(modpackAddresses, allowAskingUser));
+		return fetchModpackContentAsync(connectionInfo, secret, (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
+				manualValidationCallbackAsync(connectionInfo, allowAskingUser));
 	}
 
-	private static CompletableFuture<Optional<Jsons.ModpackContentFields>> fetchModpackContentAsync(Jsons.ModpackAddresses modpackAddresses,
+	private static CompletableFuture<Optional<Jsons.ModpackContentFields>> fetchModpackContentAsync(Jsons.ConnectionInfo connectionInfo,
 			Secrets.Secret secret, Function<DownloadClient, CompletableFuture<Path>> operation,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
 		if (secret == null) return CompletableFuture.completedFuture(Optional.empty());
-		if (modpackAddresses.isAnyEmpty()) return CompletableFuture.failedFuture(new IllegalArgumentException("Modpack addresses are empty!"));
+		if (!connectionInfo.isComplete()) return CompletableFuture.failedFuture(new IllegalArgumentException("Modpack addresses are empty!"));
 
-		return createDownloadClient(modpackAddresses, secret.secretBytes(), 1, trustCallback).thenCompose(client -> {
+		return createDownloadClient(connectionInfo, secret.secretBytes(), 1, trustCallback).thenCompose(client -> {
 			CompletableFuture<Path> operationFuture;
 			try {
 				operationFuture = operation.apply(client);
@@ -707,12 +707,12 @@ public class ModpackUtils {
 		});
 	}
 
-	private static CompletableFuture<DownloadClient> createDownloadClient(Jsons.ModpackAddresses addresses, byte[] secret, int poolSize,
+	private static CompletableFuture<DownloadClient> createDownloadClient(Jsons.ConnectionInfo addresses, byte[] secret, int poolSize,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
 		return DownloadClient.createAsync(addresses, secret, poolSize, trustCallback).thenApply(client -> {
-			if (addresses.certificatePinReason != null) {
-				CertificateTrustStore.save(addresses.serverAddress, addresses.certificateFingerprint,
-						CertificateTrustStore.Reason.valueOf(addresses.certificatePinReason));
+			if (addresses.trustReason != null) {
+				CertificateTrustStore.save(addresses.origin, addresses.expectedFingerprint,
+						CertificateTrustStore.Reason.valueOf(addresses.trustReason));
 			}
 			return client;
 		});
@@ -727,9 +727,9 @@ public class ModpackUtils {
 				"Presented: " + NetUtils.shortenFingerprint(mismatch.getPresentedFingerprint()), "automodpack.pin.mismatch.help");
 	}
 
-	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(Jsons.ModpackAddresses addresses,
+	public static Function<X509Certificate, CompletableFuture<Boolean>> manualValidationCallbackAsync(Jsons.ConnectionInfo addresses,
 			boolean allowAskingUser) {
-		String originHost = addresses.serverAddress.getHostString();
+		String originHost = addresses.origin.getHostString();
 		return certificate -> {
 			String fingerprint;
 			try {
@@ -737,20 +737,20 @@ public class ModpackUtils {
 			} catch (CertificateEncodingException e) {
 				return CompletableFuture.completedFuture(false);
 			}
-			if (CertificateTrustStore.matches(addresses.serverAddress, fingerprint)) return CompletableFuture.completedFuture(true);
+			if (CertificateTrustStore.matches(addresses.origin, fingerprint)) return CompletableFuture.completedFuture(true);
 
-			LOGGER.warn("Received untrusted certificate for Minecraft server {} from modpack route {}:{}!", originHost, addresses.hostAddress.getHostString(),
-					addresses.hostAddress.getPort());
+			LOGGER.warn("Received untrusted certificate for Minecraft server {} from modpack route {}:{}!", originHost, addresses.endpoint.getHostString(),
+					addresses.endpoint.getPort());
 			if (allowAskingUser) return askUserAboutCertificateAsync(addresses, fingerprint);
 
 			return CompletableFuture.completedFuture(false);
 		};
 	}
 
-	private static CompletableFuture<Boolean> askUserAboutCertificateAsync(Jsons.ModpackAddresses addresses, String fingerprint) {
-		String originHost = addresses.serverAddress.getHostString();
-		LOGGER.info("Asking user to verify certificate for Minecraft server {} from modpack route {}:{}", originHost, addresses.hostAddress.getHostString(),
-				addresses.hostAddress.getPort());
+	private static CompletableFuture<Boolean> askUserAboutCertificateAsync(Jsons.ConnectionInfo addresses, String fingerprint) {
+		String originHost = addresses.origin.getHostString();
+		LOGGER.info("Asking user to verify certificate for Minecraft server {} from modpack route {}:{}", originHost, addresses.endpoint.getHostString(),
+				addresses.endpoint.getPort());
 
 		var parent = new ScreenManager().getScreen().orElse(null);
 		if (parent == null) {
@@ -760,7 +760,7 @@ public class ModpackUtils {
 
 		CompletableFuture<Boolean> result = new CompletableFuture<>();
 		Runnable trustAction = () -> {
-			CertificateTrustStore.save(addresses.serverAddress, fingerprint, CertificateTrustStore.Reason.TOFU);
+			CertificateTrustStore.save(addresses.origin, fingerprint, CertificateTrustStore.Reason.TOFU);
 			result.complete(true);
 		};
 		Runnable cancelAction = () -> result.complete(false);

@@ -88,12 +88,12 @@ These settings control how the file server is exposed to the internet.
 |-------------------------|---------|--------------------------------------------------------------------------------------------------------|
 | `bindAddress`           | `""`    | The local IP to bind the host to. Empty binds to 0.0.0.0 or ::0. Ignored if bindPort is -1.            |
 | `bindPort`              | `-1`    | The port to listen on. -1 uses the Minecraft Server's port (recommended).                              |
-| `addressToSend`         | `""`    | The public IP/Domain sent to clients to start the download. Empty defaults to the connection address.  |
-| `portToSend`            | `-1`    | The public port sent to clients. -1 uses the connection port.                                          |
+| `advertisedEndpointHost` | `""`  | The public hostname/IP sent to clients as the download endpoint. Empty uses the connected hostname.  |
+| `advertisedEndpointPort` | `-1`   | The public port sent to clients as the download endpoint. -1 uses the connected port.                |
 | `bandwidthLimit`        | `0`     | Upload speed limit in Mbps (0 = unlimited).                                                            |
 | `disableInternalTLS`    | `false` | Disables internal TLS. Use this only if you handle SSL via a Reverse Proxy (like Nginx - recommended). |
 | `requireMagicPackets`   | `false` | Requires a "Magic Packet" handshake to start downloads. Always enabled if bindPort is -1.              |
-| `updateIpsOnEveryStart` | `false` | Updates addressToSend on startup. Useful for dynamic residential IPs.                                  |
+| `updateIpsOnEveryStart` | `false` | Updates advertisedEndpointHost on startup. Useful for dynamic residential IPs.                         |
 | `validateSecrets`       | `true`  | Protects downloads using unique, temporary secrets per user.                                           |
 | `secretLifetime`        | `336`   | How long (in hours) a download secret remains valid.                                                   |
 

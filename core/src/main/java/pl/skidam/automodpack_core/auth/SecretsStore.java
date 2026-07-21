@@ -68,16 +68,16 @@ public class SecretsStore {
 		hostSecrets.save(uuid, secret);
 	}
 
-	public static Secrets.Secret getClientSecret(InetSocketAddress serverAddress) {
-		return clientSecrets.get(clientKey(serverAddress));
+	public static Secrets.Secret getClientSecret(InetSocketAddress origin) {
+		return clientSecrets.get(clientKey(origin));
 	}
 
-	public static void saveClientSecret(InetSocketAddress serverAddress, Secrets.Secret secret) throws IllegalArgumentException {
-		clientSecrets.save(clientKey(serverAddress), secret);
+	public static void saveClientSecret(InetSocketAddress origin, Secrets.Secret secret) throws IllegalArgumentException {
+		clientSecrets.save(clientKey(origin), secret);
 	}
 
-	private static String clientKey(InetSocketAddress serverAddress) {
-		if (serverAddress == null) throw new IllegalArgumentException("Server address cannot be null");
-		return AddressHelpers.formatAddress(serverAddress);
+	private static String clientKey(InetSocketAddress origin) {
+		if (origin == null) throw new IllegalArgumentException("Origin cannot be null");
+		return AddressHelpers.formatAddress(origin);
 	}
 }

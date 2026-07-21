@@ -5,6 +5,8 @@ import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.google.gson.annotations.SerializedName;
+
 import pl.skidam.automodpack_core.auth.Secrets;
 
 @SuppressWarnings("unused")
@@ -17,7 +19,8 @@ public class Jsons {
 	public static class ClientConfigFieldsV3 {
 		public int DO_NOT_CHANGE_IT = 3; // file version
 		public String selectedModpackId = "";
-		public Map<String, ModpackAddresses> installedModpacks = new HashMap<>(); // modpack ID, current server connection details
+		@SerializedName(value = "modpackConnections", alternate = "installedModpacks")
+		public Map<String, ConnectionInfo> modpackConnections = new HashMap<>(); // modpack ID, known origin and endpoint routing
 		public boolean updateSelectedModpackOnLaunch = true;
 		public boolean selfUpdater = false;
 		public boolean syncAutoModpackVersion = true;
@@ -29,7 +32,7 @@ public class Jsons {
 
 		public ClientConfigFieldsV3(ClientConfigFieldsV3 source) {
 			this.selectedModpackId = source.selectedModpackId;
-			this.installedModpacks = source.installedModpacks == null ? new HashMap<>() : new HashMap<>(source.installedModpacks);
+			this.modpackConnections = source.modpackConnections == null ? new HashMap<>() : new HashMap<>(source.modpackConnections);
 			this.updateSelectedModpackOnLaunch = source.updateSelectedModpackOnLaunch;
 			this.selfUpdater = source.selfUpdater;
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
@@ -39,45 +42,27 @@ public class Jsons {
 		}
 	}
 
-	public static class ModpackAddresses {
-		public InetSocketAddress hostAddress; // server-advertised modpack route; not an authenticated identity
-		public InetSocketAddress serverAddress; // immutable player-selected Minecraft origin; certificate trust root
-		public transient String certificateFingerprint; // runtime-only exact certificate pin bound to serverAddress
-		public transient String certificatePinReason; // non-null only while importing new trust
-		public boolean requiresMagic; // if true, client will use magic packets to connect to the modpack host
+	public static class ConnectionInfo {
+		@SerializedName(value = "origin", alternate = "serverAddress")
+		public InetSocketAddress origin; // player-entered Minecraft identity and certificate trust root
+		@SerializedName(value = "endpoint", alternate = "hostAddress")
+		public InetSocketAddress endpoint; // server-advertised AutoModpack route; not an authenticated identity
+		public boolean requiresMagic;
+		public transient String expectedFingerprint; // runtime-only exact certificate pin bound to origin
+		public transient String trustReason; // non-null only while importing new trust
 
-		public ModpackAddresses() {
-			// Default constructor for Gson
-		}
+		public ConnectionInfo() {}
 
-		/**
-		 * ModpackEntry holds server connection details.
-		 *
-		 * @param hostAddress
-		 *            modpack server address that COULD be manipulated by the server
-		 * @param serverAddress
-		 *            minecraft server address that represents the target address
-		 *            which client uses to connect. This value CANNOT be manipulated by the server.
-		 */
-		public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, boolean requiresMagic) {
-			this(hostAddress, serverAddress, null, null, requiresMagic);
-		}
-
-		public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, String certificateFingerprint, boolean requiresMagic) {
-			this(hostAddress, serverAddress, certificateFingerprint, null, requiresMagic);
-		}
-
-		public ModpackAddresses(InetSocketAddress hostAddress, InetSocketAddress serverAddress, String certificateFingerprint, String certificatePinReason,
-				boolean requiresMagic) {
-			this.hostAddress = hostAddress;
-			this.serverAddress = serverAddress;
-			this.certificateFingerprint = certificateFingerprint;
-			this.certificatePinReason = certificatePinReason;
+		public ConnectionInfo(InetSocketAddress origin, InetSocketAddress endpoint, boolean requiresMagic, String expectedFingerprint, String trustReason) {
+			this.origin = origin;
+			this.endpoint = endpoint;
 			this.requiresMagic = requiresMagic;
+			this.expectedFingerprint = expectedFingerprint;
+			this.trustReason = trustReason;
 		}
 
-		public boolean isAnyEmpty() {
-			return hostAddress == null || serverAddress == null || hostAddress.getHostString().isBlank() || serverAddress.getHostString().isBlank();
+		public boolean isComplete() {
+			return origin != null && endpoint != null && !origin.getHostString().isBlank() && !endpoint.getHostString().isBlank();
 		}
 	}
 
@@ -127,8 +112,10 @@ public class Jsons {
 		public String nagClickableLink = "https://modrinth.com/project/automodpack";
 		public String bindAddress = "";
 		public int bindPort = -1;
-		public String addressToSend = "";
-		public int portToSend = -1;
+		@SerializedName(value = "advertisedEndpointHost", alternate = "addressToSend")
+		public String advertisedEndpointHost = "";
+		@SerializedName(value = "advertisedEndpointPort", alternate = "portToSend")
+		public int advertisedEndpointPort = -1;
 		public boolean disableInternalTLS = false;
 		public boolean requireMagicPackets = false;
 		public boolean updateIpsOnEveryStart = false;

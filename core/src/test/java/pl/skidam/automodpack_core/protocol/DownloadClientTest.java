@@ -71,12 +71,12 @@ class DownloadClientTest {
 				Instant.now().plusSeconds(3600));
 
 		withTlsServer(keyPair, certificate, port -> {
-			var addresses = new Jsons.ModpackAddresses(InetSocketAddress.createUnresolved("route.example", port),
-					InetSocketAddress.createUnresolved("origin.example", 25565), false);
+			var connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("origin.example", 25565),
+					InetSocketAddress.createUnresolved("route.example", port), false, null, null);
 			var route = new InetSocketAddress("127.0.0.1", port);
 
 			assertDoesNotThrow(() -> {
-				var connection = new PreValidationConnection(route, addresses, clientContext(certificate));
+				var connection = new PreValidationConnection(route, connectionInfo, clientContext(certificate));
 				connection.getSocket().close();
 			});
 		});
@@ -104,11 +104,11 @@ class DownloadClientTest {
 				Instant.now().plusSeconds(3600));
 
 		withTlsServer(keyPair, certificate, port -> {
-			var addresses = new Jsons.ModpackAddresses(InetSocketAddress.createUnresolved("route.example", port),
-					InetSocketAddress.createUnresolved("origin.example", 25565), false);
+			var connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("origin.example", 25565),
+					InetSocketAddress.createUnresolved("route.example", port), false, null, null);
 			var route = new InetSocketAddress("127.0.0.1", port);
 
-			assertThrows(IOException.class, () -> new PreValidationConnection(route, addresses, clientContext(certificate)));
+			assertThrows(IOException.class, () -> new PreValidationConnection(route, connectionInfo, clientContext(certificate)));
 		});
 	}
 

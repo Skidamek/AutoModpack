@@ -22,7 +22,7 @@ public class ModPackets {
 	public static final Identifier HANDSHAKE = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.HANDSHAKE);
 	public static final Identifier DATA = LoginNetworkingIDs.getResourceLocation(LoginNetworkingIDs.DATA);
 
-	public record ConnectionAttempt(InetSocketAddress serverAddress, String certificateFingerprint, String certificatePinReason) {}
+	public record ConnectionAttempt(InetSocketAddress origin, String expectedFingerprint, String trustReason) {}
 
 	private static ConnectionAttempt connectionAttempt;
 

@@ -1,6 +1,6 @@
 ### Choose a certificate verification method
 
-AutoModpack always authenticates the modpack host as the **Minecraft server address selected by the player**. `addressToSend` and `portToSend` may route the TCP connection elsewhere, but that advertised route never chooses the trusted identity.
+AutoModpack always authenticates the modpack endpoint as the player's **Minecraft origin**. `advertisedEndpointHost` and `advertisedEndpointPort` may route the TCP connection elsewhere, but that endpoint never chooses the trusted identity.
 
 Use the first method that fits your server:
 

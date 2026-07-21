@@ -74,8 +74,8 @@ automodpack:
     nagUnModdedClients: false
     bindAddress: ""
     bindPort: -1
-    addressToSend: ""
-    portToSend: -1
+    advertisedEndpointHost: ""
+    advertisedEndpointPort: -1
     disableInternalTLS: false
     requireMagicPackets: false
     updateIpsOnEveryStart: false
