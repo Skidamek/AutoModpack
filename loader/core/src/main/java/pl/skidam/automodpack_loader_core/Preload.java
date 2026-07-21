@@ -4,13 +4,10 @@ import static pl.skidam.automodpack_core.Constants.*;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.*;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
@@ -138,19 +135,6 @@ public class Preload {
 		THIS_MOD_JAR = JarUtils.getJarPath(this.getClass());
 		AM_VERSION = FileInspection.getModVersion(THIS_MOD_JAR);
 		MODS_DIR = THIS_MOD_JAR.getParent();
-
-		// Get "overrides-automodpack-client.json" zipfile from the AUTOMODPACK_JAR
-		try (ZipInputStream zis = new ZipInputStream(new LockFreeInputStream(THIS_MOD_JAR))) {
-			ZipEntry entry;
-			while ((entry = zis.getNextEntry()) != null) {
-				if (entry.getName().equals(clientConfigFileOverrideResource)) {
-					clientConfigOverride = new String(zis.readAllBytes(), StandardCharsets.UTF_8);
-					break;
-				}
-			}
-		} catch (IOException e) {
-			LOGGER.error("Failed to read overrides from jar", e);
-		}
 	}
 
 	private void loadConfigs() {
@@ -158,27 +142,14 @@ public class Preload {
 		boolean shouldSaveClientConfig = false;
 
 		// load client config
-		if (clientConfigOverride == null) {
-			var clientConfigVersion = ConfigTools.read(clientConfigFile, Jsons.VersionConfigField.class).orElse(null);
-			if (clientConfigVersion != null && clientConfigVersion.DO_NOT_CHANGE_IT < 3) {
-				clientConfig = new Jsons.ClientConfigFieldsV3();
-				shouldSaveClientConfig = true;
-				LOGGER.warn("Legacy client config detected. Stable modpack IDs require a one-time modpack redownload.");
-				LOGGER.warn("Old name-based modpack directories were left untouched and can be removed manually after the new modpack is installed.");
-			} else {
-				clientConfig = ConfigTools.readOrCreate(clientConfigFile, Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
-			}
+		var clientConfigVersion = ConfigTools.read(clientConfigFile, Jsons.VersionConfigField.class).orElse(null);
+		if (clientConfigVersion != null && clientConfigVersion.DO_NOT_CHANGE_IT < 3) {
+			clientConfig = new Jsons.ClientConfigFieldsV3();
+			shouldSaveClientConfig = true;
+			LOGGER.warn("Legacy client config detected. Stable modpack IDs require a one-time modpack redownload.");
+			LOGGER.warn("Old name-based modpack directories were left untouched and can be removed manually after the new modpack is installed.");
 		} else {
-			// TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
-			LOGGER.warn("You are using unofficial {} mod", MOD_ID);
-			LOGGER.warn("Using client config overrides! Editing the {} file will have no effect", clientConfigFile);
-			LOGGER.warn("Remove the {} file from inside the jar or remove and download fresh {} mod jar from modrinth/curseforge",
-					clientConfigFileOverrideResource, MOD_ID);
-			var overrideVersion = ConfigTools.parse(clientConfigOverride, Jsons.VersionConfigField.class);
-			if (overrideVersion == null || overrideVersion.DO_NOT_CHANGE_IT < 3) {
-				throw new IllegalStateException("Legacy client config overrides are unsupported; install an unmodified AutoModpack jar");
-			}
-			clientConfig = ConfigTools.parse(clientConfigOverride, Jsons.ClientConfigFieldsV3.class);
+			clientConfig = ConfigTools.readOrCreate(clientConfigFile, Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
 		}
 
 		var serverConfigVersion = ConfigTools.read(serverConfigFile, Jsons.VersionConfigField.class).orElse(null);
@@ -235,7 +206,7 @@ public class Preload {
 				clientConfig.selectedModpackId = "";
 				shouldSaveClientConfig = true;
 			}
-			if (clientConfigOverride == null && shouldSaveClientConfig) writeConfig(clientConfigFile, clientConfig);
+			if (shouldSaveClientConfig) writeConfig(clientConfigFile, clientConfig);
 		}
 
 		knownHosts = ConfigTools.readOrCreate(knownHostsFile, Jsons.KnownHostsFields.class, Jsons.KnownHostsFields::new);
@@ -264,6 +235,7 @@ public class Preload {
 
 		LOGGER.info("Loaded config! took {}ms", System.currentTimeMillis() - startTime);
 	}
+
 	private void importBootstrap() {
 		if (!Files.isRegularFile(knownHostsBootstrapFile)) return;
 
