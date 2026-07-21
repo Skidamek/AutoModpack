@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.SecureRandom;
@@ -31,10 +33,18 @@ import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.Jsons;
 
 class DownloadClientTest {
+
+	@Test
+	void localDestinationOpenFailureHasTypedStorageBoundary(@TempDir Path directory) throws Exception {
+		Path destination = Files.createDirectory(directory.resolve("destination"));
+
+		assertThrows(LocalStorageException.class, () -> LocalFileWriter.open(destination));
+	}
 
 	@Test
 	void acceptsValidSelfSignedCertificateForDnsFallback() throws Exception {

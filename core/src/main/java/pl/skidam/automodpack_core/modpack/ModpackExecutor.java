@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.*;
 
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.*;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
@@ -14,6 +15,8 @@ public class ModpackExecutor {
 	private final ThreadPoolExecutor CREATION_EXECUTOR = (ThreadPoolExecutor) Executors.newFixedThreadPool(
 			Math.max(1, Runtime.getRuntime().availableProcessors() * 2), new CustomThreadFactoryBuilder().setNameFormat("AutoModpackCreation-%d").build());
 	public final Map<String, ModpackContent> modpacks = new ConcurrentHashMap<>();
+	private final Object generationLock = new Object();
+	private CompletableFuture<Jsons.ModpackContentFields> refreshInFlight;
 
 	private ModpackContent init() {
 		if (isGenerating()) {
@@ -39,32 +42,51 @@ public class ModpackExecutor {
 	}
 
 	public boolean generateNew(ModpackContent content) {
-		if (content == null) return false;
-		boolean generated;
-		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-			generated = content.create(cache);
+		synchronized (generationLock) {
+			if (content == null) return false;
+			boolean generated;
+			try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+				generated = content.create(cache);
+			}
+			if (generated) register(content);
+			return generated;
 		}
-		if (generated) register(content);
-		return generated;
 	}
 
 	public boolean generateNew() {
-		ModpackContent content = init();
-		if (content == null) return false;
-		boolean generated;
-		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-			generated = content.create(cache);
+		synchronized (generationLock) {
+			ModpackContent content = init();
+			if (content == null) return false;
+			boolean generated;
+			try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+				generated = content.create(cache);
+			}
+			if (generated) register(content);
+			return generated;
 		}
-		if (generated) register(content);
-		return generated;
+	}
+
+	public CompletableFuture<Jsons.ModpackContentFields> regenerateFullManifest() {
+		synchronized (generationLock) {
+			if (refreshInFlight != null && !refreshInFlight.isDone()) return refreshInFlight;
+			refreshInFlight = CompletableFuture.supplyAsync(() -> {
+				if (!generateNew()) throw new CompletionException(new IOException("Failed to regenerate modpack"));
+				Jsons.ModpackContentFields manifest = ModpackContentTools.read(hostModpackContentFile);
+				if (manifest == null) throw new CompletionException(new IOException("Regenerated manifest is unavailable"));
+				return manifest;
+			});
+			return refreshInFlight;
+		}
 	}
 
 	public boolean loadLast() {
-		ModpackContent content = init();
-		if (content == null) return false;
-		boolean generated = content.loadPreviousContent();
-		if (generated) register(content);
-		return generated;
+		synchronized (generationLock) {
+			ModpackContent content = init();
+			if (content == null) return false;
+			boolean generated = content.loadPreviousContent();
+			if (generated) register(content);
+			return generated;
+		}
 	}
 
 	private void register(ModpackContent content) {

@@ -5,11 +5,13 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -18,6 +20,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -46,6 +49,7 @@ public class ModpackUpdater {
 	public boolean fullDownload = false;
 	private Jsons.ModpackContentFields serverModpackContent;
 	public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
+	private final Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new HashMap<>();
 	private final Jsons.ConnectionInfo connectionInfo;
 	private final Secrets.Secret modpackSecret;
 	private final UpdateLoopDetector updateLoopDetector = new UpdateLoopDetector();
@@ -113,6 +117,15 @@ public class ModpackUpdater {
 		}
 	}
 
+	public UpdateType reconcileReceivedManifest() throws Exception {
+		modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
+		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+			ApplyResult result = applyModpack(cache, serverModpackContent);
+			if (!result.requiresRestart()) return null;
+			return result.restartReasons().contains(RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : UpdateType.UPDATE;
+		}
+	}
+
 	// Load the already-installed modpack without contacting the server or
 	// reconciling local files against it. Used when update-on-launch is disabled
 	// so the user can freely add/remove mods (e.g. a binary search) without
@@ -150,7 +163,9 @@ public class ModpackUpdater {
 			}
 
 			LOGGER.info("Modpack is not loaded");
-			UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
+			UpdateType updateType = applyResult.restartReasons().contains(RestartReason.SELECTED_MODPACK)
+					? UpdateType.SELECT
+					: fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 			new ReLauncher(modpackDir, updateType, changelogs).restart(true);
 			return;
 		}
@@ -267,7 +282,9 @@ public class ModpackUpdater {
 			} else {
 				boolean requiredRestart = applyResult.requiresRestart();
 				LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);
-				UpdateType updateType = fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
+				UpdateType updateType = applyResult.restartReasons().contains(RestartReason.SELECTED_MODPACK)
+						? UpdateType.SELECT
+						: fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 				new ReLauncher(modpackDir, updateType, changelogs).restart(false);
 			}
 		} catch (SocketTimeoutException | ConnectException e) {
@@ -312,7 +329,10 @@ public class ModpackUpdater {
 				sources.addAll(fetchManager.getFetchDatas().get(serverFileHash).fetchedData().sources());
 			}
 
-			Runnable failureCallback = () -> failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
+			Consumer<DownloadManager.FailureCategory> failureCallback = category -> {
+				failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
+				failedDownloadCategories.put(serverItem, category);
+			};
 
 			Runnable successCallback = () -> {
 				List<String> mainPageUrls = new LinkedList<>();
@@ -339,92 +359,80 @@ public class ModpackUpdater {
 		totalBytesToDownload = 0;
 
 		if (failedDownloads.isEmpty()) return true;
+		if (failedDownloadCategories.values().stream().anyMatch(category -> category != DownloadManager.FailureCategory.REMOTE_SOURCE)) {
+			LOGGER.error("Object acquisition failed locally; regeneration is not allowed: {}", failedDownloadCategories);
+			return false;
+		}
 
-		Map<String, String> hashesToRefresh = new HashMap<>(); // File name, hash
-		var failedDownloadsSecMap = new HashMap<>(failedDownloads);
-		failedDownloadsSecMap.forEach((k, v) -> {
-			hashesToRefresh.put(k.file, k.sha1);
-			failedDownloads.remove(k);
-			totalBytesToDownload += Long.parseLong(k.size);
-		});
-
+		Map<String, String> hashesToRefresh = failedDownloads.keySet().stream()
+				.collect(Collectors.toMap(item -> item.file, item -> item.sha1, (first, second) -> first, LinkedHashMap::new));
 		if (hashesToRefresh.isEmpty()) return false;
-
-		LOGGER.warn("Failed to download {} files", hashesToRefresh.size());
-
-		// make byte[][] from hashesToRefresh.values()
-		byte[][] hashesArray = hashesToRefresh.values().stream().map(String::getBytes).toArray(byte[][]::new);
-
-		// send it to the server and get the new modpack content
-		// TODO set client to a waiting for the server to respond screen
-		LOGGER.warn("Trying to refresh the modpack content");
-		LOGGER.info("Sending hashes to refresh: {}", hashesToRefresh.values());
+		Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> originalFailures = new HashMap<>(failedDownloads);
+		LOGGER.warn("Remote acquisition failed for {} files after all sources; requesting one full regeneration", hashesToRefresh.size());
+		byte[][] hashesArray = hashesToRefresh.values().stream().map(value -> value.getBytes(StandardCharsets.UTF_8)).toArray(byte[][]::new);
 		var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(connectionInfo, modpackSecret, hashesArray, false);
 		if (refreshedContentOptional.isEmpty()) {
 			LOGGER.error("Failed to refresh the modpack content");
-			failedDownloads.putAll(failedDownloadsSecMap);
 			return false;
-		} else {
-			LOGGER.info("Successfully refreshed the modpack content");
-			// retry the download
-			// success
-			// or fail and then show the error
-
-			var refreshedContent = refreshedContentOptional.get();
-			if (!Objects.equals(serverModpackContent.modpackId, refreshedContent.modpackId)) {
-				LOGGER.error("Refreshed manifest changed modpack ID from {} to {}", serverModpackContent.modpackId, refreshedContent.modpackId);
-				failedDownloads.putAll(failedDownloadsSecMap);
-				return false;
-			}
-			this.serverModpackContent = refreshedContent;
-
-			// filter list to only the failed downloads
-			var refreshedFilteredList = refreshedContent.list.stream().filter(item -> hashesToRefresh.containsKey(item.file)).toList();
-			if (refreshedFilteredList.isEmpty()) {
-				failedDownloads.putAll(failedDownloadsSecMap);
-				return false;
-			}
-			downloadClient = DownloadClient.tryCreate(connectionInfo, modpackSecret.secretBytes(), Math.min(refreshedFilteredList.size(), 5), ModpackUtils.manualValidationCallback(connectionInfo, false));
-			if (downloadClient == null) {
-				failedDownloads.putAll(failedDownloadsSecMap);
-				return false;
-			}
-
-			downloadManager = new DownloadManager(totalBytesToDownload);
-			new ScreenManager().download(downloadManager, getModpackName());
-			downloadManager.attachDownloadClient(downloadClient);
-
-			// TODO try to fetch again from modrinth and curseforge
-
-			for (var serverItem : refreshedFilteredList) {
-
-				String serverFilePath = serverItem.file;
-				String serverFileHash = serverItem.sha1;
-				long serverFileSize = Long.parseLong(serverItem.size);
-
-				Path downloadFile = SmartFileUtils.getPath(modpackDir, serverFilePath);
-
-				LOGGER.info("Retrying to download {} from {}", serverFilePath, connectionInfo.endpoint.getHostString());
-
-				Runnable failureCallback = () -> failedDownloads.put(serverItem, List.of());
-
-				Runnable successCallback = () -> changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
-
-				downloadManager.download(downloadFile, serverFileHash, List.of(), serverFileSize, successCallback, failureCallback);
-			}
-
-			downloadManager.joinAll();
-
-			if (downloadManager.isCancelled()) {
-				LOGGER.warn("Download canceled");
-				return false;
-			}
-
-			downloadManager.cancelAllAndShutdown();
-
-			LOGGER.info("Finished refreshed downloading files in {}ms", System.currentTimeMillis() - startFetching);
 		}
 
+		Jsons.ModpackContentFields refreshedContent = refreshedContentOptional.get();
+		if (!Objects.equals(serverModpackContent.modpackId, refreshedContent.modpackId)) {
+			LOGGER.error("Refreshed manifest changed modpack ID from {} to {}", serverModpackContent.modpackId, refreshedContent.modpackId);
+			return false;
+		}
+		this.serverModpackContent = refreshedContent;
+		failedDownloads.clear();
+		failedDownloadCategories.clear();
+		totalBytesToDownload = 0;
+
+		populateStoreFromModpack(refreshedContent.list, cache);
+		ModpackUtils.populateStoreFromCWD(refreshedContent.list, cache);
+		Set<Jsons.ModpackContentFields.ModpackContentItem> refreshedFilesToAcquire = ModpackUtils.identifyUncachedFiles(refreshedContent.list);
+		if (refreshedFilesToAcquire.isEmpty()) return true;
+
+		List<FetchManager.FetchData> refreshedFetchData = new ArrayList<>();
+		for (var item : refreshedFilesToAcquire) {
+			totalBytesToDownload += Long.parseLong(item.size);
+			if (item.type.equals("mod") || item.type.equals("shader") || item.type.equals("resourcepack"))
+				refreshedFetchData.add(new FetchManager.FetchData(item.file, item.sha1, item.murmur, item.size, item.type));
+		}
+		FetchManager refreshedFetchManager = null;
+		if (!refreshedFetchData.isEmpty()) {
+			refreshedFetchManager = new FetchManager(refreshedFetchData);
+			new ScreenManager().fetch(refreshedFetchManager);
+			refreshedFetchManager.fetch();
+		}
+
+		downloadClient = DownloadClient.tryCreate(connectionInfo, modpackSecret.secretBytes(), Math.min(refreshedFilesToAcquire.size(), 5),
+				ModpackUtils.manualValidationCallback(connectionInfo, false));
+		if (downloadClient == null) {
+			failedDownloads.putAll(originalFailures);
+			return false;
+		}
+		downloadManager = new DownloadManager(totalBytesToDownload);
+		new ScreenManager().download(downloadManager, getModpackName());
+		downloadManager.attachDownloadClient(downloadClient);
+
+		for (var serverItem : refreshedFilesToAcquire) {
+			Path downloadFile = SmartFileUtils.getPath(modpackDir, serverItem.file);
+			List<DownloadSource> sources = refreshedFetchManager != null && refreshedFetchManager.getFetchDatas().containsKey(serverItem.sha1)
+					? refreshedFetchManager.getFetchDatas().get(serverItem.sha1).fetchedData().sources()
+					: List.of();
+			Consumer<DownloadManager.FailureCategory> failureCallback = category -> {
+				failedDownloads.put(serverItem, sources.stream().map(DownloadSource::url).toList());
+				failedDownloadCategories.put(serverItem, category);
+			};
+			Runnable successCallback = () -> changelogs.changesAddedList.put(downloadFile.getFileName().toString(), null);
+			downloadManager.download(downloadFile, serverItem.sha1, sources, Long.parseLong(serverItem.size), successCallback, failureCallback);
+		}
+		downloadManager.joinAll();
+		if (downloadManager.isCancelled()) {
+			LOGGER.warn("Download canceled after regeneration");
+			return false;
+		}
+		downloadManager.cancelAllAndShutdown();
+		LOGGER.info("Finished full refreshed acquisition in {}ms", System.currentTimeMillis() - startFetching);
 		return failedDownloads.isEmpty();
 	}
 
@@ -460,15 +468,17 @@ public class ModpackUpdater {
 
 	private UpdatePlan buildPlan(FileMetadataCache cache, Jsons.ModpackContentFields target) throws Exception {
 		Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackContentFile);
-		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, cache);
+		UpdatePlanner.SelectionContext selection = selectionContext(target.modpackId);
+		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, selection, cache);
+		populateSelectionObjects(selection, target, files);
 		Set<String> forceCopyServices = getForceCopyMods(target).stream().map(UpdatePlanner::normalize).collect(Collectors.toSet());
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(target, cache);
 		List<UpdatePlan.ModInfo> standardMods = inspectStandardMods(cache);
-		List<UpdatePlan.NestedCopy> nestedCopies = inspectNestedCopies(cache);
+		List<UpdatePlan.NestedCopy> nestedCopies = inspectNestedCopies(target, cache);
 		Jsons.ClientConfigFieldsV3 plannedConfig = ModpackUtils.planModpackSelection(target.modpackId, modpackDir, connectionInfo);
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, clientConfig.allowRemoteNonModpackDeletions,
-				LegacyClientCacheUtils.getEvaluatedDeletionTimestamps(), forceCopyServices, targetMods, standardMods, nestedCopies, plannedConfig));
+				LegacyClientCacheUtils.getEvaluatedDeletionTimestamps(), forceCopyServices, targetMods, standardMods, nestedCopies, selection, plannedConfig));
 		reportPlanWarnings(plan.warnings());
 		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(target.loader, target.loaderVersion)) return plan;
 		Set<UpdatePlan.RestartReason> restartReasons = EnumSet.noneOf(UpdatePlan.RestartReason.class);
@@ -492,8 +502,43 @@ public class ModpackUpdater {
 		}
 	}
 
+	private UpdatePlanner.SelectionContext selectionContext(String targetModpackId) {
+		String previousId = clientConfig.selectedModpackId;
+		if (previousId == null || previousId.isBlank() || previousId.equals(targetModpackId) || !ModpackId.isValid(previousId)) return null;
+		Path previousDirectory = ModpackUtils.getModpackPath(previousId);
+		Jsons.ModpackContentFields previousManifest = ModpackContentTools.read(previousDirectory.resolve(hostModpackContentFile.getFileName()));
+		return new UpdatePlanner.SelectionContext(previousId, previousManifest);
+	}
+
+	private void populateSelectionObjects(UpdatePlanner.SelectionContext selection, Jsons.ModpackContentFields target,
+			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files) throws IOException {
+		if (selection == null) return;
+		if (selection.previousManifest() != null && selection.previousManifest().list != null) for (var item : selection.previousManifest().list) {
+			if (!item.editable) continue;
+			UpdatePlan.FileKey key = "mod".equals(item.type)
+					? new UpdatePlan.FileKey(UpdatePlan.Root.MODS_DIR, Path.of(UpdatePlanner.normalize(item.file)).getFileName().toString())
+					: new UpdatePlan.FileKey(UpdatePlan.Root.GAME_DIR, UpdatePlanner.normalize(item.file));
+			UpdatePlan.FileState state = files.get(key);
+			if (state == null || state.sha1() == null) continue;
+			Path source = key.root() == UpdatePlan.Root.MODS_DIR ? MODS_DIR.resolve(key.relativePath()) : SmartFileUtils.CWD.resolve(key.relativePath());
+			populateSelectionObject(source, state);
+		}
+		for (var item : target.list) {
+			if (!item.editable) continue;
+			UpdatePlan.FileKey key = new UpdatePlan.FileKey(UpdatePlan.Root.MODPACK_DIR, UpdatePlanner.normalize(item.file));
+			UpdatePlan.FileState state = files.get(key);
+			if (state != null && state.sha1() != null) populateSelectionObject(modpackDir.resolve(key.relativePath()), state);
+		}
+	}
+
+	private void populateSelectionObject(Path source, UpdatePlan.FileState state) throws IOException {
+		Path storeFile = storeDir.resolve(state.sha1());
+		if (!SmartFileUtils.isValidFile(storeFile, state.size(), state.sha1()))
+			SmartFileUtils.copyVerifiedAtomic(source, storeFile, state.size(), state.sha1());
+	}
+
 	private Map<UpdatePlan.FileKey, UpdatePlan.FileState> inspectFiles(Jsons.ModpackContentFields target, Jsons.ModpackContentFields installed,
-			FileMetadataCache cache) throws IOException {
+			UpdatePlanner.SelectionContext selection, FileMetadataCache cache) throws IOException {
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = new HashMap<>();
 		if (Files.isDirectory(modpackDir)) {
 			try (Stream<Path> stream = Files.walk(modpackDir)) {
@@ -509,6 +554,8 @@ public class ModpackUpdater {
 		Set<String> gamePaths = new HashSet<>();
 		if (target.list != null) target.list.stream().filter(item -> !"mod".equals(item.type)).forEach(item -> gamePaths.add(item.file));
 		if (installed != null && installed.list != null) installed.list.stream().filter(item -> !"mod".equals(item.type)).forEach(item -> gamePaths.add(item.file));
+		if (selection != null && selection.previousManifest() != null && selection.previousManifest().list != null)
+			selection.previousManifest().list.stream().filter(item -> !"mod".equals(item.type)).forEach(item -> gamePaths.add(item.file));
 		for (String gamePath : gamePaths) {
 			Path path = SmartFileUtils.getPathFromCWD(gamePath);
 			if (Files.isRegularFile(path)) putFileState(files, UpdatePlan.Root.GAME_DIR, SmartFileUtils.CWD, path, cache);
@@ -558,16 +605,34 @@ public class ModpackUpdater {
 		return mods;
 	}
 
-	private List<UpdatePlan.NestedCopy> inspectNestedCopies(FileMetadataCache cache) throws IOException {
-		List<UpdatePlan.NestedCopy> copies = new ArrayList<>();
-		for (FileInspection.Mod mod : MODPACK_LOADER.getModpackNestedConflicts(modpackDir, cache)) {
-			if (mod.path() == null || mod.hash() == null || !Files.isRegularFile(mod.path())) continue;
-			long size = Files.size(mod.path());
-			Path storeFile = storeDir.resolve(mod.hash());
-			if (!SmartFileUtils.isValidFile(storeFile, size, mod.hash())) SmartFileUtils.copyVerifiedAtomic(mod.path(), storeFile, size, mod.hash());
-			copies.add(new UpdatePlan.NestedCopy(mod.path().getFileName().toString(), mod.hash(), size, mod.IDs()));
+	private List<UpdatePlan.NestedCopy> inspectNestedCopies(Jsons.ModpackContentFields target, FileMetadataCache cache) throws IOException {
+		Files.createDirectories(cacheDir);
+		Path inspectionDirectory = Files.createTempDirectory(cacheDir, "update-inspection-");
+		try {
+			Path inspectionMods = inspectionDirectory.resolve("mods");
+			Files.createDirectories(inspectionMods);
+			for (var item : target.list.stream().filter(value -> "mod".equals(value.type)).toList()) {
+				Path source = storeDir.resolve(item.sha1);
+				if (!SmartFileUtils.isValidFile(source, Long.parseLong(item.size), item.sha1)) source = SmartFileUtils.getPath(modpackDir, item.file);
+				if (!SmartFileUtils.isValidFile(source, Long.parseLong(item.size), item.sha1)) continue;
+				SmartFileUtils.copyVerifiedAtomic(source, inspectionMods.resolve(Path.of(UpdatePlanner.normalize(item.file)).getFileName()), Long.parseLong(item.size),
+						item.sha1);
+			}
+
+			List<UpdatePlan.NestedCopy> copies = new ArrayList<>();
+			for (FileInspection.Mod mod : MODPACK_LOADER.getModpackNestedConflicts(inspectionDirectory, cache)) {
+				if (mod.path() == null || mod.hash() == null || !Files.isRegularFile(mod.path())) continue;
+				long size = Files.size(mod.path());
+				Path storeFile = storeDir.resolve(mod.hash());
+				if (!SmartFileUtils.isValidFile(storeFile, size, mod.hash())) SmartFileUtils.copyVerifiedAtomic(mod.path(), storeFile, size, mod.hash());
+				copies.add(new UpdatePlan.NestedCopy(mod.path().getFileName().toString(), mod.hash(), size, mod.IDs()));
+			}
+			return copies;
+		} finally {
+			try (Stream<Path> stream = Files.walk(inspectionDirectory)) {
+				for (Path path : stream.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path);
+			}
 		}
-		return copies;
 	}
 
 	private void executePlan(UpdatePlan plan, Jsons.ModpackContentFields targetManifest) throws IOException {
@@ -576,6 +641,22 @@ public class ModpackUpdater {
 		if (!execution.success())
 			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
 		clientConfig = plan.plannedClientConfig();
+	}
+
+	private void populateStoreFromModpack(Collection<Jsons.ModpackContentFields.ModpackContentItem> items, FileMetadataCache cache) {
+		for (var item : items) {
+			Path storeFile = storeDir.resolve(item.sha1);
+			long size = Long.parseLong(item.size);
+			if (SmartFileUtils.isValidFile(storeFile, size, item.sha1)) continue;
+			Path source = SmartFileUtils.getPath(modpackDir, item.file);
+			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) continue;
+			try {
+				SmartFileUtils.copyVerifiedAtomic(source, storeFile, size, item.sha1);
+				cache.overwriteCache(storeFile, item.sha1);
+			} catch (IOException e) {
+				LOGGER.warn("Failed to reuse installed modpack object {}", item.file, e);
+			}
+		}
 	}
 
 	private void ensurePlanObjects(UpdatePlan plan, Jsons.ModpackContentFields targetManifest) throws IOException {
@@ -617,7 +698,8 @@ public class ModpackUpdater {
 		REMOVED_DUPLICATE_MODS("duplicate standard-directory mods were removed"),
 		REMOVED_STANDARD_MODS("modpack-owned mods were removed from the standard mods directory"),
 		APPLIED_SERVER_DELETIONS("server-requested mod deletions were applied"),
-		CHANGED_LOADER_VERSION("launcher loader-version metadata changed");
+		CHANGED_LOADER_VERSION("launcher loader-version metadata changed"),
+		SELECTED_MODPACK("the selected stable modpack changed");
 
 		private final String description;
 

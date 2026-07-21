@@ -6,10 +6,11 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.*;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFutureListener;
@@ -19,15 +20,12 @@ import io.netty.handler.stream.ChunkedNioStream;
 import io.netty.util.CharsetUtil;
 
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.message.ProtocolMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.EchoMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.FileRequestMessage;
 import pl.skidam.automodpack_core.protocol.netty.message.request.RefreshRequestMessage;
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMessage> {
 
@@ -84,51 +82,18 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		}
 	}
 
-	private void refreshModpackFiles(ChannelHandlerContext context, byte[][] FileHashesList) throws IOException {
-		Set<String> hashes = new HashSet<>();
-		for (byte[] hash : FileHashesList) {
-			hashes.add(new String(hash));
+	private void refreshModpackFiles(ChannelHandlerContext context, byte[][] fileHashesList) throws IOException {
+		Set<String> hashes = new TreeSet<>();
+		for (byte[] hash : fileHashesList) hashes.add(new String(hash, StandardCharsets.UTF_8));
+		LOGGER.info("Received full modpack regeneration request after failed hashes: {}", hashes);
+		try {
+			var manifest = modpackExecutor.regenerateFullManifest().join();
+			LOGGER.info("Sending regenerated full manifest {} with {} files", manifest.modpackId, manifest.list.size());
+			sendFile(context, new byte[0]);
+		} catch (CompletionException e) {
+			LOGGER.error("Failed to regenerate full modpack manifest", e);
+			sendError(context, protocolVersion, "Modpack regeneration failed");
 		}
-		LOGGER.info("Received refresh request for files of hashes: {}", hashes);
-		List<CompletableFuture<Void>> creationFutures = new ArrayList<>();
-		Set<ModpackContent> modpacks = new HashSet<>();
-
-		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-			for (String hash : hashes) {
-				final Optional<Path> optionalPath = resolvePath(hash);
-				if (optionalPath.isEmpty()) continue;
-				Path path = optionalPath.get();
-				ModpackContent modpack = null;
-
-				for (var content : modpackExecutor.modpacks.values()) {
-					if (!content.pathsMap.getMap().containsKey(hash)) continue;
-
-					modpack = content;
-					break;
-				}
-
-				if (modpack == null) continue;
-
-				modpacks.add(modpack);
-				creationFutures.add(modpack.replaceAsync(path, cache));
-			}
-		}
-
-		creationFutures.forEach(CompletableFuture::join);
-		modpacks.forEach(modpackContent -> {
-			var optionalPreviousModpackContent = modpackContent.getPreviousContent();
-			if (optionalPreviousModpackContent.isEmpty()) { // How?
-				LOGGER.error("Could not find previous modpack content for modpack while refreshing it: {}", modpackContent.getModpackName());
-				return;
-			}
-			Jsons.ModpackContentFields previousModpackContent = optionalPreviousModpackContent.get();
-			modpackContent.saveModpackContent(previousModpackContent.nonModpackFilesToDelete);
-		});
-
-		LOGGER.info("Sending new modpack-content.json");
-
-		// Sends new json
-		sendFile(context, new byte[0]);
 	}
 
 	private boolean validateSecret(ChannelHandlerContext ctx, SocketAddress address, byte[] secret) {

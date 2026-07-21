@@ -10,15 +10,25 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.LocalStorageException;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public class DownloadManager {
+
+	public enum FailureCategory {
+		REMOTE_SOURCE,
+		LOCAL_STORAGE,
+		CANCELLED
+	}
+
+	public record AcquisitionResult(boolean success, FailureCategory failureCategory) {}
 
 	private static final int MAX_DOWNLOADS_IN_PROGRESS = 5;
 	private static final int MAX_DOWNLOAD_ATTEMPTS = 2;
@@ -35,6 +45,7 @@ public class DownloadManager {
 	private final Map<FileInspection.HashPathPair, QueuedDownload> queuedDownloads = new ConcurrentHashMap<>();
 	public final Map<FileInspection.HashPathPair, DownloadData> downloadsInProgress = new ConcurrentHashMap<>();
 	private final Map<FileInspection.HashPathPair, Path> activeTemporaryFiles = new ConcurrentHashMap<>();
+	private final Map<FileInspection.HashPathPair, AcquisitionResult> acquisitionResults = new ConcurrentHashMap<>();
 
 	private final Map<String, Integer> activeDownloadsPerSource = new ConcurrentHashMap<>();
 
@@ -59,6 +70,11 @@ public class DownloadManager {
 	}
 
 	public synchronized void download(Path file, String sha1, List<DownloadSource> sources, long fileSize, Runnable successCallback, Runnable failureCallback) {
+		download(file, sha1, sources, fileSize, successCallback, ignored -> failureCallback.run());
+	}
+
+	public synchronized void download(Path file, String sha1, List<DownloadSource> sources, long fileSize, Runnable successCallback,
+			Consumer<FailureCategory> failureCallback) {
 		FileInspection.HashPathPair hashPathPair = new FileInspection.HashPathPair(sha1, file);
 		if (queuedDownloads.containsKey(hashPathPair)) return;
 
@@ -239,7 +255,9 @@ public class DownloadManager {
 			}
 		} catch (InterruptedException e) {
 			interrupted = true;
+			task.lastFailureCategory = FailureCategory.CANCELLED;
 		} catch (Exception e) {
+			if (task.lastFailureCategory == null) task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
 			LOGGER.warn("Unexpected error processing {}", task.file, e);
 		} finally {
 			cleanupAndFinalize(hashPathPair, task, storeFile, success, interrupted);
@@ -253,33 +271,57 @@ public class DownloadManager {
 		Path tempStoreFile = null;
 
 		try {
-			Files.createDirectories(storeDir);
-			tempStoreFile = Files.createTempFile(storeDir, "." + hashPathPair.hash() + ".", ".tmp");
-			activeTemporaryFiles.put(hashPathPair, tempStoreFile);
-			if (source != null && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
-				httpDownloader.download(source, tempStoreFile, this::updateNetworkProgress);
-			} else if (downloadClient != null) {
-				hostDownloadFile(hashPathPair, tempStoreFile, this::updateNetworkProgress);
-			} else {
+			try {
+				Files.createDirectories(storeDir);
+				tempStoreFile = Files.createTempFile(storeDir, "." + hashPathPair.hash() + ".", ".tmp");
+				activeTemporaryFiles.put(hashPathPair, tempStoreFile);
+			} catch (IOException e) {
+				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+				LOGGER.warn("Failed to create temporary CAS object {}", hashPathPair.hash(), e);
+				return false;
+			}
+
+			try {
+				if (source != null && task.attempts < MAX_DOWNLOAD_ATTEMPTS * numberOfIndexes) {
+					httpDownloader.download(source, tempStoreFile, this::updateNetworkProgress);
+				} else if (downloadClient != null) {
+					hostDownloadFile(hashPathPair, tempStoreFile, this::updateNetworkProgress);
+				} else {
+					task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+					return false;
+				}
+			} catch (LocalStorageException e) {
+				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+				LOGGER.warn("Failed to write temporary CAS object {}", hashPathPair.hash(), e);
+				return false;
+			} catch (HttpFileDownloader.HttpStatusException e) {
+				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+				if (source != null && source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
+					LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
+					task.attempts = (sourceIndex + 1) * MAX_DOWNLOAD_ATTEMPTS - 1;
+				}
+				return false;
+			} catch (IOException e) {
+				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
+				LOGGER.warn("Remote source failed for CAS object {}", hashPathPair.hash(), e);
 				return false;
 			}
 
 			if (!SmartFileUtils.isValidFile(tempStoreFile, task.fileSize, hashPathPair.hash())) {
+				task.lastFailureCategory = FailureCategory.REMOTE_SOURCE;
 				LOGGER.warn("Size or hash mismatch for downloaded file {}", task.file.getFileName());
 				return false;
 			}
-			SmartFileUtils.promoteVerifiedAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash());
-			tempStoreFile = null;
-			return true;
-		} catch (HttpFileDownloader.HttpStatusException e) {
-			if (source != null && source.provider() == DownloadSource.Provider.CURSEFORGE && e.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
-				LOGGER.warn("CurseForge rejected the download API key with HTTP 401; trying the next source");
-				task.attempts = (sourceIndex + 1) * MAX_DOWNLOAD_ATTEMPTS - 1;
+			try {
+				SmartFileUtils.promoteVerifiedAtomic(tempStoreFile, storeFile, task.fileSize, hashPathPair.hash());
+			} catch (IOException e) {
+				task.lastFailureCategory = FailureCategory.LOCAL_STORAGE;
+				LOGGER.warn("Failed to persist verified CAS object {}", hashPathPair.hash(), e);
+				return false;
 			}
-			return false;
-		} catch (IOException e) {
-			LOGGER.warn("Failed to acquire CAS object {}", hashPathPair.hash(), e);
-			return false;
+			tempStoreFile = null;
+			task.lastFailureCategory = null;
+			return true;
 		} finally {
 			activeTemporaryFiles.remove(hashPathPair);
 			if (tempStoreFile != null) {
@@ -302,6 +344,7 @@ public class DownloadManager {
 
 		if (success) {
 			downloadedCount++;
+			acquisitionResults.put(key, new AcquisitionResult(true, null));
 			LOGGER.info("Acquired CAS object {} for {}", storeFile.getFileName(), task.file.getFileName());
 			task.successCallback.run();
 			semaphore.release();
@@ -313,22 +356,36 @@ public class DownloadManager {
 	}
 
 	private void handleRetry(FileInspection.HashPathPair key, QueuedDownload task, boolean interrupted) {
-		if (interrupted) return;
-		if (task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
+		if (interrupted) {
+			acquisitionResults.put(key, new AcquisitionResult(false, FailureCategory.CANCELLED));
+			return;
+		}
+		if (task.lastFailureCategory != FailureCategory.LOCAL_STORAGE && task.attempts < (task.sources.size() + 1) * MAX_DOWNLOAD_ATTEMPTS) {
 			LOGGER.warn("Retrying download: {}", task.file.getFileName());
 			task.attempts++;
 			queuedDownloads.put(key, task);
 		} else {
-			LOGGER.error("Permanently failed to download: {}", task.file.getFileName());
-			task.failureCallback.run();
+			FailureCategory category = task.lastFailureCategory == null ? FailureCategory.REMOTE_SOURCE : task.lastFailureCategory;
+			acquisitionResults.put(key, new AcquisitionResult(false, category));
+			LOGGER.error("Permanently failed to download {} ({})", task.file.getFileName(), category);
+			task.failureCallback.accept(category);
 			semaphore.release();
 		}
 	}
 
-	private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, Path targetFile, IntConsumer progressAction) throws IOException {
-		SmartFileUtils.createParentDirs(targetFile);
+	private void hostDownloadFile(FileInspection.HashPathPair hashPathPair, Path targetFile, IntConsumer progressAction)
+			throws IOException, InterruptedException {
 		var future = downloadClient.downloadFile(hashPathPair.hash().getBytes(StandardCharsets.UTF_8), targetFile, progressAction);
-		future.join();
+		try {
+			future.join();
+		} catch (CancellationException e) {
+			throw new InterruptedException("AutoModpack host download was cancelled");
+		} catch (CompletionException e) {
+			Throwable cause = e.getCause();
+			if (cause instanceof LocalStorageException localStorageException) throw localStorageException;
+			if (cause instanceof InterruptedException) throw new InterruptedException("AutoModpack host download was interrupted");
+			throw new IOException("AutoModpack host download failed", cause);
+		}
 	}
 
 	private void updateNetworkProgress(long bytes) {
@@ -385,6 +442,10 @@ public class DownloadManager {
 		downloadExecutor.shutdown();
 	}
 
+	public Map<FileInspection.HashPathPair, AcquisitionResult> getAcquisitionResults() {
+		return Map.copyOf(acquisitionResults);
+	}
+
 	public boolean isCancelled() {
 		return cancelled;
 	}
@@ -401,9 +462,10 @@ public class DownloadManager {
 		public final long fileSize;
 		public int attempts;
 		public final Runnable successCallback;
-		public final Runnable failureCallback;
+		public final Consumer<FailureCategory> failureCallback;
+		public FailureCategory lastFailureCategory;
 
-		public QueuedDownload(Path f, List<DownloadSource> sources, long size, int a, Runnable s, Runnable fa) {
+		public QueuedDownload(Path f, List<DownloadSource> sources, long size, int a, Runnable s, Consumer<FailureCategory> fa) {
 			file = f;
 			this.sources = sources;
 			fileSize = size;

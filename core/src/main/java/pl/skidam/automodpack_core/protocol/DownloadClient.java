@@ -540,8 +540,7 @@ class Connection implements AutoCloseable {
 		long expectedFileSize = headerWrap.getLong();
 		long receivedBytes = 0;
 
-		try (OutputStream fos = new BufferedOutputStream(
-				Files.newOutputStream(destination, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE))) {
+		try (OutputStream fos = LocalFileWriter.open(destination)) {
 
 			while (receivedBytes < expectedFileSize) {
 				byte[] dataFrame = readProtocolMessageFrame();

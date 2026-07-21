@@ -134,7 +134,6 @@ public final class UpdateTransactionExecutor {
 				case INSTALL_OBJECT -> validateInstall(operation, projected);
 				case DELETE -> validateDelete(operation, projected);
 				case CREATE_DIRECTORY, REMOVE_EMPTY_DIRECTORY -> validateDirectoryOperation(operation);
-
 			}
 		}
 		validateManifestProjection(manifest, finalState);

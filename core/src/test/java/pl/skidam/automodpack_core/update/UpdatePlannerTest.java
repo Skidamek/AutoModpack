@@ -35,6 +35,30 @@ class UpdatePlannerTest {
 	}
 
 	@Test
+	void plansEditablePreservationAndCarryoverWithoutConfigMutation() {
+		String editedOldHash = "3333333333333333333333333333333333333333";
+		String editedTargetHash = "4444444444444444444444444444444444444444";
+		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(Set.of(
+				new Jsons.ModpackContentFields.ModpackContentItem("/config/settings.json", "7", "config", true, false, false, TARGET_HASH, "0")));
+		target.modpackId = "abc1234";
+		Jsons.ModpackContentFields previous = new Jsons.ModpackContentFields(Set.of(
+				new Jsons.ModpackContentFields.ModpackContentItem("/config/settings.json", "6", "config", true, false, false, OLD_HASH, "0")));
+		previous.modpackId = "old1234";
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(editedOldHash, 6, true, false),
+				new FileKey(Root.MODPACK_DIR, "config/settings.json"), new FileState(editedTargetHash, 7, true, false));
+		UpdatePlanner.Input input = new UpdatePlanner.Input(null, target, files, true, Set.of(), Set.of(), List.of(), List.of(), List.of(),
+				new UpdatePlanner.SelectionContext("old1234", previous), new Jsons.ClientConfigFieldsV3());
+
+		UpdatePlan plan = UpdatePlanner.plan(input);
+
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.AUTOMODPACK_DIR
+				&& operation.relativePath().equals("modpacks/old1234/config/settings.json") && operation.expectedObjectHash().equals(editedOldHash)));
+		assertTrue(plan.operations().stream().anyMatch(operation -> operation.root() == Root.GAME_DIR
+				&& operation.relativePath().equals("config/settings.json") && operation.expectedObjectHash().equals(editedTargetHash)));
+		assertTrue(plan.restartReasons().contains(RestartReason.SELECTED_MODPACK));
+	}
+
+	@Test
 	void remoteDeletionOptOutAndHashMismatchProduceDeterministicSafeDecisions() {
 		Jsons.ModpackContentFields target = manifest();
 		Map<FileKey, FileState> mismatch = Map.of(new FileKey(Root.MODS_DIR, "old.jar"), new FileState(TARGET_HASH, 8, true, true));
@@ -54,7 +78,8 @@ class UpdatePlannerTest {
 
 	private static UpdatePlanner.Input input(Jsons.ModpackContentFields target, Map<FileKey, FileState> files, boolean allow,
 			List<ModInfo> targetMods, List<ModInfo> standardMods) {
-		return new UpdatePlanner.Input(null, target, files, allow, Set.of(), Set.of(), targetMods, standardMods, List.of(), new Jsons.ClientConfigFieldsV3());
+		return new UpdatePlanner.Input(null, target, files, allow, Set.of(), Set.of(), targetMods, standardMods, List.of(), null,
+				new Jsons.ClientConfigFieldsV3());
 	}
 
 	private static Jsons.ModpackContentFields manifest() {

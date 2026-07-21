@@ -2,11 +2,8 @@ package pl.skidam.automodpack.networking.packet;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import io.netty.buffer.Unpooled;
@@ -24,7 +21,6 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -113,31 +109,19 @@ public class DataC2SPacket {
 					new ModpackUpdater(serverModpackContent, connectionInfo, secret, modpackDir).processModpackUpdate(updateCheckResult);
 					needsDisconnecting = true;
 				} else {
-					boolean selectedModpackChanged;
 					try {
-						selectedModpackChanged = ModpackUtils.selectModpack(serverModpackContent.modpackId, serverModpackContent.modpackName, modpackDir, connectionInfo, Set.of());
-					} catch (IOException e) {
-						LOGGER.error("Failed to select stable modpack installation", e);
+						UpdateType restartType = new ModpackUpdater(serverModpackContent, connectionInfo, secret, modpackDir).reconcileReceivedManifest();
+						if (restartType == null) {
+							needsDisconnecting = false;
+						} else {
+							disconnectImmediately(handler);
+							new ReLauncher(modpackDir, restartType, null).restart(false);
+							needsDisconnecting = true;
+						}
+					} catch (Exception e) {
+						LOGGER.error("Failed to reconcile stable modpack installation", e);
 						disconnectImmediately(handler);
 						return buildResponse(true);
-					}
-					var modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
-					if (Files.exists(modpackContentFile)) {
-						try {
-							ModpackContentTools.write(modpackContentFile, serverModpackContent);
-						} catch (IOException e) {
-							LOGGER.error("Failed to save modpack content", e);
-							disconnectImmediately(handler);
-							return buildResponse(true);
-						}
-					}
-
-					if (selectedModpackChanged) {
-						disconnectImmediately(handler);
-						new ReLauncher(modpackDir, UpdateType.SELECT, null).restart(false);
-						needsDisconnecting = true;
-					} else {
-						needsDisconnecting = false;
 					}
 				}
 			} else if (ModpackUtils.canConnectModpackHost(connectionInfo)) {

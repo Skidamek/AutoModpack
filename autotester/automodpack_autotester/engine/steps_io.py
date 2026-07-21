@@ -25,8 +25,14 @@ def _await_exist(ctx, root, rels, step, msg, default_timeout):
 
 @verb("wait_file")
 def wait_file(ctx, step):
-    rel = ctx.resolve(str(step["path"]))
-    _await_exist(ctx, ctx.game_dir, [rel], step, f"file {rel} did not appear", 300)
+    template = str(step["path"])
+    timeout = parse_duration(step.get("timeout"), default=300)
+    await_condition(
+        lambda: True if (ctx.game_dir / ctx.resolve(template)).exists() else None,
+        timeout,
+        step.get("poll"),
+        f"file {template} did not appear",
+    )
 
 
 @verb("wait_files")

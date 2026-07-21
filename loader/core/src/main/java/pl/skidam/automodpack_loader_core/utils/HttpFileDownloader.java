@@ -18,9 +18,9 @@ import java.util.zip.GZIPInputStream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import pl.skidam.automodpack_core.protocol.LocalFileWriter;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.DownloadSource;
-import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public class HttpFileDownloader {
 
@@ -46,8 +46,6 @@ public class HttpFileDownloader {
 	 *             If the download is cancelled.
 	 */
 	public void download(DownloadSource source, Path target, IntConsumer progressAction) throws IOException, InterruptedException {
-		SmartFileUtils.createParentDirs(target);
-
 		URI uri;
 		try {
 			uri = URI.create(source.url());
@@ -80,9 +78,7 @@ public class HttpFileDownloader {
 
 		boolean isGzip = "gzip".equalsIgnoreCase(response.headers().firstValue("Content-Encoding").orElse(""));
 
-		try (InputStream rawIn = response.body();
-				InputStream in = isGzip ? new GZIPInputStream(rawIn) : rawIn;
-				OutputStream out = new BufferedOutputStream(new FileOutputStream(target.toFile()), 64 * 1024)) {
+		try (InputStream rawIn = response.body(); InputStream in = isGzip ? new GZIPInputStream(rawIn) : rawIn; OutputStream out = LocalFileWriter.open(target)) {
 
 			byte[] buffer = new byte[NetUtils.DEFAULT_CHUNK_SIZE];
 			int bytesRead;

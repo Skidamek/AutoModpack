@@ -26,6 +26,7 @@ public final class UpdatePlanner {
 			List<ModInfo> targetMods,
 			List<ModInfo> standardMods,
 			List<NestedCopy> nestedCopies,
+			SelectionContext selection,
 			Jsons.ClientConfigFieldsV3 plannedClientConfig) {
 		public Input {
 			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
@@ -36,6 +37,8 @@ public final class UpdatePlanner {
 			nestedCopies = List.copyOf(nestedCopies);
 		}
 	}
+
+	public record SelectionContext(String previousModpackId, Jsons.ModpackContentFields previousManifest) {}
 
 	public static UpdatePlan plan(Input input) {
 		Objects.requireNonNull(input);
@@ -66,6 +69,8 @@ public final class UpdatePlanner {
 		}
 
 		planRemoteDeletions(input, projected, operations, timestamps, restartReasons, warnings);
+		if (isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
+		planPreviousEditablePreservation(input.selection(), target.modpackId, projected, operations);
 
 		Set<String> forceCopyPaths = new HashSet<>(input.forceCopyServicePaths());
 		for (var item : targetItems.values()) if (item.forceCopy) forceCopyPaths.add(normalize(item.file));
@@ -91,6 +96,7 @@ public final class UpdatePlanner {
 			}
 		}
 
+		planSelectedEditableCopies(input.selection(), target.modpackId, targetItems.values(), projected, operations);
 		planNestedCopies(input.nestedCopies(), projected, operations, restartReasons);
 		Set<String> standardModsToKeep = planDuplicates(input.targetMods(), input.standardMods(), forceCopyPaths, projected, operations, restartReasons);
 
@@ -115,6 +121,40 @@ public final class UpdatePlanner {
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
 		return new UpdatePlan(target.modpackId, ordered, finalState, input.plannedClientConfig(), timestamps, restartReasons, warnings);
+	}
+
+	private static boolean isSelectionChange(SelectionContext selection, String targetModpackId) {
+		return selection != null && selection.previousModpackId() != null && !selection.previousModpackId().isBlank()
+				&& !selection.previousModpackId().equals(targetModpackId);
+	}
+
+	private static void planPreviousEditablePreservation(SelectionContext selection, String targetModpackId, Map<FileKey, FileState> projected,
+			Map<FileKey, Operation> operations) {
+		if (selection == null || selection.previousModpackId() == null || selection.previousModpackId().isBlank()
+				|| selection.previousModpackId().equals(targetModpackId) || selection.previousManifest() == null || selection.previousManifest().list == null)
+			return;
+		ModpackId.requireValid(selection.previousModpackId());
+		for (var item : selection.previousManifest().list.stream().filter(value -> value.editable).sorted(Comparator.comparing(value -> value.file)).toList()) {
+			FileKey gameKey = liveKey(item);
+			FileState current = projected.get(gameKey);
+			if (current == null || !current.regularFile()) continue;
+			FileKey oldModpackKey = new FileKey(Root.AUTOMODPACK_DIR,
+					"modpacks/" + selection.previousModpackId() + "/" + normalize(item.file));
+			install(operations, projected, oldModpackKey, current.sha1(), current.size(), current.mod());
+		}
+	}
+
+	private static void planSelectedEditableCopies(SelectionContext selection, String targetModpackId,
+			Collection<Jsons.ModpackContentFields.ModpackContentItem> targetItems, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations) {
+		if (selection == null || selection.previousModpackId() == null || selection.previousModpackId().isBlank()
+				|| selection.previousModpackId().equals(targetModpackId))
+			return;
+		for (var item : targetItems) {
+			if (!item.editable || "mod".equals(item.type)) continue;
+			FileState selectedCopy = projected.get(new FileKey(Root.MODPACK_DIR, normalize(item.file)));
+			if (selectedCopy == null || !selectedCopy.regularFile()) continue;
+			install(operations, projected, liveKey(item), selectedCopy.sha1(), selectedCopy.size(), selectedCopy.mod());
+		}
 	}
 
 	private static void planRemoteDeletions(Input input, Map<FileKey, FileState> projected, Map<FileKey, Operation> operations, Set<String> timestamps,
