@@ -2,11 +2,13 @@ package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -111,6 +113,57 @@ class UpdateTransactionExecutorTest {
 		assertThrows(Exception.class, () -> executor(paths, null).recover(aliased));
 		assertFalse(Files.exists(paths.transaction()));
 		assertFalse(Files.exists(paths.modpack().resolve("mods/new.jar")));
+	}
+
+	@Test
+	void rejectsSymlinkedParentEscapingConstrainedRoot() throws Exception {
+		Paths paths = paths();
+		Files.createDirectories(paths.store());
+		Files.createDirectories(paths.modpack());
+		Path outside = temporaryDirectory.resolve("outside");
+		Files.createDirectories(outside);
+		try {
+			Files.createSymbolicLink(paths.modpack().resolve("linked"), outside);
+		} catch (IOException | UnsupportedOperationException | SecurityException e) {
+			Assumptions.assumeTrue(false, "Symbolic links are unavailable: " + e);
+		}
+		byte[] bytes = "escaped-object".getBytes(StandardCharsets.UTF_8);
+		String hash = store(paths, bytes);
+		Jsons.ModpackContentFields manifest = new Jsons.ModpackContentFields(Set.of(
+				new Jsons.ModpackContentFields.ModpackContentItem("/linked/new.jar", String.valueOf(bytes.length), "mod", false, false, false, hash, "0")));
+		manifest.modpackId = "abc1234";
+		UpdatePlan plan = new UpdatePlan(manifest.modpackId,
+				List.of(new Operation(Root.MODPACK_DIR, "linked/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "linked/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of(), Set.of(), List.of());
+
+		assertThrows(IOException.class, () -> executor(paths, null).commit(plan, manifest));
+		assertFalse(Files.exists(outside.resolve("new.jar")));
+		assertFalse(Files.exists(paths.transaction()));
+	}
+
+	@Test
+	void selfUpdateUsesConstrainedCasOperationsWithoutPublishingModpackState() throws Exception {
+		Paths paths = paths();
+		Files.createDirectories(paths.store());
+		Files.createDirectories(paths.mods());
+		Path currentJar = Files.writeString(paths.mods().resolve("automodpack-old.jar"), "old");
+		String currentHash = HashUtils.getHash(currentJar);
+		byte[] replacement = "official-update".getBytes(StandardCharsets.UTF_8);
+		String replacementHash = store(paths, replacement);
+		UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentJar.getFileName().toString(), "automodpack-new.jar", replacementHash,
+				replacement.length, currentHash);
+
+		UpdateTransactionExecutor.Execution execution = executor(paths, null).commit(transaction);
+
+		assertTrue(execution.success());
+		assertFalse(Files.exists(currentJar));
+		assertArrayEquals(replacement, Files.readAllBytes(paths.mods().resolve("automodpack-new.jar")));
+		assertFalse(Files.exists(paths.manifest()));
+		assertFalse(Files.exists(paths.clientConfig()));
+		assertFalse(Files.exists(paths.transaction()));
+
+		UpdateTransaction tampered = UpdateTransaction.createSelfUpdate("automodpack-old.jar", "../outside.jar", replacementHash, replacement.length, currentHash);
+		assertThrows(IOException.class, () -> executor(paths, null).validate(tampered));
 	}
 
 	private UpdateTransactionExecutor executor(Paths paths, UpdateTransactionExecutor.CommitAction action) {

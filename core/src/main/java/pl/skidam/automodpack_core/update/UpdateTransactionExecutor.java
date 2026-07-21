@@ -38,7 +38,7 @@ public final class UpdateTransactionExecutor {
 			Path installedManifestFile,
 			CommitAction beforeManifestAction) {}
 
-	public record Execution(UpdateTransactionResult.Status status, UpdateTransaction transaction, Path blockedPath, String message) {
+	public record Execution(UpdateTransactionResult.Status status, UpdateTransaction transaction, String operation, Path blockedPath, String message) {
 		public boolean success() {
 			return status == UpdateTransactionResult.Status.SUCCESS;
 		}
@@ -49,7 +49,10 @@ public final class UpdateTransactionExecutor {
 	}
 
 	public Execution commit(UpdatePlan plan, Jsons.ModpackContentFields targetManifest) throws IOException {
-		UpdateTransaction transaction = UpdateTransaction.create(plan, targetManifest, context.modpackDirectory());
+		return commit(UpdateTransaction.create(plan, targetManifest, context.modpackDirectory()));
+	}
+
+	public Execution commit(UpdateTransaction transaction) throws IOException {
 		validate(transaction);
 		if (Files.exists(context.transactionFile())) throw new IOException("An update transaction is already active for this game directory");
 		ConfigTools.writeAtomic(context.transactionFile(), transaction);
@@ -84,38 +87,38 @@ public final class UpdateTransactionExecutor {
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid transaction UUID", e);
 		}
-		ModpackId.requireValid(transaction.modpackId);
+		if (transaction.purpose == null) throw new IOException("Transaction purpose is missing");
 		Path gameDirectory = context.gameDirectory().toAbsolutePath().normalize();
 		Path automodpackDirectory = context.automodpackDirectory().toAbsolutePath().normalize();
 		if (!context.modsDirectory().toAbsolutePath().normalize().equals(gameDirectory.resolve("mods"))
 				|| !automodpackDirectory.equals(gameDirectory.resolve("automodpack"))
-				|| !context.storeDirectory().toAbsolutePath().normalize().equals(automodpackDirectory.resolve("store")))
+				|| !context.storeDirectory().toAbsolutePath().normalize().equals(automodpackDirectory.resolve("store"))
+				|| !context.transactionFile().toAbsolutePath().normalize().equals(automodpackDirectory.resolve(".private/update-transaction.json"))
+				|| !context.transactionResultFile().toAbsolutePath().normalize().equals(automodpackDirectory.resolve(".private/update-transaction-result.json")))
 			throw new IOException("Transaction roots do not match the game-directory layout");
-		Path expectedModpackDirectory = context.modpackDirectory().toAbsolutePath().normalize();
-		Path stableModpackDirectory = context.automodpackDirectory().resolve("modpacks").resolve(transaction.modpackId).toAbsolutePath().normalize();
-		Path recordedModpackDirectory;
-		try {
-			recordedModpackDirectory = Path.of(transaction.canonicalModpackDirectory).toAbsolutePath().normalize();
-		} catch (RuntimeException e) {
-			throw new IOException("Invalid canonical modpack directory", e);
-		}
-		if (!expectedModpackDirectory.equals(stableModpackDirectory) || !expectedModpackDirectory.equals(recordedModpackDirectory))
-			throw new IOException("Transaction modpack directory is not stable modpack storage");
-
-		Jsons.ModpackContentFields manifest;
-		try {
-			manifest = transaction.targetManifest();
-		} catch (RuntimeException e) {
-			throw new IOException("Invalid embedded target manifest", e);
-		}
-		validateManifest(manifest, transaction.modpackId);
-		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.plannedClientConfig == null
-				|| transaction.plannedDeletionTimestamps == null || transaction.restartReasons == null)
+		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.plannedDeletionTimestamps == null
+				|| transaction.restartReasons == null)
 			throw new IOException("Transaction fields are incomplete");
-		validatePlannedClientConfig(transaction);
-		validateOrderedMetadata(transaction);
 
-		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.projectedFinalState, transaction.modpackId);
+		Jsons.ModpackContentFields manifest = null;
+		switch (transaction.purpose) {
+			case MODPACK_UPDATE -> {
+				ModpackId.requireValid(transaction.modpackId);
+				validateModpackIdentity(transaction);
+				try {
+					manifest = transaction.targetManifest();
+				} catch (RuntimeException e) {
+					throw new IOException("Invalid embedded target manifest", e);
+				}
+				validateManifest(manifest, transaction.modpackId);
+				if (transaction.plannedClientConfig == null) throw new IOException("Planned client config is missing");
+				validatePlannedClientConfig(transaction);
+				validateOrderedMetadata(transaction);
+			}
+			case SELF_UPDATE -> validateSelfUpdateMetadata(transaction);
+		}
+
+		Map<FileKey, ProjectedFile> finalState = validateFinalState(transaction.projectedFinalState, transaction.modpackId, transaction.purpose);
 
 		List<Operation> sortedOperations = transaction.operations.stream().sorted(OPERATION_ORDER).toList();
 		if (!transaction.operations.equals(sortedOperations)) throw new IOException("Transaction operations are not deterministically ordered");
@@ -123,6 +126,7 @@ public final class UpdateTransactionExecutor {
 		Set<Path> operationTargets = new HashSet<>();
 		for (Operation operation : transaction.operations) {
 			if (operation == null || operation.root() == null || operation.operation() == null) throw new IOException("Incomplete transaction operation");
+			validatePurposeOperation(transaction.purpose, operation);
 			String relative = normalizeOperationPath(operation.relativePath());
 			FileKey key = new FileKey(operation.root(), relative);
 			if (!operationKeys.add(key)) throw new IOException("Duplicate transaction operation target");
@@ -136,7 +140,42 @@ public final class UpdateTransactionExecutor {
 				case CREATE_DIRECTORY, REMOVE_EMPTY_DIRECTORY -> validateDirectoryOperation(operation);
 			}
 		}
-		validateManifestProjection(manifest, finalState);
+		if (transaction.purpose == UpdateTransaction.Purpose.SELF_UPDATE && !operationKeys.equals(finalState.keySet()))
+			throw new IOException("Self-update operations and projected final state must match exactly");
+		if (manifest != null) validateManifestProjection(manifest, finalState);
+	}
+
+	private void validateModpackIdentity(UpdateTransaction transaction) throws IOException {
+		if (context.modpackDirectory() == null) throw new IOException("Modpack transaction context is incomplete");
+		Path expectedModpackDirectory = context.modpackDirectory().toAbsolutePath().normalize();
+		Path stableModpackDirectory = context.automodpackDirectory().resolve("modpacks").resolve(transaction.modpackId).toAbsolutePath().normalize();
+		Path recordedModpackDirectory;
+		try {
+			recordedModpackDirectory = Path.of(transaction.canonicalModpackDirectory).toAbsolutePath().normalize();
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid canonical modpack directory", e);
+		}
+		if (!expectedModpackDirectory.equals(stableModpackDirectory) || !expectedModpackDirectory.equals(recordedModpackDirectory))
+			throw new IOException("Transaction modpack directory is not stable modpack storage");
+	}
+
+	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
+		if (transaction.modpackId != null || transaction.targetManifestJson != null || transaction.canonicalModpackDirectory != null
+				|| transaction.plannedClientConfig != null || !transaction.plannedDeletionTimestamps.isEmpty() || !transaction.restartReasons.isEmpty())
+			throw new IOException("Self-update transaction contains modpack metadata");
+		long installs = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT).count();
+		long deletions = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.DELETE).count();
+		if (installs != 1 || deletions > 1 || transaction.operations.size() != installs + deletions)
+			throw new IOException("Self-update transaction must contain one install and at most one deletion");
+	}
+
+	private static void validatePurposeOperation(UpdateTransaction.Purpose purpose, Operation operation) throws IOException {
+		if (purpose != UpdateTransaction.Purpose.SELF_UPDATE) return;
+		if (operation.root() != Root.MODS_DIR || (operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE))
+			throw new IOException("Self-update operations are restricted to JAR replacement in the mods directory");
+		Path relative = Path.of(operation.relativePath());
+		if (relative.getNameCount() != 1 || !relative.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+			throw new IOException("Self-update target must be a direct JAR child of the mods directory");
 	}
 
 	private void validateManifest(Jsons.ModpackContentFields manifest, String modpackId) throws IOException {
@@ -181,12 +220,18 @@ public final class UpdateTransactionExecutor {
 			throw new IOException("Restart reasons are not ordered");
 	}
 
-	private Map<FileKey, ProjectedFile> validateFinalState(List<ProjectedFile> entries, String modpackId) throws IOException {
+	private Map<FileKey, ProjectedFile> validateFinalState(List<ProjectedFile> entries, String modpackId, UpdateTransaction.Purpose purpose) throws IOException {
 		Map<FileKey, ProjectedFile> finalState = new LinkedHashMap<>();
 		Set<Path> physicalTargets = new HashSet<>();
 		FileKey previous = null;
 		for (ProjectedFile entry : entries) {
 			if (entry == null || entry.root() == null) throw new IOException("Incomplete projected final-state entry");
+			if (purpose == UpdateTransaction.Purpose.SELF_UPDATE) {
+				Path selfUpdatePath = Path.of(entry.relativePath());
+				if (entry.root() != Root.MODS_DIR || selfUpdatePath.getNameCount() != 1
+						|| !selfUpdatePath.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+					throw new IOException("Self-update projected state is restricted to direct JAR children of the mods directory");
+			}
 			String relative = normalizeOperationPath(entry.relativePath());
 			Path physicalTarget = validateRootAndPath(entry.root(), relative, modpackId);
 			if (!physicalTargets.add(physicalTarget)) throw new IOException("Projected entries alias the same physical target");
@@ -257,6 +302,12 @@ public final class UpdateTransactionExecutor {
 				SmartFileUtils.copyVerifiedAtomicBatch(copies, COPY_CONCURRENCY);
 			} catch (SmartFileUtils.CopyBatchException e) {
 				blockedPath = e.target();
+				for (Operation operation : transaction.operations) {
+					if (operation.operation() == OperationType.INSTALL_OBJECT && resolve(operation).equals(blockedPath)) {
+						current = operation;
+						break;
+					}
+				}
 				throw e;
 			}
 			for (Operation operation : transaction.operations) {
@@ -282,23 +333,26 @@ public final class UpdateTransactionExecutor {
 				if (SmartFileUtils.isEmptyDirectory(target)) Files.deleteIfExists(target);
 			}
 			verifyFinalState(transaction.projectedFinalState);
-			ConfigTools.writeAtomic(context.clientConfigFile(), transaction.plannedClientConfig);
-			persistDeletionTimestamps(transaction.plannedDeletionTimestamps);
-			if (context.beforeManifestAction() != null) context.beforeManifestAction().run(transaction);
-			verifyFinalState(transaction.projectedFinalState);
-			ModpackContentTools.write(context.installedManifestFile(), transaction.targetManifest());
+			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
+				ConfigTools.writeAtomic(context.clientConfigFile(), transaction.plannedClientConfig);
+				persistDeletionTimestamps(transaction.plannedDeletionTimestamps);
+				if (context.beforeManifestAction() != null) context.beforeManifestAction().run(transaction);
+				verifyFinalState(transaction.projectedFinalState);
+				ModpackContentTools.write(context.installedManifestFile(), transaction.targetManifest());
+			}
 			Files.deleteIfExists(context.transactionFile());
 			Files.deleteIfExists(context.transactionResultFile());
-			return new Execution(UpdateTransactionResult.Status.SUCCESS, transaction, null, null);
+			return new Execution(UpdateTransactionResult.Status.SUCCESS, transaction, null, null, null);
 		} catch (IOException e) {
 			if (blockedPath == null && current != null) blockedPath = resolve(current);
 			if (isLockFailure(e)) {
 				UpdateTransactionResult result = new UpdateTransactionResult(transaction.transactionId, UpdateTransactionResult.Status.DEFERRED_LOCKED,
 						current == null ? null : current.operation().name(), blockedPath == null ? null : blockedPath.toString(), e.getMessage());
 				ConfigTools.writeAtomic(context.transactionResultFile(), result);
-				return new Execution(UpdateTransactionResult.Status.DEFERRED_LOCKED, transaction, blockedPath, e.getMessage());
+				return new Execution(UpdateTransactionResult.Status.DEFERRED_LOCKED, transaction, current == null ? null : current.operation().name(), blockedPath,
+						e.getMessage());
 			}
-			throw e;
+			throw new UpdateExecutionException(current == null ? null : current.operation().name(), blockedPath, e);
 		}
 	}
 
@@ -332,17 +386,31 @@ public final class UpdateTransactionExecutor {
 		Path root = root(operationRoot).toAbsolutePath().normalize();
 		Path resolved = root.resolve(normalizeOperationPath(relativePath)).normalize();
 		if (!resolved.startsWith(root)) throw new IOException("Operation escapes constrained root");
+		validateNoSymbolicLinkDescendants(root, resolved);
 		return resolved;
 	}
 
-	private Path root(Root root) {
-		return switch (root) {
+	public static void validateNoSymbolicLinkDescendants(Path constrainedRoot, Path target) throws IOException {
+		Path root = constrainedRoot.toAbsolutePath().normalize();
+		Path resolved = target.toAbsolutePath().normalize();
+		if (!resolved.startsWith(root)) throw new IOException("Target escapes constrained root");
+		Path current = root;
+		for (Path component : root.relativize(resolved)) {
+			current = current.resolve(component);
+			if (Files.isSymbolicLink(current)) throw new IOException("Symbolic-link component is not allowed beneath transaction root: " + current);
+		}
+	}
+
+	private Path root(Root root) throws IOException {
+		Path path = switch (root) {
 			case MODPACK_DIR -> context.modpackDirectory();
 			case GAME_DIR -> context.gameDirectory();
 			case MODS_DIR -> context.modsDirectory();
 			case STORE_DIR -> context.storeDirectory();
 			case AUTOMODPACK_DIR -> context.automodpackDirectory();
 		};
+		if (path == null) throw new IOException("Transaction context does not provide root " + root);
+		return path;
 	}
 
 	private Path validateRootAndPath(Root root, String relativePath, String currentModpackId) throws IOException {
@@ -351,10 +419,11 @@ public final class UpdateTransactionExecutor {
 		Path constrainedRoot = root(root).toAbsolutePath().normalize();
 		Path resolved = constrainedRoot.resolve(relativePath).normalize();
 		if (!resolved.startsWith(constrainedRoot)) throw new IOException("Transaction path escapes constrained root");
+		validateNoSymbolicLinkDescendants(constrainedRoot, resolved);
 		if (root == Root.GAME_DIR && (resolved.startsWith(context.modsDirectory().toAbsolutePath().normalize())
 				|| resolved.startsWith(context.automodpackDirectory().toAbsolutePath().normalize())))
 			throw new IOException("GAME_DIR operation must use the narrower constrained root");
-		if (resolved.equals(context.installedManifestFile().toAbsolutePath().normalize()))
+		if (context.installedManifestFile() != null && resolved.equals(context.installedManifestFile().toAbsolutePath().normalize()))
 			throw new IOException("Installed manifest may only be published by the executor");
 		if (root == Root.AUTOMODPACK_DIR) validateModpackStoragePath(relativePath, currentModpackId);
 		return resolved;
@@ -411,10 +480,11 @@ public final class UpdateTransactionExecutor {
 	private static boolean isLockFailure(IOException exception) {
 		Throwable current = exception;
 		while (current != null) {
-			if (current instanceof AccessDeniedException) return true;
-			if (current instanceof FileSystemException && current.getMessage() != null
-					&& current.getMessage().toLowerCase(Locale.ROOT).contains("used by another process"))
-				return true;
+			if (current instanceof FileSystemException fileSystemException) {
+				String detail = String.join(" ", Objects.toString(fileSystemException.getReason(), ""), Objects.toString(fileSystemException.getMessage(), ""))
+						.toLowerCase(Locale.ROOT);
+				if (detail.contains("used by another process") || detail.contains("being used by another process") || detail.contains("sharing violation")) return true;
+			}
 			current = current.getCause();
 		}
 		return false;

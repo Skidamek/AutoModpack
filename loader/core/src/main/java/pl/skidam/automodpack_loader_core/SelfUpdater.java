@@ -2,6 +2,7 @@ package pl.skidam.automodpack_loader_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,6 +10,8 @@ import java.util.List;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
+import pl.skidam.automodpack_core.update.UpdateTransaction;
+import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
@@ -156,37 +159,34 @@ public class SelfUpdater {
 	}
 
 	public static void installModVersion(ModrinthAPI automodpack) {
-		Path automodpackUpdateJar = automodpackDir.resolve(automodpack.fileName());
-		Path newAutomodpackJar;
-
 		try {
+			Path currentJar = THIS_MOD_JAR.toAbsolutePath().normalize();
+			Path modsDirectory = MODS_DIR.toAbsolutePath().normalize();
+			if (!currentJar.getParent().equals(modsDirectory)) throw new IllegalStateException("Loaded AutoModpack JAR is not a direct child of the mods directory");
+			Path targetJar = modsDirectory.resolve(Path.of(automodpack.fileName()).getFileName()).normalize();
+
 			DownloadManager downloadManager = new DownloadManager();
 			new ScreenManager().download(downloadManager, "AutoModpack " + automodpack.fileVersion());
-
-			downloadManager.download(automodpackUpdateJar, automodpack.SHA1Hash(),
+			downloadManager.download(targetJar, automodpack.SHA1Hash(),
 					List.of(new DownloadSource(automodpack.downloadUrl(), DownloadSource.Provider.MODRINTH)), automodpack.fileSize(),
 					() -> LOGGER.info("Downloaded update for AutoModpack."), () -> LOGGER.error("Failed to download update for AutoModpack."));
-
 			downloadManager.joinAll();
 			downloadManager.cancelAllAndShutdown();
-			SmartFileUtils.copyVerifiedAtomic(storeDir.resolve(automodpack.SHA1Hash()), automodpackUpdateJar, automodpack.fileSize(), automodpack.SHA1Hash());
 
-			newAutomodpackJar = THIS_MOD_JAR.getParent().resolve(automodpackUpdateJar.getFileName());
+			Path storeObject = storeDir.resolve(automodpack.SHA1Hash());
+			if (!SmartFileUtils.isValidFile(storeObject, automodpack.fileSize(), automodpack.SHA1Hash()))
+				throw new IllegalStateException("Downloaded official AutoModpack JAR failed verification");
+			String currentHash = HashUtils.getHash(currentJar);
+			if (currentHash == null || !Files.isRegularFile(currentJar)) throw new IllegalStateException("Loaded AutoModpack JAR cannot be verified");
 
-			var updateType = UpdateType.AUTOMODPACK;
-			var relauncher = new ReLauncher(updateType);
-
-			Runnable callback = () -> {
-				SmartFileUtils.executeOrder66(THIS_MOD_JAR);
-				LOGGER.info("Successfully updated AutoModpack! Restarting...");
-			};
-
-			SmartFileUtils.copyFile(automodpackUpdateJar, newAutomodpackJar);
-			SmartFileUtils.executeOrder66(automodpackUpdateJar); // Delete temp file
-
-			relauncher.restart(true, callback);
+			UpdateTransaction transaction = UpdateTransaction.createSelfUpdate(currentJar.getFileName().toString(), targetJar.getFileName().toString(),
+					automodpack.SHA1Hash(), automodpack.fileSize(), currentHash);
+			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
+			if (!execution.success()) DetachedUpdateHelper.launch(transaction);
+			LOGGER.info("AutoModpack update transaction {} is ready; restart required", transaction.transactionId);
+			new ReLauncher(UpdateType.AUTOMODPACK).restart(true);
 		} catch (Exception e) {
-			LOGGER.error("Failed to update! " + e);
+			LOGGER.error("Failed to update AutoModpack", e);
 		}
 	}
 }

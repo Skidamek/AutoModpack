@@ -20,6 +20,7 @@ import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -118,6 +119,11 @@ public class DataC2SPacket {
 							new ReLauncher(modpackDir, restartType, null).restart(false);
 							needsDisconnecting = true;
 						}
+					} catch (UpdateDeferredException e) {
+						LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+						disconnectImmediately(handler);
+						new ReLauncher(modpackDir, UpdateType.UPDATE, null).restart(false);
+						return buildResponse(true);
 					} catch (Exception e) {
 						LOGGER.error("Failed to reconcile stable modpack installation", e);
 						disconnectImmediately(handler);

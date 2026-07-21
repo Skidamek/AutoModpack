@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
+import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
@@ -36,7 +37,9 @@ import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
+import pl.skidam.automodpack_loader_core.DetachedUpdateHelper;
 import pl.skidam.automodpack_loader_core.ReLauncher;
+import pl.skidam.automodpack_loader_core.UpdateTransactionSupport;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
@@ -106,6 +109,9 @@ public class ModpackUpdater {
 					}
 				}
 			}
+		} catch (UpdateDeferredException e) {
+			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+			new ReLauncher(modpackDir, UpdateType.UPDATE, changelogs).restart(true);
 		} catch (Exception e) {
 			LOGGER.error("Error while initializing modpack updater", e);
 		}
@@ -287,6 +293,9 @@ public class ModpackUpdater {
 						: fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
 				new ReLauncher(modpackDir, updateType, changelogs).restart(false);
 			}
+		} catch (UpdateDeferredException e) {
+			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+			new ReLauncher(modpackDir, UpdateType.UPDATE, changelogs).restart(true);
 		} catch (SocketTimeoutException | ConnectException e) {
 			LOGGER.error("{} is not responding", "Modpack host of " + connectionInfo.endpoint.getHostString(), e);
 		} catch (InterruptedException e) {
@@ -637,9 +646,12 @@ public class ModpackUpdater {
 
 	private void executePlan(UpdatePlan plan, Jsons.ModpackContentFields targetManifest) throws IOException {
 		ensurePlanObjects(plan, targetManifest);
-		UpdateTransactionExecutor.Execution execution = transactionExecutor().commit(plan, targetManifest);
-		if (!execution.success())
-			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
+		UpdateTransaction transaction = UpdateTransaction.create(plan, targetManifest, modpackDir);
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
+		if (!execution.success()) {
+			DetachedUpdateHelper.launch(transaction);
+			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
+		}
 		clientConfig = plan.plannedClientConfig();
 	}
 
@@ -677,18 +689,6 @@ public class ModpackUpdater {
 				throw new IOException("Required object is absent from CAS and verified live locations: " + operation.expectedObjectHash());
 			SmartFileUtils.copyVerifiedAtomic(source, storeFile, operation.expectedSize(), operation.expectedObjectHash());
 		}
-	}
-
-	private UpdateTransactionExecutor transactionExecutor() {
-		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(SmartFileUtils.CWD, modpackDir, MODS_DIR, storeDir, automodpackDir,
-				transactionFile, transactionResultFile, clientConfigFile, clientDeletionTimeStamps, modpackContentFile, transaction -> {
-					if (!transaction.restartReasons.contains(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION)) return;
-					Jsons.ModpackContentFields manifest = transaction.targetManifest();
-					if (!LauncherVersionSwapper.swapLoaderVersion(manifest.loader, manifest.loaderVersion))
-						throw new IOException("Planned launcher loader-version change is no longer applicable");
-					if (LauncherVersionSwapper.requiresLoaderVersionSwap(manifest.loader, manifest.loaderVersion))
-						throw new IOException("Planned launcher loader-version change did not converge");
-				}));
 	}
 
 	private enum RestartReason {

@@ -83,11 +83,12 @@ public class SmartFileUtils {
 			try {
 				copyVerifiedAtomic(request.source(), request.target(), request.expectedSize(), request.expectedSha1());
 				return null;
-			} catch (Throwable failure) {
+			} catch (IOException | RuntimeException failure) {
 				throw new CopyBatchException(request.target(), failure);
 			}
 		}).toList();
 		IOException failure = null;
+		Error error = null;
 		boolean interrupted = false;
 		try {
 			List<Future<Void>> futures = executor.invokeAll(tasks);
@@ -96,10 +97,17 @@ public class SmartFileUtils {
 					futures.get(index).get();
 				} catch (ExecutionException e) {
 					Throwable cause = e.getCause();
-					if (failure == null)
+					if (cause instanceof Error taskError) {
+						if (error == null) {
+							error = taskError;
+						} else {
+							error.addSuppressed(taskError);
+						}
+					} else if (failure == null) {
 						failure = cause instanceof CopyBatchException copyFailure
 								? copyFailure
 								: new CopyBatchException(orderedRequests.get(index).target(), cause);
+					}
 				} catch (CancellationException e) {
 					if (failure == null) failure = new CopyBatchException(orderedRequests.get(index).target(), e);
 				}
@@ -118,6 +126,10 @@ public class SmartFileUtils {
 				}
 			}
 			if (interrupted) Thread.currentThread().interrupt();
+		}
+		if (error != null) {
+			if (failure != null) error.addSuppressed(failure);
+			throw error;
 		}
 		if (failure != null) throw failure;
 	}

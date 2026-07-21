@@ -19,16 +19,15 @@ import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
-import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
-import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.loader.LoaderManager;
 import pl.skidam.automodpack_loader_core.mods.ModpackLoader;
+import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class Preload {
 
@@ -38,6 +37,8 @@ public class Preload {
 			LOGGER.info("Prelaunching AutoModpack...");
 			initializeConstants();
 			loadConfigs();
+			DetachedUpdateHelper.consumeResult();
+			DetachedUpdateHelper.cleanupOldHelperJars();
 			recoverPendingTransaction();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) importBootstrap();
 			updateAll();
@@ -57,7 +58,7 @@ public class Preload {
 	}
 
 	private void recoverPendingTransaction() throws IOException {
-		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER || !Files.exists(transactionFile)) return;
+		if (!Files.exists(transactionFile)) return;
 
 		UpdateTransaction transaction;
 		try {
@@ -68,24 +69,9 @@ public class Preload {
 			return;
 		}
 
-		Path modpackDirectory;
+		UpdateTransactionExecutor executor;
 		try {
-			modpackDirectory = Path.of(transaction.canonicalModpackDirectory).toAbsolutePath().normalize();
-		} catch (RuntimeException e) {
-			quarantineTransaction(e);
-			return;
-		}
-		Path installedManifest = modpackDirectory.resolve(hostModpackContentFile.getFileName());
-		UpdateTransactionExecutor executor = new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(SmartFileUtils.CWD, modpackDirectory, MODS_DIR,
-				storeDir, automodpackDir, transactionFile, transactionResultFile, clientConfigFile, clientDeletionTimeStamps, installedManifest, recovered -> {
-					if (!recovered.restartReasons.contains(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION)) return;
-					Jsons.ModpackContentFields manifest = recovered.targetManifest();
-					if (!LauncherVersionSwapper.swapLoaderVersion(manifest.loader, manifest.loaderVersion))
-						throw new IOException("Planned launcher loader-version change is no longer applicable");
-					if (LauncherVersionSwapper.requiresLoaderVersionSwap(manifest.loader, manifest.loaderVersion))
-						throw new IOException("Planned launcher loader-version change did not converge");
-				}));
-		try {
+			executor = UpdateTransactionSupport.executor(transaction);
 			executor.validate(transaction);
 		} catch (IOException | RuntimeException e) {
 			quarantineTransaction(e);
@@ -93,9 +79,18 @@ public class Preload {
 		}
 
 		UpdateTransactionExecutor.Execution execution = executor.recover(transaction);
-		if (!execution.success()) throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
-		clientConfig = ConfigTools.read(clientConfigFile, Jsons.ClientConfigFieldsV3.class)
-				.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
+		if (!execution.success()) {
+			DetachedUpdateHelper.launch(transaction);
+			Path modpackDirectory = transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+					? Path.of(transaction.canonicalModpackDirectory).toAbsolutePath().normalize()
+					: null;
+			new ReLauncher(modpackDirectory, UpdateType.UPDATE, null).restart(true);
+			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
+		}
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
+			clientConfig = ConfigTools.read(clientConfigFile, Jsons.ClientConfigFieldsV3.class)
+					.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
+		}
 		LOGGER.info("Recovered update transaction {}", transaction.transactionId);
 	}
 
