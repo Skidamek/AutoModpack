@@ -18,7 +18,12 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.update.UpdateDeferredException;
+import pl.skidam.automodpack_core.update.UpdatePlan;
+import pl.skidam.automodpack_core.update.UpdateTransaction;
+import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.*;
+import pl.skidam.automodpack_core.utils.launchers.LauncherVersionSwapper;
 import pl.skidam.automodpack_loader_core.client.CertificateTrustStore;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -33,6 +38,7 @@ public class Preload {
 			LOGGER.info("Prelaunching AutoModpack...");
 			initializeConstants();
 			loadConfigs();
+			recoverPendingTransaction();
 			if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.CLIENT) importBootstrap();
 			updateAll();
 			LOGGER.info("AutoModpack prelaunched! took " + (System.currentTimeMillis() - start) + "ms");
@@ -48,6 +54,56 @@ public class Preload {
 		} catch (IOException e) {
 			throw new ConfigTools.ConfigException("Failed to save configuration " + path.toAbsolutePath().normalize(), e);
 		}
+	}
+
+	private void recoverPendingTransaction() throws IOException {
+		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER || !Files.exists(transactionFile)) return;
+
+		UpdateTransaction transaction;
+		try {
+			transaction = ConfigTools.read(transactionFile, UpdateTransaction.class)
+					.orElseThrow(() -> new ConfigTools.ConfigException("Transaction file is missing"));
+		} catch (RuntimeException e) {
+			quarantineTransaction(e);
+			return;
+		}
+
+		Path modpackDirectory;
+		try {
+			modpackDirectory = Path.of(transaction.canonicalModpackDirectory).toAbsolutePath().normalize();
+		} catch (RuntimeException e) {
+			quarantineTransaction(e);
+			return;
+		}
+		Path installedManifest = modpackDirectory.resolve(hostModpackContentFile.getFileName());
+		UpdateTransactionExecutor executor = new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(SmartFileUtils.CWD, modpackDirectory, MODS_DIR,
+				storeDir, automodpackDir, transactionFile, transactionResultFile, clientConfigFile, clientDeletionTimeStamps, installedManifest, recovered -> {
+					if (!recovered.restartReasons.contains(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION)) return;
+					Jsons.ModpackContentFields manifest = recovered.targetManifest();
+					if (!LauncherVersionSwapper.swapLoaderVersion(manifest.loader, manifest.loaderVersion))
+						throw new IOException("Planned launcher loader-version change is no longer applicable");
+					if (LauncherVersionSwapper.requiresLoaderVersionSwap(manifest.loader, manifest.loaderVersion))
+						throw new IOException("Planned launcher loader-version change did not converge");
+				}));
+		try {
+			executor.validate(transaction);
+		} catch (IOException | RuntimeException e) {
+			quarantineTransaction(e);
+			return;
+		}
+
+		UpdateTransactionExecutor.Execution execution = executor.recover(transaction);
+		if (!execution.success()) throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
+		clientConfig = ConfigTools.read(clientConfigFile, Jsons.ClientConfigFieldsV3.class)
+				.orElseThrow(() -> new ConfigTools.ConfigException("Recovered client config is missing"));
+		LOGGER.info("Recovered update transaction {}", transaction.transactionId);
+	}
+
+	private void quarantineTransaction(Exception reason) throws IOException {
+		Files.createDirectories(privateDir);
+		Path quarantine = privateDir.resolve("update-transaction.invalid-" + UUID.randomUUID() + ".json");
+		Files.move(transactionFile, quarantine, StandardCopyOption.REPLACE_EXISTING);
+		LOGGER.error("Quarantined invalid update transaction at {}", quarantine.toAbsolutePath().normalize(), reason);
 	}
 
 	private void updateAll() {

@@ -2,61 +2,50 @@ package pl.skidam.automodpack_core.utils.launchers;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.function.Predicate;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+
+import pl.skidam.automodpack_core.config.ConfigTools;
 
 public class LauncherVersionSwapper {
 
-	private static final Gson GSON = new GsonBuilder().create();
-
-	// Returns true if any launcher metadata was updated
-	public static boolean swapLoaderVersion(String serverLoaderType, String serverLoaderVersion) {
+	public static boolean requiresLoaderVersionSwap(String serverLoaderType, String serverLoaderVersion) {
 		if (!clientConfig.syncLoaderVersion) return false;
-		if (serverLoaderType == null || serverLoaderVersion == null) return false;
-
-		if (!serverLoaderType.equalsIgnoreCase(LOADER)) return false;
-
-		boolean updated = false;
-
-		if (MultiMCMeta.updateLoaderVersion(serverLoaderType, serverLoaderVersion)) updated = true;
-		if (PandoraMeta.updateLoaderVersion(serverLoaderVersion)) updated = true;
-
-		// TODO: Add more launchers here
-
-		return updated;
+		if (serverLoaderType == null || serverLoaderVersion == null || !serverLoaderType.equalsIgnoreCase(LOADER)) return false;
+		return MultiMCMeta.requiresLoaderVersionUpdate(serverLoaderType, serverLoaderVersion) || PandoraMeta.requiresLoaderVersionUpdate(serverLoaderVersion);
 	}
 
-	/**
-	 * Shared utility to safely read, modify, and write a JSON file.
-	 *
-	 * @param path
-	 *            The path to the JSON file.
-	 * @param modifier
-	 *            A predicate that modifies the JsonObject. It must return true if changes were made (triggering a save), false otherwise.
-	 */
-	public static boolean modifyJson(Path path, Predicate<JsonObject> modifier) {
-		if (!Files.exists(path)) return false;
+	public static boolean swapLoaderVersion(String serverLoaderType, String serverLoaderVersion) throws IOException {
+		if (!clientConfig.syncLoaderVersion || serverLoaderType == null || serverLoaderVersion == null || !serverLoaderType.equalsIgnoreCase(LOADER)) return false;
+		boolean multiMcApplicable = MultiMCMeta.updateLoaderVersion(serverLoaderType, serverLoaderVersion);
+		boolean pandoraApplicable = PandoraMeta.updateLoaderVersion(serverLoaderVersion);
+		return multiMcApplicable || pandoraApplicable;
+	}
 
+	static JsonObject readJson(Path path) {
 		try {
-			String content = Files.readString(path);
-			JsonObject json = GSON.fromJson(content, JsonObject.class);
-
-			if (json == null) return false;
-
-			// modifier.test(json) executes the modification logic and returns true if we need to save
-			if (modifier.test(json)) {
-				Files.writeString(path, GSON.toJson(json));
-				return true;
-			}
-		} catch (Exception e) {
-			LOGGER.error("Failed to update launcher metadata at: {}", path, e);
+			return readJsonStrict(path);
+		} catch (IOException e) {
+			LOGGER.error("Failed to read launcher metadata at: {}", path, e);
+			return null;
 		}
+	}
 
-		return false;
+	static JsonObject readJsonStrict(Path path) throws IOException {
+		if (!Files.exists(path)) return null;
+		if (!Files.isRegularFile(path)) throw new IOException("Launcher metadata is not a regular file: " + path);
+		try {
+			return ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), JsonObject.class);
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid launcher metadata JSON: " + path, e);
+		}
+	}
+
+	static void writeJsonAtomic(Path path, JsonObject json) throws IOException {
+		ConfigTools.writeAtomic(path, json);
 	}
 }

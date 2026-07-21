@@ -1,5 +1,9 @@
 package pl.skidam.automodpack_core.utils.launchers;
 
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.Constants.PRELOAD_TIME;
+
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
@@ -7,8 +11,6 @@ import java.util.Map;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-
-import pl.skidam.automodpack_core.Constants;
 
 // MultiMC and forks like Prism and forks of forks like Fjord etc.
 public class MultiMCMeta {
@@ -18,52 +20,86 @@ public class MultiMCMeta {
 	private static final Map<String, String> LOADER_UID_MAP = Map.of("fabric", "net.fabricmc.fabric-loader", "quilt", "org.quiltmc.quilt-loader", "forge",
 			"net.minecraftforge", "neoforge", "net.neoforged");
 
-	public static boolean updateLoaderVersion(String loaderType, String newVersion) {
+	public static boolean requiresLoaderVersionUpdate(String loaderType, String newVersion) {
 		String targetUid = LOADER_UID_MAP.get(loaderType.toLowerCase(Locale.ROOT));
 		if (targetUid == null) return false;
+		try {
+			return needsUpdate(LauncherVersionSwapper.readJson(MMC_PACK_PATH), targetUid, newVersion);
+		} catch (RuntimeException e) {
+			LOGGER.warn("Ignoring unsupported MultiMC/Prism launcher metadata", e);
+			return false;
+		}
+	}
 
-		return LauncherVersionSwapper.modifyJson(MMC_PACK_PATH, json -> {
-			if (!json.has("formatVersion") || json.get("formatVersion").getAsInt() != 1) return false;
-
-			JsonArray components = json.getAsJsonArray("components");
-			if (components == null) return false;
-
-			boolean changed = false;
+	public static boolean updateLoaderVersion(String loaderType, String newVersion) throws IOException {
+		String targetUid = LOADER_UID_MAP.get(loaderType.toLowerCase(Locale.ROOT));
+		if (targetUid == null) return false;
+		JsonObject json = LauncherVersionSwapper.readJsonStrict(MMC_PACK_PATH);
+		try {
+			if (!isSupported(json)) return false;
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid MultiMC/Prism launcher metadata", e);
+		}
+		JsonArray components = json.getAsJsonArray("components");
+		boolean applicable = false;
+		boolean changed = false;
+		try {
 			for (JsonElement element : components) {
 				JsonObject component = element.getAsJsonObject();
-				if (component.has("uid") && component.get("uid").getAsString().equals(targetUid)) {
-
-					String currentVersion = component.has("version") ? component.get("version").getAsString() : null;
-
-					if (currentVersion == null) continue;
-
-					if (!newVersion.equals(currentVersion)) {
-						component.addProperty("version", newVersion);
-
-						// What's this for?!
-						if (component.has("cachedVersion")) component.addProperty("cachedVersion", newVersion);
-
-						changed = true;
-					}
+				if (!component.has("uid") || !targetUid.equals(component.get("uid").getAsString()) || !component.has("version")) continue;
+				applicable = true;
+				if (!newVersion.equals(component.get("version").getAsString())) {
+					component.addProperty("version", newVersion);
+					changed = true;
+				}
+				if (component.has("cachedVersion") && !newVersion.equals(component.get("cachedVersion").getAsString())) {
+					component.addProperty("cachedVersion", newVersion);
+					changed = true;
 				}
 			}
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid MultiMC/Prism launcher metadata", e);
+		}
+		if (!applicable) return false;
+		if (changed) {
+			waitForLauncherWriteWindow();
+			LauncherVersionSwapper.writeJsonAtomic(MMC_PACK_PATH, json);
+			LOGGER.info("MultiMC/Prism: Updated loader version to {}", newVersion);
+		}
+		JsonObject persisted = LauncherVersionSwapper.readJsonStrict(MMC_PACK_PATH);
+		try {
+			if (needsUpdate(persisted, targetUid, newVersion)) throw new IOException("MultiMC/Prism loader-version metadata did not converge");
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid persisted MultiMC/Prism launcher metadata", e);
+		}
+		return true;
+	}
 
-			if (changed) {
-				var preloadDeltaTime = System.currentTimeMillis() - Constants.PRELOAD_TIME;
-				var delayRequired = DELAY - preloadDeltaTime;
-				if (delayRequired > 0) {
-					try { // Hack for prism, it reverts our changes if we write them too quickly after launching the game?!?
-						Constants.LOGGER.info("Simulating a {} sec delay to avoid MultiMC/Prism overwrite issue...", delayRequired / 1000);
-						Thread.sleep(delayRequired);
-					} catch (InterruptedException e) {
-						Constants.LOGGER.error("Interrupted while simulating delay", e);
-					}
-				}
-				json.add("components", components);
-				Constants.LOGGER.info("MultiMC/Prism: Updated loader version to {}", newVersion);
-			}
+	private static boolean isSupported(JsonObject json) {
+		return json != null && json.has("formatVersion") && json.get("formatVersion").getAsInt() == 1 && json.has("components")
+				&& json.get("components").isJsonArray();
+	}
 
-			return changed;
-		});
+	private static boolean needsUpdate(JsonObject json, String targetUid, String newVersion) {
+		if (!isSupported(json)) return false;
+		for (JsonElement element : json.getAsJsonArray("components")) {
+			JsonObject component = element.getAsJsonObject();
+			if (!component.has("uid") || !targetUid.equals(component.get("uid").getAsString()) || !component.has("version")) continue;
+			if (!newVersion.equals(component.get("version").getAsString())) return true;
+			if (component.has("cachedVersion") && !newVersion.equals(component.get("cachedVersion").getAsString())) return true;
+		}
+		return false;
+	}
+
+	private static void waitForLauncherWriteWindow() throws IOException {
+		long delayRequired = DELAY - (System.currentTimeMillis() - PRELOAD_TIME);
+		if (delayRequired <= 0) return;
+		LOGGER.info("Simulating a {} sec delay to avoid MultiMC/Prism overwrite issue...", delayRequired / 1000);
+		try {
+			Thread.sleep(delayRequired);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Interrupted before MultiMC/Prism metadata could be persisted", e);
+		}
 	}
 }

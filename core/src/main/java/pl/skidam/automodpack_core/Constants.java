@@ -53,6 +53,9 @@ public class Constants {
 	public static final Path serverSecretsFile = privateDir.resolve("automodpack-secrets.json");
 	public static final Path knownHostsFile = privateDir.resolve("automodpack-known-hosts.json");
 	public static final Path knownHostsBootstrapFile = automodpackDir.resolve("automodpack-bootstrap.json");
+	public static final Path transactionFile = privateDir.resolve("update-transaction.json");
+	public static final Path transactionResultFile = privateDir.resolve("update-transaction-result.json");
+	public static final Path helperDir = cacheDir.resolve("update-helper");
 	public static final Path serverCertFile = privateDir.resolve("cert.crt");
 	public static final Path serverPrivateKeyFile = privateDir.resolve("key.pem");
 

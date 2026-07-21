@@ -19,8 +19,10 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
+import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileInspection;
@@ -79,9 +81,6 @@ public class ModpackUpdater {
 				return;
 			}
 
-			// Create directories if they don't exist
-			if (!Files.exists(modpackDir)) Files.createDirectories(modpackDir);
-
 			// Handle new modpack
 			if (!Files.exists(modpackContentFile)) {
 				if (preload) {
@@ -98,9 +97,8 @@ public class ModpackUpdater {
 				if (result.requiresUpdate()) {
 					startUpdate(result.filesToUpdate());
 				} else {
-					ModpackContentTools.write(modpackContentFile, serverModpackContent);
 					try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-						checkAndLoadModpack(cache);
+						checkAndLoadModpack(cache, serverModpackContent);
 					}
 				}
 			}
@@ -260,11 +258,8 @@ public class ModpackUpdater {
 				throw e;
 			}
 
-			LegacyClientCacheUtils.deleteDummyFiles();
-
 			ApplyResult applyResult = applyModpack(cache, serverModpackContent);
-			LOGGER.info("Done, saving {}", modpackContentFile);
-			ModpackContentTools.write(modpackContentFile, serverModpackContent);
+			LegacyClientCacheUtils.deleteDummyFiles();
 
 			if (preload) {
 				LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
@@ -454,11 +449,10 @@ public class ModpackUpdater {
 	// this is run every time we modpack is updated
 	private ApplyResult applyModpack(FileMetadataCache cache, Jsons.ModpackContentFields modpackContent) throws Exception {
 		UpdatePlan plan = buildPlan(cache, modpackContent);
-		executePlan(plan, cache);
+		executePlan(plan, modpackContent);
 
 		EnumSet<RestartReason> restartReasons = plan.restartReasons().stream().map(reason -> RestartReason.valueOf(reason.name()))
 				.collect(Collectors.toCollection(() -> EnumSet.noneOf(RestartReason.class)));
-		if (LauncherVersionSwapper.swapLoaderVersion(modpackContent.loader, modpackContent.loaderVersion)) restartReasons.add(RestartReason.CHANGED_LOADER_VERSION);
 		ApplyResult result = new ApplyResult(restartReasons);
 		if (result.requiresRestart()) LOGGER.info("Restart required because: {}", String.join(", ", result.reasonDescriptions()));
 		return result;
@@ -476,7 +470,12 @@ public class ModpackUpdater {
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, clientConfig.allowRemoteNonModpackDeletions,
 				LegacyClientCacheUtils.getEvaluatedDeletionTimestamps(), forceCopyServices, targetMods, standardMods, nestedCopies, plannedConfig));
 		reportPlanWarnings(plan.warnings());
-		return plan;
+		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(target.loader, target.loaderVersion)) return plan;
+		Set<UpdatePlan.RestartReason> restartReasons = EnumSet.noneOf(UpdatePlan.RestartReason.class);
+		restartReasons.addAll(plan.restartReasons());
+		restartReasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
+		return new UpdatePlan(plan.modpackId(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(), plan.plannedDeletionTimestamps(),
+				restartReasons, plan.warnings());
 	}
 
 	private void reportPlanWarnings(List<UpdatePlan.Warning> warnings) {
@@ -571,43 +570,44 @@ public class ModpackUpdater {
 		return copies;
 	}
 
-	private void executePlan(UpdatePlan plan, FileMetadataCache cache) throws IOException {
-		for (UpdatePlan.Operation operation : plan.operations()) {
-			Path target = resolveOperation(operation);
-			switch (operation.operation()) {
-				case CREATE_DIRECTORY -> Files.createDirectories(target);
-				case INSTALL_OBJECT -> {
-					Path source = storeDir.resolve(operation.expectedObjectHash());
-					SmartFileUtils.copyVerifiedAtomic(source, target, operation.expectedSize(), operation.expectedObjectHash());
-					cache.overwriteCache(target, operation.expectedObjectHash());
-				}
-				case DELETE -> {
-					if (operation.expectedExistingHash() != null && Files.exists(target)
-							&& !operation.expectedExistingHash().equalsIgnoreCase(cache.getHashOrNull(target)))
-						throw new IOException("Deletion target changed after planning: " + target);
-					Files.deleteIfExists(target);
-				}
-				case REMOVE_EMPTY_DIRECTORY -> {
-					if (SmartFileUtils.isEmptyDirectory(target)) Files.deleteIfExists(target);
-				}
-			}
-		}
-		ModpackUtils.persistPlannedClientConfig(plan.plannedClientConfig());
-		for (String timestamp : plan.plannedDeletionTimestamps()) LegacyClientCacheUtils.markTimestampAsEvaluated(timestamp);
-		if (!plan.plannedDeletionTimestamps().isEmpty()) LegacyClientCacheUtils.saveDeletedFilesTimestamps();
+	private void executePlan(UpdatePlan plan, Jsons.ModpackContentFields targetManifest) throws IOException {
+		ensurePlanObjects(plan, targetManifest);
+		UpdateTransactionExecutor.Execution execution = transactionExecutor().commit(plan, targetManifest);
+		if (!execution.success())
+			throw new UpdateDeferredException(execution.transaction().transactionId, execution.blockedPath(), execution.message());
+		clientConfig = plan.plannedClientConfig();
 	}
 
-	private Path resolveOperation(UpdatePlan.Operation operation) {
-		Path root = switch (operation.root()) {
-			case MODPACK_DIR -> modpackDir;
-			case GAME_DIR -> SmartFileUtils.CWD;
-			case MODS_DIR -> MODS_DIR;
-			case STORE_DIR -> storeDir;
-			case AUTOMODPACK_DIR -> automodpackDir;
-		};
-		Path resolved = root.resolve(UpdatePlanner.normalize(operation.relativePath())).normalize();
-		if (!resolved.toAbsolutePath().normalize().startsWith(root.toAbsolutePath().normalize())) throw new IllegalArgumentException("Operation escapes root");
-		return resolved;
+	private void ensurePlanObjects(UpdatePlan plan, Jsons.ModpackContentFields targetManifest) throws IOException {
+		Map<String, Jsons.ModpackContentFields.ModpackContentItem> itemsByHash = targetManifest.list.stream()
+				.collect(Collectors.toMap(item -> item.sha1.toLowerCase(Locale.ROOT), item -> item, (first, second) -> first));
+		for (UpdatePlan.Operation operation : plan.operations()) {
+			if (operation.operation() != UpdatePlan.OperationType.INSTALL_OBJECT) continue;
+			Path storeFile = storeDir.resolve(operation.expectedObjectHash());
+			if (SmartFileUtils.isValidFile(storeFile, operation.expectedSize(), operation.expectedObjectHash())) continue;
+			var item = itemsByHash.get(operation.expectedObjectHash().toLowerCase(Locale.ROOT));
+			if (item == null) throw new IOException("Planned CAS object is unavailable: " + operation.expectedObjectHash());
+			Path source = SmartFileUtils.getPath(modpackDir, item.file);
+			if (!SmartFileUtils.isValidFile(source, operation.expectedSize(), operation.expectedObjectHash()))
+				source = "mod".equals(item.type)
+						? MODS_DIR.resolve(Path.of(UpdatePlanner.normalize(item.file)).getFileName())
+						: SmartFileUtils.getPathFromCWD(item.file);
+			if (!SmartFileUtils.isValidFile(source, operation.expectedSize(), operation.expectedObjectHash()))
+				throw new IOException("Required object is absent from CAS and verified live locations: " + operation.expectedObjectHash());
+			SmartFileUtils.copyVerifiedAtomic(source, storeFile, operation.expectedSize(), operation.expectedObjectHash());
+		}
+	}
+
+	private UpdateTransactionExecutor transactionExecutor() {
+		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(SmartFileUtils.CWD, modpackDir, MODS_DIR, storeDir, automodpackDir,
+				transactionFile, transactionResultFile, clientConfigFile, clientDeletionTimeStamps, modpackContentFile, transaction -> {
+					if (!transaction.restartReasons.contains(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION)) return;
+					Jsons.ModpackContentFields manifest = transaction.targetManifest();
+					if (!LauncherVersionSwapper.swapLoaderVersion(manifest.loader, manifest.loaderVersion))
+						throw new IOException("Planned launcher loader-version change is no longer applicable");
+					if (LauncherVersionSwapper.requiresLoaderVersionSwap(manifest.loader, manifest.loaderVersion))
+						throw new IOException("Planned launcher loader-version change did not converge");
+				}));
 	}
 
 	private enum RestartReason {
