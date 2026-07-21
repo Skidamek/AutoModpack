@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.config;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -9,7 +10,13 @@ public class ConfigUtils {
 
 	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config, boolean saveAfter) {
 		normalizeServerConfig(config);
-		if (saveAfter) ConfigTools.save(serverConfigFile, config);
+		if (saveAfter) {
+			try {
+				ConfigTools.writeAtomic(serverConfigFile, config);
+			} catch (IOException e) {
+				throw new ConfigTools.ConfigException("Failed to save server configuration", e);
+			}
+		}
 	}
 
 	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config) {

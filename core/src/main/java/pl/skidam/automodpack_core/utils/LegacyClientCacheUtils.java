@@ -18,9 +18,18 @@ public class LegacyClientCacheUtils {
 			0, 89, 116, -44, 86, -78, 127, 2, -18, 27, 0, 0, 0, 25, 0, 0, 0, 20, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 77, 69, 84, 65, 45, 73, 78,
 			70, 47, 77, 65, 78, 73, 70, 69, 83, 84, 46, 77, 70, -2, -54, 0, 0, 80, 75, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, 70, 0, 0, 0, 97, 0, 0, 0, 0, 0,};
 
-	private static final Jsons.ClientDummyFiles cacheDummyFiles = ConfigTools.load(clientDummyFilesFile, Jsons.ClientDummyFiles.class);
-	private static final Jsons.ClientDeletedNonModpackFilesTimestamps clientDeletedNonModpackFilesTimestamps = ConfigTools.load(clientDeletionTimeStamps,
-			Jsons.ClientDeletedNonModpackFilesTimestamps.class);
+	private static final Jsons.ClientDummyFiles cacheDummyFiles = ConfigTools.readOrCreate(clientDummyFilesFile, Jsons.ClientDummyFiles.class,
+			Jsons.ClientDummyFiles::new);
+	private static final Jsons.ClientDeletedNonModpackFilesTimestamps clientDeletedNonModpackFilesTimestamps = ConfigTools.readOrCreate(clientDeletionTimeStamps,
+			Jsons.ClientDeletedNonModpackFilesTimestamps.class, Jsons.ClientDeletedNonModpackFilesTimestamps::new);
+
+	private static void write(Path path, Object value) {
+		try {
+			ConfigTools.writeAtomic(path, value);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to save client cache state", e);
+		}
+	}
 
 	// Dummy
 	public static void deleteDummyFiles() {
@@ -57,7 +66,7 @@ public class LegacyClientCacheUtils {
 
 	public static void saveDummyFiles() {
 		if (cacheDummyFiles == null) return;
-		ConfigTools.save(clientDummyFilesFile, cacheDummyFiles);
+		write(clientDummyFilesFile, cacheDummyFiles);
 	}
 
 	// Non Modpack Deleted files timestamps
@@ -74,6 +83,6 @@ public class LegacyClientCacheUtils {
 
 	public static void saveDeletedFilesTimestamps() {
 		if (clientDeletedNonModpackFilesTimestamps == null) return;
-		ConfigTools.save(clientDeletionTimeStamps, clientDeletedNonModpackFilesTimestamps);
+		write(clientDeletionTimeStamps, clientDeletedNonModpackFilesTimestamps);
 	}
 }

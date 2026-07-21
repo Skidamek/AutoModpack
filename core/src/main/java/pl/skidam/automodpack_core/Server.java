@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashSet;
 
@@ -14,7 +15,7 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 public class Server {
 
 	// TODO Finish this class that it will be able to host the server without mod
-	public static void main(String[] args) {
+	public static void main(String[] args) throws IOException {
 
 		if (args.length < 1) {
 			LOGGER.error("Modpack directory not provided!");
@@ -35,11 +36,11 @@ public class Server {
 		serverConfigFile = modpackDir.resolve("automodpack-server.json");
 		serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
-		serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV2.class, Jsons.ServerConfigFieldsV2::new);
 		if (serverConfig != null) {
 			serverConfig.syncedFiles = new HashSet<>();
 			serverConfig.validateSecrets = false;
-			ConfigTools.save(serverConfigFile, serverConfig);
+			ConfigTools.writeAtomic(serverConfigFile, serverConfig);
 
 			if (serverConfig.bindPort == -1) {
 				LOGGER.error("Host port not set in config!");
@@ -47,13 +48,14 @@ public class Server {
 			}
 		}
 
-		Jsons.ServerCoreConfigFields serverCoreConfig = ConfigTools.load(serverCoreConfigFile, Jsons.ServerCoreConfigFields.class);
+		Jsons.ServerCoreConfigFields serverCoreConfig = ConfigTools.readOrCreate(serverCoreConfigFile, Jsons.ServerCoreConfigFields.class,
+				Jsons.ServerCoreConfigFields::new);
 		if (serverCoreConfig != null) {
 			AM_VERSION = serverCoreConfig.automodpackVersion;
 			LOADER = serverCoreConfig.loader;
 			LOADER_VERSION = serverCoreConfig.loaderVersion;
 			MC_VERSION = serverCoreConfig.mcVersion;
-			ConfigTools.save(serverCoreConfigFile, serverCoreConfig);
+			ConfigTools.writeAtomic(serverCoreConfigFile, serverCoreConfig);
 		}
 
 		Path mainModpackDir = modpackDir.resolve("main");

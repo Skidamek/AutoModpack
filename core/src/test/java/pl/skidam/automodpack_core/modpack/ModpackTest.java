@@ -18,6 +18,7 @@ import org.junit.jupiter.api.io.TempDir;
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 class ModpackTest {
 
@@ -110,7 +111,7 @@ class ModpackTest {
 				Set.of("/config/random-options.txt"), new HashSet<>(),
 				new ModpackExecutor().getExecutor());
 		content.create(null);
-		Jsons.ModpackContentFields firstManifest = ConfigTools.loadModpackContent(Constants.hostModpackContentFile);
+		Jsons.ModpackContentFields firstManifest = ModpackContentTools.read(Constants.hostModpackContentFile);
 		assertNotNull(firstManifest);
 		assertTrue(ModpackId.isValid(firstManifest.modpackId));
 		assertTrue(firstManifest.list.stream().filter(item -> item.file.equals("/config/random-options.txt")).findFirst().orElseThrow().overwriteEditable);
@@ -120,7 +121,7 @@ class ModpackTest {
 				Set.of("/config/random-options.txt"), new HashSet<>(),
 				new ModpackExecutor().getExecutor());
 		renamedContent.create(null);
-		Jsons.ModpackContentFields renamedManifest = ConfigTools.loadModpackContent(Constants.hostModpackContentFile);
+		Jsons.ModpackContentFields renamedManifest = ModpackContentTools.read(Constants.hostModpackContentFile);
 		assertNotNull(renamedManifest);
 		assertEquals(firstManifest.modpackId, renamedManifest.modpackId);
 		assertEquals("Renamed Pack", renamedManifest.modpackName);

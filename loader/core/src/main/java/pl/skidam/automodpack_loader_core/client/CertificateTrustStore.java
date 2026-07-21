@@ -2,6 +2,7 @@ package pl.skidam.automodpack_loader_core.client;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Objects;
@@ -72,6 +73,10 @@ public final class CertificateTrustStore {
 	}
 
 	private static void save() {
-		ConfigTools.save(knownHostsFile, knownHosts);
+		try {
+			ConfigTools.writeAtomic(knownHostsFile, knownHosts);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to save known hosts", e);
+		}
 	}
 }

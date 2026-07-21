@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_core.auth;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.Map;
@@ -25,12 +26,16 @@ public class SecretsStore {
 
 		public synchronized void load() {
 			if (db != null) return;
-			db = ConfigTools.load(configFile, Jsons.SecretsFields.class);
+			db = ConfigTools.readOrCreate(configFile, Jsons.SecretsFields.class, Jsons.SecretsFields::new);
 			if (db != null && db.secrets != null && !db.secrets.isEmpty()) cache.putAll(db.secrets);
 		}
 
 		public synchronized void save() {
-			ConfigTools.save(configFile, db);
+			try {
+				ConfigTools.writeAtomic(configFile, db);
+			} catch (IOException e) {
+				throw new ConfigTools.ConfigException("Failed to save secrets", e);
+			}
 		}
 
 		public Secrets.Secret get(String key) {

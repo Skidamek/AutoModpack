@@ -24,6 +24,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
+import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
@@ -124,7 +125,15 @@ public class DataC2SPacket {
 						return buildResponse(true);
 					}
 					var modpackContentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
-					if (Files.exists(modpackContentFile)) ConfigTools.saveModpackContent(modpackContentFile, serverModpackContent);
+					if (Files.exists(modpackContentFile)) {
+						try {
+							ModpackContentTools.write(modpackContentFile, serverModpackContent);
+						} catch (IOException e) {
+							LOGGER.error("Failed to save modpack content", e);
+							disconnectImmediately(handler);
+							return buildResponse(true);
+						}
+					}
 
 					if (selectedModpackChanged) {
 						disconnectImmediately(handler);

@@ -216,7 +216,7 @@ public class NettyServer {
 			}
 
 			try {
-				ConfigTools.save(serverConfigFile, serverConfig);
+				ConfigTools.writeAtomic(serverConfigFile, serverConfig);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}

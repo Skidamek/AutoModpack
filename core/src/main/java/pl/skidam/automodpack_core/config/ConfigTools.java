@@ -1,24 +1,70 @@
-
 package pl.skidam.automodpack_core.config;
 
-import static pl.skidam.automodpack_core.Constants.*;
-
+import java.io.IOException;
 import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+import java.util.Optional;
+import java.util.function.Supplier;
 
-import com.google.gson.*;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSerializationContext;
+import com.google.gson.JsonSerializer;
 
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
-public class ConfigTools {
-
-	public static Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
+public final class ConfigTools {
+	public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting()
 			.registerTypeAdapter(InetSocketAddress.class, new InetSocketAddressTypeAdapter())
 			.registerTypeAdapter(Jsons.ConnectionInfo.class, new ConnectionInfoTypeAdapter())
 			.registerTypeAdapter(Jsons.CertificateTrustEntry.class, new CertificateTrustEntryTypeAdapter()).create();
+
+	private ConfigTools() {}
+
+	public static <T> Optional<T> read(Path path, Class<T> type) {
+		if (!Files.isRegularFile(path)) return Optional.empty();
+		try {
+			return Optional.ofNullable(parse(Files.readString(path, StandardCharsets.UTF_8), type));
+		} catch (IOException e) {
+			throw new ConfigException("Failed to read configuration " + path.toAbsolutePath().normalize(), e);
+		}
+	}
+
+	public static <T> T readOrCreate(Path path, Class<T> type, Supplier<T> defaults) {
+		Optional<T> existing = read(path, type);
+		if (existing.isPresent()) return existing.get();
+		T value = defaults.get();
+		try {
+			writeAtomic(path, value);
+			return value;
+		} catch (IOException e) {
+			throw new ConfigException("Failed to create configuration " + path.toAbsolutePath().normalize(), e);
+		}
+	}
+
+	public static <T> T parse(String json, Class<T> type) {
+		if (json == null) throw new ConfigException("Configuration JSON is null");
+		try {
+			T value = GSON.fromJson(json, type);
+			if (value == null) throw new ConfigException("Configuration JSON produced null for " + type.getSimpleName());
+			return value;
+		} catch (JsonParseException e) {
+			throw new ConfigException("Invalid JSON for " + type.getSimpleName(), e);
+		}
+	}
+
+	public static void writeAtomic(Path path, Object value) throws IOException {
+		AtomicFileWriter.write(path, GSON.toJson(value).getBytes(StandardCharsets.UTF_8));
+	}
 
 	private static class InetSocketAddressTypeAdapter implements JsonSerializer<InetSocketAddress> {
 		@Override
@@ -61,121 +107,21 @@ public class ConfigTools {
 
 	private static class CertificateTrustEntryTypeAdapter implements JsonDeserializer<Jsons.CertificateTrustEntry> {
 		@Override
-		public Jsons.CertificateTrustEntry deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException {
+		public Jsons.CertificateTrustEntry deserialize(JsonElement json, Type type, JsonDeserializationContext context) throws JsonParseException {
 			if (json.isJsonPrimitive()) return new Jsons.CertificateTrustEntry(json.getAsString(), "TOFU");
-			JsonObject object = json.getAsJsonObject();
+			var object = json.getAsJsonObject();
 			String reason = object.has("reason") ? object.get("reason").getAsString() : "TOFU";
 			return new Jsons.CertificateTrustEntry(object.get("fingerprint").getAsString(), reason);
 		}
 	}
 
-	public static <T> T getConfigObject(Class<T> configClass) {
-		T object = null;
-		try {
-			object = configClass.getConstructor().newInstance();
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		return object;
-	}
-
-	// Config stuff
-	public static <T> T softLoad(Path configFile, Class<T> configClass) {
-		try {
-			if (Files.isRegularFile(configFile)) {
-				String json = Files.readString(configFile);
-				return GSON.fromJson(json, configClass);
-			}
-		} catch (Exception ignored) {
-		}
-		return null;
-	}
-
-	public static <T> T load(Path configFile, Class<T> configClass) {
-		try {
-			if (!Files.isDirectory(configFile.getParent())) Files.createDirectories(configFile.getParent());
-
-			if (Files.isRegularFile(configFile)) {
-				String json = Files.readString(configFile);
-				T obj = GSON.fromJson(json, configClass);
-				if (obj == null) {
-					LOGGER.error("Parsed object is null. Possible JSON syntax error in file: " + configFile);
-					return null;
-				}
-
-				save(configFile, obj);
-				return obj;
-			}
-		} catch (JsonSyntaxException e) {
-			LOGGER.error("JSON syntax error while loading config! {} {}", configClass, e.getMessage());
-			LOGGER.error("This error most often happens when you e.g. forget to put a comma between fields in JSON file. Check the file: "
-					+ configFile.toAbsolutePath().normalize());
-			return null;
-		} catch (Exception e) {
-			LOGGER.error("Couldn't load config! " + configClass);
-			e.printStackTrace();
+	public static class ConfigException extends RuntimeException {
+		public ConfigException(String message) {
+			super(message);
 		}
 
-		try { // create new config
-			T obj = getConfigObject(configClass);
-			save(configFile, obj);
-			return obj;
-		} catch (Exception e) {
-			LOGGER.error("Invalid config class! " + configClass);
-			e.printStackTrace();
-			return null;
-		}
-	}
-
-	public static <T> T load(String json, Class<T> configClass) {
-		try {
-			if (json != null) return GSON.fromJson(json, configClass);
-		} catch (Exception e) {
-			LOGGER.error("Couldn't load config! " + configClass);
-			e.printStackTrace();
-		}
-
-		return null;
-	}
-
-	public static boolean save(Path configFile, Object configObject) {
-		if (clientConfigOverride != null) return false;
-
-		try {
-			if (!Files.isDirectory(configFile.getParent())) Files.createDirectories(configFile.getParent());
-
-			Files.writeString(configFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-			return true;
-		} catch (Exception e) {
-			LOGGER.error("Couldn't save config! " + configObject.getClass());
-			e.printStackTrace();
-			return false;
-		}
-	}
-
-	// Modpack content stuff
-	public static Jsons.ModpackContentFields loadModpackContent(Path modpackContentFile) {
-		try {
-			if (Files.isRegularFile(modpackContentFile)) {
-				String json = Files.readString(modpackContentFile);
-				return GSON.fromJson(json, Jsons.ModpackContentFields.class);
-			}
-		} catch (Exception e) {
-			LOGGER.error("Couldn't load modpack content! {}", modpackContentFile.toAbsolutePath().normalize(), e);
-		}
-		return null;
-	}
-
-	public static boolean saveModpackContent(Path modpackContentFile, Jsons.ModpackContentFields configObject) {
-		try {
-			if (!Files.isDirectory(modpackContentFile.getParent())) Files.createDirectories(modpackContentFile.getParent());
-
-			Files.writeString(modpackContentFile, GSON.toJson(configObject), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-			return true;
-		} catch (Exception e) {
-			LOGGER.error("Couldn't save modpack content! " + configObject.getClass());
-			e.printStackTrace();
-			return false;
+		public ConfigException(String message, Throwable cause) {
+			super(message, cause);
 		}
 	}
 }

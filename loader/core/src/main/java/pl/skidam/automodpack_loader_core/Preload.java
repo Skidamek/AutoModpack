@@ -42,6 +42,14 @@ public class Preload {
 		}
 	}
 
+	private static void writeConfig(Path path, Object value) {
+		try {
+			ConfigTools.writeAtomic(path, value);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to save configuration " + path.toAbsolutePath().normalize(), e);
+		}
+	}
+
 	private void updateAll() {
 		if (LOADER_MANAGER.getEnvironmentType() == LoaderManagerService.EnvironmentType.SERVER) {
 			SelfUpdater.update();
@@ -53,7 +61,7 @@ public class Preload {
 			if (!ModpackId.isValid(clientConfig.selectedModpackId)) {
 				LOGGER.error("Ignoring invalid selected modpack ID: {}", clientConfig.selectedModpackId);
 				clientConfig.selectedModpackId = "";
-				ConfigTools.save(clientConfigFile, clientConfig);
+				writeConfig(clientConfigFile, clientConfig);
 			} else {
 				storedConnectionInfo = clientConfig.modpackConnections.get(clientConfig.selectedModpackId);
 				selectedModpackDir = ModpackUtils.getModpackPath(clientConfig.selectedModpackId);
@@ -85,7 +93,7 @@ public class Preload {
 		}
 
 		var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(connectionInfo, secret, false);
-		var latestModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+		var latestModpackContent = ModpackContentTools.read(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 		if (optionalLatestModpackContent.isPresent()) {
 			latestModpackContent = optionalLatestModpackContent.get();
 			if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
@@ -103,7 +111,7 @@ public class Preload {
 
 	private void loadLocalModpack(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {
 		LegacyClientCacheUtils.deleteDummyFiles();
-		var localModpackContent = ConfigTools.loadModpackContent(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
+		var localModpackContent = ModpackContentTools.read(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
 		try {
 			new ModpackUpdater(localModpackContent, connectionInfo, secret, selectedModpackDir).loadModpack();
 		} catch (Exception e) {
@@ -140,16 +148,18 @@ public class Preload {
 
 	private void loadConfigs() {
 		long startTime = System.currentTimeMillis();
+		boolean shouldSaveClientConfig = false;
 
 		// load client config
 		if (clientConfigOverride == null) {
-			var clientConfigVersion = ConfigTools.softLoad(clientConfigFile, Jsons.VersionConfigField.class);
+			var clientConfigVersion = ConfigTools.read(clientConfigFile, Jsons.VersionConfigField.class).orElse(null);
 			if (clientConfigVersion != null && clientConfigVersion.DO_NOT_CHANGE_IT < 3) {
 				clientConfig = new Jsons.ClientConfigFieldsV3();
+				shouldSaveClientConfig = true;
 				LOGGER.warn("Legacy client config detected. Stable modpack IDs require a one-time modpack redownload.");
 				LOGGER.warn("Old name-based modpack directories were left untouched and can be removed manually after the new modpack is installed.");
 			} else {
-				clientConfig = ConfigTools.load(clientConfigFile, Jsons.ClientConfigFieldsV3.class);
+				clientConfig = ConfigTools.readOrCreate(clientConfigFile, Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
 			}
 		} else {
 			// TODO: when connecting to the new server which provides modpack different modpack, ask the user if they want, stop using overrides
@@ -157,19 +167,19 @@ public class Preload {
 			LOGGER.warn("Using client config overrides! Editing the {} file will have no effect", clientConfigFile);
 			LOGGER.warn("Remove the {} file from inside the jar or remove and download fresh {} mod jar from modrinth/curseforge",
 					clientConfigFileOverrideResource, MOD_ID);
-			var overrideVersion = ConfigTools.load(clientConfigOverride, Jsons.VersionConfigField.class);
+			var overrideVersion = ConfigTools.parse(clientConfigOverride, Jsons.VersionConfigField.class);
 			if (overrideVersion == null || overrideVersion.DO_NOT_CHANGE_IT < 3) {
 				throw new IllegalStateException("Legacy client config overrides are unsupported; install an unmodified AutoModpack jar");
 			}
-			clientConfig = ConfigTools.load(clientConfigOverride, Jsons.ClientConfigFieldsV3.class);
+			clientConfig = ConfigTools.parse(clientConfigOverride, Jsons.ClientConfigFieldsV3.class);
 		}
 
-		var serverConfigVersion = ConfigTools.softLoad(serverConfigFile, Jsons.VersionConfigField.class);
+		var serverConfigVersion = ConfigTools.read(serverConfigFile, Jsons.VersionConfigField.class).orElse(null);
 		if (serverConfigVersion != null) {
 			if (serverConfigVersion.DO_NOT_CHANGE_IT == 1) {
 				// Update the configs schemes to make this update not as breaking as it could be
-				var serverConfigV1 = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV1.class);
-				var serverConfigV2 = ConfigTools.softLoad(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+				var serverConfigV1 = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV1.class).orElse(null);
+				var serverConfigV2 = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV2.class).orElse(null);
 				if (serverConfigV1 != null && serverConfigV2 != null) {
 					serverConfigVersion.DO_NOT_CHANGE_IT = 2;
 					serverConfigV2.DO_NOT_CHANGE_IT = 2;
@@ -189,36 +199,43 @@ public class Preload {
 					}
 				}
 
-				ConfigTools.save(serverConfigFile, serverConfigV2);
+				writeConfig(serverConfigFile, serverConfigV2);
 				LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
 			}
 		}
 
 		// load server config
-		serverConfig = ConfigTools.load(serverConfigFile, Jsons.ServerConfigFieldsV2.class);
+		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV2.class, Jsons.ServerConfigFieldsV2::new);
 
 		if (serverConfig != null) {
-			// Add current loader to the list
+			String serverConfigBefore = ConfigTools.GSON.toJson(serverConfig);
 			if (serverConfig.acceptedLoaders == null) {
-				serverConfig.acceptedLoaders = Set.of(LOADER);
+				serverConfig.acceptedLoaders = new HashSet<>(Set.of(LOADER));
 			} else {
 				serverConfig.acceptedLoaders.add(LOADER);
 			}
 
 			ConfigUtils.normalizeServerConfig(serverConfig);
-
-			// Save changes
-			ConfigTools.save(serverConfigFile, serverConfig);
+			if (!serverConfigBefore.equals(ConfigTools.GSON.toJson(serverConfig))) writeConfig(serverConfigFile, serverConfig);
 		}
 
 		if (clientConfig != null) {
-			if (clientConfig.modpackConnections == null) clientConfig.modpackConnections = new HashMap<>();
-			if (clientConfig.selectedModpackId == null) clientConfig.selectedModpackId = "";
-			if (clientConfigOverride == null) ConfigTools.save(clientConfigFile, clientConfig);
+			if (clientConfig.modpackConnections == null) {
+				clientConfig.modpackConnections = new HashMap<>();
+				shouldSaveClientConfig = true;
+			}
+			if (clientConfig.selectedModpackId == null) {
+				clientConfig.selectedModpackId = "";
+				shouldSaveClientConfig = true;
+			}
+			if (clientConfigOverride == null && shouldSaveClientConfig) writeConfig(clientConfigFile, clientConfig);
 		}
 
-		knownHosts = ConfigTools.load(knownHostsFile, Jsons.KnownHostsFields.class);
-		if (knownHosts != null && knownHosts.hosts == null) knownHosts.hosts = new HashMap<>();
+		knownHosts = ConfigTools.readOrCreate(knownHostsFile, Jsons.KnownHostsFields.class, Jsons.KnownHostsFields::new);
+		if (knownHosts != null && knownHosts.hosts == null) {
+			knownHosts.hosts = new HashMap<>();
+			writeConfig(knownHostsFile, knownHosts);
+		}
 
 		try {
 			Files.createDirectories(privateDir);

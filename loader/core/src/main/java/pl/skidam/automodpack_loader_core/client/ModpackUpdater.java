@@ -25,6 +25,7 @@ import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
+import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -134,7 +135,7 @@ public class ModpackUpdater {
 	private void checkAndLoadModpack(FileMetadataCache cache) throws Exception {
 		if (!Files.exists(modpackDir)) return;
 
-		Jsons.ModpackContentFields modpackContent = ConfigTools.loadModpackContent(modpackContentFile);
+		Jsons.ModpackContentFields modpackContent = ModpackContentTools.read(modpackContentFile);
 		if (modpackContent == null) throw new IllegalStateException("Failed to load modpack content");
 		checkAndLoadModpack(cache, modpackContent);
 	}
@@ -409,7 +410,7 @@ public class ModpackUpdater {
 				failedDownloads.putAll(failedDownloadsSecMap);
 				return false;
 			}
-			Jsons.ModpackContentFields installedContent = ConfigTools.loadModpackContent(modpackContentFile);
+			Jsons.ModpackContentFields installedContent = ModpackContentTools.read(modpackContentFile);
 			Set<String> changedOverwriteEditableFiles = ModpackUtils.findChangedOverwriteEditableFiles(refreshedFilteredList, installedContent);
 			for (var item : refreshedFilteredList) {
 				if (changedOverwriteEditableFiles.contains(item.file)) overwrittenEditableFiles.add(item.file);

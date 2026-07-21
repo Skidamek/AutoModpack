@@ -3,6 +3,8 @@ package pl.skidam.automodpack.client.ui;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 import static pl.skidam.automodpack_core.Constants.clientConfigFile;
 
+import java.io.IOException;
+
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
@@ -56,6 +58,14 @@ public class DownloadScreen extends VersionedScreen {
 		initWidgets();
 	}
 
+	private void saveClientConfig() {
+		try {
+			ConfigTools.writeAtomic(clientConfigFile, clientConfig);
+		} catch (IOException e) {
+			throw new ConfigTools.ConfigException("Failed to save client configuration", e);
+		}
+	}
+
 	private void initWidgets() {
 		cancelButton = addRenderableWidget(
 				buttonWidget(this.width / 2 - 60, this.height / 2 + 80, 120, 20, VersionedText.translatable("automodpack.cancel"), button -> {
@@ -70,13 +80,13 @@ public class DownloadScreen extends VersionedScreen {
 		muteMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
 			AudioManager.stopMusic();
 			clientConfig.playMusic = false;
-			ConfigTools.save(clientConfigFile, clientConfig);
+			saveClientConfig();
 		}, "music-note"));
 
 		playMusicButton = addRenderableWidget(VersionedScreen.iconButtonWidget(x, y, 20, 8, button -> {
 			AudioManager.playMusic();
 			clientConfig.playMusic = true;
-			ConfigTools.save(clientConfigFile, clientConfig);
+			saveClientConfig();
 		}, "mute-music-note"));
 	}
 

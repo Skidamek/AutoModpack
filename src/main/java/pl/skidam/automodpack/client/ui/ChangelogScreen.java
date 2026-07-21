@@ -133,7 +133,7 @@ public class ChangelogScreen extends VersionedScreen {
 			var optionalModpackContentFile =
 				ModpackContentTools.getModpackContentFile(modpackDir);
 			if (optionalModpackContentFile.isEmpty()) return;
-			modpackContent = ConfigTools.loadModpackContent(
+			modpackContent = ModpackContentTools.read(
 				optionalModpackContentFile.get()
 			);
 		}

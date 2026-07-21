@@ -50,7 +50,7 @@ public class ModpackUtils {
 			return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 		}
 
-		Jsons.ModpackContentFields clientModpackContent = ConfigTools.loadModpackContent(optionalClientModpackContentFile.get());
+		Jsons.ModpackContentFields clientModpackContent = ModpackContentTools.read(optionalClientModpackContentFile.get());
 		if (clientModpackContent == null) return new UpdateCheckResult(true, serverModpackContent.list, Set.of());
 
 		LOGGER.info("Verifying content against server list...");
@@ -570,7 +570,11 @@ public class ModpackUtils {
 	}
 
 	private static void persistClientConfig(Jsons.ClientConfigFieldsV3 updatedConfig, String errorMessage) throws IOException {
-		if (!ConfigTools.save(clientConfigFile, updatedConfig)) throw new IOException(errorMessage);
+		try {
+			ConfigTools.writeAtomic(clientConfigFile, updatedConfig);
+		} catch (IOException e) {
+			throw new IOException(errorMessage, e);
+		}
 		clientConfig = updatedConfig;
 	}
 
@@ -584,7 +588,7 @@ public class ModpackUtils {
 
 	private static void processEditableFiles(Path modpackDir, BiConsumer<Path, Set<String>> action) {
 		Path contentFile = modpackDir.resolve(hostModpackContentFile.getFileName());
-		Jsons.ModpackContentFields content = ConfigTools.loadModpackContent(contentFile);
+		Jsons.ModpackContentFields content = ModpackContentTools.read(contentFile);
 
 		if (content != null) {
 			Set<String> editableFiles = getEditableFiles(content.list);
@@ -689,7 +693,7 @@ public class ModpackUtils {
 						return Optional.<Jsons.ModpackContentFields>empty();
 					}
 
-					var content = Optional.ofNullable(ConfigTools.loadModpackContent(path));
+					var content = Optional.ofNullable(ModpackContentTools.read(path));
 					Files.deleteIfExists(modpackContentTempFile);
 
 					if (content.isPresent() && potentiallyMalicious(content.get())) return Optional.<Jsons.ModpackContentFields>empty();

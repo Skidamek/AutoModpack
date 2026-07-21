@@ -2,6 +2,7 @@ package pl.skidam.automodpack_core.modpack;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -158,7 +159,7 @@ public class ModpackContent {
 
 	public Optional<Jsons.ModpackContentFields> getPreviousContent() {
 		var optionalModpackContentFile = ModpackContentTools.getModpackContentFile(MODPACK_DIR);
-		return optionalModpackContentFile.map(ConfigTools::loadModpackContent);
+		return optionalModpackContentFile.map(ModpackContentTools::read);
 	}
 
 	public boolean loadPreviousContent() {
@@ -202,7 +203,11 @@ public class ModpackContent {
 			modpackContent.modpackName = MODPACK_NAME;
 			modpackContent.nonModpackFilesToDelete = nonModpackFilesToDelete;
 
-			ConfigTools.saveModpackContent(hostModpackContentFile, modpackContent);
+			try {
+				ModpackContentTools.write(hostModpackContentFile, modpackContent);
+			} catch (IOException e) {
+				throw new ConfigTools.ConfigException("Failed to save modpack content", e);
+			}
 		}
 	}
 
