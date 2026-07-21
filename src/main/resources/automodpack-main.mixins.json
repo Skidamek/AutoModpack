@@ -22,6 +22,7 @@
     "core.DirectJoinServerScreenMixin",
     "core.EditServerScreenMixin",
     "core.ServerAddressMixin",
+    "core.ServerAddressResolverMixin",
     "core.ServerDataMixin",
     "core.MusicTrackerMixin",
     "dev.MinecraftMixin",

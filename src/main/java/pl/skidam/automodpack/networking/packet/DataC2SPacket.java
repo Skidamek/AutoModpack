@@ -68,13 +68,10 @@ public class DataC2SPacket {
 			String effectiveHost;
 			int effectivePort;
 
-			// If the packet specifies a non-blank address, use it or else use address from the server client have connected to.
-			// Important! Use getAddress().getHostAddress() instead of getHostString()
-			// because Minecraft creates connectedAddress instance through a constructor which attempts a reverse DNS lookup
-			// which resolves PTR record for the IP address and stores the resolved hostname in the hostname field.
+			// A blank packet endpoint uses the hostname from the established Minecraft connection.
+			// This preserves hostname-routed tunnels and shared frontends; literal-IP PTR prevention happens in the resolver.
 			if (packetEndpointHost.isBlank()) {
-				var connectedInetAddress = connectedAddress.getAddress();
-				effectiveHost = connectedInetAddress == null ? connectedAddress.getHostString() : connectedInetAddress.getHostAddress();
+				effectiveHost = connectedAddress.getHostString();
 			} else {
 				effectiveHost = packetEndpointHost;
 			}
