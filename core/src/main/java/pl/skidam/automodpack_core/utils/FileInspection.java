@@ -125,16 +125,6 @@ public class FileInspection {
 		return extractBasicInfo(file, ModMetadata::modId);
 	}
 
-	public static boolean hasNestedModWithSameId(Path file) {
-		if (isJarInvalid(file)) return false;
-		try (FileSystem fs = FileSystems.newFileSystem(file)) {
-			return hasNestedModWithSameId(fs);
-		} catch (IOException e) {
-			LOGGER.debug("Failed to inspect nested mod IDs in {}", file);
-			return false;
-		}
-	}
-
 	public static boolean hasNestedModWithSameId(FileSystem fs) {
 		ModMetadata metadata = getModMetadata(fs);
 		if (metadata == null || metadata.modId() == null) return false;
