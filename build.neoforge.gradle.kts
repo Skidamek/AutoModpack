@@ -5,14 +5,17 @@ plugins {
 	id("net.neoforged.moddev")
 }
 
+val minecraftVersion = property("deps.minecraft") as String
+val neoForgeVersion = property("deps.neoforge") as String
+
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
-base.archivesName.set("${property("mod_name")}-mc${property("deps.minecraft")}-neoforge".lowercase())
+base.archivesName.set("${property("mod_name")}-mc$minecraftVersion-neoforge".lowercase())
 
 neoForge {
 	validateAccessTransformers = true
 	enable {
-		version = property("deps.neoforge") as String
+		version = neoForgeVersion
 		isDisableRecompilation = true
 	}
 }

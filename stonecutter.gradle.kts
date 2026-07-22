@@ -1,12 +1,12 @@
 plugins {
 	id("dev.kikugie.stonecutter")
-	kotlin("jvm") version "2.3.21" apply false
-	id("net.fabricmc.fabric-loom-remap") version "1.17-SNAPSHOT" apply false
-	id("net.fabricmc.fabric-loom") version "1.17-SNAPSHOT" apply false
-	id("net.neoforged.moddev") version "2.0.141" apply false
-	id("com.gradleup.shadow") version "9.4.3" apply false
-	id("org.moddedmc.wiki.toolkit") version "0.4+"
-	id("com.diffplug.spotless") version "8.8.0"
+	kotlin("jvm") apply false
+	id("net.fabricmc.fabric-loom-remap") apply false
+	id("net.fabricmc.fabric-loom") apply false
+	id("net.neoforged.moddev") apply false
+	id("com.gradleup.shadow") apply false
+	id("org.moddedmc.wiki.toolkit")
+	id("com.diffplug.spotless")
 }
 
 repositories {

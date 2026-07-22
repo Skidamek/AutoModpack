@@ -15,16 +15,26 @@ repositories {
 	mavenCentral()
 }
 
+val nettyVersion = versionProperty("versionNetty")
+val log4jVersion = versionProperty("versionLog4j")
+val gsonVersion = versionProperty("versionGson")
+val bouncyCastleVersion = versionProperty("versionBouncyCastle")
+val httpClientVersion = versionProperty("versionHttpClient")
+val tomljVersion = versionProperty("versionTomlj")
+val antlrVersion = versionProperty("versionAntlr")
+val h2Version = versionProperty("versionH2")
+val junitVersion = versionProperty("versionJunit")
+
 val deps =
 	listOf(
-		"io.netty:netty-all:4.2.9.Final",
-		"org.apache.logging.log4j:log4j-core:2.25.2",
-		"com.google.code.gson:gson:2.13.2",
-		"org.bouncycastle:bcpkix-jdk18on:1.82",
-		"org.apache.httpcomponents.client5:httpclient5:5.5.1",
-		"org.tomlj:tomlj:1.1.1",
-		"org.antlr:antlr4-runtime:4.11.1",
-		"com.h2database:h2-mvstore:2.4.240",
+		"io.netty:netty-all:$nettyVersion",
+		"org.apache.logging.log4j:log4j-core:$log4jVersion",
+		"com.google.code.gson:gson:$gsonVersion",
+		"org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion",
+		"org.apache.httpcomponents.client5:httpclient5:$httpClientVersion",
+		"org.tomlj:tomlj:$tomljVersion",
+		"org.antlr:antlr4-runtime:$antlrVersion",
+		"com.h2database:h2-mvstore:$h2Version",
 	)
 
 dependencies {
@@ -33,8 +43,8 @@ dependencies {
 	deps.forEach { runtimeOnly(it) }
 	deps.forEach { testImplementation(it) }
 
-	testImplementation("org.junit.jupiter:junit-jupiter:6.0.1")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.1")
+	testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher:$junitVersion")
 }
 
 java {

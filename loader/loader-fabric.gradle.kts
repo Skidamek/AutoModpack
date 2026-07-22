@@ -14,15 +14,20 @@ repositories {
 	maven { url = uri("https://libraries.minecraft.net/") }
 }
 
+val gsonVersion = versionProperty("versionLoaderGson")
+val log4jVersion = versionProperty("versionLoaderFabricLog4j")
+val tomljVersion = versionProperty("versionTomlj")
+val fabricLoaderVersion = loaderVersion()
+
 dependencies {
 	compileOnly(project(":core"))
 	compileOnly(project(":loader-core"))
 
-	compileOnly("com.google.code.gson:gson:2.10.1")
-	compileOnly("org.apache.logging.log4j:log4j-core:2.20.0")
-	implementation("org.tomlj:tomlj:1.1.1")
+	compileOnly("com.google.code.gson:gson:$gsonVersion")
+	compileOnly("org.apache.logging.log4j:log4j-core:$log4jVersion")
+	implementation("org.tomlj:tomlj:$tomljVersion")
 
-	implementation("net.fabricmc:fabric-loader:${property("deps.fabric")}")
+	implementation("net.fabricmc:fabric-loader:$fabricLoaderVersion")
 }
 
 java {

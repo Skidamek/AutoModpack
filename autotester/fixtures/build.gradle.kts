@@ -14,11 +14,13 @@ java {
 
 val connectorFixture = sourceSets.create("connectorFixture")
 val launchpadFixture = sourceSets.create("launchpadFixture")
+val fabricLoaderVersion = loaderVersion("loader-fabric-19")
+val mixinVersion = versionProperty("versionMixin")
 
 dependencies {
 	for (sourceSet in listOf(connectorFixture, launchpadFixture)) {
-		add(sourceSet.compileOnlyConfigurationName, "net.fabricmc:fabric-loader:0.18.4")
-		add(sourceSet.compileOnlyConfigurationName, "org.spongepowered:mixin:0.8.7")
+		add(sourceSet.compileOnlyConfigurationName, "net.fabricmc:fabric-loader:$fabricLoaderVersion")
+		add(sourceSet.compileOnlyConfigurationName, "org.spongepowered:mixin:$mixinVersion")
 	}
 }
 

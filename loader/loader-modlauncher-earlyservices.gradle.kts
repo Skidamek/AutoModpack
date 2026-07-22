@@ -4,6 +4,8 @@ plugins {
 	id("net.neoforged.moddev.legacyforge")
 }
 
+val selectedForgeVersion = loaderVersion()
+
 // Compile-only stubs for cpw.mods.cl/cpw.mods.modlauncher (the third-party ModLauncher/
 // securejarhandler libraries, not any Forge/NeoForge-owned API) - pulled in via legacy Forge's
 // moddev plugin rather than NeoForge's, purely so the resolved artifacts (Forge republishes them
@@ -20,7 +22,7 @@ base {
 
 legacyForge {
 	enable {
-		forgeVersion = property("deps.forge") as String
+		forgeVersion = selectedForgeVersion
 		isDisableRecompilation = true
 	}
 }

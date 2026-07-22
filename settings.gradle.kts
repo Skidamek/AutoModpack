@@ -7,12 +7,33 @@ pluginManagement {
 		maven("https://maven.neoforged.net/releases/") { name = "NeoForged" }
 		maven("https://maven.kikugie.dev/snapshots") { name = "KikuGie" }
 	}
+
+	plugins {
+		val pluginKotlinVersion = providers.gradleProperty("pluginKotlinVersion").get()
+		val pluginLoomVersion = providers.gradleProperty("pluginLoomVersion").get()
+		val pluginModDevVersion = providers.gradleProperty("pluginModDevVersion").get()
+		val pluginShadowVersion = providers.gradleProperty("pluginShadowVersion").get()
+		val pluginWikiToolkitVersion = providers.gradleProperty("pluginWikiToolkitVersion").get()
+		val pluginSpotlessVersion = providers.gradleProperty("pluginSpotlessVersion").get()
+		val pluginFoojayVersion = providers.gradleProperty("pluginFoojayVersion").get()
+		val pluginStonecutterVersion = providers.gradleProperty("pluginStonecutterVersion").get()
+
+		id("org.jetbrains.kotlin.jvm") version pluginKotlinVersion
+		id("net.fabricmc.fabric-loom-remap") version pluginLoomVersion
+		id("net.fabricmc.fabric-loom") version pluginLoomVersion
+		id("net.neoforged.moddev") version pluginModDevVersion
+		id("com.gradleup.shadow") version pluginShadowVersion
+		id("org.moddedmc.wiki.toolkit") version pluginWikiToolkitVersion
+		id("com.diffplug.spotless") version pluginSpotlessVersion
+		id("org.gradle.toolchains.foojay-resolver-convention") version pluginFoojayVersion
+		id("dev.kikugie.stonecutter") version pluginStonecutterVersion
+	}
 }
 
 plugins {
 	// For some reason, this plugin is crucial - do not remove
-	id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
-	id("dev.kikugie.stonecutter") version "0.9+"
+	id("org.gradle.toolchains.foojay-resolver-convention")
+	id("dev.kikugie.stonecutter")
 }
 
 include(":core")

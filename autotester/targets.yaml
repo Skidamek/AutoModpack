@@ -1,27 +1,26 @@
 defaults:
   artifactPattern: "automodpack-mc{minecraft}-{loader}-*.jar"
-  fabricLoader: "0.17.3"
 
 targets:
-  - { id: "26.2-fabric", minecraft: "26.2", loader: "fabric", java: 25, fabricLoader: "0.19.3" }
-  - { id: "26.2-neoforge", minecraft: "26.2", loader: "neoforge", java: 25, neoforgeVersion: "26.2.0.7-beta" }
-  - { id: "26.1-fabric", minecraft: "26.1", loader: "fabric", java: 25, fabricLoader: "0.18.4" }
-  - { id: "26.1-neoforge", minecraft: "26.1.2", loader: "neoforge", java: 25, neoforgeVersion: "26.1.2.84", artifactPattern: "automodpack-mc26.1-neoforge-*.jar" }
-  - { id: "1.21.11-fabric", minecraft: "1.21.11", loader: "fabric", java: 21, fabricLoader: "0.17.3" }
-  - { id: "1.21.11-neoforge", minecraft: "1.21.11", loader: "neoforge", java: 21, neoforgeVersion: "21.11.42" }
-  - { id: "1.21.10-fabric", minecraft: "1.21.10", loader: "fabric", java: 21, fabricLoader: "0.17.3" }
-  - { id: "1.21.10-neoforge", minecraft: "1.21.10", loader: "neoforge", java: 21, neoforgeVersion: "21.10.64" }
-  - { id: "1.21.8-fabric", minecraft: "1.21.8", loader: "fabric", java: 21, fabricLoader: "0.17.3" }
-  - { id: "1.21.8-neoforge", minecraft: "1.21.8", loader: "neoforge", java: 21, neoforgeVersion: "21.8.50" }
-  - { id: "1.21.5-fabric", minecraft: "1.21.5", loader: "fabric", java: 21, fabricLoader: "0.17.3" }
-  - { id: "1.21.5-neoforge", minecraft: "1.21.5", loader: "neoforge", java: 21, neoforgeVersion: "21.5.97" }
-  - { id: "1.21.4-fabric", minecraft: "1.21.4", loader: "fabric", java: 21, fabricLoader: "0.17.3" }
-  - { id: "1.21.4-neoforge", minecraft: "1.21.4", loader: "neoforge", java: 21, neoforgeVersion: "21.4.157" }
-  - { id: "1.21.1-fabric", minecraft: "1.21.1", loader: "fabric", java: 21, fabricLoader: "0.17.3" }
-  - { id: "1.21.1-neoforge", minecraft: "1.21.1", loader: "neoforge", java: 21, neoforgeVersion: "21.1.230" }
-  - { id: "1.20.1-fabric", minecraft: "1.20.1", loader: "fabric", java: 17, fabricLoader: "0.17.3" }
-  - { id: "1.20.1-forge", minecraft: "1.20.1", loader: "forge", java: 17, forgeVersion: "47.3.0" }
-  - { id: "1.19.2-fabric", minecraft: "1.19.2", loader: "fabric", java: 17, fabricLoader: "0.17.3" }
-  - { id: "1.19.2-forge", minecraft: "1.19.2", loader: "forge", java: 17, forgeVersion: "43.3.0" }
-  - { id: "1.18.2-fabric", minecraft: "1.18.2", loader: "fabric", java: 17, fabricLoader: "0.17.3" }
-  - { id: "1.18.2-forge", minecraft: "1.18.2", loader: "forge", java: 17, forgeVersion: "40.2.10" }
+  - { id: "26.2-fabric", java: 25 }
+  - { id: "26.2-neoforge", java: 25 }
+  - { id: "26.1-fabric", java: 25 }
+  - { id: "26.1-neoforge", java: 25 }
+  - { id: "1.21.11-fabric", java: 21 }
+  - { id: "1.21.11-neoforge", java: 21 }
+  - { id: "1.21.10-fabric", java: 21 }
+  - { id: "1.21.10-neoforge", java: 21 }
+  - { id: "1.21.8-fabric", java: 21 }
+  - { id: "1.21.8-neoforge", java: 21 }
+  - { id: "1.21.5-fabric", java: 21 }
+  - { id: "1.21.5-neoforge", java: 21 }
+  - { id: "1.21.4-fabric", java: 21 }
+  - { id: "1.21.4-neoforge", java: 21 }
+  - { id: "1.21.1-fabric", java: 21 }
+  - { id: "1.21.1-neoforge", java: 21 }
+  - { id: "1.20.1-fabric", java: 17 }
+  - { id: "1.20.1-forge", java: 17 }
+  - { id: "1.19.2-fabric", java: 17 }
+  - { id: "1.19.2-forge", java: 17 }
+  - { id: "1.18.2-fabric", java: 17 }
+  - { id: "1.18.2-forge", java: 17 }

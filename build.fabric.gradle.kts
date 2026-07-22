@@ -12,10 +12,13 @@ plugins {
 }
 
 val fabric = the<FabricExtension>()
+val minecraftVersion = property("deps.minecraft") as String
+val fabricApiVersion = property("deps.fabric-api") as String
+val fabricLoaderVersion = property("deps.fabric-loader") as String
 
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
-base.archivesName.set("${property("mod_name")}-mc${property("deps.minecraft")}-fabric".lowercase())
+base.archivesName.set("${property("mod_name")}-mc$minecraftVersion-fabric".lowercase())
 
 loom {
 	accessWidenerPath = rootProject.file(fabric.accessWidenerPath)
@@ -25,12 +28,12 @@ dependencies {
 	implementation(project(":core")) { isTransitive = false }
 	implementation(project(":loader-core")) { isTransitive = false }
 
-	minecraft("com.mojang:minecraft:${property("deps.minecraft")}")
+	minecraft("com.mojang:minecraft:$minecraftVersion")
 	if (!fabric.isUnobf) {
 		mappings(loom.officialMojangMappings())
 	}
 
-	modImplementation("net.fabricmc:fabric-loader:${property("deps.fabric-loader")}")
+	modImplementation("net.fabricmc:fabric-loader:$fabricLoaderVersion")
 
 	setOf(
 		"api-base", // Required by modules below
@@ -38,19 +41,19 @@ dependencies {
 		"networking-api-v1", // Required by registry sync module
 		"resource-loader-v0", // Required for translatable texts
 	).forEach {
-		include(modImplementation(fabricApi.module("fabric-$it", property("deps.fabric-api") as String))!!)
+		include(modImplementation(fabricApi.module("fabric-$it", fabricApiVersion))!!)
 	}
 
 	// Required for commands
 	if (sc.current.parsed < "1.19.2") {
-		include(modImplementation(fabricApi.module("fabric-command-api-v1", property("deps.fabric-api") as String))!!)
+		include(modImplementation(fabricApi.module("fabric-command-api-v1", fabricApiVersion))!!)
 	} else {
-		include(modImplementation(fabricApi.module("fabric-command-api-v2", property("deps.fabric-api") as String))!!)
+		include(modImplementation(fabricApi.module("fabric-command-api-v2", fabricApiVersion))!!)
 	}
 
 	// Required for translatable texts in 1.21.9+ for some reason i need both v0 and v1?
 	if (sc.current.parsed >= "1.21.9") {
-		include(modImplementation(fabricApi.module("fabric-resource-loader-v1", property("deps.fabric-api") as String))!!)
+		include(modImplementation(fabricApi.module("fabric-resource-loader-v1", fabricApiVersion))!!)
 	}
 }
 

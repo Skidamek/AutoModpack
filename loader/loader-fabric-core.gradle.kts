@@ -17,6 +17,15 @@ repositories {
 	maven { url = uri("https://maven.fabricmc.net/") }
 }
 
+val gsonVersion = versionProperty("versionLoaderGson")
+val log4jVersion = versionProperty("versionLoaderPlatformLog4j")
+val fabricLoaderVersion = loaderVersion()
+val tomljVersion = versionProperty("versionTomlj")
+val bouncyCastleVersion = versionProperty("versionBouncyCastle")
+val httpClientVersion = versionProperty("versionHttpClient")
+val nettyVersion = versionProperty("versionNetty")
+val h2Version = versionProperty("versionH2")
+
 dependencies {
 	compileOnly(project(":core"))
 	compileOnly(project(":loader-core"))
@@ -24,19 +33,19 @@ dependencies {
 	compileOnly(project(":loader-fabric-16"))
 
 	// External provided deps to compile this
-	compileOnly("com.google.code.gson:gson:2.10.1")
-	compileOnly("org.apache.logging.log4j:log4j-core:2.8.1")
-	compileOnly("net.fabricmc:fabric-loader:${property("deps.fabric")}")
+	compileOnly("com.google.code.gson:gson:$gsonVersion")
+	compileOnly("org.apache.logging.log4j:log4j-core:$log4jVersion")
+	compileOnly("net.fabricmc:fabric-loader:$fabricLoaderVersion")
 
 	// Stuff to actually bundle
-	implementation("org.tomlj:tomlj:1.1.1")
-	implementation("org.bouncycastle:bcpkix-jdk18on:1.83")
-	implementation("org.apache.httpcomponents.client5:httpclient5:5.5.1")
+	implementation("org.tomlj:tomlj:$tomljVersion")
+	implementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
+	implementation("org.apache.httpcomponents.client5:httpclient5:$httpClientVersion")
 	// Disable transitives so netty-buffer/common/transport aren't pulled in
-	implementation("io.netty:netty-codec-haproxy:4.2.9.Final") {
+	implementation("io.netty:netty-codec-haproxy:$nettyVersion") {
 		isTransitive = false
 	}
-	implementation("com.h2database:h2-mvstore:2.4.240")
+	implementation("com.h2database:h2-mvstore:$h2Version")
 }
 
 configurations {

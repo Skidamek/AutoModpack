@@ -9,14 +9,19 @@ plugins {
 	id("net.neoforged.moddev.legacyforge")
 }
 
+val minecraftVersion = property("deps.minecraft") as String
+val selectedForgeVersion = property("deps.forge") as String
+val mixinExtrasVersion = versionProperty("versionMixinExtras")
+val mixinVersion = versionProperty("versionMixin")
+
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
-base.archivesName.set("${property("mod_name")}-mc${property("deps.minecraft")}-forge".lowercase())
+base.archivesName.set("${property("mod_name")}-mc$minecraftVersion-forge".lowercase())
 
 legacyForge {
 	validateAccessTransformers = true
 	enable {
-		forgeVersion = property("deps.forge") as String
+		forgeVersion = selectedForgeVersion
 		isDisableRecompilation = true
 	}
 }
@@ -25,10 +30,10 @@ dependencies {
 	implementation(project(":core")) { isTransitive = false }
 	implementation(project(":loader-core")) { isTransitive = false }
 
-	compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:0.5.4")!!)
-	implementation(jarJar("io.github.llamalad7:mixinextras-forge:0.5.4")!!)
+	compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:$mixinExtrasVersion")!!)
+	implementation(jarJar("io.github.llamalad7:mixinextras-forge:$mixinExtrasVersion")!!)
 
-	annotationProcessor("org.spongepowered:mixin:0.8.5:processor") // Required to generate refmaps
+	annotationProcessor("org.spongepowered:mixin:$mixinVersion:processor") // Required to generate refmaps
 }
 
 mixin {

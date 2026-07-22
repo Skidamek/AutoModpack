@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=83"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,15 +8,15 @@ version = "0.1.0"
 description = "Docker-first in-game integration tests for AutoModpack"
 requires-python = ">=3.11"
 dependencies = [
-    "docker>=7.1.0",
-    "PyYAML>=6.0.1",
+    "docker>=7.2.0",
+    "PyYAML>=6.0.3",
 ]
 
 [project.scripts]
 autotester = "automodpack_autotester.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=9.1.1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

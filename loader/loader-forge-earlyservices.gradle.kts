@@ -10,6 +10,8 @@ plugins {
 	id("net.neoforged.moddev.legacyforge")
 }
 
+val selectedForgeVersion = loaderVersion()
+
 base {
 	archivesName = property("mod.id") as String + "-" + project.name
 	version = property("mod_version") as String
@@ -18,7 +20,7 @@ base {
 
 legacyForge {
 	enable {
-		forgeVersion = property("deps.forge") as String
+		forgeVersion = selectedForgeVersion
 		isDisableRecompilation = true
 	}
 }

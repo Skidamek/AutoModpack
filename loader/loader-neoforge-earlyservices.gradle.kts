@@ -4,6 +4,8 @@ plugins {
 	id("net.neoforged.moddev")
 }
 
+val neoForgeVersion = loaderVersion()
+
 base {
 	archivesName = property("mod.id") as String + "-" + project.name
 	version = property("mod_version") as String
@@ -12,7 +14,7 @@ base {
 
 neoForge {
 	enable {
-		version = property("deps.neoforge") as String
+		version = neoForgeVersion
 		isDisableRecompilation = true
 	}
 }

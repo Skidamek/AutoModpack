@@ -61,9 +61,10 @@ flow:
             container: client
             matches: 'Bootstrapping \d+ early-service'
         - log:
-            # locator replay is routine per-launch noise now logged at DEBUG only
+            # Older generations log the replay directly; current fml11 logs the discovered
+            # CrashAssistant locator, while the next assertion proves that it produced the inner mod.
             file: logs/debug.log
-            matches: 'Running in-place (dependency|candidate) locator.*CrashAssistant'
+            matches: '(Running in-place (dependency|candidate) locator.*CrashAssistant|CrashAssistantDependencyLocator from .*CrashAssistant)'
   # ModLauncher generations only: the outer jar's classes are bridged to the GAME layer.
   # fml10/fml11 have no bridge (flat classloader chain) and no such log line at all.
   - do: wait_for

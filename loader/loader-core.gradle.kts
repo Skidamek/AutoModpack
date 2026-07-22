@@ -12,13 +12,17 @@ repositories {
 	mavenCentral()
 }
 
+val gsonVersion = versionProperty("versionLoaderGson")
+val log4jVersion = versionProperty("versionLoaderCoreLog4j")
+val tomljVersion = versionProperty("versionTomlj")
+
 dependencies {
 	implementation(project(":core"))
 
 	// our needed dependencies
-	implementation("com.google.code.gson:gson:2.10.1")
-	implementation("org.apache.logging.log4j:log4j-core:2.19.0")
-	implementation("org.tomlj:tomlj:1.1.1")
+	implementation("com.google.code.gson:gson:$gsonVersion")
+	implementation("org.apache.logging.log4j:log4j-core:$log4jVersion")
+	implementation("org.tomlj:tomlj:$tomljVersion")
 }
 
 java {

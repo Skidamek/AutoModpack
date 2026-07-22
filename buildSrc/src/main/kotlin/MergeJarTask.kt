@@ -23,6 +23,12 @@ abstract class MergeJarTask : DefaultTask() {
     @get:Input
     abstract val libsPath: Property<String>
 
+    @get:Input
+    abstract val loaderModuleName: Property<String>
+
+    @get:Input
+    abstract val zstdVersion: Property<String>
+
     @get:Internal
     abstract val buildDirectory: DirectoryProperty
 
@@ -45,17 +51,15 @@ abstract class MergeJarTask : DefaultTask() {
         val time = System.currentTimeMillis()
         println("Found $jarToMerge to merge. Merging...")
 
-        val loaderModule = getLoaderModuleName(jarToMerge.name)
-
+        val loaderModule = loaderModuleName.get()
         val loaderBuildDir = File(rootProjectPath.get(), "loader/${loaderModule.replace("-", "/")}/build/libs")
         val loaderFile = loaderBuildDir.listFiles()
             ?.single { it.isFile && !it.name.endsWith("-sources.jar") && it.name.endsWith(".jar") }
             ?: error("No loader jar found in ${loaderBuildDir.absolutePath}")
 
         val libsDir = File(libsPath.get())
-        val zstdFile = libsDir.listFiles()
-            ?.firstOrNull { file -> file.isFile && file.name.startsWith("zstd-jni-") && file.name.endsWith(".jar") }
-            ?: error("No zstd-jni-*.jar found in libs directory! ${libsDir.absolutePath}")
+        val zstdFile = File(libsDir, "zstd-jni-${zstdVersion.get()}.jar")
+        check(zstdFile.isFile) { "No ${zstdFile.name} found in libs directory! ${libsDir.absolutePath}" }
 
         val finalJar = File(mergedDir, jarToMerge.name)
 

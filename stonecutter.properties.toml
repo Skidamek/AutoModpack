@@ -1,8 +1,8 @@
 ["26.2-fabric"]
-deps.fabric-api = "0.153.0+26.2"
+deps.fabric-api = "0.155.2+26.2"
 
 ["26.2-neoforge"]
-deps.neoforge = "26.2.0.7-beta"
+deps.neoforge = "26.2.0.28-beta"
 
 ["26.2"]
 deps.minecraft = "26.2"
@@ -11,22 +11,22 @@ publish_versions = "26.2"
 
 
 ["26.1-fabric"]
-deps.fabric-api = "0.149.1+26.1.2"
+deps.fabric-api = "0.155.2+26.1.2"
 
 ["26.1-neoforge"]
-deps.neoforge = "26.1.2.64-beta"
+deps.neoforge = "26.1.2.84"
 
 ["26.1"]
-deps.minecraft = "26.1"
+deps.minecraft = "26.1.2"
 meta.minecraft = "~26.1"
 publish_versions = "26.1\n26.1.1\n26.1.2"
 
 
 ["1.21.11-fabric"]
-deps.fabric-api = "0.141.4+1.21.11"
+deps.fabric-api = "0.141.5+1.21.11"
 
 ["1.21.11-neoforge"]
-deps.neoforge = "21.11.42"
+deps.neoforge = "21.11.44"
 
 ["1.21.11"]
 deps.minecraft = "1.21.11"
@@ -50,7 +50,7 @@ publish_versions = "1.21.10"
 deps.fabric-api = "0.136.1+1.21.8"
 
 ["1.21.8-neoforge"]
-deps.neoforge = "21.8.50"
+deps.neoforge = "21.8.54"
 
 ["1.21.8"]
 deps.minecraft = "1.21.8"
@@ -62,7 +62,7 @@ publish_versions = "1.21.6\n1.21.7\n1.21.8"
 deps.fabric-api = "0.128.2+1.21.5"
 
 ["1.21.5-neoforge"]
-deps.neoforge = "21.5.97"
+deps.neoforge = "21.5.98"
 
 ["1.21.5"]
 deps.minecraft = "1.21.5"
@@ -83,10 +83,10 @@ publish_versions = "1.21.4"
 
 
 ["1.21.1-fabric"]
-deps.fabric-api = "0.116.12+1.21.1"
+deps.fabric-api = "0.116.14+1.21.1"
 
 ["1.21.1-neoforge"]
-deps.neoforge = "21.1.230"
+deps.neoforge = "21.1.242"
 
 ["1.21.1"]
 deps.minecraft = "1.21.1"
@@ -95,10 +95,10 @@ publish_versions = "1.21\n1.21.1"
 
 
 ["1.20.1-fabric"]
-deps.fabric-api = "0.92.7+1.20.1"
+deps.fabric-api = "0.92.11+1.20.1"
 
 ["1.20.1-forge"]
-deps.forge = "1.20.1-47.3.0"
+deps.forge = "1.20.1-47.4.22"
 
 ["1.20.1"]
 deps.minecraft = "1.20.1"
@@ -107,10 +107,10 @@ publish_versions = "1.20\n1.20.1"
 
 
 ["1.19.2-fabric"]
-deps.fabric-api = "0.76.1+1.19.2"
+deps.fabric-api = "0.77.0+1.19.2"
 
 ["1.19.2-forge"]
-deps.forge = "1.19.2-43.3.0"
+deps.forge = "1.19.2-43.5.2"
 
 ["1.19.2"]
 deps.minecraft = "1.19.2"
@@ -119,10 +119,10 @@ publish_versions = "1.19\n1.19.1\n1.19.2"
 
 
 ["1.18.2-fabric"]
-deps.fabric-api = "0.76.0+1.18.2"
+deps.fabric-api = "0.77.0+1.18.2"
 
 ["1.18.2-forge"]
-deps.forge = "1.18.2-40.2.10"
+deps.forge = "1.18.2-40.3.12"
 
 ["1.18.2"]
 deps.minecraft = "1.18.2"
@@ -131,4 +131,8 @@ publish_versions = "1.18\n1.18.1\n1.18.2"
 
 
 ["fabric"]
-deps.fabric-loader = "0.15.11"
+deps.fabric-loader = "0.19.3"
+
+["loader-modules"]
+fabric-15 = "0.15.11"
+fabric-16 = "0.16.14"
