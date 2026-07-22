@@ -2,7 +2,10 @@
 templating, polling, and the flow executor — all Docker-free."""
 from __future__ import annotations
 
+import hashlib
+import io
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -419,23 +422,27 @@ def test_resolve_mod_per_target_map_picks_target_entry(tmp_path, monkeypatch):
 
     fetched = {}
 
-    def fake_fetch(url, sha512, name):
-        fetched["url"], fetched["sha512"] = url, sha512
+    def fake_fetch(url, sha512, name, timeout):
+        fetched["url"], fetched["sha512"], fetched["timeout"] = url, sha512, timeout
         return tmp_path / "cached.jar"
 
     monkeypatch.setattr(mods, "_fetch", fake_fetch)
     entry = {
         "url": {"1.21.1-neoforge": "https://cdn/a.jar", "1.20.1-forge": "https://cdn/b.jar"},
-        "sha512": {"1.21.1-neoforge": "AA", "1.20.1-forge": "BB"},
+        "sha512": {"1.21.1-neoforge": "A" * 128, "1.20.1-forge": "B" * 128},
     }
     mods.resolve_mod(entry, target_id="1.20.1-forge")
-    assert fetched == {"url": "https://cdn/b.jar", "sha512": "bb"}  # sha lowercased
+    assert fetched == {
+        "url": "https://cdn/b.jar",
+        "sha512": "b" * 128,
+        "timeout": 180,
+    }
 
 
 def test_resolve_mod_per_target_map_missing_target_raises(tmp_path):
     from automodpack_autotester import mods
 
-    entry = {"url": {"1.21.1-neoforge": "https://cdn/a.jar"}, "sha512": "AA"}
+    entry = {"url": {"1.21.1-neoforge": "https://cdn/a.jar"}, "sha512": "a" * 128}
     with pytest.raises(ValueError, match="no entry for target"):
         mods.resolve_mod(entry, target_id="26.1-neoforge")
     with pytest.raises(ValueError, match="no entry for target"):
@@ -446,6 +453,44 @@ def test_resolve_mod_plain_values_unchanged(tmp_path, monkeypatch):
     from automodpack_autotester import mods
 
     seen = {}
-    monkeypatch.setattr(mods, "_fetch", lambda url, sha, name: seen.update(url=url) or tmp_path / "x.jar")
-    mods.resolve_mod({"url": "https://cdn/plain.jar", "sha512": "cc"}, target_id="1.21.1-neoforge")
-    assert seen["url"] == "https://cdn/plain.jar"
+    monkeypatch.setattr(
+        mods,
+        "_fetch",
+        lambda url, sha, name, timeout: seen.update(url=url, timeout=timeout) or tmp_path / "x.jar",
+    )
+    mods.resolve_mod(
+        {"url": "https://cdn/plain.jar", "sha512": "c" * 128},
+        target_id="1.21.1-neoforge",
+    )
+    assert seen == {"url": "https://cdn/plain.jar", "timeout": 180}
+
+
+def test_fetch_serializes_concurrent_downloads(tmp_path, monkeypatch):
+    from automodpack_autotester import mods
+
+    payload = b"fixture jar bytes"
+    sha512 = hashlib.sha512(payload).hexdigest()
+    calls = []
+
+    class Response(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.close()
+
+    def urlopen(url, timeout):
+        calls.append((url, timeout))
+        return Response(payload)
+
+    monkeypatch.setattr(mods, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(mods.urllib.request, "urlopen", urlopen)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(mods._fetch, "https://cdn/fixture.jar", sha512, None, 12)
+            for _ in range(2)
+        ]
+    paths = [future.result() for future in futures]
+    assert paths[0] == paths[1]
+    assert paths[0].read_bytes() == payload
+    assert calls == [("https://cdn/fixture.jar", 12)]

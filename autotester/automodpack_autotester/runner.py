@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -7,6 +8,7 @@ import random
 import secrets
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import docker as docker_py
@@ -140,11 +142,11 @@ def _gid():
 
 def _load_ver(t):
     if t.loader == "fabric":
-        return t.fabric_loader or ""
+        return getattr(t, "fabric_loader", None) or ""
     if t.loader == "forge":
-        return t.forge_version or ""
+        return getattr(t, "forge_version", None) or ""
     if t.loader == "neoforge":
-        return t.neoforge_version or ""
+        return getattr(t, "neoforge_version", None) or ""
     return ""
 
 
@@ -212,7 +214,7 @@ def _launch_server(ctx: Context):
     env.update({
         "TYPE": str(srv_type),
         "VERSION": target.minecraft,
-        "MEMORY": str(topo.get("memory", "2G")),
+        "MEMORY": str(topo.get("memory", settings.get("server", {}).get("memory", "2G"))),
     })
     for k, v in [
         ("fabric_loader", "FABRIC_LOADER_VERSION"),
@@ -464,6 +466,38 @@ def _v_wait_join(ctx: Context, step):
     )
 
 
+def _sha1(path: Path) -> str:
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "sha1").hexdigest()
+
+
+def _write_staged_manifest(ctx: Context, root: Path, modpack_id: str) -> None:
+    entries = []
+    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+        if path.name == "automodpack-content.json":
+            continue
+        rel = path.relative_to(root)
+        entries.append({
+            "file": "/" + rel.as_posix(),
+            "size": str(path.stat().st_size),
+            "type": "mod" if rel.parts and rel.parts[0] == "mods" else "config",
+            "editable": rel == ctx.marker_rel,
+            "forceCopy": False,
+            "sha1": _sha1(path),
+            "murmur": "",
+        })
+    manifest = {
+        "modpackName": ctx.modpack_name,
+        "modpackId": modpack_id,
+        "automodpackVersion": "",
+        "loader": ctx.target.loader,
+        "loaderVersion": _load_ver(ctx.target),
+        "mcVersion": ctx.target.minecraft,
+        "list": entries,
+    }
+    (root / "automodpack-content.json").write_text(json.dumps(manifest, indent=2))
+
+
 @verb("stage_modpack")
 def _v_stage_modpack(ctx: Context, step):
     """Pre-stage a modpack into the client game dir for offline / client-only runs.
@@ -503,18 +537,31 @@ def _v_stage_modpack(ctx: Context, step):
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(content)
 
-    manifest_path = root / "automodpack-content.json"
-    if manifest_path.is_file():
-        manifest = json.loads(manifest_path.read_text())
-        manifest["modpackId"] = modpack_id
-        manifest_path.write_text(json.dumps(manifest, indent=2))
-
     mods = step.get("mods") or []
     if mods:
         (root / "mods").mkdir(parents=True, exist_ok=True)
-        for m in mods:
-            mp = resolve_mod(m, ctx.resolve, target_id=getattr(ctx.target, "id", None))
-            shutil.copy2(mp, root / "mods" / mp.name)
+        download_timeout = float(ctx.settings.get("timeouts", {}).get("downloadFileSeconds", 180))
+
+        def resolve(entry):
+            return resolve_mod(
+                entry,
+                ctx.resolve,
+                target_id=getattr(ctx.target, "id", None),
+                timeout=download_timeout,
+            )
+
+        with ThreadPoolExecutor(max_workers=min(4, len(mods))) as executor:
+            resolved_mods = executor.map(resolve, mods)
+            for mod in resolved_mods:
+                shutil.copy2(mod, root / "mods" / mod.name)
+
+    manifest_path = root / "automodpack-content.json"
+    if step.get("manifest", False):
+        _write_staged_manifest(ctx, root, modpack_id)
+    elif manifest_path.is_file():
+        manifest = json.loads(manifest_path.read_text())
+        manifest["modpackId"] = modpack_id
+        manifest_path.write_text(json.dumps(manifest, indent=2))
 
     # A client config that selects the staged pack and disables the launch update,
     # so Preload loads it locally (no server contact, no file reconciliation). The
@@ -541,6 +588,25 @@ def _v_stage_modpack(ctx: Context, step):
 
 
 # ── case orchestration ────────────────────────────────────────────────────
+
+
+def _resolve_artifact(target: Target, artifact_dir: Path) -> Path:
+    pattern = target.artifact_pattern.format(
+        id=target.id,
+        minecraft=target.minecraft,
+        loader=target.loader,
+    )
+    matches = sorted(artifact_dir.glob(pattern))
+    if not matches:
+        raise FileNotFoundError(
+            f"No artifact for {target.id} matching {pattern!r} in {artifact_dir}"
+        )
+    if len(matches) != 1:
+        names = ", ".join(path.name for path in matches)
+        raise RuntimeError(
+            f"Ambiguous artifacts for {target.id} matching {pattern!r}: {names}"
+        )
+    return matches[0].resolve()
 
 
 def run_case(
@@ -572,11 +638,7 @@ def run_case(
 
     step_results: list[dict] = []
     try:
-        pattern = f"automodpack-mc{target.minecraft}-{target.loader}-*.jar"
-        matches = sorted(artifact_dir.glob(pattern))
-        if not matches:
-            raise FileNotFoundError(f"No artifact for {target.id} in {artifact_dir}")
-        artifact = matches[-1].resolve()
+        artifact = _resolve_artifact(target, artifact_dir)
 
         sf = parse_server_files(scenario)
 

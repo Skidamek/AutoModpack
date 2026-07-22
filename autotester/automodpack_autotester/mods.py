@@ -21,8 +21,11 @@ paths leak into the scenarios this way.
 """
 from __future__ import annotations
 
+import fcntl
 import hashlib
+import re
 import shutil
+import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -41,14 +44,16 @@ def _per_target(value, target_id, field: str):
     return value[target_id]
 
 
-def resolve_mod(entry, resolve=str, target_id=None) -> Path:
+def resolve_mod(entry, resolve=str, target_id=None, timeout=180) -> Path:
     """A scenario mod entry → a local jar Path (downloading + verifying if remote)."""
     if isinstance(entry, dict):
         if "url" not in entry or "sha512" not in entry:
             raise ValueError(f"remote mod entry needs 'url' and 'sha512': {entry!r}")
         url = _per_target(entry["url"], target_id, "url")
-        sha512 = _per_target(entry["sha512"], target_id, "sha512")
-        return _fetch(resolve(str(url)), str(sha512).lower(), entry.get("name"))
+        sha512 = str(_per_target(entry["sha512"], target_id, "sha512")).lower()
+        if re.fullmatch(r"[0-9a-f]{128}", sha512) is None:
+            raise ValueError(f"invalid sha512 for {url!r}: {sha512!r}")
+        return _fetch(resolve(str(url)), sha512, entry.get("name"), timeout)
 
     path = Path(resolve(str(entry)))
     if not path.is_absolute():
@@ -59,31 +64,46 @@ def resolve_mod(entry, resolve=str, target_id=None) -> Path:
     return path
 
 
-def _fetch(url: str, sha512: str, name: str | None) -> Path:
+def _fetch(url: str, sha512: str, name: str | None, timeout: float) -> Path:
     # Keep the jar's real filename (the hash lives in the bucket dir, not the name) so the
     # staged mod is byte-for-byte the same path a human download would produce - scenario log
     # assertions that match on the filename keep working. URL-decode so %2B etc. become '+'.
     filename = name or urllib.parse.unquote(url.rsplit("/", 1)[-1])
+    if Path(filename).name != filename:
+        raise ValueError(f"remote mod name must be a filename: {filename!r}")
     bucket = CACHE_DIR / sha512[:16]
     bucket.mkdir(parents=True, exist_ok=True)
     dest = bucket / filename
-    if dest.is_file() and _sha512(dest) == sha512:
-        return dest
+    lock_path = bucket / ".download.lock"
 
-    tmp = dest.with_name(dest.name + ".tmp")
-    with urllib.request.urlopen(url) as response, open(tmp, "wb") as out:
-        shutil.copyfileobj(response, out)
-    got = _sha512(tmp)
-    if got != sha512:
-        tmp.unlink(missing_ok=True)
-        raise ValueError(f"sha512 mismatch for {url}\n  expected {sha512}\n  got      {got}")
-    tmp.replace(dest)
-    return dest
+    with lock_path.open("a+b") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if dest.is_file() and _sha512(dest) == sha512:
+            return dest
+
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=bucket,
+                prefix=f".{filename}.",
+                suffix=".tmp",
+                delete=False,
+            ) as out:
+                tmp_path = Path(out.name)
+                with urllib.request.urlopen(url, timeout=timeout) as response:
+                    shutil.copyfileobj(response, out)
+            got = _sha512(tmp_path)
+            if got != sha512:
+                raise ValueError(
+                    f"sha512 mismatch for {url}\n  expected {sha512}\n  got      {got}"
+                )
+            tmp_path.replace(dest)
+            return dest
+        finally:
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
 
 
 def _sha512(path: Path) -> str:
-    digest = hashlib.sha512()
-    with open(path, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "sha512").hexdigest()

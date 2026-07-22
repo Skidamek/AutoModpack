@@ -92,6 +92,12 @@ boot_client_only:
   - do: launch_client
     name: start the client against the pre-staged modpack
 
+# Stop a successful client-only run without waiting minutes for a healthy client to exit on its own.
+# The quit verb is intentionally best-effort: cleanup still removes a crashed or bridge-less container.
+finish_client_only:
+  - do: quit
+    name: stop the client after successful assertions
+
 # Relaunch the client and play through to in-game (used to confirm a synced modpack loads).
 rejoin:
   - do: launch_client

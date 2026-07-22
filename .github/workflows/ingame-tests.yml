@@ -23,12 +23,9 @@ jobs:
       - id: set-matrix
         run: |
           TARGET="${{ github.event.inputs.target || 'all' }}"
-          ALL=$(uv run --project autotester python -c "import json,yaml; ids=[t['id'] for t in yaml.safe_load(open('autotester/targets.yaml')).get('targets',[])]; print(json.dumps(ids))")
-          if [ "$TARGET" = "all" ]; then
-            echo "matrix={\"target\":$ALL}" >> $GITHUB_OUTPUT
-          else
-            echo "matrix={\"target\":[\"$TARGET\"]}" >> $GITHUB_OUTPUT
-          fi
+          SCENARIO="${{ github.event.inputs.scenario || 'sync' }}"
+          TARGETS=$(uv --project autotester run autotester targets --scenario "$SCENARIO" --target "$TARGET")
+          echo "matrix={\"target\":$TARGETS}" >> $GITHUB_OUTPUT
       - id: set-scenario
         run: |
           echo "scenario=${{ github.event.inputs.scenario || 'sync' }}" >> $GITHUB_OUTPUT
@@ -44,8 +41,25 @@ jobs:
       autotest: true
     secrets: inherit
 
+  client-image:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+      - name: Build autotest client image
+        run: uv --project autotester run autotester build-images
+      - name: Export autotest client image
+        run: docker save automodpack-autotest-client:local | zstd -T0 -3 -o /tmp/automodpack-autotest-client.tar.zst
+      - uses: actions/upload-artifact@v7
+        with:
+          name: autotester-client-image
+          path: /tmp/automodpack-autotest-client.tar.zst
+          compression-level: 0
+
   ingame:
-    needs: [build, prepare]
+    needs: [build, prepare, client-image]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -58,8 +72,12 @@ jobs:
         with:
           name: build-artifacts
           path: merged/
-      - name: Build autotest client image
-        run: uv --project autotester run autotester build-images
+      - uses: actions/download-artifact@v8
+        with:
+          name: autotester-client-image
+          path: /tmp/autotester-client-image
+      - name: Load autotest client image
+        run: zstd -d -c /tmp/autotester-client-image/automodpack-autotest-client.tar.zst | docker load
       - name: Run autotest
         run: >
           uv --project autotester run autotester run

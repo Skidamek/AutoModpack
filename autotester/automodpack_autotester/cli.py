@@ -66,6 +66,7 @@ def _cmd_verbs() -> int:
 def _cmd_validate(scenario_name: str | None) -> int:
     macros = load_macros()
     scenarios = load_scenarios()
+    targets = load_targets()
     if scenario_name:
         if scenario_name not in scenarios:
             print(f"No such scenario: {scenario_name}", file=sys.stderr)
@@ -73,7 +74,7 @@ def _cmd_validate(scenario_name: str | None) -> int:
         scenarios = {scenario_name: scenarios[scenario_name]}
     ok = True
     for name, scenario in scenarios.items():
-        problems = validate_scenario(scenario, macros)
+        problems = validate_scenario(scenario, macros, targets)
         if problems:
             ok = False
             print(f"FAIL {name}")
@@ -82,6 +83,28 @@ def _cmd_validate(scenario_name: str | None) -> int:
         else:
             print(f"OK   {name}")
     return 0 if ok else 1
+
+
+def _select_targets(targets: dict, target_name: str, scenario: dict) -> tuple[list, list]:
+    requested = list(targets.values()) if target_name == "all" else [targets[target_name]]
+    return requested, [t for t in requested if scenario_matches_target(scenario, t)]
+
+
+def _cmd_targets(scenario_name: str, target_name: str) -> int:
+    scenarios = load_scenarios()
+    scenario = scenarios.get(scenario_name)
+    if scenario is None:
+        print(f"No such scenario: {scenario_name}", file=sys.stderr)
+        return 1
+    targets = load_targets()
+    problems = validate_scenario(scenario, load_macros(), targets)
+    if problems:
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        return 1
+    _, selected = _select_targets(targets, target_name, scenario)
+    print(json.dumps([t.id for t in selected]))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -96,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     run_p = sub.add_parser("run")
     run_p.add_argument("--target")
     run_p.add_argument("--scenario")
-    run_p.add_argument("--jobs", type=int, default=1)
+    run_p.add_argument("--jobs", type=int)
     run_p.add_argument("--docker-uid", type=int)
     run_p.add_argument("--docker-gid", type=int)
     run_p.add_argument("--artifact-dir", type=Path)
@@ -111,6 +134,10 @@ def main(argv: list[str] | None = None) -> int:
     val = sub.add_parser("validate", help="Statically validate scenario(s) without Docker")
     val.add_argument("--scenario", help="Scenario stem; omit to validate all")
 
+    target_p = sub.add_parser("targets", help="Print in-scope target IDs as JSON")
+    target_p.add_argument("--scenario", required=True)
+    target_p.add_argument("--target", default="all")
+
     args = p.parse_args(argv)
 
     if args.command == "verbs":
@@ -118,6 +145,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "validate":
         return _cmd_validate(args.scenario)
+
+    if args.command == "targets":
+        return _cmd_targets(args.scenario, args.target)
 
     if args.command == "build-images":
         s = load_settings()
@@ -173,21 +203,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # Fail fast on a malformed scenario rather than after minutes in Docker.
-    problems = validate_scenario(scenario, load_macros())
+    problems = validate_scenario(scenario, load_macros(), targets)
     if problems:
         print(f"Scenario {scenario_name!r} is invalid:", file=sys.stderr)
         for prob in problems:
             print(f"  - {prob}", file=sys.stderr)
         return 1
 
-    requested = (
-        list(targets.values())
-        if not args.target or args.target == "all"
-        else [targets[args.target]]
-    )
+    target_name = args.target or rc.get("target", "all")
     # Drop targets the scenario doesn't apply to (targets:/loaders:/minecraft:),
     # so an unrelated target doesn't fail confusingly on missing mods.
-    selected = [t for t in requested if scenario_matches_target(scenario, t)]
+    requested, selected = _select_targets(targets, target_name, scenario)
     for t in requested:
         if t not in selected:
             print(f"SKIP {t.id} (out of scenario scope)")

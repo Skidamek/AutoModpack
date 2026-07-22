@@ -1,7 +1,8 @@
 """Verb registry. Step verbs register here and the executor looks them up by name."""
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 
 VERBS: dict[str, Callable] = {}
 
@@ -23,6 +24,21 @@ def verb(*names: str) -> Callable:
 
 def get(name: str) -> Callable | None:
     return VERBS.get(name)
+
+
+@contextmanager
+def temporary(overrides: dict[str, Callable]) -> Iterator[None]:
+    """Install verb overrides for one test and restore the registry afterward."""
+    saved = {name: VERBS.get(name) for name in overrides}
+    VERBS.update(overrides)
+    try:
+        yield
+    finally:
+        for name, fn in saved.items():
+            if fn is None:
+                VERBS.pop(name, None)
+            else:
+                VERBS[name] = fn
 
 
 def names() -> list[str]:

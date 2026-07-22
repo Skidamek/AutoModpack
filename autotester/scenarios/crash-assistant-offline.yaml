@@ -87,11 +87,7 @@ flow:
         # stdout, but forge (fml40/47) does not - so assert on debug.log for cross-loader parity.
         file: logs/debug.log
         matches: 'crash_assistant\} mods - versions \{1\.11\.10'
-  - do: wait_exit
-    name: tolerate the client exiting (headless GL/audio) or staying alive at the main menu
-    expect: any
-    or_alive: true
-    timeout: 60s
+  - use: finish_client_only
   - do: assert
     name: no split-classloader or duplicate-mod failure
     that:

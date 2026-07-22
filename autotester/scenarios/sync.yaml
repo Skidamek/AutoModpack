@@ -29,7 +29,6 @@ topology:
     modrinth:
       projects:
         - ferrite-core?
-      dependencies: true
 
 serverFiles:
   modpackName: amp-autotest

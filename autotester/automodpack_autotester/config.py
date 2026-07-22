@@ -39,6 +39,7 @@ class Target:
     fabric_loader: str | None = None
     forge_version: str | None = None
     neoforge_version: str | None = None
+    artifact_pattern: str = "automodpack-mc{minecraft}-{loader}-*.jar"
 
 
 def load_targets() -> dict[str, Target]:
@@ -55,6 +56,10 @@ def load_targets() -> dict[str, Target]:
                 fabric_loader=item.get("fabricLoader", d.get("fabricLoader")),
                 forge_version=item.get("forgeVersion", d.get("forgeVersion")),
                 neoforge_version=item.get("neoforgeVersion", d.get("neoforgeVersion")),
+                artifact_pattern=item.get(
+                    "artifactPattern",
+                    d.get("artifactPattern", "automodpack-mc{minecraft}-{loader}-*.jar"),
+                ),
             )
         )
     return {t.id: t for t in targets}

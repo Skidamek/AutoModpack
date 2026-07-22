@@ -32,13 +32,13 @@ uv --project autotester run autotester build-images
 Run one target:
 
 ```bash
-uv --project autotester run autotester run --target 1.21.11-fabric --scenario download-only
+uv --project autotester run autotester run --target 1.21.11-fabric --scenario download-only --jobs 3
 ```
 
 Run the full default matrix:
 
 ```bash
-uv --project autotester run autotester run --target all --scenario sync --jobs 1
+uv --project autotester run autotester run --target all --scenario sync --jobs 3
 ```
 
 Clean generated output:
@@ -167,17 +167,16 @@ flow:
       log:
         matches_all: [ 'Prelaunching AutoModpack', 'AutoModpack prelaunched' ]
         not_matches: [ 'ClassNotFoundException' ]
-  - do: wait_exit                 # tolerate a later headless crash OR a GPU idle
-    expect: any
-    or_alive: true
+  - use: finish_client_only       # best-effort quit; cleanup handles a crashed client
 ```
 
 `stage_modpack` accepts `from:` (a ready modpack dir to copy wholesale), `mods:`
 (extra jars to drop into the pack's `mods/`), and `config:` (extra client-config
 overrides). **`from:` and `mods:` paths resolve against the repo root** (the
-parent of `autotester/`) unless absolute. The combination of whole-log assertions
-and `wait_exit: { expect: any, or_alive: true }` makes "verify it loaded, don't
-care what happens at render" robust on both headless and GPU hosts. See
+parent of `autotester/`) unless absolute. `manifest: true` derives a local
+`automodpack-content.json` from the final staged files for reconciliation tests.
+Whole-log assertions followed by `finish_client_only` make "verify it loaded, then
+stop immediately" robust on both headless and GPU hosts. See
 `scenarios/client-loads-offline.yaml`.
 
 ### Discovering verbs and validating scenarios
@@ -186,6 +185,7 @@ care what happens at render" robust on both headless and GPU hosts. See
 autotester verbs                       # list verbs + condition keys (from the registry)
 autotester validate                    # statically check every scenario
 autotester validate --scenario sync    # check one
+autotester targets --scenario sync     # print the in-scope target IDs as JSON
 ```
 
 `validate` expands macros and checks that every verb/macro name resolves and

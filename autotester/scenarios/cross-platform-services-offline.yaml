@@ -58,11 +58,7 @@ flow:
               # GraphicsBootstrapper initialised - instead of an uninitialised second copy (the split
               # that used to NPE in place). Reaching this proves the in-place class identity is fixed.
               - 'Bridged \d+ outer package.*asynclogger'
-  - do: wait_exit
-    name: tolerate the client exiting (headless GL) or staying alive
-    expect: any
-    or_alive: true
-    timeout: 60s
+  - use: finish_client_only
   - do: assert
     name: no copy-to-standard workaround, and no in-place split-state crash
     that:

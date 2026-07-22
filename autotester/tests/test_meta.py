@@ -2,6 +2,8 @@
 transport/mode selection, and verb discovery."""
 from __future__ import annotations
 
+import hashlib
+import json
 import types
 
 import pytest
@@ -10,6 +12,7 @@ from automodpack_autotester import runner
 from automodpack_autotester.config import (
     load_macros,
     load_scenarios,
+    load_targets,
     scenario_matches_target,
 )
 from automodpack_autotester.engine.registry import describe, names
@@ -27,8 +30,9 @@ def _target(**kw):
 
 def test_shipped_scenarios_validate():
     macros = load_macros()
+    targets = load_targets()
     for name, scenario in load_scenarios().items():
-        assert validate_scenario(scenario, macros) == [], name
+        assert validate_scenario(scenario, macros, targets) == [], name
 
 
 def test_validate_flags_unknown_verb_and_macro():
@@ -56,10 +60,46 @@ def test_validate_flags_bad_mode_and_network():
     assert any("unknown network" in p for p in problems)
 
 
-def test_validate_handles_recursive_macros():
-    # Mutually recursive macros must not blow the stack.
+def test_validate_rejects_recursive_macros():
     macros = {"a": [{"use": "b"}], "b": [{"use": "a"}]}
-    assert validate_scenario({"flow": [{"use": "a"}]}, macros) == []
+    problems = validate_scenario({"id": "cycle", "flow": [{"use": "a"}]}, macros)
+    assert any("macro cycle: a -> b -> a" in p for p in problems)
+
+
+def test_validate_rejects_bad_duration_regex_and_repeat():
+    scenario = {
+        "id": "bad-fields",
+        "flow": [{
+            "do": "wait_for",
+            "timeout": "soon",
+            "repeat": 0,
+            "until": {"log": {"matches": "["}},
+        }],
+    }
+    problems = validate_scenario(scenario, {})
+    assert any("invalid positive duration" in p for p in problems)
+    assert any("invalid regex" in p for p in problems)
+    assert any("positive integer" in p for p in problems)
+
+
+def test_validate_requires_remote_mod_maps_for_every_scoped_target():
+    targets = {
+        "a": _target(id="a"),
+        "b": _target(id="b"),
+    }
+    scenario = {
+        "id": "remote-map",
+        "targets": ["a", "b"],
+        "flow": [{
+            "do": "stage_modpack",
+            "mods": [{
+                "url": {"a": "https://example.invalid/a.jar"},
+                "sha512": {"a": "a" * 128},
+            }],
+        }],
+    }
+    problems = validate_scenario(scenario, {}, targets)
+    assert any("missing target entries ['b']" in p for p in problems)
 
 
 # ── target scoping ──────────────────────────────────────────────────────────
@@ -94,6 +134,37 @@ def test_transport_precedence():
 def test_scenario_mode():
     assert runner.scenario_mode({}) == "full"
     assert runner.scenario_mode({"mode": "client-only"}) == "client-only"
+
+
+# ── artifact and staged manifest handling ────────────────────────────────────
+
+
+def test_artifact_resolution_rejects_ambiguous_matches(tmp_path):
+    target = _target(artifact_pattern="automodpack-mc{minecraft}-{loader}-*.jar")
+    (tmp_path / "automodpack-mc1.21.1-neoforge-a.jar").touch()
+    (tmp_path / "automodpack-mc1.21.1-neoforge-b.jar").touch()
+    with pytest.raises(RuntimeError, match="Ambiguous artifacts"):
+        runner._resolve_artifact(target, tmp_path)
+
+
+def test_staged_manifest_uses_actual_file_metadata(make_ctx):
+    ctx = make_ctx()
+    root = ctx.game_dir / "staged"
+    marker = root / ctx.marker_rel
+    marker.parent.mkdir(parents=True)
+    marker.write_text("marker\n")
+    mod = root / "mods" / "fixture.jar"
+    mod.parent.mkdir()
+    mod.write_bytes(b"fixture")
+
+    runner._write_staged_manifest(ctx, root, "fixture-id")
+
+    manifest = json.loads((root / "automodpack-content.json").read_text())
+    by_path = {entry["file"]: entry for entry in manifest["list"]}
+    assert by_path["/mods/fixture.jar"]["size"] == str(len(b"fixture"))
+    assert by_path["/mods/fixture.jar"]["sha1"] == hashlib.sha1(b"fixture").hexdigest()
+    assert by_path["/mods/fixture.jar"]["editable"] is False
+    assert by_path["/config/amp-autotest-marker.json"]["editable"] is True
 
 
 # ── wait_exit (Docker calls stubbed) ─────────────────────────────────────────

@@ -60,11 +60,7 @@ flow:
           # the aggregator is discovered in the modpack folder, not copied to mods/
           - 'Found library file "kotlinforforge'
           - 'Kotlin For Forge .*\(kotlinforforge\)'
-  - do: wait_exit
-    name: tolerate the client exiting, or staying alive (kotlin has nothing to render)
-    expect: any
-    or_alive: true
-    timeout: 30s
+  - use: finish_client_only
   - do: assert
     name: no fatal language-provider / modpack-load failure
     that:

@@ -142,11 +142,7 @@ flow:
         matches_all:
           - 'Ran in-place transformation-service initialize for.*ConnectorLoaderService'
           - 'Forwarded \d+ completeScan result.*ConnectorLoaderService'
-  - do: wait_exit
-    name: tolerate the client exiting (headless GL/audio) or staying alive
-    expect: any
-    or_alive: true
-    timeout: 60s
+  - use: finish_client_only
   - do: assert
     name: Connector fully initialised in place - no CNF and no failed coremod/mixin apply
     that:
@@ -163,20 +159,10 @@ flow:
           # mixin-plugin classes - the headless DummyProvider does this too, so it reproduces here.
           - 'does not read module'
           - 'IllegalAccessError.*connector'
-  # Positive check, not just absence-of-error: the Connector-loaded Fabric mod's own mixin
-  # must actually apply, not merely load without exception. This is the exact failure mode
-  # of a prior live-only-detectable regression (ITransformationService.initialize() run too
-  # early silently broke Connector's Fabric mixin registration, with no error anywhere) that
-  # the checks above would NOT have caught - only a positive application signal does. Mixin's
-  # apply-tracing is DEBUG-level and not on the container's stdout, so read it from the file.
-  - do: assert
-    name: Connector-loaded Fabric mod's mixin actually applied (NeoForge fml4)
-    when:
-      target: [1.21.1-neoforge]
-    that:
-      log:
-        file: logs/debug.log
-        matches: 'Mixing ExplosionMixin from explosiveenhancement\.mixins\.json into net\.minecraft\.world\.level\.Explosion'
+  # The 1.21.1 Explosive Enhancement build only targets Explosion, which is not loaded during
+  # a main-menu-only headless boot. Its positive proof here is therefore discovery plus Connector's
+  # full coremod/transformation-service lifecycle above. The current FML11 scenarios use local
+  # fixtures targeting Minecraft itself and retain a deterministic positive mixin-application check.
   # On 1.20.1 the same positive-apply check can't use ExplosionMixin: the 1.20 build of
   # explosive-enhancement registers only that one client mixin, and its target class
   # (net.minecraft.world.level.Explosion) is never classloaded during a headless main-menu

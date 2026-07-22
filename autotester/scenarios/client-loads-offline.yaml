@@ -33,16 +33,7 @@ flow:
         not_matches:
           - 'ClassNotFoundException'
           - 'Failed to load modpack'
-  - do: wait_exit
-    name: tolerate the client exiting (or idling, on a GPU host) after load
-    expect: any
-    # The asserts above already prove the client loaded; here we just drain the
-    # rest of the run. or_alive keeps this robust on a real-GPU host where the
-    # client idles in-menu instead of crashing headless - a headless host that
-    # never crashes would otherwise burn the full timeout doing nothing, so keep
-    # this short (matches the other offline scenarios' post-assert wait_exit).
-    or_alive: true
-    timeout: 60s
+  - use: finish_client_only
 
 serverFiles:
   modpackName: amp-autotest
