@@ -6,9 +6,10 @@ import static pl.skidam.automodpack_core.config.ConfigTools.GSON;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.function.LongSupplier;
+
+import pl.skidam.automodpack_core.config.ConfigTools;
 
 /** Stops rapid updater restart loops which repeatedly fail to converge. */
 public final class UpdateLoopDetector {
@@ -69,9 +70,7 @@ public final class UpdateLoopDetector {
 
 	private void write(State state) {
 		try {
-			Path parent = stateFile.getParent();
-			if (parent != null) Files.createDirectories(parent);
-			Files.writeString(stateFile, GSON.toJson(state), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+			ConfigTools.writeAtomic(stateFile, state);
 		} catch (Exception e) {
 			LOGGER.warn("Failed to save restart-loop state; allowing restart", e);
 		}

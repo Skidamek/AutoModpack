@@ -139,65 +139,6 @@ public class SmartFileUtils {
 		}
 	}
 
-	public static void copyFile(Path sourceFile, Path targetFile) throws IOException {
-		createParentDirs(targetFile);
-
-		// Use a temp file to ensure atomicity at the destination
-		Path tempTargetFile = targetFile.resolveSibling(targetFile.getFileName() + ".tmp_" + System.nanoTime());
-
-		try {
-			// Copy Source -> Temp
-			performSmartCopy(sourceFile, tempTargetFile);
-			// Promote Temp -> Target
-			moveFile(tempTargetFile, targetFile);
-		} catch (Exception e) {
-			try {
-				Files.deleteIfExists(tempTargetFile);
-			} catch (IOException ignored) {
-			}
-			LOGGER.error("Failed to copy file from {} to {}", sourceFile, targetFile, e);
-			throw e;
-		}
-	}
-
-	public static void moveFile(Path sourceFile, Path targetFile) throws IOException {
-		try {
-			// Atomic Move: The gold standard for consistency
-			Files.move(sourceFile, targetFile, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-		} catch (AtomicMoveNotSupportedException e) {
-			try {
-				// Fallback: Standard Move
-				Files.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
-			} catch (IOException ex) {
-				// Last Resort: Copy & Delete (Required for cross-drive moves)
-				performSmartCopy(sourceFile, targetFile);
-				Files.deleteIfExists(sourceFile);
-			}
-		}
-	}
-
-	private static void performSmartCopy(Path source, Path target) throws IOException {
-		try {
-			// Try Native reflink (CoW) on Java 20+
-			Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-		} catch (IOException e) {
-			// Fallback to Zero-Copy Channel Transfer (Handles locked files on Windows)
-			copyViaChannel(source, target);
-		}
-	}
-
-	private static void copyViaChannel(Path sourceFile, Path targetFile) throws IOException {
-		try (FileChannel source = LockFreeInputStream.openChannel(sourceFile);
-				FileChannel target = FileChannel.open(targetFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
-
-			long count = source.size();
-			long position = 0;
-			while (position < count) {
-				position += source.transferTo(position, count - position, target);
-			}
-		}
-	}
-
 	// --- Directory & Path Logic ---
 
 	public static void createParentDirs(Path file) throws IOException {
