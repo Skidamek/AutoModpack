@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "package": "pl.skidam.automodpack_autotest.connector.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["ConnectorFixtureMixin"],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "automodpack_connector_fixture",
+  "version": "1.0.0",
+  "name": "AutoModpack Connector Fixture",
+  "environment": "client",
+  "entrypoints": {
+    "main": ["pl.skidam.automodpack_autotest.connector.ConnectorFixture"]
+  },
+  "mixins": ["automodpack-connector-fixture.mixins.json"],
+  "depends": {
+    "minecraft": "26.1.2",
+    "java": ">=25"
+  }
+}

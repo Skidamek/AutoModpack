@@ -16,6 +16,10 @@ plugins {
 }
 
 include(":core")
+if (providers.gradleProperty("automodpack.autotest").isPresent) {
+	include(":autotest-fixtures")
+	project(":autotest-fixtures").projectDir = file("autotester/fixtures")
+}
 
 fun getProperty(key: String): String? = settings.extra[key] as? String
 

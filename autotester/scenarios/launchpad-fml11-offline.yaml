@@ -1,0 +1,68 @@
+id: launchpad-fml11-offline
+description: |
+  NeoForge 26.1.2 proof that Sinytra Launchpad loads in place from AutoModpack's
+  selected modpack directory and reads an opted-in Fabric-only mod from that same
+  directory. The downstream fixture is staged before Launchpad on purpose: custom
+  readers must be installed globally before any staged jar is interpreted, regardless
+  of filesystem order. Nothing is copied into standard mods/ and no restart is used.
+
+network: host
+mode: client-only
+
+timeouts:
+  clientRunSeconds: 1200
+
+targets:
+  - 26.1-neoforge
+
+flow:
+  - do: stage_modpack
+    name: stage a Fabric-only fixture before Launchpad in the modpack directory
+    mods:
+      - merged/autotest-fixtures/launchpad-downstream-26.1.jar
+      - url: https://cdn.modrinth.com/data/voWgQoWV/versions/nWdOZVsP/launchpad-1.8.0%2B26.1.2-full.jar
+        sha512: a863fc9e8b229c2f2d952c6ccacd3db7afe20654fff3335b4a6d23cc78dbd625121dd0c3ac61199d6027bdc4d06dde6473b52094676d2356914e6d191f2faf75
+  - do: launch_client
+    name: boot NeoForge against the staged Launchpad modpack
+  - do: wait_for
+    name: Launchpad services ran and the Fabric fixture initialized
+    timeout: 300s
+    until:
+      all:
+        - log:
+            container: client
+            matches_all:
+              - 'Bootstrapping \d+ early-service'
+              - 'AUTOMODPACK_LAUNCHPAD_FIXTURE_INITIALIZED'
+        - log:
+            file: logs/debug.log
+            matches_all:
+              - 'org\.sinytra\.launchpad\.service\.FabricModJsonFileReader from .*launchpad-1\.8\.0'
+              - 'org\.sinytra\.launchpad\.service\.InDevFabricJarLocator from .*launchpad-1\.8\.0'
+              - 'org\.sinytra\.launchpad\.service\.FabricJarInJarLocator from .*launchpad-1\.8\.0'
+              - 'org\.sinytra\.launchpad\.service\.FabricAccessTransformerServiceProvider'
+  - do: assert
+    name: Launchpad loaded the downstream Fabric mod cleanly and entirely in place
+    that:
+      all:
+        - only_files:
+            dir: mods
+            patterns: ['automodpack.jar']
+        - log:
+            container: client
+            not_matches:
+              - 'Applying workaround'
+              - 'Please restart the game to apply updates!'
+              - 'Failed to (?:load|run|instantiate).*Launchpad'
+              - 'ClassNotFoundException.*(?:launchpad|automodpack_launchpad_fixture)'
+              - 'NoClassDefFoundError.*(?:launchpad|automodpack_launchpad_fixture)'
+              - 'Mixin apply for mod automodpack_launchpad_fixture failed'
+              - 'DuplicateModsFoundException'
+        - log:
+            file: logs/debug.log
+            matches: 'Mixing LaunchpadFixtureMixin from automodpack-launchpad-fixture\.mixins\.json into net\.minecraft\.client\.Minecraft'
+  - use: finish_client_only
+
+serverFiles:
+  modpackName: amp-autotest
+  marker: config/amp-autotest-marker.json

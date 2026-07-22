@@ -105,6 +105,12 @@ spotless {
 	}
 }
 
+if (providers.gradleProperty("automodpack.autotest").isPresent) {
+	tasks.matching { it.name == "build" }.configureEach {
+		dependsOn(":autotest-fixtures:build")
+	}
+}
+
 tasks.register("formatApply") {
 	group = "formatting"
 	description = "Formats all authored source files."

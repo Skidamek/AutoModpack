@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "automodpack_launchpad_fixture",
+  "version": "1.0.0",
+  "name": "AutoModpack Launchpad Fixture",
+  "environment": "client",
+  "entrypoints": {
+    "main": ["pl.skidam.automodpack_autotest.launchpad.LaunchpadFixture"]
+  },
+  "mixins": ["automodpack-launchpad-fixture.mixins.json"],
+  "depends": {
+    "minecraft": "26.1.2",
+    "java": ">=25"
+  },
+  "custom": {
+    "launchpad:compatible": true
+  }
+}

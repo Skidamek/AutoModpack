@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "package": "pl.skidam.automodpack_autotest.launchpad.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["LaunchpadFixtureMixin"],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
