@@ -1,5 +1,6 @@
 package pl.skidam.automodpack_loader_core_neoforge;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -75,7 +76,7 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 				if (earlyServiceJars.isEmpty()) return;
 			}
 
-			EarlyServiceLayer.register(earlyServiceJars, childLoader);
+			EarlyServiceLayer.register(earlyServiceJars);
 
 			for (Path jar : earlyServiceJars) {
 				for (String impl : EarlyServiceLayer.serviceImpls(jar, EarlyServiceLayer.GRAPHICS_BOOTSTRAPPER_SERVICE)) {
@@ -96,10 +97,10 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 	}
 
 	/**
-	 * Grows FMLLoader's own flat classloader chain with these jars, mirroring what it does for its
-	 * own "FML Early Services" jars ({@code FMLLoader.loadEarlyServices()} ->
-	 * {@code appendLoader("FML Early Services", jarContentsList)}), a private instance method reached
-	 * via reflection.
+	 * Registers these jars exactly like {@code FMLLoader.loadEarlyServices()}: each path becomes a
+	 * native early-service mod file, its contents grow FMLLoader's flat classloader chain, and the mod
+	 * file joins {@code earlyServicesJars} so dependency locators can inspect its nested jars later.
+	 * FML keeps all three operations private, so this mirrors them through reflection.
 	 *
 	 * <p>
 	 * This also bridges to the game layer: {@code FMLLoader} later builds the GAME
@@ -112,16 +113,29 @@ public class EarlyServiceBootstrapper implements GraphicsBootstrapper {
 			Class<?> fmlLoaderClass = Class.forName("net.neoforged.fml.loading.FMLLoader");
 			Object current = fmlLoaderClass.getMethod("getCurrent").invoke(null);
 
-			Class<?> jarContentsClass = Class.forName("net.neoforged.fml.jarcontents.JarContents");
-			Method ofPath = jarContentsClass.getMethod("ofPath", Path.class);
+			Class<?> earlyServiceDiscovery = Class.forName("net.neoforged.fml.loading.EarlyServiceDiscovery");
+			Method createEarlyServiceModFile = earlyServiceDiscovery.getDeclaredMethod("createEarlyServiceModFile", Path.class);
+			createEarlyServiceModFile.setAccessible(true);
+
+			Class<?> modFileClass = Class.forName("net.neoforged.fml.loading.moddiscovery.ModFile");
+			Method getContents = modFileClass.getMethod("getContents");
+			List<Object> earlyServiceModFiles = new ArrayList<>(jars.size());
 			List<Object> jarContentsList = new ArrayList<>(jars.size());
 			for (Path jar : jars) {
-				jarContentsList.add(ofPath.invoke(null, jar));
+				Object modFile = createEarlyServiceModFile.invoke(null, jar);
+				earlyServiceModFiles.add(modFile);
+				jarContentsList.add(getContents.invoke(modFile));
 			}
 
 			Method appendLoader = fmlLoaderClass.getDeclaredMethod("appendLoader", String.class, List.class);
 			appendLoader.setAccessible(true);
 			appendLoader.invoke(current, "automodpack modpack early services", jarContentsList);
+
+			Field earlyServicesJars = fmlLoaderClass.getDeclaredField("earlyServicesJars");
+			earlyServicesJars.setAccessible(true);
+			@SuppressWarnings("unchecked")
+			List<Object> registered = (List<Object>) earlyServicesJars.get(current);
+			registered.addAll(earlyServiceModFiles);
 
 			Method getCurrentClassLoader = fmlLoaderClass.getMethod("getCurrentClassLoader");
 			return (ClassLoader) getCurrentClassLoader.invoke(current);

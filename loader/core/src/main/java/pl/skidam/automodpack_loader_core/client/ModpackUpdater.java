@@ -18,7 +18,6 @@ import java.util.stream.Stream;
 import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.auth.Secrets;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -161,10 +160,8 @@ public class ModpackUpdater {
 			String fingerprint = updateStateFingerprint(applyResult);
 			if (updateLoopDetector.evaluateAndRecord(fingerprint) == UpdateLoopDetector.Decision.SUPPRESS) {
 				LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
-				LOGGER.error("Corrections were applied during this launch but still require a restart: {}",
-						String.join(", ", applyResult.reasonDescriptions()));
-				LOGGER.error(
-						"Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
+				LOGGER.error("Corrections were applied during this launch but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
+				LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
 				return;
 			}
 

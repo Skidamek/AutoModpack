@@ -12,24 +12,13 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import net.neoforged.neoforgespi.ILaunchContext;
-import net.neoforged.neoforgespi.locating.IDependencyLocator;
-import net.neoforged.neoforgespi.locating.IDiscoveryPipeline;
-import net.neoforged.neoforgespi.locating.IModFile;
-import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
-
-import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.loader.LoaderServicePaths;
 import pl.skidam.automodpack_core.utils.FileInspection;
 
@@ -43,9 +32,9 @@ import pl.skidam.automodpack_core.utils.FileInspection;
  * native fallback with no manual class/resource bridging, {@code addReads}, or {@code Unsafe}.
  *
  * <p>
- * This class covers this loader version's jar inspection/candidate-locator/dependency-locator/
- * mod-file-reader replay that lets a modpack-folder early-service jar's real (inner) mod load in
- * place. See {@link EarlyServiceBootstrapper} for where jars are appended to FMLLoader's chain.
+ * This class inspects and registers modpack-folder early-service jars. Once appended, FML discovers
+ * their locators, readers, language loaders, and class processors through its native ServiceLoader
+ * passes; AutoModpack only invokes GraphicsBootstrapper early because that pass already happened.
  */
 public final class EarlyServiceLayer {
 
@@ -56,15 +45,15 @@ public final class EarlyServiceLayer {
 	public static final String DEPENDENCY_LOCATOR_SERVICE = LoaderServicePaths.NEOFORGE_DEPENDENCY_LOCATOR;
 	public static final String LANGUAGE_LOADER_SERVICE = LoaderServicePaths.NEOFORGE_LANGUAGE_LOADER;
 	public static final String MOD_FILE_READER_SERVICE = LoaderServicePaths.NEOFORGE_MOD_FILE_READER;
+	public static final String CLASS_PROCESSOR_SERVICE = LoaderServicePaths.NEOFORGE_CLASS_PROCESSOR;
+	public static final String CLASS_PROCESSOR_PROVIDER_SERVICE = LoaderServicePaths.NEOFORGE_CLASS_PROCESSOR_PROVIDER;
 	// ICoreMod and ModLauncher's ITransformationService no longer exist as SPIs on this loader.
 
-	static final List<String> ACTIVELY_RUN_SERVICES = List.of(GRAPHICS_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE,
-			MOD_FILE_READER_SERVICE);
-
-	// Services a mod can ship without needing a copy: the actively-run ones above, plus language
-	// loaders (passive - picked up from the flat classloader chain once appended).
-	public static final Set<String> HANDLEABLE_SERVICES = Stream.concat(ACTIVELY_RUN_SERVICES.stream(), Stream.of(LANGUAGE_LOADER_SERVICE))
-			.collect(Collectors.toUnmodifiableSet());
+	// Every service FML can discover natively after the jar is appended to its flat classloader
+	// chain. GraphicsBootstrapper is the sole exception: AutoModpack invokes it because FML's own
+	// bootstrapper pass has already selected AutoModpack by then.
+	public static final Set<String> HANDLEABLE_SERVICES = Set.of(GRAPHICS_BOOTSTRAPPER_SERVICE, CANDIDATE_LOCATOR_SERVICE, DEPENDENCY_LOCATOR_SERVICE,
+			MOD_FILE_READER_SERVICE, LANGUAGE_LOADER_SERVICE, CLASS_PROCESSOR_SERVICE, CLASS_PROCESSOR_PROVIDER_SERVICE);
 
 	// Read from net.neoforged.fml.loading.EarlyServiceDiscovery.SERVICES so this is exact for this
 	// loader version. The force-copy decision (ModpackLoader#knownServices) counts only services
@@ -98,16 +87,25 @@ public final class EarlyServiceLayer {
 			handled.add(LoaderServicePaths.NEOFORGE_IMMEDIATE_WINDOW_PROVIDER);
 		}
 		handled.add(LANGUAGE_LOADER_SERVICE);
+		addIfPresent(handled, "net.neoforged.neoforgespi.transformation.ClassProcessor", CLASS_PROCESSOR_SERVICE);
+		addIfPresent(handled, "net.neoforged.neoforgespi.transformation.ClassProcessorProvider", CLASS_PROCESSOR_PROVIDER_SERVICE);
 		return Set.copyOf(handled);
+	}
+
+	private static void addIfPresent(Set<String> handled, String className, String servicePath) {
+		try {
+			Class.forName(className, false, EarlyServiceLayer.class.getClassLoader());
+			handled.add(servicePath);
+		} catch (ClassNotFoundException ignored) {
+			// This service does not exist on the running FML generation.
+		}
 	}
 
 	// Modpack-folder jars EarlyServiceBootstrapper has appended to FMLLoader's classloader chain,
 	// plus that shared classloader.
 	private static final Set<Path> REGISTERED_JARS = ConcurrentHashMap.newKeySet();
-	private static final AtomicReference<ClassLoader> CHILD_LOADER = new AtomicReference<>();
 
-	static void register(List<Path> jars, ClassLoader childLoader) {
-		CHILD_LOADER.set(childLoader);
+	static void register(List<Path> jars) {
 		for (Path jar : jars) {
 			REGISTERED_JARS.add(canonical(jar));
 		}
@@ -115,10 +113,6 @@ public final class EarlyServiceLayer {
 
 	public static boolean isEarlyServiceJar(Path jar) {
 		return jar != null && REGISTERED_JARS.contains(canonical(jar));
-	}
-
-	private static ClassLoader classLoaderFor(Path jar) {
-		return isEarlyServiceJar(jar) ? CHILD_LOADER.get() : null;
 	}
 
 	// Purely lexical (no toRealPath()): both the writer (register(), from Files.list(modpackMods))
@@ -129,7 +123,7 @@ public final class EarlyServiceLayer {
 	}
 
 	// Per-jar facts derived from a single jar mount, cached for the JVM's life.
-	private record JarInfo(boolean activelyRunInPlace, Set<String> services, Map<String, List<String>> serviceImpls, boolean standalone) {}
+	private record JarInfo(boolean eligible, Map<String, List<String>> serviceImpls, boolean standalone) {}
 
 	private static final Map<Path, JarInfo> JAR_INFO = new ConcurrentHashMap<>();
 
@@ -138,132 +132,31 @@ public final class EarlyServiceLayer {
 	}
 
 	private static JarInfo inspect(Path jar) {
-		boolean activelyRun = false;
-		Set<String> services = Set.of();
+		boolean eligible = false;
 		Map<String, List<String>> impls = new HashMap<>();
 		boolean standalone = false;
 		try (FileSystem fs = FileSystems.newFileSystem(jar)) {
 			// Scoped to what this loader version actually handles (knownServices()), so a legacy/
 			// removed SPI doesn't wrongly make an otherwise in-place-able mod look unhandleable.
-			services = FileInspection.getServices(fs, knownServices());
-			standalone = Files.exists(fs.getPath("META-INF/neoforge.mods.toml"));
-			for (String service : ACTIVELY_RUN_SERVICES) {
-				if (Files.exists(fs.getPath(service))) {
-					activelyRun = true;
-					impls.put(service, readServiceImpls(fs, service));
-				}
+			Set<String> services = FileInspection.getServices(fs, knownServices());
+			eligible = !services.isEmpty() && HANDLEABLE_SERVICES.containsAll(services);
+			standalone = Files.exists(fs.getPath("META-INF/neoforge.mods.toml")) && !FileInspection.hasNestedModWithSameId(fs);
+			if (Files.exists(fs.getPath(GRAPHICS_BOOTSTRAPPER_SERVICE))) {
+				impls.put(GRAPHICS_BOOTSTRAPPER_SERVICE, readServiceImpls(fs, GRAPHICS_BOOTSTRAPPER_SERVICE));
 			}
 		} catch (Exception e) {
 			LOGGER.warn("[AutoModpack] Could not inspect {}; not handling it in place", jar.getFileName(), e);
 		}
-		return new JarInfo(activelyRun, services, impls, standalone);
+		return new JarInfo(eligible, impls, standalone);
 	}
 
-	/** The impl class names of an {@link #ACTIVELY_RUN_SERVICES} service declared at the jar's root. */
+	/** The implementation class names of a service declared at the jar's root. */
 	public static List<String> serviceImpls(Path jar, String serviceFile) {
 		return info(jar).serviceImpls().getOrDefault(serviceFile, List.of());
 	}
 
-	public static void runCandidateLocators(List<Path> jars, ILaunchContext context, IDiscoveryPipeline pipeline) {
-		List<IModFileCandidateLocator> locators = new ArrayList<>();
-		for (Path jar : jars) {
-			ClassLoader cl = classLoaderFor(jar);
-			if (cl == null) continue;
-			for (String impl : serviceImpls(jar, CANDIDATE_LOCATOR_SERVICE)) {
-				try {
-					locators.add((IModFileCandidateLocator) Class.forName(impl, true, cl).getDeclaredConstructor().newInstance());
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] Failed to load candidate locator {} from {}", impl, jar.getFileName(), t);
-				}
-			}
-		}
-		// Run highest-priority first (IOrderedProvider order) across ALL early-service jars, so a
-		// replayed locator's declared priority is honoured relative to the others; raw modsToLoad
-		// (filesystem) order would silently drop it.
-		locators.sort(Comparator.comparingInt(IModFileCandidateLocator::getPriority).reversed());
-		for (IModFileCandidateLocator locator : locators) {
-			try {
-				LOGGER.debug("[AutoModpack] Running in-place candidate locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
-				locator.findCandidates(context, pipeline);
-			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to run candidate locator {}", locator.getClass().getName(), t);
-			}
-		}
-	}
-
-	public static void runDependencyLocators(List<Path> jars, List<?> loadedMods, IDiscoveryPipeline pipeline) {
-		@SuppressWarnings("unchecked")
-		List<IModFile> mods = (List<IModFile>) loadedMods;
-		List<IDependencyLocator> locators = new ArrayList<>();
-		for (Path jar : jars) {
-			ClassLoader cl = classLoaderFor(jar);
-			if (cl == null) continue;
-			for (String impl : serviceImpls(jar, DEPENDENCY_LOCATOR_SERVICE)) {
-				try {
-					locators.add((IDependencyLocator) Class.forName(impl, true, cl).getDeclaredConstructor().newInstance());
-				} catch (Throwable t) {
-					LOGGER.error("[AutoModpack] Failed to load dependency locator {} from {}", impl, jar.getFileName(), t);
-				}
-			}
-		}
-		locators.sort(Comparator.comparingInt(IDependencyLocator::getPriority).reversed());
-		for (IDependencyLocator locator : locators) {
-			try {
-				LOGGER.debug("[AutoModpack] Running in-place dependency locator {} (priority {})", locator.getClass().getName(), locator.getPriority());
-				locator.scanMods(mods, pipeline);
-			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to run dependency locator {}", locator.getClass().getName(), t);
-			}
-		}
-	}
-
-	/**
-	 * Forwards an early-service jar's {@code IModFileReader}s into the live discovery pipeline via
-	 * reflection - there is no public API to register one.
-	 */
-	public static void runModFileReaders(Path jar, IDiscoveryPipeline pipeline) {
-		ClassLoader cl = classLoaderFor(jar);
-		if (cl == null) return;
-		List<Object> readers = new ArrayList<>();
-		for (String impl : serviceImpls(jar, MOD_FILE_READER_SERVICE)) {
-			try {
-				readers.add(Class.forName(impl, true, cl).getDeclaredConstructor().newInstance());
-			} catch (Throwable t) {
-				LOGGER.error("[AutoModpack] Failed to instantiate IModFileReader {} from {}", impl, jar.getFileName(), t);
-			}
-		}
-		if (readers.isEmpty()) return;
-
-		try {
-			Field outer = pipeline.getClass().getDeclaredField("this$0");
-			outer.setAccessible(true);
-			Object modDiscoverer = outer.get(pipeline);
-			Field readersField = modDiscoverer.getClass().getDeclaredField("modFileReaders");
-			readersField.setAccessible(true);
-			@SuppressWarnings("unchecked")
-			List<Object> current = (List<Object>) readersField.get(modDiscoverer);
-			List<Object> merged = new ArrayList<>(current);
-			merged.addAll(readers);
-			merged.sort(Comparator.comparingInt(EarlyServiceLayer::providerPriority).reversed());
-			readersField.set(modDiscoverer, List.copyOf(merged));
-			LOGGER.debug("[AutoModpack] Forwarded {} in-place IModFileReader(s) from {} into mod discovery", readers.size(), jar.getFileName());
-		} catch (Throwable t) {
-			LOGGER.error("[AutoModpack] Could not forward IModFileReader(s) from {} into mod discovery; a mod relying on that reader may need copy-to-standard",
-					jar.getFileName(), t);
-		}
-	}
-
-	private static int providerPriority(Object provider) {
-		try {
-			return (int) provider.getClass().getMethod("getPriority").invoke(provider);
-		} catch (Throwable t) {
-			return 0;
-		}
-	}
-
 	public static boolean eligibleForInPlace(Path jar) {
-		JarInfo info = info(jar);
-		return info.activelyRunInPlace() && HANDLEABLE_SERVICES.containsAll(info.services());
+		return info(jar).eligible();
 	}
 
 	public static boolean isStandaloneModFile(Path jar) {

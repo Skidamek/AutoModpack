@@ -125,6 +125,40 @@ public class FileInspection {
 		return extractBasicInfo(file, ModMetadata::modId);
 	}
 
+	public static boolean hasNestedModWithSameId(Path file) {
+		if (isJarInvalid(file)) return false;
+		try (FileSystem fs = FileSystems.newFileSystem(file)) {
+			return hasNestedModWithSameId(fs);
+		} catch (IOException e) {
+			LOGGER.debug("Failed to inspect nested mod IDs in {}", file);
+			return false;
+		}
+	}
+
+	public static boolean hasNestedModWithSameId(FileSystem fs) {
+		ModMetadata metadata = getModMetadata(fs);
+		if (metadata == null || metadata.modId() == null) return false;
+
+		Set<String> rootIds = new HashSet<>(metadata.provides());
+		rootIds.add(metadata.modId());
+		try (Stream<Path> walk = Files.walk(fs.getPath("/"))) {
+			return walk.filter(path -> path.toString().endsWith(".jar")).anyMatch(path -> nestedModHasAnyId(path, rootIds));
+		} catch (IOException e) {
+			LOGGER.debug("Failed to inspect nested mod IDs");
+			return false;
+		}
+	}
+
+	private static boolean nestedModHasAnyId(Path path, Set<String> rootIds) {
+		try (InputStream is = Files.newInputStream(path)) {
+			Mod nested = readModFromStream(path, is);
+			return nested != null && !Collections.disjoint(rootIds, nested.IDs());
+		} catch (IOException e) {
+			LOGGER.debug("Skipping unreadable nested jar: {}", path);
+			return false;
+		}
+	}
+
 	public static LoaderManagerService.EnvironmentType getModEnvironment(Path file) {
 		return extractBasicInfo(file, ModMetadata::environment);
 	}
