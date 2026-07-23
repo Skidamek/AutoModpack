@@ -54,6 +54,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 
 		// Validate the secret
 		if (!validateSecret(ctx, address, msg.getSecret())) {
+			LOGGER.warn("Player with address {} tried to connect but we've received an invalid secret - make sure they are whitelisted", address);
 			sendError(ctx, protocolVersion, "Authentication failed");
 			return;
 		}
