@@ -354,16 +354,19 @@ step is preserved.
 
 ## CI Workflow
 
-`.github/workflows/ingame-tests.yml` is manual (`workflow_dispatch`). It builds
-the normal project artifacts, builds the autotest client image, runs the chosen
-target/scenario matrix, uploads per-target logs, and publishes an aggregate
-summary.
+`.github/workflows/ingame-tests.yml` is manual (`workflow_dispatch`). It selects
+the target/scenario matrix first, then each test job builds only its own
+instrumented target locally. Instrumented jars are never uploaded as workflow
+artifacts. The workflow builds and briefly transfers one shared autotest client
+image, uploads per-target logs, and publishes an aggregate summary.
 
 ## Bridge
 
-The bridge is disabled unless the JVM property `automodpack.autotest=true` is
-present. Test containers pass a per-run token and game directory through JVM
-properties. Commands and responses are JSON files under:
+The bridge and its dev mixins exist only in jars built with
+`-Pautomodpack.autotest`; normal release jars exclude their classes and mixin
+entries. Instrumented jars apply the dev mixins directly, while the bridge still
+requires the per-run token and game-directory JVM properties supplied by the test
+container. Commands and responses are JSON files under:
 
 ```text
 <gameDir>/automodpack/autotest/

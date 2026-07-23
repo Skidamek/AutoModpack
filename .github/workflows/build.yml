@@ -8,12 +8,6 @@ on:
         type: string
         required: false
         default: ''
-      autotest:
-        description: Bundle autotester instrumentation into the jars
-        type: boolean
-        required: false
-        default: false
-
 permissions:
   contents: read
 
@@ -69,13 +63,7 @@ jobs:
       - name: Build target
         env:
           TARGET: ${{ matrix.subproject }}
-          AUTOTEST: ${{ inputs.autotest }}
-        run: |
-          args=(buildTargets "-Pautomodpack.targets=$TARGET")
-          if [[ "$AUTOTEST" == true ]]; then
-            args+=("-Pautomodpack.autotest")
-          fi
-          ./gradlew "${args[@]}"
+        run: ./gradlew buildTargets "-Pautomodpack.targets=$TARGET"
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:

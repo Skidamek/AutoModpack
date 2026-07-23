@@ -10,7 +10,6 @@ import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import com.llamalad7.mixinextras.MixinExtrasBootstrap;
 
 public class MixinPlugin implements IMixinConfigPlugin {
-	private static final boolean AUTOTEST_ENABLED = Boolean.getBoolean("automodpack.autotest");
 
 	@Override
 	public void onLoad(String mixinPackage) {
@@ -24,7 +23,6 @@ public class MixinPlugin implements IMixinConfigPlugin {
 
 	@Override
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-		if (mixinClassName.contains(".dev.")) return AUTOTEST_ENABLED;
 		return true;
 	}
 

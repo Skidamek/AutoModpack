@@ -65,8 +65,7 @@ public final class AutoTestBridge {
 		return reloadFinished;
 	}
 
-	public static void startIfEnabled() {
-		if (!Boolean.getBoolean("automodpack.autotest")) return;
+	public static void start() {
 		if (!STARTED.compareAndSet(false, true)) return;
 		String token = System.getProperty("automodpack.autotest.token", "");
 		String gameDir = System.getProperty("automodpack.autotest.gamedir", "");

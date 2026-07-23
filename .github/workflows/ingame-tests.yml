@@ -34,13 +34,6 @@ jobs:
     uses: ./.github/workflows/autotester-tests.yml
     secrets: inherit
 
-  build:
-    needs: [prepare, unit]
-    uses: ./.github/workflows/build.yml
-    with:
-      autotest: true
-    secrets: inherit
-
   client-image:
     needs: unit
     runs-on: ubuntu-latest
@@ -54,31 +47,43 @@ jobs:
         run: docker save automodpack-autotest-client:local | zstd -T0 -3 -o /tmp/automodpack-autotest-client.tar.zst
       - uses: actions/upload-artifact@v7
         with:
-          name: autotester-client-image
+          name: ingame-client-image
           path: /tmp/automodpack-autotest-client.tar.zst
           compression-level: 0
+          retention-days: 1
 
   ingame:
-    needs: [build, prepare, client-image]
+    needs: [prepare, client-image]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          add-job-summary: never
+          cache-provider: basic
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+      - name: Build instrumented target
+        run: >
+          ./gradlew buildTargets
+          "-Pautomodpack.targets=${{ matrix.target }}"
+          -Pautomodpack.autotest
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
       - uses: actions/download-artifact@v8
         with:
-          pattern: '*.jar'
-          path: merged/
-          merge-multiple: true
-      - uses: actions/download-artifact@v8
-        with:
-          name: autotester-client-image
-          path: /tmp/autotester-client-image
+          name: ingame-client-image
+          path: /tmp/ingame-client-image
       - name: Load autotest client image
-        run: zstd -d -c /tmp/autotester-client-image/automodpack-autotest-client.tar.zst | docker load
+        run: zstd -d -c /tmp/ingame-client-image/automodpack-autotest-client.tar.zst | docker load
       - name: Run autotest
         run: >
           uv --project autotester run autotester run
@@ -87,11 +92,13 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: autotester-${{ matrix.target }}
+          name: ingame-results-${{ matrix.target }}
           path: autotester/out
+          if-no-files-found: warn
+          retention-days: 7
 
   report:
-    needs: [ingame]
+    needs: [prepare, ingame]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -99,10 +106,13 @@ jobs:
       # ubuntu-latest ships with. Adding setup-uv without a checkout only
       # produced "no cache-dependency file matched" / "empty workdir" warnings.
       - uses: actions/download-artifact@v8
+        continue-on-error: true
         with:
-          pattern: autotester-*
+          pattern: ingame-results-*
       - name: Aggregate results
         id: aggregate
+        env:
+          EXPECTED_MATRIX: ${{ needs.prepare.outputs.matrix }}
         run: |
           cat > /tmp/aggregate.py << 'PYEOF'
           import json, glob, os
@@ -136,7 +146,35 @@ jobs:
                   results.extend(data.get("results", []))
               except Exception:
                   name = f.split(os.sep)[0] if os.sep in f else "unknown"
-                  results.append({"target": name, "ok": False, "error": "results.json missing or invalid"})
+                  target = name.removeprefix("ingame-results-")
+                  results.append({"target": target, "ok": False, "error": "results.json missing or invalid"})
+
+          try:
+              expected = json.loads(os.environ.get("EXPECTED_MATRIX", "")).get("target", [])
+          except (json.JSONDecodeError, AttributeError):
+              expected = None
+          if expected is None:
+              expected = []
+              results.append({
+                  "target": "workflow",
+                  "ok": False,
+                  "error": "target preparation produced no valid test matrix",
+              })
+          elif not expected:
+              results.append({
+                  "target": "workflow",
+                  "ok": False,
+                  "error": "target preparation selected no test targets",
+              })
+
+          found = {str(r.get("target")) for r in results}
+          for target in expected:
+              if target not in found:
+                  results.append({
+                      "target": target,
+                      "ok": False,
+                      "error": "test job produced no results (build, setup, or runner failed)",
+                  })
 
           total = len(results)
           passed = sum(1 for r in results if r.get("ok"))
@@ -179,10 +217,11 @@ jobs:
           python3 /tmp/aggregate.py
       - uses: actions/upload-artifact@v7
         with:
-          name: aggregated-results
+          name: ingame-results-summary
           path: |
             aggregated.json
             summary.md
+          retention-days: 14
       - name: Post job summary
         run: cat summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Check overall result

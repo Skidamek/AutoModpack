@@ -15,6 +15,6 @@ public abstract class MinecraftMixin {
 
 	@Inject(method = "<init>", at = @At("RETURN"))
 	private void onInit(GameConfig gameConfig, CallbackInfo ci) {
-		AutoTestBridge.startIfEnabled();
+		AutoTestBridge.start();
 	}
 }
