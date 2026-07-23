@@ -1,3 +1,5 @@
+import java.util.Locale
+
 plugins {
 	kotlin("jvm")
 	id("automodpack.common")
@@ -5,12 +7,13 @@ plugins {
 	id("net.neoforged.moddev")
 }
 
+val targetName = sc.current.project
 val minecraftVersion = property("deps.minecraft") as String
 val neoForgeVersion = property("deps.neoforge") as String
 
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
-base.archivesName.set("${property("mod_name")}-mc$minecraftVersion-neoforge".lowercase())
+base.archivesName.set("${property("mod_name")}-mc$targetName".lowercase(Locale.ROOT))
 
 neoForge {
 	validateAccessTransformers = true

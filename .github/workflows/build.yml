@@ -3,20 +3,19 @@ name: step.build
 on:
   workflow_call:
     inputs:
-      release:
-        type: boolean
-        required: false
-        default: false
-      target_subproject:
-        description: see release.yml, leave it empty to build all
+      targets:
+        description: Comma-separated Stonecutter targets; empty builds all targets
         type: string
         required: false
         default: ''
       autotest:
-        description: bundle the autotester instrumentation into the jars (never for releases)
+        description: Bundle autotester instrumentation into the jars
         type: boolean
         required: false
         default: false
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -26,35 +25,29 @@ jobs:
       - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: 25
-
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-      - name: Execute Gradle build
-        run: |
-          chmod +x gradlew
-          flags=""
-          if [ "${{ inputs.autotest }}" = "true" ]; then
-              flags="-Pautomodpack.autotest"
-          fi
-          if [ -z "${{ inputs.target_subproject }}" ]; then
-              echo "Building all subprojects"
-              ./gradlew build $flags
-          else
-              args=$(echo "${{ inputs.target_subproject }}" | tr ',' '\n' | sed 's/$/:build/' | paste -sd ' ')
-              echo "Building with arguments=$args"
-              ./gradlew $args $flags
-          fi
+      - name: Build targets
         env:
-          BUILD_ID: ${{ github.run_number }}
-          BUILD_RELEASE: ${{ inputs.release }}
-
+          TARGETS: ${{ inputs.targets }}
+          AUTOTEST: ${{ inputs.autotest }}
+        run: |
+          args=(buildTargets)
+          if [[ -n "$TARGETS" ]]; then
+            args+=("-Pautomodpack.targets=$TARGETS")
+          fi
+          if [[ "$AUTOTEST" == true ]]; then
+            args+=("-Pautomodpack.autotest")
+          fi
+          ./gradlew "${args[@]}"
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: build-artifacts
-          path: merged
+          path: merged/*.jar
+          if-no-files-found: error

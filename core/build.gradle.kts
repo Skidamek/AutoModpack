@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.api.file.DuplicatesStrategy
 
 plugins {
 	kotlin("jvm")
@@ -67,6 +68,10 @@ tasks.named<Test>("test") {
 tasks.named<ShadowJar>("shadowJar") {
 	archiveBaseName.set("automodpack-server")
 	configurations = listOf(project.configurations.compileClasspath.get())
+	duplicatesStrategy = DuplicatesStrategy.INCLUDE
+	filesNotMatching("META-INF/*.kotlin_module") {
+		duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	}
 
 	manifest {
 		attributes(

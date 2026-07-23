@@ -1,6 +1,7 @@
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.node.ObjectNode
+import java.util.Locale
 
 plugins {
 	kotlin("jvm")
@@ -9,6 +10,7 @@ plugins {
 	id("net.neoforged.moddev.legacyforge")
 }
 
+val targetName = sc.current.project
 val minecraftVersion = property("deps.minecraft") as String
 val selectedForgeVersion = property("deps.forge") as String
 val mixinExtrasVersion = versionProperty("versionMixinExtras")
@@ -16,7 +18,7 @@ val mixinVersion = versionProperty("versionMixin")
 
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
-base.archivesName.set("${property("mod_name")}-mc$minecraftVersion-forge".lowercase())
+base.archivesName.set("${property("mod_name")}-mc$targetName".lowercase(Locale.ROOT))
 
 legacyForge {
 	validateAccessTransformers = true

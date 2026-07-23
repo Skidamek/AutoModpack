@@ -1,31 +1,12 @@
 import org.gradle.api.Project
-import org.tomlj.Toml
 import java.io.File
 
 fun Project.versionProperty(name: String): String = providers.gradleProperty(name).get()
 
 fun Project.loaderVersion(moduleName: String = project.name): String {
-    val (section, key) = when (moduleName) {
-        "loader-fabric-15", "loader-fabric-core" -> "loader-modules" to "fabric-15"
-        "loader-fabric-16" -> "loader-modules" to "fabric-16"
-        "loader-fabric-19" -> "fabric" to "deps.fabric-loader"
-        "loader-forge-fml40" -> "1.18.2-forge" to "deps.forge"
-        "loader-forge-fml47", "loader-forge-earlyservices", "loader-modlauncher-earlyservices" ->
-            "1.20.1-forge" to "deps.forge"
-        "loader-neoforge-fml4" -> "1.21.1-neoforge" to "deps.neoforge"
-        "loader-neoforge-fml10", "loader-neoforge-earlyservices" ->
-            "1.21.10-neoforge" to "deps.neoforge"
-        "loader-neoforge-fml11" -> "26.1-neoforge" to "deps.neoforge"
-        else -> error("Unknown loader module: $moduleName")
-    }
-
-    val properties = Toml.parse(rootProject.file("stonecutter.properties.toml").toPath())
-    if (properties.hasErrors()) {
-        error(properties.errors().joinToString("\n"))
-    }
-
-    return properties.getString(listOf(section) + key.split('.'))
-        ?: error("Missing $section.$key in stonecutter.properties.toml")
+    @Suppress("UNCHECKED_CAST")
+    val versions = rootProject.extensions.extraProperties["loaderVersions"] as Map<String, String>
+    return versions[moduleName] ?: error("Unknown loader module: $moduleName")
 }
 
 fun getLoaderModuleName(projectName: String): String {

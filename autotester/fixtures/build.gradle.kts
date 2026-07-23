@@ -14,7 +14,7 @@ java {
 
 val connectorFixture = sourceSets.create("connectorFixture")
 val launchpadFixture = sourceSets.create("launchpadFixture")
-val fabricLoaderVersion = loaderVersion("loader-fabric-19")
+val fabricLoaderVersion = loaderVersion("loader-fabric-latest")
 val mixinVersion = versionProperty("versionMixin")
 
 dependencies {

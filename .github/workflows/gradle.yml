@@ -2,6 +2,13 @@ name: Dev Builds
 
 on: [workflow_dispatch, push]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   format:
     runs-on: ubuntu-latest

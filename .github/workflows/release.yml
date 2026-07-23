@@ -1,184 +1,126 @@
 name: Release
 
-# release: <default> (release title)
-# dispatch (all): Manual release for $target_release_tag
-# dispatch (specified): Manual release for $target_release_tag (subproject: $target_subproject)
-run-name: |-
-  ${{ github.event_name == 'workflow_dispatch' && format('Manual release for {0}{1}', inputs.target_release_tag, inputs.target_subproject && format(' (subproject: {0})', inputs.target_subproject) || '') || '' }}
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+      && format('Manual release for {0}{1}', inputs.target_release_tag, inputs.target_subproject && format(' ({0})', inputs.target_subproject) || '')
+      || github.event.release.name }}
 
 on:
   release:
-    types:
-      - published
+    types: [published]
   workflow_dispatch:
     inputs:
       target_subproject:
-        description: |-
-          The subproject name(s) of the specified Minecraft version to be released, seperated with ",".
-          By default all subprojects will be released
+        description: Comma-separated Stonecutter targets; empty publishes all targets
         type: string
         required: false
         default: ''
       target_release_tag:
-        description: The tag of the release you want to append the artifact to
+        description: Existing GitHub release tag to publish to
         type: string
         required: true
 
-
 jobs:
-  show_action_parameters:
+  prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      tag: ${{ steps.release.outputs.tag }}
+      changelog: ${{ steps.release.outputs.changelog }}
     steps:
-      - name: Show action parameters
+      - uses: actions/checkout@v7
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Generate release matrix
+        id: matrix
+        env:
+          TARGETS: ${{ inputs.target_subproject }}
         run: |
-          cat <<EOF > $GITHUB_STEP_SUMMARY
-          ## Action Parameters
-          - target_subproject: \`${{ github.event.inputs.target_subproject }}\`
-          - target_release_tag: \`${{ github.event.inputs.target_release_tag }}\`
-          EOF
-
-  matrix_prep:
-    uses: ./.github/workflows/matrix_prep.yml
-    with:
-      target_subproject: ${{ github.event.inputs.target_subproject }}
+          args=(writeReleaseMatrix)
+          if [[ -n "$TARGETS" ]]; then
+            args+=("-Pautomodpack.targets=$TARGETS")
+          fi
+          ./gradlew "${args[@]}"
+          echo "matrix=$(<build/ci/release-matrix.json)" >> "$GITHUB_OUTPUT"
+      - name: Read release information
+        id: release
+        uses: actions/github-script@v9
+        env:
+          TARGET_RELEASE_TAG: ${{ inputs.target_release_tag }}
+        with:
+          script: |
+            const release = context.eventName === 'release'
+              ? context.payload.release
+              : (await github.rest.repos.getReleaseByTag({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  tag: process.env.TARGET_RELEASE_TAG,
+                })).data;
+            core.setOutput('tag', release.tag_name);
+            core.setOutput('changelog', release.body || '');
+      - name: Summarize release
+        env:
+          TARGETS: ${{ inputs.target_subproject || 'all' }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          {
+            echo '## Release parameters'
+            echo "- Tag: \`$TAG\`"
+            echo "- Targets: \`$TARGETS\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   build:
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
-      target_subproject: ${{ github.event.inputs.target_subproject }}
-      release: true
+      targets: ${{ inputs.target_subproject }}
 
-  release:
-    needs:
-      - matrix_prep
-      - build
+  publish:
+    needs: [prepare, build]
     runs-on: ubuntu-latest
-
-    # allow the mod publish step to add asserts to release
-    # https://docs.github.com/en/actions/security-guides/automatic-token-authentication#permissions-for-the-github_token
     permissions:
       contents: write
-
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.matrix_prep.outputs.matrix) }}
-
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v7
-
-      - name: Display context
-        run: |
-          echo ref_name = ${{ github.ref_name }}
-          echo target_subproject = ${{ github.event.inputs.target_subproject }}
-          echo target_release_tag = ${{ github.event.inputs.target_release_tag }}
-
       - name: Download build artifacts
         uses: actions/download-artifact@v8
         with:
           name: build-artifacts
           path: build-artifacts
-
-      - name: Get github release information
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        id: get_release
-        uses: cardinalby/git-get-release-action@1.2.4
+      - name: Verify artifact
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          FILE: build-artifacts/${{ matrix.file }}
+        run: test -f "$FILE"
+      - name: Publish Minecraft mod
+        uses: Kir-Antipov/mc-publish@v3.3.1
         with:
-          tag: ${{ github.event.inputs.target_release_tag }}
-
-      - name: Generate publish related information
-        id: release_info
-        run: |
-          if [ $GITHUB_EVENT_NAME == 'release' ]
-          then
-              # Leave an empty value here, so Kir-Antipov/mc-publish will infer the tag from the action context
-              echo "tag_name=" >> $GITHUB_OUTPUT
-          elif [ $GITHUB_EVENT_NAME == 'workflow_dispatch' ]
-          then
-              echo "tag_name=${{ github.event.inputs.target_release_tag }}" >> $GITHUB_OUTPUT
-          else
-              echo Unknown github event name $GITHUB_EVENT_NAME
-              exit 1
-          fi
-
-      - name: Read common properties
-        id: properties_c
-        uses: christian-draeger/read-properties@1.1.1
-        with:
-          path: gradle.properties
-          properties: 'mod_name mod_version'
-
-      - name: Read version-specific properties
-        id: properties_v
-        uses: christian-draeger/read-properties@1.1.1
-        with:
-          path: ${{ format('versions/{0}/gradle.properties', matrix.subproject) }}
-          properties: 'publish_versions'
-
-      - name: Fix game version
-        id: publish_versions
-        run: |
-          # Fixed \n in publish_versions isn't parsed by christian-draeger/read-properties as a line separator
-          echo 'value<<EOF' >> $GITHUB_OUTPUT
-          echo -e "${{ steps.properties_v.outputs.publish_versions }}" >> $GITHUB_OUTPUT
-          echo 'EOF' >> $GITHUB_OUTPUT
-
-      - name: Prepare file information
-        id: file_info
-        run: |
-          shopt -s extglob
-          FILE_PATHS=$(ls ${{ format('build-artifacts/!(*-@(dev|sources|shadow)).jar') }})
-          for FILE_PATH in $FILE_PATHS; do
-              if [[ $FILE_PATH == *${{ matrix.mc_version }}* ]] && [[ $FILE_PATH == *${{ matrix.mod_brand }}* ]]; then
-                  FILE_NAME=$(basename $FILE_PATH)
-                  FILE_HASH=$(sha256sum $FILE_PATH | awk '{ print $1 }')
-                  echo "path=$FILE_PATH" >> $GITHUB_OUTPUT
-                  echo "name=$FILE_NAME" >> $GITHUB_OUTPUT
-                  echo "hash=$FILE_HASH" >> $GITHUB_OUTPUT
-                  cat $GITHUB_OUTPUT
-                  exit 0
-              fi
-          done
-
-      - name: Prepare changelog
-        uses: actions/github-script@v9
-        id: changelog
-        with:
-          script: return process.env.CHANGELOG
-          result-encoding: string
-        env:
-          CHANGELOG: ${{ format('{0}{1}', github.event.release.body, steps.get_release.outputs.body) }}
-
-      - name: Publish Minecraft Mods
-        uses: Kir-Antipov/mc-publish@v3.3
-        with:
-          # https://modrinth.com/settings/pats
           modrinth-id: k68glP2e
           modrinth-token: ${{ secrets.MODRINTH_API_TOKEN }}
-
-          # https://legacy.curseforge.com/account/api-tokens
           curseforge-id: 639211
           curseforge-token: ${{ secrets.CF_API_TOKEN }}
+          github-tag: ${{ needs.prepare.outputs.tag }}
+          github-token: ${{ github.token }}
 
-          github-tag: ${{ steps.release_info.outputs.tag_name }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-          files: ${{ steps.file_info.outputs.path }}
-
-          name: ${{ format('{0} {1} {2}', steps.properties_c.outputs.mod_name, steps.properties_c.outputs.mod_version, matrix.mod_brand) }}
-          version: ${{ steps.properties_c.outputs.mod_version }}
+          files: build-artifacts/${{ matrix.file }}
+          name: ${{ format('{0} {1} {2}', matrix.mod_name, matrix.mod_version, matrix.loader) }}
+          version: ${{ matrix.mod_version }}
           version-type: release
-
-          loaders: ${{ matrix.mod_brand }}
-          game-versions: ${{ steps.publish_versions.outputs.value }}
+          loaders: ${{ matrix.loader }}
+          game-versions: ${{ matrix.publish_versions }}
           game-version-filter: any
-          dependencies: ''  # declare the dependencies explicitly, so mc-publish won't try to load from fabric.mod.json
+          dependencies: ''
 
-          github-changelog: ${{ steps.changelog.outputs.result }}
-          modrinth-changelog: ${{ steps.changelog.outputs.result }}
-          curseforge-changelog: ${{ steps.changelog.outputs.result }}
-
+          github-changelog: ${{ needs.prepare.outputs.changelog }}
+          modrinth-changelog: ${{ needs.prepare.outputs.changelog }}
+          curseforge-changelog: ${{ needs.prepare.outputs.changelog }}
           retry-attempts: 3
           retry-delay: 10000

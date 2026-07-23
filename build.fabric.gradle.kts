@@ -1,6 +1,7 @@
 @file:Suppress("UnstableApiUsage")
 
 import pl.skidam.automodpack.buildlogic.FabricPlugin.FabricExtension
+import java.util.Locale
 
 plugins {
 	kotlin("jvm")
@@ -12,13 +13,14 @@ plugins {
 }
 
 val fabric = the<FabricExtension>()
+val targetName = sc.current.project
 val minecraftVersion = property("deps.minecraft") as String
 val fabricApiVersion = property("deps.fabric-api") as String
 val fabricLoaderVersion = property("deps.fabric-loader") as String
 
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
-base.archivesName.set("${property("mod_name")}-mc$minecraftVersion-fabric".lowercase())
+base.archivesName.set("${property("mod_name")}-mc$targetName".lowercase(Locale.ROOT))
 
 loom {
 	accessWidenerPath = rootProject.file(fabric.accessWidenerPath)

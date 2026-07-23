@@ -1,4 +1,6 @@
 import com.diffplug.gradle.spotless.SpotlessExtension
+import com.fasterxml.jackson.databind.ObjectMapper
+import java.util.Locale
 
 plugins {
 	id("dev.kikugie.stonecutter")
@@ -22,6 +24,28 @@ wiki {
 }
 
 stonecutter active "26.2-fabric" // [SC] DO NOT EDIT
+
+fun structuredString(vararg path: String): String =
+	stonecutter.properties
+		.raw(*path)
+		.asPrimitive()
+		.content as String
+
+extra["loaderVersions"] =
+	mapOf(
+		"loader-fabric-15" to structuredString("loader-modules", "fabric-15"),
+		"loader-fabric-core" to structuredString("loader-modules", "fabric-15"),
+		"loader-fabric-16" to structuredString("loader-modules", "fabric-16"),
+		"loader-fabric-latest" to structuredString("fabric", "deps", "fabric-loader"),
+		"loader-forge-fml40" to structuredString("1.18.2-forge", "deps", "forge"),
+		"loader-forge-fml47" to structuredString("1.20.1-forge", "deps", "forge"),
+		"loader-forge-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
+		"loader-modlauncher-earlyservices" to structuredString("1.20.1-forge", "deps", "forge"),
+		"loader-neoforge-fml4" to structuredString("1.21.1-neoforge", "deps", "neoforge"),
+		"loader-neoforge-fml10" to structuredString("1.21.10-neoforge", "deps", "neoforge"),
+		"loader-neoforge-earlyservices" to structuredString("1.21.10-neoforge", "deps", "neoforge"),
+		"loader-neoforge-fml11" to structuredString("26.1-neoforge", "deps", "neoforge"),
+	)
 
 stonecutter.parameters {
 	val (version, loader) = current.project.split('-', limit = 2)
@@ -109,6 +133,68 @@ afterEvaluate {
 			trimTrailingWhitespace()
 			endWithNewline()
 		}
+	}
+}
+
+val availableTargets = stonecutter.versions.map { it.project }.sorted()
+val requestedTargets =
+	providers
+		.gradleProperty("automodpack.targets")
+		.orNull
+		?.split(',')
+		?.map(String::trim)
+		?.filter(String::isNotEmpty)
+		.orEmpty()
+val selectedTargets = requestedTargets.ifEmpty { availableTargets }
+val duplicateTargets =
+	selectedTargets
+		.groupingBy { it }
+		.eachCount()
+		.filterValues { it > 1 }
+		.keys
+require(duplicateTargets.isEmpty()) { "Duplicate AutoModpack targets: ${duplicateTargets.sorted().joinToString()}" }
+val unknownTargets = selectedTargets.toSet() - availableTargets.toSet()
+require(unknownTargets.isEmpty()) { "Unknown AutoModpack targets: ${unknownTargets.sorted().joinToString()}" }
+
+val releaseMatrixFile = layout.buildDirectory.file("ci/release-matrix.json")
+
+tasks.register("buildTargets") {
+	group = "build"
+	description = "Builds all targets or those selected with -Pautomodpack.targets."
+	dependsOn(selectedTargets.map { ":$it:build" })
+	if (providers.gradleProperty("automodpack.autotest").isPresent) {
+		dependsOn(":autotest-fixtures:build")
+	}
+}
+
+tasks.register("writeReleaseMatrix") {
+	group = "publishing"
+	description = "Writes release metadata for all targets or those selected with -Pautomodpack.targets."
+	inputs.property("targets", selectedTargets)
+	outputs.file(releaseMatrixFile)
+
+	doLast {
+		val displayName = project.property("mod_name").toString()
+		val modName = displayName.lowercase(Locale.ROOT)
+		val modVersion = project.property("mod_version").toString()
+		val entries =
+			selectedTargets.map { target ->
+				val targetLine = target.substringBeforeLast('-')
+				val loader = target.substringAfterLast('-')
+				mapOf(
+					"subproject" to target,
+					"target" to targetLine,
+					"loader" to loader,
+					"file" to "$modName-mc$target-$modVersion.jar",
+					"mod_name" to displayName,
+					"mod_version" to modVersion,
+					"publish_versions" to structuredString(targetLine, "publish_versions"),
+				)
+			}
+		val output = releaseMatrixFile.get().asFile
+		output.parentFile.mkdirs()
+		output.writeText(ObjectMapper().writeValueAsString(mapOf("include" to entries)) + "\n")
+		println(output.absolutePath)
 	}
 }
 

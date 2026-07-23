@@ -19,16 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@v9.0.0
       - id: set-matrix
         run: |
           TARGET="${{ github.event.inputs.target || 'all' }}"
           SCENARIO="${{ github.event.inputs.scenario || 'sync' }}"
           TARGETS=$(uv --project autotester run autotester targets --scenario "$SCENARIO" --target "$TARGET")
-          echo "matrix={\"target\":$TARGETS}" >> $GITHUB_OUTPUT
+          echo "matrix={\"target\":$TARGETS}" >> "$GITHUB_OUTPUT"
       - id: set-scenario
         run: |
-          echo "scenario=${{ github.event.inputs.scenario || 'sync' }}" >> $GITHUB_OUTPUT
+          echo "scenario=${{ github.event.inputs.scenario || 'sync' }}" >> "$GITHUB_OUTPUT"
 
   unit:
     uses: ./.github/workflows/autotester-tests.yml
@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@v9.0.0
       - name: Build autotest client image
         run: uv --project autotester run autotester build-images
       - name: Export autotest client image
@@ -67,7 +67,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.2.0
+        uses: astral-sh/setup-uv@v9.0.0
       - uses: actions/download-artifact@v8
         with:
           name: build-artifacts
@@ -183,7 +183,7 @@ jobs:
             aggregated.json
             summary.md
       - name: Post job summary
-        run: cat summary.md >> $GITHUB_STEP_SUMMARY
+        run: cat summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: Check overall result
         if: steps.aggregate.outputs.ok != 'true'
         run: |
