@@ -18,7 +18,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 @Mod(MOD_ID + "_mod")
 public class ForgeInit {
 
-	public ForgeInit() {
+	public ForgeInit(/^? if >=1.19.2 {^/FMLJavaModLoadingContext context/^?}^/) {
 		preload = false;
 		ScreenManager.INSTANCE = new ScreenImpl();
 
@@ -31,7 +31,13 @@ public class ForgeInit {
 			Common.serverInit();
 		} else {
 			ModPackets.registerC2SPackets();
-			new AudioManager(FMLJavaModLoadingContext.get().getModEventBus());
+			new AudioManager(
+				/^? if >=1.19.2 {^/
+				context.getModEventBus()
+				/^?} else {^/
+				/^FMLJavaModLoadingContext.get().getModEventBus()
+				^//^?}^/
+			);
 		}
 
 

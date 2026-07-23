@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.api.file.DuplicatesStrategy
 
 // fml10 and fml11 (NeoForge 21.6+) share one early-service implementation
 // (:loader-neoforge-earlyservices): that NeoForge generation removed ModLauncher/securejarhandler
@@ -81,6 +82,10 @@ configurations {
 tasks.named<ShadowJar>("shadowJar") {
 	dependsOn(tasks.named("processResources"))
 	archiveClassifier.set("")
+	duplicatesStrategy = DuplicatesStrategy.INCLUDE
+	filesNotMatching(listOf("META-INF/services/**", "META-INF/*.kotlin_module")) {
+		duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	}
 
 	// Combine all subproject outputs efficiently
 	val subprojects = listOf(":core", ":loader-core", ":$earlyServicesModule")

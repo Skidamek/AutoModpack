@@ -1,3 +1,5 @@
+import com.diffplug.gradle.spotless.SpotlessExtension
+
 plugins {
 	id("dev.kikugie.stonecutter")
 	kotlin("jvm") apply false
@@ -6,7 +8,7 @@ plugins {
 	id("net.neoforged.moddev") apply false
 	id("com.gradleup.shadow") apply false
 	id("org.moddedmc.wiki.toolkit")
-	id("com.diffplug.spotless")
+	id("com.diffplug.spotless") apply false
 }
 
 repositories {
@@ -34,7 +36,7 @@ stonecutter.parameters {
 		}
 
 		regex(current.parsed >= "1.21.11") {
-			replace("\\bResourceLocation\\b" to "Identifier", "\\bIdentifier\\b" to "ResourceLocation")
+			replace("\\bResourceLocation\\b", "Identifier", "\\bIdentifier\\b", "ResourceLocation")
 		}
 
 		string(current.parsed >= "1.21.11") {
@@ -72,36 +74,41 @@ val trackedMiscFiles =
 			},
 	)
 
-spotless {
-	java {
-		target("src/main/java/**/*.java", "core/src/**/*.java", "loader/**/src/**/*.java")
-		targetExclude("versions/**", stonecutterJava)
-		eclipse().configFile("config/format/eclipse-java.xml")
-		importOrder("java", "javax", "org", "com", "", "pl.skidam")
-		trimTrailingWhitespace()
-		endWithNewline()
-	}
+// Spotless applies Gradle's base plugin, which makes Stonecutter misclassify this controller
+// project as buildable. Apply it after Stonecutter's end-of-evaluation validation instead.
+afterEvaluate {
+	pluginManager.apply("com.diffplug.spotless")
+	extensions.configure<SpotlessExtension> {
+		java {
+			target("src/main/java/**/*.java", "core/src/**/*.java", "loader/**/src/**/*.java")
+			targetExclude("versions/**", stonecutterJava)
+			eclipse().configFile("config/format/eclipse-java.xml")
+			importOrder("java", "javax", "org", "com", "", "pl.skidam")
+			trimTrailingWhitespace()
+			endWithNewline()
+		}
 
-	format("stonecutterJava") {
-		target(stonecutterJava)
-		leadingSpacesToTabs(4)
-		trimTrailingWhitespace()
-		endWithNewline()
-	}
+		format("stonecutterJava") {
+			target(stonecutterJava)
+			leadingSpacesToTabs(4)
+			trimTrailingWhitespace()
+			endWithNewline()
+		}
 
-	kotlinGradle {
-		target("**/*.gradle.kts")
-		targetExclude("versions/**", ".gradle/**", "**/build/**")
-		ktlint()
-		trimTrailingWhitespace()
-		endWithNewline()
-	}
+		kotlinGradle {
+			target("**/*.gradle.kts")
+			targetExclude("versions/**", ".gradle/**", "**/build/**")
+			ktlint()
+			trimTrailingWhitespace()
+			endWithNewline()
+		}
 
-	format("misc") {
-		target(trackedMiscFiles)
-		targetExclude("versions/**", "autotester/uv.lock")
-		trimTrailingWhitespace()
-		endWithNewline()
+		format("misc") {
+			target(trackedMiscFiles)
+			targetExclude("versions/**", "autotester/uv.lock")
+			trimTrailingWhitespace()
+			endWithNewline()
+		}
 	}
 }
 

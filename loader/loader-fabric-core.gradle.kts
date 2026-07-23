@@ -1,4 +1,5 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import org.gradle.api.file.DuplicatesStrategy
 
 plugins {
 	kotlin("jvm")
@@ -58,6 +59,10 @@ configurations {
 tasks.named<ShadowJar>("shadowJar") {
 	dependsOn(tasks.named("processResources"))
 	archiveClassifier.set("")
+	duplicatesStrategy = DuplicatesStrategy.INCLUDE
+	filesNotMatching(listOf("META-INF/services/**", "META-INF/*.kotlin_module")) {
+		duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	}
 
 	// Combine all subproject outputs efficiently
 	val subprojects = listOf(":core", ":loader-core", ":loader-fabric-core", ":loader-fabric-15", ":loader-fabric-16")
