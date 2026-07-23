@@ -139,8 +139,21 @@ def test_scenario_mode():
 # ── artifact and staged manifest handling ────────────────────────────────────
 
 
+def test_artifact_resolution_uses_target_id(tmp_path):
+    target = _target(
+        id="26.1-fabric",
+        minecraft="26.1.2",
+        loader="fabric",
+        artifact_pattern="automodpack-mc{id}-*.jar",
+    )
+    artifact = tmp_path / "automodpack-mc26.1-fabric-test.jar"
+    artifact.touch()
+
+    assert runner._resolve_artifact(target, tmp_path) == artifact.resolve()
+
+
 def test_artifact_resolution_rejects_ambiguous_matches(tmp_path):
-    target = _target(artifact_pattern="automodpack-mc{minecraft}-{loader}-*.jar")
+    target = _target(artifact_pattern="automodpack-mc{id}-*.jar")
     (tmp_path / "automodpack-mc1.21.1-neoforge-a.jar").touch()
     (tmp_path / "automodpack-mc1.21.1-neoforge-b.jar").touch()
     with pytest.raises(RuntimeError, match="Ambiguous artifacts"):

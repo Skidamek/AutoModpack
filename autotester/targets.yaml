@@ -1,5 +1,5 @@
 defaults:
-  artifactPattern: "automodpack-mc{minecraft}-{loader}-*.jar"
+  artifactPattern: "automodpack-mc{id}-*.jar"
 
 targets:
   - { id: "26.2-fabric", java: 25 }
