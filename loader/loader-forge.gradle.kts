@@ -95,6 +95,8 @@ tasks.named<ShadowJar>("shadowJar") {
 	relocate("org.checkerframework", "$reloc.org.checkerframework")
 	relocate("org.slf4j", "$reloc.org.slf4j")
 	relocate("org.bouncycastle", "$reloc.org.bouncycastle")
+	relocate("org.h2", "$reloc.org.h2")
+	relocate("org.publicsuffix", "$reloc.org.publicsuffix")
 	relocate("io.netty.handler.codec.haproxy", "$reloc.io.netty.handler.codec.haproxy")
 
 	// Project internal relocations
@@ -107,6 +109,8 @@ tasks.named<ShadowJar>("shadowJar") {
 
 	exclude("kotlin/**", "log4j2.xml")
 	exclude("META-INF/maven/**", "META-INF/native-image/**", "META-INF/io.netty.versions.properties")
+	exclude("META-INF/*.kotlin_module", "META-INF/DEPENDENCIES*", "META-INF/LICENSE*", "META-INF/NOTICE*")
+	exclude("META-INF/versions/**/OSGI-INF/**")
 	exclude("META-INF/services/java.security.Provider")
 
 	mergeServiceFiles()

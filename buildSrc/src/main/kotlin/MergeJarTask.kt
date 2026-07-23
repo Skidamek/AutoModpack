@@ -6,9 +6,12 @@ import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.jar.JarFile
+import java.util.jar.Manifest
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -62,6 +65,7 @@ abstract class MergeJarTask : DefaultTask() {
         check(zstdFile.isFile) { "No ${zstdFile.name} found in libs directory! ${libsDir.absolutePath}" }
 
         val finalJar = File(mergedDir, jarToMerge.name)
+        val manifest = mergeStonecutterMetadata(loaderFile, jarToMerge)
 
         val seen = mutableSetOf<String>()
         ZipOutputStream(FileOutputStream(finalJar).buffered()).use { zipStream ->
@@ -70,7 +74,11 @@ abstract class MergeJarTask : DefaultTask() {
                     .forEach { entry ->
                         if (seen.add(entry.name) && !entry.isDirectory) {
                             zipStream.putNextEntry(ZipEntry(entry.name))
-                            baseStream.copyTo(zipStream)
+                            if (entry.name == JarFile.MANIFEST_NAME) {
+                                zipStream.write(manifest)
+                            } else {
+                                baseStream.copyTo(zipStream)
+                            }
                             zipStream.closeEntry()
                         }
                     }
@@ -89,5 +97,21 @@ abstract class MergeJarTask : DefaultTask() {
 
         outputJar.get().asFile.writeText(finalJar.absolutePath)
         println("Merged: ${jarToMerge.name} and ${zstdFile.name} from: ${loaderFile.name} into: ${finalJar.name} Took: ${System.currentTimeMillis() - time}ms")
+    }
+
+    private fun mergeStonecutterMetadata(loaderFile: File, modFile: File): ByteArray {
+        val manifest = JarFile(loaderFile).use { it.manifest ?: Manifest() }
+        val modAttributes = JarFile(modFile).use { it.manifest?.mainAttributes }
+
+        modAttributes?.forEach { key, value ->
+            if (key.toString().startsWith("Stonecutter-")) {
+                manifest.mainAttributes[key] = value
+            }
+        }
+
+        return ByteArrayOutputStream().use { output ->
+            manifest.write(output)
+            output.toByteArray()
+        }
     }
 }
