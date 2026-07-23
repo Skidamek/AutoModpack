@@ -70,8 +70,9 @@ jobs:
         uses: astral-sh/setup-uv@v9.0.0
       - uses: actions/download-artifact@v8
         with:
-          name: build-artifacts
+          pattern: '*.jar'
           path: merged/
+          merge-multiple: true
       - uses: actions/download-artifact@v8
         with:
           name: autotester-client-image

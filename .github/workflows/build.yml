@@ -18,8 +18,10 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
       - name: Set up JDK 25
@@ -32,22 +34,49 @@ jobs:
         with:
           cache-provider: basic
           cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-      - name: Build targets
+      - name: Generate build matrix
+        id: matrix
         env:
           TARGETS: ${{ inputs.targets }}
-          AUTOTEST: ${{ inputs.autotest }}
         run: |
-          args=(buildTargets)
+          args=(writeReleaseMatrix)
           if [[ -n "$TARGETS" ]]; then
             args+=("-Pautomodpack.targets=$TARGETS")
           fi
+          ./gradlew "${args[@]}"
+          echo "matrix=$(<build/ci/release-matrix.json)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+      - name: Build target
+        env:
+          TARGET: ${{ matrix.subproject }}
+          AUTOTEST: ${{ inputs.autotest }}
+        run: |
+          args=(buildTargets "-Pautomodpack.targets=$TARGET")
           if [[ "$AUTOTEST" == true ]]; then
             args+=("-Pautomodpack.autotest")
           fi
           ./gradlew "${args[@]}"
-      - name: Upload artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: build-artifacts
-          path: merged/*.jar
+          name: ${{ matrix.file }}
+          path: merged/${{ matrix.file }}
           if-no-files-found: error
