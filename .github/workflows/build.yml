@@ -3,70 +3,88 @@ name: step.build
 on:
   workflow_call:
     inputs:
+      source_sha:
+        description: Immutable commit to build
+        type: string
+        required: true
       targets:
-        description: Comma-separated Stonecutter targets; empty builds all targets
+        description: Comma-separated targets to build and expose; empty builds every target
         type: string
         required: false
         default: ''
+      artifact_retention_days:
+        description: Retention for individual jar artifacts
+        type: number
+        required: false
+        default: 7
+    outputs:
+      matrix:
+        description: Metadata for the exposed jars
+        value: ${{ jobs.build.outputs.matrix }}
+
 permissions:
   contents: read
 
 jobs:
-  prepare:
+  build:
+    name: Build targets
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_sha }}
       - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
-      - name: Setup Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
           cache-provider: basic
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-      - name: Generate build matrix
-        id: matrix
+      - name: Build targets
         env:
           TARGETS: ${{ inputs.targets }}
+        run: ./gradlew buildTargets --continue "-Pautomodpack.targets=$TARGETS"
+      - name: Verify artifacts
+        id: matrix
         run: |
-          args=(writeReleaseMatrix)
-          if [[ -n "$TARGETS" ]]; then
-            args+=("-Pautomodpack.targets=$TARGETS")
-          fi
-          ./gradlew "${args[@]}"
-          echo "matrix=$(<build/ci/release-matrix.json)" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          matrix=$(<build/ci/release-matrix.json)
+          mapfile -t expected_files < <(jq -r '.include[].file' <<<"$matrix")
+          for file in "${expected_files[@]}"; do
+            test -f "merged/$file" || { echo "Missing built jar: $file" >&2; exit 1; }
+          done
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+      - name: Upload temporary build bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-staging
+          path: merged/*.jar
+          if-no-files-found: error
+          retention-days: 1
 
-  build:
-    needs: prepare
+  upload:
+    name: Upload ${{ matrix.subproject }}
+    needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5
+      - uses: actions/download-artifact@v8
         with:
-          distribution: temurin
-          java-version: 25
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
-          cache-provider: basic
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
-      - name: Build target
-        env:
-          TARGET: ${{ matrix.subproject }}
-        run: ./gradlew buildTargets "-Pautomodpack.targets=$TARGET"
-      - name: Upload artifact
+          name: build-staging
+          path: merged
+      - name: Upload jar
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.file }}
           path: merged/${{ matrix.file }}
           if-no-files-found: error
+          retention-days: ${{ inputs.artifact_retention_days }}

@@ -1,12 +1,15 @@
 name: step.autotester-tests
 
-# Fast, Docker-free tests for the autotester step engine (selectors, conditions,
-# templating, the executor, and the shipped scenarios run through a fake bridge).
 on: [workflow_call]
+
+permissions:
+  contents: read
 
 jobs:
   autotester-tests:
+    name: Python engine tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - name: Install uv

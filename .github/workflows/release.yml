@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       target_subproject:
-        description: Comma-separated Stonecutter targets; empty publishes all targets
+        description: Comma-separated targets to publish; empty publishes all
         type: string
         required: false
         default: ''
@@ -20,78 +20,108 @@ on:
         type: string
         required: true
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.target_release_tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
 jobs:
   prepare:
+    name: Resolve release and source
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 10
     outputs:
-      matrix: ${{ steps.matrix.outputs.matrix }}
       tag: ${{ steps.release.outputs.tag }}
       changelog: ${{ steps.release.outputs.changelog }}
+      source_branch: ${{ steps.release.outputs.source_branch }}
+      source_sha: ${{ steps.release.outputs.source_sha }}
     steps:
-      - uses: actions/checkout@v7
-      - name: Set up JDK 25
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 25
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          add-job-summary: never
-      - name: Generate release matrix
-        id: matrix
-        env:
-          TARGETS: ${{ inputs.target_subproject }}
-        run: |
-          args=(writeReleaseMatrix)
-          if [[ -n "$TARGETS" ]]; then
-            args+=("-Pautomodpack.targets=$TARGETS")
-          fi
-          ./gradlew "${args[@]}"
-          echo "matrix=$(<build/ci/release-matrix.json)" >> "$GITHUB_OUTPUT"
-      - name: Read release information
+      - name: Resolve destination release and current main
         id: release
         uses: actions/github-script@v9
         env:
           TARGET_RELEASE_TAG: ${{ inputs.target_release_tag }}
         with:
           script: |
-            const release = context.eventName === 'release'
-              ? context.payload.release
-              : (await github.rest.repos.getReleaseByTag({
+            const releaseRequest = context.eventName === 'release'
+              ? Promise.resolve(context.payload.release)
+              : github.rest.repos.getReleaseByTag({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   tag: process.env.TARGET_RELEASE_TAG,
-                })).data;
+                }).then(({ data }) => data);
+            const [release, repositoryResponse] = await Promise.all([
+              releaseRequest,
+              github.rest.repos.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              }),
+            ]);
+            const repository = repositoryResponse.data;
+            const branch = (await github.rest.repos.getBranch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch: repository.default_branch,
+            })).data;
             core.setOutput('tag', release.tag_name);
             core.setOutput('changelog', release.body || '');
+            core.setOutput('source_branch', repository.default_branch);
+            core.setOutput('source_sha', branch.commit.sha);
       - name: Summarize release
         env:
-          TARGETS: ${{ inputs.target_subproject || 'all' }}
+          SOURCE_BRANCH: ${{ steps.release.outputs.source_branch }}
+          SOURCE_SHA: ${{ steps.release.outputs.source_sha }}
           TAG: ${{ steps.release.outputs.tag }}
+          TARGETS: ${{ inputs.target_subproject || 'all' }}
         run: |
           {
             echo '## Release parameters'
-            echo "- Tag: \`$TAG\`"
-            echo "- Targets: \`$TARGETS\`"
+            echo "- Destination tag: \`$TAG\`"
+            echo "- Source: \`$SOURCE_BRANCH\` at \`$SOURCE_SHA\`"
+            echo "- Publish targets: \`$TARGETS\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
+    name: Build current main
+    needs: prepare
     uses: ./.github/workflows/build.yml
-    secrets: inherit
     with:
+      source_sha: ${{ needs.prepare.outputs.source_sha }}
       targets: ${{ inputs.target_subproject }}
+      artifact_retention_days: 7
 
-  publish:
+  verify:
+    name: Verify release version
     needs: [prepare, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Match build version to destination tag
+        env:
+          MATRIX: ${{ needs.build.outputs.matrix }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version=$(jq -r '.include[0].mod_version' <<<"$MATRIX")
+          [[ "$version" != null && -n "$version" ]] || { echo "Build matrix has no version" >&2; exit 1; }
+          tag_version=${TAG#v}
+          [[ "$version" == "$tag_version" ]] || {
+            echo "Build version $version does not match destination tag $TAG" >&2
+            exit 1
+          }
+
+  publish:
+    name: Publish ${{ matrix.subproject }}
+    needs: [prepare, build, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
     steps:
       - name: Download build artifact
         uses: actions/download-artifact@v8
@@ -103,7 +133,7 @@ jobs:
           FILE: build-artifacts/${{ matrix.file }}
         run: test -f "$FILE"
       - name: Publish Minecraft mod
-        uses: Kir-Antipov/mc-publish@v3.3.1
+        uses: Kir-Antipov/mc-publish@52307b03863581dec6b652b83e597aec02ebb075 # v3.3.1
         with:
           modrinth-id: k68glP2e
           modrinth-token: ${{ secrets.MODRINTH_API_TOKEN }}

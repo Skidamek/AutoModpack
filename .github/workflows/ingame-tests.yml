@@ -4,39 +4,48 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: "Autotest scenario"
-        default: "sync"
+        description: Autotest scenario; blank uses the autotester default
+        default: ''
       target:
-        description: "Target ID (or 'all')"
-        default: "all"
+        description: Target ID; blank uses the autotester default
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingame-${{ github.ref }}-${{ inputs.scenario }}-${{ inputs.target }}
+  cancel-in-progress: true
 
 jobs:
   prepare:
+    name: Select targets
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      scenario: ${{ steps.set-scenario.outputs.scenario }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
-      - id: set-matrix
+      - name: Generate target matrix
+        id: matrix
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+          TARGET: ${{ inputs.target }}
         run: |
-          TARGET="${{ github.event.inputs.target || 'all' }}"
-          SCENARIO="${{ github.event.inputs.scenario || 'sync' }}"
-          TARGETS=$(uv --project autotester run autotester targets --scenario "$SCENARIO" --target "$TARGET")
-          echo "matrix={\"target\":$TARGETS}" >> "$GITHUB_OUTPUT"
-      - id: set-scenario
-        run: |
-          echo "scenario=${{ github.event.inputs.scenario || 'sync' }}" >> "$GITHUB_OUTPUT"
+          targets=$(uv --project autotester run autotester targets --scenario "$SCENARIO" --target "$TARGET")
+          echo "matrix={\"target\":$targets}" >> "$GITHUB_OUTPUT"
 
   unit:
+    name: Autotester tests
     uses: ./.github/workflows/autotester-tests.yml
-    secrets: inherit
 
   client-image:
+    name: Build client image
     needs: unit
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
@@ -45,7 +54,8 @@ jobs:
         run: uv --project autotester run autotester build-images
       - name: Export autotest client image
         run: docker save automodpack-autotest-client:local | zstd -T0 -3 -o /tmp/automodpack-autotest-client.tar.zst
-      - uses: actions/upload-artifact@v7
+      - name: Upload client image
+        uses: actions/upload-artifact@v7
         with:
           name: ingame-client-image
           path: /tmp/automodpack-autotest-client.tar.zst
@@ -53,8 +63,10 @@ jobs:
           retention-days: 1
 
   ingame:
+    name: Test ${{ matrix.target }}
     needs: [prepare, client-image]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -65,31 +77,31 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-      - name: Setup Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
           cache-provider: basic
-          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
       - name: Build instrumented target
-        run: >
-          ./gradlew buildTargets
-          "-Pautomodpack.targets=${{ matrix.target }}"
-          -Pautomodpack.autotest
+        env:
+          TARGET: ${{ matrix.target }}
+        run: ./gradlew ":$TARGET:build" -Pautomodpack.autotest
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
-      - uses: actions/download-artifact@v8
+      - name: Download client image
+        uses: actions/download-artifact@v8
         with:
           name: ingame-client-image
           path: /tmp/ingame-client-image
       - name: Load autotest client image
         run: zstd -d -c /tmp/ingame-client-image/automodpack-autotest-client.tar.zst | docker load
       - name: Run autotest
-        run: >
-          uv --project autotester run autotester run
-          --target "${{ matrix.target }}"
-          --scenario "${{ needs.prepare.outputs.scenario }}"
-      - uses: actions/upload-artifact@v7
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+          TARGET: ${{ matrix.target }}
+        run: uv --project autotester run autotester run --target "$TARGET" --scenario "$SCENARIO"
+      - name: Upload target results
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ingame-results-${{ matrix.target }}
@@ -98,124 +110,27 @@ jobs:
           retention-days: 7
 
   report:
+    name: Aggregate results
     needs: [prepare, ingame]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      # No uv/checkout here: aggregation runs on the stdlib `python3` that
-      # ubuntu-latest ships with. Adding setup-uv without a checkout only
-      # produced "no cache-dependency file matched" / "empty workdir" warnings.
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@v7
+      - name: Download target results
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           pattern: ingame-results-*
+          path: results
       - name: Aggregate results
         id: aggregate
         env:
           EXPECTED_MATRIX: ${{ needs.prepare.outputs.matrix }}
-        run: |
-          cat > /tmp/aggregate.py << 'PYEOF'
-          import json, glob, os
-
-          def headline(err):
-              # First line only, with the "--- logs ---" tail stripped: safe for
-              # one-line contexts (table cells, annotation titles).
-              err = (err or "").split("\n--- logs ---", 1)[0].strip()
-              line = err.splitlines()[0] if err else ""
-              return line or "unknown error"
-
-          def cell(text, limit=180):
-              # Collapse to a single line and escape pipes so a multi-line error
-              # can't shatter the markdown table.
-              text = " ".join((text or "").split()).replace("|", "\\|")
-              return (text[: limit - 1] + "…") if len(text) > limit else text
-
-          def gha(msg):
-              # Escape a (possibly multi-line) message for a workflow command.
-              return (msg or "").replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-
-          def gha_prop(val):
-              # Property values additionally escape ',' and ':' (else a comma in
-              # the title starts a bogus property and mangles the annotation).
-              return gha(val).replace(",", "%2C").replace(":", "%3A")
-
-          results = []
-          for f in sorted(glob.glob("**/results.json", recursive=True)):
-              try:
-                  data = json.load(open(f))
-                  results.extend(data.get("results", []))
-              except Exception:
-                  name = f.split(os.sep)[0] if os.sep in f else "unknown"
-                  target = name.removeprefix("ingame-results-")
-                  results.append({"target": target, "ok": False, "error": "results.json missing or invalid"})
-
-          try:
-              expected = json.loads(os.environ.get("EXPECTED_MATRIX", "")).get("target", [])
-          except (json.JSONDecodeError, AttributeError):
-              expected = None
-          if expected is None:
-              expected = []
-              results.append({
-                  "target": "workflow",
-                  "ok": False,
-                  "error": "target preparation produced no valid test matrix",
-              })
-          elif not expected:
-              results.append({
-                  "target": "workflow",
-                  "ok": False,
-                  "error": "target preparation selected no test targets",
-              })
-
-          found = {str(r.get("target")) for r in results}
-          for target in expected:
-              if target not in found:
-                  results.append({
-                      "target": target,
-                      "ok": False,
-                      "error": "test job produced no results (build, setup, or runner failed)",
-                  })
-
-          total = len(results)
-          passed = sum(1 for r in results if r.get("ok"))
-          any_ok = passed == total
-
-          fails = [r for r in results if not r.get("ok")]
-          for r in fails:
-              err = r.get("error", "unknown error")
-              # Title stays single-line; full (escaped) error goes in the message.
-              print(f"::error title={gha_prop(headline(err))}::{gha(err)}")
-
-          summary = {"ok": any_ok, "total": total, "passed": passed, "failed": total - passed, "results": results}
-          with open("aggregated.json", "w") as f:
-              json.dump(summary, f, indent=2)
-
-          md = "## In-game Test Results\n\n"
-          md += f"**{'PASS' if any_ok else 'FAIL'}** — {passed}/{total} passed, {total - passed} failed\n\n"
-          md += "| Status | Target | Duration | Error |\n"
-          md += "|--------|--------|----------|-------|\n"
-          for r in results:
-              status = "✅" if r.get("ok") else "❌"
-              dur = f"{r.get('duration', 0):.1f}s" if "duration" in r else "-"
-              err = cell(headline(r.get("error"))) if not r.get("ok") else ""
-              md += f"| {status} | {r['target']} | {dur} | {err} |\n"
-
-          if fails:
-              md += "\n### Failure details\n"
-              for r in fails:
-                  err = (r.get("error") or "unknown error").replace("```", "ʼʼʼ")
-                  md += (
-                      f"\n<details><summary>{r['target']}</summary>\n\n"
-                      f"```\n{err.strip()}\n```\n\n</details>\n"
-                  )
-
-          with open("summary.md", "w") as f:
-              f.write(md)
-
-          print(f"ok={str(any_ok).lower()}", file=open(os.environ["GITHUB_OUTPUT"], "a"))
-          PYEOF
-          python3 /tmp/aggregate.py
-      - uses: actions/upload-artifact@v7
+          PYTHONPATH: autotester
+        run: python3 -m automodpack_autotester.report --results-dir results
+      - name: Upload summary
+        uses: actions/upload-artifact@v7
         with:
           name: ingame-results-summary
           path: |

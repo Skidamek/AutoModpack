@@ -137,71 +137,68 @@ afterEvaluate {
 }
 
 val availableTargets = stonecutter.versions.map { it.project }.sorted()
-val requestedTargets =
-	providers
-		.gradleProperty("automodpack.targets")
-		.orNull
-		?.split(',')
-		?.map(String::trim)
-		?.filter(String::isNotEmpty)
-		.orEmpty()
-val selectedTargets = requestedTargets.ifEmpty { availableTargets }
-val duplicateTargets =
-	selectedTargets
-		.groupingBy { it }
-		.eachCount()
-		.filterValues { it > 1 }
-		.keys
-require(duplicateTargets.isEmpty()) { "Duplicate AutoModpack targets: ${duplicateTargets.sorted().joinToString()}" }
-val unknownTargets = selectedTargets.toSet() - availableTargets.toSet()
-require(unknownTargets.isEmpty()) { "Unknown AutoModpack targets: ${unknownTargets.sorted().joinToString()}" }
+val selectedTargets =
+	run {
+		val targets =
+			providers
+				.gradleProperty("automodpack.targets")
+				.orNull
+				?.split(',')
+				?.map(String::trim)
+				?.filter(String::isNotEmpty)
+				.orEmpty()
+				.ifEmpty { availableTargets }
+		val duplicates =
+			targets
+				.groupingBy { it }
+				.eachCount()
+				.filterValues { it > 1 }
+				.keys
+		require(duplicates.isEmpty()) { "Duplicate AutoModpack targets: ${duplicates.sorted().joinToString()}" }
+		val unknown = targets.toSet() - availableTargets.toSet()
+		require(unknown.isEmpty()) { "Unknown AutoModpack targets: ${unknown.sorted().joinToString()}" }
+		targets
+	}
 
 val releaseMatrixFile = layout.buildDirectory.file("ci/release-matrix.json")
 
+val writeReleaseMatrix =
+	tasks.register("writeReleaseMatrix") {
+		group = "publishing"
+		description = "Writes release metadata for the selected AutoModpack targets."
+		inputs.property("targets", selectedTargets)
+		outputs.file(releaseMatrixFile)
+
+		doLast {
+			val displayName = project.property("mod_name").toString()
+			val modName = displayName.lowercase(Locale.ROOT)
+			val modVersion = project.property("mod_version").toString()
+			val entries =
+				selectedTargets.map { target ->
+					val targetLine = target.substringBeforeLast('-')
+					val loader = target.substringAfterLast('-')
+					mapOf(
+						"subproject" to target,
+						"target" to targetLine,
+						"loader" to loader,
+						"file" to "$modName-mc$target-$modVersion.jar",
+						"mod_name" to displayName,
+						"mod_version" to modVersion,
+						"publish_versions" to structuredString(targetLine, "publish_versions"),
+					)
+				}
+			val output = releaseMatrixFile.get().asFile
+			output.parentFile.mkdirs()
+			output.writeText(ObjectMapper().writeValueAsString(mapOf("include" to entries)) + "\n")
+			println(output.absolutePath)
+		}
+	}
+
 tasks.register("buildTargets") {
 	group = "build"
-	description = "Builds all targets or those selected with -Pautomodpack.targets."
+	description = "Builds the selected AutoModpack targets and writes their release metadata."
 	dependsOn(selectedTargets.map { ":$it:build" })
-	if (providers.gradleProperty("automodpack.autotest").isPresent) {
-		dependsOn(":autotest-fixtures:build")
-	}
-}
-
-tasks.register("writeReleaseMatrix") {
-	group = "publishing"
-	description = "Writes release metadata for all targets or those selected with -Pautomodpack.targets."
-	inputs.property("targets", selectedTargets)
-	outputs.file(releaseMatrixFile)
-
-	doLast {
-		val displayName = project.property("mod_name").toString()
-		val modName = displayName.lowercase(Locale.ROOT)
-		val modVersion = project.property("mod_version").toString()
-		val entries =
-			selectedTargets.map { target ->
-				val targetLine = target.substringBeforeLast('-')
-				val loader = target.substringAfterLast('-')
-				mapOf(
-					"subproject" to target,
-					"target" to targetLine,
-					"loader" to loader,
-					"file" to "$modName-mc$target-$modVersion.jar",
-					"mod_name" to displayName,
-					"mod_version" to modVersion,
-					"publish_versions" to structuredString(targetLine, "publish_versions"),
-				)
-			}
-		val output = releaseMatrixFile.get().asFile
-		output.parentFile.mkdirs()
-		output.writeText(ObjectMapper().writeValueAsString(mapOf("include" to entries)) + "\n")
-		println(output.absolutePath)
-	}
-}
-
-if (providers.gradleProperty("automodpack.autotest").isPresent) {
-	tasks.matching { it.name == "build" }.configureEach {
-		dependsOn(":autotest-fixtures:build")
-	}
+	dependsOn(writeReleaseMatrix)
 }
 
 tasks.register("formatApply") {

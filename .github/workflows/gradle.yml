@@ -1,17 +1,23 @@
-name: Dev Builds
+name: CI
 
-on: [workflow_dispatch, push]
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: dev-build-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   format:
+    name: Formatting
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - name: Set up JDK 25
@@ -19,19 +25,38 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-      - name: Setup Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
           add-job-summary: never
       - name: Check formatting
         run: ./gradlew formatCheck
 
-  tests: # runs on linux and windows
+  core-tests:
+    name: Core tests
     uses: ./.github/workflows/tests.yml
-    secrets: inherit
-  autotester-tests: # autotester engine unit tests (no Docker)
+
+  autotester-tests:
+    name: Autotester tests
     uses: ./.github/workflows/autotester-tests.yml
-    secrets: inherit
-  build: # runs on linux
+
+  build:
+    name: Build and package
     uses: ./.github/workflows/build.yml
-    secrets: inherit
+    with:
+      source_sha: ${{ github.sha }}
+      artifact_retention_days: 7
+
+  gate:
+    name: CI Gate
+    needs: [format, core-tests, autotester-tests, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check required jobs
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          jq -e 'all(.[]; .result == "success")' <<<"$NEEDS"

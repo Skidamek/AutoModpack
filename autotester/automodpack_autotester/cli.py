@@ -90,7 +90,15 @@ def _select_targets(targets: dict, target_name: str, scenario: dict) -> tuple[li
     return requested, [t for t in requested if scenario_matches_target(scenario, t)]
 
 
-def _cmd_targets(scenario_name: str, target_name: str) -> int:
+def _selection_defaults(settings: dict) -> tuple[str, str]:
+    run = settings.get("run", {})
+    return str(run.get("scenario", "sync")), str(run.get("target", "all"))
+
+
+def _cmd_targets(scenario_name: str | None, target_name: str | None) -> int:
+    default_scenario, default_target = _selection_defaults(load_settings())
+    scenario_name = scenario_name or default_scenario
+    target_name = target_name or default_target
     scenarios = load_scenarios()
     scenario = scenarios.get(scenario_name)
     if scenario is None:
@@ -135,8 +143,8 @@ def main(argv: list[str] | None = None) -> int:
     val.add_argument("--scenario", help="Scenario stem; omit to validate all")
 
     target_p = sub.add_parser("targets", help="Print in-scope target IDs as JSON")
-    target_p.add_argument("--scenario", required=True)
-    target_p.add_argument("--target", default="all")
+    target_p.add_argument("--scenario")
+    target_p.add_argument("--target")
 
     args = p.parse_args(argv)
 
@@ -196,7 +204,8 @@ def main(argv: list[str] | None = None) -> int:
 
     targets = load_targets()
     scenarios = load_scenarios()
-    scenario_name = args.scenario or rc.get("scenario", "sync")
+    default_scenario, default_target = _selection_defaults(s)
+    scenario_name = args.scenario or default_scenario
     scenario = scenarios.get(scenario_name)
     if scenario is None:
         print(f"No such scenario: {scenario_name}", file=sys.stderr)
@@ -210,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {prob}", file=sys.stderr)
         return 1
 
-    target_name = args.target or rc.get("target", "all")
+    target_name = args.target or default_target
     # Drop targets the scenario doesn't apply to (targets:/loaders:/minecraft:),
     # so an unrelated target doesn't fail confusingly on missing mods.
     requested, selected = _select_targets(targets, target_name, scenario)

@@ -50,6 +50,9 @@ tasks.named("build") {
 		taksToRun.add(":$module:build")
 	}
 	dependsOn(taksToRun)
+	if (project.hasProperty("automodpack.autotest")) {
+		dependsOn(":autotest-fixtures:build")
+	}
 	finalizedBy(tasks.named("mergeJar"))
 }
 

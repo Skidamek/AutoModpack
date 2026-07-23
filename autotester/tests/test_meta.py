@@ -8,7 +8,7 @@ import types
 
 import pytest
 
-from automodpack_autotester import runner
+from automodpack_autotester import cli, runner
 from automodpack_autotester.config import (
     load_macros,
     load_scenarios,
@@ -23,6 +23,19 @@ def _target(**kw):
     base = dict(id="1.21.1-neoforge", minecraft="1.21.1", loader="neoforge", java=21)
     base.update(kw)
     return types.SimpleNamespace(**base)
+
+
+def test_targets_command_uses_configured_defaults(monkeypatch, capsys):
+    target = _target(id="selected")
+    monkeypatch.setattr(cli, "load_settings", lambda: {"run": {"scenario": "custom", "target": "selected"}})
+    monkeypatch.setattr(cli, "load_scenarios", lambda: {"custom": {}})
+    monkeypatch.setattr(cli, "load_targets", lambda: {"selected": target})
+    monkeypatch.setattr(cli, "load_macros", lambda: {})
+    monkeypatch.setattr(cli, "validate_scenario", lambda *_: [])
+    monkeypatch.setattr(cli, "scenario_matches_target", lambda *_: True)
+
+    assert cli._cmd_targets(None, None) == 0
+    assert json.loads(capsys.readouterr().out) == ["selected"]
 
 
 # ── validation ─────────────────────────────────────────────────────────────
