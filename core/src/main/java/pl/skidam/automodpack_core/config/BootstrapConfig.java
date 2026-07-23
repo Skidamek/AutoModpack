@@ -7,14 +7,11 @@ import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 public final class BootstrapConfig {
-	public static final int SCHEMA_VERSION = 1;
 
 	private BootstrapConfig() {}
 
 	public static Validated validate(Jsons.KnownHostsBootstrapFields fields) {
 		if (fields == null) throw new IllegalArgumentException("Bootstrap configuration is missing");
-		if (fields.schemaVersion != null && fields.schemaVersion != SCHEMA_VERSION)
-			throw new IllegalArgumentException("Unsupported bootstrap schema version: " + fields.schemaVersion);
 		if (fields.origin == null || fields.origin.isBlank()) throw new IllegalArgumentException("Bootstrap origin is required");
 		if (fields.fingerprint == null || fields.fingerprint.isBlank()) throw new IllegalArgumentException("Bootstrap fingerprint is required");
 
@@ -53,7 +50,6 @@ public final class BootstrapConfig {
 
 	private static Jsons.KnownHostsBootstrapFields fields(String origin, String fingerprint, String modpackId, String endpoint, Boolean requiresMagic) {
 		Jsons.KnownHostsBootstrapFields fields = new Jsons.KnownHostsBootstrapFields();
-		fields.schemaVersion = SCHEMA_VERSION;
 		fields.origin = origin;
 		fields.fingerprint = fingerprint;
 		fields.modpackId = modpackId;

@@ -30,17 +30,11 @@ class BootstrapConfigTest {
 	}
 
 	@Test
-	void rejectsMixedAndUnsupportedForms() {
+	void rejectsMixedForms() {
 		Jsons.KnownHostsBootstrapFields mixed = new Jsons.KnownHostsBootstrapFields();
 		mixed.origin = "play.example.com";
 		mixed.fingerprint = FINGERPRINT;
 		mixed.modpackId = "abc1234";
 		assertThrows(IllegalArgumentException.class, () -> BootstrapConfig.validate(mixed));
-
-		Jsons.KnownHostsBootstrapFields unsupported = new Jsons.KnownHostsBootstrapFields();
-		unsupported.schemaVersion = 2;
-		unsupported.origin = "play.example.com";
-		unsupported.fingerprint = FINGERPRINT;
-		assertThrows(IllegalArgumentException.class, () -> BootstrapConfig.validate(unsupported));
 	}
 }

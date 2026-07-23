@@ -164,7 +164,6 @@ public class Jsons {
 	}
 
 	public static class KnownHostsBootstrapFields {
-		public Integer schemaVersion;
 		public String origin;
 		public String fingerprint;
 		public String modpackId;
