@@ -81,6 +81,48 @@ class ModpackTest {
 	}
 
 	@Test
+	void assignsFilesFromPerGroupDirectories() throws IOException {
+		Constants.serverConfig = new Jsons.ServerConfigFieldsV3();
+		Constants.serverConfig.autoExcludeUnnecessaryFiles = false;
+
+		// Mirrors a real server: host-modpack/main is the modpack dir and host-modpack/<group>
+		// directories sit beside it.
+		Path hostModpack = testFilesDir.resolve("host-modpack");
+		Path mainDir = hostModpack.resolve("main");
+		Path extrasDir = hostModpack.resolve("animatedEntities");
+		Files.createDirectories(mainDir.resolve("mods"));
+		Files.createDirectories(extrasDir.resolve("mods"));
+		Files.createDirectories(extrasDir.resolve("resourcepacks"));
+		Files.writeString(mainDir.resolve("mods/core.jar"), "a");
+		Files.writeString(extrasDir.resolve("mods/entity_texture_features.jar"), "a");
+		Files.writeString(extrasDir.resolve("resourcepacks/FreshAnimations.zip"), "a");
+
+		Jsons.GroupDeclaration main = new Jsons.GroupDeclaration();
+		main.required = true;
+		Jsons.GroupDeclaration extras = new Jsons.GroupDeclaration();
+		extras.displayName = "Animated Entities";
+		extras.recommended = true;
+
+		Map<String, Jsons.GroupDeclaration> groups = new LinkedHashMap<>();
+		groups.put("main", main);
+		groups.put("animatedEntities", extras);
+
+		ModpackContent content = new ModpackContent("GroupDirPack", null, mainDir, groups, new ModpackExecutor().getExecutor());
+		assertTrue(content.create(null));
+
+		Jsons.ModpackContentFields manifest = ModpackContentTools.read(Constants.hostModpackContentFile);
+		assertNotNull(manifest);
+
+		// Files in a group directory belong to that group even with no globs configured at all.
+		assertEquals(Set.of("/mods/entity_texture_features.jar", "/resourcepacks/FreshAnimations.zip"),
+				manifest.groups.get("animatedEntities").files);
+		assertEquals(Set.of("/mods/core.jar"), manifest.groups.get("main").files);
+
+		// Paths are relative to each group's own directory, so they install to the same place.
+		assertTrue(manifest.list.stream().anyMatch(fileItem -> fileItem.file.equals("/mods/entity_texture_features.jar")));
+	}
+
+	@Test
 	void assignsFilesToDeclaredGroups() {
 		Constants.serverConfig = new Jsons.ServerConfigFieldsV3();
 		Constants.serverConfig.autoExcludeUnnecessaryFiles = false;

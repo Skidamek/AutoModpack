@@ -25,6 +25,9 @@ public class ModpackContent {
 	private final String MODPACK_NAME;
 	private final Map<String, GroupScanners> GROUP_SCANNERS = new LinkedHashMap<>();
 	private final Map<String, Jsons.ModpackContentFields.ModpackGroupFields> GROUP_FIELDS = new LinkedHashMap<>();
+	// Each group may own a sibling directory of the modpack dir, e.g. host-modpack/<groupId>/.
+	// Anything inside one belongs to that group outright, no globs needed.
+	private final Map<String, Path> GROUP_DIRECTORIES = new LinkedHashMap<>();
 	private final String FALLBACK_GROUP_ID;
 	private final Path MODPACK_DIR;
 	private final ThreadPoolExecutor CREATION_EXECUTOR;
@@ -67,9 +70,14 @@ public class ModpackContent {
 				? Map.of("main", Jsons.mainGroupDeclaration())
 				: groups;
 
+		// The modpack dir is itself one group's directory (conventionally "main"), so its siblings
+		// are the other groups' directories.
+		Path modpackRoot = MODPACK_DIR == null ? null : MODPACK_DIR.getParent();
+
 		for (var entry : declarations.entrySet()) {
 			Jsons.GroupDeclaration declaration = entry.getValue();
 			if (declaration == null) continue;
+			if (modpackRoot != null) GROUP_DIRECTORIES.put(entry.getKey(), modpackRoot.resolve(entry.getKey()));
 			GROUP_SCANNERS.put(entry.getKey(), new GroupScanners(new FileTreeScanner(declaration.syncedFiles, syncedSearchDirectories),
 					new FileTreeScanner(declaration.allowEditsInFiles, directoriesToSearch),
 					new FileTreeScanner(declaration.overwriteEditableFiles, directoriesToSearch),
@@ -164,12 +172,26 @@ public class ModpackContent {
 				}
 			}
 
+			// Each group directory is its own modpack root, so host-modpack/<group>/mods/x.jar lands
+			// at /mods/x.jar on the client exactly like the main group's files do.
+			for (var groupEntry : GROUP_DIRECTORIES.entrySet()) {
+				Path groupDirectory = groupEntry.getValue();
+				if (groupDirectory == null || !Files.isDirectory(groupDirectory)) continue;
+				if (MODPACK_DIR != null && groupDirectory.toAbsolutePath().normalize().equals(MODPACK_DIR.toAbsolutePath().normalize())) continue;
+
+				try (Stream<Path> stream = Files.walk(groupDirectory)) {
+					stream.filter(Files::isRegularFile).forEach(path -> filesToProcess.put(SmartFileUtils.formatPath(path, groupDirectory), path));
+				} catch (IOException e) {
+					LOGGER.error("Failed to walk group directory {}", groupDirectory, e);
+				}
+			}
+
 			var tempPathMap = new ConcurrentHashMap<>(filesToProcess);
 
 			List<CompletableFuture<GroupedItem>> futures = filesToProcess.entrySet().stream()
 					.map(entry -> CompletableFuture.supplyAsync(() -> {
 						try {
-							String groupId = resolveGroupId(entry.getKey());
+							String groupId = resolveGroupId(entry.getValue(), entry.getKey());
 							var contentEntry = generateContent(entry.getValue(), entry.getKey(), cache, GROUP_SCANNERS.get(groupId));
 							if (contentEntry == null) return null;
 							LOGGER.debug("Generated modpack content for {} in group {}", entry.getValue(), groupId);
@@ -232,10 +254,9 @@ public class ModpackContent {
 			}
 
 			for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : list) {
-				Path file = SmartFileUtils.getPath(MODPACK_DIR, modpackContentItem.file);
-				if (!Files.exists(file)) file = SmartFileUtils.getPathFromCWD(modpackContentItem.file);
-				if (!Files.exists(file)) {
-					LOGGER.warn("File {} does not exist!", file);
+				Path file = resolveExistingFile(modpackContentItem.file);
+				if (file == null) {
+					LOGGER.warn("File {} does not exist!", modpackContentItem.file);
 					continue;
 				}
 
@@ -280,8 +301,10 @@ public class ModpackContent {
 	public void replace(Path file, FileMetadataCache cache) {
 		remove(file);
 		try {
-			String modpackFile = SmartFileUtils.formatPath(file, MODPACK_DIR);
-			String groupId = resolveGroupId(modpackFile);
+			String owningGroup = groupOwningDirectory(file);
+			Path relativeTo = owningGroup != null ? GROUP_DIRECTORIES.get(owningGroup) : MODPACK_DIR;
+			String modpackFile = SmartFileUtils.formatPath(file, relativeTo);
+			String groupId = resolveGroupId(file, modpackFile);
 			Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file, modpackFile, cache, GROUP_SCANNERS.get(groupId));
 			if (item != null) {
 				LOGGER.info("generated content for {}", item.file);
@@ -298,7 +321,8 @@ public class ModpackContent {
 	}
 
 	public void remove(Path file) {
-		String modpackFile = SmartFileUtils.formatPath(file, MODPACK_DIR);
+		String owningGroup = groupOwningDirectory(file);
+		String modpackFile = SmartFileUtils.formatPath(file, owningGroup != null ? GROUP_DIRECTORIES.get(owningGroup) : MODPACK_DIR);
 
 		synchronized (list) {
 			for (Jsons.ModpackContentFields.ModpackContentItem item : this.list) {
@@ -327,13 +351,49 @@ public class ModpackContent {
 	private record GroupedItem(String groupId, Jsons.ModpackContentFields.ModpackContentItem item) {}
 
 	/**
-	 * First group whose synced globs claim this path wins; declaration order in the config decides ties.
+	 * A file sitting inside a group's own directory belongs to that group, no matter what the globs
+	 * say. Otherwise the first group whose synced globs claim the path wins, with declaration order
+	 * deciding ties, and anything left over falls back to a required group.
 	 */
-	private String resolveGroupId(String formattedFile) {
+	private String resolveGroupId(Path absolutePath, String formattedFile) {
+		String owningGroup = groupOwningDirectory(absolutePath);
+		if (owningGroup != null) return owningGroup;
+
 		for (var entry : GROUP_SCANNERS.entrySet()) {
 			if (entry.getValue().synced().matches(formattedFile)) return entry.getKey();
 		}
 		return FALLBACK_GROUP_ID;
+	}
+
+	/**
+	 * Finds a recorded modpack file back on disk. The same relative path can live under the modpack
+	 * dir or under any group's directory, so every root has to be tried before giving up.
+	 */
+	private Path resolveExistingFile(String modpackFile) {
+		if (MODPACK_DIR != null) {
+			Path candidate = SmartFileUtils.getPath(MODPACK_DIR, modpackFile);
+			if (Files.exists(candidate)) return candidate;
+		}
+
+		for (Path groupDirectory : GROUP_DIRECTORIES.values()) {
+			if (groupDirectory == null) continue;
+			Path candidate = SmartFileUtils.getPath(groupDirectory, modpackFile);
+			if (Files.exists(candidate)) return candidate;
+		}
+
+		Path fromCwd = SmartFileUtils.getPathFromCWD(modpackFile);
+		return Files.exists(fromCwd) ? fromCwd : null;
+	}
+
+	private String groupOwningDirectory(Path file) {
+		if (file == null) return null;
+		Path normalized = file.toAbsolutePath().normalize();
+		for (var entry : GROUP_DIRECTORIES.entrySet()) {
+			Path directory = entry.getValue();
+			if (directory == null) continue;
+			if (normalized.startsWith(directory.toAbsolutePath().normalize())) return entry.getKey();
+		}
+		return null;
 	}
 
 	public Map<String, Jsons.ModpackContentFields.ModpackGroupFields> getGroups() {
