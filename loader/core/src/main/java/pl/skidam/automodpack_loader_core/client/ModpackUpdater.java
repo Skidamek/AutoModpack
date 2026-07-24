@@ -19,6 +19,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -67,12 +68,44 @@ public class ModpackUpdater {
 	}
 
 	public ModpackUpdater(Jsons.ModpackContentFields modpackContent, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, Path modpackPath) {
-		this.serverModpackContent = modpackContent;
+		this.serverModpackContent = applyGroupSelection(modpackContent);
 		this.connectionInfo = connectionInfo;
 		this.modpackSecret = secret;
 		this.modpackDir = modpackPath;
 
 		if (this.connectionInfo == null || !this.connectionInfo.isComplete()) throw new IllegalArgumentException("connectionInfo is null or empty");
+	}
+
+	/**
+	 * Narrows the manifest to the groups this player kept, so every step downstream - update check,
+	 * download, and removal of files that are no longer part of the modpack - operates on the
+	 * player's modpack rather than the server's full one. Deselecting a group therefore uninstalls
+	 * it on the next run, the same way the server dropping a file would.
+	 */
+	private static Jsons.ModpackContentFields applyGroupSelection(Jsons.ModpackContentFields modpackContent) {
+		if (modpackContent == null || modpackContent.groups == null || modpackContent.groups.isEmpty()) return modpackContent;
+
+		var manager = ClientSelectionManager.getManager();
+		Set<String> chosen = manager.getSelection(modpackContent.modpackId).map(selection -> selection.selectedGroups)
+				.orElseGet(() -> ClientSelectionManager.defaultSelection(modpackContent.groups));
+		Set<String> resolved = ClientSelectionManager.resolve(modpackContent.groups, chosen);
+		Set<String> allowedFiles = ClientSelectionManager.selectedFiles(modpackContent, resolved);
+
+		if (allowedFiles.size() == modpackContent.list.size()) return modpackContent;
+
+		LOGGER.info("Group selection covers {} of {} modpack files (groups: {})", allowedFiles.size(), modpackContent.list.size(), resolved);
+
+		var filtered = new Jsons.ModpackContentFields(modpackContent.list.stream().filter(item -> allowedFiles.contains(item.file))
+				.collect(Collectors.toCollection(HashSet::new)));
+		filtered.modpackId = modpackContent.modpackId;
+		filtered.modpackName = modpackContent.modpackName;
+		filtered.automodpackVersion = modpackContent.automodpackVersion;
+		filtered.loader = modpackContent.loader;
+		filtered.loaderVersion = modpackContent.loaderVersion;
+		filtered.mcVersion = modpackContent.mcVersion;
+		filtered.nonModpackFilesToDelete = modpackContent.nonModpackFilesToDelete;
+		filtered.groups = modpackContent.groups;
+		return filtered;
 	}
 
 	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result) {

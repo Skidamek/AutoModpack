@@ -1,0 +1,230 @@
+package pl.skidam.automodpack_core.modpack;
+
+import static pl.skidam.automodpack_core.Constants.LOGGER;
+import static pl.skidam.automodpack_core.Constants.clientSelectionFile;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.*;
+
+import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.utils.PlatformUtils;
+
+/**
+ * Remembers which groups the player picked per modpack, so the selection screen is shown once
+ * rather than on every launch, and turns a raw pick into a consistent set of groups by applying
+ * required/requires/breaksWith/compatibleOS.
+ *
+ * The resolution half is static and free of I/O so it can be exercised without a game or a disk.
+ */
+public class ClientSelectionManager {
+
+	private static final ClientSelectionManager INSTANCE = new ClientSelectionManager(clientSelectionFile);
+
+	private final Path selectionFile;
+	private final Jsons.ClientSelectionManagerFields selections;
+
+	public static ClientSelectionManager getManager() {
+		return INSTANCE;
+	}
+
+	ClientSelectionManager(Path selectionFile) {
+		this.selectionFile = selectionFile;
+		this.selections = ConfigTools.readOrCreate(selectionFile, Jsons.ClientSelectionManagerFields.class, Jsons.ClientSelectionManagerFields::new);
+		if (this.selections.selections == null) this.selections.selections = new HashMap<>();
+	}
+
+	// =================================================================================
+	// PERSISTENCE
+	// =================================================================================
+
+	public Optional<Jsons.ClientSelectionManagerFields.ModpackSelection> getSelection(String modpackId) {
+		if (modpackId == null || modpackId.isBlank()) return Optional.empty();
+		return Optional.ofNullable(selections.selections.get(modpackId));
+	}
+
+	/**
+	 * Records the player's pick along with the groups the server offered at the time, so a later
+	 * launch can tell the difference between "player declined this" and "this did not exist yet".
+	 */
+	public void saveSelection(String modpackId, Set<String> selectedGroups, Set<String> offeredGroups) {
+		if (modpackId == null || modpackId.isBlank()) {
+			LOGGER.warn("Refusing to save a group selection without a modpack ID.");
+			return;
+		}
+
+		selections.selections.put(modpackId, new Jsons.ClientSelectionManagerFields.ModpackSelection(new HashSet<>(selectedGroups), new HashSet<>(offeredGroups)));
+		save();
+	}
+
+	public void clearSelection(String modpackId) {
+		if (modpackId == null) return;
+		if (selections.selections.remove(modpackId) != null) save();
+	}
+
+	public void save() {
+		try {
+			ConfigTools.writeAtomic(selectionFile, selections);
+		} catch (IOException e) {
+			LOGGER.error("Failed to save client group selection", e);
+		}
+	}
+
+	// =================================================================================
+	// PROMPTING
+	// =================================================================================
+
+	/**
+	 * The screen is due when nothing was ever saved, or when the server now offers a group the
+	 * player has never been asked about. Removing a group is not a reason to re-ask.
+	 */
+	public boolean needsSelection(String modpackId, Map<String, Jsons.ModpackContentFields.ModpackGroupFields> groups) {
+		if (groups == null || groups.isEmpty()) return false;
+		// Nothing to decide when every group is mandatory.
+		if (groups.values().stream().allMatch(group -> group.required)) return false;
+
+		var saved = getSelection(modpackId);
+		if (saved.isEmpty()) return true;
+
+		Set<String> known = saved.get().knownGroups == null ? Set.of() : saved.get().knownGroups;
+		return !known.containsAll(groups.keySet());
+	}
+
+	// =================================================================================
+	// RESOLUTION (pure)
+	// =================================================================================
+
+	/** Pre-ticked state for a player who has not chosen yet: everything required or recommended. */
+	public static Set<String> defaultSelection(Map<String, Jsons.ModpackContentFields.ModpackGroupFields> groups) {
+		if (groups == null) return Set.of();
+		Set<String> chosen = new LinkedHashSet<>();
+		groups.forEach((id, group) -> {
+			if (group != null && (group.required || group.recommended)) chosen.add(id);
+		});
+		return resolve(groups, chosen);
+	}
+
+	/**
+	 * Turns a raw pick into a consistent set: drops groups this OS cannot take, forces required
+	 * ones in, pulls in dependencies, and breaks up conflicts. Required groups always win a
+	 * conflict; otherwise the group declared first does.
+	 */
+	public static Set<String> resolve(Map<String, Jsons.ModpackContentFields.ModpackGroupFields> groups, Set<String> chosen) {
+		if (groups == null || groups.isEmpty()) return Set.of();
+
+		Map<String, Jsons.ModpackContentFields.ModpackGroupFields> usable = new LinkedHashMap<>();
+		groups.forEach((id, group) -> {
+			if (group == null) return;
+			if (!PlatformUtils.isCompatibleWithCurrentOS(group.compatibleOS)) {
+				LOGGER.info("Group {} is not compatible with {}, skipping it", id, PlatformUtils.getCurrentOS());
+				return;
+			}
+			usable.put(id, group);
+		});
+
+		Set<String> wanted = new LinkedHashSet<>();
+		usable.forEach((id, group) -> {
+			if (group.required || (chosen != null && chosen.contains(id))) wanted.add(id);
+		});
+
+		addRequiredDependencies(usable, wanted);
+
+		// Required first so they can never be the side that loses a conflict.
+		List<String> byPriority = new ArrayList<>();
+		usable.keySet().stream().filter(id -> wanted.contains(id) && usable.get(id).required).forEach(byPriority::add);
+		usable.keySet().stream().filter(id -> wanted.contains(id) && !usable.get(id).required).forEach(byPriority::add);
+
+		Set<String> kept = new LinkedHashSet<>();
+		for (String id : byPriority) {
+			String clash = kept.stream().filter(other -> conflicts(usable, other, id)).findFirst().orElse(null);
+			if (clash == null) {
+				kept.add(id);
+			} else if (usable.get(id).required) {
+				LOGGER.warn("Groups {} and {} are both required but declared as conflicting; keeping both.", clash, id);
+				kept.add(id);
+			} else {
+				LOGGER.info("Group {} conflicts with {}, leaving it out", id, clash);
+			}
+		}
+
+		dropUnsatisfied(usable, kept);
+		return kept;
+	}
+
+	private static void addRequiredDependencies(Map<String, Jsons.ModpackContentFields.ModpackGroupFields> usable, Set<String> wanted) {
+		boolean changed = true;
+		while (changed) {
+			changed = false;
+			for (String id : new ArrayList<>(wanted)) {
+				var group = usable.get(id);
+				if (group == null || group.requires == null) continue;
+				for (String dependency : group.requires) {
+					if (dependency == null) continue;
+					if (!usable.containsKey(dependency)) continue;
+					if (wanted.add(dependency)) changed = true;
+				}
+			}
+		}
+	}
+
+	/** A group whose dependency was never available, or lost a conflict, cannot stay selected. */
+	private static void dropUnsatisfied(Map<String, Jsons.ModpackContentFields.ModpackGroupFields> usable, Set<String> kept) {
+		boolean changed = true;
+		while (changed) {
+			changed = false;
+			for (String id : new ArrayList<>(kept)) {
+				var group = usable.get(id);
+				if (group == null || group.requires == null) continue;
+				for (String dependency : group.requires) {
+					if (dependency == null || dependency.isBlank()) continue;
+					if (kept.contains(dependency)) continue;
+					if (group.required) {
+						LOGGER.warn("Required group {} depends on {}, which is unavailable.", id, dependency);
+						continue;
+					}
+					kept.remove(id);
+					LOGGER.info("Group {} needs {}, which is not selected; leaving it out", id, dependency);
+					changed = true;
+					break;
+				}
+			}
+		}
+	}
+
+	public static boolean conflicts(Map<String, Jsons.ModpackContentFields.ModpackGroupFields> groups, String a, String b) {
+		if (Objects.equals(a, b)) return false;
+		return breaksWith(groups.get(a), b) || breaksWith(groups.get(b), a);
+	}
+
+	private static boolean breaksWith(Jsons.ModpackContentFields.ModpackGroupFields group, String other) {
+		return group != null && group.breaksWith != null && group.breaksWith.contains(other);
+	}
+
+	/**
+	 * Relative paths the given groups cover. Files outside every group stay included, so a client
+	 * talking to a server that never declared groups still receives the whole modpack.
+	 */
+	public static Set<String> selectedFiles(Jsons.ModpackContentFields content, Set<String> selectedGroups) {
+		if (content == null || content.list == null) return Set.of();
+		if (content.groups == null || content.groups.isEmpty()) {
+			Set<String> everything = new HashSet<>();
+			content.list.forEach(item -> everything.add(item.file));
+			return everything;
+		}
+
+		Set<String> grouped = new HashSet<>();
+		Set<String> allowed = new HashSet<>();
+		content.groups.forEach((id, group) -> {
+			if (group == null || group.files == null) return;
+			grouped.addAll(group.files);
+			if (selectedGroups != null && selectedGroups.contains(id)) allowed.addAll(group.files);
+		});
+
+		content.list.forEach(item -> {
+			if (!grouped.contains(item.file)) allowed.add(item.file);
+		});
+
+		return allowed;
+	}
+}
