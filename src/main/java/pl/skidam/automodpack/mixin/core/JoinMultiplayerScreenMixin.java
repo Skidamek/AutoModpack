@@ -1,5 +1,9 @@
 package pl.skidam.automodpack.mixin.core;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.layouts.LinearLayout;
@@ -23,9 +27,10 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 
 /**
  * Adds an "Optional Mods" button to the multiplayer screen's top footer row, beside Join Server /
- * Direct Connection / Add Server. The row is a centered LinearLayout, so adding a child lets the
- * game re-center all of them - no manual positioning. The button greys out, exactly like Edit and
- * Delete do, unless the highlighted server is a known AutoModpack modpack with optional groups.
+ * Direct Connection / Add Server, but only while the highlighted server is a known AutoModpack
+ * modpack with optional groups. The row is a centered LinearLayout whose GridLayout does not skip
+ * hidden children, so simply toggling visibility would leave a gap; instead the row is rebuilt on
+ * each selection change and re-centered, so the button appears and disappears cleanly.
  */
 @Mixin(JoinMultiplayerScreen.class)
 public abstract class JoinMultiplayerScreenMixin extends Screen {
@@ -34,32 +39,56 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 	protected ServerSelectionList serverSelectionList;
 
 	@Unique
+	private LinearLayout automodpack$topRow;
+	@Unique
+	private final List<AbstractWidget> automodpack$vanillaRowButtons = new ArrayList<>();
+	@Unique
 	private Button automodpack$groupsButton;
+	@Unique
+	private boolean automodpack$buttonInRow = false;
 
 	protected JoinMultiplayerScreenMixin(Component title) {
 		super(title);
 	}
 
-	// Injected before the layout is walked into renderable widgets, capturing the top footer row so
-	// our button is arranged and registered along with the vanilla ones. ordinal = 1 is that row
-	// (0 is the outer vertical footer, 2 is the bottom row).
+	// Captured before the layout is walked into widgets. ordinal = 1 is the top footer row (0 is the
+	// outer vertical footer, 2 the bottom row). The button is registered here but kept out of the row
+	// until a matching server is selected.
 	@Inject(method = "init", at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/gui/layouts/HeaderAndFooterLayout;visitWidgets(Ljava/util/function/Consumer;)V"))
-	private void automodpack$addGroupsButton(CallbackInfo ci, @Local(ordinal = 1) LinearLayout topFooterButtons) {
-		automodpack$groupsButton = topFooterButtons.addChild(Button.builder(VersionedText.translatable("automodpack.selection.button"), press -> {
+	private void automodpack$captureRow(CallbackInfo ci, @Local(ordinal = 1) LinearLayout topFooterButtons) {
+		automodpack$topRow = topFooterButtons;
+		automodpack$vanillaRowButtons.clear();
+		topFooterButtons.visitChildren(child -> {
+			if (child instanceof AbstractWidget widget) automodpack$vanillaRowButtons.add(widget);
+		});
+		automodpack$buttonInRow = false;
+
+		automodpack$groupsButton = Button.builder(VersionedText.translatable("automodpack.selection.button"), press -> {
 			String address = automodpack$selectedServerAddress();
 			if (address != null) minecraft.gui.setScreen(ModpackSelectionScreen.forServerAddress(this, address));
-		}).width(100).build());
-		automodpack$groupsButton.active = false;
+		}).width(100).build();
+		automodpack$groupsButton.visible = false;
+		addRenderableWidget(automodpack$groupsButton);
 	}
 
-	// Fires whenever the highlighted server changes; require = 0 so a version without this exact
-	// method simply leaves the button disabled instead of failing to load.
+	// Fires on every selection change (and once at the end of init). require = 0 so a version without
+	// this exact method just leaves the button hidden rather than failing to load.
 	@Inject(method = "onSelectedChange", at = @At("RETURN"), require = 0)
 	private void automodpack$onSelectedChange(CallbackInfo ci) {
-		if (automodpack$groupsButton == null) return;
+		if (automodpack$topRow == null || automodpack$groupsButton == null) return;
+
 		String address = automodpack$selectedServerAddress();
-		automodpack$groupsButton.active = address != null && ModpackSelectionScreen.serverHasGroupsToConfigure(address);
+		boolean show = address != null && ModpackSelectionScreen.serverHasGroupsToConfigure(address);
+		if (show == automodpack$buttonInRow) return; // Row membership already correct; avoid needless relayout.
+
+		automodpack$topRow.removeChildren();
+		for (AbstractWidget widget : automodpack$vanillaRowButtons) automodpack$topRow.addChild(widget);
+		if (show) automodpack$topRow.addChild(automodpack$groupsButton);
+
+		automodpack$groupsButton.visible = show;
+		automodpack$buttonInRow = show;
+		this.repositionElements(); // safe here: only re-arranges the layout and resizes the list
 	}
 
 	@Unique
