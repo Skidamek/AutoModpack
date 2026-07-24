@@ -145,6 +145,37 @@ class ClientSelectionManagerTest {
 		assertEquals(Set.of("/mods/a.jar", "/mods/b.jar"), ClientSelectionManager.selectedFiles(content, Set.of()));
 	}
 
+	@Test
+	void filterToSelectionDropsUnselectedFilesButKeepsMetadata() {
+		// No saved selection on disk in the test env, so this falls back to required + recommended.
+		var content = new Jsons.ModpackContentFields();
+		content.modpackId = "abc123";
+		content.modpackName = "My Server";
+		content.mcVersion = "26.2";
+		content.loader = "fabric";
+		content.groups = groups("main", group(true, false, "/mods/core.jar"), "extras", group(false, false, "/mods/extra.jar"));
+		content.list = Set.of(item("/mods/core.jar"), item("/mods/extra.jar"));
+
+		var filtered = ClientSelectionManager.filterToSelection(content);
+
+		// The optional, non-recommended group is dropped; the required group stays.
+		assertEquals(Set.of("/mods/core.jar"), filtered.list.stream().map(fileItem -> fileItem.file).collect(java.util.stream.Collectors.toSet()));
+		// Identity fields the update check and download screen rely on must survive filtering.
+		assertEquals("abc123", filtered.modpackId);
+		assertEquals("My Server", filtered.modpackName);
+		assertEquals("26.2", filtered.mcVersion);
+		assertEquals("fabric", filtered.loader);
+		// Groups are retained so the selection screen still works after a filtered download.
+		assertEquals(Set.of("main", "extras"), filtered.groups.keySet());
+	}
+
+	@Test
+	void filterToSelectionLeavesGrouplessContentUntouched() {
+		var content = new Jsons.ModpackContentFields();
+		content.list = Set.of(item("/mods/a.jar"));
+		assertSame(content, ClientSelectionManager.filterToSelection(content));
+	}
+
 	private static Jsons.ModpackContentFields.ModpackContentItem item(String file) {
 		return new Jsons.ModpackContentFields.ModpackContentItem(file, "1", "mod", false, false, false, "sha", null);
 	}

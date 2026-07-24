@@ -202,6 +202,41 @@ public class ClientSelectionManager {
 	}
 
 	/**
+	 * Narrows a server manifest to the files the player's current selection keeps. Every part of the
+	 * client that reasons about "what should be on disk" - the update check, the downloader, and the
+	 * removal of files that are no longer wanted - must run on this filtered view rather than the
+	 * server's full manifest, otherwise unselected files look perpetually missing and trigger an
+	 * endless update loop. Returns the input untouched when there is nothing to filter.
+	 */
+	public static Jsons.ModpackContentFields filterToSelection(Jsons.ModpackContentFields content) {
+		if (content == null || content.groups == null || content.groups.isEmpty() || content.list == null) return content;
+
+		Set<String> chosen = getManager().getSelection(content.modpackId).map(selection -> selection.selectedGroups)
+				.orElseGet(() -> defaultSelection(content.groups));
+		Set<String> resolved = resolve(content.groups, chosen);
+		Set<String> allowedFiles = selectedFiles(content, resolved);
+
+		if (allowedFiles.size() == content.list.size()) return content;
+		LOGGER.info("Group selection covers {} of {} modpack files (groups: {})", allowedFiles.size(), content.list.size(), resolved);
+
+		Set<Jsons.ModpackContentFields.ModpackContentItem> keptItems = new HashSet<>();
+		content.list.forEach(item -> {
+			if (allowedFiles.contains(item.file)) keptItems.add(item);
+		});
+
+		var filtered = new Jsons.ModpackContentFields(keptItems);
+		filtered.modpackId = content.modpackId;
+		filtered.modpackName = content.modpackName;
+		filtered.automodpackVersion = content.automodpackVersion;
+		filtered.loader = content.loader;
+		filtered.loaderVersion = content.loaderVersion;
+		filtered.mcVersion = content.mcVersion;
+		filtered.nonModpackFilesToDelete = content.nonModpackFilesToDelete;
+		filtered.groups = content.groups;
+		return filtered;
+	}
+
+	/**
 	 * Relative paths the given groups cover. Files outside every group stay included, so a client
 	 * talking to a server that never declared groups still receives the whole modpack.
 	 */

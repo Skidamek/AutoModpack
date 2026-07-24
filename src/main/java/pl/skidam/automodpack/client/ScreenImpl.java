@@ -52,7 +52,7 @@ public class ScreenImpl implements ScreenService {
 
 	@Override
 	public void menu(Object... args) {
-		executeOnClient(Screens::menu);
+		executeOnClient(() -> Screens.menu(args.length > 0 ? args[0] : null));
 	}
 
 	@Override
@@ -121,8 +121,8 @@ public class ScreenImpl implements ScreenService {
 			Screens.setScreen(new TitleScreen());
 		}
 
-		public static void menu() {
-//            Screens.setScreen(new MenuScreen());
+		public static void menu(Object parent) {
+			Screens.setScreen(ModpackSelectionScreen.forSelectedModpack((Screen) parent));
 		}
 
 		public static void validation(Object parent, Object serverFingerprint, Object validatedCallback, Object canceledCallback) {

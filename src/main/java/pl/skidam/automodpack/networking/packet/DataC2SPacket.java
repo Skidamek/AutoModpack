@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
@@ -94,7 +95,9 @@ public class DataC2SPacket {
 			Boolean needsDisconnecting = null;
 
 			if (optionalServerModpackContent.isPresent()) {
-				Jsons.ModpackContentFields serverModpackContent = optionalServerModpackContent.get();
+				// Narrow the server manifest to the player's selected groups before any update check,
+				// otherwise unselected files read as missing and force an endless "please restart" loop.
+				Jsons.ModpackContentFields serverModpackContent = ClientSelectionManager.filterToSelection(optionalServerModpackContent.get());
 				Path modpackDir = ModpackUtils.getModpackPath(serverModpackContent.modpackId);
 				try {
 					SecretsStore.saveClientSecret(connectionInfo.origin, secret);
