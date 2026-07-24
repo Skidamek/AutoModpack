@@ -295,7 +295,7 @@ public class Commands {
 
 	private static int reload(CommandContext<CommandSourceStack> context) {
 		Util.backgroundExecutor().execute(() -> {
-			var tempServerConfig = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV2.class).orElse(null);
+			var tempServerConfig = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV3.class).orElse(null);
 			if (tempServerConfig != null) {
 				ConfigUtils.normalizeServerConfig(tempServerConfig, true);
 				serverConfig = tempServerConfig;

@@ -136,6 +136,75 @@ public class Jsons {
 		}
 	}
 
+	public static class ServerConfigFieldsV3 {
+		public int DO_NOT_CHANGE_IT = 3; // file version
+		public String modpackName = "";
+		public boolean modpackHost = true;
+		public boolean generateModpackOnStart = true;
+		// Replaces V2's flat syncedFiles/allowEditsInFiles/overwriteEditableFiles/forceCopyFilesToStandardLocation.
+		// Key is the group id referenced by requires/breaksWith and by the client's saved selection.
+		public Map<String, GroupDeclaration> groups = Map.of("main", mainGroupDeclaration());
+		public Map<String, String> nonModpackFilesToDelete = Map.of();
+		public boolean autoExcludeServerSideMods = true;
+		public boolean autoExcludeUnnecessaryFiles = true;
+		public boolean requireAutoModpackOnClient = true;
+		public boolean nagUnModdedClients = true;
+		public String nagMessage = "This server provides dedicated modpack through AutoModpack!";
+		public String nagClickableMessage = "Click here to get the AutoModpack!";
+		public String nagClickableLink = "https://modrinth.com/project/automodpack";
+		public String bindAddress = "";
+		public int bindPort = -1;
+		@SerializedName(value = "advertisedEndpointHost", alternate = "addressToSend")
+		public String advertisedEndpointHost = "";
+		@SerializedName(value = "advertisedEndpointPort", alternate = "portToSend")
+		public int advertisedEndpointPort = -1;
+		public boolean disableInternalTLS = false;
+		public boolean requireMagicPackets = false;
+		public boolean updateIpsOnEveryStart = false;
+		public int bandwidthLimit = 0;
+		public boolean validateSecrets = true;
+		public long secretLifetime = 336; // 336 hours = 14 days
+		public boolean selfUpdater = false;
+		public Set<String> acceptedLoaders = new HashSet<>();
+	}
+
+	// Default group for a fresh config and for migrating a V2 config, whose flat file
+	// globs all belong to one implicitly-required group.
+	public static GroupDeclaration mainGroupDeclaration() {
+		GroupDeclaration declaration = new GroupDeclaration();
+		declaration.displayName = "Main";
+		declaration.description = "Core modpack files";
+		declaration.required = true;
+		declaration.recommended = true;
+		declaration.syncedFiles = Set.of("/mods/*.jar", "/kubejs/**", "!/kubejs/server_scripts/**", "/emotes/*");
+		declaration.allowEditsInFiles = Set.of("/options.txt", "/config/**");
+		return declaration;
+	}
+
+	public static class GroupDeclaration {
+		// UI metadata. The map key is the group id; displayName is what the player sees.
+		public String displayName = "";
+		public String description = "";
+		public String category = "";
+
+		// If required, the client cannot uncheck it. recommended is ignored when required.
+		public boolean required = false;
+		public boolean recommended = false;
+
+		// Group ids this one conflicts with / depends on.
+		public Set<String> breaksWith = Set.of();
+		public Set<String> requires = Set.of();
+
+		// WINDOWS, MACOS, LINUX, ANDROID; prefix with ! to negate. Empty = every OS.
+		public Set<String> compatibleOS = Set.of();
+
+		// Per-group equivalents of the V2 flat file rules.
+		public Set<String> syncedFiles = Set.of();
+		public Set<String> allowEditsInFiles = Set.of();
+		public Set<String> overwriteEditableFiles = Set.of();
+		public Set<String> forceCopyFilesToStandardLocation = Set.of();
+	}
+
 	public static class ServerCoreConfigFields {
 		public String automodpackVersion = "";
 		public String loader = "";
@@ -180,6 +249,9 @@ public class Jsons {
 		public String mcVersion = "";
 		public Set<ModpackContentItem> list;
 		public Set<FileToDelete> nonModpackFilesToDelete = Set.of();
+		// Group id -> metadata. Each group's files are referenced by path into `list`, which stays the
+		// canonical flat file set so clients that ignore groups still see a complete modpack.
+		public Map<String, ModpackGroupFields> groups = Map.of();
 
 		public ModpackContentFields(Set<ModpackContentItem> list) {
 			this.list = list;
@@ -187,6 +259,34 @@ public class Jsons {
 
 		public ModpackContentFields() {
 			this.list = Set.of();
+		}
+
+		public static class ModpackGroupFields {
+			// Mirrors Jsons.GroupDeclaration, minus the server-only file globs.
+			public String displayName = "";
+			public String description = "";
+			public String category = "";
+			public boolean required;
+			public boolean recommended;
+			public Set<String> breaksWith = Set.of();
+			public Set<String> requires = Set.of();
+			public Set<String> compatibleOS = Set.of();
+
+			// Populated by the scanner: relative paths of the ModpackContentItems in this group.
+			public Set<String> files = new HashSet<>();
+
+			public ModpackGroupFields() {}
+
+			public ModpackGroupFields(GroupDeclaration declaration) {
+				this.displayName = declaration.displayName;
+				this.description = declaration.description;
+				this.category = declaration.category;
+				this.required = declaration.required;
+				this.recommended = declaration.recommended;
+				this.breaksWith = declaration.breaksWith;
+				this.requires = declaration.requires;
+				this.compatibleOS = declaration.compatibleOS;
+			}
 		}
 
 		public static class ModpackContentItem {
@@ -270,5 +370,27 @@ public class Jsons {
 	public static class ClientDeletedNonModpackFilesTimestamps {
 		// Set of timestamps of the files to delete
 		public Set<String> timestamps = ConcurrentHashMap.newKeySet();
+	}
+
+	// Per-modpack record of which groups the player picked, so the selection screen is shown
+	// once and later launches reuse the answer. Keyed by modpack id, matching
+	// ClientConfigFieldsV3.modpackConnections, which already owns the connection details.
+	public static class ClientSelectionManagerFields {
+		public int DO_NOT_CHANGE_IT = 1; // file version
+		public Map<String, ModpackSelection> selections = new HashMap<>();
+
+		public static class ModpackSelection {
+			public Set<String> selectedGroups = new HashSet<>();
+			// Groups the server offered when the player last chose. A new group appearing on the
+			// server means the saved answer is incomplete and the screen must be shown again.
+			public Set<String> knownGroups = new HashSet<>();
+
+			public ModpackSelection() {}
+
+			public ModpackSelection(Set<String> selectedGroups, Set<String> knownGroups) {
+				this.selectedGroups = selectedGroups;
+				this.knownGroups = knownGroups;
+			}
+		}
 	}
 }

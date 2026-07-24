@@ -23,33 +23,81 @@ public class ModpackContent {
 	public final ObservableMap<String, Path> pathsMap = new ObservableMap<>();
 	private final String MODPACK_ID;
 	private final String MODPACK_NAME;
-	private final FileTreeScanner SYNCED_FILES_CARDS;
-	private final FileTreeScanner EDITABLE_CARDS;
-	private final FileTreeScanner OVERWRITE_EDITABLE_CARDS;
-	private final FileTreeScanner FORCE_COPY_FILES_TO_STANDARD_LOCATION;
+	private final Map<String, GroupScanners> GROUP_SCANNERS = new LinkedHashMap<>();
+	private final Map<String, Jsons.ModpackContentFields.ModpackGroupFields> GROUP_FIELDS = new LinkedHashMap<>();
+	private final String FALLBACK_GROUP_ID;
 	private final Path MODPACK_DIR;
 	private final ThreadPoolExecutor CREATION_EXECUTOR;
 	private final Map<String, String> sha1MurmurMapPreviousContent = new HashMap<>();
 	private Optional<Jsons.ModpackContentFields> cachedPreviousContent;
 
+	// The four file-rule scanners belonging to one group.
+	private record GroupScanners(FileTreeScanner synced, FileTreeScanner editable, FileTreeScanner overwriteEditable, FileTreeScanner forceCopy) {
+		void scanAll() {
+			synced.scan();
+			editable.scan();
+			overwriteEditable.scan();
+			forceCopy.scan();
+		}
+	}
+
+	/**
+	 * Pre-groups behaviour: every file belongs to a single implicitly-required group.
+	 */
 	public ModpackContent(String modpackName, Path cwd, Path modpackDir, Set<String> syncedFiles, Set<String> allowEditsInFiles,
 			Set<String> overwriteEditableFiles, Set<String> forceCopyFilesToStandardLocation, ThreadPoolExecutor CREATION_EXECUTOR) {
+		this(modpackName, cwd, modpackDir, singleGroup(syncedFiles, allowEditsInFiles, overwriteEditableFiles, forceCopyFilesToStandardLocation),
+				CREATION_EXECUTOR);
+	}
+
+	public ModpackContent(String modpackName, Path cwd, Path modpackDir, Map<String, Jsons.GroupDeclaration> groups,
+			ThreadPoolExecutor CREATION_EXECUTOR) {
 		this.MODPACK_NAME = modpackName;
 		this.MODPACK_DIR = modpackDir;
 		this.cachedPreviousContent = getPreviousContent();
 		this.MODPACK_ID = resolveModpackId(cachedPreviousContent);
 		this.CREATION_EXECUTOR = CREATION_EXECUTOR;
+
 		Set<Path> directoriesToSearch = new HashSet<>(2);
 		if (MODPACK_DIR != null) directoriesToSearch.add(MODPACK_DIR);
-		if (cwd != null) {
-			directoriesToSearch.add(cwd);
-			this.SYNCED_FILES_CARDS = new FileTreeScanner(syncedFiles, Set.of(cwd));
-		} else {
-			this.SYNCED_FILES_CARDS = new FileTreeScanner(syncedFiles, Set.of());
+		if (cwd != null) directoriesToSearch.add(cwd);
+		Set<Path> syncedSearchDirectories = cwd != null ? Set.of(cwd) : Set.of();
+
+		Map<String, Jsons.GroupDeclaration> declarations = groups == null || groups.isEmpty()
+				? Map.of("main", Jsons.mainGroupDeclaration())
+				: groups;
+
+		for (var entry : declarations.entrySet()) {
+			Jsons.GroupDeclaration declaration = entry.getValue();
+			if (declaration == null) continue;
+			GROUP_SCANNERS.put(entry.getKey(), new GroupScanners(new FileTreeScanner(declaration.syncedFiles, syncedSearchDirectories),
+					new FileTreeScanner(declaration.allowEditsInFiles, directoriesToSearch),
+					new FileTreeScanner(declaration.overwriteEditableFiles, directoriesToSearch),
+					new FileTreeScanner(declaration.forceCopyFilesToStandardLocation, directoriesToSearch)));
+			GROUP_FIELDS.put(entry.getKey(), new Jsons.ModpackContentFields.ModpackGroupFields(declaration));
 		}
-		this.EDITABLE_CARDS = new FileTreeScanner(allowEditsInFiles, directoriesToSearch);
-		this.OVERWRITE_EDITABLE_CARDS = new FileTreeScanner(overwriteEditableFiles, directoriesToSearch);
-		this.FORCE_COPY_FILES_TO_STANDARD_LOCATION = new FileTreeScanner(forceCopyFilesToStandardLocation, directoriesToSearch);
+
+		this.FALLBACK_GROUP_ID = resolveFallbackGroupId(declarations);
+	}
+
+	private static Map<String, Jsons.GroupDeclaration> singleGroup(Set<String> syncedFiles, Set<String> allowEditsInFiles,
+			Set<String> overwriteEditableFiles, Set<String> forceCopyFilesToStandardLocation) {
+		Jsons.GroupDeclaration declaration = new Jsons.GroupDeclaration();
+		declaration.displayName = "Main";
+		declaration.required = true;
+		declaration.recommended = true;
+		declaration.syncedFiles = syncedFiles == null ? Set.of() : syncedFiles;
+		declaration.allowEditsInFiles = allowEditsInFiles == null ? Set.of() : allowEditsInFiles;
+		declaration.overwriteEditableFiles = overwriteEditableFiles == null ? Set.of() : overwriteEditableFiles;
+		declaration.forceCopyFilesToStandardLocation = forceCopyFilesToStandardLocation == null ? Set.of() : forceCopyFilesToStandardLocation;
+		return Map.of("main", declaration);
+	}
+
+	// Files found under the modpack dir that no group's globs claim have to land somewhere; a
+	// required group is the only safe home, otherwise the player could deselect them away.
+	private static String resolveFallbackGroupId(Map<String, Jsons.GroupDeclaration> declarations) {
+		return declarations.entrySet().stream().filter(entry -> entry.getValue() != null && entry.getValue().required).map(Map.Entry::getKey).findFirst()
+				.orElseGet(() -> declarations.keySet().stream().findFirst().orElse("main"));
 	}
 
 	private String resolveModpackId(Optional<Jsons.ModpackContentFields> previousContent) {
@@ -76,12 +124,11 @@ public class ModpackContent {
 		Set<Jsons.ModpackContentFields.FileToDelete> computedFilesToDelete = new HashSet<>();
 
 		try {
-			SYNCED_FILES_CARDS.scan();
-			EDITABLE_CARDS.scan();
-			FORCE_COPY_FILES_TO_STANDARD_LOCATION.scan();
+			GROUP_SCANNERS.values().forEach(GroupScanners::scanAll);
 
 			pathsMap.clear();
 			sha1MurmurMapPreviousContent.clear();
+			GROUP_FIELDS.values().forEach(group -> group.files = ConcurrentHashMap.newKeySet());
 
 			consumePreviousContent().ifPresent(previousContent -> {
 				Map<String, Jsons.ModpackContentFields.FileToDelete> oldFilesMap = previousContent.nonModpackFilesToDelete.stream()
@@ -105,7 +152,10 @@ public class ModpackContent {
 
 			Map<String, Path> filesToProcess = new HashMap<>();
 
-			SYNCED_FILES_CARDS.getMatchedPaths().values().forEach(path -> filesToProcess.put(SmartFileUtils.formatPath(path, MODPACK_DIR), path));
+			for (var groupEntry : GROUP_SCANNERS.entrySet()) {
+				groupEntry.getValue().synced().getMatchedPaths().values()
+						.forEach(path -> filesToProcess.put(SmartFileUtils.formatPath(path, MODPACK_DIR), path));
+			}
 
 			if (MODPACK_DIR != null) {
 				try (Stream<Path> stream = Files.walk(MODPACK_DIR)) { // in case there any files with the same relative path, we prefer from MODPACK_DIR, this
@@ -116,14 +166,15 @@ public class ModpackContent {
 
 			var tempPathMap = new ConcurrentHashMap<>(filesToProcess);
 
-			List<CompletableFuture<Jsons.ModpackContentFields.ModpackContentItem>> futures = filesToProcess.entrySet().stream()
+			List<CompletableFuture<GroupedItem>> futures = filesToProcess.entrySet().stream()
 					.map(entry -> CompletableFuture.supplyAsync(() -> {
 						try {
-							var contentEntry = generateContent(entry.getValue(), entry.getKey(), cache);
+							String groupId = resolveGroupId(entry.getKey());
+							var contentEntry = generateContent(entry.getValue(), entry.getKey(), cache, GROUP_SCANNERS.get(groupId));
 							if (contentEntry == null) return null;
-							LOGGER.debug("Generated modpack content for {}", entry.getValue());
+							LOGGER.debug("Generated modpack content for {} in group {}", entry.getValue(), groupId);
 							tempPathMap.put(contentEntry.sha1, entry.getValue());
-							return contentEntry;
+							return new GroupedItem(groupId, contentEntry);
 						} catch (Exception e) {
 							LOGGER.error("Error generating content for {}", entry.getValue(), e);
 							return null;
@@ -133,10 +184,12 @@ public class ModpackContent {
 			CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
 			for (var future : futures) {
-				Jsons.ModpackContentFields.ModpackContentItem item = future.join();
-				if (item != null) {
-					list.add(item);
-					pathsMap.put(item.sha1, tempPathMap.get(item.sha1));
+				GroupedItem grouped = future.join();
+				if (grouped != null) {
+					list.add(grouped.item());
+					pathsMap.put(grouped.item().sha1, tempPathMap.get(grouped.item().sha1));
+					var group = GROUP_FIELDS.get(grouped.groupId());
+					if (group != null) group.files.add(grouped.item().file);
 				}
 			}
 
@@ -170,6 +223,14 @@ public class ModpackContent {
 		synchronized (list) {
 			list.addAll(previousModpackContent.list);
 
+			// Reuse the recorded membership; without a rescan we cannot recompute it here.
+			if (previousModpackContent.groups != null) {
+				previousModpackContent.groups.forEach((groupId, previousGroup) -> {
+					var group = GROUP_FIELDS.get(groupId);
+					if (group != null && previousGroup.files != null) group.files.addAll(previousGroup.files);
+				});
+			}
+
 			for (Jsons.ModpackContentFields.ModpackContentItem modpackContentItem : list) {
 				Path file = SmartFileUtils.getPath(MODPACK_DIR, modpackContentItem.file);
 				if (!Files.exists(file)) file = SmartFileUtils.getPathFromCWD(modpackContentItem.file);
@@ -202,6 +263,7 @@ public class ModpackContent {
 			modpackContent.modpackId = MODPACK_ID;
 			modpackContent.modpackName = MODPACK_NAME;
 			modpackContent.nonModpackFilesToDelete = nonModpackFilesToDelete;
+			modpackContent.groups = new LinkedHashMap<>(GROUP_FIELDS);
 
 			try {
 				ModpackContentTools.write(hostModpackContentFile, modpackContent);
@@ -219,13 +281,16 @@ public class ModpackContent {
 		remove(file);
 		try {
 			String modpackFile = SmartFileUtils.formatPath(file, MODPACK_DIR);
-			Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file, modpackFile, cache);
+			String groupId = resolveGroupId(modpackFile);
+			Jsons.ModpackContentFields.ModpackContentItem item = generateContent(file, modpackFile, cache, GROUP_SCANNERS.get(groupId));
 			if (item != null) {
 				LOGGER.info("generated content for {}", item.file);
 				synchronized (list) {
 					list.add(item);
 				}
 				pathsMap.put(item.sha1, file);
+				var group = GROUP_FIELDS.get(groupId);
+				if (group != null) group.files.add(item.file);
 			}
 		} catch (Exception e) {
 			LOGGER.error("Error while replacing content for: " + file, e);
@@ -240,6 +305,7 @@ public class ModpackContent {
 				if (item.file.equals(modpackFile)) {
 					this.pathsMap.remove(item.sha1);
 					this.list.remove(item);
+					GROUP_FIELDS.values().forEach(group -> group.files.remove(item.file));
 					LOGGER.info("Removed content for {}", modpackFile);
 					break;
 				}
@@ -258,8 +324,24 @@ public class ModpackContent {
 		return isInner;
 	}
 
-	private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file, final String formattedFile, FileMetadataCache cache)
-			throws Exception {
+	private record GroupedItem(String groupId, Jsons.ModpackContentFields.ModpackContentItem item) {}
+
+	/**
+	 * First group whose synced globs claim this path wins; declaration order in the config decides ties.
+	 */
+	private String resolveGroupId(String formattedFile) {
+		for (var entry : GROUP_SCANNERS.entrySet()) {
+			if (entry.getValue().synced().matches(formattedFile)) return entry.getKey();
+		}
+		return FALLBACK_GROUP_ID;
+	}
+
+	public Map<String, Jsons.ModpackContentFields.ModpackGroupFields> getGroups() {
+		return GROUP_FIELDS;
+	}
+
+	private Jsons.ModpackContentFields.ModpackContentItem generateContent(final Path file, final String formattedFile, FileMetadataCache cache,
+			GroupScanners scanners) throws Exception {
 		if (!Files.isRegularFile(file)) return null;
 
 		if (serverConfig == null) {
@@ -335,16 +417,16 @@ public class ModpackContent {
 		}
 
 		boolean isEditable = false;
-		if (EDITABLE_CARDS.hasMatch(formattedFile)) {
+		if (scanners != null && scanners.editable().hasMatch(formattedFile)) {
 			isEditable = true;
 			LOGGER.info("File {} is editable!", formattedFile);
 		}
 
-		boolean overwriteEditable = isEditable && OVERWRITE_EDITABLE_CARDS.matches(formattedFile);
+		boolean overwriteEditable = isEditable && scanners.overwriteEditable().matches(formattedFile);
 		if (overwriteEditable) LOGGER.debug("Editable file {} is overwritten when the server changes it!", formattedFile);
 
 		boolean forcedToCopy = false;
-		if (FORCE_COPY_FILES_TO_STANDARD_LOCATION.hasMatch(formattedFile)) {
+		if (scanners != null && scanners.forceCopy().hasMatch(formattedFile)) {
 			forcedToCopy = true;
 			LOGGER.info("File {} is forced to copy to standard location!", formattedFile);
 		}

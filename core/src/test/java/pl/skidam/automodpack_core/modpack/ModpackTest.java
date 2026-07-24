@@ -7,8 +7,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -78,6 +81,56 @@ class ModpackTest {
 	}
 
 	@Test
+	void assignsFilesToDeclaredGroups() {
+		Constants.serverConfig = new Jsons.ServerConfigFieldsV3();
+		Constants.serverConfig.autoExcludeUnnecessaryFiles = false;
+
+		Jsons.GroupDeclaration shaders = new Jsons.GroupDeclaration();
+		shaders.displayName = "Shaders";
+		shaders.syncedFiles = Set.of("/shaders/**");
+
+		Jsons.GroupDeclaration configs = new Jsons.GroupDeclaration();
+		configs.displayName = "Configs";
+		configs.recommended = true;
+		configs.syncedFiles = Set.of("/config/**");
+
+		Jsons.GroupDeclaration core = new Jsons.GroupDeclaration();
+		core.displayName = "Core";
+		core.required = true;
+
+		// LinkedHashMap: declaration order decides which group claims a path first.
+		Map<String, Jsons.GroupDeclaration> groups = new LinkedHashMap<>();
+		groups.put("shaders", shaders);
+		groups.put("configs", configs);
+		groups.put("core", core);
+
+		ModpackContent content = new ModpackContent("GroupPack", null, testFilesDir, groups, new ModpackExecutor().getExecutor());
+		assertTrue(content.create(null));
+
+		Jsons.ModpackContentFields manifest = ModpackContentTools.read(Constants.hostModpackContentFile);
+		assertNotNull(manifest);
+		assertEquals(Set.of("shaders", "configs", "core"), manifest.groups.keySet());
+
+		// Metadata survives the round trip to the manifest the client will read.
+		assertTrue(manifest.groups.get("core").required);
+		assertFalse(manifest.groups.get("shaders").required);
+		assertTrue(manifest.groups.get("configs").recommended);
+
+		assertTrue(manifest.groups.get("shaders").files.stream().allMatch(file -> file.startsWith("/shaders/")));
+		assertTrue(manifest.groups.get("shaders").files.contains("/shaders/shader1.zip"));
+		assertTrue(manifest.groups.get("configs").files.contains("/config/config.json"));
+
+		// Nothing matched the required group's (empty) globs, so it collects the leftovers.
+		assertTrue(manifest.groups.get("core").files.contains("/mods/mod-1.20.jar"));
+		assertTrue(manifest.groups.get("core").files.contains("/file.txt"));
+
+		// Every generated file belongs to exactly one group, and the groups cover the whole list.
+		List<String> grouped = manifest.groups.values().stream().flatMap(group -> group.files.stream()).toList();
+		assertEquals(grouped.size(), Set.copyOf(grouped).size(), "a file was claimed by more than one group");
+		assertEquals(manifest.list.stream().map(item -> item.file).collect(Collectors.toSet()), Set.copyOf(grouped));
+	}
+
+	@Test
 	void modpackTest() {
 		// Use relative paths for editable rules (relative to testFilesDir)
 		var editable = List.of("/file.txt", "/config/*", "!/config/config-mod.json5");
@@ -104,7 +157,7 @@ class ModpackTest {
 				"ModpackContentItems(file=/mods/server-mod-1.19.jar, size=1, type=other, editable=false, forceCopy=false, sha1=86f7e437faa5a7fce15d1ddcb9eaeaea377667b8, murmur=null)",
 				"ModpackContentItems(file=/mods/server-mod-1.20.jar, size=1, type=other, editable=false, forceCopy=false, sha1=86f7e437faa5a7fce15d1ddcb9eaeaea377667b8, murmur=null)");
 
-		Constants.serverConfig = new Jsons.ServerConfigFieldsV2();
+		Constants.serverConfig = new Jsons.ServerConfigFieldsV3();
 		Constants.serverConfig.autoExcludeUnnecessaryFiles = false;
 
 		ModpackContent content = new ModpackContent("TestPack", null, testFilesDir, new HashSet<>(), new HashSet<>(editable),

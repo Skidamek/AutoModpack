@@ -230,10 +230,31 @@ public class Preload {
 				writeConfig(serverConfigFile, serverConfigV2);
 				LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
 			}
+
+			if (serverConfigVersion.DO_NOT_CHANGE_IT == 2) {
+				// V3 moves the flat file rules into named groups; the existing rules become the
+				// single required "main" group, so an upgraded server behaves exactly as before.
+				var serverConfigV2 = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV2.class).orElse(null);
+				var serverConfigV3 = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV3.class).orElse(null);
+				if (serverConfigV2 != null && serverConfigV3 != null) {
+					serverConfigVersion.DO_NOT_CHANGE_IT = 3;
+					serverConfigV3.DO_NOT_CHANGE_IT = 3;
+
+					var mainGroup = Jsons.mainGroupDeclaration();
+					mainGroup.syncedFiles = serverConfigV2.syncedFiles;
+					mainGroup.allowEditsInFiles = serverConfigV2.allowEditsInFiles;
+					mainGroup.overwriteEditableFiles = serverConfigV2.overwriteEditableFiles;
+					mainGroup.forceCopyFilesToStandardLocation = serverConfigV2.forceCopyFilesToStandardLocation;
+					serverConfigV3.groups = new LinkedHashMap<>(Map.of("main", mainGroup));
+
+					writeConfig(serverConfigFile, serverConfigV3);
+					LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
+				}
+			}
 		}
 
 		// load server config
-		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV2.class, Jsons.ServerConfigFieldsV2::new);
+		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
 
 		if (serverConfig != null) {
 			String serverConfigBefore = ConfigTools.GSON.toJson(serverConfig);
