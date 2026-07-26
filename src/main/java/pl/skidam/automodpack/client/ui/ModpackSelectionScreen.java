@@ -174,6 +174,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			Button button = buttonWidget(x, y, ROW_WIDTH, 20, rowLabel(groupId, group), press -> toggle(groupId));
 			// Required groups are shown so the player can see what they are getting, but not togglable.
 			button.active = group != null && !group.required;
+			MutableComponent tooltip = rowTooltip(group);
+			// A disabled button still shows its tooltip, so required groups keep their description on hover.
+			if (tooltip != null) setTooltip(button, tooltip);
 			this.addRenderableWidget(button);
 		}
 
@@ -233,6 +236,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		ClientSelectionManager.getManager().saveSelection(modpackId, resolved);
 		saved = true;
 		rebuild();
+	}
+
+	/** The group's description, shown on hover. Null when the server set none, so no tooltip appears. */
+	private MutableComponent rowTooltip(Jsons.ModpackContentFields.ModpackGroupFields group) {
+		if (group == null || group.description == null || group.description.isBlank()) return null;
+		return VersionedText.literal(group.description).withStyle(ChatFormatting.GRAY);
 	}
 
 	private MutableComponent rowLabel(String groupId, Jsons.ModpackContentFields.ModpackGroupFields group) {

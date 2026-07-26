@@ -16,8 +16,7 @@ import pl.skidam.automodpack_core.config.Jsons;
  * only ever changed by the player through that screen; it is never prompted automatically. This
  * class also turns a raw pick into a consistent set of groups by applying
  * required/requires/breaksWith.
- *
- * The resolution half is static and free of I/O so it can be exercised without a game or a disk.
+  * The resolution half is static and free of I/O so it can be exercised without a game or a disk.
  */
 public class ClientSelectionManager {
 
@@ -54,11 +53,6 @@ public class ClientSelectionManager {
 
 		selections.selections.put(modpackId, new Jsons.ClientSelectionManagerFields.ModpackSelection(new HashSet<>(selectedGroups)));
 		save();
-	}
-
-	public void clearSelection(String modpackId) {
-		if (modpackId == null) return;
-		if (selections.selections.remove(modpackId) != null) save();
 	}
 
 	public void save() {
