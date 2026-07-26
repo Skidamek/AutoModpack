@@ -230,7 +230,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void save() {
-		ClientSelectionManager.getManager().saveSelection(modpackId, resolved, groups.keySet());
+		ClientSelectionManager.getManager().saveSelection(modpackId, resolved);
 		saved = true;
 		rebuild();
 	}

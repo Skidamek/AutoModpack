@@ -12,8 +12,10 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /**
- * Remembers which groups the player picked per modpack, so the selection screen is shown once
- * rather than on every launch, and turns a raw pick into a consistent set of groups by applying
+ * Remembers which groups the player picked per modpack, so downloads are filtered to that choice
+ * and the "Optional Mods" screen reopens with the previous answer already ticked. The selection is
+ * only ever changed by the player through that screen; it is never prompted automatically. This
+ * class also turns a raw pick into a consistent set of groups by applying
  * required/requires/breaksWith/compatibleOS.
  *
  * The resolution half is static and free of I/O so it can be exercised without a game or a disk.
@@ -44,17 +46,14 @@ public class ClientSelectionManager {
 		return Optional.ofNullable(selections.selections.get(modpackId));
 	}
 
-	/**
-	 * Records the player's pick along with the groups the server offered at the time, so a later
-	 * launch can tell the difference between "player declined this" and "this did not exist yet".
-	 */
-	public void saveSelection(String modpackId, Set<String> selectedGroups, Set<String> offeredGroups) {
+	/** Records the player's pick for a modpack, replacing any previous choice. */
+	public void saveSelection(String modpackId, Set<String> selectedGroups) {
 		if (modpackId == null || modpackId.isBlank()) {
 			LOGGER.warn("Refusing to save a group selection without a modpack ID.");
 			return;
 		}
 
-		selections.selections.put(modpackId, new Jsons.ClientSelectionManagerFields.ModpackSelection(new HashSet<>(selectedGroups), new HashSet<>(offeredGroups)));
+		selections.selections.put(modpackId, new Jsons.ClientSelectionManagerFields.ModpackSelection(new HashSet<>(selectedGroups)));
 		save();
 	}
 
@@ -69,26 +68,6 @@ public class ClientSelectionManager {
 		} catch (IOException e) {
 			LOGGER.error("Failed to save client group selection", e);
 		}
-	}
-
-	// =================================================================================
-	// PROMPTING
-	// =================================================================================
-
-	/**
-	 * The screen is due when nothing was ever saved, or when the server now offers a group the
-	 * player has never been asked about. Removing a group is not a reason to re-ask.
-	 */
-	public boolean needsSelection(String modpackId, Map<String, Jsons.ModpackContentFields.ModpackGroupFields> groups) {
-		if (groups == null || groups.isEmpty()) return false;
-		// Nothing to decide when every group is mandatory.
-		if (groups.values().stream().allMatch(group -> group.required)) return false;
-
-		var saved = getSelection(modpackId);
-		if (saved.isEmpty()) return true;
-
-		Set<String> known = saved.get().knownGroups == null ? Set.of() : saved.get().knownGroups;
-		return !known.containsAll(groups.keySet());
 	}
 
 	// =================================================================================

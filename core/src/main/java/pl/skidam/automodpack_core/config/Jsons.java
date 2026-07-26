@@ -381,15 +381,11 @@ public class Jsons {
 
 		public static class ModpackSelection {
 			public Set<String> selectedGroups = new HashSet<>();
-			// Groups the server offered when the player last chose. A new group appearing on the
-			// server means the saved answer is incomplete and the screen must be shown again.
-			public Set<String> knownGroups = new HashSet<>();
 
 			public ModpackSelection() {}
 
-			public ModpackSelection(Set<String> selectedGroups, Set<String> knownGroups) {
+			public ModpackSelection(Set<String> selectedGroups) {
 				this.selectedGroups = selectedGroups;
-				this.knownGroups = knownGroups;
 			}
 		}
 	}
