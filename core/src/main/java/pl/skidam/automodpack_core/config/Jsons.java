@@ -195,9 +195,6 @@ public class Jsons {
 		public Set<String> breaksWith = Set.of();
 		public Set<String> requires = Set.of();
 
-		// WINDOWS, MACOS, LINUX, ANDROID; prefix with ! to negate. Empty = every OS.
-		public Set<String> compatibleOS = Set.of();
-
 		// Per-group equivalents of the V2 flat file rules.
 		public Set<String> syncedFiles = Set.of();
 		public Set<String> allowEditsInFiles = Set.of();
@@ -270,7 +267,6 @@ public class Jsons {
 			public boolean recommended;
 			public Set<String> breaksWith = Set.of();
 			public Set<String> requires = Set.of();
-			public Set<String> compatibleOS = Set.of();
 
 			// Populated by the scanner: relative paths of the ModpackContentItems in this group.
 			public Set<String> files = new HashSet<>();
@@ -285,7 +281,6 @@ public class Jsons {
 				this.recommended = declaration.recommended;
 				this.breaksWith = declaration.breaksWith;
 				this.requires = declaration.requires;
-				this.compatibleOS = declaration.compatibleOS;
 			}
 		}
 

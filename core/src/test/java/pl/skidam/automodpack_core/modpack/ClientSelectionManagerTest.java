@@ -7,7 +7,6 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 class ClientSelectionManagerTest {
 
@@ -104,17 +103,6 @@ class ClientSelectionManagerTest {
 
 		// shaders loses to required core, so shaderPacks can no longer stand alone.
 		assertEquals(Set.of("core"), ClientSelectionManager.resolve(map, Set.of("shaders", "shaderPacks")));
-	}
-
-	@Test
-	void excludesGroupsThisOsCannotTake() {
-		var incompatible = group(false, true);
-		incompatible.compatibleOS = Set.of("!" + PlatformUtils.getCurrentOS().name());
-		var compatible = group(false, true);
-		compatible.compatibleOS = Set.of(PlatformUtils.getCurrentOS().name());
-		var map = groups("nope", incompatible, "yep", compatible);
-
-		assertEquals(Set.of("yep"), ClientSelectionManager.defaultSelection(map));
 	}
 
 	@Test

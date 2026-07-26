@@ -9,14 +9,13 @@ import java.util.*;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.utils.PlatformUtils;
 
 /**
  * Remembers which groups the player picked per modpack, so downloads are filtered to that choice
  * and the "Optional Mods" screen reopens with the previous answer already ticked. The selection is
  * only ever changed by the player through that screen; it is never prompted automatically. This
  * class also turns a raw pick into a consistent set of groups by applying
- * required/requires/breaksWith/compatibleOS.
+ * required/requires/breaksWith.
  *
  * The resolution half is static and free of I/O so it can be exercised without a game or a disk.
  */
@@ -85,21 +84,16 @@ public class ClientSelectionManager {
 	}
 
 	/**
-	 * Turns a raw pick into a consistent set: drops groups this OS cannot take, forces required
-	 * ones in, pulls in dependencies, and breaks up conflicts. Required groups always win a
-	 * conflict; otherwise the group declared first does.
+	 * Turns a raw pick into a consistent set: forces required ones in, pulls in dependencies, and
+	 * breaks up conflicts. Required groups always win a conflict; otherwise the group declared
+	 * first does.
 	 */
 	public static Set<String> resolve(Map<String, Jsons.ModpackContentFields.ModpackGroupFields> groups, Set<String> chosen) {
 		if (groups == null || groups.isEmpty()) return Set.of();
 
 		Map<String, Jsons.ModpackContentFields.ModpackGroupFields> usable = new LinkedHashMap<>();
 		groups.forEach((id, group) -> {
-			if (group == null) return;
-			if (!PlatformUtils.isCompatibleWithCurrentOS(group.compatibleOS)) {
-				LOGGER.info("Group {} is not compatible with {}, skipping it", id, PlatformUtils.getCurrentOS());
-				return;
-			}
-			usable.put(id, group);
+			if (group != null) usable.put(id, group);
 		});
 
 		Set<String> wanted = new LinkedHashSet<>();
