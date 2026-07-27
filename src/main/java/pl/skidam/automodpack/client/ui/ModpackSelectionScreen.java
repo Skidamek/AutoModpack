@@ -229,7 +229,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void rebuild() {
+		/*? if >=1.19.2 {*/
 		this.rebuildWidgets();
+		/*?} else {*/
+		/*
+		this.init(this.minecraft, this.width, this.height);
+		*//*?}*/
 	}
 
 	private void save() {
