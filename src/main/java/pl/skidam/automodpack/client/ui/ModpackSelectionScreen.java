@@ -258,7 +258,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		// Header names the modpack when the server set one, so the player knows which pack they are editing.
-		MutableComponent header = modpackName.isBlank() ? VersionedText.translatable("automodpack.selection.title")
+		MutableComponent header = modpackName.isBlank()
+				? VersionedText.translatable("automodpack.selection.title")
 				: VersionedText.literal(modpackName + " – ").append(VersionedText.translatable("automodpack.selection.title"));
 		drawCenteredTextWithShadow(matrices, this.font, header.withStyle(ChatFormatting.BOLD), this.width / 2, 18, TextColors.WHITE);
 
