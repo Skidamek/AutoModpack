@@ -16,6 +16,10 @@ base {
 repositories {
 	mavenCentral()
 	maven { url = uri("https://maven.fabricmc.net/") }
+	flatDir {
+		name = "mcholepunchLibs"
+		dirs(rootProject.file("libs"))
+	}
 }
 
 val gsonVersion = versionProperty("versionLoaderGson")
@@ -26,6 +30,7 @@ val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val httpClientVersion = versionProperty("versionHttpClient")
 val nettyVersion = versionProperty("versionNetty")
 val h2Version = versionProperty("versionH2")
+val mcholepunchVersion = versionProperty("versionMcholepunch")
 
 dependencies {
 	compileOnly(project(":core"))
@@ -47,6 +52,11 @@ dependencies {
 		isTransitive = false
 	}
 	implementation("com.h2database:h2-mvstore:$h2Version")
+
+	// mcholepunch jars — shadowed into the loader so classes are available at
+	// the root classpath (needed by the preload-stage client).
+	implementation(":mcholepunch-core:$mcholepunchVersion")
+	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
 }
 
 configurations {

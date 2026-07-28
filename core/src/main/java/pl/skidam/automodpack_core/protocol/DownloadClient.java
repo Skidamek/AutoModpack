@@ -31,6 +31,10 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.PlatformUtils;
+import pl.skidam.mcholepunch.HolepunchClient;
+import pl.skidam.mcholepunch.HolepunchConnection;
+import pl.skidam.mcholepunch.HolepunchOptions;
+import pl.skidam.mcholepunch.MinecraftProtocol;
 
 public class DownloadClient implements AutoCloseable {
 
@@ -227,10 +231,46 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	private static PreValidationConnection getPreValidationConnection(Jsons.ConnectionInfo connectionInfo, SSLContext sharedContext) throws IOException {
+		return switch (connectionInfo.connectionMode) {
+			case HOLEPUNCH -> connectHolepunch(connectionInfo, sharedContext);
+			case MAGIC_PACKET, DIRECT -> connectDirect(connectionInfo, sharedContext);
+		};
+	}
+
+	private static PreValidationConnection connectDirect(Jsons.ConnectionInfo connectionInfo, SSLContext sharedContext) throws IOException {
 		String hostName = connectionInfo.endpoint.getHostString();
 		InetSocketAddress address = new InetSocketAddress(hostName, connectionInfo.endpoint.getPort());
 		if (address.isUnresolved()) throw new IOException("Failed to resolve endpoint host: " + hostName);
-		return new PreValidationConnection(address, connectionInfo, sharedContext);
+		Socket socket = new Socket();
+		socket.connect(address, 15000);
+		return new PreValidationConnection(socket, connectionInfo, sharedContext);
+	}
+
+	private static PreValidationConnection connectHolepunch(Jsons.ConnectionInfo connectionInfo, SSLContext sharedContext) throws IOException {
+		MinecraftProtocol minecraftProtocol;
+		try {
+			minecraftProtocol = MinecraftProtocol.forMinecraftVersion(MC_VERSION);
+		} catch (IllegalArgumentException e) {
+			throw new IOException("No mcholepunch protocol for Minecraft " + MC_VERSION, e);
+		}
+
+		try {
+			HolepunchSocket socket = new HolepunchSocket();
+			HolepunchConnection connection = HolepunchClient.connect(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort(), minecraftProtocol,
+					socket.handler(), HolepunchOptions.builder().build())
+					.toCompletableFuture().get(15, TimeUnit.SECONDS);
+			socket.setConnection(connection);
+			return new PreValidationConnection(socket, connectionInfo, sharedContext);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Holepunch connect interrupted", e);
+		} catch (ExecutionException e) {
+			Throwable cause = e.getCause() != null ? e.getCause() : e;
+			if (cause instanceof IOException io) throw io;
+			throw new IOException("Holepunch connect failed", cause);
+		} catch (Exception e) {
+			throw new IOException("Holepunch connect failed", e);
+		}
 	}
 
 	private static SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating, Jsons.ConnectionInfo connectionInfo) {
@@ -305,12 +345,14 @@ class PreValidationConnection {
 
 	private final SSLSocket socket;
 
-	public PreValidationConnection(InetSocketAddress resolvedHostAddress, Jsons.ConnectionInfo connectionInfo, SSLContext sslContext) throws IOException {
-		Socket plainSocket = new Socket();
-		plainSocket.connect(resolvedHostAddress, 10000);
-		plainSocket.setSoTimeout(10000);
+	public PreValidationConnection(Socket preConnectedSocket, Jsons.ConnectionInfo connectionInfo, SSLContext sslContext) throws IOException {
+		preConnectedSocket.setSoTimeout(10000);
+		InetSocketAddress addr = new InetSocketAddress(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort());
+		this.socket = wrapWithTls(preConnectedSocket, addr, connectionInfo, sslContext);
+	}
 
-		if (connectionInfo.requiresMagic) {
+	private static SSLSocket wrapWithTls(Socket plainSocket, InetSocketAddress resolvedHostAddress, Jsons.ConnectionInfo connectionInfo, SSLContext sslContext) throws IOException {
+		if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) {
 			try {
 				DataOutputStream plainOut = new DataOutputStream(new BufferedOutputStream(plainSocket.getOutputStream()));
 				DataInputStream plainIn = new DataInputStream(new BufferedInputStream(plainSocket.getInputStream()));
@@ -354,7 +396,7 @@ class PreValidationConnection {
 			throw e;
 		}
 
-		this.socket = sslSocket;
+		return sslSocket;
 	}
 
 	protected SSLSocket getSocket() {

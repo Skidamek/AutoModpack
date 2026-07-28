@@ -2,7 +2,6 @@ package pl.skidam.automodpack.modpack;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 /*? if >= 1.21.11 {*/
@@ -18,11 +17,14 @@ import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
@@ -91,9 +93,8 @@ public class Commands {
 												.then(argument("origin", StringArgumentType.word())
 														.executes(Commands::bootstrapInstallConfiguredEndpoint)
 														.then(argument("endpoint", StringArgumentType.word())
-																.executes(Commands::bootstrapInstallExplicitEndpointDefault)
-																.then(argument("requires-magic", BoolArgumentType.bool())
-																		.executes(Commands::bootstrapInstallExplicitEndpointWithMagic)
+																.then(argument("connection-mode", StringArgumentType.word())
+																		.executes(Commands::bootstrapInstallExplicitEndpoint)
 																)
 														)
 												)
@@ -199,27 +200,22 @@ public class Commands {
 			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
 			InetSocketAddress endpoint = AddressHelpers.parseEndpoint(
 					AddressHelpers.formatAddress(AddressHelpers.format(serverConfig.advertisedEndpointHost, serverConfig.advertisedEndpointPort)));
-			boolean requiresMagic = (serverConfig.bindPort == -1 && hostServer.isRunning()) || serverConfig.requireMagicPackets;
-			return writeBootstrap(context, BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, requiresMagic), true);
+			return writeBootstrap(context,
+					BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, serverConfig.connectionMode), true);
 		} catch (IllegalArgumentException e) {
 			send(context, e.getMessage(), ChatFormatting.RED, false);
 			return 0;
 		}
 	}
 
-	private static int bootstrapInstallExplicitEndpointDefault(CommandContext<CommandSourceStack> context) {
-		return bootstrapInstallExplicitEndpoint(context, true);
-	}
-
-	private static int bootstrapInstallExplicitEndpointWithMagic(CommandContext<CommandSourceStack> context) {
-		return bootstrapInstallExplicitEndpoint(context, BoolArgumentType.getBool(context, "requires-magic"));
-	}
-
-	private static int bootstrapInstallExplicitEndpoint(CommandContext<CommandSourceStack> context, boolean requiresMagic) {
+	private static int bootstrapInstallExplicitEndpoint(CommandContext<CommandSourceStack> context) {
 		try {
 			InetSocketAddress origin = AddressHelpers.parseOrigin(StringArgumentType.getString(context, "origin"));
 			InetSocketAddress endpoint = AddressHelpers.parseEndpoint(StringArgumentType.getString(context, "endpoint"));
-			return writeBootstrap(context, BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, requiresMagic), true);
+			ModpackConnectionMode connectionMode = ModpackConnectionMode.valueOf(
+					StringArgumentType.getString(context, "connection-mode").toUpperCase(Locale.ROOT));
+			return writeBootstrap(context,
+					BootstrapConfig.install(origin, requireBootstrapFingerprint(), requirePublishedModpackId(), endpoint, connectionMode), true);
 		} catch (IllegalArgumentException e) {
 			send(context, e.getMessage(), ChatFormatting.RED, false);
 			return 0;
@@ -298,8 +294,10 @@ public class Commands {
 			var tempServerConfig = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV2.class).orElse(null);
 			if (tempServerConfig != null) {
 				ConfigUtils.normalizeServerConfig(tempServerConfig, true);
+				boolean restartRequired = connectionRuntimeChanged(serverConfig, tempServerConfig);
 				serverConfig = tempServerConfig;
 				send(context, "AutoModpack server config reloaded!", ChatFormatting.GREEN, true);
+				if (restartRequired) send(context, "Connection settings changed. Run /automodpack host restart to apply them.", ChatFormatting.YELLOW, false);
 			} else {
 				send(context, "Error while reloading config file!", ChatFormatting.RED, true);
 			}
@@ -310,17 +308,14 @@ public class Commands {
 
 	private static int startModpackHost(CommandContext<CommandSourceStack> context) {
 		Util.backgroundExecutor().execute(() -> {
-			if (!hostServer.isRunning()) {
-				send(context, "Starting modpack hosting...", ChatFormatting.YELLOW, true);
-				hostServer.start();
-				if (hostServer.isRunning()) {
-					send(context, "Modpack hosting started!", ChatFormatting.GREEN, true);
-				} else {
-					send(context, "Couldn't start server!", ChatFormatting.RED, true);
-				}
-			} else {
+			if (hostServer.isRunning()) {
 				send(context, "Modpack hosting is already running!", ChatFormatting.RED, false);
+				return;
 			}
+
+			send(context, "Starting modpack hosting...", ChatFormatting.YELLOW, true);
+			hostServer.start();
+			reportHostStart(context, "started");
 		});
 
 		return Command.SINGLE_SUCCESS;
@@ -328,13 +323,12 @@ public class Commands {
 
 	private static int stopModpackHost(CommandContext<CommandSourceStack> context) {
 		Util.backgroundExecutor().execute(() -> {
-			if (hostServer.isRunning()) {
-				send(context, "Stopping modpack hosting...", ChatFormatting.RED, true);
-				if (hostServer.stop()) {
-					send(context, "Modpack hosting stopped!", ChatFormatting.RED, true);
-				} else {
-					send(context, "Couldn't stop server!", ChatFormatting.RED, true);
-				}
+			boolean wasRunning = hostServer.isRunning();
+			if (wasRunning) send(context, "Stopping modpack hosting...", ChatFormatting.RED, true);
+			if (!hostServer.stop()) {
+				send(context, "Couldn't stop server!", ChatFormatting.RED, true);
+			} else if (wasRunning) {
+				send(context, "Modpack hosting stopped!", ChatFormatting.RED, true);
 			} else {
 				send(context, "Modpack hosting is not running!", ChatFormatting.RED, false);
 			}
@@ -346,25 +340,34 @@ public class Commands {
 	private static int restartModpackHost(CommandContext<CommandSourceStack> context) {
 		Util.backgroundExecutor().execute(() -> {
 			send(context, "Restarting modpack hosting...", ChatFormatting.YELLOW, true);
-			boolean needStop = hostServer.isRunning();
-			boolean stopped = false;
-			if (needStop) {
-				stopped = hostServer.stop();
+			if (!hostServer.stop()) {
+				send(context, "Couldn't restart server!", ChatFormatting.RED, true);
+				return;
 			}
 
-			if (needStop && !stopped) {
-				send(context, "Couldn't restart server!", ChatFormatting.RED, true);
-			} else {
-				hostServer.start();
-				if (hostServer.isRunning()) {
-					send(context, "Modpack hosting restarted!", ChatFormatting.GREEN, true);
-				} else {
-					send(context, "Couldn't restart server!", ChatFormatting.RED, true);
-				}
-			}
+			hostServer.start();
+			reportHostStart(context, "restarted");
 		});
 
 		return Command.SINGLE_SUCCESS;
+	}
+
+	private static void reportHostStart(CommandContext<CommandSourceStack> context, String action) {
+		if (hostServer.isRunning()) {
+			send(context, "Modpack hosting " + action + "!", ChatFormatting.GREEN, true);
+		} else if (!serverConfig.modpackHost) {
+			send(context, "Built-in modpack hosting is disabled by modpackHost.", ChatFormatting.YELLOW, false);
+		} else if (serverConfig.connectionMode == ModpackConnectionMode.DIRECT && serverConfig.bindPort == -1) {
+			send(context, "DIRECT with bindPort -1 uses only the advertised external endpoint; no built-in listener was started.", ChatFormatting.YELLOW, false);
+		} else {
+			send(context, "Couldn't start server!", ChatFormatting.RED, true);
+		}
+	}
+
+	private static boolean connectionRuntimeChanged(Jsons.ServerConfigFieldsV2 previous, Jsons.ServerConfigFieldsV2 current) {
+		return previous.connectionMode != current.connectionMode || previous.bindPort != current.bindPort || previous.modpackHost != current.modpackHost
+				|| previous.disableInternalTLS != current.disableInternalTLS || previous.bandwidthLimit != current.bandwidthLimit
+				|| previous.updateIpsOnEveryStart != current.updateIpsOnEveryStart || !Objects.equals(previous.bindAddress, current.bindAddress);
 	}
 
 	private static int modpackHostAbout(CommandContext<CommandSourceStack> context) {

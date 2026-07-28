@@ -7,7 +7,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.gson.annotations.SerializedName;
 
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 @SuppressWarnings("unused")
 public class Jsons {
@@ -47,22 +49,22 @@ public class Jsons {
 		public InetSocketAddress origin; // player-entered Minecraft identity and certificate trust root
 		@SerializedName(value = "endpoint", alternate = "hostAddress")
 		public InetSocketAddress endpoint; // server-advertised AutoModpack route; not an authenticated identity
-		public boolean requiresMagic;
+		public ModpackConnectionMode connectionMode;
 		public transient String expectedFingerprint; // runtime-only exact certificate pin bound to origin
 		public transient String trustReason; // non-null only while importing new trust
 
 		public ConnectionInfo() {}
 
-		public ConnectionInfo(InetSocketAddress origin, InetSocketAddress endpoint, boolean requiresMagic, String expectedFingerprint, String trustReason) {
+		public ConnectionInfo(InetSocketAddress origin, InetSocketAddress endpoint, ModpackConnectionMode connectionMode, String expectedFingerprint, String trustReason) {
 			this.origin = origin;
 			this.endpoint = endpoint;
-			this.requiresMagic = requiresMagic;
+			this.connectionMode = connectionMode;
 			this.expectedFingerprint = expectedFingerprint;
 			this.trustReason = trustReason;
 		}
 
 		public boolean isComplete() {
-			return origin != null && endpoint != null && !origin.getHostString().isBlank() && !endpoint.getHostString().isBlank();
+			return origin != null && endpoint != null && connectionMode != null && !origin.getHostString().isBlank() && !endpoint.getHostString().isBlank();
 		}
 	}
 
@@ -117,7 +119,7 @@ public class Jsons {
 		@SerializedName(value = "advertisedEndpointPort", alternate = "portToSend")
 		public int advertisedEndpointPort = -1;
 		public boolean disableInternalTLS = false;
-		public boolean requireMagicPackets = false;
+		public ModpackConnectionMode connectionMode = ModpackConnectionMode.defaultFor(Constants.MC_VERSION, Constants.LOADER);
 		public boolean updateIpsOnEveryStart = false;
 		public int bandwidthLimit = 0;
 		public boolean validateSecrets = true;
@@ -168,7 +170,7 @@ public class Jsons {
 		public String fingerprint;
 		public String modpackId;
 		public String endpoint;
-		public Boolean requiresMagic;
+		public ModpackConnectionMode connectionMode;
 	}
 
 	public static class ModpackContentFields {

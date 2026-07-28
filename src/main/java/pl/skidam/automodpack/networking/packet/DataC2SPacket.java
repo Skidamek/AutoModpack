@@ -17,9 +17,9 @@ import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_loader_core.ReLauncher;
@@ -44,7 +44,11 @@ public class DataC2SPacket {
 		int packetEndpointPort = dataPacket.endpointPort;
 		Secrets.Secret secret = dataPacket.secret;
 		boolean modRequired = dataPacket.modRequired;
-		boolean requiresMagic = dataPacket.requiresMagic;
+		ModpackConnectionMode connectionMode = dataPacket.connectionMode;
+		if (connectionMode == null) {
+			LOGGER.error("Server did not provide an AutoModpack connection mode");
+			return CompletableFuture.completedFuture(buildResponse(null));
+		}
 
 		if (modRequired) {
 			// TODO set screen to refreshed danger screen which will ask user to install modpack with two options
@@ -60,8 +64,10 @@ public class DataC2SPacket {
 
 		Jsons.ConnectionInfo connectionInfo;
 		try {
-			// Get actual address of the server client have connected to and format it
-			InetSocketAddress connectedAddress = (InetSocketAddress) ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
+			// Get actual address of the server client have connected to and format it.
+			// Transports such as e4mc expose their own SocketAddress implementation, thus we need to fallback.
+			var remoteAddress = ((ClientLoginNetworkHandlerAccessor) handler).getConnection().getRemoteAddress();
+			InetSocketAddress connectedAddress = remoteAddress instanceof InetSocketAddress inetAddress ? inetAddress : connectionAttempt.origin();
 			String effectiveHost;
 			int effectivePort;
 
@@ -81,10 +87,9 @@ public class DataC2SPacket {
 
 			InetSocketAddress endpoint = AddressHelpers.format(effectiveHost, effectivePort);
 
-			LOGGER.info("AutoModpack endpoint: {}:{}; requires magic protocol: {}", endpoint.getHostString(), endpoint.getPort(), requiresMagic);
+			LOGGER.info("AutoModpack endpoint: {}:{} ({})", endpoint.getHostString(), endpoint.getPort(), connectionMode);
 
-			connectionInfo = new Jsons.ConnectionInfo(connectionAttempt.origin(), endpoint, requiresMagic, connectionAttempt.expectedFingerprint(),
-					connectionAttempt.trustReason());
+			connectionInfo = new Jsons.ConnectionInfo(connectionAttempt.origin(), endpoint, connectionMode, connectionAttempt.expectedFingerprint(), connectionAttempt.trustReason());
 		} catch (Exception e) {
 			LOGGER.error("Error preparing AutoModpack endpoint from data packet", e);
 			return CompletableFuture.completedFuture(buildResponse(null));

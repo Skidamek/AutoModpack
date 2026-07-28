@@ -5,7 +5,6 @@ import net.minecraft.server.MinecraftServer;
 import pl.skidam.automodpack.loader.GameCall;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
-import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
 import java.util.HashMap;
@@ -17,8 +16,20 @@ public class Common {
 
 	public static Map<String, Boolean> players = new HashMap<>();
 	public static MinecraftServer server = null;
+	private static boolean serverRuntimePrepared;
 
-	public static void serverInit() {
+	public static synchronized void serverInit() {
+		prepareServerRuntime();
+		ModPackets.registerS2CPackets();
+	}
+
+	private static void prepareServerRuntime() {
+		if (serverRuntimePrepared) return;
+
+		hostServer = new NettyServer();
+		modpackExecutor = new ModpackExecutor();
+		serverRuntimePrepared = true;
+
 		if (serverConfig.generateModpackOnStart) {
 			LOGGER.info("Generating modpack...");
 			long genStart = System.currentTimeMillis();
@@ -36,31 +47,25 @@ public class Common {
 				LOGGER.error("Failed to load modpack!");
 			}
 		}
-
-		ModPackets.registerS2CPackets();
 	}
 
 	public static void init() {
 		GAME_CALL = new GameCall();
-		hostServer = new NettyServer();
-		modpackExecutor = new ModpackExecutor();
 	}
 
-	public static void afterSetupServer() {
-		if (LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.SERVER) {
-			return;
-		}
-
+	public static synchronized void afterSetupServer() {
+		prepareServerRuntime();
 		hostServer.start();
 	}
 
-	public static void beforeShutdownServer() {
-		if (LOADER_MANAGER.getEnvironmentType() != LoaderManagerService.EnvironmentType.SERVER) {
-			return;
-		}
+	public static synchronized void beforeShutdownServer() {
+		if (!serverRuntimePrepared) return;
 
 		hostServer.stop();
 		modpackExecutor.stop();
+		hostServer = null;
+		modpackExecutor = null;
+		serverRuntimePrepared = false;
 	}
 
 	// <1.19.2 has no Identifier factory, only the deprecated-for-removal

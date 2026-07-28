@@ -6,17 +6,17 @@ This configuration file controls the behavior of the AutoModpack server-side com
 
 ## General Settings
 
-| Setting                       | Default         | Description                                                                                                                             |
-|-------------------------------|-----------------|-----------------------------------------------------------------------------------------------------------------------------------------|
-| `DO_NOT_CHANGE_IT`            | `<version>`     | Internal Use Only. Used to auto-migrate config versions during updates. Do not modify this manually.                                    |
-| `modpackName`                 | `""`            | The display name of the modpack shown in AutoModpack user interfaces. It does not determine pack identity or client storage paths.      |
-| `modpackHost`                 | `true`          | Enables or disables the internal host server that serves the modpack.                                                                   |
-| `generateModpackOnStart`      | `true`          | Automatically scans files and regenerates modpack metadata every time the server starts.                                                |
-| `autoExcludeServerSideMods`   | `true`          | Automatically excludes mods marked as "Server Side Only" in their metadata.                                                             |
-| `autoExcludeUnnecessaryFiles` | `true`          | Automatically skips syncing files that are empty, hidden, temporary, disabled, or backup files.                                         |
-| `requireAutoModpackOnClient`  | `true`          | If true, players are kicked if they do not have AutoModpack installed.                                                                  |
-| `acceptedLoaders`             | `["<current>"]` | A list of modloaders allowed to connect (e.g., Fabric, Forge). Use with caution; most mods are loader-specific.                         |
-| `selfUpdater`                 | `false`         | Enables AutoModpack to update its own jar file automatically when new version is published on modrinth.                                 |
+| Setting                       | Default         | Description                                                                                                                                       |
+|-------------------------------|-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| `DO_NOT_CHANGE_IT`            | `<version>`     | Internal Use Only. Used to auto-migrate config versions during updates. Do not modify this manually.                                              |
+| `modpackName`                 | `""`            | The display name of the modpack shown in AutoModpack user interfaces. It does not determine pack identity or client storage paths.                |
+| `modpackHost`                 | `true`          | Enables AutoModpack's built-in connection handling. When false, connection information can still point clients to an externally handled endpoint. |
+| `generateModpackOnStart`      | `true`          | Automatically scans files and regenerates modpack metadata every time the server starts.                                                          |
+| `autoExcludeServerSideMods`   | `true`          | Automatically excludes mods marked as "Server Side Only" in their metadata.                                                                       |
+| `autoExcludeUnnecessaryFiles` | `true`          | Automatically skips syncing files that are empty, hidden, temporary, disabled, or backup files.                                                   |
+| `requireAutoModpackOnClient`  | `true`          | If true, players are kicked if they do not have AutoModpack installed.                                                                            |
+| `acceptedLoaders`             | `["<current>"]` | A list of modloaders allowed to connect (e.g., Fabric, Forge). Use with caution; most mods are loader-specific.                                   |
+| `selfUpdater`                 | `false`         | Enables AutoModpack to update its own jar file automatically when new version is published on modrinth.                                           |
 
 ## File Synchronization
 
@@ -84,18 +84,34 @@ You can use a browser-based calculator like [SHA1 File Checksum](https://emn178.
 
 These settings control how the file server is exposed to the internet.
 
-| Setting                 | Default | Description                                                                                            |
-|-------------------------|---------|--------------------------------------------------------------------------------------------------------|
-| `bindAddress`           | `""`    | The local IP to bind the host to. Empty binds to 0.0.0.0 or ::0. Ignored if bindPort is -1.            |
-| `bindPort`              | `-1`    | The TCP port to listen on. -1 uses the Minecraft Server's port (recommended).                              |
-| `advertisedEndpointHost` | `""`  | The public hostname/IP sent to clients as the download endpoint. Empty uses the connected hostname.  |
-| `advertisedEndpointPort` | `-1`   | The public TCP port sent to clients as the download endpoint. -1 uses the connected port.                |
-| `bandwidthLimit`        | `0`     | Upload speed limit in Mbps (0 = unlimited).                                                            |
-| `disableInternalTLS`    | `false` | Disables internal TLS. Use this only if you handle SSL via a Reverse Proxy (like Nginx - recommended). |
-| `requireMagicPackets`   | `false` | Requires a "Magic Packet" handshake to start downloads. Always enabled if bindPort is -1.              |
-| `updateIpsOnEveryStart` | `false` | Updates advertisedEndpointHost on startup. Useful for dynamic residential IPs.                         |
-| `validateSecrets`       | `true`  | Protects downloads using unique, temporary secrets per user.                                           |
-| `secretLifetime`        | `336`   | How long (in hours) a download secret remains valid.                                                   |
+| Setting                  | Default                                                    | Description                                                                                                                                    |
+|--------------------------|------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|
+| `bindAddress`            | `""`                                                       | The local IP for a dedicated listener. Empty binds to 0.0.0.0 or ::0. Used only when the selected mode starts a dedicated listener.            |
+| `bindPort`               | `-1`                                                       | Controls built-in TCP handling according to `connectionMode`; see the matrix below. Values unused by the selected mode are preserved.          |
+| `advertisedEndpointHost` | `""`                                                       | The public hostname/IP sent to clients as the download endpoint. Empty uses the connected hostname.                                            |
+| `advertisedEndpointPort` | `-1`                                                       | The public TCP port sent to clients as the download endpoint. -1 uses the connected port.                                                      |
+| `bandwidthLimit`         | `0`                                                        | Upload speed limit in Mbps (0 = unlimited).                                                                                                    |
+| `disableInternalTLS`     | `false`                                                    | Disables only AutoModpack's server-side TLS termination. Clients always use TLS; an expert-provided terminator must forward decrypted traffic. |
+| `connectionMode`         | `HOLEPUNCH` on supported targets; `MAGIC_PACKET` otherwise | Selects the exact method advertised to clients and used by built-in handling. Modes do not fall back to one another.                           |
+| `updateIpsOnEveryStart`  | `false`                                                    | Updates advertisedEndpointHost on startup. Useful for dynamic residential IPs.                                                                 |
+| `validateSecrets`        | `true`                                                     | Protects downloads using unique, temporary secrets per user.                                                                                   |
+| `secretLifetime`         | `336`                                                      | How long (in hours) a download secret remains valid.                                                                                           |
+
+### Connection modes and ports
+
+| Mode           | `bindPort: -1`                                                                                                    | Explicit `bindPort`                                            |
+|----------------|-------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| `HOLEPUNCH`    | Accept only marked Minecraft Login takeover connections.                                                          | Same behavior; the configured port remains dormant.            |
+| `MAGIC_PACKET` | Require AMMH/AMOK on fresh connections to the Minecraft port. Non-magic traffic continues to Minecraft unchanged. | Start a dedicated listener that requires AMMH/AMOK before TLS. |
+| `DIRECT`       | Start no built-in listener. The advertised endpoint must be handled externally.                                   | Start a dedicated listener that expects TLS immediately.       |
+
+`HOLEPUNCH`, `MAGIC_PACKET`, and `DIRECT` are strict. A client uses only the advertised mode, and the server does not reinterpret a wrong-mode connection. Optional PROXY protocol metadata is accepted before dedicated `MAGIC_PACKET` and `DIRECT` connections, not on the shared Minecraft listener.
+
+Setting `modpackHost` to `false` disables all built-in listeners and holepunch handling, but it does not suppress connection information sent to clients. This supports reverse proxies and separately hosted endpoints. AutoModpack cannot validate external routing from the Minecraft server process.
+
+Clients always start TLS after the mode-specific opening. With `disableInternalTLS: true`, AutoModpack expects that TLS to have been terminated elsewhere before traffic reaches its protocol handler. This is an expert setting and does not permit plaintext client connections.
+
+On targets without built-in holepunch support, `HOLEPUNCH` is normalized, logged, and saved as `MAGIC_PACKET`. `DIRECT` is never selected automatically.
 
 ## Nagging Un-modded Clients
 

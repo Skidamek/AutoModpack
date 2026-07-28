@@ -16,6 +16,7 @@ import pl.skidam.automodpack.mixin.core.ServerLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.modpack.GameHelpers;
 import pl.skidam.automodpack.networking.PacketSender;
 import pl.skidam.automodpack.networking.server.ServerLoginNetworking;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class DataS2CPacket {
 
@@ -35,8 +36,12 @@ public class DataS2CPacket {
 			String clientHasUpdate = buf.readUtf(Short.MAX_VALUE);
 
 			if ("true".equals(clientHasUpdate)) { // disconnect
-				LOGGER.warn("{} has not installed modpack. Certificate fingerprint: {}", GameHelpers.getPlayerName(profile),
-						hostServer.getCertificateFingerprint());
+				String fingerprint = hostServer.getCertificateFingerprint();
+				if (fingerprint == null) {
+					LOGGER.warn("{} has not installed modpack", GameHelpers.getPlayerName(profile));
+				} else {
+					LOGGER.warn("{} has not installed modpack. Certificate fingerprint: {}", GameHelpers.getPlayerName(profile), fingerprint);
+				}
 				Component reason = VersionedText.literal("[AutoModpack] Install/Update modpack to join");
 				Connection connection = ((ServerLoginNetworkHandlerAccessor) handler).getConnection();
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
@@ -49,27 +54,29 @@ public class DataS2CPacket {
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
 				connection.disconnect(reason);
 
-				LOGGER.error("Host server error. AutoModpack host server is down or server is not configured correctly");
+				LOGGER.error("AutoModpack connection failed. Check the advertised endpoint and its configured connection mode.");
 
-				if (serverConfig.bindPort == -1) {
-					LOGGER.warn("You are hosting AutoModpack host server on the Minecraft port.");
+				if (!serverConfig.modpackHost) {
+					LOGGER.warn("Built-in modpack hosting is disabled; the advertised endpoint must be handled externally.");
+				} else if (serverConfig.connectionMode == ModpackConnectionMode.HOLEPUNCH) {
+					LOGGER.warn("HOLEPUNCH expects a marked Minecraft Login connection; bindPort is not used.");
+				} else if (serverConfig.connectionMode == ModpackConnectionMode.MAGIC_PACKET && serverConfig.bindPort == -1) {
+					LOGGER.warn("MAGIC_PACKET expects AMMH/AMOK routing on the Minecraft port.");
+				} else if (serverConfig.connectionMode == ModpackConnectionMode.MAGIC_PACKET) {
+					LOGGER.warn("MAGIC_PACKET expects AMMH/AMOK before TLS on dedicated port '{}'.", serverConfig.bindPort);
+				} else if (serverConfig.bindPort == -1) {
+					LOGGER.warn("DIRECT with bindPort -1 starts no built-in listener; the advertised endpoint must be handled externally.");
 				} else {
-					LOGGER.warn("Please check if AutoModpack host server (TCP) port '{}' is forwarded / opened correctly", serverConfig.bindPort);
+					LOGGER.warn("DIRECT expects TLS immediately on dedicated port '{}'.", serverConfig.bindPort);
 				}
 
-				LOGGER.warn("Make sure that 'advertisedEndpointHost' is correctly set in the config file!");
-				LOGGER.warn("It can be either an IP address or a domain pointing to your modpack host server.");
-				LOGGER.warn("If nothing works, try changing the 'bindPort' in the config file, then forward / open it and restart server");
-				LOGGER.warn(
-						"Note that some hosting providers may proxy this port internally and give you a different address and port to use. In this case, separate the given address with ':', and set the first part as 'advertisedEndpointHost' and the second part as 'advertisedEndpointPort' in the config file.");
-
-				if (serverConfig.bindPort != serverConfig.advertisedEndpointPort && serverConfig.bindPort != -1 && serverConfig.advertisedEndpointPort != -1) {
-					LOGGER.error(
-							"bindPort '{}' is different than advertisedEndpointPort '{}'. If you are not using reverse proxy, match them! If you do use reverse proxy, make sure it is setup correctly.",
-							serverConfig.bindPort, serverConfig.advertisedEndpointPort);
+				if (serverConfig.disableInternalTLS) {
+					LOGGER.warn("Internal TLS termination is disabled; clients still use TLS and a compatible terminator must forward decrypted traffic to AutoModpack.");
 				}
 
-				LOGGER.warn("Server certificate fingerprint: {}", hostServer.getCertificateFingerprint());
+				LOGGER.warn("Verify advertisedEndpointHost and advertisedEndpointPort, including any proxy or external routing configuration.");
+				String fingerprint = hostServer.getCertificateFingerprint();
+				if (fingerprint != null) LOGGER.warn("Server certificate fingerprint: {}", fingerprint);
 			}
 		} catch (Exception e) {
 			LOGGER.error("Error while handling DataS2CPacket", e);

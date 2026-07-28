@@ -1,2 +1,9 @@
-By default, AutoModpack hosts your modpack on your minecraft server port (e.g. 25565). This means that you don't need to open any other port on your router/firewall.
-If you want to use a different port, change `bindPort` in [config](../configuration/server-config).
+AutoModpack's built-in hosting behavior depends on `connectionMode` and `bindPort`.
+
+- `HOLEPUNCH` uses marked Minecraft Login connections and does not use `bindPort`.
+- `MAGIC_PACKET` with `bindPort: -1` shares the Minecraft port through AMMH/AMOK routing. With an explicit port, it starts a dedicated magic-only listener.
+- `DIRECT` starts a dedicated direct-TLS listener only when `bindPort` is explicit. With `bindPort: -1`, no built-in listener is started.
+
+See the complete matrix in the [server config](../configuration/server-config).
+
+The endpoint sent to clients is controlled separately by `advertisedEndpointHost` and `advertisedEndpointPort`. It may be handled by this process, a proxy, or another server. Disabling `modpackHost` disables built-in handling but does not suppress the advertised connection information.

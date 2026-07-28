@@ -40,8 +40,11 @@ public class ServerLoginNetworkAddon implements PacketSender {
 		this.server = ((ServerLoginNetworkHandlerAccessor) handler).getServer();
 	}
 
-	// returns true if we should move to another login stage
+	// Returns true if we should move to another login stage
 	public boolean queryTick() {
+		// Don't send automodpack packets on singleplayer world connect.
+		if (this.connection.isMemoryConnection()) return true;
+
 		if (this.firstTick) {
 
 			// Fire onReady event

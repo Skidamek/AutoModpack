@@ -23,9 +23,9 @@ Just delete file from server, or exclude it from sync, read about `syncedFiles` 
 Read about `nonModpackFilesToDelete` in [config](configuration/server-config)
 
 ### Do I have to open any port on my router?
-No, you don't need to. By default, AutoModpack injects into minecraft networking I/O which reuses your minecraft server port. (e.g. 25565)
+Usually not. On supported targets, the default `HOLEPUNCH` mode uses the Minecraft Login connection. Otherwise, the default `MAGIC_PACKET` mode can share the Minecraft port when `bindPort` is `-1`.
 
-If you want to use a different port, change `bindPort` and `advertisedEndpointPort` in [config](configuration/server-config).
+An explicit `bindPort` starts a dedicated listener for `MAGIC_PACKET` or `DIRECT`. Configure `advertisedEndpointHost` and `advertisedEndpointPort` for the public route clients should use. See the complete matrix in [config](configuration/server-config).
 
 ### What happens when I update AutoModpack version on server?
 Client always try to sync to the server's version of AutoModpack. It updates or downgrades itself to the server's version if such is found on the Modrinth.

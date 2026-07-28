@@ -20,6 +20,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 public final class ConfigTools {
@@ -79,7 +80,7 @@ public final class ConfigTools {
 			JsonObject object = new JsonObject();
 			if (source.origin != null) object.addProperty("origin", AddressHelpers.formatAddress(source.origin));
 			if (source.endpoint != null) object.addProperty("endpoint", AddressHelpers.formatAddress(source.endpoint));
-			object.addProperty("requiresMagic", source.requiresMagic);
+			object.add("connectionMode", context.serialize(source.connectionMode));
 			return object;
 		}
 
@@ -90,11 +91,12 @@ public final class ConfigTools {
 			try {
 				InetSocketAddress origin = parseAddress(object, "origin", "serverAddress", true);
 				InetSocketAddress endpoint = parseAddress(object, "endpoint", "hostAddress", false);
-				boolean requiresMagic = object.has("requiresMagic") && !object.get("requiresMagic").isJsonNull()
-						&& object.get("requiresMagic").getAsBoolean();
-				return new Jsons.ConnectionInfo(origin, endpoint, requiresMagic, null, null);
+				JsonElement modeElement = object.get("connectionMode");
+				if (modeElement == null || modeElement.isJsonNull()) throw new JsonParseException("ConnectionInfo connectionMode is required");
+				ModpackConnectionMode connectionMode = context.deserialize(modeElement, ModpackConnectionMode.class);
+				return new Jsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
 			} catch (IllegalArgumentException e) {
-				throw new JsonParseException("Invalid ConnectionInfo address", e);
+				throw new JsonParseException("Invalid ConnectionInfo", e);
 			}
 		}
 

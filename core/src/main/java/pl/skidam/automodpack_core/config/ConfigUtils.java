@@ -6,6 +6,8 @@ import java.io.IOException;
 import java.util.*;
 import java.util.regex.Pattern;
 
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
+
 public class ConfigUtils {
 
 	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config, boolean saveAfter) {
@@ -20,6 +22,12 @@ public class ConfigUtils {
 	}
 
 	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config) {
+		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.defaultFor(MC_VERSION, LOADER);
+		if (config.connectionMode == ModpackConnectionMode.HOLEPUNCH && !ModpackConnectionMode.isHolepunchAvailable(MC_VERSION, LOADER)) {
+			config.connectionMode = ModpackConnectionMode.MAGIC_PACKET;
+			LOGGER.warn("HOLEPUNCH connection mode is unavailable on " + LOADER + " " + MC_VERSION + ". Falling back to MAGIC_PACKET");
+		}
+
 		Set<String> fixedSyncedFiles = new LinkedHashSet<>(config.syncedFiles.size());
 		Map<String, String> fixedNonModpackFilesToDelete = new LinkedHashMap<>(config.nonModpackFilesToDelete.size());
 

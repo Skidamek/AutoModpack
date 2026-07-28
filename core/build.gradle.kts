@@ -14,6 +14,10 @@ base {
 
 repositories {
 	mavenCentral()
+	flatDir {
+		name = "mcholepunchLibs"
+		dirs(rootProject.file("libs"))
+	}
 }
 
 val nettyVersion = versionProperty("versionNetty")
@@ -25,6 +29,7 @@ val tomljVersion = versionProperty("versionTomlj")
 val antlrVersion = versionProperty("versionAntlr")
 val h2Version = versionProperty("versionH2")
 val junitVersion = versionProperty("versionJunit")
+val mcholepunchVersion = versionProperty("versionMcholepunch")
 
 val deps =
 	listOf(
@@ -39,6 +44,9 @@ val deps =
 	)
 
 dependencies {
+	implementation(":mcholepunch-core:$mcholepunchVersion")
+	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
+
 	// minecraft/loaders uses these, so we cant just implement them because it wont resolve in gradle
 	deps.forEach { compileOnly(it) }
 	deps.forEach { runtimeOnly(it) }

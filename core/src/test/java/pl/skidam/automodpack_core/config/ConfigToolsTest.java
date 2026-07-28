@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
 class ConfigToolsTest {
@@ -68,14 +69,14 @@ class ConfigToolsTest {
 	}
 
 	@Test
-	void readsLegacyConnectionAliasesAndWritesOnlyNewNames() throws Exception {
+	void readsConnectionAddressAliasesAndWritesOnlyNewNames() throws Exception {
 		String legacy = """
 				{
 				  "installedModpacks": {
 				    "pack": {
 				      "serverAddress": "Play.Example.com",
 				      "hostAddress": "[2001:0DB8:0:0:0:0:0:1]:24444",
-				      "requiresMagic": true
+				      "connectionMode": "MAGIC_PACKET"
 				    }
 				  }
 				}
@@ -85,7 +86,7 @@ class ConfigToolsTest {
 
 		assertEquals("play.example.com:25565", AddressHelpers.formatAddress(connectionInfo.origin));
 		assertEquals("[2001:db8::1]:24444", AddressHelpers.formatAddress(connectionInfo.endpoint));
-		assertTrue(connectionInfo.requiresMagic);
+		assertEquals(ModpackConnectionMode.MAGIC_PACKET, connectionInfo.connectionMode);
 
 		Path path = temporaryDirectory.resolve("client.json");
 		ConfigTools.writeAtomic(path, config);
@@ -121,6 +122,9 @@ class ConfigToolsTest {
 		assertFalse(connectionInfo.isComplete());
 
 		connectionInfo.endpoint = AddressHelpers.parseEndpoint("downloads.example.com:24444");
+		assertFalse(connectionInfo.isComplete());
+
+		connectionInfo.connectionMode = ModpackConnectionMode.DIRECT;
 		assertTrue(connectionInfo.isComplete());
 	}
 

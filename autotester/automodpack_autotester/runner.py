@@ -577,7 +577,7 @@ def _v_stage_modpack(ctx: Context, step):
             modpack_id: {
                 "origin": addr,
                 "endpoint": addr,
-                "requiresMagic": False,
+                "connectionMode": "DIRECT",
             }
         },
     }

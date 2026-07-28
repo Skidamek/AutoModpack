@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
@@ -193,7 +194,7 @@ class UpdateTransactionExecutorTest {
 		config.selectedModpackId = modpackId;
 		config.modpackConnections.put(modpackId,
 				new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("origin.example", 25565), InetSocketAddress.createUnresolved("endpoint.example", 25564),
-						true, null, null));
+						ModpackConnectionMode.MAGIC_PACKET, null, null));
 		return config;
 	}
 

@@ -30,6 +30,13 @@ plugins {
 	id("com.gradleup.shadow")
 }
 
+repositories {
+	flatDir {
+		name = "mcholepunchLibs"
+		dirs(rootProject.file("libs"))
+	}
+}
+
 val neoForgeVersion = loaderVersion()
 val gsonVersion = versionProperty("versionLoaderGson")
 val log4jVersion = versionProperty("versionLoaderPlatformLog4j")
@@ -38,6 +45,7 @@ val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val httpClientVersion = versionProperty("versionHttpClient")
 val nettyVersion = versionProperty("versionNetty")
 val h2Version = versionProperty("versionH2")
+val mcholepunchVersion = versionProperty("versionMcholepunch")
 
 base {
 	archivesName = property("mod.id") as String + "-" + project.name
@@ -70,6 +78,11 @@ dependencies {
 		isTransitive = false
 	}
 	implementation("com.h2database:h2-mvstore:$h2Version")
+
+	// mcholepunch jars — shadowed into the loader so classes are available at
+	// the root classpath (needed by the preload-stage client).
+	implementation(":mcholepunch-core:$mcholepunchVersion")
+	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
 }
 
 configurations {

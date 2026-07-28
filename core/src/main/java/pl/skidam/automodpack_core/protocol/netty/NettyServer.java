@@ -25,7 +25,9 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
+import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
@@ -41,7 +43,7 @@ public class NettyServer {
 	private final Map<String, Path> paths = new ConcurrentHashMap<>();
 	private MultithreadEventLoopGroup eventLoopGroup;
 	private ChannelFuture serverChannel;
-	private Boolean shouldHost = false; // needed for stop modpack hosting for minecraft port
+	private volatile boolean sharedMagicEnabled;
 	private String certificateFingerprint;
 	private SslContext sslCtx;
 
@@ -79,156 +81,171 @@ public class NettyServer {
 		return Optional.ofNullable(paths.get(hash));
 	}
 
-	public Optional<ChannelFuture> start() {
+	public synchronized Optional<ChannelFuture> start() {
+		if (isRunning()) {
+			LOGGER.warn("Modpack hosting is already running");
+			return Optional.ofNullable(serverChannel);
+		}
+
 		if (!serverConfig.modpackHost) {
-			LOGGER.warn("Modpack hosting is disabled in config");
+			LOGGER.warn("Built-in modpack hosting is disabled in config");
+			return Optional.empty();
+		}
+
+		if (paths.isEmpty()) {
+			LOGGER.warn("No file to host. Can't start modpack hosting.");
+			return Optional.empty();
+		}
+
+		updateAdvertisedAddress();
+
+		ModpackConnectionMode connectionMode = serverConfig.connectionMode;
+		if (connectionMode == ModpackConnectionMode.DIRECT && serverConfig.bindPort == -1) {
+			LOGGER.info("DIRECT is advertised without a built-in listener; expecting the endpoint to be handled externally");
 			return Optional.empty();
 		}
 
 		try {
-			if (serverConfig.disableInternalTLS && serverConfig.bindPort != -1) {
-				LOGGER.warn("Internal TLS is disabled. Clients will not be able to connect directly; you must use e.g. a reverse proxy with TLS.");
-			} else {
-				if (serverConfig.disableInternalTLS) {
-					LOGGER.error(
-							"Internal TLS cannot be disabled. You have to bind modpack host on a separate port, preferably also on a loopback address or atleast some private one.");
-				}
+			prepareTls();
 
-				if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
-					// Create a self-signed certificate
-					KeyPair keyPair = NetUtils.generateKeyPair();
-					X509Certificate cert = NetUtils.selfSign(keyPair);
-
-					// save it to the file
-					NetUtils.saveCertificate(cert, serverCertFile);
-					NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
-				}
-
-				X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
-
-				if (cert == null) throw new IllegalStateException("Server certificate couldn't be loaded");
-
-				// Shiny TLS 1.3
-				sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
-						.ciphers(Arrays.asList("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256")).sessionTimeout(1800)
-						.build();
-
-				// generate sha256 from cert as a fingerprint
-				certificateFingerprint = NetUtils.getFingerprint(cert);
-				if (certificateFingerprint != null) { LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint); }
-			}
-
-			if (!canStart()) {
-				new TrafficShaper(null);
+			if (connectionMode == ModpackConnectionMode.HOLEPUNCH) {
+				LOGGER.info("Hosting modpack through Minecraft Login holepunch; bindPort is not used");
+				ServerHolepunchBridge.register(this);
 				return Optional.empty();
 			}
 
-			String address = serverConfig.bindAddress;
-			int port = serverConfig.bindPort;
-			InetSocketAddress bindAddress = null;
-			if (port != -1) {
-				if (address == null || address.isBlank()) {
-					bindAddress = new InetSocketAddress(port);
-				} else {
-					bindAddress = new InetSocketAddress(address, port);
-				}
+			if (connectionMode == ModpackConnectionMode.MAGIC_PACKET && serverConfig.bindPort == -1) {
+				LOGGER.info("Hosting modpack through magic packet routing on the Minecraft port");
+				new TrafficShaper(null);
+				sharedMagicEnabled = true;
+				return Optional.empty();
 			}
 
-			LOGGER.info("Starting modpack host server on {}", bindAddress);
-
-			Class<? extends ServerChannel> socketChannelClass;
-			if (Epoll.isAvailable()) {
-				socketChannelClass = EpollServerSocketChannel.class;
-				eventLoopGroup = new EpollEventLoopGroup(
-						new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
-			} else {
-				socketChannelClass = NioServerSocketChannel.class;
-				eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
-			}
-
-			new TrafficShaper(eventLoopGroup);
-
-			serverChannel = new ServerBootstrap().channel(socketChannelClass).childOption(ChannelOption.TCP_NODELAY, true)
-					.childHandler(new ChannelInitializer<SocketChannel>() {
-						@Override
-						protected void initChannel(SocketChannel ch) {
-							ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(sslCtx));
-						}
-					}).group(eventLoopGroup).localAddress(bindAddress).bind().syncUninterruptibly();
+			return startDedicated(connectionMode);
 		} catch (Exception e) {
-			LOGGER.error("Failed to start Netty server", e);
+			LOGGER.error("Failed to start modpack hosting", e);
+			stop();
 			return Optional.empty();
 		}
-
-		return Optional.ofNullable(serverChannel);
 	}
 
-	public boolean shouldHost() {
-		return shouldHost;
-	}
-
-	// Returns true if stopped successfully
-	public boolean stop() {
-		try {
-			if (serverChannel != null) {
-				serverChannel.channel().close().sync();
-				serverChannel = null;
-			}
-
-			shouldHost = false;
-
-			TrafficShaper.close();
-
-			if (eventLoopGroup != null) eventLoopGroup.shutdownGracefully().sync();
-		} catch (InterruptedException e) {
-			LOGGER.error("Interrupted server channel", e);
-			return false;
+	private Optional<ChannelFuture> startDedicated(ModpackConnectionMode connectionMode) {
+		String address = serverConfig.bindAddress;
+		int port = serverConfig.bindPort;
+		InetSocketAddress bindAddress;
+		if (address == null || address.isBlank()) {
+			bindAddress = new InetSocketAddress(port);
+		} else {
+			bindAddress = new InetSocketAddress(address, port);
 		}
 
-		return true;
+		LOGGER.info("Starting {} modpack host server on {}", connectionMode, bindAddress);
+
+		Class<? extends ServerChannel> socketChannelClass;
+		if (Epoll.isAvailable()) {
+			socketChannelClass = EpollServerSocketChannel.class;
+			eventLoopGroup = new EpollEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Epoll Server IO #%d").setDaemon(true).build());
+		} else {
+			socketChannelClass = NioServerSocketChannel.class;
+			eventLoopGroup = new NioEventLoopGroup(new CustomThreadFactoryBuilder().setNameFormat("AutoModpack Server IO #%d").setDaemon(true).build());
+		}
+
+		new TrafficShaper(eventLoopGroup);
+
+		serverChannel = new ServerBootstrap().channel(socketChannelClass).childOption(ChannelOption.TCP_NODELAY, true)
+				.childHandler(new ChannelInitializer<SocketChannel>() {
+					@Override
+					protected void initChannel(SocketChannel ch) {
+						ch.pipeline().addLast(MOD_ID, new ProtocolServerHandler(NettyServer.this, connectionMode, false));
+					}
+				}).group(eventLoopGroup).localAddress(bindAddress).bind().syncUninterruptibly();
+		return Optional.of(serverChannel);
+	}
+
+	private void prepareTls() throws Exception {
+		sslCtx = null;
+		certificateFingerprint = null;
+
+		if (serverConfig.disableInternalTLS) {
+			LOGGER.warn("Internal TLS termination is disabled. Clients still use TLS; traffic must be decrypted before it reaches AutoModpack.");
+			return;
+		}
+
+		if (!Files.exists(serverCertFile) || !Files.exists(serverPrivateKeyFile)) {
+			KeyPair keyPair = NetUtils.generateKeyPair();
+			X509Certificate cert = NetUtils.selfSign(keyPair);
+			NetUtils.saveCertificate(cert, serverCertFile);
+			NetUtils.savePrivateKey(keyPair.getPrivate(), serverPrivateKeyFile);
+		}
+
+		X509Certificate cert = NetUtils.loadCertificate(serverCertFile);
+		if (cert == null) throw new IllegalStateException("Server certificate couldn't be loaded");
+
+		sslCtx = SslContextBuilder.forServer(serverCertFile.toFile(), serverPrivateKeyFile.toFile()).sslProvider(SslProvider.JDK).protocols("TLSv1.3")
+				.ciphers(Arrays.asList("TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256")).sessionTimeout(1800).build();
+		certificateFingerprint = NetUtils.getFingerprint(cert);
+		if (certificateFingerprint != null) LOGGER.warn("Certificate fingerprint: {}", certificateFingerprint);
+	}
+
+	private void updateAdvertisedAddress() {
+		if (!serverConfig.updateIpsOnEveryStart) return;
+
+		String publicIp = AddressHelpers.getPublicIp();
+		if (publicIp != null) {
+			serverConfig.advertisedEndpointHost = publicIp;
+			LOGGER.warn("Setting Host IP to {}", serverConfig.advertisedEndpointHost);
+		} else {
+			LOGGER.error("Couldn't get public IP, please change it manually!");
+		}
+
+		try {
+			ConfigTools.writeAtomic(serverConfigFile, serverConfig);
+		} catch (Exception e) {
+			LOGGER.error("Failed to save updated advertised endpoint", e);
+		}
+	}
+
+	public boolean isSharedMagicEnabled() {
+		return sharedMagicEnabled;
+	}
+
+	public synchronized boolean stop() {
+		boolean stopped = true;
+		sharedMagicEnabled = false;
+		ServerHolepunchBridge.close();
+
+		try {
+			if (serverChannel != null) serverChannel.channel().close().sync();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			LOGGER.error("Interrupted while closing server channel", e);
+			stopped = false;
+		} finally {
+			serverChannel = null;
+		}
+
+		TrafficShaper.close();
+
+		try {
+			if (eventLoopGroup != null) eventLoopGroup.shutdownGracefully().sync();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			LOGGER.error("Interrupted while stopping server event loop", e);
+			stopped = false;
+		} finally {
+			eventLoopGroup = null;
+		}
+
+		sslCtx = null;
+		certificateFingerprint = null;
+		return stopped;
 	}
 
 	public boolean isRunning() {
-		if (serverChannel == null) return shouldHost;
-
-		return serverChannel.channel().isOpen();
+		return sharedMagicEnabled || ServerHolepunchBridge.isRegistered() || serverChannel != null && serverChannel.channel().isOpen();
 	}
 
 	public SslContext getSslCtx() {
 		return sslCtx;
-	}
-
-	private boolean canStart() {
-		if (isRunning() || !serverConfig.modpackHost) return false;
-
-		if (paths.isEmpty()) {
-			LOGGER.warn("No file to host. Can't start modpack host server.");
-			return false;
-		}
-
-		if (serverConfig.updateIpsOnEveryStart) {
-			String publicIp = AddressHelpers.getPublicIp();
-			if (publicIp != null) {
-				serverConfig.advertisedEndpointHost = publicIp;
-				LOGGER.warn("Setting Host IP to {}", serverConfig.advertisedEndpointHost);
-			} else {
-				LOGGER.error("Couldn't get public IP, please change it manually! ");
-			}
-
-			try {
-				ConfigTools.writeAtomic(serverConfigFile, serverConfig);
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-
-		shouldHost = true; // At this point we know that we want to host the modpack
-
-		if (serverConfig.bindPort == -1) {
-			LOGGER.info("Hosting modpack on Minecraft port");
-			return false; // Dont start separate server for modpack hosting, use minecraft port instead
-		} else {
-			return true; // Start separate server for modpack hosting
-		}
 	}
 }
