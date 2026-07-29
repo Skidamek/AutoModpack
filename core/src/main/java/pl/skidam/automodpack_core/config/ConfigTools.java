@@ -92,8 +92,16 @@ public final class ConfigTools {
 				InetSocketAddress origin = parseAddress(object, "origin", "serverAddress", true);
 				InetSocketAddress endpoint = parseAddress(object, "endpoint", "hostAddress", false);
 				JsonElement modeElement = object.get("connectionMode");
-				if (modeElement == null || modeElement.isJsonNull()) throw new JsonParseException("ConnectionInfo connectionMode is required");
-				ModpackConnectionMode connectionMode = context.deserialize(modeElement, ModpackConnectionMode.class);
+				ModpackConnectionMode connectionMode;
+				if (modeElement != null && !modeElement.isJsonNull()) {
+					connectionMode = context.deserialize(modeElement, ModpackConnectionMode.class);
+				} else if (object.has("requiresMagic") && !object.get("requiresMagic").isJsonNull()) {
+					// Pre-holepunch configs stored a plain boolean instead of connectionMode: true meant
+					// magic-packet wakeup, false meant a direct connection (holepunch did not exist yet).
+					connectionMode = object.get("requiresMagic").getAsBoolean() ? ModpackConnectionMode.MAGIC_PACKET : ModpackConnectionMode.DIRECT;
+				} else {
+					throw new JsonParseException("ConnectionInfo connectionMode is required");
+				}
 				return new Jsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
 			} catch (IllegalArgumentException e) {
 				throw new JsonParseException("Invalid ConnectionInfo", e);
