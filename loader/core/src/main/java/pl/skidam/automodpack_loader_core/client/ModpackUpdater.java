@@ -521,8 +521,8 @@ public class ModpackUpdater implements AutoCloseable {
 		Set<UpdatePlan.RestartReason> restartReasons = EnumSet.noneOf(UpdatePlan.RestartReason.class);
 		restartReasons.addAll(plan.restartReasons());
 		restartReasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
-		return new UpdatePlan(plan.modpackId(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(), plan.plannedDeletionTimestamps(),
-				restartReasons, plan.warnings());
+		return new UpdatePlan(plan.modpackId(), plan.generationTarget(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(),
+				plan.plannedDeletionTimestamps(), restartReasons, plan.warnings());
 	}
 
 	private void reportPlanWarnings(List<UpdatePlan.Warning> warnings) {

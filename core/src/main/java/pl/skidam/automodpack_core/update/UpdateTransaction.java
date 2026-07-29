@@ -5,13 +5,14 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
-import pl.skidam.automodpack_core.modpack.group.GroupManifest;
-import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
@@ -28,6 +29,9 @@ public final class UpdateTransaction {
 	public String transactionId;
 	public Purpose purpose;
 	public String modpackId;
+	public String targetGenerationId;
+	public String parentGenerationId;
+	public String stateDigest;
 	public String completeManifestJson;
 	public String targetManifestJson;
 	public String targetPlatform;
@@ -44,8 +48,18 @@ public final class UpdateTransaction {
 	public UpdateTransaction() {}
 
 	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, Path modpackDirectory) {
+		Objects.requireNonNull(plan, "plan");
+		Objects.requireNonNull(target, "target");
+		if (!plan.modpackId().equals(target.manifest().modpackId())) throw new IllegalArgumentException("Plan and selected target modpack IDs disagree");
+		if (!plan.generationTarget().equals(target.generationTarget())) throw new IllegalArgumentException("Plan and selected target generation identities disagree");
+		if (!plan.generationTarget().equals(GenerationTarget.fromFlat(target.flatTarget())))
+			throw new IllegalArgumentException("Plan and selected flat target generation identities disagree");
+
 		UpdateTransaction transaction = base(Purpose.MODPACK_UPDATE);
 		transaction.modpackId = plan.modpackId();
+		transaction.targetGenerationId = plan.generationTarget().targetGenerationId();
+		transaction.parentGenerationId = plan.generationTarget().parentGenerationId();
+		transaction.stateDigest = plan.generationTarget().stateDigest();
 		transaction.completeManifestJson = ConfigTools.GSON.toJson(target.completeFields());
 		transaction.targetManifestJson = ConfigTools.GSON.toJson(target.flatTarget());
 		transaction.targetPlatform = target.platform().id();
@@ -106,8 +120,12 @@ public final class UpdateTransaction {
 		return ConfigTools.parse(targetManifestJson, Jsons.ModpackContentFields.class);
 	}
 
-	public GroupManifest completeManifest() {
-		return GroupManifestValidator.validate(ConfigTools.parse(completeManifestJson, Jsons.CompleteModpackContentFields.class));
+	public GenerationRecord completeGenerationRecord() {
+		return GenerationRecord.fromFields(ConfigTools.parse(completeManifestJson, Jsons.CompleteModpackContentFields.class));
+	}
+
+	public GenerationTarget generationTarget() {
+		return new GenerationTarget(targetGenerationId, parentGenerationId, stateDigest);
 	}
 
 	public ClientPlatform platform() {

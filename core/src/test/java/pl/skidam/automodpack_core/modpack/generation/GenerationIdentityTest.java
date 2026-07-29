@@ -2,17 +2,24 @@ package pl.skidam.automodpack_core.modpack.generation;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 class GenerationIdentityTest {
+	@TempDir
+	Path temporaryDirectory;
+
 	@Test
 	void shuffledCatalogueOrderDoesNotChangeStateDigest() {
 		var first = catalogue("main", "main description");
@@ -25,6 +32,21 @@ class GenerationIdentityTest {
 		second.groups.put("optional", secondGroups.get("optional"));
 		second.groups.put("main", secondGroups.get("main"));
 		assertEquals(GenerationIdentity.stateDigest(GroupManifestValidator.validate(first)), GenerationIdentity.stateDigest(GroupManifestValidator.validate(second)));
+	}
+
+	@Test
+	void completeRecordReadPreservesGenerationMetadata() throws Exception {
+		GroupManifest manifest = GroupManifestValidator.validate(catalogue("main", "stored"));
+		GenerationRecord record = GenerationRecord.create(manifest, "0".repeat(40), Instant.parse("2026-01-03T00:00:00Z"), "notes\n");
+		Path path = temporaryDirectory.resolve("automodpack-catalogue.json");
+		ConfigTools.writeAtomic(path, record.toFields());
+
+		GenerationRecord read = ModpackContentTools.readGenerationRecord(path);
+
+		assertEquals(record, read);
+		assertEquals(record.metadata().generationId(), read.metadata().generationId());
+		assertEquals(record.metadata().parentGenerationId(), read.metadata().parentGenerationId());
+		assertEquals(record.metadata().stateDigest(), read.metadata().stateDigest());
 	}
 
 	@Test
