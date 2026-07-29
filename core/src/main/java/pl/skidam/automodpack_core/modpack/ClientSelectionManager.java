@@ -97,18 +97,28 @@ public class ClientSelectionManager {
 
 		addRequiredDependencies(usable, wanted);
 
-		// Required first so they can never be the side that loses a conflict.
+		// Dependencies a required group pulls in must win conflicts exactly like their required
+		// dependent does, otherwise an optional group selected earlier can steal the conflict and
+		// leave the required group's dependency missing (dropUnsatisfied then keeps the required
+		// group anyway, producing an invalid selection).
+		Set<String> mustHave = new LinkedHashSet<>();
+		usable.forEach((id, group) -> {
+			if (group.required) mustHave.add(id);
+		});
+		addRequiredDependencies(usable, mustHave);
+
+		// Required (and their dependencies) first so they can never be the side that loses a conflict.
 		List<String> byPriority = new ArrayList<>();
-		usable.keySet().stream().filter(id -> wanted.contains(id) && usable.get(id).required).forEach(byPriority::add);
-		usable.keySet().stream().filter(id -> wanted.contains(id) && !usable.get(id).required).forEach(byPriority::add);
+		usable.keySet().stream().filter(id -> wanted.contains(id) && mustHave.contains(id)).forEach(byPriority::add);
+		usable.keySet().stream().filter(id -> wanted.contains(id) && !mustHave.contains(id)).forEach(byPriority::add);
 
 		Set<String> kept = new LinkedHashSet<>();
 		for (String id : byPriority) {
 			String clash = kept.stream().filter(other -> conflicts(usable, other, id)).findFirst().orElse(null);
 			if (clash == null) {
 				kept.add(id);
-			} else if (usable.get(id).required) {
-				LOGGER.warn("Groups {} and {} are both required but declared as conflicting; keeping both.", clash, id);
+			} else if (mustHave.contains(id)) {
+				LOGGER.warn("Group {} is required (directly or as a dependency of a required group) but conflicts with {}; keeping both.", id, clash);
 				kept.add(id);
 			} else {
 				LOGGER.info("Group {} conflicts with {}, leaving it out", id, clash);

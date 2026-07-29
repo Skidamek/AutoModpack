@@ -12,6 +12,7 @@
   "automodpack.selection.description": "Choose which optional parts of the modpack you want.",
   "automodpack.selection.saved": "Your selection was saved.",
   "automodpack.selection.restartRequired": "Restart the game to apply your changes.",
+  "automodpack.selection.updateOnLaunchDisabled": "\"Update modpack on launch\" is disabled, so this change won't take effect on restart. Enable it or trigger a manual update to apply your selection.",
   "automodpack.selection.restartNow": "Restart now",
   "automodpack.selection.later": "Later",
   "automodpack.selection.save": "Save",

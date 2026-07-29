@@ -77,11 +77,22 @@ public class ModpackContent {
 		for (var entry : declarations.entrySet()) {
 			Jsons.GroupDeclaration declaration = entry.getValue();
 			if (declaration == null) continue;
-			if (modpackRoot != null) GROUP_DIRECTORIES.put(entry.getKey(), modpackRoot.resolve(entry.getKey()));
+			Path groupDirectory = modpackRoot == null ? null : modpackRoot.resolve(entry.getKey());
+			if (groupDirectory != null) GROUP_DIRECTORIES.put(entry.getKey(), groupDirectory);
+
+			// hasMatch() only sees files under a scanner's own start directories, so a group's editable
+			// and force-copy rules must also scan its own sibling directory, not just the main modpack
+			// dir and CWD, otherwise files living only there silently lose those flags.
+			Set<Path> ruleSearchDirectories = directoriesToSearch;
+			if (groupDirectory != null && !directoriesToSearch.contains(groupDirectory)) {
+				ruleSearchDirectories = new HashSet<>(directoriesToSearch);
+				ruleSearchDirectories.add(groupDirectory);
+			}
+
 			GROUP_SCANNERS.put(entry.getKey(), new GroupScanners(new FileTreeScanner(declaration.syncedFiles, syncedSearchDirectories),
-					new FileTreeScanner(declaration.allowEditsInFiles, directoriesToSearch),
-					new FileTreeScanner(declaration.overwriteEditableFiles, directoriesToSearch),
-					new FileTreeScanner(declaration.forceCopyFilesToStandardLocation, directoriesToSearch)));
+					new FileTreeScanner(declaration.allowEditsInFiles, ruleSearchDirectories),
+					new FileTreeScanner(declaration.overwriteEditableFiles, ruleSearchDirectories),
+					new FileTreeScanner(declaration.forceCopyFilesToStandardLocation, ruleSearchDirectories)));
 			GROUP_FIELDS.put(entry.getKey(), new Jsons.ModpackContentFields.ModpackGroupFields(declaration));
 		}
 
@@ -174,13 +185,26 @@ public class ModpackContent {
 
 			// Each group directory is its own modpack root, so host-modpack/<group>/mods/x.jar lands
 			// at /mods/x.jar on the client exactly like the main group's files do.
+			Map<String, String> groupDirectoryFileOwners = new HashMap<>();
 			for (var groupEntry : GROUP_DIRECTORIES.entrySet()) {
 				Path groupDirectory = groupEntry.getValue();
 				if (groupDirectory == null || !Files.isDirectory(groupDirectory)) continue;
 				if (MODPACK_DIR != null && groupDirectory.toAbsolutePath().normalize().equals(MODPACK_DIR.toAbsolutePath().normalize())) continue;
 
+				String owningGroup = groupEntry.getKey();
 				try (Stream<Path> stream = Files.walk(groupDirectory)) {
-					stream.filter(Files::isRegularFile).forEach(path -> filesToProcess.put(SmartFileUtils.formatPath(path, groupDirectory), path));
+					stream.filter(Files::isRegularFile).forEach(path -> {
+						String formattedFile = SmartFileUtils.formatPath(path, groupDirectory);
+						// Two mutually exclusive groups can each ship their own variant of the same
+						// destination path (e.g. /mods/renderer.jar); silently keeping only the last one
+						// found would mean selecting the other group omits the file entirely. That is
+						// a modpack authoring error the server must not start with.
+						String previousOwner = groupDirectoryFileOwners.putIfAbsent(formattedFile, owningGroup);
+						if (previousOwner != null && !previousOwner.equals(owningGroup)) {
+							throw new DuplicateGroupFileError(formattedFile, previousOwner, owningGroup);
+						}
+						filesToProcess.put(formattedFile, path);
+					});
 				} catch (IOException e) {
 					LOGGER.error("Failed to walk group directory {}", groupDirectory, e);
 				}
@@ -349,6 +373,19 @@ public class ModpackContent {
 	}
 
 	private record GroupedItem(String groupId, Jsons.ModpackContentFields.ModpackContentItem item) {}
+
+	/**
+	 * Thrown when two mutually exclusive group directories ship a file at the same destination path.
+	 * Deliberately an {@link Error}, not an {@link Exception}: it must escape {@link #create}'s
+	 * {@code catch (Exception e)} and crash the server with this message in the crash report instead
+	 * of silently starting with one of the two files missing from the manifest.
+	 */
+	public static final class DuplicateGroupFileError extends Error {
+		public DuplicateGroupFileError(String formattedFile, String firstGroup, String secondGroup) {
+			super("Modpack file " + formattedFile + " exists in both group '" + firstGroup + "' and group '" + secondGroup
+					+ "'. Each group's files must resolve to a unique destination path; rename or remove one of them.");
+		}
+	}
 
 	/**
 	 * A file sitting inside a group's own directory belongs to that group, no matter what the globs

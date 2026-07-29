@@ -8,6 +8,7 @@ import java.util.HashSet;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ServerConfigMigration;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -35,6 +36,8 @@ public class Server {
 		hostModpackContentFile = modpackDir.resolve("automodpack-content.json");
 		serverConfigFile = modpackDir.resolve("automodpack-server.json");
 		serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
+
+		ServerConfigMigration.migrateToLatest(serverConfigFile);
 
 		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
 		if (serverConfig != null) {

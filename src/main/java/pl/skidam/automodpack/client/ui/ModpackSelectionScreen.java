@@ -121,11 +121,17 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (serverAddress == null || clientConfig == null || clientConfig.modpackConnections == null) return null;
 
 		String wanted = normalizeAddress(serverAddress);
+		// A bare host with no port is ambiguous between saved modpacks, so it may fall back to a
+		// host-only match; an address that specifies a port must match that port exactly, otherwise
+		// the button can open and save selections for the wrong modpack among several on one host.
+		boolean addressHasPort = serverAddress.lastIndexOf(':') > 0;
+		String wantedHost = normalizeAddress(hostOnly(serverAddress));
 		for (var entry : clientConfig.modpackConnections.entrySet()) {
 			var connection = entry.getValue();
 			if (connection == null || connection.origin == null) continue;
-			if (normalizeAddress(connection.origin.getHostString() + ":" + connection.origin.getPort()).equals(wanted)
-					|| normalizeAddress(connection.origin.getHostString()).equals(normalizeAddress(hostOnly(serverAddress)))) {
+			boolean exactMatch = normalizeAddress(connection.origin.getHostString() + ":" + connection.origin.getPort()).equals(wanted);
+			boolean hostOnlyMatch = !addressHasPort && normalizeAddress(connection.origin.getHostString()).equals(wantedHost);
+			if (exactMatch || hostOnlyMatch) {
 				return entry.getKey();
 			}
 		}
@@ -273,6 +279,13 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					this.width / 2, this.height / 2 - 30, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.restartRequired").withStyle(ChatFormatting.YELLOW),
 					this.width / 2, this.height / 2 - 15, TextColors.WHITE);
+			// updateSelectedModpackOnLaunch skips reconciliation entirely on the next launch, so a
+			// restart alone will not apply this selection change; say so instead of implying it will.
+			if (clientConfig != null && !clientConfig.updateSelectedModpackOnLaunch) {
+				drawCenteredTextWithShadow(matrices, this.font,
+						VersionedText.translatable("automodpack.selection.updateOnLaunchDisabled").withStyle(ChatFormatting.RED), this.width / 2,
+						this.height / 2 - 45, TextColors.WHITE);
+			}
 		} else {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.selection.description").withStyle(ChatFormatting.GRAY),
 					this.width / 2, 32, TextColors.WHITE);

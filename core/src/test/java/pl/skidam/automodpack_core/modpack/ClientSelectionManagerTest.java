@@ -94,6 +94,21 @@ class ClientSelectionManagerTest {
 	}
 
 	@Test
+	void requiredGroupsDependencyWinsConflictOverEarlierOptional() {
+		var renderApi = group(false, false);
+		var legacyRenderer = group(false, false);
+		legacyRenderer.breaksWith = Set.of("renderApi");
+		var core = group(true, false);
+		core.requires = Set.of("renderApi");
+		// legacyRenderer is declared (and chosen) before renderApi, so without dependency-aware
+		// priority it would win the conflict on declaration order and get dropped, leaving
+		// required "core" with an unsatisfied dependency.
+		var map = groups("legacyRenderer", legacyRenderer, "renderApi", renderApi, "core", core);
+
+		assertEquals(Set.of("core", "renderApi"), ClientSelectionManager.resolve(map, Set.of("legacyRenderer")));
+	}
+
+	@Test
 	void dropsDependantWhenItsDependencyLosesAConflict() {
 		var shaders = group(false, false);
 		shaders.breaksWith = Set.of("core");
