@@ -3,18 +3,23 @@ package pl.skidam.automodpack_core.modpack;
 import static pl.skidam.automodpack_core.Constants.*;
 
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.modpack.candidate.*;
+import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
+import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
+import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
 public class ModpackExecutor {
@@ -24,123 +29,103 @@ public class ModpackExecutor {
 	private final AtomicBoolean generating = new AtomicBoolean();
 	private final Path serverRoot;
 	private final Path groupRoot;
-	private final Path manifestPath;
-	private final Path objectsDirectory;
-	private final Path stagingDirectory;
+	private final Path generationRoot;
+	private final GenerationStore generationStore;
 	private final ModpackCandidateScanner scanner = new ModpackCandidateScanner();
 	private CompletableFuture<Jsons.CompleteModpackContentFields> refreshInFlight;
 
 	public ModpackExecutor() {
-		this(SmartFileUtils.CWD, hostModpackDir, hostModpackContentFile, hostGenerationObjectsDir, hostGenerationStagingDir);
+		this(SmartFileUtils.CWD, hostModpackDir, hostGenerationsDir);
 	}
 
-	public ModpackExecutor(Path serverRoot, Path groupRoot, Path manifestPath, Path objectsDirectory, Path stagingDirectory) {
+	public ModpackExecutor(Path serverRoot, Path groupRoot, Path generationRoot) {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
-		this.manifestPath = manifestPath.toAbsolutePath().normalize();
-		this.objectsDirectory = objectsDirectory.toAbsolutePath().normalize();
-		this.stagingDirectory = stagingDirectory.toAbsolutePath().normalize();
-		if (this.objectsDirectory.startsWith(this.stagingDirectory) || this.stagingDirectory.startsWith(this.objectsDirectory))
-			throw new IllegalArgumentException("Managed object and staging directories must be separate");
+		this.generationRoot = generationRoot.toAbsolutePath().normalize();
+		this.generationStore = new GenerationStore(this.generationRoot);
 	}
 
-	public boolean generateNew() {
+	public GenerationResult generateNew() {
 		synchronized (generationLock) {
-			if (!generating.compareAndSet(false, true)) return false;
+			if (!generating.compareAndSet(false, true))
+				return failed(new IllegalStateException("A modpack generation is already in progress"));
 			try {
+				Optional<GenerationStore.CurrentSnapshot> previous = generationStore.loadCurrent();
 				validateConfiguration();
 				prepareDirectories();
-				GroupManifest previous = ModpackContentTools.readComplete(manifestPath);
-				String modpackId = previous == null ? ModpackId.generate() : ModpackId.requireValid(previous.modpackId());
-				Set<Jsons.ModpackContentFields.FileToDelete> deletions = deletionMetadata(previous);
+				String modpackId = previous.map(snapshot -> ModpackId.requireValid(snapshot.record().manifest().modpackId())).orElseGet(ModpackId::generate);
+				GroupManifest previousManifest = previous.map(snapshot -> snapshot.record().manifest()).orElse(null);
+				Set<Jsons.ModpackContentFields.FileToDelete> deletions = deletionMetadata(previousManifest);
 				ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
 						LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups, serverConfig.selectionTags, deletions,
-						serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, stagingDirectory, creationExecutor);
+						serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(hostGenerationStagingDir.getFileName()), creationExecutor);
+				GenerationStore.Publication publication;
 				try (ModpackCandidate candidate = scanner.scan(request)) {
-					new LegacyCandidatePublisher(manifestPath, objectsDirectory, stagingDirectory, hostServer).publish(candidate);
-					LOGGER.info("Modpack candidate published with {} groups and {} unique objects", candidate.manifest().groups().size(), candidate.objects().size());
+					publication = generationStore.publish(candidate, previous, "");
+					LOGGER.info("Modpack generation {} with {} groups and {} unique objects", publication.status(), candidate.manifest().groups().size(), candidate.objects().size());
 				}
-				return true;
+				replaceHosting(publication.hostingPaths());
+				cleanupLegacyCatalogue();
+				return new GenerationResult(publication.status() == GenerationStore.PublicationStatus.PUBLISHED ? GenerationStatus.PUBLISHED : GenerationStatus.NO_CHANGES,
+						publication.record(), null);
 			} catch (Exception e) {
-				LOGGER.error("Failed to generate modpack candidate", e);
-				return false;
+				LOGGER.error("Failed to generate modpack generation", e);
+				return failed(e);
 			} finally {
 				generating.set(false);
 			}
 		}
 	}
 
-	// Transitional until G3: client refresh can still trigger a source scan.
+	// Transitional until G3: client refresh can still trigger source generation.
 	public CompletableFuture<Jsons.CompleteModpackContentFields> regenerateFullManifest() {
 		synchronized (generationLock) {
 			if (refreshInFlight != null && !refreshInFlight.isDone()) return refreshInFlight;
 			refreshInFlight = CompletableFuture.supplyAsync(() -> {
-				if (!generateNew()) throw new CompletionException(new IOException("Failed to regenerate modpack"));
-				GroupManifest manifest = ModpackContentTools.readComplete(manifestPath);
-				if (manifest == null) throw new CompletionException(new IOException("Regenerated catalogue is unavailable"));
-				return manifest.toFields();
+				GenerationResult result = generateNew();
+				if (!result.succeeded()) throw new CompletionException(new IOException("Failed to regenerate modpack", result.failure()));
+				return result.current().toFields();
 			});
 			return refreshInFlight;
 		}
 	}
 
-	// Transitional until G3: startup still reconstructs legacy serving from mutable sources.
-	public boolean loadLast() {
+	public GenerationResult loadLast() {
 		synchronized (generationLock) {
-			if (!generating.compareAndSet(false, true)) return false;
+			if (!generating.compareAndSet(false, true)) return failed(new IllegalStateException("A modpack generation is already in progress"));
 			try {
-				GroupManifest manifest = ModpackContentTools.readComplete(manifestPath);
-				if (manifest == null) return false;
-				Map<String, Path> hostedPaths = resolvePublishedSources(manifest);
-				if (hostServer != null) hostServer.replacePaths(hostedPaths);
-				return true;
+				GenerationStore.CurrentSnapshot current = generationStore.loadCurrent().orElseThrow(() -> new IOException("No current generation pointer exists"));
+				replaceHosting(current.hostingPaths());
+				cleanupLegacyCatalogue();
+				return new GenerationResult(GenerationStatus.NO_CHANGES, current.record(), null);
 			} catch (Exception e) {
-				LOGGER.error("Failed to validate and load the last published modpack catalogue", e);
-				return false;
+				LOGGER.error("Failed to validate and load the current modpack generation", e);
+				return failed(e);
 			} finally {
 				generating.set(false);
 			}
 		}
 	}
 
-	private Map<String, Path> resolvePublishedSources(GroupManifest manifest) throws CandidateBuildException {
-		validateConfiguration();
-		Map<String, Path> paths = new TreeMap<>();
-		for (var groupEntry : manifest.groups().entrySet()) {
-			String groupId = groupEntry.getKey();
-			Jsons.GroupDeclaration declaration = serverConfig.groups.get(groupId);
-			if (declaration == null) throw new CandidateBuildException("Published group is absent from server config: " + groupId);
-			PathRuleSet syncedRules = new PathRuleSet(declaration.syncedFiles);
-			for (var fileEntry : groupEntry.getValue().files().entrySet()) {
-				String logicalPath = fileEntry.getKey();
-				GroupManifest.GroupFile file = fileEntry.getValue();
-				Path groupSource = groupRoot.resolve(groupId).resolve(logicalPath).normalize();
-				Path syncedSource = serverRoot.resolve(logicalPath).normalize();
-				Path selected = null;
-				if (isValidHostedSource(groupRoot, groupSource, file)) selected = groupSource;
-				else
-					if (syncedRules.evaluate(logicalPath).included()
-							&& isValidHostedSource(serverRoot, syncedSource, file))
-						selected = syncedSource;
-				if (selected == null) throw new CandidateBuildException("Published object cannot be reproduced for group '" + groupId + "' path '" + logicalPath + "'");
-				paths.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), selected);
-			}
-		}
-		return paths;
+	public Optional<GenerationRecord> currentRecord() throws IOException {
+		return generationStore.loadCurrent().map(GenerationStore.CurrentSnapshot::record);
 	}
 
-	private static boolean isValidHostedSource(Path root, Path source, GroupManifest.GroupFile file) {
-		if (!source.startsWith(root) || Files.isSymbolicLink(root)) return false;
+	private void replaceHosting(Map<String, Path> paths) {
+		if (hostServer != null) hostServer.replacePaths(paths);
+	}
+
+	private void cleanupLegacyCatalogue() {
+		Path legacyCatalogue = groupRoot.resolve(modpackContentFileName).normalize();
 		try {
-			Path current = root;
-			for (Path component : root.relativize(source)) {
-				current = current.resolve(component);
-				if (Files.isSymbolicLink(current)) return false;
-			}
-			return SmartFileUtils.isValidFile(source, file.size(), file.sha1());
-		} catch (IllegalArgumentException e) {
-			return false;
+			if (Files.deleteIfExists(legacyCatalogue)) LOGGER.debug("Removed stale generated catalogue {}", legacyCatalogue);
+		} catch (IOException e) {
+			LOGGER.warn("Failed to remove stale generated catalogue {}", legacyCatalogue, e);
 		}
+	}
+
+	private static GenerationResult failed(Throwable failure) {
+		return new GenerationResult(GenerationStatus.FAILED, null, failure);
 	}
 
 	private static void validateConfiguration() throws CandidateBuildException {
@@ -177,11 +162,14 @@ public class ModpackExecutor {
 		for (String groupId : serverConfig.groups.keySet()) {
 			Path groupDirectory = groupRoot.resolve(groupId).normalize();
 			if (!groupDirectory.startsWith(groupRoot)) throw new CandidateBuildException("Group directory escapes host-modpack: " + groupId);
+			if (groupDirectory.startsWith(generationRoot) || generationRoot.startsWith(groupDirectory))
+				throw new CandidateBuildException("Group directory overlaps managed generation store: " + groupId);
 			groupDirectories.put(groupId, groupDirectory);
 		}
 		Files.createDirectories(groupRoot);
-		Files.createDirectories(objectsDirectory);
-		Files.createDirectories(stagingDirectory);
+		Files.createDirectories(generationRoot);
+		Files.createDirectories(generationRoot.resolve(hostGenerationObjectsDir.getFileName()));
+		Files.createDirectories(generationRoot.resolve(hostGenerationStagingDir.getFileName()));
 		for (Path groupDirectory : groupDirectories.values()) Files.createDirectories(groupDirectory);
 		Path main = groupDirectories.get("main");
 		if (main == null) return;

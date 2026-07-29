@@ -33,18 +33,20 @@ public class Common {
 		if (serverConfig.generateModpackOnStart) {
 			LOGGER.info("Generating modpack...");
 			long genStart = System.currentTimeMillis();
-			if (modpackExecutor.generateNew()) {
-				LOGGER.info("Modpack generated! took " + (System.currentTimeMillis() - genStart) + "ms");
+			var generation = modpackExecutor.generateNew();
+			if (generation.succeeded()) {
+				LOGGER.info("Modpack generation {}! took {}ms", generation.status(), System.currentTimeMillis() - genStart);
 			} else {
-				LOGGER.error("Failed to generate modpack!");
+				LOGGER.error("Failed to generate modpack!", generation.failure());
 			}
 		} else {
 			LOGGER.info("Loading last modpack...");
 			long genStart = System.currentTimeMillis();
-			if (modpackExecutor.loadLast()) {
-				LOGGER.info("Modpack loaded! took " + (System.currentTimeMillis() - genStart) + "ms");
+			var generation = modpackExecutor.loadLast();
+			if (generation.succeeded()) {
+				LOGGER.info("Modpack loaded at generation {}! took {}ms", generation.current().metadata().generationId(), System.currentTimeMillis() - genStart);
 			} else {
-				LOGGER.error("Failed to load modpack!");
+				LOGGER.error("Failed to load modpack!", generation.failure());
 			}
 		}
 	}

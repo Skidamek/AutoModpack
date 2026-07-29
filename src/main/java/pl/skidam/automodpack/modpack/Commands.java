@@ -19,7 +19,6 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -230,9 +229,12 @@ public class Commands {
 	}
 
 	private static String requirePublishedModpackId() {
-		var content = ModpackContentTools.readComplete(hostModpackContentFile);
-		if (content == null || !ModpackId.isValid(content.modpackId())) throw new IllegalArgumentException("No valid published modpack ID is available; generate the modpack first");
-		return content.modpackId();
+		try {
+			var current = modpackExecutor.currentRecord().orElseThrow(() -> new IllegalArgumentException("No current generation is available; generate the modpack first"));
+			return ModpackId.requireValid(current.manifest().modpackId());
+		} catch (IOException e) {
+			throw new IllegalArgumentException("Current generation is invalid; check the server logs", e);
+		}
 	}
 
 	private static int writeBootstrap(CommandContext<CommandSourceStack> context, Jsons.KnownHostsBootstrapFields fields, boolean install) {
@@ -393,8 +395,9 @@ public class Commands {
 			}
 			send(context, "Generating Modpack...", ChatFormatting.YELLOW, true);
 			long start = System.currentTimeMillis();
-			if (modpackExecutor.generateNew()) {
-				send(context, "Modpack generated! took " + (System.currentTimeMillis() - start) + "ms", ChatFormatting.GREEN, true);
+			var generation = modpackExecutor.generateNew();
+			if (generation.succeeded()) {
+				send(context, "Modpack generation " + generation.status() + "! took " + (System.currentTimeMillis() - start) + "ms", ChatFormatting.GREEN, true);
 			} else {
 				send(context, "Modpack generation failed! Check logs for more info.", ChatFormatting.RED, true);
 			}
