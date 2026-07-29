@@ -9,12 +9,12 @@ import java.util.Optional;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
-import pl.skidam.automodpack_core.modpack.group.GroupManifest;
-import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 
 public class ModpackContentTools {
 	public static Jsons.ModpackContentFields read(Path path) {
-		return ConfigTools.read(path, Jsons.ModpackContentFields.class).filter(ModpackContentTools::isValid).orElse(null);
+		return ConfigTools.read(path, Jsons.ModpackContentFields.class).map(ModpackContentTools::requireValid).orElse(null);
 	}
 
 	public static void write(Path path, Jsons.ModpackContentFields content) throws IOException {
@@ -22,21 +22,28 @@ public class ModpackContentTools {
 		ConfigTools.writeAtomic(path, content);
 	}
 
-	public static GroupManifest readComplete(Path path) {
-		return ConfigTools.read(path, Jsons.CompleteModpackContentFields.class).map(GroupManifestValidator::validate).orElse(null);
+	public static GenerationRecord readGenerationRecord(Path path) {
+		return ConfigTools.read(path, Jsons.CompleteModpackContentFields.class).map(GenerationRecord::fromFields).orElse(null);
 	}
 
 	public static Jsons.CompleteModpackContentFields readCompleteFields(Path path) {
-		GroupManifest manifest = readComplete(path);
-		return manifest == null ? null : manifest.toFields();
+		GenerationRecord record = readGenerationRecord(path);
+		return record == null ? null : record.toFields();
 	}
 
-	public static void writeComplete(Path path, GroupManifest manifest) throws IOException {
-		ConfigTools.writeAtomic(path, manifest.toFields());
+	private static Jsons.ModpackContentFields requireValid(Jsons.ModpackContentFields content) {
+		if (!isValid(content)) throw new ConfigTools.ConfigException("Invalid selected modpack content");
+		return content;
 	}
 
 	private static boolean isValid(Jsons.ModpackContentFields content) {
-		return content != null && content.list != null && content.selectedGroups != null && content.nonModpackFilesToDelete != null;
+		if (content == null || content.list == null || content.selectedGroups == null || content.nonModpackFilesToDelete == null) return false;
+		try {
+			GenerationTarget.fromFlat(content);
+			return true;
+		} catch (RuntimeException e) {
+			return false;
+		}
 	}
 
 	public static String getFileType(String file, Jsons.ModpackContentFields list) {

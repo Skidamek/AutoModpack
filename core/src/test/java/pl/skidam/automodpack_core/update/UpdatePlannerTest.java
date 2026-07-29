@@ -41,9 +41,15 @@ class UpdatePlannerTest {
 		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(Set.of(
 				new Jsons.ModpackContentFields.ModpackContentItem("/config/settings.json", "7", "config", true, false, false, TARGET_HASH, "0")));
 		target.modpackId = "abc1234";
+		target.targetGenerationId = "1".repeat(40);
+		target.parentGenerationId = "";
+		target.stateDigest = "2".repeat(40);
 		Jsons.ModpackContentFields previous = new Jsons.ModpackContentFields(Set.of(
 				new Jsons.ModpackContentFields.ModpackContentItem("/config/settings.json", "6", "config", true, false, false, OLD_HASH, "0")));
 		previous.modpackId = "old1234";
+		previous.targetGenerationId = "3".repeat(40);
+		previous.parentGenerationId = "";
+		previous.stateDigest = "4".repeat(40);
 		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/settings.json"), new FileState(editedOldHash, 6, true, false),
 				new FileKey(Root.MODPACK_DIR, "config/settings.json"), new FileState(editedTargetHash, 7, true, false));
 		UpdatePlanner.Input input = new UpdatePlanner.Input(null, target, files, true, Set.of(), Set.of(), List.of(), List.of(), List.of(),
@@ -86,6 +92,9 @@ class UpdatePlannerTest {
 		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(Set.of(
 				new Jsons.ModpackContentFields.ModpackContentItem("/mods/new.jar", "9", "mod", false, false, false, TARGET_HASH, "0")));
 		target.modpackId = "abc1234";
+		target.targetGenerationId = "1".repeat(40);
+		target.parentGenerationId = "";
+		target.stateDigest = "2".repeat(40);
 		target.nonModpackFilesToDelete = Set.of(new Jsons.ModpackContentFields.FileToDelete("/mods/old.jar", OLD_HASH, "delete-1"));
 		return target;
 	}

@@ -2,9 +2,12 @@ package pl.skidam.automodpack_core.modpack.group;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.time.Instant;
 import java.util.*;
 
 import org.junit.jupiter.api.Test;
+
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 
 class SelectedTreeComposerTest {
 	@Test
@@ -21,6 +24,21 @@ class SelectedTreeComposerTest {
 		assertEquals(1, both.list.size());
 		assertEquals(1, one.list.size());
 		assertEquals(Set.of("main", "visuals"), both.selectedGroups);
+	}
+
+	@Test
+	void selectionChangeKeepsGenerationIdentity() {
+		GroupManifest.GroupFile file = new GroupManifest.GroupFile(1, "mod", false, false, false,
+				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null);
+		GroupManifest manifest = manifest(Map.of("main", group(file), "visuals", group(file)));
+		GenerationRecord record = GenerationRecord.create(manifest, "", Instant.parse("2026-01-01T00:00:00Z"), "");
+
+		SelectedModpackTarget main = SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		SelectedModpackTarget visuals = SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("visuals")), ClientPlatform.LINUX);
+
+		assertEquals(record.metadata().generationId(), main.flatTarget().targetGenerationId);
+		assertEquals(main.flatTarget().targetGenerationId, visuals.flatTarget().targetGenerationId);
+		assertNotEquals(main.flatTarget().selectedGroups, visuals.flatTarget().selectedGroups);
 	}
 
 	@Test

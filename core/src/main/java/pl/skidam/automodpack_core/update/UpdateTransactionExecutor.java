@@ -12,13 +12,15 @@ import java.util.regex.Pattern;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
-import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectedTreeComposer;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.LegacyDummyFiles;
@@ -141,7 +143,15 @@ public final class UpdateTransactionExecutor {
 					throw new IOException("Invalid embedded target manifest", e);
 				}
 				validateManifest(manifest, transaction.modpackId);
-				validateGroupTarget(transaction, manifest);
+				GenerationRecord completeRecord;
+				try {
+					completeRecord = transaction.completeGenerationRecord();
+				} catch (RuntimeException e) {
+					throw new IOException("Invalid embedded complete generation record", e);
+				}
+				validateGenerationIdentity(transaction, completeRecord, manifest);
+				validateGroupTarget(transaction, completeRecord, manifest);
+				validateStoredGenerationState(transaction, completeRecord);
 				if (transaction.plannedClientConfig == null) throw new IOException("Planned client config is missing");
 				validatePlannedClientConfig(transaction);
 				validateOrderedMetadata(transaction);
@@ -192,13 +202,17 @@ public final class UpdateTransactionExecutor {
 		if (context.completeCatalogueFile() == null || !context.completeCatalogueFile().toAbsolutePath().normalize()
 				.equals(expectedModpackDirectory.resolve(modpackCatalogueFileName)))
 			throw new IOException("Complete catalogue path does not match stable modpack storage");
+		if (context.installedManifestFile() == null || !context.installedManifestFile().toAbsolutePath().normalize()
+				.equals(expectedModpackDirectory.resolve(modpackContentFileName)))
+			throw new IOException("Installed manifest path does not match stable modpack storage");
 		if (context.selectionFile() == null || !context.selectionFile().toAbsolutePath().normalize()
 				.equals(context.gameDirectory().resolve(clientSelectionFile).toAbsolutePath().normalize()))
 			throw new IOException("Selection store path does not match AutoModpack storage");
 	}
 
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.modpackId != null || transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
+		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
+				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
 				|| transaction.canonicalModpackDirectory != null
 				|| transaction.plannedClientConfig != null || !transaction.plannedDeletionTimestamps.isEmpty() || !transaction.restartReasons.isEmpty())
@@ -210,12 +224,34 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private static void validateLegacyDummyCleanupMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.modpackId != null || transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
+		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
+				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
 				|| transaction.canonicalModpackDirectory != null
 				|| transaction.plannedClientConfig != null || !transaction.plannedDeletionTimestamps.isEmpty() || !transaction.restartReasons.isEmpty())
 			throw new IOException("Legacy dummy cleanup transaction contains modpack metadata");
 		if (transaction.operations.isEmpty()) throw new IOException("Legacy dummy cleanup transaction has no targets");
+	}
+
+	private static void validateGenerationIdentity(UpdateTransaction transaction, GenerationRecord completeRecord,
+			Jsons.ModpackContentFields manifest) throws IOException {
+		GenerationTarget transactionTarget;
+		try {
+			transactionTarget = transaction.generationTarget();
+		} catch (RuntimeException e) {
+			throw new IOException("Transaction generation identity is invalid", e);
+		}
+		GenerationTarget recordTarget = GenerationTarget.from(completeRecord.metadata());
+		GenerationTarget flatTarget;
+		try {
+			flatTarget = GenerationTarget.fromFlat(manifest);
+		} catch (RuntimeException e) {
+			throw new IOException("Selected target generation identity is invalid", e);
+		}
+		if (!transactionTarget.equals(recordTarget) || !transactionTarget.equals(flatTarget))
+			throw new IOException("Transaction, complete catalogue, and selected target generation identities disagree");
+		if (!transaction.modpackId.equals(completeRecord.manifest().modpackId()))
+			throw new IOException("Complete catalogue modpack ID does not match transaction");
 	}
 
 	private static void validatePurposeOperation(UpdateTransaction.Purpose purpose, Operation operation) throws IOException {
@@ -255,7 +291,7 @@ public final class UpdateTransactionExecutor {
 		}
 	}
 
-	private void validateGroupTarget(UpdateTransaction transaction, Jsons.ModpackContentFields manifest) throws IOException {
+	private void validateGroupTarget(UpdateTransaction transaction, GenerationRecord completeRecord, Jsons.ModpackContentFields manifest) throws IOException {
 		if (transaction.completeManifestJson == null || transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null
 				|| transaction.requestedGroups == null)
 			throw new IOException("Group transaction metadata is incomplete");
@@ -265,16 +301,89 @@ public final class UpdateTransactionExecutor {
 		try {
 			ClientPlatform platform = transaction.platform();
 			if (!platform.id().equals(transaction.targetPlatform)) throw new IOException("Transaction platform is not canonical");
-			GroupManifest complete = transaction.completeManifest();
-			if (!transaction.modpackId.equals(complete.modpackId())) throw new IOException("Complete catalogue modpack ID does not match transaction");
-			ResolvedSelection resolved = GroupSelectionResolver.resolve(complete, transaction.targetIntent(), platform);
-			Jsons.ModpackContentFields recomposed = SelectedTreeComposer.compose(complete, resolved);
+			ResolvedSelection resolved = GroupSelectionResolver.resolve(completeRecord.manifest(), transaction.targetIntent(), platform);
+			Jsons.ModpackContentFields recomposed = SelectedTreeComposer.compose(completeRecord.manifest(), resolved,
+					GenerationTarget.from(completeRecord.metadata()));
 			if (!flatManifestState(recomposed).equals(flatManifestState(manifest)))
 				throw new IOException("Embedded selected manifest does not match the complete catalogue and selection intent");
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
 			throw new IOException("Invalid complete catalogue or group selection", e);
+		}
+	}
+
+	private void validateStoredGenerationState(UpdateTransaction transaction, GenerationRecord completeRecord) throws IOException {
+		GenerationTarget target = transaction.generationTarget();
+		Path catalogue = context.completeCatalogueFile();
+		Path installed = context.installedManifestFile();
+		boolean cataloguePresent = validateStoredFile(catalogue, "Stored complete catalogue");
+		boolean manifestPresent = validateStoredFile(installed, "Stored selected manifest");
+
+		if (!cataloguePresent) {
+			if (manifestPresent) throw new IOException("Stored selected manifest has no complete catalogue");
+			return;
+		}
+
+		GenerationRecord storedCatalogue;
+		try {
+			storedCatalogue = ModpackContentTools.readGenerationRecord(catalogue);
+		} catch (RuntimeException e) {
+			throw new IOException("Stored complete catalogue is invalid", e);
+		}
+		if (storedCatalogue == null) throw new IOException("Stored complete catalogue is invalid");
+		GenerationTarget storedCatalogueTarget = GenerationTarget.from(storedCatalogue.metadata());
+		if (storedCatalogueTarget.equals(target) && !storedCatalogue.equals(completeRecord))
+			throw new IOException("Stored complete catalogue disagrees with transaction target");
+		if (!storedCatalogue.manifest().modpackId().equals(transaction.modpackId))
+			throw new IOException("Stored complete catalogue belongs to another modpack lineage");
+		if (!manifestPresent) {
+			if (storedCatalogueTarget.equals(target)) return;
+			throw new IOException("Stored complete catalogue has no selected manifest");
+		}
+
+		Jsons.ModpackContentFields storedTarget;
+		try {
+			storedTarget = ConfigTools.read(installed, Jsons.ModpackContentFields.class).orElse(null);
+			if (storedTarget == null) throw new IllegalArgumentException("Selected manifest is missing");
+			validateManifest(storedTarget, transaction.modpackId);
+		} catch (RuntimeException e) {
+			throw new IOException("Stored selected manifest is invalid", e);
+		}
+		GenerationTarget storedIdentity;
+		try {
+			storedIdentity = GenerationTarget.fromFlat(storedTarget);
+		} catch (RuntimeException e) {
+			throw new IOException("Stored selected manifest generation identity is invalid", e);
+		}
+
+		if (storedCatalogueTarget.equals(target) && !storedIdentity.equals(target)) return;
+		if (!storedIdentity.equals(storedCatalogueTarget))
+			throw new IOException("Stored selected manifest generation identity disagrees with its catalogue");
+		validateStoredManifestComposition(storedCatalogue, storedCatalogueTarget, storedTarget, transaction);
+	}
+
+	private static boolean validateStoredFile(Path path, String description) throws IOException {
+		if (path == null) throw new IOException(description + " path is missing");
+		if (Files.isSymbolicLink(path)) throw new IOException(description + " may not be a symbolic link");
+		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return false;
+		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException(description + " must be a regular file");
+		return true;
+	}
+
+	private void validateStoredManifestComposition(GenerationRecord storedCatalogue, GenerationTarget storedCatalogueTarget,
+			Jsons.ModpackContentFields storedTarget, UpdateTransaction transaction) throws IOException {
+		try {
+			ClientPlatform platform = transaction.platform();
+			ResolvedSelection storedSelection = GroupSelectionResolver.resolve(storedCatalogue.manifest(),
+					new SelectionIntent(storedTarget.selectedGroups), platform);
+			Jsons.ModpackContentFields recomposed = SelectedTreeComposer.compose(storedCatalogue.manifest(), storedSelection, storedCatalogueTarget);
+			if (!flatManifestState(recomposed).equals(flatManifestState(storedTarget)))
+				throw new IOException("Stored selected manifest does not compose from the stored catalogue");
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Stored selected manifest selection is invalid", e);
 		}
 	}
 
@@ -286,6 +395,9 @@ public final class UpdateTransactionExecutor {
 		state.add("loader=" + Objects.toString(manifest.loader, ""));
 		state.add("loaderVersion=" + Objects.toString(manifest.loaderVersion, ""));
 		state.add("mcVersion=" + Objects.toString(manifest.mcVersion, ""));
+		state.add("targetGenerationId=" + Objects.toString(manifest.targetGenerationId, ""));
+		state.add("parentGenerationId=" + Objects.toString(manifest.parentGenerationId, ""));
+		state.add("stateDigest=" + Objects.toString(manifest.stateDigest, ""));
 		if (manifest.selectedGroups != null) manifest.selectedGroups.stream().sorted().forEach(group -> state.add("group=" + group));
 		if (manifest.list != null)
 			manifest.list.stream().sorted(Comparator.comparing(item -> normalizeUnchecked(item.file))).forEach(item -> state.add(String.join("\0",
@@ -457,7 +569,7 @@ public final class UpdateTransactionExecutor {
 				persistDeletionTimestamps(transaction.plannedDeletionTimestamps);
 				if (context.beforeManifestAction() != null) context.beforeManifestAction().run(transaction);
 				blockedPath = context.completeCatalogueFile();
-				GroupManifest complete = transaction.completeManifest();
+				GenerationRecord complete = transaction.completeGenerationRecord();
 				ConfigTools.writeAtomic(context.completeCatalogueFile(), complete.toFields());
 				blockedPath = null;
 				verifyFinalState(transaction.projectedFinalState, transaction.purpose);

@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 
@@ -45,6 +46,8 @@ public final class UpdatePlanner {
 		Objects.requireNonNull(input);
 		Jsons.ModpackContentFields target = Objects.requireNonNull(input.targetManifest());
 		ModpackId.requireValid(target.modpackId);
+		GenerationTarget generationTarget = GenerationTarget.fromFlat(target);
+		if (input.installedManifest() != null) GenerationTarget.fromFlat(input.installedManifest());
 		if (target.list == null) throw new IllegalArgumentException("Target manifest list is missing");
 
 		Map<String, Jsons.ModpackContentFields.ModpackContentItem> targetItems = sortedItems(target.list);
@@ -123,7 +126,7 @@ public final class UpdatePlanner {
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
-		return new UpdatePlan(target.modpackId, ordered, finalState, input.plannedClientConfig(), timestamps, restartReasons, warnings);
+		return new UpdatePlan(target.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), timestamps, restartReasons, warnings);
 	}
 
 	private static boolean isSelectionChange(SelectionContext selection, String targetModpackId) {
