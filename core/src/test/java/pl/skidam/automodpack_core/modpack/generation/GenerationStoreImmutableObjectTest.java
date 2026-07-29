@@ -1,4 +1,4 @@
-package pl.skidam.automodpack_core.modpack.candidate;
+package pl.skidam.automodpack_core.modpack.generation;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -12,25 +12,29 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
+import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
+import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
-class LegacyCandidatePublisherTest {
+class GenerationStoreImmutableObjectTest {
 	@TempDir
 	Path tempDir;
 
 	@Test
 	void publishedObjectRemainsUnchangedAfterSourceMutation() throws Exception {
 		Path source = source("before publication");
-		Path objects = tempDir.resolve("host-generations/objects");
+		GenerationStore store = new GenerationStore(tempDir.resolve("host-generations"));
 		NettyServer server = new NettyServer();
 		try (ModpackCandidate candidate = scan()) {
 			StagedObject staged = onlyObject(candidate);
 			Files.writeString(source, "changed before publication", StandardCharsets.UTF_8);
 
-			new LegacyCandidatePublisher(tempDir.resolve("catalogue.json"), objects, tempDir.resolve("host-generations/staging"), server).publish(candidate);
+			GenerationStore.Publication publication = store.publish(candidate, Optional.empty(), "");
+			server.replacePaths(publication.hostingPaths());
 
-			Path published = objects.resolve(staged.sha1());
+			Path published = tempDir.resolve("host-generations/objects").resolve(staged.sha1());
 			assertEquals("before publication", Files.readString(published, StandardCharsets.UTF_8));
 			assertEquals(published, server.getPath(staged.sha1()).orElseThrow());
 			Files.writeString(source, "changed after publication", StandardCharsets.UTF_8);
@@ -40,62 +44,58 @@ class LegacyCandidatePublisherTest {
 
 	@Test
 	void reusesVerifiedExistingObject() throws Exception {
-		Path objects = tempDir.resolve("host-generations/objects");
+		Path root = tempDir.resolve("host-generations");
+		GenerationStore store = new GenerationStore(root);
 		try (ModpackCandidate candidate = scan()) {
 			StagedObject staged = onlyObject(candidate);
-			Path existing = objects.resolve(staged.sha1());
-			Files.createDirectories(objects);
+			Path existing = root.resolve("objects").resolve(staged.sha1());
+			Files.createDirectories(existing.getParent());
 			Files.copy(staged.stagedPath(), existing);
 
-			NettyServer server = new NettyServer();
-			new LegacyCandidatePublisher(tempDir.resolve("catalogue.json"), objects, tempDir.resolve("host-generations/staging"), server).publish(candidate);
+			GenerationStore.Publication publication = store.publish(candidate, Optional.empty(), "");
 
 			assertFalse(Files.exists(staged.stagedPath(), LinkOption.NOFOLLOW_LINKS));
-			assertEquals(existing, server.getPath(staged.sha1()).orElseThrow());
+			assertEquals(existing, publication.hostingPaths().get(staged.sha1()));
 			assertEquals("before publication", Files.readString(existing, StandardCharsets.UTF_8));
 		}
 	}
 
 	@Test
 	void rejectsCorruptExistingObjectWithoutOverwritingIt() throws Exception {
-		Path objects = tempDir.resolve("host-generations/objects");
-		try (ModpackCandidate candidate = scan()) {
-			StagedObject staged = onlyObject(candidate);
-			Path existing = objects.resolve(staged.sha1());
-			Files.createDirectories(objects);
-			Files.writeString(existing, "corrupt", StandardCharsets.UTF_8);
+		Path root = tempDir.resolve("host-generations");
+		GenerationStore store = new GenerationStore(root);
+		ModpackCandidate candidate = scan();
+		StagedObject staged = onlyObject(candidate);
+		Path existing = root.resolve("objects").resolve(staged.sha1());
+		Files.createDirectories(existing.getParent());
+		Files.writeString(existing, "corrupt", StandardCharsets.UTF_8);
 
-			IOException failure = assertThrows(IOException.class,
-					() -> new LegacyCandidatePublisher(tempDir.resolve("catalogue.json"), objects, tempDir.resolve("host-generations/staging"), null).publish(candidate));
+		IOException failure = assertThrows(IOException.class, () -> store.publish(candidate, Optional.empty(), ""));
+		candidate.close();
 
-			assertTrue(failure.getMessage().contains("Refusing to replace corrupt immutable object"));
-			assertEquals("corrupt", Files.readString(existing, StandardCharsets.UTF_8));
-			assertFalse(Files.exists(staged.stagedPath(), LinkOption.NOFOLLOW_LINKS));
-		}
+		assertTrue(failure.getMessage().contains("Refusing to replace corrupt immutable object"));
+		assertEquals("corrupt", Files.readString(existing, StandardCharsets.UTF_8));
+		assertFalse(Files.exists(staged.stagedPath(), LinkOption.NOFOLLOW_LINKS));
 	}
 
 	@Test
-	void catalogueFailureRestoresServingMapButLeavesPromotedObjectUnreachable() throws Exception {
-		Path objects = tempDir.resolve("host-generations/objects");
-		Path blockedCatalogue = tempDir.resolve("catalogue-blocked");
-		Files.createDirectory(blockedCatalogue);
-		Path previousPath = tempDir.resolve("previous-object");
-		Files.writeString(previousPath, "previous", StandardCharsets.UTF_8);
-		NettyServer server = new NettyServer();
-		Map<String, Path> previous = Map.of("previous", previousPath);
-		server.replacePaths(previous);
-
+	void pointerFailureLeavesPromotedObjectAndRecordUnreachable() throws Exception {
+		Path root = tempDir.resolve("host-generations");
+		GenerationStore store = new GenerationStore(root, java.time.Clock.systemUTC(), () -> {
+			throw new IOException("pointer failure");
+		});
 		try (ModpackCandidate candidate = scan()) {
 			StagedObject staged = onlyObject(candidate);
-			IOException failure = assertThrows(IOException.class,
-					() -> new LegacyCandidatePublisher(blockedCatalogue, objects, tempDir.resolve("host-generations/staging"), server).publish(candidate));
+			assertThrows(IOException.class, () -> store.publish(candidate, Optional.empty(), ""));
 
-			assertNotNull(failure);
-			assertEquals(previous, server.getPathsSnapshot());
-			Path promoted = objects.resolve(staged.sha1());
+			assertFalse(Files.exists(root.resolve("current.json"), LinkOption.NOFOLLOW_LINKS));
+			Path promoted = root.resolve("objects").resolve(staged.sha1());
 			assertTrue(Files.isRegularFile(promoted, LinkOption.NOFOLLOW_LINKS));
 			assertEquals(staged.sha1(), HashUtils.getHash(promoted));
-			assertFalse(server.getPath(staged.sha1()).isPresent());
+			try (var records = Files.list(root.resolve("records"))) {
+				assertEquals(1, records.count());
+			}
+			assertTrue(store.loadCurrent().isEmpty());
 		}
 	}
 

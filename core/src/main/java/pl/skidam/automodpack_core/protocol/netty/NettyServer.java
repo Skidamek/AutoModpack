@@ -5,6 +5,7 @@ import static pl.skidam.automodpack_core.Constants.*;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.cert.X509Certificate;
@@ -25,7 +26,6 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.util.AttributeKey;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
-import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.protocol.ServerHolepunchBridge;
@@ -33,7 +33,6 @@ import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.handler.ProtocolServerHandler;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
-import pl.skidam.automodpack_core.utils.ModpackContentTools;
 
 public class NettyServer {
 
@@ -92,8 +91,9 @@ public class NettyServer {
 			return Optional.empty();
 		}
 
-		if (paths.isEmpty() && !hasEmptyValidatedCatalogue()) {
-			LOGGER.warn("No hosted objects and no validated empty catalogue. Can't start modpack hosting.");
+		Path currentRecord = paths.get("");
+		if (currentRecord == null || Files.isSymbolicLink(currentRecord) || !Files.isRegularFile(currentRecord, LinkOption.NOFOLLOW_LINKS)) {
+			LOGGER.warn("No current generation record is prepared. Can't start modpack hosting.");
 			return Optional.empty();
 		}
 
@@ -126,16 +126,6 @@ public class NettyServer {
 			LOGGER.error("Failed to start modpack hosting", e);
 			stop();
 			return Optional.empty();
-		}
-	}
-
-	private boolean hasEmptyValidatedCatalogue() {
-		try {
-			GroupManifest manifest = ModpackContentTools.readComplete(hostModpackContentFile);
-			return manifest != null && manifest.groups().values().stream().allMatch(group -> group.files().isEmpty());
-		} catch (RuntimeException e) {
-			LOGGER.warn("Current complete catalogue is invalid; refusing manifest-only hosting", e);
-			return false;
 		}
 	}
 

@@ -249,6 +249,11 @@ public class Jsons {
 		public ModpackConnectionMode connectionMode;
 	}
 
+	public static class GenerationPointerFields {
+		public int schemaVersion;
+		public String generationId = "";
+	}
+
 	public static class CompleteModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
@@ -259,6 +264,18 @@ public class Jsons {
 		public Map<String, ModpackGroupFields> groups = Map.of();
 		public Map<String, SelectionTagFields> selectionTags = Map.of();
 		public Set<ModpackContentFields.FileToDelete> nonModpackFilesToDelete = Set.of();
+		public GenerationFields generation;
+
+		public static class GenerationFields {
+			public int schemaVersion;
+			public String generationId = "";
+			public String parentGenerationId = "";
+			public String createdAt = "";
+			public String stateDigest = "";
+			public String patchNotes = "";
+			public String patchNotesDigest = "";
+			public String rollbackTargetGenerationId = "";
+		}
 
 		public static class ModpackGroupFields {
 			public String displayName = "";

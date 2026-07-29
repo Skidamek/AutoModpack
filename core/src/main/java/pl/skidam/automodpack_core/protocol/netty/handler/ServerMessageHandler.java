@@ -170,7 +170,6 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 	}
 
 	public Optional<Path> resolvePath(final String sha1) {
-		if (sha1.isBlank()) return Optional.of(hostModpackContentFile);
 		return server.getPath(sha1);
 	}
 

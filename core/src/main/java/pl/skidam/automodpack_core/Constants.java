@@ -36,6 +36,8 @@ public class Constants {
 	public static final Path storeDir = automodpackDir.resolve("store");
 	public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
 	public static final Path hostGenerationsDir = automodpackDir.resolve("host-generations");
+	public static final Path hostGenerationCurrentFile = hostGenerationsDir.resolve("current.json");
+	public static final Path hostGenerationRecordsDir = hostGenerationsDir.resolve("records");
 	public static final Path hostGenerationObjectsDir = hostGenerationsDir.resolve("objects");
 	public static final Path hostGenerationStagingDir = hostGenerationsDir.resolve("staging");
 	// TODO More server modpacks
@@ -45,7 +47,6 @@ public class Constants {
 	public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
 	public static final Path modpackContentFileName = Path.of("automodpack-content.json");
 	public static final Path modpackCatalogueFileName = Path.of("automodpack-catalogue.json");
-	public static Path hostModpackContentFile = hostModpackDir.resolve(modpackContentFileName);
 	public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
 	public static Path clientLocalMetadataFile = automodpackDir.resolve("automodpack-client-metadata.json");
 	public static Path cacheDir = automodpackDir.resolve("cache");
