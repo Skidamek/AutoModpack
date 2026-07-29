@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 
 public final class UpdatePlanner {
@@ -69,6 +70,8 @@ public final class UpdatePlanner {
 		}
 
 		planRemoteDeletions(input, projected, operations, timestamps, restartReasons, warnings);
+		if (input.installedManifest() != null && !Objects.equals(input.installedManifest().selectedGroups, target.selectedGroups))
+			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
 		if (isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
 		planPreviousEditablePreservation(input.selection(), target.modpackId, projected, operations);
 
@@ -312,11 +315,6 @@ public final class UpdatePlanner {
 	}
 
 	public static String normalize(String path) {
-		if (path == null || path.indexOf('\0') >= 0) throw new IllegalArgumentException("Invalid relative path");
-		String normalized = path.replace('\\', '/');
-		while (normalized.startsWith("/")) normalized = normalized.substring(1);
-		Path value = Path.of(normalized).normalize();
-		if (value.isAbsolute() || normalized.isBlank() || value.startsWith("..")) throw new IllegalArgumentException("Unsafe relative path: " + path);
-		return value.toString().replace('\\', '/');
+		return LogicalPath.normalize(path);
 	}
 }

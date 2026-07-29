@@ -20,6 +20,7 @@ public final class UpdateTransactionSupport {
 		Path gameDirectory = SmartFileUtils.CWD.toAbsolutePath().normalize();
 		Path modpackDirectory = null;
 		Path installedManifest = null;
+		Path completeCatalogue = null;
 		UpdateTransactionExecutor.CommitAction beforeManifest = null;
 		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 			try {
@@ -27,12 +28,14 @@ public final class UpdateTransactionSupport {
 			} catch (RuntimeException e) {
 				throw new IOException("Invalid canonical modpack directory", e);
 			}
-			installedManifest = modpackDirectory.resolve(hostModpackContentFile.getFileName());
+			installedManifest = modpackDirectory.resolve(modpackContentFileName);
+			completeCatalogue = modpackDirectory.resolve(modpackCatalogueFileName);
 			beforeManifest = UpdateTransactionSupport::applyLauncherMetadata;
 		}
 		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(gameDirectory, modpackDirectory, gameDirectory.resolve("mods"),
 				gameDirectory.resolve(storeDir), gameDirectory.resolve(automodpackDir), gameDirectory.resolve(transactionFile), gameDirectory.resolve(transactionResultFile),
-				gameDirectory.resolve(clientConfigFile), gameDirectory.resolve(clientDeletionTimeStamps), installedManifest, beforeManifest));
+				gameDirectory.resolve(clientConfigFile), gameDirectory.resolve(clientDeletionTimeStamps), installedManifest, completeCatalogue,
+				gameDirectory.resolve(clientSelectionFile), beforeManifest));
 	}
 
 	private static void applyLauncherMetadata(UpdateTransaction transaction) throws IOException {

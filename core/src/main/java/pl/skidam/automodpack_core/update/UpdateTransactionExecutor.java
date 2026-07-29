@@ -1,5 +1,9 @@
 package pl.skidam.automodpack_core.update;
 
+import static pl.skidam.automodpack_core.Constants.clientSelectionFile;
+import static pl.skidam.automodpack_core.Constants.modpackCatalogueFileName;
+import static pl.skidam.automodpack_core.Constants.modpackContentFileName;
+
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
@@ -8,6 +12,13 @@ import java.util.regex.Pattern;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
+import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectedTreeComposer;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 import pl.skidam.automodpack_core.utils.HashUtils;
 import pl.skidam.automodpack_core.utils.LegacyDummyFiles;
@@ -37,6 +48,8 @@ public final class UpdateTransactionExecutor {
 			Path clientConfigFile,
 			Path deletionTimestampsFile,
 			Path installedManifestFile,
+			Path completeCatalogueFile,
+			Path selectionFile,
 			CommitAction beforeManifestAction) {}
 
 	public record Execution(UpdateTransactionResult.Status status, UpdateTransaction transaction, String operation, Path blockedPath, String message) {
@@ -49,21 +62,37 @@ public final class UpdateTransactionExecutor {
 		this.context = Objects.requireNonNull(context);
 	}
 
-	public Execution commit(UpdatePlan plan, Jsons.ModpackContentFields targetManifest) throws IOException {
-		return commit(UpdateTransaction.create(plan, targetManifest, context.modpackDirectory()));
+	public Execution commit(UpdatePlan plan, SelectedModpackTarget target) throws IOException {
+		return commit(UpdateTransaction.create(plan, target, context.modpackDirectory()));
 	}
 
 	public Execution commit(UpdateTransaction transaction) throws IOException {
 		validate(transaction);
 		if (Files.exists(context.transactionFile())) throw new IOException("An update transaction is already active for this game directory");
 		ConfigTools.writeAtomic(context.transactionFile(), transaction);
+		try {
+			claimSelection(transaction);
+		} catch (IOException e) {
+			try {
+				Files.deleteIfExists(context.transactionFile());
+			} catch (IOException cleanupFailure) {
+				e.addSuppressed(cleanupFailure);
+			}
+			throw e;
+		}
 		Files.deleteIfExists(context.transactionResultFile());
 		return executePersisted(transaction);
 	}
 
 	public Execution recover(UpdateTransaction transaction) throws IOException {
 		validate(transaction);
+		claimSelection(transaction);
 		return executePersisted(transaction);
+	}
+
+	private void claimSelection(UpdateTransaction transaction) throws IOException {
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) return;
+		new ClientSelectionStore(context.selectionFile()).compareAndSet(transaction.modpackId, transaction.expectedPriorIntent(), transaction.targetIntent());
 	}
 
 	public UpdateTransaction readPersisted() {
@@ -112,6 +141,7 @@ public final class UpdateTransactionExecutor {
 					throw new IOException("Invalid embedded target manifest", e);
 				}
 				validateManifest(manifest, transaction.modpackId);
+				validateGroupTarget(transaction, manifest);
 				if (transaction.plannedClientConfig == null) throw new IOException("Planned client config is missing");
 				validatePlannedClientConfig(transaction);
 				validateOrderedMetadata(transaction);
@@ -159,10 +189,18 @@ public final class UpdateTransactionExecutor {
 		}
 		if (!expectedModpackDirectory.equals(stableModpackDirectory) || !expectedModpackDirectory.equals(recordedModpackDirectory))
 			throw new IOException("Transaction modpack directory is not stable modpack storage");
+		if (context.completeCatalogueFile() == null || !context.completeCatalogueFile().toAbsolutePath().normalize()
+				.equals(expectedModpackDirectory.resolve(modpackCatalogueFileName)))
+			throw new IOException("Complete catalogue path does not match stable modpack storage");
+		if (context.selectionFile() == null || !context.selectionFile().toAbsolutePath().normalize()
+				.equals(context.gameDirectory().resolve(clientSelectionFile).toAbsolutePath().normalize()))
+			throw new IOException("Selection store path does not match AutoModpack storage");
 	}
 
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.modpackId != null || transaction.targetManifestJson != null || transaction.canonicalModpackDirectory != null
+		if (transaction.modpackId != null || transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
+				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
+				|| transaction.canonicalModpackDirectory != null
 				|| transaction.plannedClientConfig != null || !transaction.plannedDeletionTimestamps.isEmpty() || !transaction.restartReasons.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
 		long installs = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT).count();
@@ -172,7 +210,9 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private static void validateLegacyDummyCleanupMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.modpackId != null || transaction.targetManifestJson != null || transaction.canonicalModpackDirectory != null
+		if (transaction.modpackId != null || transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
+				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
+				|| transaction.canonicalModpackDirectory != null
 				|| transaction.plannedClientConfig != null || !transaction.plannedDeletionTimestamps.isEmpty() || !transaction.restartReasons.isEmpty())
 			throw new IOException("Legacy dummy cleanup transaction contains modpack metadata");
 		if (transaction.operations.isEmpty()) throw new IOException("Legacy dummy cleanup transaction has no targets");
@@ -194,7 +234,8 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateManifest(Jsons.ModpackContentFields manifest, String modpackId) throws IOException {
-		if (manifest == null || manifest.list == null || !modpackId.equals(manifest.modpackId) || !ModpackId.isValid(manifest.modpackId))
+		if (manifest == null || manifest.list == null || manifest.selectedGroups == null || !modpackId.equals(manifest.modpackId)
+				|| !ModpackId.isValid(manifest.modpackId))
 			throw new IOException("Embedded manifest identity is invalid");
 		Set<String> normalizedPaths = new HashSet<>();
 		for (var item : manifest.list) {
@@ -211,6 +252,59 @@ public final class UpdateTransactionExecutor {
 			String relative = normalizeManifestPath(deletion.file);
 			validateHash(deletion.sha1, "deletion SHA-1");
 			if (!deletionKeys.add(deletion.timestamp + "\0" + relative)) throw new IOException("Manifest contains duplicate deletion metadata");
+		}
+	}
+
+	private void validateGroupTarget(UpdateTransaction transaction, Jsons.ModpackContentFields manifest) throws IOException {
+		if (transaction.completeManifestJson == null || transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null
+				|| transaction.requestedGroups == null)
+			throw new IOException("Group transaction metadata is incomplete");
+		if (!transaction.expectedPriorRequestedGroups.equals(transaction.expectedPriorRequestedGroups.stream().distinct().sorted().toList())
+				|| !transaction.requestedGroups.equals(transaction.requestedGroups.stream().distinct().sorted().toList()))
+			throw new IOException("Group selection intent is not uniquely ordered");
+		try {
+			ClientPlatform platform = transaction.platform();
+			if (!platform.id().equals(transaction.targetPlatform)) throw new IOException("Transaction platform is not canonical");
+			GroupManifest complete = transaction.completeManifest();
+			if (!transaction.modpackId.equals(complete.modpackId())) throw new IOException("Complete catalogue modpack ID does not match transaction");
+			ResolvedSelection resolved = GroupSelectionResolver.resolve(complete, transaction.targetIntent(), platform);
+			Jsons.ModpackContentFields recomposed = SelectedTreeComposer.compose(complete, resolved);
+			if (!flatManifestState(recomposed).equals(flatManifestState(manifest)))
+				throw new IOException("Embedded selected manifest does not match the complete catalogue and selection intent");
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid complete catalogue or group selection", e);
+		}
+	}
+
+	private static List<String> flatManifestState(Jsons.ModpackContentFields manifest) {
+		List<String> state = new ArrayList<>();
+		state.add("modpackId=" + Objects.toString(manifest.modpackId, ""));
+		state.add("modpackName=" + Objects.toString(manifest.modpackName, ""));
+		state.add("automodpackVersion=" + Objects.toString(manifest.automodpackVersion, ""));
+		state.add("loader=" + Objects.toString(manifest.loader, ""));
+		state.add("loaderVersion=" + Objects.toString(manifest.loaderVersion, ""));
+		state.add("mcVersion=" + Objects.toString(manifest.mcVersion, ""));
+		if (manifest.selectedGroups != null) manifest.selectedGroups.stream().sorted().forEach(group -> state.add("group=" + group));
+		if (manifest.list != null)
+			manifest.list.stream().sorted(Comparator.comparing(item -> normalizeUnchecked(item.file))).forEach(item -> state.add(String.join("\0",
+					"file", normalizeUnchecked(item.file), Objects.toString(item.size, ""), Objects.toString(item.type, ""), Boolean.toString(item.editable),
+					Boolean.toString(item.overwriteEditable), Boolean.toString(item.forceCopy), Objects.toString(item.sha1, ""), Objects.toString(item.murmur, ""))));
+		if (manifest.nonModpackFilesToDelete != null)
+			manifest.nonModpackFilesToDelete.stream()
+					.sorted(Comparator.comparing((Jsons.ModpackContentFields.FileToDelete deletion) -> Objects.toString(deletion.timestamp, ""))
+							.thenComparing(deletion -> normalizeUnchecked(deletion.file)).thenComparing(deletion -> Objects.toString(deletion.sha1, "")))
+					.forEach(deletion -> state.add(String.join("\0", "delete", normalizeUnchecked(deletion.file), Objects.toString(deletion.sha1, ""),
+							Objects.toString(deletion.timestamp, ""))));
+		return state;
+	}
+
+	private static String normalizeUnchecked(String path) {
+		try {
+			return UpdatePlanner.normalize(path);
+		} catch (RuntimeException e) {
+			return Objects.toString(path, "");
 		}
 	}
 
@@ -362,6 +456,10 @@ public final class UpdateTransactionExecutor {
 				ConfigTools.writeAtomic(context.clientConfigFile(), transaction.plannedClientConfig);
 				persistDeletionTimestamps(transaction.plannedDeletionTimestamps);
 				if (context.beforeManifestAction() != null) context.beforeManifestAction().run(transaction);
+				blockedPath = context.completeCatalogueFile();
+				GroupManifest complete = transaction.completeManifest();
+				ConfigTools.writeAtomic(context.completeCatalogueFile(), complete.toFields());
+				blockedPath = null;
 				verifyFinalState(transaction.projectedFinalState, transaction.purpose);
 				ModpackContentTools.write(context.installedManifestFile(), transaction.targetManifest());
 			} else if (transaction.purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP) {
@@ -492,8 +590,7 @@ public final class UpdateTransactionExecutor {
 		if (root == Root.GAME_DIR && (resolved.startsWith(context.modsDirectory().toAbsolutePath().normalize())
 				|| resolved.startsWith(context.automodpackDirectory().toAbsolutePath().normalize())))
 			throw new IOException("GAME_DIR operation must use the narrower constrained root");
-		if (context.installedManifestFile() != null && resolved.equals(context.installedManifestFile().toAbsolutePath().normalize()))
-			throw new IOException("Installed manifest may only be published by the executor");
+		if (isProtectedManifestPath(resolved)) throw new IOException("Authoritative modpack metadata may only be published by the executor");
 		if (root == Root.AUTOMODPACK_DIR) {
 			if (purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 				validateModpackStoragePath(relativePath, currentModpackId);
@@ -505,6 +602,15 @@ public final class UpdateTransactionExecutor {
 			}
 		}
 		return resolved;
+	}
+
+	private boolean isProtectedManifestPath(Path resolved) {
+		Path target = resolved.toAbsolutePath().normalize();
+		if (context.installedManifestFile() != null && target.equals(context.installedManifestFile().toAbsolutePath().normalize())) return true;
+		if (context.completeCatalogueFile() != null && target.equals(context.completeCatalogueFile().toAbsolutePath().normalize())) return true;
+		if (context.modpackDirectory() == null) return false;
+		Path modpackDirectory = context.modpackDirectory().toAbsolutePath().normalize();
+		return target.equals(modpackDirectory.resolve(modpackContentFileName)) || target.equals(modpackDirectory.resolve(modpackCatalogueFileName));
 	}
 
 	private static void validateModpackStoragePath(String relativePath, String currentModpackId) throws IOException {
