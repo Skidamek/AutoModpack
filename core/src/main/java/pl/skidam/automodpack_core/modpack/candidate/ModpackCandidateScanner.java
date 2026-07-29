@@ -10,12 +10,11 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 public final class ModpackCandidateScanner {
-	private final StableSourceReader sourceReader = new StableSourceReader();
+	private final StableSourceSnapshotter sourceSnapshotter = new StableSourceSnapshotter();
 
-	public ModpackCandidate scan(Request request, FileMetadataCache cache) throws CandidateBuildException {
+	public ModpackCandidate scan(Request request) throws CandidateBuildException {
 		Objects.requireNonNull(request);
 		if (request.groups() == null || request.groups().isEmpty()) throw new CandidateBuildException("No groups are configured");
 		Map<String, Jsons.GroupDeclaration> declarations = new TreeMap<>();
@@ -63,103 +62,116 @@ public final class ModpackCandidateScanner {
 		try {
 			for (SourcePair pair : sources.values()) futures.add(CompletableFuture.supplyAsync(() -> {
 				try {
-					return process(pair, rulesByGroup.get(pair.groupId()), request, cache);
+					return process(pair, rulesByGroup.get(pair.groupId()), request);
 				} catch (CandidateBuildException e) {
 					throw new CompletionException(e);
 				}
 			}, request.executor()));
 		} catch (RejectedExecutionException e) {
 			CandidateBuildException submissionFailure = new CandidateBuildException("Failed to submit candidate task", e);
-			CandidateBuildException taskFailure = drain(futures, new ArrayList<>());
+			List<PathResult> completed = new ArrayList<>();
+			CandidateBuildException taskFailure = drain(futures, completed);
+			cleanup(completed, submissionFailure);
 			if (taskFailure != null) submissionFailure.addSuppressed(taskFailure);
 			throw submissionFailure;
 		}
 
 		List<PathResult> results = new ArrayList<>();
 		CandidateBuildException taskFailure = drain(futures, results);
-		if (taskFailure != null) throw taskFailure;
+		if (taskFailure != null) {
+			cleanup(results, taskFailure);
+			throw taskFailure;
+		}
 		results.sort(Comparator.comparing(result -> result.selected == null ? result.sourceForOrdering() : result.selected));
 
 		Map<String, Map<String, Jsons.CompleteModpackContentFields.GroupFileFields>> filesByGroup = new TreeMap<>();
 		for (String groupId : declarations.keySet()) filesByGroup.put(groupId, new TreeMap<>());
-		Map<String, Path> hostedPaths = new TreeMap<>();
+		Map<String, StagedObject> objects = new TreeMap<>();
 		Map<String, CandidateProvenance> provenance = new TreeMap<>();
 		List<ExcludedCandidate> exclusions = new ArrayList<>(ruleExclusions);
 		List<ShadowedCandidate> shadows = new ArrayList<>();
-		for (PathResult result : results) {
-			exclusions.addAll(result.exclusions);
-			if (result.shadow != null) shadows.add(result.shadow);
-			if (result.selected == null || result.file == null) continue;
-			GroupManifest.GroupFile file = result.file;
-			filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new Jsons.CompleteModpackContentFields.GroupFileFields(
-					String.valueOf(file.size()), file.type(), file.editable(), file.overwriteEditable(), file.forceCopy(), file.sha1(), file.murmur()));
-			hostedPaths.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.selected.sourcePath());
-			provenance.put(ModpackCandidate.provenanceKey(result.selected.groupId(), result.selected.logicalPath()), result.provenance);
-		}
-
-		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
-		fields.modpackId = request.modpackId();
-		fields.modpackName = request.modpackName();
-		fields.automodpackVersion = request.automodpackVersion();
-		fields.loader = request.loader();
-		fields.loaderVersion = request.loaderVersion();
-		fields.mcVersion = request.mcVersion();
-		fields.nonModpackFilesToDelete = request.nonModpackFilesToDelete();
-		Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> groups = new LinkedHashMap<>();
-		for (var entry : declarations.entrySet()) {
-			Jsons.GroupDeclaration declaration = entry.getValue();
-			Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
-			group.displayName = declaration.displayName;
-			group.description = declaration.description;
-			group.category = declaration.category;
-			group.required = declaration.required;
-			group.recommended = declaration.recommended;
-			group.breaksWith = sortedSet(declaration.breaksWith);
-			group.requires = sortedSet(declaration.requires);
-			group.tags = sortedSet(declaration.tags);
-			group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);
-			group.files = filesByGroup.get(entry.getKey());
-			groups.put(entry.getKey(), group);
-		}
-		fields.groups = groups;
-		Map<String, Jsons.CompleteModpackContentFields.SelectionTagFields> tags = new LinkedHashMap<>();
-		if (request.selectionTags() != null) for (var entry : new TreeMap<>(request.selectionTags()).entrySet()) {
-			Jsons.SelectionTagDeclaration declaration = entry.getValue();
-			if (declaration == null) throw new CandidateBuildException("Selection tag '" + entry.getKey() + "' has no declaration");
-			Jsons.CompleteModpackContentFields.SelectionTagFields tag = new Jsons.CompleteModpackContentFields.SelectionTagFields();
-			tag.displayName = declaration.displayName;
-			tag.description = declaration.description;
-			tag.defaultSelected = declaration.defaultSelected;
-			tag.serverForced = declaration.serverForced;
-			tags.put(entry.getKey(), tag);
-		}
-		fields.selectionTags = tags;
-
 		try {
+			for (PathResult result : results) {
+				exclusions.addAll(result.exclusions);
+				if (result.shadow != null) shadows.add(result.shadow);
+				if (result.selected == null || result.file == null) continue;
+				GroupManifest.GroupFile file = result.file;
+				if (result.object == null) throw new CandidateBuildException("Selected source has no staged object: " + result.selected.sourcePath());
+				filesByGroup.get(result.selected.groupId()).put(result.selected.logicalPath(), new Jsons.CompleteModpackContentFields.GroupFileFields(
+						String.valueOf(file.size()), file.type(), file.editable(), file.overwriteEditable(), file.forceCopy(), file.sha1(), file.murmur()));
+				StagedObject redundant = objects.putIfAbsent(file.sha1().toLowerCase(Locale.ROOT), result.object);
+				if (redundant != null) result.object.delete();
+				provenance.put(ModpackCandidate.provenanceKey(result.selected.groupId(), result.selected.logicalPath()), result.provenance);
+			}
+
+			Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+			fields.modpackId = request.modpackId();
+			fields.modpackName = request.modpackName();
+			fields.automodpackVersion = request.automodpackVersion();
+			fields.loader = request.loader();
+			fields.loaderVersion = request.loaderVersion();
+			fields.mcVersion = request.mcVersion();
+			fields.nonModpackFilesToDelete = request.nonModpackFilesToDelete();
+			Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> groups = new LinkedHashMap<>();
+			for (var entry : declarations.entrySet()) {
+				Jsons.GroupDeclaration declaration = entry.getValue();
+				Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+				group.displayName = declaration.displayName;
+				group.description = declaration.description;
+				group.category = declaration.category;
+				group.required = declaration.required;
+				group.recommended = declaration.recommended;
+				group.breaksWith = sortedSet(declaration.breaksWith);
+				group.requires = sortedSet(declaration.requires);
+				group.tags = sortedSet(declaration.tags);
+				group.compatiblePlatforms = sortedSet(declaration.compatiblePlatforms);
+				group.files = filesByGroup.get(entry.getKey());
+				groups.put(entry.getKey(), group);
+			}
+			fields.groups = groups;
+			Map<String, Jsons.CompleteModpackContentFields.SelectionTagFields> tags = new LinkedHashMap<>();
+			if (request.selectionTags() != null) for (var entry : new TreeMap<>(request.selectionTags()).entrySet()) {
+				Jsons.SelectionTagDeclaration declaration = entry.getValue();
+				if (declaration == null) throw new CandidateBuildException("Selection tag '" + entry.getKey() + "' has no declaration");
+				Jsons.CompleteModpackContentFields.SelectionTagFields tag = new Jsons.CompleteModpackContentFields.SelectionTagFields();
+				tag.displayName = declaration.displayName;
+				tag.description = declaration.description;
+				tag.defaultSelected = declaration.defaultSelected;
+				tag.serverForced = declaration.serverForced;
+				tags.put(entry.getKey(), tag);
+			}
+			fields.selectionTags = tags;
 			GroupManifest manifest = GroupManifestValidator.validate(fields);
-			return new ModpackCandidate(manifest, new TreeMap<>(hostedPaths), new TreeMap<>(provenance), exclusions, shadows);
-		} catch (IllegalArgumentException e) {
-			throw new CandidateBuildException("Candidate validation failed: " + e.getMessage(), e);
+			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions, shadows);
+		} catch (Exception e) {
+			cleanup(results, e);
+			if (e instanceof CandidateBuildException candidateBuildException) throw candidateBuildException;
+			throw new CandidateBuildException("Failed to construct candidate", e);
 		}
 	}
 
-	private PathResult process(SourcePair pair, GroupRules rules, Request request, FileMetadataCache cache) throws CandidateBuildException {
+	private PathResult process(SourcePair pair, GroupRules rules, Request request) throws CandidateBuildException {
 		List<ExcludedCandidate> exclusions = new ArrayList<>();
 		CandidateSource selected = null;
 		GroupManifest.GroupFile file = null;
+		StagedObject object = null;
 		if (pair.explicit != null) {
-			StableSourceReader.Observation observation = sourceReader.read(pair.explicit, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(), cache);
-			if (observation.exclusion() == null) {
+			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(pair.explicit, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
+					request.stagingDirectory());
+			if (snapshot.exclusion() == null) {
 				selected = pair.explicit;
-				file = observation.file();
-			} else exclusions.add(excluded(pair.explicit, observation.exclusion()));
+				file = snapshot.file();
+				object = snapshot.object();
+			} else exclusions.add(excluded(pair.explicit, snapshot.exclusion()));
 		}
 		if (pair.explicit == null && pair.synced != null) {
-			StableSourceReader.Observation observation = sourceReader.read(pair.synced, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(), cache);
-			if (observation.exclusion() == null) {
+			StableSourceSnapshotter.Snapshot snapshot = sourceSnapshotter.snapshot(pair.synced, request.autoExcludeUnnecessaryFiles(), request.autoExcludeServerSideMods(),
+					request.stagingDirectory());
+			if (snapshot.exclusion() == null) {
 				selected = pair.synced;
-				file = observation.file();
-			} else exclusions.add(excluded(pair.synced, observation.exclusion()));
+				file = snapshot.file();
+				object = snapshot.object();
+			} else exclusions.add(excluded(pair.synced, snapshot.exclusion()));
 		}
 		ShadowedCandidate shadow = pair.explicit != null && pair.synced != null
 				? new ShadowedCandidate(pair.explicit, pair.synced, ShadowedCandidate.Relationship.NOT_COMPARED)
@@ -173,7 +185,7 @@ public final class ModpackCandidateScanner {
 			file = new GroupManifest.GroupFile(file.size(), file.type(), isEditable, isEditable && overwrite.included(), forceCopy.included(), file.sha1(), file.murmur());
 			provenance = new CandidateProvenance(selected, editable.decisiveRule(), overwrite.decisiveRule(), forceCopy.decisiveRule());
 		}
-		return new PathResult(selected, file, provenance, exclusions, shadow, pair.explicit != null ? pair.explicit : pair.synced);
+		return new PathResult(selected, file, object, provenance, exclusions, shadow, pair.explicit != null ? pair.explicit : pair.synced);
 	}
 
 	private static GroupRules compileRules(String groupId, Jsons.GroupDeclaration declaration) throws CandidateBuildException {
@@ -208,8 +220,19 @@ public final class ModpackCandidateScanner {
 		return taskFailure;
 	}
 
-	private static ExcludedCandidate excluded(CandidateSource source, StableSourceReader.Exclusion exclusion) {
+	private static ExcludedCandidate excluded(CandidateSource source, StableSourceSnapshotter.Exclusion exclusion) {
 		return new ExcludedCandidate(source, exclusion.reason(), exclusion.message());
+	}
+
+	private static void cleanup(List<PathResult> results, Exception failure) {
+		for (PathResult result : results) {
+			if (result.object == null) continue;
+			try {
+				result.object.delete();
+			} catch (IOException e) {
+				failure.addSuppressed(e);
+			}
+		}
 	}
 
 	private static NavigableMap<String, Path> walk(Path root) throws CandidateBuildException {
@@ -262,6 +285,7 @@ public final class ModpackCandidateScanner {
 	private record PathResult(
 			CandidateSource selected,
 			GroupManifest.GroupFile file,
+			StagedObject object,
 			CandidateProvenance provenance,
 			List<ExcludedCandidate> exclusions,
 			ShadowedCandidate shadow,
@@ -281,10 +305,12 @@ public final class ModpackCandidateScanner {
 			Set<Jsons.ModpackContentFields.FileToDelete> nonModpackFilesToDelete,
 			boolean autoExcludeUnnecessaryFiles,
 			boolean autoExcludeServerSideMods,
+			Path stagingDirectory,
 			Executor executor) {
 		public Request {
 			serverRoot = serverRoot.toAbsolutePath().normalize();
 			groupRoot = groupRoot.toAbsolutePath().normalize();
+			stagingDirectory = stagingDirectory.toAbsolutePath().normalize();
 			Objects.requireNonNull(executor);
 		}
 	}
