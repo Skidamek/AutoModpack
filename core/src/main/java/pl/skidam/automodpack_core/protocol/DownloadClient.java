@@ -29,8 +29,12 @@ import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
+import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.PlatformUtils;
+import pl.skidam.mcholepunch.HolepunchClient;
+import pl.skidam.mcholepunch.HolepunchConnection;
+import pl.skidam.mcholepunch.HolepunchOptions;
+import pl.skidam.mcholepunch.MinecraftProtocol;
 
 public class DownloadClient implements AutoCloseable {
 
@@ -227,10 +231,46 @@ public class DownloadClient implements AutoCloseable {
 	}
 
 	private static PreValidationConnection getPreValidationConnection(Jsons.ConnectionInfo connectionInfo, SSLContext sharedContext) throws IOException {
+		return switch (connectionInfo.connectionMode) {
+			case HOLEPUNCH -> connectHolepunch(connectionInfo, sharedContext);
+			case MAGIC_PACKET, DIRECT -> connectDirect(connectionInfo, sharedContext);
+		};
+	}
+
+	private static PreValidationConnection connectDirect(Jsons.ConnectionInfo connectionInfo, SSLContext sharedContext) throws IOException {
 		String hostName = connectionInfo.endpoint.getHostString();
 		InetSocketAddress address = new InetSocketAddress(hostName, connectionInfo.endpoint.getPort());
 		if (address.isUnresolved()) throw new IOException("Failed to resolve endpoint host: " + hostName);
-		return new PreValidationConnection(address, connectionInfo, sharedContext);
+		Socket socket = new Socket();
+		socket.connect(address, 15000);
+		return new PreValidationConnection(socket, connectionInfo, sharedContext);
+	}
+
+	private static PreValidationConnection connectHolepunch(Jsons.ConnectionInfo connectionInfo, SSLContext sharedContext) throws IOException {
+		MinecraftProtocol minecraftProtocol;
+		try {
+			minecraftProtocol = MinecraftProtocol.forMinecraftVersion(MC_VERSION);
+		} catch (IllegalArgumentException e) {
+			throw new IOException("No mcholepunch protocol for Minecraft " + MC_VERSION, e);
+		}
+
+		try {
+			HolepunchSocket socket = new HolepunchSocket();
+			HolepunchConnection connection = HolepunchClient.connect(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort(), minecraftProtocol,
+					socket.handler(), HolepunchOptions.builder().build())
+					.toCompletableFuture().get(15, TimeUnit.SECONDS);
+			socket.setConnection(connection);
+			return new PreValidationConnection(socket, connectionInfo, sharedContext);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Holepunch connect interrupted", e);
+		} catch (ExecutionException e) {
+			Throwable cause = e.getCause() != null ? e.getCause() : e;
+			if (cause instanceof IOException io) throw io;
+			throw new IOException("Holepunch connect failed", cause);
+		} catch (Exception e) {
+			throw new IOException("Holepunch connect failed", e);
+		}
 	}
 
 	private static SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating, Jsons.ConnectionInfo connectionInfo) {
@@ -262,8 +302,7 @@ public class DownloadClient implements AutoCloseable {
 		} catch (Exception e) {
 			if (e instanceof InterruptedException) Thread.currentThread().interrupt();
 			Throwable cause = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
-			LOGGER.error("Failed to create download client: {}", cause.getMessage());
-			LOGGER.debug(cause);
+			LOGGER.error("Failed to create download client", cause);
 			return null;
 		}
 	}
@@ -305,12 +344,14 @@ class PreValidationConnection {
 
 	private final SSLSocket socket;
 
-	public PreValidationConnection(InetSocketAddress resolvedHostAddress, Jsons.ConnectionInfo connectionInfo, SSLContext sslContext) throws IOException {
-		Socket plainSocket = new Socket();
-		plainSocket.connect(resolvedHostAddress, 10000);
-		plainSocket.setSoTimeout(10000);
+	public PreValidationConnection(Socket preConnectedSocket, Jsons.ConnectionInfo connectionInfo, SSLContext sslContext) throws IOException {
+		preConnectedSocket.setSoTimeout(10000);
+		InetSocketAddress addr = new InetSocketAddress(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort());
+		this.socket = wrapWithTls(preConnectedSocket, addr, connectionInfo, sslContext);
+	}
 
-		if (connectionInfo.requiresMagic) {
+	private static SSLSocket wrapWithTls(Socket plainSocket, InetSocketAddress resolvedHostAddress, Jsons.ConnectionInfo connectionInfo, SSLContext sslContext) throws IOException {
+		if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) {
 			try {
 				DataOutputStream plainOut = new DataOutputStream(new BufferedOutputStream(plainSocket.getOutputStream()));
 				DataInputStream plainIn = new DataInputStream(new BufferedInputStream(plainSocket.getInputStream()));
@@ -354,7 +395,7 @@ class PreValidationConnection {
 			throw e;
 		}
 
-		this.socket = sslSocket;
+		return sslSocket;
 	}
 
 	protected SSLSocket getSocket() {
@@ -365,7 +406,7 @@ class PreValidationConnection {
 class Connection implements AutoCloseable {
 
 	private byte protocolVersion = LATEST_SUPPORTED_PROTOCOL_VERSION;
-	private byte compressionType = COMPRESSION_ZSTD;
+	private CompressionType compressionType = CompressionType.ZSTD;
 	private int chunkSize = DEFAULT_CHUNK_SIZE;
 	private final byte[] secretBytes;
 	private final SSLSocket socket;
@@ -373,8 +414,8 @@ class Connection implements AutoCloseable {
 	private final DataOutputStream out;
 	private final ExecutorService executor = Executors.newSingleThreadExecutor();
 	private final AtomicBoolean busy = new AtomicBoolean(false);
-
-	private final byte[] networkInputBuffer = new byte[MAX_CHUNK_SIZE + 8192];
+	private CompressionCodec compressionCodec;
+	private byte[] networkInputBuffer;
 
 	public Connection(PreValidationConnection preValidationConnection, byte[] secretBytes) throws IOException {
 		if (preValidationConnection.getSocket() == null || preValidationConnection.getSocket().isClosed()) {
@@ -387,9 +428,11 @@ class Connection implements AutoCloseable {
 		this.out = new DataOutputStream(new BufferedOutputStream(this.socket.getOutputStream()));
 
 		try {
-			if (!PlatformUtils.canUseZstd()) this.compressionType = COMPRESSION_GZIP;
-			this.compressionType = sendCompressionConfig(compressionType);
-			this.chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
+			if (!CompressionFactory.isAvailable(compressionType)) compressionType = CompressionType.GZIP;
+			compressionType = sendCompressionConfig(compressionType);
+			compressionCodec = CompressionFactory.createCodec(compressionType);
+			chunkSize = sendChunkSizeConfig(DEFAULT_CHUNK_SIZE);
+			networkInputBuffer = new byte[compressionCodec.maxCompressedLength(chunkSize)];
 			sendEchoConfig();
 		} catch (IOException e) {
 			LOGGER.error("Failed to configure connection", e);
@@ -410,7 +453,7 @@ class Connection implements AutoCloseable {
 	}
 
 	private CompressionCodec getCompressionCodec() {
-		return CompressionFactory.getCodec(compressionType);
+		return compressionCodec;
 	}
 
 	public CompletableFuture<Path> sendDownloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
@@ -502,14 +545,13 @@ class Connection implements AutoCloseable {
 		int compressedLength = in.readInt();
 		int originalLength = in.readInt();
 
-		int maxAllowedSize = this.chunkSize + 8192;
-
-		if (compressedLength < 0 || compressedLength > maxAllowedSize) {
-			throw new IOException("Frame compressed length (" + compressedLength + ") exceeds limit (" + maxAllowedSize + ")");
+		if (originalLength < 0 || originalLength > chunkSize) {
+			throw new IOException("Frame original length (" + originalLength + ") exceeds chunk size (" + chunkSize + ")");
 		}
 
-		if (originalLength < 0 || originalLength > this.chunkSize) {
-			throw new IOException("Frame original length (" + originalLength + ") exceeds chunk size (" + this.chunkSize + ")");
+		int maxCompressedLength = getCompressionCodec().maxCompressedLength(originalLength);
+		if (compressedLength < 0 || compressedLength > maxCompressedLength) {
+			throw new IOException("Frame compressed length (" + compressedLength + ") exceeds codec limit (" + maxCompressedLength + ")");
 		}
 
 		if (compressedLength > networkInputBuffer.length) throw new IOException("Compressed length exceeds buffer capacity");
@@ -556,12 +598,12 @@ class Connection implements AutoCloseable {
 		return destination;
 	}
 
-	private byte sendCompressionConfig(byte desiredCompression) throws IOException {
+	private CompressionType sendCompressionConfig(CompressionType desiredCompression) throws IOException {
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		DataOutputStream dos = new DataOutputStream(baos);
 		dos.writeByte(protocolVersion);
 		dos.writeByte(CONFIGURATION_COMPRESSION_TYPE);
-		dos.writeByte(desiredCompression);
+		dos.writeByte(desiredCompression.wireId());
 
 		out.write(baos.toByteArray());
 		out.flush();
@@ -572,9 +614,11 @@ class Connection implements AutoCloseable {
 		byte type = in.readByte();
 		if (type != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected response: " + type);
 
-		byte negotiated = in.readByte();
-		if (negotiated != COMPRESSION_NONE && negotiated != COMPRESSION_ZSTD && negotiated != COMPRESSION_GZIP) {
-			throw new IOException("Unsupported compression: " + negotiated);
+		CompressionType negotiated;
+		try {
+			negotiated = CompressionType.fromWireId(in.readByte());
+		} catch (IllegalArgumentException e) {
+			throw new IOException("Unsupported compression response", e);
 		}
 		return negotiated;
 	}

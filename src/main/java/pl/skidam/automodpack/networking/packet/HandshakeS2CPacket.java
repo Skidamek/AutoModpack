@@ -100,11 +100,6 @@ public class HandshakeS2CPacket {
 				return;
 			}
 
-			if (!hostServer.isRunning() && serverConfig.advertisedEndpointPort == -1) {
-				LOGGER.info("Host server is not running. Modpack will not be sent to {}", GameHelpers.getPlayerName(profile));
-				return;
-			}
-
 			if (modpackExecutor.isGenerating()) {
 				Component reason = VersionedText.literal("AutoModpack is generating modpack. Please wait a moment and try again.");
 				connection.send(new ClientboundLoginDisconnectPacket(reason));
@@ -119,11 +114,9 @@ public class HandshakeS2CPacket {
 
 			String advertisedEndpointHost = serverConfig.advertisedEndpointHost;
 			int advertisedEndpointPort = serverConfig.advertisedEndpointPort;
-			boolean requiresMagic = (serverConfig.bindPort == -1 && hostServer.isRunning()) || serverConfig.requireMagicPackets;
+			LOGGER.info("Sending {} AutoModpack endpoint: {}:{} ({})", GameHelpers.getPlayerName(profile), advertisedEndpointHost, advertisedEndpointPort, serverConfig.connectionMode);
 
-			LOGGER.info("Sending {} AutoModpack endpoint: {}:{}", GameHelpers.getPlayerName(profile), advertisedEndpointHost, advertisedEndpointPort);
-
-			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.requireAutoModpackOnClient, requiresMagic);
+			DataPacket dataPacket = new DataPacket(advertisedEndpointHost, advertisedEndpointPort, secret, serverConfig.requireAutoModpackOnClient, serverConfig.connectionMode);
 			String packetContentJson = dataPacket.toJson();
 
 			FriendlyByteBuf outBuf = new FriendlyByteBuf(Unpooled.buffer());

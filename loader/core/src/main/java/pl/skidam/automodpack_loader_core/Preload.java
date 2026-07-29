@@ -129,7 +129,7 @@ public class Preload {
 
 		String expectedFingerprint = CertificateTrustStore.getFingerprint(storedConnectionInfo.origin);
 		Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(storedConnectionInfo.origin, storedConnectionInfo.endpoint,
-				storedConnectionInfo.requiresMagic, expectedFingerprint, null);
+				storedConnectionInfo.connectionMode, expectedFingerprint, null);
 		Secrets.Secret secret = SecretsStore.getClientSecret(storedConnectionInfo.origin);
 		if (secret == null) {
 			secret = Secrets.anonymousSecret();
@@ -331,7 +331,7 @@ public class Preload {
 		if (bootstrap.installsModpack()) {
 			updatedClientConfig = new Jsons.ClientConfigFieldsV3(clientConfig);
 			previousConnection = updatedClientConfig.modpackConnections.put(bootstrap.modpackId(),
-					new Jsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.requiresMagic(), null, null));
+					new Jsons.ConnectionInfo(bootstrap.origin(), bootstrap.endpoint(), bootstrap.connectionMode(), null, null));
 			updatedClientConfig.selectedModpackId = bootstrap.modpackId();
 		}
 

@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.config;
 import java.net.InetSocketAddress;
 
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
@@ -22,14 +23,14 @@ public final class BootstrapConfig {
 
 		if (!hasEndpoint) {
 			if (hasModpackId) throw new IllegalArgumentException("Bootstrap modpackId requires an endpoint");
-			if (fields.requiresMagic != null) throw new IllegalArgumentException("Bootstrap requiresMagic requires an endpoint");
-			return new Validated(origin, fingerprint, null, null, false);
+			if (fields.connectionMode != null) throw new IllegalArgumentException("Bootstrap connectionMode requires an endpoint");
+			return new Validated(origin, fingerprint, null, null, null);
 		}
 
 		if (!hasModpackId || !ModpackId.isValid(fields.modpackId)) throw new IllegalArgumentException("Bootstrap endpoint requires a valid modpackId");
+		if (fields.connectionMode == null) throw new IllegalArgumentException("Bootstrap endpoint requires connectionMode");
 		InetSocketAddress endpoint = AddressHelpers.parseEndpoint(fields.endpoint);
-		boolean requiresMagic = fields.requiresMagic == null || fields.requiresMagic;
-		return new Validated(origin, fingerprint, fields.modpackId, endpoint, requiresMagic);
+		return new Validated(origin, fingerprint, fields.modpackId, endpoint, fields.connectionMode);
 	}
 
 	public static Jsons.KnownHostsBootstrapFields pin(InetSocketAddress origin, String fingerprint) {
@@ -38,27 +39,29 @@ public final class BootstrapConfig {
 	}
 
 	public static Jsons.KnownHostsBootstrapFields install(InetSocketAddress origin, String fingerprint, String modpackId, InetSocketAddress endpoint,
-			boolean requiresMagic) {
-		Validated validated = validate(fields(origin, fingerprint, modpackId, endpoint, requiresMagic));
-		return fields(validated.origin(), validated.fingerprint(), validated.modpackId(), validated.endpoint(), validated.requiresMagic());
+			ModpackConnectionMode connectionMode) {
+		Validated validated = validate(fields(origin, fingerprint, modpackId, endpoint, connectionMode));
+		return fields(validated.origin(), validated.fingerprint(), validated.modpackId(), validated.endpoint(), validated.connectionMode());
 	}
 
 	private static Jsons.KnownHostsBootstrapFields fields(InetSocketAddress origin, String fingerprint, String modpackId, InetSocketAddress endpoint,
-			Boolean requiresMagic) {
-		return fields(AddressHelpers.formatAddress(origin), fingerprint, modpackId, endpoint == null ? null : AddressHelpers.formatAddress(endpoint), requiresMagic);
+			ModpackConnectionMode connectionMode) {
+		return fields(AddressHelpers.formatAddress(origin), fingerprint, modpackId, endpoint == null ? null : AddressHelpers.formatAddress(endpoint), connectionMode);
 	}
 
-	private static Jsons.KnownHostsBootstrapFields fields(String origin, String fingerprint, String modpackId, String endpoint, Boolean requiresMagic) {
+	private static Jsons.KnownHostsBootstrapFields fields(String origin, String fingerprint, String modpackId, String endpoint,
+			ModpackConnectionMode connectionMode) {
 		Jsons.KnownHostsBootstrapFields fields = new Jsons.KnownHostsBootstrapFields();
 		fields.origin = origin;
 		fields.fingerprint = fingerprint;
 		fields.modpackId = modpackId;
 		fields.endpoint = endpoint;
-		fields.requiresMagic = requiresMagic;
+		fields.connectionMode = connectionMode;
 		return fields;
 	}
 
-	public record Validated(InetSocketAddress origin, String fingerprint, String modpackId, InetSocketAddress endpoint, boolean requiresMagic) {
+	public record Validated(InetSocketAddress origin, String fingerprint, String modpackId, InetSocketAddress endpoint,
+			ModpackConnectionMode connectionMode) {
 		public boolean installsModpack() {
 			return endpoint != null;
 		}

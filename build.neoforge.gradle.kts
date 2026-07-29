@@ -10,10 +10,18 @@ plugins {
 val targetName = sc.current.project
 val minecraftVersion = property("deps.minecraft") as String
 val neoForgeVersion = property("deps.neoforge") as String
+val mcholepunchVersion = versionProperty("versionMcholepunch")
 
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
 base.archivesName.set("${property("mod_name")}-mc$targetName".lowercase(Locale.ROOT))
+
+repositories {
+	flatDir {
+		name = "mcholepunchLibs"
+		dirs(rootProject.file("libs"))
+	}
+}
 
 neoForge {
 	validateAccessTransformers = true
@@ -26,6 +34,13 @@ neoForge {
 dependencies {
 	implementation(project(":core")) { isTransitive = false }
 	implementation(project(":loader-core")) { isTransitive = false }
+
+	compileOnly(":mcholepunch-core:$mcholepunchVersion") { isTransitive = false }
+	if (sc.current.parsed >= "1.21.1") {
+		// NeoForge keeps Mojmap runtime names across these targets, so every release reuses the same
+		// Java 21 mixin shim while the client still selects the exact Minecraft wire protocol.
+		jarJar(implementation(":mcholepunch-neoforge:$mcholepunchVersion") { isTransitive = false })
+	}
 }
 
 tasks {

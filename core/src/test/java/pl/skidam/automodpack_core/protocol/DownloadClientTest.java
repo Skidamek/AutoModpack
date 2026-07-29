@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -82,11 +83,10 @@ class DownloadClientTest {
 
 		withTlsServer(keyPair, certificate, port -> {
 			var connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("origin.example", 25565),
-					InetSocketAddress.createUnresolved("route.example", port), false, null, null);
-			var route = new InetSocketAddress("127.0.0.1", port);
+					InetSocketAddress.createUnresolved("route.example", port), ModpackConnectionMode.DIRECT, null, null);
 
 			assertDoesNotThrow(() -> {
-				var connection = new PreValidationConnection(route, connectionInfo, clientContext(certificate));
+				var connection = new PreValidationConnection(new Socket("127.0.0.1", port), connectionInfo, clientContext(certificate));
 				connection.getSocket().close();
 			});
 		});
@@ -115,10 +115,9 @@ class DownloadClientTest {
 
 		withTlsServer(keyPair, certificate, port -> {
 			var connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("origin.example", 25565),
-					InetSocketAddress.createUnresolved("route.example", port), false, null, null);
-			var route = new InetSocketAddress("127.0.0.1", port);
+					InetSocketAddress.createUnresolved("route.example", port), ModpackConnectionMode.DIRECT, null, null);
 
-			assertThrows(IOException.class, () -> new PreValidationConnection(route, connectionInfo, clientContext(certificate)));
+			assertThrows(IOException.class, () -> new PreValidationConnection(new Socket("127.0.0.1", port), connectionInfo, clientContext(certificate)));
 		});
 	}
 

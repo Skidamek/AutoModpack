@@ -1,37 +1,33 @@
 package pl.skidam.automodpack_core.protocol.compression;
 
-import static pl.skidam.automodpack_core.protocol.NetUtils.*;
+import io.airlift.compress.lz4.Lz4Compressor;
+import io.airlift.compress.lz4.Lz4Decompressor;
+import io.airlift.compress.lzo.LzoCompressor;
+import io.airlift.compress.lzo.LzoDecompressor;
+import io.airlift.compress.snappy.SnappyCompressor;
+import io.airlift.compress.snappy.SnappyDecompressor;
+import io.airlift.compress.zstd.ZstdCompressor;
+import io.airlift.compress.zstd.ZstdDecompressor;
 
 public class CompressionFactory {
 
-	/**
-	 * Gets a compression codec for the specified compression type.
-	 * The codec is lazily loaded and cached for subsequent use.
-	 *
-	 * @param compressionType
-	 *            the compression type constant from NetUtils
-	 * @return the compression codec
-	 * @throws IllegalArgumentException
-	 *             if the compression type is not supported
-	 */
-	public static CompressionCodec getCodec(byte compressionType) {
+	public static CompressionCodec createCodec(CompressionType compressionType) {
 		return switch (compressionType) {
-			case COMPRESSION_ZSTD -> Zstd.CODEC;
-			case COMPRESSION_GZIP -> Gzip.CODEC;
-			case COMPRESSION_NONE -> None.CODEC;
-			default -> throw new IllegalArgumentException("Unsupported compression type: " + compressionType);
+			case NONE -> new NoneCompression();
+			case GZIP -> new GzipCompression();
+			case ZSTD -> new AirliftCompressionCodec(CompressionType.ZSTD, new ZstdCompressor(), new ZstdDecompressor());
+			case SNAPPY -> new AirliftCompressionCodec(CompressionType.SNAPPY, new SnappyCompressor(), new SnappyDecompressor());
+			case LZ4 -> new AirliftCompressionCodec(CompressionType.LZ4, new Lz4Compressor(), new Lz4Decompressor());
+			case LZO -> new AirliftCompressionCodec(CompressionType.LZO, new LzoCompressor(), new LzoDecompressor());
 		};
 	}
 
-	private static class Zstd {
-		private static final ZstdCompression CODEC = new ZstdCompression();
-	}
-
-	private static class Gzip {
-		private static final GzipCompression CODEC = new GzipCompression();
-	}
-
-	private static class None {
-		private static final NoneCompression CODEC = new NoneCompression();
+	public static boolean isAvailable(CompressionType compressionType) {
+		try {
+			createCodec(compressionType);
+			return true;
+		} catch (LinkageError | RuntimeException e) {
+			return false;
+		}
 	}
 }

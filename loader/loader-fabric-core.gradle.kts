@@ -16,6 +16,10 @@ base {
 repositories {
 	mavenCentral()
 	maven { url = uri("https://maven.fabricmc.net/") }
+	flatDir {
+		name = "mcholepunchLibs"
+		dirs(rootProject.file("libs"))
+	}
 }
 
 val gsonVersion = versionProperty("versionLoaderGson")
@@ -26,6 +30,8 @@ val bouncyCastleVersion = versionProperty("versionBouncyCastle")
 val httpClientVersion = versionProperty("versionHttpClient")
 val nettyVersion = versionProperty("versionNetty")
 val h2Version = versionProperty("versionH2")
+val mcholepunchVersion = versionProperty("versionMcholepunch")
+val aircompressorVersion = versionProperty("versionAircompressor")
 
 dependencies {
 	compileOnly(project(":core"))
@@ -39,6 +45,7 @@ dependencies {
 	compileOnly("net.fabricmc:fabric-loader:$fabricLoaderVersion")
 
 	// Stuff to actually bundle
+	implementation("io.airlift:aircompressor:$aircompressorVersion")
 	implementation("org.tomlj:tomlj:$tomljVersion")
 	implementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
 	implementation("org.apache.httpcomponents.client5:httpclient5:$httpClientVersion")
@@ -47,6 +54,11 @@ dependencies {
 		isTransitive = false
 	}
 	implementation("com.h2database:h2-mvstore:$h2Version")
+
+	// mcholepunch jars — shadowed into the loader so classes are available at
+	// the root classpath (needed by the preload-stage client).
+	implementation(":mcholepunch-core:$mcholepunchVersion")
+	implementation(":mcholepunch-server-netty:$mcholepunchVersion")
 }
 
 configurations {
@@ -78,6 +90,7 @@ tasks.named<ShadowJar>("shadowJar") {
 	configurations = listOf(project.configurations.getByName("shadowImplementation"))
 
 	val reloc = "amp_libs"
+	relocate("io.airlift.compress", "$reloc.io.airlift.compress")
 	relocate("org.antlr", "$reloc.org.antlr")
 	relocate("org.tomlj", "$reloc.org.tomlj")
 	relocate("org.apache.hc", "$reloc.org.apache.hc")

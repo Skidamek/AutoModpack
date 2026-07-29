@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.protocol.compression;
 
-import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_NONE;
-
 import java.util.Arrays;
 
 /**
@@ -11,29 +9,30 @@ import java.util.Arrays;
 public class NoneCompression implements CompressionCodec {
 
 	@Override
-	public boolean isInitialized() {
-		return true;
-	}
-
-	@Override
 	public byte[] compress(byte[] input) {
 		return input;
 	}
 
 	@Override
 	public byte[] decompress(byte[] compressed, int originalLength) {
+		if (compressed.length != originalLength) throw new IllegalArgumentException("Uncompressed length does not match expected length");
 		return compressed;
 	}
 
 	@Override
 	public byte[] decompress(byte[] compressedBuffer, int offset, int length, int originalLength) {
-		// For "None", we just return the slice of the buffer.
-		// We must copy it because the caller expects a standalone array of size 'originalLength'.
+		if (length != originalLength) throw new IllegalArgumentException("Uncompressed length does not match expected length");
 		return Arrays.copyOfRange(compressedBuffer, offset, offset + length);
 	}
 
 	@Override
-	public byte getCompressionType() {
-		return COMPRESSION_NONE;
+	public int maxCompressedLength(int originalLength) {
+		if (originalLength < 0) throw new IllegalArgumentException("Original length cannot be negative");
+		return originalLength;
+	}
+
+	@Override
+	public CompressionType getCompressionType() {
+		return CompressionType.NONE;
 	}
 }

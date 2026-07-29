@@ -17,6 +17,7 @@ val targetName = sc.current.project
 val minecraftVersion = property("deps.minecraft") as String
 val fabricApiVersion = property("deps.fabric-api") as String
 val fabricLoaderVersion = property("deps.fabric-loader") as String
+val mcholepunchVersion = versionProperty("versionMcholepunch")
 
 version = "${property("mod_version")}"
 group = "${property("mod.group")}"
@@ -26,9 +27,29 @@ loom {
 	accessWidenerPath = rootProject.file(fabric.accessWidenerPath)
 }
 
+repositories {
+	flatDir {
+		name = "mcholepunchLibs"
+		dirs(rootProject.file("libs"))
+	}
+}
+
 dependencies {
 	implementation(project(":core")) { isTransitive = false }
 	implementation(project(":loader-core")) { isTransitive = false }
+
+	compileOnly(":mcholepunch-core:$mcholepunchVersion")
+	if (sc.current.parsed >= "1.20.1") {
+		// Fabric 1.20–1.21.x shares intermediary runtime names; Fabric 26.x uses Mojmap.
+		val adapterName =
+			if (sc.current.parsed >= "26.1") {
+				"mcholepunch-fabric-mojmap"
+			} else {
+				"mcholepunch-fabric-intermediary"
+			}
+		val adapter = modImplementation(":$adapterName:$mcholepunchVersion") { isTransitive = false }
+		include(adapter!!)
+	}
 
 	minecraft("com.mojang:minecraft:$minecraftVersion")
 	if (!fabric.isUnobf) {

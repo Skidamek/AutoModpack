@@ -73,9 +73,7 @@ val mergeJarTask =
 	tasks.register<MergeJarTask>("mergeJar") {
 		this.mergedDirPath.set(project.rootProject.projectDir.absolutePath + "/merged")
 		this.rootProjectPath.set(project.rootProject.projectDir.absolutePath)
-		this.libsPath.set(project.rootProject.projectDir.absolutePath + "/libs")
 		this.loaderModuleName.set(getLoaderModuleName(project.name))
-		this.zstdVersion.set(versionProperty("versionZstdJni"))
 		this.buildDirectory.set(layout.buildDirectory)
 		this.outputJar.set(layout.buildDirectory.file("merged-jar-path.txt"))
 

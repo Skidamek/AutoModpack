@@ -8,6 +8,22 @@ TLS has method of verifying the server's identity using a certificate which is c
 
 AutoModpack treats the original Minecraft hostname selected by the player as the server identity. SRV targets, server transfers, and the server-advertised modpack address and port do not replace that identity; they are routing information only. A CA-signed certificate must be valid for the original Minecraft hostname, while clients can authenticate a self-signed certificate through a DNSSEC fingerprint under the same hostname. When neither automatic method is available, AutoModpack uses permanent origin-scoped fingerprint trust. Read [certificate verification](certificate) for setup and fallback details.
 
+### Connection modes
+
+Every mode establishes an AutoModpack TLS session, but each uses a different opening:
+
+```text
+HOLEPUNCH     Minecraft Handshake/Login takeover → TLS → AutoModpack protocol
+MAGIC_PACKET  AMMH → AMOK → TLS → AutoModpack protocol
+DIRECT        TLS → AutoModpack protocol
+```
+
+The modes are strict and clients do not retry another mode after failure. On a shared Minecraft listener, non-AMMH traffic is returned to Minecraft unchanged. On a dedicated `MAGIC_PACKET` listener, non-AMMH traffic is rejected. A `DIRECT` listener never responds with AMOK.
+
+Optional PROXY protocol metadata may precede dedicated `MAGIC_PACKET` and `DIRECT` connections. It is not consumed by the shared Minecraft-port handler.
+
+`disableInternalTLS` changes only where the required TLS session is terminated. Clients still start TLS; when internal termination is disabled, a compatible external component must decrypt the connection before forwarding AutoModpack protocol traffic.
+
 ### Direct Downloads
 
 AutoModpack uses direct download links from Modrinth and CurseForge APIs to download most of your modpack files.
@@ -17,10 +33,10 @@ However, if file you are providing in the modpack is not available on Modrinth o
 
 ### Compression
 
-To speed up the download, AutoModpack compresses the modpack files using [Zstandard](https://facebook.github.io/zstd/) compression algorithm.
-This algorithm is very fast and provides great compression ratio, which means that the modpack files are smaller and faster to download.
-This is especially useful for larger modpacks or slower internet connections.
-However, this only applies to files downloaded from your server.
+To speed up downloads, AutoModpack uses pure-Java [Zstandard](https://facebook.github.io/zstd/) compression by default.
+The transfer protocol also defines None, Gzip, Snappy, LZ4, and LZO codecs; peers select one codec for the connection before file frames begin.
+Zstandard offers the best general compression ratio and performance for modpack transfers without shipping or extracting native binaries.
+Compression applies only to files downloaded from your server.
 
 ### Authorization
 

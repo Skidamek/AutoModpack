@@ -21,12 +21,12 @@ Install the official [AutoModpack Velocity plugin](https://modrinth.com/plugin/a
 
 Gate Lite forwards the packets out of the box. Your issue here is routing.
 
-Clients default to downloading the modpack on the same port they used to connect to the server. The proxy changes that port. If you leave it alone, the client tries to pull files from the wrong place and the connection fails.
+The endpoint sent to clients is controlled by `advertisedEndpointHost` and `advertisedEndpointPort`. Set them to the public route that accepts the selected `connectionMode`; they do not need to match the process's `bindAddress` or `bindPort` when a proxy or separate host is involved.
 
-You override this behavior with the `advertisedEndpointPort` setting.
+- `HOLEPUNCH` must route the marked Minecraft Login connection to a server with holepunch handling enabled.
+- `MAGIC_PACKET` must preserve AMMH/AMOK before the TLS session. With `bindPort: -1`, route it to the backend Minecraft port; with an explicit port, route it to the dedicated magic-only listener.
+- `DIRECT` must route TLS directly to an explicit dedicated listener or another endpoint that handles it. `DIRECT` with `bindPort: -1` starts no built-in listener.
 
-If your `bindPort` is set to `-1`
-- Set `advertisedEndpointPort` to the port your backend Minecraft server uses to listen for connections.
+Optional PROXY protocol metadata is accepted before dedicated `MAGIC_PACKET` and `DIRECT` connections. It is not consumed by shared Minecraft-port magic routing.
 
-If your `bindPort` is set to a specific number:
-- Set `advertisedEndpointPort` to the port your modpack host uses. This is usually the exact same number you used for `bindPort`.
+When `disableInternalTLS` is enabled, clients still initiate TLS. The proxy or another compatible component must terminate it and forward already-decrypted AutoModpack traffic.

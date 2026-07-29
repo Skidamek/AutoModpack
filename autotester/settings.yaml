@@ -75,7 +75,7 @@ automodpack:
     advertisedEndpointHost: ""
     advertisedEndpointPort: -1
     disableInternalTLS: false
-    requireMagicPackets: false
+    connectionMode: HOLEPUNCH
     updateIpsOnEveryStart: false
     bandwidthLimit: 0
     validateSecrets: true
