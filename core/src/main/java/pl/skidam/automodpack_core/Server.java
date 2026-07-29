@@ -65,12 +65,14 @@ public class Server {
 
 		Path hostGenerations = modpackDir.resolve(hostGenerationsDir.getFileName());
 		modpackExecutor = new ModpackExecutor(modpackDir, modpackDir, hostGenerations);
-		var generation = modpackExecutor.generateNew();
+		var generation = modpackExecutor.publish();
 
-		if (generation.succeeded()) {
-			LOGGER.info("Modpack generation {}!", generation.status());
+		if (generation instanceof ModpackExecutor.Published || generation instanceof ModpackExecutor.NoChanges) {
+			LOGGER.info("Modpack generation completed!");
+		} else if (generation instanceof ModpackExecutor.PublishFailed failed) {
+			LOGGER.error("Failed to generate modpack", failed.failure());
 		} else {
-			LOGGER.error("Failed to generate modpack!", generation.failure());
+			LOGGER.error("Failed to generate modpack: operation was rejected");
 		}
 
 		LOGGER.info("Starting server on port {}", serverConfig.bindPort);
