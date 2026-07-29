@@ -23,6 +23,7 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 
+import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.handler.CompressionDecoder;
 import pl.skidam.automodpack_core.protocol.netty.handler.CompressionEncoder;
@@ -129,7 +130,7 @@ public final class ServerHolepunchBridge {
 			channel = new EmbeddedChannel();
 			channel.attr(NettyServer.REAL_REMOTE_ADDR).set(remoteAddress);
 			channel.attr(NettyServer.PROTOCOL_VERSION).set(LATEST_SUPPORTED_PROTOCOL_VERSION);
-			channel.attr(NettyServer.COMPRESSION_TYPE).set(COMPRESSION_ZSTD);
+			channel.attr(NettyServer.COMPRESSION_TYPE).set(CompressionType.ZSTD);
 			channel.attr(NettyServer.CHUNK_SIZE).set(DEFAULT_CHUNK_SIZE);
 
 			channel.pipeline().addLast("error-printer-first", new ErrorPrinter());

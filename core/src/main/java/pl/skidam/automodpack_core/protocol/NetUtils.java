@@ -34,11 +34,6 @@ public class NetUtils {
 	// Protocol versions
 	public static final byte LATEST_SUPPORTED_PROTOCOL_VERSION = 0x01;
 
-	// Compression types
-	public static final byte COMPRESSION_NONE = 0x00;
-	public static final byte COMPRESSION_ZSTD = 0x01;
-	public static final byte COMPRESSION_GZIP = 0x02;
-
 	// Message types and configuration message types should not overlap
 	// Message types
 	public static final byte ECHO_TYPE = 0x00;

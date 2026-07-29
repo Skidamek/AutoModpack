@@ -8,64 +8,55 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 
 import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
 import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
+import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 
-/**
- * Generic compression decoder that uses a CompressionCodec for decoding.
- * The specific compression algorithm is determined by the codec instance provided.
- */
 public class CompressionDecoder extends ByteToMessageDecoder {
-
 	private CompressionCodec codec;
+	private CompressionType compressionType;
 
 	@Override
 	protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-		if (in.readableBytes() < 8) return;
-
-		var comp = ctx.channel().attr(NettyServer.COMPRESSION_TYPE).get();
-		codec = CompressionFactory.getCodec(comp);
+		if (in.readableBytes() < Integer.BYTES * 2) return;
 
 		in.markReaderIndex();
 		int compressedLength = in.readInt();
 		int originalLength = in.readInt();
-
-		// Define a safety buffer. Compression usually shrinks data, but headers can add overhead.
-		var chunkSize = ctx.channel().attr(NettyServer.CHUNK_SIZE).get();
-		int maxAllowedSize = chunkSize + 8192;
-
-		// Validate lengths
-		if (compressedLength < 0 || compressedLength > maxAllowedSize) {
-			throw new IllegalArgumentException("Frame compressed length (" + compressedLength + ") exceeds limit (" + maxAllowedSize + ")");
-		}
+		int chunkSize = ctx.channel().attr(NettyServer.CHUNK_SIZE).get();
+		CompressionCodec codec = codec(ctx);
 
 		if (originalLength < 0 || originalLength > chunkSize) {
 			throw new IllegalArgumentException("Frame original length (" + originalLength + ") exceeds chunk size (" + chunkSize + ")");
 		}
 
-		// Check if we have enough data
+		int maxCompressedLength = codec.maxCompressedLength(originalLength);
+		if (compressedLength < 0 || compressedLength > maxCompressedLength) {
+			throw new IllegalArgumentException("Frame compressed length (" + compressedLength + ") exceeds codec limit (" + maxCompressedLength + ")");
+		}
+
 		if (in.readableBytes() < compressedLength) {
 			in.resetReaderIndex();
 			return;
 		}
 
-		// Read compressed data
 		byte[] compressed = new byte[compressedLength];
 		in.readBytes(compressed);
-
-		// Decompress using the codec
 		byte[] decompressed = codec.decompress(compressed, originalLength);
-
-		// Create output buffer with decompressed data
 		ByteBuf decompressedBuf = ctx.alloc().buffer(originalLength);
 		decompressedBuf.writeBytes(decompressed);
 		out.add(decompressedBuf);
 	}
 
-	/**
-	 * Gets the compression codec used by this decoder.
-	 *
-	 * @return the compression codec
-	 */
+	private CompressionCodec codec(ChannelHandlerContext ctx) {
+		CompressionType selected = ctx.channel().attr(NettyServer.COMPRESSION_TYPE).get();
+		if (selected == null) throw new IllegalStateException("Compression type has not been configured");
+		if (codec == null || compressionType != selected) {
+			codec = CompressionFactory.createCodec(selected);
+			compressionType = selected;
+		}
+		return codec;
+	}
+
 	public CompressionCodec getCodec() {
 		return codec;
 	}

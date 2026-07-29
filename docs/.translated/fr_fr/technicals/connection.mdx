@@ -17,10 +17,10 @@ Cependant, si un fichier que vous fournissez dans le modpack n'est pas disponibl
 
 ### Compression
 
-Pour accélérer le téléchargement, AutoModpack compresse les fichiers du modpack à l'aide de l'algorithme de compression [Zstandard](https://facebook.github.io/zstd/).
-Cet algorithme est très rapide et offre un excellent taux de compression, ce qui signifie que les fichiers du modpack sont plus petits et plus rapides à télécharger.
-C'est particulièrement utile pour les modpacks plus volumineux ou les connexions Internet plus lentes.
-Cependant, cela ne s'applique qu'aux fichiers téléchargés depuis votre serveur.
+Pour accélérer les téléchargements, AutoModpack utilise par défaut la compression [Zstandard](https://facebook.github.io/zstd/) purement Java.
+Le protocole de transfert définit aussi les codecs None, Gzip, Snappy, LZ4 et LZO ; les pairs sélectionnent un codec pour la connexion avant le début des trames de fichier.
+Zstandard offre le meilleur équilibre général entre taux de compression et performances pour les transferts de modpacks, sans fournir ni extraire de bibliothèques natives.
+La compression s'applique uniquement aux fichiers téléchargés depuis votre serveur.
 
 ### Autorisation
 

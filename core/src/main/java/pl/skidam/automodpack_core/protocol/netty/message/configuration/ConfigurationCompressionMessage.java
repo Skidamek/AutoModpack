@@ -5,25 +5,26 @@ import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_COMPRES
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
+import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 import pl.skidam.automodpack_core.protocol.netty.message.ConfigurationMessage;
 
 public class ConfigurationCompressionMessage extends ConfigurationMessage {
 
-	private final byte compressionType;
+	private final CompressionType compressionType;
 
-	public ConfigurationCompressionMessage(byte version, byte compressionType) {
+	public ConfigurationCompressionMessage(byte version, CompressionType compressionType) {
 		super(version, CONFIGURATION_COMPRESSION_TYPE);
 		this.compressionType = compressionType;
 	}
 
-	public byte getCompressionType() {
+	public CompressionType getCompressionType() {
 		return compressionType;
 	}
 
 	public ByteBuf toByteBuf() {
 		ByteBuf buf = Unpooled.buffer(3);
 		super.toByteBuf(buf);
-		buf.writeByte(compressionType);
+		buf.writeByte(compressionType.wireId());
 		return buf;
 	}
 }

@@ -8,8 +8,6 @@ import java.io.IOException;
  */
 public interface CompressionCodec {
 
-	boolean isInitialized();
-
 	/**
 	 * Compresses the input data.
 	 *
@@ -63,10 +61,7 @@ public interface CompressionCodec {
 		return decompress(slice, originalLength);
 	}
 
-	/**
-	 * Gets the compression type identifier for this codec.
-	 *
-	 * @return the compression type constant from NetUtils
-	 */
-	byte getCompressionType();
+	int maxCompressedLength(int originalLength);
+
+	CompressionType getCompressionType();
 }

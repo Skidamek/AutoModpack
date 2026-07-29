@@ -24,13 +24,7 @@ abstract class MergeJarTask : DefaultTask() {
     abstract val rootProjectPath: Property<String>
 
     @get:Input
-    abstract val libsPath: Property<String>
-
-    @get:Input
     abstract val loaderModuleName: Property<String>
-
-    @get:Input
-    abstract val zstdVersion: Property<String>
 
     @get:Internal
     abstract val buildDirectory: DirectoryProperty
@@ -60,10 +54,6 @@ abstract class MergeJarTask : DefaultTask() {
             ?.single { it.isFile && !it.name.endsWith("-sources.jar") && it.name.endsWith(".jar") }
             ?: error("No loader jar found in ${loaderBuildDir.absolutePath}")
 
-        val libsDir = File(libsPath.get())
-        val zstdFile = File(libsDir, "zstd-jni-${zstdVersion.get()}.jar")
-        check(zstdFile.isFile) { "No ${zstdFile.name} found in libs directory! ${libsDir.absolutePath}" }
-
         val finalJar = File(mergedDir, jarToMerge.name)
         val manifest = mergeStonecutterMetadata(loaderFile, jarToMerge)
 
@@ -88,15 +78,10 @@ abstract class MergeJarTask : DefaultTask() {
             zipStream.putNextEntry(ZipEntry("META-INF/jarjar/automodpack-mod.jar"))
             FileInputStream(jarToMerge).buffered().use { it.copyTo(zipStream) }
             zipStream.closeEntry()
-
-            // Add zstd jar.
-            zipStream.putNextEntry(ZipEntry("META-INF/jarjar/zstd-jni.jar"))
-            FileInputStream(zstdFile).buffered().use { it.copyTo(zipStream) }
-            zipStream.closeEntry()
         }
 
         outputJar.get().asFile.writeText(finalJar.absolutePath)
-        println("Merged: ${jarToMerge.name} and ${zstdFile.name} from: ${loaderFile.name} into: ${finalJar.name} Took: ${System.currentTimeMillis() - time}ms")
+        println("Merged: ${jarToMerge.name} with ${loaderFile.name} into: ${finalJar.name} Took: ${System.currentTimeMillis() - time}ms")
     }
 
     private fun mergeStonecutterMetadata(loaderFile: File, modFile: File): ByteArray {

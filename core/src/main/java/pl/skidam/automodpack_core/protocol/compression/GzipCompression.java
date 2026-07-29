@@ -1,7 +1,5 @@
 package pl.skidam.automodpack_core.protocol.compression;
 
-import static pl.skidam.automodpack_core.protocol.NetUtils.COMPRESSION_GZIP;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -12,11 +10,6 @@ import java.util.zip.GZIPOutputStream;
  * GZIP compression codec implementation.
  */
 public class GzipCompression implements CompressionCodec {
-
-	@Override
-	public boolean isInitialized() {
-		return true;
-	}
 
 	@Override
 	public byte[] compress(byte[] input) throws IOException {
@@ -48,8 +41,8 @@ public class GzipCompression implements CompressionCodec {
 				totalRead += bytesRead;
 			}
 
-			if (totalRead != originalLength) {
-				throw new IOException("Decompressed length (" + totalRead + ") does not match expected length (" + originalLength + ")");
+			if (totalRead != originalLength || gzipInputStream.read() != -1) {
+				throw new IOException("Decompressed length does not match expected length (" + originalLength + ")");
 			}
 
 			return decompressed;
@@ -59,7 +52,13 @@ public class GzipCompression implements CompressionCodec {
 	}
 
 	@Override
-	public byte getCompressionType() {
-		return COMPRESSION_GZIP;
+	public int maxCompressedLength(int originalLength) {
+		if (originalLength < 0) throw new IllegalArgumentException("Original length cannot be negative");
+		return Math.addExact(originalLength, Math.addExact(originalLength / 16, 80));
+	}
+
+	@Override
+	public CompressionType getCompressionType() {
+		return CompressionType.GZIP;
 	}
 }

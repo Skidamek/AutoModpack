@@ -30,6 +30,7 @@ val antlrVersion = versionProperty("versionAntlr")
 val h2Version = versionProperty("versionH2")
 val junitVersion = versionProperty("versionJunit")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
+val aircompressorVersion = versionProperty("versionAircompressor")
 
 val deps =
 	listOf(
@@ -41,6 +42,7 @@ val deps =
 		"org.tomlj:tomlj:$tomljVersion",
 		"org.antlr:antlr4-runtime:$antlrVersion",
 		"com.h2database:h2-mvstore:$h2Version",
+		"io.airlift:aircompressor:$aircompressorVersion",
 	)
 
 dependencies {

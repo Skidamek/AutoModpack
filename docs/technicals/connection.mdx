@@ -33,10 +33,10 @@ However, if file you are providing in the modpack is not available on Modrinth o
 
 ### Compression
 
-To speed up the download, AutoModpack compresses the modpack files using [Zstandard](https://facebook.github.io/zstd/) compression algorithm.
-This algorithm is very fast and provides great compression ratio, which means that the modpack files are smaller and faster to download.
-This is especially useful for larger modpacks or slower internet connections.
-However, this only applies to files downloaded from your server.
+To speed up downloads, AutoModpack uses pure-Java [Zstandard](https://facebook.github.io/zstd/) compression by default.
+The transfer protocol also defines None, Gzip, Snappy, LZ4, and LZO codecs; peers select one codec for the connection before file frames begin.
+Zstandard offers the best general compression ratio and performance for modpack transfers without shipping or extracting native binaries.
+Compression applies only to files downloaded from your server.
 
 ### Authorization
 
