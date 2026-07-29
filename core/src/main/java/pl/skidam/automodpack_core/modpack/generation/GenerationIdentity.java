@@ -5,6 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -60,7 +61,13 @@ public final class GenerationIdentity {
 	}
 
 	public static String patchNotesDigest(String notes) {
-		return sha1(GenerationMetadata.normalizeNotes(notes).getBytes(StandardCharsets.UTF_8));
+		return sha1(GenerationMetadata.validateNotes(notes).getBytes(StandardCharsets.UTF_8));
+	}
+
+	public static String deletionRequestId(String path, String sha1) {
+		CanonicalEncoder encoder = new CanonicalEncoder().string("automodpack-deletion-v1").string(path)
+				.string(sha1.toLowerCase(Locale.ROOT));
+		return sha1(encoder.bytes());
 	}
 
 	private static void writeStrings(CanonicalEncoder encoder, Iterable<String> values) {
