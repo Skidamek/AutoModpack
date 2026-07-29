@@ -21,12 +21,12 @@ import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.protocol.netty.TrafficShaper;
 
 class ProtocolServerHandlerTest {
-	private Jsons.ServerConfigFieldsV2 previousConfig;
+	private Jsons.ServerConfigFieldsV3 previousConfig;
 
 	@BeforeEach
 	void setUp() {
 		previousConfig = Constants.serverConfig;
-		Constants.serverConfig = new Jsons.ServerConfigFieldsV2();
+		Constants.serverConfig = new Jsons.ServerConfigFieldsV3();
 	}
 
 	@AfterEach
