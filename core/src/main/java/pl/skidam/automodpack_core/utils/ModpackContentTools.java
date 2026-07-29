@@ -9,6 +9,8 @@ import java.util.Optional;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
 
 public class ModpackContentTools {
 	public static Jsons.ModpackContentFields read(Path path) {
@@ -16,12 +18,25 @@ public class ModpackContentTools {
 	}
 
 	public static void write(Path path, Jsons.ModpackContentFields content) throws IOException {
-		if (!isValid(content)) throw new ConfigTools.ConfigException("Invalid modpack content");
+		if (!isValid(content)) throw new ConfigTools.ConfigException("Invalid selected modpack content");
 		ConfigTools.writeAtomic(path, content);
 	}
 
+	public static GroupManifest readComplete(Path path) {
+		return ConfigTools.read(path, Jsons.CompleteModpackContentFields.class).map(GroupManifestValidator::validate).orElse(null);
+	}
+
+	public static Jsons.CompleteModpackContentFields readCompleteFields(Path path) {
+		GroupManifest manifest = readComplete(path);
+		return manifest == null ? null : manifest.toFields();
+	}
+
+	public static void writeComplete(Path path, GroupManifest manifest) throws IOException {
+		ConfigTools.writeAtomic(path, manifest.toFields());
+	}
+
 	private static boolean isValid(Jsons.ModpackContentFields content) {
-		return content != null && content.list != null;
+		return content != null && content.list != null && content.selectedGroups != null && content.nonModpackFilesToDelete != null;
 	}
 
 	public static String getFileType(String file, Jsons.ModpackContentFields list) {
@@ -44,9 +59,9 @@ public class ModpackContentTools {
 	public static Optional<Path> getModpackContentFile(Path modpackDir) {
 		if (!Files.exists(modpackDir)) return Optional.empty();
 
-		Path path = modpackDir.getParent().resolve(hostModpackContentFile.getFileName()); // server
+		Path path = modpackDir.getParent().resolve(modpackContentFileName); // server
 		if (!Files.exists(path)) {
-			path = modpackDir.resolve(hostModpackContentFile.getFileName()); // client
+			path = modpackDir.resolve(modpackContentFileName); // client
 			if (!Files.exists(path)) return Optional.empty();
 		}
 

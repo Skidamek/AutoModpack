@@ -9,6 +9,11 @@ import java.util.UUID;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
+import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
@@ -23,7 +28,12 @@ public final class UpdateTransaction {
 	public String transactionId;
 	public Purpose purpose;
 	public String modpackId;
+	public String completeManifestJson;
 	public String targetManifestJson;
+	public String targetPlatform;
+	public boolean expectedPriorSelectionPresent;
+	public List<String> expectedPriorRequestedGroups;
+	public List<String> requestedGroups;
 	public String canonicalModpackDirectory;
 	public List<Operation> operations;
 	public List<ProjectedFile> projectedFinalState;
@@ -33,10 +43,15 @@ public final class UpdateTransaction {
 
 	public UpdateTransaction() {}
 
-	public static UpdateTransaction create(UpdatePlan plan, Jsons.ModpackContentFields targetManifest, Path modpackDirectory) {
+	public static UpdateTransaction create(UpdatePlan plan, SelectedModpackTarget target, Path modpackDirectory) {
 		UpdateTransaction transaction = base(Purpose.MODPACK_UPDATE);
 		transaction.modpackId = plan.modpackId();
-		transaction.targetManifestJson = ConfigTools.GSON.toJson(targetManifest);
+		transaction.completeManifestJson = ConfigTools.GSON.toJson(target.completeFields());
+		transaction.targetManifestJson = ConfigTools.GSON.toJson(target.flatTarget());
+		transaction.targetPlatform = target.platform().id();
+		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
+		transaction.expectedPriorRequestedGroups = target.expectedPriorIntent() == null ? List.of() : new ArrayList<>(target.expectedPriorIntent().requestedGroups());
+		transaction.requestedGroups = new ArrayList<>(target.selection().intent().requestedGroups());
 		transaction.canonicalModpackDirectory = modpackDirectory.toAbsolutePath().normalize().toString();
 		transaction.operations = List.copyOf(plan.operations());
 		transaction.projectedFinalState = List.copyOf(plan.projectedFinalState());
@@ -89,6 +104,22 @@ public final class UpdateTransaction {
 
 	public Jsons.ModpackContentFields targetManifest() {
 		return ConfigTools.parse(targetManifestJson, Jsons.ModpackContentFields.class);
+	}
+
+	public GroupManifest completeManifest() {
+		return GroupManifestValidator.validate(ConfigTools.parse(completeManifestJson, Jsons.CompleteModpackContentFields.class));
+	}
+
+	public ClientPlatform platform() {
+		return ClientPlatform.parse(targetPlatform);
+	}
+
+	public SelectionIntent expectedPriorIntent() {
+		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups) : null;
+	}
+
+	public SelectionIntent targetIntent() {
+		return new SelectionIntent(requestedGroups);
 	}
 
 	public record LegacyDummyTarget(Root root, String relativePath) {}
