@@ -230,9 +230,9 @@ public class Commands {
 	}
 
 	private static String requirePublishedModpackId() {
-		Jsons.ModpackContentFields content = ModpackContentTools.read(hostModpackContentFile);
-		if (content == null || !ModpackId.isValid(content.modpackId)) throw new IllegalArgumentException("No valid published modpack ID is available; generate the modpack first");
-		return content.modpackId;
+		var content = ModpackContentTools.readComplete(hostModpackContentFile);
+		if (content == null || !ModpackId.isValid(content.modpackId())) throw new IllegalArgumentException("No valid published modpack ID is available; generate the modpack first");
+		return content.modpackId();
 	}
 
 	private static int writeBootstrap(CommandContext<CommandSourceStack> context, Jsons.KnownHostsBootstrapFields fields, boolean install) {

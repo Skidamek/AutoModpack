@@ -19,7 +19,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.stream.ChunkedNioStream;
 import io.netty.handler.stream.ChunkedWriteHandler;
-import io.netty.util.CharsetUtil;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -95,7 +94,8 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		LOGGER.info("Received full modpack regeneration request after failed hashes: {}", hashes);
 		try {
 			var manifest = modpackExecutor.regenerateFullManifest().join();
-			LOGGER.info("Sending regenerated full manifest {} with {} files", manifest.modpackId, manifest.list.size());
+			int files = manifest.groups.values().stream().mapToInt(group -> group.files.size()).sum();
+			LOGGER.info("Sending regenerated full catalogue {} with {} group entries", manifest.modpackId, files);
 			sendFile(context, new byte[0]);
 		} catch (CompletionException e) {
 			LOGGER.error("Failed to regenerate full modpack manifest", e);
@@ -120,7 +120,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 	}
 
 	private void sendFile(ChannelHandlerContext ctx, byte[] bsha1) throws IOException {
-		final String sha1 = new String(bsha1, CharsetUtil.UTF_8);
+		final String sha1 = new String(bsha1, StandardCharsets.UTF_8);
 		final Optional<Path> optionalPath = resolvePath(sha1);
 
 		if (optionalPath.isEmpty() || !Files.exists(optionalPath.get())) {
@@ -175,7 +175,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 	}
 
 	private void sendError(ChannelHandlerContext ctx, byte version, String errorMessage) {
-		byte[] errMsgBytes = errorMessage.getBytes(CharsetUtil.UTF_8);
+		byte[] errMsgBytes = errorMessage.getBytes(StandardCharsets.UTF_8);
 		ByteBuf errorBuf = ctx.alloc().buffer(1 + 1 + 4 + errMsgBytes.length);
 		errorBuf.writeByte(version);
 		errorBuf.writeByte(ERROR);
