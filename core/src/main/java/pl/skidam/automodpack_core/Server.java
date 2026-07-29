@@ -64,7 +64,9 @@ public class Server {
 			ConfigTools.writeAtomic(serverCoreConfigFile, serverCoreConfig);
 		}
 
-		modpackExecutor = new ModpackExecutor(modpackDir, modpackDir, hostModpackContentFile);
+		Path hostGenerations = modpackDir.resolve(hostGenerationsDir.getFileName());
+		modpackExecutor = new ModpackExecutor(modpackDir, modpackDir, hostModpackContentFile,
+				hostGenerations.resolve(hostGenerationObjectsDir.getFileName()), hostGenerations.resolve(hostGenerationStagingDir.getFileName()));
 		boolean generated = modpackExecutor.generateNew();
 
 		if (generated) {

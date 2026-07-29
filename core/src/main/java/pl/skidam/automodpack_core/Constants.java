@@ -35,6 +35,9 @@ public class Constants {
 	public static final Path automodpackDir = Path.of("automodpack");
 	public static final Path storeDir = automodpackDir.resolve("store");
 	public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
+	public static final Path hostGenerationsDir = automodpackDir.resolve("host-generations");
+	public static final Path hostGenerationObjectsDir = hostGenerationsDir.resolve("objects");
+	public static final Path hostGenerationStagingDir = hostGenerationsDir.resolve("staging");
 	// TODO More server modpacks
 	// Main - required
 	// Addons - optional addon packs

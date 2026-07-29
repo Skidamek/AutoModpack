@@ -16,7 +16,6 @@ import pl.skidam.automodpack_core.modpack.group.LogicalPath;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
-import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
 
 public class ModpackExecutor {
 	private final ThreadPoolExecutor creationExecutor = (ThreadPoolExecutor) Executors.newFixedThreadPool(
@@ -26,17 +25,23 @@ public class ModpackExecutor {
 	private final Path serverRoot;
 	private final Path groupRoot;
 	private final Path manifestPath;
+	private final Path objectsDirectory;
+	private final Path stagingDirectory;
 	private final ModpackCandidateScanner scanner = new ModpackCandidateScanner();
 	private CompletableFuture<Jsons.CompleteModpackContentFields> refreshInFlight;
 
 	public ModpackExecutor() {
-		this(SmartFileUtils.CWD, hostModpackDir, hostModpackContentFile);
+		this(SmartFileUtils.CWD, hostModpackDir, hostModpackContentFile, hostGenerationObjectsDir, hostGenerationStagingDir);
 	}
 
-	public ModpackExecutor(Path serverRoot, Path groupRoot, Path manifestPath) {
+	public ModpackExecutor(Path serverRoot, Path groupRoot, Path manifestPath, Path objectsDirectory, Path stagingDirectory) {
 		this.serverRoot = serverRoot.toAbsolutePath().normalize();
 		this.groupRoot = groupRoot.toAbsolutePath().normalize();
 		this.manifestPath = manifestPath.toAbsolutePath().normalize();
+		this.objectsDirectory = objectsDirectory.toAbsolutePath().normalize();
+		this.stagingDirectory = stagingDirectory.toAbsolutePath().normalize();
+		if (this.objectsDirectory.startsWith(this.stagingDirectory) || this.stagingDirectory.startsWith(this.objectsDirectory))
+			throw new IllegalArgumentException("Managed object and staging directories must be separate");
 	}
 
 	public boolean generateNew() {
@@ -50,11 +55,10 @@ public class ModpackExecutor {
 				Set<Jsons.ModpackContentFields.FileToDelete> deletions = deletionMetadata(previous);
 				ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
 						LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups, serverConfig.selectionTags, deletions,
-						serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, creationExecutor);
-				try (FileMetadataCache cache = FileMetadataCache.open(hashCacheDBFile)) {
-					ModpackCandidate candidate = scanner.scan(request, cache);
-					new LegacyCandidatePublisher(manifestPath, hostServer).publish(candidate);
-					LOGGER.info("Modpack candidate published with {} groups and {} unique objects", candidate.manifest().groups().size(), candidate.hostedPaths().size());
+						serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, stagingDirectory, creationExecutor);
+				try (ModpackCandidate candidate = scanner.scan(request)) {
+					new LegacyCandidatePublisher(manifestPath, objectsDirectory, stagingDirectory, hostServer).publish(candidate);
+					LOGGER.info("Modpack candidate published with {} groups and {} unique objects", candidate.manifest().groups().size(), candidate.objects().size());
 				}
 				return true;
 			} catch (Exception e) {
@@ -66,6 +70,7 @@ public class ModpackExecutor {
 		}
 	}
 
+	// Transitional until G3: client refresh can still trigger a source scan.
 	public CompletableFuture<Jsons.CompleteModpackContentFields> regenerateFullManifest() {
 		synchronized (generationLock) {
 			if (refreshInFlight != null && !refreshInFlight.isDone()) return refreshInFlight;
@@ -79,6 +84,7 @@ public class ModpackExecutor {
 		}
 	}
 
+	// Transitional until G3: startup still reconstructs legacy serving from mutable sources.
 	public boolean loadLast() {
 		synchronized (generationLock) {
 			if (!generating.compareAndSet(false, true)) return false;
@@ -174,6 +180,8 @@ public class ModpackExecutor {
 			groupDirectories.put(groupId, groupDirectory);
 		}
 		Files.createDirectories(groupRoot);
+		Files.createDirectories(objectsDirectory);
+		Files.createDirectories(stagingDirectory);
 		for (Path groupDirectory : groupDirectories.values()) Files.createDirectories(groupDirectory);
 		Path main = groupDirectories.get("main");
 		if (main == null) return;
