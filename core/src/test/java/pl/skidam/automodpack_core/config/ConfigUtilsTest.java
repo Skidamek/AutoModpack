@@ -36,7 +36,7 @@ class ConfigUtilsTest {
 		String previousVersion = Constants.MC_VERSION;
 		String previousLoader = Constants.LOADER;
 		try {
-			Jsons.ServerConfigFieldsV2 config = new Jsons.ServerConfigFieldsV2();
+			Jsons.ServerConfigFieldsV3 config = new Jsons.ServerConfigFieldsV3();
 			config.bindPort = 24444;
 
 			Constants.MC_VERSION = "1.20.1";

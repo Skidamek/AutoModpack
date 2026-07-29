@@ -28,7 +28,6 @@ public class ConfigUtils {
 			LOGGER.warn("HOLEPUNCH connection mode is unavailable on " + LOADER + " " + MC_VERSION + ". Falling back to MAGIC_PACKET");
 		}
 
-		Set<String> fixedSyncedFiles = new LinkedHashSet<>(config.syncedFiles.size());
 		Map<String, String> fixedNonModpackFilesToDelete = new LinkedHashMap<>(config.nonModpackFilesToDelete.size());
 
 		String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";

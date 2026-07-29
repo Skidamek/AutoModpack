@@ -161,7 +161,7 @@ public class Jsons {
 		@SerializedName(value = "advertisedEndpointPort", alternate = "portToSend")
 		public int advertisedEndpointPort = -1;
 		public boolean disableInternalTLS = false;
-		public boolean requireMagicPackets = false;
+		public ModpackConnectionMode connectionMode = ModpackConnectionMode.defaultFor(Constants.MC_VERSION, Constants.LOADER);
 		public boolean updateIpsOnEveryStart = false;
 		public int bandwidthLimit = 0;
 		public boolean validateSecrets = true;
