@@ -1,5 +1,10 @@
 package pl.skidam.automodpack_core.modpack.generation;
 
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Objects;
@@ -19,6 +24,7 @@ public record GenerationMetadata(
 	public static final int CURRENT_SCHEMA_VERSION = 1;
 	public static final String ROOT_PARENT = "";
 	public static final String NO_ROLLBACK_TARGET = "";
+	public static final int MAX_PATCH_NOTES_UTF8_BYTES = 16 * 1024;
 	private static final Pattern DIGEST = Pattern.compile("[0-9a-f]{40}");
 
 	public GenerationMetadata {
@@ -36,6 +42,28 @@ public record GenerationMetadata(
 	public static String normalizeNotes(String notes) {
 		if (notes == null || notes.isEmpty()) return "";
 		return notes.replace("\r\n", "\n").replace('\r', '\n');
+	}
+
+	public static String validateNotes(String notes) {
+		Objects.requireNonNull(notes, "Patch notes are missing");
+		byte[] original = encodeUtf8(notes);
+		if (original.length > MAX_PATCH_NOTES_UTF8_BYTES) throw new IllegalArgumentException("Patch notes exceed the 16 KiB UTF-8 limit");
+		String normalized = normalizeNotes(notes);
+		if (encodeUtf8(normalized).length > MAX_PATCH_NOTES_UTF8_BYTES)
+			throw new IllegalArgumentException("Patch notes exceed the 16 KiB UTF-8 limit");
+		return normalized;
+	}
+
+	private static byte[] encodeUtf8(String value) {
+		try {
+			ByteBuffer encoded = StandardCharsets.UTF_8.newEncoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT)
+					.encode(CharBuffer.wrap(value));
+			byte[] bytes = new byte[encoded.remaining()];
+			encoded.get(bytes);
+			return bytes;
+		} catch (CharacterCodingException e) {
+			throw new IllegalArgumentException("Patch notes are not valid UTF-8", e);
+		}
 	}
 
 	public Jsons.CompleteModpackContentFields.GenerationFields toFields() {
@@ -78,8 +106,8 @@ public record GenerationMetadata(
 	}
 
 	private static String requireNormalizedNotes(String value) {
-		if (value == null) throw new IllegalArgumentException("Patch notes are missing");
-		if (!value.equals(normalizeNotes(value))) throw new IllegalArgumentException("Patch notes must use LF line endings");
+		String validated = validateNotes(value);
+		if (!value.equals(validated)) throw new IllegalArgumentException("Patch notes must use LF line endings");
 		return value;
 	}
 }

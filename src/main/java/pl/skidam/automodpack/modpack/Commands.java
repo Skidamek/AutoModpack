@@ -16,7 +16,9 @@ import pl.skidam.automodpack_core.auth.ServerAddressPin;
 import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
@@ -46,7 +48,17 @@ public class Commands {
 						.then(literal("generate")
 								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
 								.executes(Commands::generateModpack)
-						)
+								.then(literal("notes")
+										.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::generateModpack)))
+								.then(literal("preview")
+										.executes(Commands::previewModpack)
+										.then(literal("notes")
+												.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::previewModpack))))
+								.then(literal("if-state")
+										.then(argument("state-digest", StringArgumentType.word()).executes(Commands::guardedGenerateModpack)
+												.then(literal("notes")
+														.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::guardedGenerateModpack))))
+						))
 						.then(literal("host")
 								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
 								.executes(Commands::modpackHostAbout)
@@ -381,29 +393,97 @@ public class Commands {
 
 	private static int about(CommandContext<CommandSourceStack> context) {
 		send(context, "AutoModpack", ChatFormatting.GREEN, AM_VERSION, ChatFormatting.WHITE, false);
-		send(context, "/automodpack generate", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack generate [notes <text...>]", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
+		send(context, "/automodpack generate if-state <digest> [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
 	}
 
 	private static int generateModpack(CommandContext<CommandSourceStack> context) {
+		return runGeneration(context, false, false);
+	}
+
+	private static int previewModpack(CommandContext<CommandSourceStack> context) {
+		return runGeneration(context, true, false);
+	}
+
+	private static int guardedGenerateModpack(CommandContext<CommandSourceStack> context) {
+		return runGeneration(context, false, true);
+	}
+
+	private static int runGeneration(CommandContext<CommandSourceStack> context, boolean preview, boolean guarded) {
+		String notes = optionalArgument(context, "notes");
+		String stateDigest = guarded ? StringArgumentType.getString(context, "state-digest") : null;
 		Util.backgroundExecutor().execute(() -> {
-			if (modpackExecutor.isGenerating()) {
-				send(context, "Modpack is already generating! Please wait!", ChatFormatting.RED, false);
+			send(context, preview ? "Preparing modpack preview..." : "Generating modpack...", ChatFormatting.YELLOW, !preview);
+			long start = System.currentTimeMillis();
+			if (preview) {
+				ModpackExecutor.PreviewResult result = modpackExecutor.preview(notes);
+				if (result instanceof ModpackExecutor.PreviewReady ready) {
+					send(context, "PREVIEW READY" + elapsed(start), ChatFormatting.GREEN, false);
+					reportGenerationDetails(context, ready.state(), null, false);
+					if (ready.state().parent().isEmpty())
+						send(context, "Guarded publication is unavailable until an unguarded root generation exists", ChatFormatting.YELLOW, false);
+				} else if (result instanceof ModpackExecutor.PreviewBusy busy) {
+					send(context, "PREVIEW FAILED: " + busy.detail(), ChatFormatting.RED, false);
+				} else if (result instanceof ModpackExecutor.PreviewFailed failed) {
+					send(context, "PREVIEW FAILED: " + failed.failure().getClass().getSimpleName(), ChatFormatting.RED, false);
+				}
 				return;
 			}
-			send(context, "Generating Modpack...", ChatFormatting.YELLOW, true);
-			long start = System.currentTimeMillis();
-			var generation = modpackExecutor.generateNew();
-			if (generation.succeeded()) {
-				send(context, "Modpack generation " + generation.status() + "! took " + (System.currentTimeMillis() - start) + "ms", ChatFormatting.GREEN, true);
-			} else {
-				send(context, "Modpack generation failed! Check logs for more info.", ChatFormatting.RED, true);
+
+			ModpackExecutor.PublishResult result = guarded ? modpackExecutor.publishIfState(stateDigest, notes) : modpackExecutor.publish(notes);
+			if (result instanceof ModpackExecutor.Published published) {
+				send(context, "PUBLISHED" + elapsed(start), ChatFormatting.GREEN, true);
+				reportGenerationDetails(context, published.state(), published.current(), false);
+				published.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, false));
+			} else if (result instanceof ModpackExecutor.NoChanges noChanges) {
+				send(context, "NO_CHANGES" + elapsed(start), ChatFormatting.YELLOW, true);
+				reportGenerationDetails(context, noChanges.state(), noChanges.current(), false);
+				noChanges.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, false));
+			} else if (result instanceof ModpackExecutor.PublishGuardMismatch mismatch) {
+				send(context, "FAILED: " + mismatch.detail(), ChatFormatting.RED, true);
+				reportGenerationDetails(context, mismatch.state(), null, false);
+			} else if (result instanceof ModpackExecutor.PublishInvalidGuard invalid) {
+				send(context, "FAILED: " + invalid.detail(), ChatFormatting.RED, true);
+			} else if (result instanceof ModpackExecutor.PublishGuardUnsupported unsupported) {
+				send(context, "FAILED: " + unsupported.detail(), ChatFormatting.RED, true);
+			} else if (result instanceof ModpackExecutor.PublishBusy busy) {
+				send(context, "FAILED: " + busy.detail(), ChatFormatting.RED, true);
+			} else if (result instanceof ModpackExecutor.PublishFailed failed) {
+				send(context, "FAILED: " + failed.failure().getClass().getSimpleName(), ChatFormatting.RED, true);
 			}
 		});
-
 		return Command.SINGLE_SUCCESS;
+	}
+
+	private static String optionalArgument(CommandContext<CommandSourceStack> context, String name) {
+		try {
+			return StringArgumentType.getString(context, name);
+		} catch (IllegalArgumentException e) {
+			return null;
+		}
+	}
+
+	private static String elapsed(long start) {
+		return " took " + (System.currentTimeMillis() - start) + "ms";
+	}
+
+	private static void reportGenerationDetails(CommandContext<CommandSourceStack> context, ModpackExecutor.CandidateState state,
+			GenerationRecord current, boolean broadcast) {
+		state.parent().ifPresent(parent -> send(context, "Parent generation", ChatFormatting.WHITE, copyable(parent.metadata().generationId()), ChatFormatting.YELLOW, broadcast));
+		send(context, "Candidate state", ChatFormatting.WHITE, copyable(state.candidateStateDigest()), ChatFormatting.YELLOW, broadcast);
+		var diff = state.diff().summary();
+		send(context, String.format(Locale.ROOT, "Diff: +%d ~%d -%d metadata-only %d metadata changes %d", diff.addedFiles(), diff.modifiedFiles(), diff.removedFiles(),
+				diff.metadataOnlyFiles(), diff.metadataChanges()), ChatFormatting.WHITE, broadcast);
+		var summary = state.summary();
+		send(context, String.format(Locale.ROOT, "Candidate: %d groups, %d files, %d objects, %d exclusions, %d shadows", summary.groups(), summary.files(), summary.objects(),
+				summary.exclusions(), summary.shadows()), ChatFormatting.WHITE, broadcast);
+		state.patchNotesSource().ifPresent(source -> send(context, "Patch notes: " + source.name().toLowerCase(Locale.ROOT), ChatFormatting.WHITE, broadcast));
+		if (current != null)
+			send(context, "Current generation", ChatFormatting.WHITE, copyable(current.metadata().generationId()), ChatFormatting.YELLOW, broadcast);
 	}
 
 	private static void send(CommandContext<CommandSourceStack> context, String msg, ChatFormatting msgColor, boolean broadcast) {

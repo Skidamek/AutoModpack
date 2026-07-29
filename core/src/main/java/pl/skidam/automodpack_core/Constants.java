@@ -40,6 +40,7 @@ public class Constants {
 	public static final Path hostGenerationRecordsDir = hostGenerationsDir.resolve("records");
 	public static final Path hostGenerationObjectsDir = hostGenerationsDir.resolve("objects");
 	public static final Path hostGenerationStagingDir = hostGenerationsDir.resolve("staging");
+	public static final Path hostPatchNotesFile = automodpackDir.resolve("host-patch-notes.md");
 	// TODO More server modpacks
 	// Main - required
 	// Addons - optional addon packs

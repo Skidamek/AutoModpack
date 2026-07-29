@@ -21,7 +21,7 @@ public record GenerationRecord(GroupManifest manifest, GenerationMetadata metada
 	}
 
 	public static GenerationRecord create(GroupManifest manifest, String parentGenerationId, Instant createdAt, String patchNotes) {
-		String normalizedNotes = GenerationMetadata.normalizeNotes(patchNotes);
+		String normalizedNotes = GenerationMetadata.validateNotes(patchNotes);
 		String stateDigest = GenerationIdentity.stateDigest(manifest);
 		String notesDigest = GenerationIdentity.patchNotesDigest(normalizedNotes);
 		String parent = parentGenerationId == null ? GenerationMetadata.ROOT_PARENT : parentGenerationId;
