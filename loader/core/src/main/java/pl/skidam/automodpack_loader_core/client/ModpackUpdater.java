@@ -11,6 +11,12 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -44,7 +50,14 @@ import pl.skidam.automodpack_loader_core.utils.DownloadManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 // TODO: clean up this mess
-public class ModpackUpdater {
+public class ModpackUpdater implements AutoCloseable {
+	private static final long CONFIRMATION_TIMEOUT_MINUTES = 5;
+	private static final ScheduledExecutorService CONFIRMATION_TIMER = Executors.newSingleThreadScheduledExecutor(task -> {
+		Thread thread = new Thread(task, "AutoModpack confirmation timer");
+		thread.setDaemon(true);
+		return thread;
+	});
+
 	public Changelogs changelogs = new Changelogs();
 	public DownloadManager downloadManager;
 	public long totalBytesToDownload = 0;
@@ -54,7 +67,11 @@ public class ModpackUpdater {
 	private final Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new HashMap<>();
 	private final Jsons.ConnectionInfo connectionInfo;
 	private final Secrets.Secret modpackSecret;
+	private final DownloadClient downloadClient;
+	private final AtomicBoolean closed = new AtomicBoolean();
+	private final AtomicReference<ConfirmationState> confirmationState = new AtomicReference<>(ConfirmationState.INACTIVE);
 	private final UpdateLoopDetector updateLoopDetector = new UpdateLoopDetector();
+	private volatile ScheduledFuture<?> confirmationExpiry;
 	private Path modpackDir;
 	private Path modpackContentFile;
 
@@ -66,11 +83,33 @@ public class ModpackUpdater {
 		return serverModpackContent.list;
 	}
 
+	public ConfirmationState getConfirmationState() {
+		return confirmationState.get();
+	}
+
+	public void startConfirmedUpdate() {
+		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.STARTED)) return;
+		cancelConfirmationExpiry();
+		DownloadClient.NET_EXECUTOR.execute(() -> startUpdate(getModpackFileList()));
+	}
+
+	public void cancelConfirmation() {
+		if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED)) return;
+		cancelConfirmationExpiry();
+		close();
+	}
+
 	public ModpackUpdater(Jsons.ModpackContentFields modpackContent, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, Path modpackPath) {
+		this(modpackContent, connectionInfo, secret, modpackPath, null);
+	}
+
+	public ModpackUpdater(Jsons.ModpackContentFields modpackContent, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, Path modpackPath,
+			DownloadClient downloadClient) {
 		this.serverModpackContent = modpackContent;
 		this.connectionInfo = connectionInfo;
 		this.modpackSecret = secret;
 		this.modpackDir = modpackPath;
+		this.downloadClient = downloadClient;
 
 		if (this.connectionInfo == null || !this.connectionInfo.isComplete()) throw new IllegalArgumentException("connectionInfo is null or empty");
 	}
@@ -84,6 +123,7 @@ public class ModpackUpdater {
 				try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 					checkAndLoadModpack(cache);
 				}
+				close();
 				return;
 			}
 
@@ -93,7 +133,8 @@ public class ModpackUpdater {
 					startUpdate(serverModpackContent.list);
 				} else {
 					fullDownload = true;
-					new ScreenManager().danger(new ScreenManager().getScreen().orElseThrow(), this);
+					if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
+					new ScreenManager().danger(this);
 				}
 			} else {
 				// Handle existing modpack
@@ -105,14 +146,17 @@ public class ModpackUpdater {
 				} else {
 					try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 						checkAndLoadModpack(cache, serverModpackContent);
+						close();
 					}
 				}
 			}
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
 			new ReLauncher(modpackDir, UpdateType.UPDATE, changelogs).restart(true);
+			close();
 		} catch (Exception e) {
 			LOGGER.error("Error while initializing modpack updater", e);
+			close();
 		}
 	}
 
@@ -128,6 +172,8 @@ public class ModpackUpdater {
 			ApplyResult result = applyModpack(cache, serverModpackContent);
 			if (!result.requiresRestart()) return null;
 			return result.restartReasons().contains(RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : UpdateType.UPDATE;
+		} finally {
+			close();
 		}
 	}
 
@@ -227,9 +273,10 @@ public class ModpackUpdater {
 	}
 
 	public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
-		if (modpackSecret == null) {
-			LOGGER.error("Cannot update modpack, secret is null");
-			new ScreenManager().error("automodpack.error.critical", "Secret is null - cannot update", "automodpack.error.logs");
+		if (modpackSecret == null || downloadClient == null) {
+			LOGGER.error("Cannot update modpack, transfer session is unavailable");
+			new ScreenManager().error("automodpack.error.critical", "Transfer session is unavailable", "automodpack.error.logs");
+			close();
 			return;
 		}
 
@@ -299,6 +346,8 @@ public class ModpackUpdater {
 		} catch (Exception e) {
 			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
 			LOGGER.error("Critical error during modpack update", e);
+		} finally {
+			close();
 		}
 	}
 
@@ -313,8 +362,6 @@ public class ModpackUpdater {
 
 		LOGGER.info("In queue left {} files to download ({}MB)", wholeQueue, totalBytesToDownload / 1024 / 1024);
 
-		DownloadClient downloadClient = DownloadClient.tryCreate(connectionInfo, modpackSecret.secretBytes(), Math.min(wholeQueue, 5),
-				ModpackUtils.manualValidationCallback(connectionInfo, false));
 		if (downloadClient == null) return false;
 
 		downloadManager = new DownloadManager(totalBytesToDownload);
@@ -372,10 +419,9 @@ public class ModpackUpdater {
 		Map<String, String> hashesToRefresh = failedDownloads.keySet().stream()
 				.collect(Collectors.toMap(item -> item.file, item -> item.sha1, (first, second) -> first, LinkedHashMap::new));
 		if (hashesToRefresh.isEmpty()) return false;
-		Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> originalFailures = new HashMap<>(failedDownloads);
 		LOGGER.warn("Remote acquisition failed for {} files after all sources; requesting one full regeneration", hashesToRefresh.size());
 		byte[][] hashesArray = hashesToRefresh.values().stream().map(value -> value.getBytes(StandardCharsets.UTF_8)).toArray(byte[][]::new);
-		var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(connectionInfo, modpackSecret, hashesArray, false);
+		var refreshedContentOptional = ModpackUtils.refreshServerModpackContent(downloadClient, hashesArray);
 		if (refreshedContentOptional.isEmpty()) {
 			LOGGER.error("Failed to refresh the modpack content");
 			return false;
@@ -409,12 +455,6 @@ public class ModpackUpdater {
 			refreshedFetchManager.fetch();
 		}
 
-		downloadClient = DownloadClient.tryCreate(connectionInfo, modpackSecret.secretBytes(), Math.min(refreshedFilesToAcquire.size(), 5),
-				ModpackUtils.manualValidationCallback(connectionInfo, false));
-		if (downloadClient == null) {
-			failedDownloads.putAll(originalFailures);
-			return false;
-		}
 		downloadManager = new DownloadManager(totalBytesToDownload);
 		new ScreenManager().download(downloadManager, getModpackName());
 		downloadManager.attachDownloadClient(downloadClient);
@@ -685,6 +725,31 @@ public class ModpackUpdater {
 				throw new IOException("Required object is absent from CAS and verified live locations: " + operation.expectedObjectHash());
 			SmartFileUtils.copyVerifiedAtomic(source, storeFile, operation.expectedSize(), operation.expectedObjectHash());
 		}
+	}
+
+	private boolean beginConfirmation() {
+		if (!confirmationState.compareAndSet(ConfirmationState.INACTIVE, ConfirmationState.WAITING)) return false;
+		confirmationExpiry = CONFIRMATION_TIMER.schedule(() -> {
+			if (!confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.EXPIRED)) return;
+			close();
+		}, CONFIRMATION_TIMEOUT_MINUTES, TimeUnit.MINUTES);
+		return true;
+	}
+
+	private void cancelConfirmationExpiry() {
+		ScheduledFuture<?> expiry = confirmationExpiry;
+		if (expiry != null) expiry.cancel(false);
+	}
+
+	@Override
+	public void close() {
+		confirmationState.compareAndSet(ConfirmationState.WAITING, ConfirmationState.CANCELLED);
+		cancelConfirmationExpiry();
+		if (closed.compareAndSet(false, true) && downloadClient != null) downloadClient.close();
+	}
+
+	public enum ConfirmationState {
+		INACTIVE, WAITING, STARTED, CANCELLED, EXPIRED
 	}
 
 	private enum RestartReason {

@@ -22,6 +22,8 @@ public interface ScreenService {
 
 	void validation(Object... args);
 
+	void waiting();
+
 	Optional<String> getScreenString();
 
 	Optional<Object> getScreen();

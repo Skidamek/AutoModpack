@@ -11,6 +11,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class FingerprintVerificationScreen extends VersionedScreen {
 	private final Screen parent;
@@ -78,7 +79,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 				VersionedText.translatable("automodpack.skip"),
 				button -> {
 					assert this.minecraft != null;
-					this.minecraft.gui.setScreen(new SkipVerificationScreen(this, this.parent, this.validatedCallback));
+					this.minecraft.gui.setScreen(new SkipVerificationScreen(this, this.validatedCallback));
 				});
 
 		// Verify button (right - primary action, bold)
@@ -98,9 +99,7 @@ public class FingerprintVerificationScreen extends VersionedScreen {
 		verifyButton.active = false;
 		this.validated = true;
 		this.inputText = "";
-		if (this.minecraft != null) {
-			this.minecraft.gui.setScreen(parent);
-		}
+		new ScreenManager().waiting();
 		validatedCallback.run();
 	}
 

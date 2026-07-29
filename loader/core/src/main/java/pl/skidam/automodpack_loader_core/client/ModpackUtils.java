@@ -1,7 +1,6 @@
 package pl.skidam.automodpack_loader_core.client;
 
 import static pl.skidam.automodpack_core.Constants.*;
-import static pl.skidam.automodpack_core.utils.LegacyClientCacheUtils.*;
 
 import java.io.*;
 import java.net.*;
@@ -22,9 +21,6 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.CertificatePinMismatchException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
-import pl.skidam.automodpack_core.utils.AddressHelpers;
-import pl.skidam.automodpack_core.utils.FileInspection;
-import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.cache.FileMetadataCache;
@@ -35,6 +31,16 @@ public class ModpackUtils {
 	// Modpack may require update even if there's no files to update, because some files may need to be deleted
 	public record UpdateCheckResult(boolean requiresUpdate, Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate,
 			Set<String> changedOverwriteEditableFiles) {}
+
+	public enum ManifestFetchState {
+		SUCCESS, OPERATION_FAILED, CONNECTION_FAILED
+	}
+
+	public record ManifestFetchResult(ManifestFetchState state, Jsons.ModpackContentFields content, DownloadClient client, Throwable failure) {
+		public boolean successful() {
+			return state == ManifestFetchState.SUCCESS;
+		}
+	}
 
 	// Fast and friendly method to check if the modpack is up to date without modifying anything on disk
 	public static UpdateCheckResult isUpdate(Jsons.ModpackContentFields serverModpackContent, Path modpackDir) {
@@ -248,120 +254,80 @@ public class ModpackUtils {
 		return modpacksDir.resolve(ModpackId.requireValid(modpackId));
 	}
 
-	public static Optional<Jsons.ModpackContentFields> requestServerModpackContent(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
-			boolean allowAskingUser) {
-		return fetchModpackContent(connectionInfo, secret, (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null), allowAskingUser);
-	}
-
-	public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
-			byte[][] fileHashes, boolean allowAskingUser) {
-		return fetchModpackContent(connectionInfo, secret, (client) -> client.requestRefresh(fileHashes, modpackContentTempFile), allowAskingUser);
-	}
-
-	private static Optional<Jsons.ModpackContentFields> fetchModpackContent(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
-			Function<DownloadClient, CompletableFuture<Path>> operation, boolean allowAskingUser) {
-		if (secret == null) return Optional.empty();
-		if (!connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing!");
-
+	public static ManifestFetchResult requestServerModpackContent(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, boolean allowAskingUser) {
 		try {
-			return fetchModpackContentAsync(connectionInfo, secret, operation, manualValidationCallbackAsync(connectionInfo, allowAskingUser)).get();
+			return requestServerModpackContentAsync(connectionInfo, secret, allowAskingUser).get();
 		} catch (Exception e) {
-			LOGGER.error("Error while getting server modpack content", e);
+			Throwable cause = DownloadClient.unwrap(e);
+			LOGGER.error("Error while getting server modpack content", cause);
+			return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);
+		}
+	}
+
+	public static Optional<Jsons.ModpackContentFields> refreshServerModpackContent(DownloadClient client, byte[][] fileHashes) {
+		try {
+			return fetchModpackContentAsync(client, current -> current.requestRefresh(fileHashes, modpackContentTempFile)).get();
+		} catch (Exception e) {
+			LOGGER.error("Error while refreshing server modpack content", DownloadClient.unwrap(e));
 			return Optional.empty();
 		}
-	}
-
-	public static boolean canConnectModpackHost(Jsons.ConnectionInfo connectionInfo) {
-		if (!connectionInfo.isComplete()) throw new IllegalArgumentException("Connection origin or endpoint is missing!");
-
-		try (DownloadClient client = createDownloadClient(connectionInfo, null, 1, manualValidationCallbackAsync(connectionInfo, false)).get()) {
-			return client != null;
-		} catch (Exception e) {
-			LOGGER.error("Error while pinging AutoModpack host server", e);
-		}
-
-		return false;
-	}
-
-	/**
-	 * Returns a callback for use with {@link DownloadClient} that checks for trusted fingerprints in the known hosts
-	 * list of the client config. Trust is owned by the player-selected Minecraft origin; the advertised endpoint is
-	 * routing information only.
-	 *
-	 * @param connectionInfo
-	 *            the authenticated Minecraft origin and advertised endpoint
-	 * @param allowAskingUser
-	 *            whether the user should be prompted if a certificate is not trusted
-	 * @return the callback
-	 */
-	public static Function<X509Certificate, Boolean> manualValidationCallback(Jsons.ConnectionInfo connectionInfo, boolean allowAskingUser) {
-		Function<X509Certificate, CompletableFuture<Boolean>> callback = manualValidationCallbackAsync(connectionInfo, allowAskingUser);
-		return certificate -> {
-			try {
-				return callback.apply(certificate).get();
-			} catch (Exception e) {
-				return false;
-			}
-		};
 	}
 
 	// ---- Async versions (non-blocking, used by login packet flow) ----
 
-	public static CompletableFuture<Optional<Jsons.ModpackContentFields>> requestServerModpackContentAsync(Jsons.ConnectionInfo connectionInfo,
-			Secrets.Secret secret, boolean allowAskingUser) {
-		if (secret == null) return CompletableFuture.completedFuture(Optional.empty());
-		if (!connectionInfo.isComplete()) return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing!"));
+	public static CompletableFuture<ManifestFetchResult> requestServerModpackContentAsync(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret,
+			boolean allowAskingUser) {
+		if (secret == null) {
+			return CompletableFuture.completedFuture(
+					new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, new IllegalArgumentException("Secret is missing")));
+		}
+		if (!connectionInfo.isComplete()) {
+			return CompletableFuture.completedFuture(new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null,
+					new IllegalArgumentException("Connection origin or endpoint is missing")));
+		}
 
-		return fetchModpackContentAsync(connectionInfo, secret, (client) -> client.downloadFile(new byte[0], modpackContentTempFile, null),
-				manualValidationCallbackAsync(connectionInfo, allowAskingUser));
+		return createDownloadClient(connectionInfo, secret.secretBytes(), manualValidationCallbackAsync(connectionInfo, allowAskingUser))
+				.thenCompose(client -> fetchModpackContentAsync(client, current -> current.downloadFile(new byte[0], modpackContentTempFile, null)).handle((content, error) -> {
+					if (error != null || content.isEmpty()) {
+						client.close();
+						Throwable cause = error == null ? new IOException("Server returned no usable modpack content") : DownloadClient.unwrap(error);
+						LOGGER.error("Error while getting server modpack content", cause);
+						return new ManifestFetchResult(ManifestFetchState.OPERATION_FAILED, null, null, cause);
+					}
+					return new ManifestFetchResult(ManifestFetchState.SUCCESS, content.get(), client, null);
+				})).exceptionally(error -> {
+					Throwable cause = DownloadClient.unwrap(error);
+					showPinMismatch(cause);
+					LOGGER.error("Error while connecting to the server modpack host", cause);
+					return new ManifestFetchResult(ManifestFetchState.CONNECTION_FAILED, null, null, cause);
+				});
 	}
 
-	private static CompletableFuture<Optional<Jsons.ModpackContentFields>> fetchModpackContentAsync(Jsons.ConnectionInfo connectionInfo,
-			Secrets.Secret secret, Function<DownloadClient, CompletableFuture<Path>> operation,
-			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		if (secret == null) return CompletableFuture.completedFuture(Optional.empty());
-		if (!connectionInfo.isComplete()) return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing!"));
+	private static CompletableFuture<Optional<Jsons.ModpackContentFields>> fetchModpackContentAsync(DownloadClient client,
+			Function<DownloadClient, CompletableFuture<Path>> operation) {
+		CompletableFuture<Path> operationFuture;
+		try {
+			operationFuture = operation.apply(client);
+		} catch (Exception e) {
+			return CompletableFuture.failedFuture(e);
+		}
 
-		return createDownloadClient(connectionInfo, secret.secretBytes(), 1, trustCallback).thenCompose(client -> {
-			CompletableFuture<Path> operationFuture;
+		return operationFuture.thenApplyAsync(path -> {
+			Jsons.ModpackContentFields content = ModpackContentTools.read(path);
+			if (content == null || potentiallyMalicious(content)) return Optional.<Jsons.ModpackContentFields>empty();
+			return Optional.of(content);
+		}, DownloadClient.NET_EXECUTOR).whenComplete((content, error) -> {
 			try {
-				operationFuture = operation.apply(client);
-			} catch (Exception e) {
-				try {
-					client.close();
-				} catch (Exception ignored) {
-				}
-				return CompletableFuture.completedFuture(Optional.<Jsons.ModpackContentFields>empty());
+				Files.deleteIfExists(modpackContentTempFile);
+			} catch (IOException e) {
+				LOGGER.warn("Failed to remove temporary modpack content", e);
 			}
-
-			return operationFuture.handleAsync((path, throwable) -> {
-				try (client) {
-					if (throwable != null) {
-						LOGGER.error("Error while getting server modpack content", throwable);
-						return Optional.<Jsons.ModpackContentFields>empty();
-					}
-
-					var content = Optional.ofNullable(ModpackContentTools.read(path));
-					Files.deleteIfExists(modpackContentTempFile);
-
-					if (content.isPresent() && potentiallyMalicious(content.get())) return Optional.<Jsons.ModpackContentFields>empty();
-
-					return content;
-				} catch (Exception e) {
-					LOGGER.error("Error while getting server modpack content", e);
-					return Optional.<Jsons.ModpackContentFields>empty();
-				}
-			});
-		}).exceptionally(e -> {
-			showPinMismatch(e);
-			LOGGER.error("Error while getting server modpack content", e);
-			return Optional.empty();
 		});
 	}
 
-	private static CompletableFuture<DownloadClient> createDownloadClient(Jsons.ConnectionInfo connectionInfo, byte[] secret, int poolSize,
+	private static CompletableFuture<DownloadClient> createDownloadClient(Jsons.ConnectionInfo connectionInfo, byte[] secret,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		return DownloadClient.createAsync(connectionInfo, secret, poolSize, trustCallback).thenApply(client -> {
+		return DownloadClient.createAsync(connectionInfo, secret, trustCallback).thenApply(client -> {
 			if (connectionInfo.trustReason != null) {
 				CertificateTrustStore.save(connectionInfo.origin, connectionInfo.expectedFingerprint,
 						CertificateTrustStore.Reason.valueOf(connectionInfo.trustReason));

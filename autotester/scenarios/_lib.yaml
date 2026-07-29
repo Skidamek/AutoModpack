@@ -51,6 +51,12 @@ accept_certificate:
   - do: click
     name: click verify
     select: { text: verify }
+  - do: assert
+    name: transition directly to AutoModpack UI
+    that:
+      all:
+        - screen: [PreparingScreen, DangerScreen, DownloadScreen, FetchScreen, RestartScreen]
+        - screen_not: DisconnectedScreen
   - do: wait_for
     name: wait for the certificate to be accepted
     timeout: 20s

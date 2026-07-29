@@ -438,7 +438,6 @@ public class DownloadManager {
 		semaphore.release(totalFilesAdded);
 		downloadsInProgress.clear();
 		downloadedCount = 0;
-		if (downloadClient != null) downloadClient.close();
 		downloadExecutor.shutdown();
 	}
 

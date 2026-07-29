@@ -56,7 +56,7 @@ def make_ctx(tmp_path):
 class FakeBridge:
     """A tiny GUI state machine that mimics the real client over the file bridge.
 
-    Screens: title -> cert -> download -> restart -> (relaunch) -> ingame.
+    Screens: title -> cert -> preparing -> download -> restart -> (relaunch) -> ingame.
     Clicking the download button writes the modpack files into the game dir, so
     the filesystem verbs see real files appear exactly as they would in Docker.
     """
@@ -79,6 +79,7 @@ class FakeBridge:
                 "buttons": [{"id": 2, "text": "Verify", "enabled": True, "visible": True}],
                 "textFields": [{"id": 1, "text": "", "enabled": True, "visible": True}],
             },
+            "preparing": {"screenClass": "PreparingScreen", "buttons": [], "textFields": []},
             "download": {
                 "screenClass": "DownloadScreen",
                 "buttons": [{"id": 3, "text": "Download", "enabled": True, "visible": True}],
@@ -91,7 +92,10 @@ class FakeBridge:
             },
             "ingame": {"screenClass": None, "buttons": [], "textFields": []},
         }
-        return snapshots[self.screen]
+        snapshot = snapshots[self.screen]
+        if self.screen == "preparing":
+            self.screen = "download"
+        return snapshot
 
     # --- actions ----------------------------------------------------------
     def text(self, element_id: int, value: str, timeout: float = 30) -> dict:
@@ -103,7 +107,7 @@ class FakeBridge:
     def click(self, element_id: int, timeout: float = 30, **payload) -> dict:
         self.clicks.append(element_id)
         if element_id == 2 and self.fingerprint:
-            self.screen = "download"
+            self.screen = "preparing"
         elif element_id == 3:
             self._write_modpack()
             self.screen = "restart"

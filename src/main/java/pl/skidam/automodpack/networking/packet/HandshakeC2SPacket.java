@@ -2,6 +2,7 @@ package pl.skidam.automodpack.networking.packet;
 
 import static pl.skidam.automodpack_core.Constants.*;
 
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
@@ -10,12 +11,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 
-import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
-import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
+import pl.skidam.automodpack.networking.client.ClientLoginDisconnect;
 import pl.skidam.automodpack.networking.content.HandshakePacket;
 import pl.skidam.automodpack_core.platforms.ModrinthAPI;
 import pl.skidam.automodpack_core.utils.SemanticVersion;
 import pl.skidam.automodpack_loader_core.SelfUpdater;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class HandshakeC2SPacket {
 
@@ -26,7 +27,7 @@ public class HandshakeC2SPacket {
 			String serverResponse = buf.readUtf(Short.MAX_VALUE);
 			HandshakePacket serverHandshakePacket = HandshakePacket.fromJson(serverResponse);
 
-			String loader = LOADER_MANAGER.getPlatformType().toString().toLowerCase();
+			String loader = LOADER_MANAGER.getPlatformType().toString().toLowerCase(Locale.ROOT);
 			if (!serverHandshakePacket.loaders.contains(loader)) {
 				LOGGER.warn("Loader mismatch. Server accepts: {}: Client: {}", serverHandshakePacket.loaders, loader);
 				return CompletableFuture.completedFuture(outBuf);
@@ -72,7 +73,8 @@ public class HandshakeC2SPacket {
 
 		// Disconnect and install only if the update is valid
 		if (SelfUpdater.validUpdate(semver)) {
-			((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) handler).getConnection()).getChannel().disconnect();
+			new ScreenManager().waiting();
+			ClientLoginDisconnect.disconnect(handler);
 			SelfUpdater.installModVersion(automodpack);
 		}
 	}

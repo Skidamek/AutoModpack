@@ -8,22 +8,35 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.security.*;
+import java.security.GeneralSecurityException;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
-import java.util.stream.IntStream;
 
-import javax.net.ssl.*;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
 
 import pl.skidam.automodpack_core.auth.DnsPinResolver;
 import pl.skidam.automodpack_core.config.Jsons;
@@ -34,120 +47,341 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.mcholepunch.HolepunchClient;
 import pl.skidam.mcholepunch.HolepunchConnection;
 import pl.skidam.mcholepunch.HolepunchOptions;
+import pl.skidam.mcholepunch.HolepunchRoute;
 import pl.skidam.mcholepunch.MinecraftProtocol;
 
 public class DownloadClient implements AutoCloseable {
 
-	// Dedicated daemon pool for blocking network/login stages and pool hydration.
-	// Human certificate decisions intentionally have no AutoModpack deadline.
 	public static final ExecutorService NET_EXECUTOR = Executors.newCachedThreadPool(r -> {
 		Thread t = new Thread(r, "automodpack-net");
 		t.setDaemon(true);
 		return t;
 	});
 
-	private final List<Connection> connections = new ArrayList<>();
+	private static final int MAX_CONNECTIONS = 5;
 
-	private record InitialConnectionResult(PreValidationConnection connection, SSLContext sslContext) {}
+	private final Jsons.ConnectionInfo connectionInfo;
+	private final byte[] secretBytes;
+	private final Function<X509Certificate, CompletableFuture<Boolean>> trustCallback;
+	private final CustomizableTrustManager.SessionTrust sessionTrust;
+	private final TransportRoute route;
+	private final Object poolLock = new Object();
+	private final Deque<Connection> availableConnections = new ArrayDeque<>();
+	private final Deque<CompletableFuture<Connection>> connectionWaiters = new ArrayDeque<>();
+	private final Set<Connection> allConnections = Collections.newSetFromMap(new IdentityHashMap<>());
+	private int openingConnections;
+	private boolean closed;
 
-	/**
-	 * Holds the outcome of a single probe attempt, along with the KeyStore for later mutation.
-	 */
-	private record ProbeResult(InitialConnectionResult success, X509Certificate untrustedCert, IOException error, KeyStore keyStore) {}
+	private record TransportRoute(InetSocketAddress directAddress, HolepunchRoute holepunchRoute) {}
 
-	private DownloadClient(List<Connection> connections) {
-		this.connections.addAll(connections);
+	private record TlsCandidate(SSLSocket socket, CustomizableTrustManager trustManager) {}
+
+	private DownloadClient(Jsons.ConnectionInfo connectionInfo, byte[] secretBytes, Function<X509Certificate, CompletableFuture<Boolean>> trustCallback,
+			TransportRoute route) {
+		this.connectionInfo = connectionInfo;
+		this.secretBytes = secretBytes == null ? null : secretBytes.clone();
+		this.trustCallback = trustCallback;
+		this.route = route;
+		this.sessionTrust = new CustomizableTrustManager.SessionTrust(AddressHelpers.formatAddress(connectionInfo.origin), connectionInfo.expectedFingerprint);
 	}
 
-	/**
-	 * Opens a client using the server-origin trust policy, in order: mandatory explicit pin/TOFU, WebPKI, DNSSEC for a valid self-signed certificate.
-	 * The advertised endpoint is only the TCP route and never selects certificate trust.
-	 */
-	public static CompletableFuture<DownloadClient> createAsync(Jsons.ConnectionInfo connectionInfo, byte[] secretBytes, int poolSize,
+	public static CompletableFuture<DownloadClient> createAsync(Jsons.ConnectionInfo connectionInfo, byte[] secretBytes,
 			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
+		if (connectionInfo == null || !connectionInfo.isComplete())
+			return CompletableFuture.failedFuture(new IllegalArgumentException("Connection origin or endpoint is missing"));
 
-		if (poolSize < 1) return CompletableFuture.failedFuture(new IllegalArgumentException("Pool size must be greater than 0"));
-
-		return CompletableFuture.supplyAsync(() -> probeConnection(connectionInfo), NET_EXECUTOR).thenCompose(probe -> {
-			if (probe.success != null) return finishConnection(probe.success, secretBytes, poolSize, connectionInfo);
-
-			CertificatePinMismatchException pinMismatch = findCause(probe.error, CertificatePinMismatchException.class);
-			if (pinMismatch != null) return CompletableFuture.failedFuture(pinMismatch);
-			if (probe.untrustedCert == null) return CompletableFuture.failedFuture(probe.error);
-
-			if (!isSelfSigned(probe.untrustedCert)) return requestManualTrust(probe, connectionInfo, secretBytes, poolSize, trustCallback);
-
-			return DnsPinResolver.resolvePinAsync(connectionInfo.origin.getHostString()).thenCompose(result -> {
-				if (result instanceof DnsPinResolver.Authoritative authoritative) {
-					try {
-						probe.untrustedCert.checkValidity();
-						if (!authoritative.fingerprint().equals(getFingerprint(probe.untrustedCert))) {
-							return CompletableFuture.failedFuture(
-									new IOException("Certificate does not match the DNSSEC fingerprint for " + connectionInfo.origin.getHostString()));
-						}
-					} catch (CertificateException e) {
-						return CompletableFuture.failedFuture(new IOException("DNSSEC-pinned certificate is not valid", e));
-					}
-
-					LOGGER.info("Trusting the self-signed certificate from {} because it matches the DNSSEC fingerprint for {}",
-							connectionInfo.endpoint.getHostString(), connectionInfo.origin.getHostString());
-					return retryWithTrustedCertificate(probe, connectionInfo, secretBytes, poolSize);
+		return resolveRouteAsync(connectionInfo).thenCompose(route -> {
+			DownloadClient client = new DownloadClient(connectionInfo, secretBytes, trustCallback, route);
+			return client.openConnectionAsync().thenApply(connection -> {
+				synchronized (client.poolLock) {
+					client.allConnections.add(connection);
+					client.availableConnections.add(connection);
 				}
-				if (result instanceof DnsPinResolver.Misconfigured misconfigured) {
-					return CompletableFuture.failedFuture(new IOException(
-							"Invalid DNSSEC AutoModpack fingerprint for " + connectionInfo.origin.getHostString() + ": " + misconfigured.reason()));
-				}
-				return requestManualTrust(probe, connectionInfo, secretBytes, poolSize, trustCallback);
+				return client;
+			}).whenComplete((ignored, error) -> {
+				if (error != null) client.close();
 			});
 		});
 	}
 
-	private static ProbeResult probeConnection(Jsons.ConnectionInfo connectionInfo) {
-		KeyStore keyStore = loadDefaultKeyStore();
-		AtomicReference<X509Certificate[]> capturedChain = new AtomicReference<>();
-		SSLContext context = createSSLContext(keyStore, capturedChain::set, connectionInfo);
-
-		try {
-			PreValidationConnection probe = getPreValidationConnection(connectionInfo, context);
-			return new ProbeResult(new InitialConnectionResult(probe, context), null, null, keyStore);
-		} catch (IOException e) {
-			X509Certificate[] chain = capturedChain.get();
-			X509Certificate untrusted = (chain != null && chain.length > 0) ? chain[0] : null;
-			return new ProbeResult(null, untrusted, e, keyStore);
+	private static CompletableFuture<TransportRoute> resolveRouteAsync(Jsons.ConnectionInfo connectionInfo) {
+		if (connectionInfo.connectionMode == ModpackConnectionMode.HOLEPUNCH) {
+			return HolepunchClient.resolve(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort()).toCompletableFuture()
+					.thenApply(route -> new TransportRoute(null, route));
 		}
-	}
 
-	private static CompletableFuture<DownloadClient> finishConnection(InitialConnectionResult connection, byte[] secretBytes, int poolSize,
-			Jsons.ConnectionInfo connectionInfo) {
-		try {
-			return CompletableFuture.completedFuture(new DownloadClient(hydratePool(connection, secretBytes, poolSize, connectionInfo)));
-		} catch (IOException e) {
-			return CompletableFuture.failedFuture(e);
-		}
-	}
-
-	private static CompletableFuture<DownloadClient> requestManualTrust(ProbeResult probe, Jsons.ConnectionInfo connectionInfo, byte[] secretBytes, int poolSize,
-			Function<X509Certificate, CompletableFuture<Boolean>> trustCallback) {
-		if (trustCallback == null) return CompletableFuture.failedFuture(probe.error);
-
-		return trustCallback.apply(probe.untrustedCert).thenComposeAsync(trusted -> {
-			if (!trusted) return CompletableFuture.failedFuture(new IOException("User rejected certificate"));
-			return retryWithTrustedCertificate(probe, connectionInfo, secretBytes, poolSize);
+		return CompletableFuture.supplyAsync(() -> {
+			String host = connectionInfo.endpoint.getHostString();
+			InetSocketAddress address = new InetSocketAddress(host, connectionInfo.endpoint.getPort());
+			if (address.isUnresolved()) throw new CompletionException(new IOException("Failed to resolve endpoint host: " + host));
+			return new TransportRoute(address, null);
 		}, NET_EXECUTOR);
 	}
 
-	private static CompletableFuture<DownloadClient> retryWithTrustedCertificate(ProbeResult probe, Jsons.ConnectionInfo connectionInfo, byte[] secretBytes,
-			int poolSize) {
+	private CompletableFuture<Connection> openConnectionAsync() {
 		return CompletableFuture.supplyAsync(() -> {
 			try {
-				probe.keyStore.setCertificateEntry(connectionInfo.endpoint.getHostString(), probe.untrustedCert);
-				SSLContext trustedContext = createSSLContext(probe.keyStore, null, connectionInfo);
-				PreValidationConnection retry = getPreValidationConnection(connectionInfo, trustedContext);
-				return new DownloadClient(hydratePool(new InitialConnectionResult(retry, trustedContext), secretBytes, poolSize, connectionInfo));
-			} catch (Exception e) {
-				throw new CompletionException(new IOException("Failed to reconnect after trust", e));
+				return openTlsCandidate();
+			} catch (IOException e) {
+				throw new CompletionException(e);
+			}
+		}, NET_EXECUTOR).thenCompose(this::validateCandidate).thenApplyAsync(candidate -> {
+			try {
+				return new Connection(candidate.socket(), secretBytes);
+			} catch (IOException e) {
+				closeQuietly(candidate.socket());
+				throw new CompletionException(e);
 			}
 		}, NET_EXECUTOR);
+	}
+
+	private TlsCandidate openTlsCandidate() throws IOException {
+		CustomizableTrustManager trustManager;
+		try {
+			trustManager = new CustomizableTrustManager(sessionTrust, null);
+		} catch (Exception e) {
+			throw new IOException("Failed to initialize certificate trust", e);
+		}
+		SSLContext context = createSSLContext(trustManager);
+		Socket plainSocket = connectTransport();
+
+		try {
+			plainSocket.setSoTimeout(10000);
+			if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) performMagicHandshake(plainSocket);
+			return new TlsCandidate(wrapWithTls(plainSocket, context), trustManager);
+		} catch (IOException e) {
+			closeQuietly(plainSocket);
+			throw e;
+		}
+	}
+
+	private Socket connectTransport() throws IOException {
+		if (connectionInfo.connectionMode != ModpackConnectionMode.HOLEPUNCH) {
+			Socket socket = new Socket();
+			socket.connect(route.directAddress(), 15000);
+			return socket;
+		}
+
+		MinecraftProtocol minecraftProtocol;
+		try {
+			minecraftProtocol = MinecraftProtocol.forMinecraftVersion(MC_VERSION);
+		} catch (IllegalArgumentException e) {
+			throw new IOException("No mcholepunch protocol for Minecraft " + MC_VERSION, e);
+		}
+
+		try {
+			HolepunchSocket socket = new HolepunchSocket();
+			HolepunchConnection connection = HolepunchClient.connect(route.holepunchRoute(), minecraftProtocol, socket.handler(), HolepunchOptions.builder().build())
+					.toCompletableFuture().get(15, TimeUnit.SECONDS);
+			socket.setConnection(connection);
+			return socket;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Holepunch connect interrupted", e);
+		} catch (ExecutionException e) {
+			Throwable cause = e.getCause() != null ? e.getCause() : e;
+			if (cause instanceof IOException io) throw io;
+			throw new IOException("Holepunch connect failed", cause);
+		} catch (Exception e) {
+			throw new IOException("Holepunch connect failed", e);
+		}
+	}
+
+	private void performMagicHandshake(Socket plainSocket) throws IOException {
+		DataOutputStream plainOut = new DataOutputStream(new BufferedOutputStream(plainSocket.getOutputStream()));
+		DataInputStream plainIn = new DataInputStream(new BufferedInputStream(plainSocket.getInputStream()));
+		byte[] hostBytes = connectionInfo.endpoint.getHostString().getBytes(StandardCharsets.UTF_8);
+
+		plainOut.writeInt(MAGIC_AMMH);
+		plainOut.writeShort(hostBytes.length);
+		plainOut.write(hostBytes);
+		plainOut.flush();
+
+		int handshakeResponse = plainIn.readInt();
+		if (handshakeResponse != MAGIC_AMOK) throw new IOException("Invalid response from server: " + handshakeResponse);
+	}
+
+	private SSLSocket wrapWithTls(Socket plainSocket, SSLContext context) throws IOException {
+		SSLSocketFactory factory = context.getSocketFactory();
+		String originHost = connectionInfo.origin.getHostString();
+		SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, originHost, connectionInfo.endpoint.getPort(), true);
+		sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
+		sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
+
+		SSLParameters parameters = new SSLParameters();
+		parameters.setEndpointIdentificationAlgorithm("HTTPS");
+		sslSocket.setSSLParameters(parameters);
+
+		try {
+			sslSocket.startHandshake();
+			return sslSocket;
+		} catch (IOException e) {
+			closeQuietly(sslSocket);
+			throw e;
+		}
+	}
+
+	private CompletableFuture<TlsCandidate> validateCandidate(TlsCandidate candidate) {
+		X509Certificate certificate = candidate.trustManager().getDeferredCertificate();
+		if (certificate == null) return CompletableFuture.completedFuture(candidate);
+
+		try {
+			certificate.checkValidity();
+		} catch (CertificateException e) {
+			return rejectCandidate(candidate, new IOException("Untrusted certificate is not valid", e));
+		}
+
+		CompletableFuture<TlsCandidate> validation = DnsPinResolver.resolvePinAsync(connectionInfo.origin.getHostString()).thenCompose(result -> {
+			if (result instanceof DnsPinResolver.Authoritative authoritative) {
+				try {
+					String fingerprint = getFingerprint(certificate);
+					if (!authoritative.fingerprint().equals(fingerprint)) {
+						return rejectCandidate(candidate,
+								new IOException("Certificate does not match the DNSSEC fingerprint for " + connectionInfo.origin.getHostString()));
+					}
+					sessionTrust.accept(certificate);
+					LOGGER.info("Trusting the self-signed certificate from {} because it matches the DNSSEC fingerprint for {}",
+							connectionInfo.endpoint.getHostString(), connectionInfo.origin.getHostString());
+					return CompletableFuture.completedFuture(candidate);
+				} catch (CertificateException e) {
+					return rejectCandidate(candidate, new IOException("Failed to validate DNSSEC-pinned certificate", e));
+				}
+			}
+			if (result instanceof DnsPinResolver.Misconfigured misconfigured) {
+				return rejectCandidate(candidate, new IOException(
+						"Invalid DNSSEC AutoModpack fingerprint for " + connectionInfo.origin.getHostString() + ": " + misconfigured.reason()));
+			}
+			return requestManualTrust(candidate, certificate);
+		});
+		return validation.whenComplete((ignored, error) -> {
+			if (error != null) closeQuietly(candidate.socket());
+		});
+	}
+
+	private CompletableFuture<TlsCandidate> requestManualTrust(TlsCandidate candidate, X509Certificate certificate) {
+		if (trustCallback == null) {
+			CertificateException failure = candidate.trustManager().getDeferredFailure();
+			return rejectCandidate(candidate, failure == null ? new IOException("Certificate is not trusted") : failure);
+		}
+
+		CompletableFuture<Boolean> decision;
+		try {
+			decision = Objects.requireNonNull(trustCallback.apply(certificate), "trust callback result");
+		} catch (Exception e) {
+			return rejectCandidate(candidate, new IOException("Certificate trust callback failed", e));
+		}
+
+		return decision.handle((trusted, error) -> {
+			if (error != null) {
+				closeQuietly(candidate.socket());
+				throw new CompletionException(new IOException("Certificate trust decision failed", unwrap(error)));
+			}
+			if (!trusted) {
+				closeQuietly(candidate.socket());
+				throw new CompletionException(new IOException("User rejected certificate"));
+			}
+			try {
+				sessionTrust.accept(certificate);
+				return candidate;
+			} catch (CertificateException e) {
+				closeQuietly(candidate.socket());
+				throw new CompletionException(e);
+			}
+		});
+	}
+
+	private static <T> CompletableFuture<T> rejectCandidate(TlsCandidate candidate, Throwable error) {
+		closeQuietly(candidate.socket());
+		return CompletableFuture.failedFuture(error);
+	}
+
+	private static SSLContext createSSLContext(CustomizableTrustManager trustManager) {
+		try {
+			SSLContext context = SSLContext.getInstance("TLSv1.3");
+			context.init(null, new TrustManager[]{trustManager}, new SecureRandom());
+			return context;
+		} catch (NoSuchAlgorithmException | KeyManagementException e) {
+			throw new RuntimeException("Failed to initialize SSLContext", e);
+		}
+	}
+
+	private CompletableFuture<Connection> acquireConnection() {
+		CompletableFuture<Connection> waiter = new CompletableFuture<>();
+		synchronized (poolLock) {
+			if (closed) return CompletableFuture.failedFuture(new IOException("Download client is closed"));
+			connectionWaiters.add(waiter);
+			pumpPool();
+		}
+		return waiter;
+	}
+
+	private void pumpPool() {
+		while (!availableConnections.isEmpty()) {
+			Connection connection = availableConnections.peek();
+			if (connection.isActive()) break;
+			availableConnections.remove();
+			allConnections.remove(connection);
+			closeQuietly(connection);
+		}
+
+		while (!connectionWaiters.isEmpty() && !availableConnections.isEmpty()) {
+			CompletableFuture<Connection> waiter = connectionWaiters.remove();
+			Connection connection = availableConnections.remove();
+			waiter.complete(connection);
+		}
+
+		while (!closed && !connectionWaiters.isEmpty() && allConnections.size() + openingConnections < MAX_CONNECTIONS) {
+			CompletableFuture<Connection> waiter = connectionWaiters.remove();
+			openingConnections++;
+			openConnectionAsync().whenComplete((connection, error) -> {
+				synchronized (poolLock) {
+					openingConnections--;
+					if (closed) {
+						if (connection != null) closeQuietly(connection);
+						waiter.completeExceptionally(new IOException("Download client is closed"));
+					} else if (error != null) {
+						waiter.completeExceptionally(unwrap(error));
+					} else {
+						allConnections.add(connection);
+						waiter.complete(connection);
+					}
+					pumpPool();
+				}
+			});
+		}
+	}
+
+	private <T> CompletableFuture<T> withConnection(Function<Connection, CompletableFuture<T>> operation) {
+		return acquireConnection().thenCompose(connection -> {
+			CompletableFuture<T> future;
+			try {
+				future = operation.apply(connection);
+			} catch (Exception e) {
+				future = CompletableFuture.failedFuture(e);
+			}
+			return future.whenComplete((ignored, error) -> releaseConnection(connection, error == null));
+		});
+	}
+
+	private void releaseConnection(Connection connection, boolean healthy) {
+		synchronized (poolLock) {
+			if (closed || !healthy || !connection.isActive()) {
+				allConnections.remove(connection);
+				availableConnections.remove(connection);
+				closeQuietly(connection);
+			} else {
+				availableConnections.add(connection);
+			}
+			pumpPool();
+		}
+	}
+
+	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
+		return withConnection(connection -> connection.sendDownloadFile(fileHash, destination, chunkCallback));
+	}
+
+	public CompletableFuture<Path> requestRefresh(byte[][] fileHashes, Path destination) {
+		return withConnection(connection -> connection.sendRefreshRequest(fileHashes, destination));
 	}
 
 	static boolean isSelfSigned(X509Certificate certificate) {
@@ -161,56 +395,6 @@ public class DownloadClient implements AutoCloseable {
 		}
 	}
 
-	/**
-	 * Hydrates the connection pool from a successful probe and SSL context.
-	 */
-	private static List<Connection> hydratePool(InitialConnectionResult probe, byte[] secretBytes, int poolSize, Jsons.ConnectionInfo connectionInfo)
-			throws IOException {
-		List<Connection> conns = new ArrayList<>();
-		if (probe.connection().getSocket() != null && !probe.connection().getSocket().isClosed()) {
-			if (secretBytes == null) {
-				probe.connection().getSocket().close();
-				return conns;
-			} else {
-				conns.add(new Connection(probe.connection(), secretBytes));
-			}
-		}
-		if (secretBytes == null) return conns;
-
-		int remainingNeeded = poolSize - conns.size();
-		if (remainingNeeded < 1) return conns;
-
-		// Open the remaining connections in parallel. Record each one the moment
-		// it is created so that if any sibling task fails, we can close every
-		// connection that did open (including the probe) instead of leaking its
-		// socket and single-thread executor.
-		List<Connection> opened = Collections.synchronizedList(new ArrayList<>());
-		try {
-			IntStream.range(0, remainingNeeded).parallel().forEach(i -> {
-				try {
-					opened.add(new Connection(getPreValidationConnection(connectionInfo, probe.sslContext()), secretBytes));
-				} catch (IOException e) {
-					throw new CompletionException(e);
-				}
-			});
-		} catch (RuntimeException e) {
-			for (Connection c : conns) closeQuietly(c);
-			for (Connection c : opened) closeQuietly(c);
-			Throwable cause = (e instanceof CompletionException && e.getCause() != null) ? e.getCause() : e;
-			if (cause instanceof IOException io) throw io;
-			throw new IOException("Failed to hydrate connection pool", cause);
-		}
-		conns.addAll(opened);
-		return conns;
-	}
-
-	private static void closeQuietly(AutoCloseable c) {
-		try {
-			c.close();
-		} catch (Exception ignored) {
-		}
-	}
-
 	public static <T extends Throwable> T findCause(Throwable throwable, Class<T> type) {
 		Throwable current = throwable;
 		while (current != null) {
@@ -220,186 +404,38 @@ public class DownloadClient implements AutoCloseable {
 		return null;
 	}
 
-	private static KeyStore loadDefaultKeyStore() {
+	public static Throwable unwrap(Throwable throwable) {
+		Throwable current = throwable;
+		while ((current instanceof CompletionException || current instanceof ExecutionException) && current.getCause() != null) {
+			current = current.getCause();
+		}
+		return current;
+	}
+
+	static void closeQuietly(AutoCloseable closeable) {
 		try {
-			KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
-			keyStore.load(null);
-			return keyStore;
-		} catch (KeyStoreException | NoSuchAlgorithmException | CertificateException | IOException e) {
-			throw new RuntimeException("Failed to initialize KeyStore", e);
+			closeable.close();
+		} catch (Exception ignored) {
 		}
-	}
-
-	private static PreValidationConnection getPreValidationConnection(Jsons.ConnectionInfo connectionInfo, SSLContext sharedContext) throws IOException {
-		return switch (connectionInfo.connectionMode) {
-			case HOLEPUNCH -> connectHolepunch(connectionInfo, sharedContext);
-			case MAGIC_PACKET, DIRECT -> connectDirect(connectionInfo, sharedContext);
-		};
-	}
-
-	private static PreValidationConnection connectDirect(Jsons.ConnectionInfo connectionInfo, SSLContext sharedContext) throws IOException {
-		String hostName = connectionInfo.endpoint.getHostString();
-		InetSocketAddress address = new InetSocketAddress(hostName, connectionInfo.endpoint.getPort());
-		if (address.isUnresolved()) throw new IOException("Failed to resolve endpoint host: " + hostName);
-		Socket socket = new Socket();
-		socket.connect(address, 15000);
-		return new PreValidationConnection(socket, connectionInfo, sharedContext);
-	}
-
-	private static PreValidationConnection connectHolepunch(Jsons.ConnectionInfo connectionInfo, SSLContext sharedContext) throws IOException {
-		MinecraftProtocol minecraftProtocol;
-		try {
-			minecraftProtocol = MinecraftProtocol.forMinecraftVersion(MC_VERSION);
-		} catch (IllegalArgumentException e) {
-			throw new IOException("No mcholepunch protocol for Minecraft " + MC_VERSION, e);
-		}
-
-		try {
-			HolepunchSocket socket = new HolepunchSocket();
-			HolepunchConnection connection = HolepunchClient.connect(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort(), minecraftProtocol,
-					socket.handler(), HolepunchOptions.builder().build())
-					.toCompletableFuture().get(15, TimeUnit.SECONDS);
-			socket.setConnection(connection);
-			return new PreValidationConnection(socket, connectionInfo, sharedContext);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			throw new IOException("Holepunch connect interrupted", e);
-		} catch (ExecutionException e) {
-			Throwable cause = e.getCause() != null ? e.getCause() : e;
-			if (cause instanceof IOException io) throw io;
-			throw new IOException("Holepunch connect failed", cause);
-		} catch (Exception e) {
-			throw new IOException("Holepunch connect failed", e);
-		}
-	}
-
-	private static SSLContext createSSLContext(KeyStore trustedCertificates, Consumer<X509Certificate[]> onValidating, Jsons.ConnectionInfo connectionInfo) {
-		try {
-			SSLContext sslContext = SSLContext.getInstance("TLSv1.3");
-			String expectedFingerprint = connectionInfo.expectedFingerprint == null ? null : normalizeFingerprint(connectionInfo.expectedFingerprint);
-			X509ExtendedTrustManager trustManager = new CustomizableTrustManager(trustedCertificates, onValidating,
-					AddressHelpers.formatAddress(connectionInfo.origin), expectedFingerprint);
-
-			sslContext.init(null, new TrustManager[]{trustManager}, new SecureRandom());
-
-			SSLSessionContext sessionContext = sslContext.getClientSessionContext();
-			sessionContext.setSessionTimeout(1800);
-			sessionContext.setSessionCacheSize(20);
-
-			return sslContext;
-		} catch (NoSuchAlgorithmException | KeyManagementException | KeyStoreException e) {
-			throw new RuntimeException("Failed to initialize SSLContext", e);
-		}
-	}
-
-	public static DownloadClient tryCreate(Jsons.ConnectionInfo connectionInfo, byte[] secretBytes, int poolSize,
-			Function<X509Certificate, Boolean> trustedByUserCallback) {
-		try {
-			Function<X509Certificate, CompletableFuture<Boolean>> asyncCallback = trustedByUserCallback == null
-					? null
-					: certificate -> CompletableFuture.completedFuture(trustedByUserCallback.apply(certificate));
-			return createAsync(connectionInfo, secretBytes, poolSize, asyncCallback).get();
-		} catch (Exception e) {
-			if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-			Throwable cause = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
-			LOGGER.error("Failed to create download client", cause);
-			return null;
-		}
-	}
-
-	private synchronized Connection getFreeConnection() {
-		Iterator<Connection> iterator = connections.iterator();
-		while (iterator.hasNext()) {
-			Connection conn = iterator.next();
-			if (!conn.isBusy()) {
-				if (!conn.isActive()) {
-					iterator.remove();
-					return getFreeConnection();
-				}
-				conn.setBusy(true);
-				return conn;
-			}
-		}
-		throw new IllegalStateException("No available connections");
-	}
-
-	public CompletableFuture<Path> downloadFile(byte[] fileHash, Path destination, IntConsumer chunkCallback) {
-		return getFreeConnection().sendDownloadFile(fileHash, destination, chunkCallback);
-	}
-
-	public CompletableFuture<Path> requestRefresh(byte[][] fileHashes, Path destination) {
-		return getFreeConnection().sendRefreshRequest(fileHashes, destination);
 	}
 
 	@Override
 	public void close() {
-		for (Connection conn : connections) {
-			conn.close();
-		}
-		connections.clear();
-	}
-}
-
-class PreValidationConnection {
-
-	private final SSLSocket socket;
-
-	public PreValidationConnection(Socket preConnectedSocket, Jsons.ConnectionInfo connectionInfo, SSLContext sslContext) throws IOException {
-		preConnectedSocket.setSoTimeout(10000);
-		InetSocketAddress addr = new InetSocketAddress(connectionInfo.endpoint.getHostString(), connectionInfo.endpoint.getPort());
-		this.socket = wrapWithTls(preConnectedSocket, addr, connectionInfo, sslContext);
-	}
-
-	private static SSLSocket wrapWithTls(Socket plainSocket, InetSocketAddress resolvedHostAddress, Jsons.ConnectionInfo connectionInfo, SSLContext sslContext) throws IOException {
-		if (connectionInfo.connectionMode == ModpackConnectionMode.MAGIC_PACKET) {
-			try {
-				DataOutputStream plainOut = new DataOutputStream(new BufferedOutputStream(plainSocket.getOutputStream()));
-				DataInputStream plainIn = new DataInputStream(new BufferedInputStream(plainSocket.getInputStream()));
-
-				byte[] hostBytes = resolvedHostAddress.getHostString().getBytes(StandardCharsets.UTF_8);
-
-				plainOut.writeInt(MAGIC_AMMH);
-				plainOut.writeShort(hostBytes.length);
-				plainOut.write(hostBytes);
-				plainOut.flush();
-
-				int handshakeResponse = plainIn.readInt();
-				if (handshakeResponse != MAGIC_AMOK) throw new IOException("Invalid response from server: " + handshakeResponse);
-			} catch (IOException e) {
-				try {
-					plainSocket.close();
-				} catch (IOException ignored) {
-				}
-				throw e;
-			}
+		List<Connection> connections;
+		List<CompletableFuture<Connection>> waiters;
+		synchronized (poolLock) {
+			if (closed) return;
+			closed = true;
+			connections = new ArrayList<>(allConnections);
+			waiters = new ArrayList<>(connectionWaiters);
+			allConnections.clear();
+			availableConnections.clear();
+			connectionWaiters.clear();
 		}
 
-		SSLSocketFactory factory = sslContext.getSocketFactory();
-		String originHost = connectionInfo.origin.getHostString();
-		SSLSocket sslSocket = (SSLSocket) factory.createSocket(plainSocket, originHost, resolvedHostAddress.getPort(), true);
-
-		sslSocket.setEnabledProtocols(new String[]{"TLSv1.3"});
-		sslSocket.setEnabledCipherSuites(new String[]{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"});
-
-		SSLParameters sslParameters = new SSLParameters();
-		sslParameters.setEndpointIdentificationAlgorithm("HTTPS");
-		sslSocket.setSSLParameters(sslParameters);
-
-		try {
-			sslSocket.startHandshake();
-		} catch (IOException e) {
-			try {
-				sslSocket.close();
-			} catch (IOException ignored) {
-			}
-			throw e;
-		}
-
-		return sslSocket;
-	}
-
-	protected SSLSocket getSocket() {
-		return socket;
+		IOException closedError = new IOException("Download client is closed");
+		waiters.forEach(waiter -> waiter.completeExceptionally(closedError));
+		connections.forEach(DownloadClient::closeQuietly);
 	}
 }
 
@@ -413,15 +449,12 @@ class Connection implements AutoCloseable {
 	private final DataInputStream in;
 	private final DataOutputStream out;
 	private final ExecutorService executor = Executors.newSingleThreadExecutor();
-	private final AtomicBoolean busy = new AtomicBoolean(false);
 	private CompressionCodec compressionCodec;
 	private byte[] networkInputBuffer;
 
-	public Connection(PreValidationConnection preValidationConnection, byte[] secretBytes) throws IOException {
-		if (preValidationConnection.getSocket() == null || preValidationConnection.getSocket().isClosed()) {
-			throw new SSLHandshakeException("Server certificate invalid, connection closed");
-		}
-		this.socket = preValidationConnection.getSocket();
+	public Connection(SSLSocket socket, byte[] secretBytes) throws IOException {
+		if (socket == null || socket.isClosed()) throw new IOException("Server connection is closed");
+		this.socket = socket;
 		this.secretBytes = secretBytes;
 
 		this.in = new DataInputStream(new BufferedInputStream(this.socket.getInputStream()));
@@ -442,14 +475,6 @@ class Connection implements AutoCloseable {
 
 	public boolean isActive() {
 		return !socket.isClosed();
-	}
-
-	public boolean isBusy() {
-		return busy.get();
-	}
-
-	public void setBusy(boolean value) {
-		busy.set(value);
 	}
 
 	private CompressionCodec getCompressionCodec() {
@@ -517,8 +542,6 @@ class Connection implements AutoCloseable {
 			}
 		} catch (IOException e) {
 			if (exception == null) throw new CompletionException(e);
-		} finally {
-			if (exception == null) setBusy(false);
 		}
 	}
 
@@ -583,7 +606,6 @@ class Connection implements AutoCloseable {
 		long receivedBytes = 0;
 
 		try (OutputStream fos = LocalFileWriter.open(destination)) {
-
 			while (receivedBytes < expectedFileSize) {
 				byte[] dataFrame = readProtocolMessageFrame();
 				int toWrite = Math.min(dataFrame.length, (int) (expectedFileSize - receivedBytes));
