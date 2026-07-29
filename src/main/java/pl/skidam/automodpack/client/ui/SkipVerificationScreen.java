@@ -11,10 +11,10 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.Constants;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class SkipVerificationScreen extends VersionedScreen {
 	private final Screen verificationScreen;
-	private final Screen parent;
 	private final Runnable validatedCallback;
 	private final Toast failedToast = new SystemToast(SystemToast.SystemToastId.PACK_LOAD_FAILURE,
 			VersionedText.translatable("automodpack.validation.skip.failed"),
@@ -27,10 +27,9 @@ public class SkipVerificationScreen extends VersionedScreen {
 	private Button wikiButton;
 	private int ticksRemaining;
 
-	public SkipVerificationScreen(Screen verificationScreen, Screen parent, Runnable validatedCallback) {
+	public SkipVerificationScreen(Screen verificationScreen, Runnable validatedCallback) {
 		super(VersionedText.literal("SkipVerificationScreen"));
 		this.verificationScreen = verificationScreen;
-		this.parent = parent;
 		this.validatedCallback = validatedCallback;
 		this.ticksRemaining = TIMER_SECONDS * 20; // 20 ticks per second
 	}
@@ -91,9 +90,7 @@ public class SkipVerificationScreen extends VersionedScreen {
 
 		if (input.equals(REQUIRED_TEXT)) {
 			confirmButton.active = false;
-			if (this.minecraft != null) {
-				this.minecraft.gui.setScreen(parent);
-			}
+			new ScreenManager().waiting();
 			validatedCallback.run();
 		} else {
 			Constants.LOGGER.error("Skip verification text mismatch, try again");

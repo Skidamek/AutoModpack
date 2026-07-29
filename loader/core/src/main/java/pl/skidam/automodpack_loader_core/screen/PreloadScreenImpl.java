@@ -33,6 +33,9 @@ public class PreloadScreenImpl implements ScreenService {
 	public void validation(Object... args) {}
 
 	@Override
+	public void waiting() {}
+
+	@Override
 	public Optional<String> getScreenString() {
 		return Optional.empty();
 	}

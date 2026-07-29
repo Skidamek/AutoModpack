@@ -11,9 +11,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 
-import pl.skidam.automodpack.mixin.core.ClientConnectionAccessor;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.ModPackets;
+import pl.skidam.automodpack.networking.client.ClientLoginDisconnect;
 import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
@@ -26,6 +26,7 @@ import pl.skidam.automodpack_core.utils.AddressHelpers;
 import pl.skidam.automodpack_loader_core.ReLauncher;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 import pl.skidam.automodpack_loader_core.utils.UpdateType;
 
 public class DataC2SPacket {
@@ -96,54 +97,56 @@ public class DataC2SPacket {
 			return CompletableFuture.completedFuture(buildResponse(null));
 		}
 
-		return ModpackUtils.requestServerModpackContentAsync(connectionInfo, secret, true).thenApplyAsync(optionalServerModpackContent -> {
-			Boolean needsDisconnecting = null;
+		return ModpackUtils.requestServerModpackContentAsync(connectionInfo, secret, true).thenApplyAsync(manifestResult -> {
+			if (manifestResult.state() == ModpackUtils.ManifestFetchState.OPERATION_FAILED) return buildResponse(true);
+			if (!manifestResult.successful()) return buildResponse(null);
 
-			if (optionalServerModpackContent.isPresent()) {
-				// Narrow the server manifest to the player's selected groups before any update check,
-				// otherwise unselected files read as missing and force an endless "please restart" loop.
-				Jsons.ModpackContentFields serverModpackContent = ClientSelectionManager.filterToSelection(optionalServerModpackContent.get());
-				Path modpackDir = ModpackUtils.getModpackPath(serverModpackContent.modpackId);
-				try {
-					SecretsStore.saveClientSecret(connectionInfo.origin, secret);
-				} catch (Exception e) {
-					LOGGER.error("Failed to persist client secret", e);
+			// Narrow the server manifest to the player's selected groups before any update check,
+			// otherwise unselected files read as missing and force an endless "please restart" loop.
+			Jsons.ModpackContentFields serverModpackContent = ClientSelectionManager.filterToSelection(manifestResult.content());
+			DownloadClient downloadClient = manifestResult.client();
+			Path modpackDir = ModpackUtils.getModpackPath(serverModpackContent.modpackId);
+			try {
+				SecretsStore.saveClientSecret(connectionInfo.origin, secret);
+			} catch (Exception e) {
+				downloadClient.close();
+				LOGGER.error("Failed to persist client secret", e);
+				new ScreenManager().error("automodpack.error.critical", "Failed to persist client secret", "automodpack.error.logs");
+				disconnectImmediately(handler);
+				return buildResponse(true);
+			}
+
+			ModpackUpdater updater = new ModpackUpdater(serverModpackContent, connectionInfo, secret, modpackDir, downloadClient);
+			try {
+				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
+				if (updateCheckResult.requiresUpdate()) {
+					new ScreenManager().waiting();
 					disconnectImmediately(handler);
+					updater.processModpackUpdate(updateCheckResult);
 					return buildResponse(true);
 				}
 
-				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
-				if (updateCheckResult.requiresUpdate()) {
-					disconnectImmediately(handler);
-					new ModpackUpdater(serverModpackContent, connectionInfo, secret, modpackDir).processModpackUpdate(updateCheckResult);
-					needsDisconnecting = true;
-				} else {
-					try {
-						UpdateType restartType = new ModpackUpdater(serverModpackContent, connectionInfo, secret, modpackDir).reconcileReceivedManifest();
-						if (restartType == null) {
-							needsDisconnecting = false;
-						} else {
-							disconnectImmediately(handler);
-							new ReLauncher(modpackDir, restartType, null).restart(false);
-							needsDisconnecting = true;
-						}
-					} catch (UpdateDeferredException e) {
-						LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-						disconnectImmediately(handler);
-						new ReLauncher(modpackDir, UpdateType.UPDATE, null).restart(false);
-						return buildResponse(true);
-					} catch (Exception e) {
-						LOGGER.error("Failed to reconcile stable modpack installation", e);
-						disconnectImmediately(handler);
-						return buildResponse(true);
-					}
-				}
-			} else if (ModpackUtils.canConnectModpackHost(connectionInfo)) {
-				// Couldn't download the modpack content (e.g. certificate not verified) but the host is reachable
-				needsDisconnecting = true;
-			}
+				UpdateType restartType = updater.reconcileReceivedManifest();
+				if (restartType == null) return buildResponse(false);
 
-			return buildResponse(needsDisconnecting);
+				new ScreenManager().waiting();
+				disconnectImmediately(handler);
+				new ReLauncher(modpackDir, restartType, null).restart(false);
+				return buildResponse(true);
+			} catch (UpdateDeferredException e) {
+				updater.close();
+				LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+				new ScreenManager().waiting();
+				disconnectImmediately(handler);
+				new ReLauncher(modpackDir, UpdateType.UPDATE, null).restart(false);
+				return buildResponse(true);
+			} catch (Exception e) {
+				updater.close();
+				LOGGER.error("Failed to reconcile stable modpack installation", e);
+				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+				disconnectImmediately(handler);
+				return buildResponse(true);
+			}
 		}, DownloadClient.NET_EXECUTOR).exceptionally(e -> {
 			LOGGER.error("Error while handling data packet", e);
 			return buildResponse(null);
@@ -161,7 +164,6 @@ public class DataC2SPacket {
 	}
 
 	private static void disconnectImmediately(ClientHandshakePacketListenerImpl clientLoginNetworkHandler) {
-		var channel = ((ClientConnectionAccessor) ((ClientLoginNetworkHandlerAccessor) clientLoginNetworkHandler).getConnection()).getChannel();
-		channel.disconnect();
+		ClientLoginDisconnect.disconnect(clientLoginNetworkHandler);
 	}
 }

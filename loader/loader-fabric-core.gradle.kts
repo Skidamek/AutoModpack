@@ -27,7 +27,6 @@ val log4jVersion = versionProperty("versionLoaderPlatformLog4j")
 val fabricLoaderVersion = loaderVersion()
 val tomljVersion = versionProperty("versionTomlj")
 val bouncyCastleVersion = versionProperty("versionBouncyCastle")
-val httpClientVersion = versionProperty("versionHttpClient")
 val nettyVersion = versionProperty("versionNetty")
 val h2Version = versionProperty("versionH2")
 val mcholepunchVersion = versionProperty("versionMcholepunch")
@@ -48,7 +47,6 @@ dependencies {
 	implementation("io.airlift:aircompressor:$aircompressorVersion")
 	implementation("org.tomlj:tomlj:$tomljVersion")
 	implementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
-	implementation("org.apache.httpcomponents.client5:httpclient5:$httpClientVersion")
 	// Disable transitives so netty-buffer/common/transport aren't pulled in
 	implementation("io.netty:netty-codec-haproxy:$nettyVersion") {
 		isTransitive = false
@@ -93,12 +91,10 @@ tasks.named<ShadowJar>("shadowJar") {
 	relocate("io.airlift.compress", "$reloc.io.airlift.compress")
 	relocate("org.antlr", "$reloc.org.antlr")
 	relocate("org.tomlj", "$reloc.org.tomlj")
-	relocate("org.apache.hc", "$reloc.org.apache.hc")
 	relocate("org.checkerframework", "$reloc.org.checkerframework")
 	relocate("org.slf4j", "$reloc.org.slf4j")
 	relocate("org.bouncycastle", "$reloc.org.bouncycastle")
 	relocate("org.h2", "$reloc.org.h2")
-	relocate("org.publicsuffix", "$reloc.org.publicsuffix")
 	relocate("io.netty.handler.codec.haproxy", "$reloc.io.netty.handler.codec.haproxy")
 
 	// Project internal relocations
@@ -116,6 +112,9 @@ tasks.named<ShadowJar>("shadowJar") {
 	exclude("META-INF/*.kotlin_module", "META-INF/DEPENDENCIES*", "META-INF/LICENSE*", "META-INF/NOTICE*")
 	exclude("META-INF/versions/**/OSGI-INF/**")
 	exclude("META-INF/services/java.security.Provider")
+	exclude("org/bouncycastle/pqc/legacy/picnic/*.properties")
+	exclude("org/bouncycastle/pkix/CertPathReviewerMessages*.properties")
+	exclude("org/bouncycastle/x509/CertPathReviewerMessages*.properties")
 
 	mergeServiceFiles()
 }

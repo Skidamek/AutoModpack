@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.NetUtils;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
@@ -148,20 +149,26 @@ public class Preload {
 			return;
 		}
 
-		var optionalLatestModpackContent = ModpackUtils.requestServerModpackContent(connectionInfo, secret, false);
+		var manifestResult = ModpackUtils.requestServerModpackContent(connectionInfo, secret, false);
 		var latestModpackContent = ModpackContentTools.read(selectedModpackDir.resolve(hostModpackContentFile.getFileName()));
-		if (optionalLatestModpackContent.isPresent()) {
-			latestModpackContent = optionalLatestModpackContent.get();
+		DownloadClient downloadClient = null;
+		if (manifestResult.successful()) {
+			latestModpackContent = manifestResult.content();
+			downloadClient = manifestResult.client();
 			if (!Objects.equals(clientConfig.selectedModpackId, latestModpackContent.modpackId)) {
 				LOGGER.error("Selected modpack manifest changed ID from {} to {}", clientConfig.selectedModpackId, latestModpackContent.modpackId);
+				downloadClient.close();
 				loadLocalModpack(connectionInfo, secret);
 				return;
 			}
 			selectedModpackDir = ModpackUtils.getModpackPath(latestModpackContent.modpackId);
-			if (SelfUpdater.update(latestModpackContent)) return;
+			if (SelfUpdater.update(latestModpackContent)) {
+				downloadClient.close();
+				return;
+			}
 		}
 
-		new ModpackUpdater(latestModpackContent, connectionInfo, secret, selectedModpackDir).processModpackUpdate(null);
+		new ModpackUpdater(latestModpackContent, connectionInfo, secret, selectedModpackDir, downloadClient).processModpackUpdate(null);
 	}
 
 	private void loadLocalModpack(Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret) {

@@ -1,14 +1,15 @@
 package pl.skidam.automodpack_core.protocol;
 
+import static pl.skidam.automodpack_core.protocol.NetUtils.getFingerprint;
+import static pl.skidam.automodpack_core.protocol.NetUtils.normalizeFingerprint;
+
 import java.net.Socket;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import javax.net.ssl.SSLEngine;
@@ -18,36 +19,55 @@ import javax.net.ssl.X509ExtendedTrustManager;
 
 public class CustomizableTrustManager extends X509ExtendedTrustManager {
 
-	private final X509ExtendedTrustManager defaultTrustManager;
-	private final X509ExtendedTrustManager customTrustManager;
-	private final Consumer<X509Certificate[]> onValidating;
-	private final String origin;
-	private final String expectedFingerprint;
-	private final X509Certificate[] cachedAcceptedIssuers;
+	public static final class SessionTrust {
+		private final String origin;
+		private final String configuredFingerprint;
+		private final AtomicReference<String> acceptedFingerprint = new AtomicReference<>();
 
-	public CustomizableTrustManager(KeyStore customStore, Consumer<X509Certificate[]> onValidating, String origin, String expectedFingerprint)
-			throws KeyStoreException {
-		this.defaultTrustManager = createTrustManager(null);
-		this.customTrustManager = (customStore != null && customStore.size() > 0) ? createTrustManager(customStore) : null;
-		this.onValidating = onValidating;
-		this.origin = origin;
-		this.expectedFingerprint = expectedFingerprint;
+		public SessionTrust(String origin, String configuredFingerprint) {
+			this.origin = origin;
+			this.configuredFingerprint = configuredFingerprint == null ? null : normalizeFingerprint(configuredFingerprint);
+		}
 
-		// Pre-calculate merged issuers to avoid overhead on every handshake
-		List<X509Certificate> issuers = new ArrayList<>(Arrays.asList(defaultTrustManager.getAcceptedIssuers()));
-		if (this.customTrustManager != null) issuers.addAll(Arrays.asList(this.customTrustManager.getAcceptedIssuers()));
-		this.cachedAcceptedIssuers = issuers.toArray(new X509Certificate[0]);
+		boolean checkPin(X509Certificate[] chain) throws CertificateException {
+			String expected = configuredFingerprint != null ? configuredFingerprint : acceptedFingerprint.get();
+			if (expected == null) return false;
+			if (chain == null || chain.length == 0) throw new CertificateException("Server did not present a certificate");
+
+			String presented = getFingerprint(chain[0]);
+			if (!expected.equals(presented)) throw new CertificatePinMismatchException(origin, expected, presented);
+			return true;
+		}
+
+		void accept(X509Certificate certificate) throws CertificateException {
+			String fingerprint = getFingerprint(certificate);
+			String expected = configuredFingerprint;
+			if (expected != null && !expected.equals(fingerprint)) throw new CertificatePinMismatchException(origin, expected, fingerprint);
+
+			String previous = acceptedFingerprint.get();
+			if (previous != null && !previous.equals(fingerprint)) throw new CertificatePinMismatchException(origin, previous, fingerprint);
+			acceptedFingerprint.compareAndSet(null, fingerprint);
+		}
 	}
 
-	/**
-	 * Factory helper to reduce code duplication when initializing trust managers.
-	 */
-	private static X509ExtendedTrustManager createTrustManager(KeyStore keyStore) throws KeyStoreException {
+	private final X509ExtendedTrustManager defaultTrustManager;
+	private final SessionTrust sessionTrust;
+	private final Consumer<X509Certificate[]> onValidating;
+	private volatile X509Certificate deferredCertificate;
+	private volatile CertificateException deferredFailure;
+
+	public CustomizableTrustManager(SessionTrust sessionTrust, Consumer<X509Certificate[]> onValidating) throws KeyStoreException {
+		this.defaultTrustManager = createTrustManager();
+		this.sessionTrust = sessionTrust;
+		this.onValidating = onValidating;
+	}
+
+	private static X509ExtendedTrustManager createTrustManager() throws KeyStoreException {
 		try {
-			TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-			tmf.init(keyStore);
-			for (TrustManager tm : tmf.getTrustManagers()) {
-				if (tm instanceof X509ExtendedTrustManager) return (X509ExtendedTrustManager) tm;
+			TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+			factory.init((KeyStore) null);
+			for (TrustManager manager : factory.getTrustManagers()) {
+				if (manager instanceof X509ExtendedTrustManager extended) return extended;
 			}
 			throw new IllegalStateException("No X509ExtendedTrustManager found");
 		} catch (NoSuchAlgorithmException e) {
@@ -55,112 +75,64 @@ public class CustomizableTrustManager extends X509ExtendedTrustManager {
 		}
 	}
 
-	@Override
-	public X509Certificate[] getAcceptedIssuers() {
-		return cachedAcceptedIssuers;
+	public X509Certificate getDeferredCertificate() {
+		return deferredCertificate;
 	}
 
-	// --- Server Trust Checks (Client-Side Logic) ---
+	public CertificateException getDeferredFailure() {
+		return deferredFailure;
+	}
 
-	private boolean checkPin(X509Certificate[] chain) throws CertificateException {
-		if (expectedFingerprint == null) return false;
-		if (chain == null || chain.length == 0) throw new CertificateException("Server did not present a certificate");
-
-		String presentedFingerprint = NetUtils.getFingerprint(chain[0]);
-		if (!expectedFingerprint.equals(presentedFingerprint)) throw new CertificatePinMismatchException(origin, expectedFingerprint, presentedFingerprint);
-		return true;
+	@Override
+	public X509Certificate[] getAcceptedIssuers() {
+		return defaultTrustManager.getAcceptedIssuers();
 	}
 
 	@Override
 	public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-		if (onValidating != null) onValidating.accept(chain);
-		if (checkPin(chain)) return;
-		try {
-			defaultTrustManager.checkServerTrusted(chain, authType);
-		} catch (CertificateException e) {
-			if (customTrustManager != null) {
-				customTrustManager.checkServerTrusted(chain, authType);
-			} else {
-				throw e;
-			}
-		}
+		validateServer(chain, () -> defaultTrustManager.checkServerTrusted(chain, authType));
 	}
 
 	@Override
 	public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket) throws CertificateException {
-		if (onValidating != null) onValidating.accept(chain);
-		if (checkPin(chain)) return;
-		try {
-			// Primary check: Includes standard PKIX path validation AND Hostname Verification (if Endpoint ID is HTTPS)
-			defaultTrustManager.checkServerTrusted(chain, authType, socket);
-		} catch (CertificateException e) {
-			// Fallback: If user explicitly trusted this cert, verify the signature but BYPASS Hostname Verification.
-			// We intentionally drop the 'socket' parameter here to allow connecting to IPs that don't match the Cert CN.
-			if (customTrustManager != null) {
-				customTrustManager.checkServerTrusted(chain, authType);
-			} else {
-				throw e;
-			}
-		}
+		validateServer(chain, () -> defaultTrustManager.checkServerTrusted(chain, authType, socket));
 	}
 
 	@Override
 	public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine) throws CertificateException {
+		validateServer(chain, () -> defaultTrustManager.checkServerTrusted(chain, authType, engine));
+	}
+
+	private void validateServer(X509Certificate[] chain, TrustCheck defaultCheck) throws CertificateException {
 		if (onValidating != null) onValidating.accept(chain);
-		if (checkPin(chain)) return;
+		if (sessionTrust.checkPin(chain)) return;
+
 		try {
-			defaultTrustManager.checkServerTrusted(chain, authType, engine);
+			defaultCheck.check();
 		} catch (CertificateException e) {
-			// Fallback: Bypass Hostname Verification for custom store (see Socket overload)
-			if (customTrustManager != null) {
-				customTrustManager.checkServerTrusted(chain, authType);
-			} else {
-				throw e;
-			}
+			if (chain == null || chain.length == 0 || !DownloadClient.isSelfSigned(chain[0])) throw e;
+			deferredCertificate = chain[0];
+			deferredFailure = e;
 		}
 	}
 
-	// --- Client Trust Checks (Server-Side Logic - unused in this context) ---
-
 	@Override
 	public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-		if (onValidating != null) onValidating.accept(chain);
-		try {
-			defaultTrustManager.checkClientTrusted(chain, authType);
-		} catch (CertificateException e) {
-			if (customTrustManager != null) {
-				customTrustManager.checkClientTrusted(chain, authType);
-			} else {
-				throw e;
-			}
-		}
+		defaultTrustManager.checkClientTrusted(chain, authType);
 	}
 
 	@Override
 	public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) throws CertificateException {
-		if (onValidating != null) onValidating.accept(chain);
-		try {
-			defaultTrustManager.checkClientTrusted(chain, authType, socket);
-		} catch (CertificateException e) {
-			if (customTrustManager != null) {
-				customTrustManager.checkClientTrusted(chain, authType);
-			} else {
-				throw e;
-			}
-		}
+		defaultTrustManager.checkClientTrusted(chain, authType, socket);
 	}
 
 	@Override
 	public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) throws CertificateException {
-		if (onValidating != null) onValidating.accept(chain);
-		try {
-			defaultTrustManager.checkClientTrusted(chain, authType, engine);
-		} catch (CertificateException e) {
-			if (customTrustManager != null) {
-				customTrustManager.checkClientTrusted(chain, authType);
-			} else {
-				throw e;
-			}
-		}
+		defaultTrustManager.checkClientTrusted(chain, authType, engine);
+	}
+
+	@FunctionalInterface
+	private interface TrustCheck {
+		void check() throws CertificateException;
 	}
 }

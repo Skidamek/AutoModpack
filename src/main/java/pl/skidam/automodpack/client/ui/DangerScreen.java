@@ -1,27 +1,22 @@
 package pl.skidam.automodpack.client.ui;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.util.Util;
 
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
+import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public class DangerScreen extends VersionedScreen {
 
-	private final Screen parent;
-	private final ModpackUpdater modpackUpdaterInstance;
-	private final AtomicBoolean updateStarted = new AtomicBoolean(false);
+	private final ModpackUpdater modpackUpdater;
+	private boolean confirmationFinished;
 
-	public DangerScreen(Screen parent, ModpackUpdater modpackUpdaterInstance) {
+	public DangerScreen(ModpackUpdater modpackUpdater) {
 		super(VersionedText.literal("DangerScreen"));
-		this.parent = parent;
-		this.modpackUpdaterInstance = modpackUpdaterInstance;
+		this.modpackUpdater = modpackUpdater;
 
 		if (AudioManager.isMusicPlaying()) AudioManager.stopMusic();
 	}
@@ -31,14 +26,29 @@ public class DangerScreen extends VersionedScreen {
 		super.init();
 
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 115, this.height / 2 + 50, 120, 20, VersionedText.translatable("automodpack.danger.cancel"),
-				button -> this.minecraft.gui.setScreen(parent)));
+				button -> cancelConfirmation()));
 
 		this.addRenderableWidget(buttonWidget(this.width / 2 + 15, this.height / 2 + 50, 120, 20,
-				VersionedText.translatable("automodpack.danger.confirm").withStyle(ChatFormatting.BOLD), button -> {
-					if (updateStarted.compareAndSet(false, true)) {
-						Util.backgroundExecutor().execute(() -> modpackUpdaterInstance.startUpdate(modpackUpdaterInstance.getModpackFileList()));
-					}
-				}));
+				VersionedText.translatable("automodpack.danger.confirm").withStyle(ChatFormatting.BOLD), button -> startUpdate()));
+	}
+
+	private void startUpdate() {
+		modpackUpdater.startConfirmedUpdate();
+	}
+
+	private void cancelConfirmation() {
+		modpackUpdater.cancelConfirmation();
+		new ScreenManager().title();
+	}
+
+	@Override
+	public void tick() {
+		super.tick();
+		if (confirmationFinished) return;
+		ModpackUpdater.ConfirmationState state = modpackUpdater.getConfirmationState();
+		if (state != ModpackUpdater.ConfirmationState.EXPIRED && state != ModpackUpdater.ConfirmationState.CANCELLED) return;
+		confirmationFinished = true;
+		new ScreenManager().title();
 	}
 
 	@Override
@@ -64,8 +74,8 @@ public class DangerScreen extends VersionedScreen {
 
 	@Override
 	public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
-		if (keyCode == 257 && updateStarted.compareAndSet(false, true)) { // Enter key (GLFW_KEY_ENTER = 257)
-			Util.backgroundExecutor().execute(() -> modpackUpdaterInstance.startUpdate(modpackUpdaterInstance.getModpackFileList()));
+		if (keyCode == 257) { // Enter key (GLFW_KEY_ENTER = 257)
+			startUpdate();
 			return true;
 		}
 		return super.onKeyPress(keyCode, scanCode, modifiers);

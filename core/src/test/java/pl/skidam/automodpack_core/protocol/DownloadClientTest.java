@@ -1,12 +1,22 @@
 package pl.skidam.automodpack_core.protocol;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_CHUNK_SIZE_TYPE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_COMPRESSION_TYPE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.CONFIGURATION_ECHO_TYPE;
+import static pl.skidam.automodpack_core.protocol.NetUtils.END_OF_TRANSMISSION;
+import static pl.skidam.automodpack_core.protocol.NetUtils.FILE_REQUEST_TYPE;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -15,16 +25,22 @@ import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLSocket;
-import javax.net.ssl.TrustManagerFactory;
 
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.Extension;
@@ -37,6 +53,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.protocol.compression.CompressionCodec;
+import pl.skidam.automodpack_core.protocol.compression.CompressionFactory;
+import pl.skidam.automodpack_core.protocol.compression.CompressionType;
 
 class DownloadClientTest {
 
@@ -48,20 +67,15 @@ class DownloadClientTest {
 	}
 
 	@Test
-	void acceptsValidSelfSignedCertificateForDnsFallback() throws Exception {
-		X509Certificate certificate = NetUtils.selfSign(NetUtils.generateKeyPair());
-
-		assertTrue(DownloadClient.isSelfSigned(certificate));
-	}
-
-	@Test
-	void rejectsCaIssuedCertificateForDnsFallback() throws Exception {
+	void recognizesOnlyGenuinelySelfSignedCertificates() throws Exception {
+		X509Certificate selfSigned = NetUtils.selfSign(NetUtils.generateKeyPair());
 		KeyPair issuerKeyPair = NetUtils.generateKeyPair();
 		X509Certificate issuer = NetUtils.selfSign(issuerKeyPair);
-		X509Certificate leaf = issueCertificate(new X500Name(issuer.getSubjectX500Principal().getName()), new X500Name("CN=AutoModpack CA-issued Certificate"),
-				null, NetUtils.generateKeyPair(), issuerKeyPair, Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600));
+		X509Certificate issued = issueCertificate(new X500Name(issuer.getSubjectX500Principal().getName()), new X500Name("CN=Issued"), null,
+				NetUtils.generateKeyPair(), issuerKeyPair, Instant.now().minusSeconds(60), Instant.now().plusSeconds(3600));
 
-		assertFalse(DownloadClient.isSelfSigned(leaf));
+		assertTrue(DownloadClient.isSelfSigned(selfSigned));
+		assertFalse(DownloadClient.isSelfSigned(issued));
 	}
 
 	@Test
@@ -75,69 +89,89 @@ class DownloadClientTest {
 	}
 
 	@Test
-	void authenticatesOriginWhileConnectingToDifferentRoute() throws Exception {
-		KeyPair keyPair = NetUtils.generateKeyPair();
-		X500Name subject = new X500Name("CN=origin.example");
-		X509Certificate certificate = issueCertificate(subject, subject, "origin.example", keyPair, keyPair, Instant.now().minusSeconds(60),
-				Instant.now().plusSeconds(3600));
+	void exactAndSessionPinsConstrainEveryConnection() throws Exception {
+		X509Certificate accepted = NetUtils.selfSign(NetUtils.generateKeyPair());
+		X509Certificate changed = NetUtils.selfSign(NetUtils.generateKeyPair());
+		String fingerprint = NetUtils.getFingerprint(accepted);
 
-		withTlsServer(keyPair, certificate, port -> {
-			var connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("origin.example", 25565),
-					InetSocketAddress.createUnresolved("route.example", port), ModpackConnectionMode.DIRECT, null, null);
+		var configuredTrust = new CustomizableTrustManager.SessionTrust("origin.example:25565", fingerprint);
+		var configuredManager = new CustomizableTrustManager(configuredTrust, null);
+		assertDoesNotThrow(() -> configuredManager.checkServerTrusted(new X509Certificate[]{accepted}, "RSA"));
+		assertThrows(CertificatePinMismatchException.class,
+				() -> configuredManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
 
-			assertDoesNotThrow(() -> {
-				var connection = new PreValidationConnection(new Socket("127.0.0.1", port), connectionInfo, clientContext(certificate));
-				connection.getSocket().close();
-			});
-		});
+		var sessionTrust = new CustomizableTrustManager.SessionTrust("origin.example:25565", null);
+		sessionTrust.accept(accepted);
+		var sessionManager = new CustomizableTrustManager(sessionTrust, null);
+		assertDoesNotThrow(() -> sessionManager.checkServerTrusted(new X509Certificate[]{accepted}, "RSA"));
+		assertThrows(CertificatePinMismatchException.class, () -> sessionManager.checkServerTrusted(new X509Certificate[]{changed}, "RSA"));
 	}
 
 	@Test
-	void exactPinConstrainsOtherwiseTrustedCertificate() throws Exception {
-		X509Certificate certificate = NetUtils.selfSign(NetUtils.generateKeyPair());
-		KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
-		trustStore.load(null);
-
-		var matching = new CustomizableTrustManager(trustStore, null, "origin.example", NetUtils.getFingerprint(certificate));
-		assertDoesNotThrow(() -> matching.checkServerTrusted(new X509Certificate[]{certificate}, "RSA"));
-
-		var mismatching = new CustomizableTrustManager(trustStore, null, "origin.example", "0".repeat(64));
-		assertThrows(CertificatePinMismatchException.class, () -> mismatching.checkServerTrusted(new X509Certificate[]{certificate}, "RSA"));
-		assertThrows(CertificatePinMismatchException.class, () -> mismatching.checkServerTrusted(new X509Certificate[]{certificate}, "RSA", (SSLEngine) null));
-	}
-
-	@Test
-	void rejectsCertificateValidOnlyForAdvertisedRoute() throws Exception {
+	void deferredTrustSendsNoApplicationBytesAndReusesSocket() throws Exception {
 		KeyPair keyPair = NetUtils.generateKeyPair();
-		X500Name subject = new X500Name("CN=route.example");
-		X509Certificate certificate = issueCertificate(subject, subject, "route.example", keyPair, keyPair, Instant.now().minusSeconds(60),
-				Instant.now().plusSeconds(3600));
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		CompletableFuture<Boolean> decision = new CompletableFuture<>();
 
-		withTlsServer(keyPair, certificate, port -> {
-			var connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("origin.example", 25565),
-					InetSocketAddress.createUnresolved("route.example", port), ModpackConnectionMode.DIRECT, null, null);
+		try (TransferServer server = new TransferServer(keyPair, certificate)) {
+			Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
+			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
 
-			assertThrows(IOException.class, () -> new PreValidationConnection(new Socket("127.0.0.1", port), connectionInfo, clientContext(certificate)));
-		});
-	}
+			assertEquals(-1, server.earlyApplicationByte().get(5, TimeUnit.SECONDS));
+			assertFalse(clientFuture.isDone());
+			decision.complete(true);
 
-	private static void withTlsServer(KeyPair keyPair, X509Certificate certificate, ThrowingPortConsumer test) throws Exception {
-		SSLServerSocket server = (SSLServerSocket) serverContext(keyPair, certificate).getServerSocketFactory().createServerSocket(0, 1,
-				InetAddress.getLoopbackAddress());
-		server.setEnabledProtocols(new String[]{"TLSv1.3"});
-
-		CompletableFuture<Void> handshake = CompletableFuture.runAsync(() -> {
-			try (SSLSocket socket = (SSLSocket) server.accept()) {
-				socket.setEnabledProtocols(new String[]{"TLSv1.3"});
-				socket.startHandshake();
-			} catch (IOException ignored) {
+			try (DownloadClient ignored = clientFuture.get(5, TimeUnit.SECONDS)) {
+				server.configured().get(5, TimeUnit.SECONDS);
+				assertEquals(1, server.acceptedConnections());
 			}
-		});
+		}
+	}
 
-		try (server) {
-			test.accept(server.getLocalPort());
-		} finally {
-			handshake.get(5, TimeUnit.SECONDS);
+	@Test
+	void rejectedDeferredTrustClosesWithoutReconnect() throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		CompletableFuture<Boolean> decision = new CompletableFuture<>();
+
+		try (TransferServer server = new TransferServer(keyPair, certificate)) {
+			Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, null, null);
+			CompletableFuture<DownloadClient> clientFuture = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> decision);
+
+			assertEquals(-1, server.earlyApplicationByte().get(5, TimeUnit.SECONDS));
+			decision.complete(false);
+			assertThrows(Exception.class, () -> clientFuture.get(5, TimeUnit.SECONDS));
+			assertEquals(1, server.acceptedConnections());
+		}
+	}
+
+	@Test
+	void lazyPoolCapsAtFiveAndQueuesSixthRequest(@TempDir Path directory) throws Exception {
+		KeyPair keyPair = NetUtils.generateKeyPair();
+		X509Certificate certificate = NetUtils.selfSign(keyPair);
+		String fingerprint = NetUtils.getFingerprint(certificate);
+
+		try (LeasingServer server = new LeasingServer(keyPair, certificate)) {
+			Jsons.ConnectionInfo connectionInfo = new Jsons.ConnectionInfo(InetSocketAddress.createUnresolved("127.0.0.1", 25565),
+					new InetSocketAddress(InetAddress.getLoopbackAddress(), server.port()), ModpackConnectionMode.DIRECT, fingerprint, null);
+			try (DownloadClient client = DownloadClient.createAsync(connectionInfo, new byte[32], ignored -> CompletableFuture.completedFuture(false)).get(5,
+					TimeUnit.SECONDS)) {
+				List<CompletableFuture<Path>> downloads = new ArrayList<>();
+				for (int i = 0; i < 6; i++) downloads.add(client.downloadFile(new byte[0], directory.resolve("download-" + i), null));
+
+				assertTrue(server.firstFiveRequests().await(5, TimeUnit.SECONDS));
+				assertEquals(5, server.acceptedConnections());
+				assertFalse(server.sixthRequest().isDone());
+
+				server.allowResponses(1);
+				server.sixthRequest().get(5, TimeUnit.SECONDS);
+				assertEquals(5, server.acceptedConnections());
+
+				server.allowResponses(5);
+				CompletableFuture.allOf(downloads.toArray(CompletableFuture[]::new)).get(5, TimeUnit.SECONDS);
+			}
 		}
 	}
 
@@ -155,19 +189,6 @@ class DownloadClientTest {
 		return context;
 	}
 
-	private static SSLContext clientContext(X509Certificate certificate) throws Exception {
-		KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
-		trustStore.load(null);
-		trustStore.setCertificateEntry("server", certificate);
-
-		TrustManagerFactory trustManagers = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-		trustManagers.init(trustStore);
-
-		SSLContext context = SSLContext.getInstance("TLSv1.3");
-		context.init(null, trustManagers.getTrustManagers(), new SecureRandom());
-		return context;
-	}
-
 	private static X509Certificate issueCertificate(X500Name issuer, X500Name subject, String dnsName, KeyPair subjectKeyPair, KeyPair signingKeyPair,
 			Instant notBefore, Instant notAfter) throws Exception {
 		var builder = new JcaX509v3CertificateBuilder(issuer, BigInteger.ONE, Date.from(notBefore), Date.from(notAfter), subject, subjectKeyPair.getPublic());
@@ -176,8 +197,206 @@ class DownloadClientTest {
 		return new JcaX509CertificateConverter().getCertificate(builder.build(signer));
 	}
 
-	@FunctionalInterface
-	private interface ThrowingPortConsumer {
-		void accept(int port) throws Exception;
+	private static final class LeasingServer implements AutoCloseable {
+		private final SSLServerSocket server;
+		private final ExecutorService executor = Executors.newCachedThreadPool();
+		private final List<SSLSocket> sockets = new CopyOnWriteArrayList<>();
+		private final AtomicInteger acceptedConnections = new AtomicInteger();
+		private final CountDownLatch firstFiveRequests = new CountDownLatch(5);
+		private final CompletableFuture<Void> sixthRequest = new CompletableFuture<>();
+		private final Semaphore responsePermits = new Semaphore(0);
+		private volatile boolean closed;
+
+		LeasingServer(KeyPair keyPair, X509Certificate certificate) throws Exception {
+			server = (SSLServerSocket) serverContext(keyPair, certificate).getServerSocketFactory().createServerSocket(0, 5,
+					InetAddress.getLoopbackAddress());
+			server.setEnabledProtocols(new String[]{"TLSv1.3"});
+			executor.execute(this::acceptConnections);
+		}
+
+		int port() {
+			return server.getLocalPort();
+		}
+
+		int acceptedConnections() {
+			return acceptedConnections.get();
+		}
+
+		CountDownLatch firstFiveRequests() {
+			return firstFiveRequests;
+		}
+
+		CompletableFuture<Void> sixthRequest() {
+			return sixthRequest;
+		}
+
+		void allowResponses(int count) {
+			responsePermits.release(count);
+		}
+
+		private void acceptConnections() {
+			while (!closed) {
+				try {
+					SSLSocket socket = (SSLSocket) server.accept();
+					sockets.add(socket);
+					acceptedConnections.incrementAndGet();
+					executor.execute(() -> serve(socket));
+				} catch (IOException e) {
+					if (!closed) sixthRequest.completeExceptionally(e);
+				}
+			}
+		}
+
+		private void serve(SSLSocket socket) {
+			try {
+				socket.setEnabledProtocols(new String[]{"TLSv1.3"});
+				socket.startHandshake();
+				DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+				DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+
+				int version = in.readUnsignedByte();
+				if (in.readUnsignedByte() != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected compression request");
+				in.readUnsignedByte();
+				out.writeByte(version);
+				out.writeByte(CONFIGURATION_COMPRESSION_TYPE);
+				out.writeByte(CompressionType.GZIP.wireId());
+				out.flush();
+
+				version = in.readUnsignedByte();
+				if (in.readUnsignedByte() != CONFIGURATION_CHUNK_SIZE_TYPE) throw new IOException("Unexpected chunk request");
+				int chunkSize = in.readInt();
+				out.writeByte(version);
+				out.writeByte(CONFIGURATION_CHUNK_SIZE_TYPE);
+				out.writeInt(chunkSize);
+				out.flush();
+
+				in.readUnsignedByte();
+				if (in.readUnsignedByte() != CONFIGURATION_ECHO_TYPE) throw new IOException("Unexpected echo request");
+
+				CompressionCodec codec = CompressionFactory.createCodec(CompressionType.GZIP);
+				while (!closed && !socket.isClosed()) {
+					byte[] request = readFrame(in, codec);
+					if (request.length < 2 || request[1] != FILE_REQUEST_TYPE) throw new IOException("Unexpected file request");
+					if (firstFiveRequests.getCount() > 0) {
+						firstFiveRequests.countDown();
+					} else {
+						sixthRequest.complete(null);
+					}
+					responsePermits.acquire();
+					writeFrame(out, codec, new byte[]{request[0], END_OF_TRANSMISSION});
+				}
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			} catch (IOException ignored) {
+			}
+		}
+
+		private static byte[] readFrame(DataInputStream in, CompressionCodec codec) throws IOException {
+			int compressedLength = in.readInt();
+			int originalLength = in.readInt();
+			byte[] compressed = in.readNBytes(compressedLength);
+			if (compressed.length != compressedLength) throw new EOFException("Incomplete request frame");
+			return codec.decompress(compressed, 0, compressedLength, originalLength);
+		}
+
+		private static void writeFrame(DataOutputStream out, CompressionCodec codec, byte[] payload) throws IOException {
+			byte[] compressed = codec.compress(payload);
+			out.writeInt(compressed.length);
+			out.writeInt(payload.length);
+			out.write(compressed);
+			out.flush();
+		}
+
+		@Override
+		public void close() throws Exception {
+			closed = true;
+			server.close();
+			responsePermits.release(6);
+			for (SSLSocket socket : sockets) socket.close();
+			executor.shutdownNow();
+		}
+	}
+
+	private static final class TransferServer implements AutoCloseable {
+		private final SSLServerSocket server;
+		private final ExecutorService executor = Executors.newSingleThreadExecutor();
+		private final AtomicInteger acceptedConnections = new AtomicInteger();
+		private final CompletableFuture<Integer> earlyApplicationByte = new CompletableFuture<>();
+		private final CompletableFuture<Void> configured = new CompletableFuture<>();
+		private volatile SSLSocket socket;
+
+		TransferServer(KeyPair keyPair, X509Certificate certificate) throws Exception {
+			server = (SSLServerSocket) serverContext(keyPair, certificate).getServerSocketFactory().createServerSocket(0, 5,
+					InetAddress.getLoopbackAddress());
+			server.setEnabledProtocols(new String[]{"TLSv1.3"});
+			executor.execute(this::serve);
+		}
+
+		int port() {
+			return server.getLocalPort();
+		}
+
+		int acceptedConnections() {
+			return acceptedConnections.get();
+		}
+
+		CompletableFuture<Integer> earlyApplicationByte() {
+			return earlyApplicationByte;
+		}
+
+		CompletableFuture<Void> configured() {
+			return configured;
+		}
+
+		private void serve() {
+			try {
+				socket = (SSLSocket) server.accept();
+				acceptedConnections.incrementAndGet();
+				socket.setEnabledProtocols(new String[]{"TLSv1.3"});
+				socket.startHandshake();
+				DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+				DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+
+				socket.setSoTimeout(300);
+				try {
+					earlyApplicationByte.complete(in.readUnsignedByte());
+				} catch (SocketTimeoutException e) {
+					earlyApplicationByte.complete(-1);
+				}
+
+				socket.setSoTimeout(5000);
+				int version = in.readUnsignedByte();
+				int compressionType = in.readUnsignedByte();
+				int compression = in.readUnsignedByte();
+				if (compressionType != CONFIGURATION_COMPRESSION_TYPE) throw new IOException("Unexpected compression request");
+				out.writeByte(version);
+				out.writeByte(compressionType);
+				out.writeByte(compression);
+				out.flush();
+
+				version = in.readUnsignedByte();
+				int chunkType = in.readUnsignedByte();
+				int chunkSize = in.readInt();
+				if (chunkType != CONFIGURATION_CHUNK_SIZE_TYPE) throw new IOException("Unexpected chunk request");
+				out.writeByte(version);
+				out.writeByte(chunkType);
+				out.writeInt(chunkSize);
+				out.flush();
+
+				in.readUnsignedByte();
+				if (in.readUnsignedByte() != CONFIGURATION_ECHO_TYPE) throw new IOException("Unexpected echo request");
+				configured.complete(null);
+			} catch (Exception e) {
+				if (!earlyApplicationByte.isDone()) earlyApplicationByte.completeExceptionally(e);
+				if (!configured.isDone()) configured.completeExceptionally(e);
+			}
+		}
+
+		@Override
+		public void close() throws Exception {
+			if (socket != null) socket.close();
+			server.close();
+			executor.shutdownNow();
+		}
 	}
 }

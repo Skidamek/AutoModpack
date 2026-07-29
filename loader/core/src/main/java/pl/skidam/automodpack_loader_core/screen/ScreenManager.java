@@ -52,6 +52,11 @@ public class ScreenManager implements ScreenService {
 	}
 
 	@Override
+	public void waiting() {
+		INSTANCE.waiting();
+	}
+
+	@Override
 	public Optional<String> getScreenString() {
 		return INSTANCE.getScreenString();
 	}

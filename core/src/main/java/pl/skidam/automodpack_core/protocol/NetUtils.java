@@ -1,6 +1,9 @@
 package pl.skidam.automodpack_core.protocol;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,12 +18,13 @@ import java.util.Date;
 import java.util.HexFormat;
 import java.util.Locale;
 
-import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import javax.security.auth.x500.X500Principal;
+
+import org.bouncycastle.asn1.DERNull;
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
+import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 import pl.skidam.automodpack_core.utils.LockFreeInputStream;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
@@ -53,11 +57,8 @@ public class NetUtils {
 	public static final int MIN_CHUNK_SIZE = 8 * 1024; // 8 KB
 	public static final int MAX_CHUNK_SIZE = 512 * 1024; // 512 KB
 
-	private static final Provider BC_PROVIDER = new BouncyCastleProvider();
-
-	static {
-		if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) Security.addProvider(BC_PROVIDER);
-	}
+	private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
+	private static final AlgorithmIdentifier SIGNATURE_ALGORITHM_IDENTIFIER = new AlgorithmIdentifier(PKCSObjectIdentifiers.sha256WithRSAEncryption, DERNull.INSTANCE);
 
 	public static String getFingerprint(X509Certificate cert) throws CertificateEncodingException {
 		byte[] certificate = cert.getEncoded();
@@ -92,7 +93,7 @@ public class NetUtils {
 		long now = System.currentTimeMillis();
 		Date startDate = new Date(now);
 
-		X500Name dnName = new X500Name("CN=AutoModpack Self Signed Certificate");
+		X500Principal distinguishedName = new X500Principal("CN=AutoModpack Self Signed Certificate");
 		BigInteger certSerialNumber = new BigInteger(159, new SecureRandom());
 
 		Calendar calendar = Calendar.getInstance();
@@ -100,11 +101,44 @@ public class NetUtils {
 		calendar.add(Calendar.YEAR, 1);
 		Date endDate = calendar.getTime();
 
-		String signatureAlgorithm = "SHA256WithRSA";
-		ContentSigner contentSigner = new JcaContentSignerBuilder(signatureAlgorithm).build(keyPair.getPrivate());
-		JcaX509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(dnName, certSerialNumber, startDate, endDate, dnName, keyPair.getPublic());
+		ContentSigner contentSigner = createContentSigner(keyPair.getPrivate());
+		JcaX509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(distinguishedName, certSerialNumber, startDate, endDate, distinguishedName, keyPair.getPublic());
 
-		return new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certBuilder.build(contentSigner));
+		byte[] encodedCertificate = certBuilder.build(contentSigner).getEncoded();
+		X509Certificate certificate;
+		try (InputStream input = new ByteArrayInputStream(encodedCertificate)) {
+			certificate = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(input);
+		}
+		certificate.verify(keyPair.getPublic());
+		return certificate;
+	}
+
+	private static ContentSigner createContentSigner(PrivateKey privateKey) throws GeneralSecurityException {
+		Signature signature = Signature.getInstance(SIGNATURE_ALGORITHM);
+		signature.initSign(privateKey);
+		ByteArrayOutputStream encodedCertificate = new ByteArrayOutputStream();
+
+		return new ContentSigner() {
+			@Override
+			public AlgorithmIdentifier getAlgorithmIdentifier() {
+				return SIGNATURE_ALGORITHM_IDENTIFIER;
+			}
+
+			@Override
+			public OutputStream getOutputStream() {
+				return encodedCertificate;
+			}
+
+			@Override
+			public byte[] getSignature() {
+				try {
+					signature.update(encodedCertificate.toByteArray());
+					return signature.sign();
+				} catch (SignatureException e) {
+					throw new IllegalStateException("Failed to sign certificate", e);
+				}
+			}
+		};
 	}
 
 	public static void saveCertificate(X509Certificate cert, Path path) throws Exception {
