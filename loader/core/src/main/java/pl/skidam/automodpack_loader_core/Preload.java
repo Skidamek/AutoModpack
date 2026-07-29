@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.config.BootstrapConfig;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.ConfigUtils;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ServerConfigMigration;
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -209,38 +210,10 @@ public class Preload {
 			clientConfig = ConfigTools.readOrCreate(clientConfigFile, Jsons.ClientConfigFieldsV3.class, Jsons.ClientConfigFieldsV3::new);
 		}
 
-		var serverConfigVersion = ConfigTools.read(serverConfigFile, Jsons.VersionConfigField.class).orElse(null);
-		if (serverConfigVersion != null) {
-			if (serverConfigVersion.DO_NOT_CHANGE_IT == 1) {
-				// Update the configs schemes to make this update not as breaking as it could be
-				var serverConfigV1 = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV1.class).orElse(null);
-				var serverConfigV2 = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV2.class).orElse(null);
-				if (serverConfigV1 != null && serverConfigV2 != null) {
-					serverConfigVersion.DO_NOT_CHANGE_IT = 2;
-					serverConfigV2.DO_NOT_CHANGE_IT = 2;
-
-					if (serverConfigV1.hostIp.isBlank()) {
-						serverConfigV2.advertisedEndpointHost = "";
-					} else {
-						serverConfigV2.advertisedEndpointHost = AddressHelpers.parseOrigin(serverConfigV1.hostIp).getHostString();
-					}
-
-					if (serverConfigV1.hostModpackOnMinecraftPort) {
-						serverConfigV2.bindPort = -1;
-						serverConfigV2.advertisedEndpointPort = -1;
-					} else {
-						serverConfigV2.bindPort = serverConfigV1.hostPort;
-						serverConfigV2.advertisedEndpointPort = serverConfigV1.hostPort;
-					}
-				}
-
-				writeConfig(serverConfigFile, serverConfigV2);
-				LOGGER.info("Updated server config version to {}", serverConfigVersion.DO_NOT_CHANGE_IT);
-			}
-		}
+		ServerConfigMigration.migrateToLatest(serverConfigFile);
 
 		// load server config
-		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV2.class, Jsons.ServerConfigFieldsV2::new);
+		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
 
 		if (serverConfig != null) {
 			String serverConfigBefore = ConfigTools.GSON.toJson(serverConfig);

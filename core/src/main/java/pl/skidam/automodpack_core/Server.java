@@ -8,6 +8,7 @@ import java.util.HashSet;
 
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.config.ServerConfigMigration;
 import pl.skidam.automodpack_core.modpack.ModpackContent;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.protocol.netty.NettyServer;
@@ -36,9 +37,12 @@ public class Server {
 		serverConfigFile = modpackDir.resolve("automodpack-server.json");
 		serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
-		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV2.class, Jsons.ServerConfigFieldsV2::new);
+		ServerConfigMigration.migrateToLatest(serverConfigFile);
+
+		serverConfig = ConfigTools.readOrCreate(serverConfigFile, Jsons.ServerConfigFieldsV3.class, Jsons.ServerConfigFieldsV3::new);
 		if (serverConfig != null) {
-			serverConfig.syncedFiles = new HashSet<>();
+			// Standalone host serves only what is already in the modpack dir, so no group pulls in CWD files.
+			if (serverConfig.groups != null) serverConfig.groups.values().forEach(group -> group.syncedFiles = new HashSet<>());
 			serverConfig.validateSecrets = false;
 			ConfigTools.writeAtomic(serverConfigFile, serverConfig);
 
@@ -62,8 +66,7 @@ public class Server {
 		mainModpackDir.toFile().mkdirs();
 
 		ModpackExecutor modpackExecutor = new ModpackExecutor();
-		ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.syncedFiles,
-				serverConfig.allowEditsInFiles, serverConfig.overwriteEditableFiles, serverConfig.forceCopyFilesToStandardLocation,
+		ModpackContent modpackContent = new ModpackContent(serverConfig.modpackName, null, mainModpackDir, serverConfig.groups,
 				modpackExecutor.getExecutor());
 		boolean generated = modpackExecutor.generateNew(modpackContent);
 

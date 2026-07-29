@@ -20,6 +20,7 @@ import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
 
+import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
@@ -92,8 +93,9 @@ public final class ConfigTools {
 				InetSocketAddress origin = parseAddress(object, "origin", "serverAddress", true);
 				InetSocketAddress endpoint = parseAddress(object, "endpoint", "hostAddress", false);
 				JsonElement modeElement = object.get("connectionMode");
-				if (modeElement == null || modeElement.isJsonNull()) throw new JsonParseException("ConnectionInfo connectionMode is required");
-				ModpackConnectionMode connectionMode = context.deserialize(modeElement, ModpackConnectionMode.class);
+				ModpackConnectionMode connectionMode = modeElement == null || modeElement.isJsonNull()
+						? ModpackConnectionMode.defaultFor(Constants.MC_VERSION, Constants.LOADER)
+						: context.deserialize(modeElement, ModpackConnectionMode.class);
 				return new Jsons.ConnectionInfo(origin, endpoint, connectionMode, null, null);
 			} catch (IllegalArgumentException e) {
 				throw new JsonParseException("Invalid ConnectionInfo", e);

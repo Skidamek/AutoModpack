@@ -29,7 +29,7 @@ public class Constants {
 	public static Path MODS_DIR;
 	public static ModpackExecutor modpackExecutor;
 	public static NettyServer hostServer;
-	public static Jsons.ServerConfigFieldsV2 serverConfig;
+	public static Jsons.ServerConfigFieldsV3 serverConfig;
 	public static Jsons.ClientConfigFieldsV3 clientConfig;
 	public static Jsons.KnownHostsFields knownHosts;
 	public static final Path automodpackDir = Path.of("automodpack");
@@ -46,6 +46,7 @@ public class Constants {
 	public static Path cacheDir = automodpackDir.resolve("cache");
 	public static Path hashCacheDBFile = cacheDir.resolve("hash-cache.db");
 	public static Path modCacheDBFile = cacheDir.resolve("mod-cache.db");
+	public static Path clientSelectionFile = automodpackDir.resolve("automodpack-client-selection.json");
 	public static Path clientDummyFilesFile = automodpackDir.resolve("automodpack-dummy-files.json");
 	public static Path clientDeletionTimeStamps = automodpackDir.resolve("automodpack-deletion-timestamps-files.json");
 	public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");

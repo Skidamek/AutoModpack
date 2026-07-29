@@ -10,7 +10,7 @@ import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 
 public class ConfigUtils {
 
-	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config, boolean saveAfter) {
+	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV3 config, boolean saveAfter) {
 		normalizeServerConfig(config);
 		if (saveAfter) {
 			try {
@@ -21,39 +21,32 @@ public class ConfigUtils {
 		}
 	}
 
-	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV2 config) {
+	public static void normalizeServerConfig(Jsons.ServerConfigFieldsV3 config) {
 		if (config.connectionMode == null) config.connectionMode = ModpackConnectionMode.defaultFor(MC_VERSION, LOADER);
 		if (config.connectionMode == ModpackConnectionMode.HOLEPUNCH && !ModpackConnectionMode.isHolepunchAvailable(MC_VERSION, LOADER)) {
 			config.connectionMode = ModpackConnectionMode.MAGIC_PACKET;
 			LOGGER.warn("HOLEPUNCH connection mode is unavailable on " + LOADER + " " + MC_VERSION + ". Falling back to MAGIC_PACKET");
 		}
 
-		Set<String> fixedSyncedFiles = new LinkedHashSet<>(config.syncedFiles.size());
 		Map<String, String> fixedNonModpackFilesToDelete = new LinkedHashMap<>(config.nonModpackFilesToDelete.size());
 
 		String prefixPattern = "^/?automodpack/host-modpack/[^/]+/";
 		Pattern pattern = Pattern.compile(prefixPattern);
 
-		for (var file : config.syncedFiles) {
-			if (file == null) {
-				LOGGER.warn("Ignored null entry in syncedFiles.");
-				continue;
-			}
-			var trimmed = file.trim();
-			if (trimmed.isEmpty()) {
-				LOGGER.warn("Ignored empty entry in syncedFiles.");
-				continue;
-			}
-			if (pattern.matcher(trimmed).find()) {
-				LOGGER.info("Removed redundant syncedFiles entry '{}': paths under '/automodpack/host-modpack/' are implicitly synced.", file);
-			} else {
-				fixedSyncedFiles.add(prefixSlash(file));
+		if (config.groups != null) {
+			for (var groupEntry : config.groups.entrySet()) {
+				var group = groupEntry.getValue();
+				if (group == null) {
+					LOGGER.warn("Ignored null group declaration '{}'.", groupEntry.getKey());
+					continue;
+				}
+				group.syncedFiles = normalizeSyncedFiles(group.syncedFiles, pattern);
+				group.allowEditsInFiles = normalizePathRules(group.allowEditsInFiles, "allowEditsInFiles", pattern);
+				group.overwriteEditableFiles = normalizePathRules(group.overwriteEditableFiles, "overwriteEditableFiles", pattern);
+				group.forceCopyFilesToStandardLocation = normalizePathRules(group.forceCopyFilesToStandardLocation, "forceCopyFilesToStandardLocation",
+						pattern);
 			}
 		}
-
-		Set<String> fixedAllowEditsInFiles = normalizePathRules(config.allowEditsInFiles, "allowEditsInFiles", pattern);
-		Set<String> fixedOverwriteEditableFiles = normalizePathRules(config.overwriteEditableFiles, "overwriteEditableFiles", pattern);
-		Set<String> fixedForceCopyFilesToStandardLocation = normalizePathRules(config.forceCopyFilesToStandardLocation, "forceCopyFilesToStandardLocation", pattern);
 
 		for (var entry : config.nonModpackFilesToDelete.entrySet()) {
 			var file = entry.getKey();
@@ -74,11 +67,30 @@ public class ConfigUtils {
 			fixedNonModpackFilesToDelete.put(prefixSlash(fixed), hash);
 		}
 
-		config.syncedFiles = fixedSyncedFiles;
-		config.allowEditsInFiles = fixedAllowEditsInFiles;
-		config.overwriteEditableFiles = fixedOverwriteEditableFiles;
-		config.forceCopyFilesToStandardLocation = fixedForceCopyFilesToStandardLocation;
 		config.nonModpackFilesToDelete = fixedNonModpackFilesToDelete;
+	}
+
+	private static Set<String> normalizeSyncedFiles(Set<String> syncedFiles, Pattern hostModpackPattern) {
+		if (syncedFiles == null || syncedFiles.isEmpty()) return new LinkedHashSet<>();
+
+		Set<String> fixedSyncedFiles = new LinkedHashSet<>(syncedFiles.size());
+		for (var file : syncedFiles) {
+			if (file == null) {
+				LOGGER.warn("Ignored null entry in syncedFiles.");
+				continue;
+			}
+			var trimmed = file.trim();
+			if (trimmed.isEmpty()) {
+				LOGGER.warn("Ignored empty entry in syncedFiles.");
+				continue;
+			}
+			if (hostModpackPattern.matcher(trimmed).find()) {
+				LOGGER.info("Removed redundant syncedFiles entry '{}': paths under '/automodpack/host-modpack/' are implicitly synced.", file);
+			} else {
+				fixedSyncedFiles.add(prefixSlash(file));
+			}
+		}
+		return fixedSyncedFiles;
 	}
 
 	private static Set<String> normalizePathRules(Set<String> files, String configKey, Pattern hostModpackPattern) {

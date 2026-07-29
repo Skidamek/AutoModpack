@@ -18,6 +18,7 @@ import pl.skidam.automodpack.networking.content.DataPacket;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.auth.SecretsStore;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -100,7 +101,9 @@ public class DataC2SPacket {
 			if (manifestResult.state() == ModpackUtils.ManifestFetchState.OPERATION_FAILED) return buildResponse(true);
 			if (!manifestResult.successful()) return buildResponse(null);
 
-			Jsons.ModpackContentFields serverModpackContent = manifestResult.content();
+			// Narrow the server manifest to the player's selected groups before any update check,
+			// otherwise unselected files read as missing and force an endless "please restart" loop.
+			Jsons.ModpackContentFields serverModpackContent = ClientSelectionManager.filterToSelection(manifestResult.content());
 			DownloadClient downloadClient = manifestResult.client();
 			Path modpackDir = ModpackUtils.getModpackPath(serverModpackContent.modpackId);
 			try {

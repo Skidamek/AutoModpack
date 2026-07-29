@@ -291,7 +291,7 @@ public class Commands {
 
 	private static int reload(CommandContext<CommandSourceStack> context) {
 		Util.backgroundExecutor().execute(() -> {
-			var tempServerConfig = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV2.class).orElse(null);
+			var tempServerConfig = ConfigTools.read(serverConfigFile, Jsons.ServerConfigFieldsV3.class).orElse(null);
 			if (tempServerConfig != null) {
 				ConfigUtils.normalizeServerConfig(tempServerConfig, true);
 				boolean restartRequired = connectionRuntimeChanged(serverConfig, tempServerConfig);
@@ -364,7 +364,7 @@ public class Commands {
 		}
 	}
 
-	private static boolean connectionRuntimeChanged(Jsons.ServerConfigFieldsV2 previous, Jsons.ServerConfigFieldsV2 current) {
+	private static boolean connectionRuntimeChanged(Jsons.ServerConfigFieldsV3 previous, Jsons.ServerConfigFieldsV3 current) {
 		return previous.connectionMode != current.connectionMode || previous.bindPort != current.bindPort || previous.modpackHost != current.modpackHost
 				|| previous.disableInternalTLS != current.disableInternalTLS || previous.bandwidthLimit != current.bandwidthLimit
 				|| previous.updateIpsOnEveryStart != current.updateIpsOnEveryStart || !Objects.equals(previous.bindAddress, current.bindAddress);

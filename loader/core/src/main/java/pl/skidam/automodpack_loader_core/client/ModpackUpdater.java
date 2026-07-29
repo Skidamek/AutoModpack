@@ -25,6 +25,7 @@ import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.ClientSelectionManager;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -105,7 +106,9 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public ModpackUpdater(Jsons.ModpackContentFields modpackContent, Jsons.ConnectionInfo connectionInfo, Secrets.Secret secret, Path modpackPath,
 			DownloadClient downloadClient) {
-		this.serverModpackContent = modpackContent;
+		// Filtering here is a safety net; callers that also feed the raw manifest to isUpdate must
+		// filter it themselves so both sides agree on what the modpack contains.
+		this.serverModpackContent = ClientSelectionManager.filterToSelection(modpackContent);
 		this.connectionInfo = connectionInfo;
 		this.modpackSecret = secret;
 		this.modpackDir = modpackPath;
@@ -427,7 +430,9 @@ public class ModpackUpdater implements AutoCloseable {
 			return false;
 		}
 
-		Jsons.ModpackContentFields refreshedContent = refreshedContentOptional.get();
+		// The server regenerates its full manifest here, so it has to be narrowed back down to the
+		// player's selection before it replaces the one the updater has been working with.
+		Jsons.ModpackContentFields refreshedContent = ClientSelectionManager.filterToSelection(refreshedContentOptional.get());
 		if (!Objects.equals(serverModpackContent.modpackId, refreshedContent.modpackId)) {
 			LOGGER.error("Refreshed manifest changed modpack ID from {} to {}", serverModpackContent.modpackId, refreshedContent.modpackId);
 			return false;
