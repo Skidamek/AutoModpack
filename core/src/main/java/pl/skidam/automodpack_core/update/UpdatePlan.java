@@ -3,12 +3,15 @@ package pl.skidam.automodpack_core.update;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 
 public record UpdatePlan(
 		String modpackId,
+		GenerationTarget generationTarget,
 		List<Operation> operations,
 		List<ProjectedFile> projectedFinalState,
 		Jsons.ClientConfigFieldsV3 plannedClientConfig,
@@ -17,6 +20,7 @@ public record UpdatePlan(
 		List<Warning> warnings) {
 
 	public UpdatePlan {
+		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
 		operations = List.copyOf(operations);
 		projectedFinalState = List.copyOf(projectedFinalState);
 		plannedDeletionTimestamps = stableSet(plannedDeletionTimestamps);

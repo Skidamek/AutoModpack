@@ -3,11 +3,16 @@ package pl.skidam.automodpack_core.modpack.group;
 import java.util.*;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 
 public final class SelectedTreeComposer {
 	private SelectedTreeComposer() {}
 
 	public static Jsons.ModpackContentFields compose(GroupManifest manifest, ResolvedSelection selection) {
+		return compose(manifest, selection, null);
+	}
+
+	public static Jsons.ModpackContentFields compose(GroupManifest manifest, ResolvedSelection selection, GenerationTarget generationTarget) {
 		Map<String, GroupManifest.GroupFile> files = new TreeMap<>();
 		for (String groupId : selection.selectedGroups()) {
 			GroupManifest.Group group = manifest.groups().get(groupId);
@@ -34,6 +39,11 @@ public final class SelectedTreeComposer {
 		target.loaderVersion = manifest.loaderVersion();
 		target.mcVersion = manifest.mcVersion();
 		target.selectedGroups = new LinkedHashSet<>(selection.selectedGroups());
+		if (generationTarget != null) {
+			target.targetGenerationId = generationTarget.targetGenerationId();
+			target.parentGenerationId = generationTarget.parentGenerationId();
+			target.stateDigest = generationTarget.stateDigest();
+		}
 		Set<Jsons.ModpackContentFields.FileToDelete> deletions = new LinkedHashSet<>();
 		for (GroupManifest.DeletionRequest deletion : manifest.nonModpackFilesToDelete())
 			deletions.add(new Jsons.ModpackContentFields.FileToDelete(deletion.file(), deletion.sha1(), deletion.timestamp()));

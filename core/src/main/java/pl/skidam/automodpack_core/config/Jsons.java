@@ -330,6 +330,9 @@ public class Jsons {
 		public Set<ModpackContentItem> list;
 		public Set<String> selectedGroups = Set.of();
 		public Set<FileToDelete> nonModpackFilesToDelete = Set.of();
+		public String targetGenerationId = "";
+		public String parentGenerationId = "";
+		public String stateDigest = "";
 
 		public ModpackContentFields(Set<ModpackContentItem> list) {
 			this.list = list;

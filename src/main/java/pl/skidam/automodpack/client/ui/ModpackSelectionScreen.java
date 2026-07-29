@@ -94,7 +94,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 
 		Path contentFile = ModpackUtils.getModpackPath(modpackId).resolve(modpackCatalogueFileName);
-		GroupManifest manifest = ModpackContentTools.readComplete(contentFile);
+		GroupManifest manifest = Optional.ofNullable(ModpackContentTools.readGenerationRecord(contentFile)).map(record -> record.manifest()).orElse(null);
 		if (manifest == null || manifest.groups().isEmpty()) {
 			LOGGER.info("Modpack {} declares no groups", modpackId);
 			return parent;
@@ -115,7 +115,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	private static boolean modpackHasOptionalGroups(String modpackId) {
 		if (modpackId == null || modpackId.isBlank()) return false;
 
-		GroupManifest manifest = ModpackContentTools.readComplete(ModpackUtils.getModpackPath(modpackId).resolve(modpackCatalogueFileName));
+		GroupManifest manifest = Optional.ofNullable(ModpackContentTools.readGenerationRecord(ModpackUtils.getModpackPath(modpackId).resolve(modpackCatalogueFileName)))
+				.map(record -> record.manifest()).orElse(null);
 		if (manifest == null) return false;
 		// Nothing worth showing a button for when every available group is mandatory.
 		return manifest.groups().values().stream().anyMatch(group -> !isMandatory(manifest, group) && group.supports(ClientPlatform.current()));
