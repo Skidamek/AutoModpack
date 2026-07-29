@@ -33,7 +33,6 @@ public class Server {
 
 		modpackDir.toFile().mkdirs();
 
-		hostModpackContentFile = modpackDir.resolve(modpackContentFileName);
 		serverConfigFile = modpackDir.resolve("automodpack-server.json");
 		serverCoreConfigFile = modpackDir.resolve("automodpack-core.json");
 
@@ -65,14 +64,13 @@ public class Server {
 		}
 
 		Path hostGenerations = modpackDir.resolve(hostGenerationsDir.getFileName());
-		modpackExecutor = new ModpackExecutor(modpackDir, modpackDir, hostModpackContentFile,
-				hostGenerations.resolve(hostGenerationObjectsDir.getFileName()), hostGenerations.resolve(hostGenerationStagingDir.getFileName()));
-		boolean generated = modpackExecutor.generateNew();
+		modpackExecutor = new ModpackExecutor(modpackDir, modpackDir, hostGenerations);
+		var generation = modpackExecutor.generateNew();
 
-		if (generated) {
-			LOGGER.info("Modpack generated!");
+		if (generation.succeeded()) {
+			LOGGER.info("Modpack generation {}!", generation.status());
 		} else {
-			LOGGER.error("Failed to generate modpack!");
+			LOGGER.error("Failed to generate modpack!", generation.failure());
 		}
 
 		LOGGER.info("Starting server on port {}", serverConfig.bindPort);
