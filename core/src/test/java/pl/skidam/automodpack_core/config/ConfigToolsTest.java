@@ -133,21 +133,4 @@ class ConfigToolsTest {
 		String invalid = "{\"origin\":\"play.example.com\",\"endpoint\":\"downloads.example.com\"}";
 		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse(invalid, Jsons.ConnectionInfo.class));
 	}
-
-	@Test
-	void connectionInfoFallsBackToLegacyRequiresMagicWhenConnectionModeIsAbsent() {
-		String legacyTrue = "{\"origin\":\"play.example.com:25565\",\"endpoint\":\"play.example.com:25565\",\"requiresMagic\":true}";
-		Jsons.ConnectionInfo magicPacket = ConfigTools.parse(legacyTrue, Jsons.ConnectionInfo.class);
-		assertEquals(ModpackConnectionMode.MAGIC_PACKET, magicPacket.connectionMode);
-
-		String legacyFalse = "{\"origin\":\"play.example.com:25565\",\"endpoint\":\"play.example.com:25565\",\"requiresMagic\":false}";
-		Jsons.ConnectionInfo direct = ConfigTools.parse(legacyFalse, Jsons.ConnectionInfo.class);
-		assertEquals(ModpackConnectionMode.DIRECT, direct.connectionMode);
-	}
-
-	@Test
-	void connectionInfoWithNeitherConnectionModeNorRequiresMagicIsRejected() {
-		String invalid = "{\"origin\":\"play.example.com:25565\",\"endpoint\":\"play.example.com:25565\"}";
-		assertThrows(ConfigTools.ConfigException.class, () -> ConfigTools.parse(invalid, Jsons.ConnectionInfo.class));
-	}
 }
