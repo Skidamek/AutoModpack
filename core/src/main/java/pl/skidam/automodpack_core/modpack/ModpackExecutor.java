@@ -32,7 +32,6 @@ public class ModpackExecutor {
 	private final Path generationRoot;
 	private final GenerationStore generationStore;
 	private final ModpackCandidateScanner scanner = new ModpackCandidateScanner();
-	private CompletableFuture<Jsons.CompleteModpackContentFields> refreshInFlight;
 
 	public ModpackExecutor() {
 		this(SmartFileUtils.CWD, hostModpackDir, hostGenerationsDir);
@@ -77,19 +76,6 @@ public class ModpackExecutor {
 		}
 	}
 
-	// Transitional until G3: client refresh can still trigger source generation.
-	public CompletableFuture<Jsons.CompleteModpackContentFields> regenerateFullManifest() {
-		synchronized (generationLock) {
-			if (refreshInFlight != null && !refreshInFlight.isDone()) return refreshInFlight;
-			refreshInFlight = CompletableFuture.supplyAsync(() -> {
-				GenerationResult result = generateNew();
-				if (!result.succeeded()) throw new CompletionException(new IOException("Failed to regenerate modpack", result.failure()));
-				return result.current().toFields();
-			});
-			return refreshInFlight;
-		}
-	}
-
 	public GenerationResult loadLast() {
 		synchronized (generationLock) {
 			if (!generating.compareAndSet(false, true)) return failed(new IllegalStateException("A modpack generation is already in progress"));
@@ -112,7 +98,10 @@ public class ModpackExecutor {
 	}
 
 	private void replaceHosting(Map<String, Path> paths) {
-		if (hostServer != null) hostServer.replacePaths(paths);
+		if (hostServer != null) {
+			hostServer.setObjectRoot(generationStore.objectRoot());
+			hostServer.replacePaths(paths);
+		}
 	}
 
 	private void cleanupLegacyCatalogue() {

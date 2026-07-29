@@ -69,6 +69,10 @@ public final class GenerationStore {
 		this.objectStore = new ServerObjectStore(objectsDirectory, stagingDirectory);
 	}
 
+	public Path objectRoot() {
+		return objectsDirectory;
+	}
+
 	public Optional<CurrentSnapshot> loadCurrent() throws IOException {
 		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) requireDirectory(root, "generation store");
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();

@@ -42,6 +42,7 @@ public class NettyServer {
 	public static final AttributeKey<Byte> PROTOCOL_VERSION = AttributeKey.valueOf("PROTOCOL_VERSION");
 	private final Map<Channel, String> connections = new ConcurrentHashMap<>();
 	private volatile Map<String, Path> paths = Map.of();
+	private volatile Path objectRoot;
 	private MultithreadEventLoopGroup eventLoopGroup;
 	private ChannelFuture serverChannel;
 	private volatile boolean sharedMagicEnabled;
@@ -72,12 +73,46 @@ public class NettyServer {
 		this.paths = Map.copyOf(paths);
 	}
 
+	public void setObjectRoot(Path objectRoot) {
+		this.objectRoot = objectRoot == null ? null : objectRoot.toAbsolutePath().normalize();
+	}
+
 	public Map<String, Path> getPathsSnapshot() {
 		return paths;
 	}
 
-	public Optional<Path> getPath(String hash) {
-		return hash == null ? Optional.empty() : Optional.ofNullable(paths.get(hash.toLowerCase(Locale.ROOT)));
+	public Optional<Path> getPath(String requestKey) {
+		if (requestKey == null) return Optional.empty();
+		if (requestKey.isEmpty()) return regularPath(paths.get(""));
+		if (!isSha1(requestKey)) return Optional.empty();
+
+		String sha1 = requestKey.toLowerCase(Locale.ROOT);
+		Path configuredObjectRoot = objectRoot;
+		if (configuredObjectRoot != null) {
+			if (!directory(configuredObjectRoot)) return Optional.empty();
+			Path object = configuredObjectRoot.resolve(sha1).normalize();
+			if (!object.startsWith(configuredObjectRoot)) return Optional.empty();
+			return regularPath(object);
+		}
+
+		return regularPath(paths.get(sha1));
+	}
+
+	private static Optional<Path> regularPath(Path path) {
+		return path != null && !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) ? Optional.of(path) : Optional.empty();
+	}
+
+	private static boolean directory(Path path) {
+		return !Files.isSymbolicLink(path) && Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS);
+	}
+
+	private static boolean isSha1(String value) {
+		if (value.length() != 40) return false;
+		for (int i = 0; i < value.length(); i++) {
+			char c = value.charAt(i);
+			if (!(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') && !(c >= 'A' && c <= 'F')) return false;
+		}
+		return true;
 	}
 
 	public synchronized Optional<ChannelFuture> start() {
@@ -91,8 +126,7 @@ public class NettyServer {
 			return Optional.empty();
 		}
 
-		Path currentRecord = paths.get("");
-		if (currentRecord == null || Files.isSymbolicLink(currentRecord) || !Files.isRegularFile(currentRecord, LinkOption.NOFOLLOW_LINKS)) {
+		if (objectRoot == null || !directory(objectRoot) || getPath("").isEmpty()) {
 			LOGGER.warn("No current generation record is prepared. Can't start modpack hosting.");
 			return Optional.empty();
 		}
