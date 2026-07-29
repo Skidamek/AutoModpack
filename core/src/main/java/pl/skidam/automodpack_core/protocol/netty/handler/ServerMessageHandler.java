@@ -8,9 +8,9 @@ import java.net.SocketAddress;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.concurrent.CompletionException;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelFuture;
@@ -91,16 +91,8 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 	private void refreshModpackFiles(ChannelHandlerContext context, byte[][] fileHashesList) throws IOException {
 		Set<String> hashes = new TreeSet<>();
 		for (byte[] hash : fileHashesList) hashes.add(new String(hash, StandardCharsets.UTF_8));
-		LOGGER.info("Received full modpack regeneration request after failed hashes: {}", hashes);
-		try {
-			var manifest = modpackExecutor.regenerateFullManifest().join();
-			int files = manifest.groups.values().stream().mapToInt(group -> group.files.size()).sum();
-			LOGGER.info("Sending regenerated full catalogue {} with {} group entries", manifest.modpackId, files);
-			sendFile(context, new byte[0]);
-		} catch (CompletionException e) {
-			LOGGER.error("Failed to regenerate full modpack manifest", e);
-			sendError(context, protocolVersion, "Modpack regeneration failed");
-		}
+		LOGGER.info("Received refresh request after failed hashes: {}", hashes);
+		sendFile(context, new byte[0]);
 	}
 
 	private boolean validateSecret(ChannelHandlerContext ctx, SocketAddress address, byte[] secret) {
@@ -123,7 +115,7 @@ public class ServerMessageHandler extends SimpleChannelInboundHandler<ProtocolMe
 		final String sha1 = new String(bsha1, StandardCharsets.UTF_8);
 		final Optional<Path> optionalPath = resolvePath(sha1);
 
-		if (optionalPath.isEmpty() || !Files.exists(optionalPath.get())) {
+		if (optionalPath.isEmpty() || Files.isSymbolicLink(optionalPath.get()) || !Files.isRegularFile(optionalPath.get(), LinkOption.NOFOLLOW_LINKS)) {
 			sendError(ctx, this.protocolVersion, "File not found");
 			return;
 		}
