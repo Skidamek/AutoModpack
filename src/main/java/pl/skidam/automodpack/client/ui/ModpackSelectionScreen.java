@@ -79,14 +79,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return forModpackId(parent, clientConfig == null ? null : clientConfig.selectedModpackId);
 	}
 
-	/**
-	 * Builds the screen for the modpack belonging to a given Minecraft server address, or returns the
-	 * parent when that server is not a known AutoModpack modpack with optional groups.
-	 */
-	public static Screen forServerAddress(Screen parent, String serverAddress) {
-		return forModpackId(parent, modpackIdForServer(serverAddress));
-	}
-
 	private static Screen forModpackId(Screen parent, String modpackId) {
 		if (modpackId == null || modpackId.isBlank()) {
 			LOGGER.info("No modpack selected, nothing to configure");
@@ -107,10 +99,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		return modpackHasOptionalGroups(clientConfig == null ? null : clientConfig.selectedModpackId);
 	}
 
-	/** Whether the server at the given address is a known modpack the player can configure groups for. */
-	public static boolean serverHasGroupsToConfigure(String serverAddress) {
-		return modpackHasOptionalGroups(modpackIdForServer(serverAddress));
-	}
 
 	private static boolean modpackHasOptionalGroups(String modpackId) {
 		if (modpackId == null || modpackId.isBlank()) return false;
@@ -120,42 +108,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		if (manifest == null) return false;
 		// Nothing worth showing a button for when every available group is mandatory.
 		return manifest.groups().values().stream().anyMatch(group -> !isMandatory(manifest, group) && group.supports(ClientPlatform.current()));
-	}
-
-	/**
-	 * Maps a Minecraft server address to the modpack the client installed from it. The client config
-	 * records each modpack's origin (the address the player connected to), so a match there means we
-	 * already downloaded that server's modpack and know its groups.
-	 */
-	private static String modpackIdForServer(String serverAddress) {
-		if (serverAddress == null || clientConfig == null || clientConfig.modpackConnections == null) return null;
-
-		String wanted = normalizeAddress(serverAddress);
-		// A bare host with no port is ambiguous between saved modpacks, so it may fall back to a
-		// host-only match; an address that specifies a port must match that port exactly, otherwise
-		// the button can open and save selections for the wrong modpack among several on one host.
-		boolean addressHasPort = serverAddress.lastIndexOf(':') > 0;
-		String wantedHost = normalizeAddress(hostOnly(serverAddress));
-		for (var entry : clientConfig.modpackConnections.entrySet()) {
-			var connection = entry.getValue();
-			if (connection == null || connection.origin == null) continue;
-			boolean exactMatch = normalizeAddress(connection.origin.getHostString() + ":" + connection.origin.getPort()).equals(wanted);
-			boolean hostOnlyMatch = !addressHasPort && normalizeAddress(connection.origin.getHostString()).equals(wantedHost);
-			if (exactMatch || hostOnlyMatch) {
-				return entry.getKey();
-			}
-		}
-		return null;
-	}
-
-	private static String normalizeAddress(String address) {
-		return address == null ? "" : address.trim().toLowerCase(Locale.ROOT);
-	}
-
-	private static String hostOnly(String address) {
-		if (address == null) return "";
-		int colon = address.lastIndexOf(':');
-		return colon > 0 ? address.substring(0, colon) : address;
 	}
 
 	@Override
