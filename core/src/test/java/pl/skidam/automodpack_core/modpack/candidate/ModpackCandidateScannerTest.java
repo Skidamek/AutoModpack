@@ -64,11 +64,12 @@ class ModpackCandidateScannerTest {
 		Files.createDirectories(server.resolve("config"));
 		Files.createDirectories(groups.resolve("main/config"));
 		Files.writeString(server.resolve("config/example.disabled"), "synced");
+		Files.writeString(server.resolve("config/kept.txt"), "kept");
 		Files.writeString(groups.resolve("main/config/example.disabled"), "explicit");
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", group("/config/**")), true);
 
-		assertTrue(candidate.manifest().groups().get("main").files().isEmpty());
+		assertTrue(candidate.manifest().groups().get("main").files().containsKey("config/kept.txt"));
 		assertEquals(ExcludedCandidate.Reason.DISABLED_FILE, candidate.exclusions().get(0).reason());
 		assertEquals(1, candidate.shadows().size());
 	}
@@ -81,10 +82,14 @@ class ModpackCandidateScannerTest {
 		Files.createDirectories(server);
 		Files.createFile(groups.resolve("main/config/empty.txt"));
 
-		ModpackCandidate candidate = scan(server, groups, Map.of("main", group()), true);
+		CandidateBuildException failure = assertThrows(CandidateBuildException.class, () -> scan(server, groups, Map.of("main", group()), true));
 
-		assertEquals(ExcludedCandidate.Reason.EMPTY_FILE, candidate.exclusions().get(0).reason());
-		assertTrue(candidate.manifest().groups().get("main").files().isEmpty());
+		assertTrue(failure.getMessage().contains("no published files"));
+		if (Files.exists(tempDir.resolve("staging"))) {
+			try (var files = Files.list(tempDir.resolve("staging"))) {
+				assertEquals(0, files.count());
+			}
+		}
 	}
 
 	@Test
