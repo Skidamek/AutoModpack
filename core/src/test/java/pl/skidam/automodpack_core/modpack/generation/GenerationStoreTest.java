@@ -11,6 +11,9 @@ import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -45,6 +48,34 @@ class GenerationStoreTest {
 		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, second.status());
 		assertEquals(first.record().metadata().generationId(), second.record().metadata().parentGenerationId());
 		assertEquals(second.record(), store.loadCurrent().orElseThrow().record());
+	}
+
+	@Test
+	void concurrentPublishersFromOneParentCannotBothSucceed() throws Exception {
+		GenerationStore firstStore = store(Instant.parse("2026-01-01T00:00:00Z"));
+		firstStore.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot parent = firstStore.loadCurrent().orElseThrow();
+		GenerationStore secondStore = store(Instant.parse("2026-01-02T00:00:00Z"));
+		ExecutorService executor = Executors.newFixedThreadPool(2);
+		try {
+			var first = executor.submit(() -> firstStore.publish(candidate("second"), Optional.of(parent), ""));
+			var second = executor.submit(() -> secondStore.publish(candidate("third"), Optional.of(parent), ""));
+			int successes = 0;
+			int failures = 0;
+			for (var result : java.util.List.of(first, second)) {
+				try {
+					assertEquals(GenerationStore.PublicationStatus.PUBLISHED, result.get().status());
+					successes++;
+				} catch (ExecutionException e) {
+					assertInstanceOf(java.io.IOException.class, e.getCause());
+					failures++;
+				}
+			}
+			assertEquals(1, successes);
+			assertEquals(1, failures);
+		} finally {
+			executor.shutdownNow();
+		}
 	}
 
 	@Test
