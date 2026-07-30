@@ -211,7 +211,8 @@ public class ModpackExecutor {
 		prepareDirectories();
 		String modpackId = previous.map(snapshot -> ModpackId.requireValid(snapshot.record().manifest().modpackId())).orElseGet(ModpackId::generate);
 		GroupManifest previousManifest = previous.map(snapshot -> snapshot.record().manifest()).orElse(null);
-		Set<Jsons.ModpackContentFields.FileToDelete> deletions = deletionMetadata(previousManifest);
+		String parentGenerationId = previous.map(snapshot -> snapshot.record().metadata().generationId()).orElse("");
+		Set<Jsons.ModpackContentFields.FileToDelete> deletions = deletionMetadata(previousManifest, parentGenerationId);
 		ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
 				LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups, serverConfig.selectionTags, deletions,
 				serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(hostGenerationStagingDir.getFileName()), creationExecutor);
@@ -252,7 +253,7 @@ public class ModpackExecutor {
 		}
 	}
 
-	private Set<Jsons.ModpackContentFields.FileToDelete> deletionMetadata(GroupManifest previous) {
+	private Set<Jsons.ModpackContentFields.FileToDelete> deletionMetadata(GroupManifest previous, String parentGenerationId) {
 		Map<String, Jsons.ModpackContentFields.FileToDelete> previousByPath = new HashMap<>();
 		if (previous != null)
 			for (GroupManifest.DeletionRequest deletion : previous.nonModpackFilesToDelete())
@@ -263,7 +264,7 @@ public class ModpackExecutor {
 			String path = LogicalPath.normalize(entry.getKey());
 			String sha1 = entry.getValue().toLowerCase(Locale.ROOT);
 			Jsons.ModpackContentFields.FileToDelete old = previousByPath.get(path);
-			String timestamp = old != null && old.sha1.equalsIgnoreCase(sha1) ? old.timestamp : GenerationIdentity.deletionRequestId(path, sha1);
+			String timestamp = old != null && old.sha1.equalsIgnoreCase(sha1) ? old.timestamp : GenerationIdentity.deletionRequestId(path, sha1, parentGenerationId);
 			result.add(new Jsons.ModpackContentFields.FileToDelete(path, sha1, timestamp));
 		}
 		return result;
