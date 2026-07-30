@@ -48,6 +48,29 @@ public final class PathRuleSet {
 		return includes.isEmpty();
 	}
 
+	/** Returns the narrowest filesystem prefixes that can contain an included path. */
+	public Set<String> safeScanRoots() {
+		if (includes.isEmpty()) return Set.of();
+		Set<String> roots = new TreeSet<>();
+		for (CompiledRule rule : includes) {
+			String pattern = rule.raw();
+			while (pattern.startsWith("!")) pattern = pattern.substring(1);
+			while (pattern.startsWith("/")) pattern = pattern.substring(1);
+			StringBuilder literal = new StringBuilder();
+			for (String component : pattern.split("/")) {
+				if (component.isEmpty() || containsGlob(component)) break;
+				if (literal.length() > 0) literal.append('/');
+				literal.append(component);
+			}
+			roots.add(literal.toString());
+		}
+		return Set.copyOf(roots);
+	}
+
+	private static boolean containsGlob(String component) {
+		return component.indexOf('*') >= 0 || component.indexOf('?') >= 0 || component.indexOf('[') >= 0 || component.indexOf('{') >= 0;
+	}
+
 	private List<PathMatcher> compile(String pattern) {
 		try {
 			List<PathMatcher> matchers = new ArrayList<>();

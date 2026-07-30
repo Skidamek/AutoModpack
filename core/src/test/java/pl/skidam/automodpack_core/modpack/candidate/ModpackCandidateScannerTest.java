@@ -44,8 +44,10 @@ class ModpackCandidateScannerTest {
 		Path server = tempDir.resolve("server");
 		Path groups = tempDir.resolve("groups");
 		Files.createDirectories(server.resolve("config"));
+		Files.createDirectories(server.resolve("unrelated/deep"));
 		Files.createDirectories(groups);
 		Files.writeString(server.resolve("config/example.txt"), "shared");
+		Files.writeString(server.resolve("unrelated/deep/example.txt"), "ignored");
 		Map<String, Jsons.GroupDeclaration> declarations = new LinkedHashMap<>();
 		declarations.put("visuals", group("/config/**"));
 		declarations.put("main", group("/config/**"));

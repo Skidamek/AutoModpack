@@ -43,18 +43,32 @@ public final class ModpackCandidateScanner {
 				CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.GROUP_DIRECTORY, file.getValue(), null);
 				sources.computeIfAbsent(key(groupId, file.getKey()), ignored -> new SourcePair()).explicit = source;
 			}
-			if (!syncedRules.isEmpty()) for (var file : walk(request.serverRoot()).entrySet()) {
-				PathRuleSet.Decision decision = syncedRules.evaluate(file.getKey());
-				if (!decision.matched()) continue;
-				CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), decision.decisiveRule());
-				if (!decision.included()) {
-					ruleExclusions.add(new ExcludedCandidate(source, ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + decision.decisiveRule()));
-					continue;
+		}
+
+		List<GroupRules> synchronizedGroups = rulesByGroup.values().stream().filter(rules -> !rules.syncedFiles().isEmpty()).toList();
+		if (!synchronizedGroups.isEmpty()) {
+			Set<String> scanRoots = new TreeSet<>();
+			for (GroupRules rules : synchronizedGroups) scanRoots.addAll(rules.syncedFiles().safeScanRoots());
+			for (String scanRoot : minimalScanRoots(scanRoots)) {
+				Path root = scanRoot.isEmpty() ? request.serverRoot() : request.serverRoot().resolve(scanRoot);
+				for (var file : walk(root, request.serverRoot()).entrySet()) {
+					for (var entry : declarations.entrySet()) {
+						String groupId = entry.getKey();
+						PathRuleSet syncedRules = rulesByGroup.get(groupId).syncedFiles();
+						if (syncedRules.isEmpty()) continue;
+						PathRuleSet.Decision decision = syncedRules.evaluate(file.getKey());
+						if (!decision.matched()) continue;
+						CandidateSource source = new CandidateSource(groupId, file.getKey(), CandidateSource.SourceKind.SYNCED_ROOT, file.getValue(), decision.decisiveRule());
+						if (!decision.included()) {
+							ruleExclusions.add(new ExcludedCandidate(source, ExcludedCandidate.Reason.EXCLUDED_BY_RULE, "excluded by " + decision.decisiveRule()));
+							continue;
+						}
+						SourcePair pair = sources.computeIfAbsent(key(groupId, file.getKey()), ignored -> new SourcePair());
+						if (pair.synced != null && !pair.synced.sourcePath().equals(source.sourcePath()))
+							throw new CandidateBuildException("Multiple synchronized sources resolve to group '" + groupId + "' path '" + file.getKey() + "'");
+						pair.synced = source;
+					}
 				}
-				SourcePair pair = sources.computeIfAbsent(key(groupId, file.getKey()), ignored -> new SourcePair());
-				if (pair.synced != null && !pair.synced.sourcePath().equals(source.sourcePath()))
-					throw new CandidateBuildException("Multiple synchronized sources resolve to group '" + groupId + "' path '" + file.getKey() + "'");
-				pair.synced = source;
 			}
 		}
 
@@ -237,15 +251,33 @@ public final class ModpackCandidateScanner {
 		}
 	}
 
+	private static Set<String> minimalScanRoots(Set<String> roots) {
+		TreeSet<String> minimal = new TreeSet<>();
+		for (String root : roots) {
+			if (root.isEmpty()) return Set.of("");
+			boolean covered = minimal.stream().anyMatch(existing -> root.equals(existing) || root.startsWith(existing + "/"));
+			if (!covered) {
+				minimal.removeIf(existing -> existing.startsWith(root + "/"));
+				minimal.add(root);
+			}
+		}
+		return minimal;
+	}
+
 	private static NavigableMap<String, Path> walk(Path root) throws CandidateBuildException {
+		return walk(root, root);
+	}
+
+	private static NavigableMap<String, Path> walk(Path root, Path logicalRoot) throws CandidateBuildException {
 		TreeMap<String, Path> files = new TreeMap<>();
 		if (root == null || !Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return files;
 		Path normalizedRoot = root.toAbsolutePath().normalize();
+		Path normalizedLogicalRoot = logicalRoot.toAbsolutePath().normalize();
 		try {
 			Files.walkFileTree(normalizedRoot, EnumSet.noneOf(FileVisitOption.class), Integer.MAX_VALUE, new SimpleFileVisitor<>() {
 				@Override
 				public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) {
-					String logicalPath = LogicalPath.normalize(normalizedRoot.relativize(file.toAbsolutePath().normalize()).toString());
+					String logicalPath = LogicalPath.normalize(normalizedLogicalRoot.relativize(file.toAbsolutePath().normalize()).toString());
 					files.put(logicalPath, file);
 					return FileVisitResult.CONTINUE;
 				}
