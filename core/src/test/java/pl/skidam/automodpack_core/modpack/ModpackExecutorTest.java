@@ -79,7 +79,8 @@ class ModpackExecutorTest {
 	@Test
 	void deletionDirectivePreviewDigestCanGuardPublication() throws Exception {
 		Path groups = tempDir.resolve("host-modpack");
-		Files.createDirectories(groups.resolve("main"));
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
 		Constants.AM_VERSION = "test";
@@ -102,7 +103,8 @@ class ModpackExecutorTest {
 	@Test
 	void previewAndPublishAdmissionDoesNotQueue() throws Exception {
 		Path groups = tempDir.resolve("host-modpack");
-		Files.createDirectories(groups.resolve("main"));
+		Files.createDirectories(groups.resolve("main/config"));
+		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
 		ConstantsSnapshot snapshot = new ConstantsSnapshot();
 		Constants.serverConfig = config();
 		Constants.AM_VERSION = "test";
