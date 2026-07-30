@@ -47,6 +47,7 @@ public final class ServerObjectStore {
 			 * deleting its name after linking therefore leaves the verified immutable inode.
 			 */
 			Files.createLink(destination, object.stagedPath());
+			forceDirectory(objectsDirectory);
 			object.delete();
 		} catch (FileAlreadyExistsException e) {
 			verifyExisting(destination, object);
@@ -97,6 +98,14 @@ public final class ServerObjectStore {
 	private static void force(Path path) throws IOException {
 		try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS)) {
 			channel.force(true);
+		}
+	}
+
+	private static void forceDirectory(Path directory) throws IOException {
+		try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
+			channel.force(true);
+		} catch (UnsupportedOperationException e) {
+			throw new IOException("Filesystem does not support immutable object directory durability: " + directory, e);
 		}
 	}
 }
