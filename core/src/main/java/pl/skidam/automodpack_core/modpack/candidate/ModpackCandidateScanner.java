@@ -50,7 +50,8 @@ public final class ModpackCandidateScanner {
 			Set<String> scanRoots = new TreeSet<>();
 			for (GroupRules rules : synchronizedGroups) scanRoots.addAll(rules.syncedFiles().safeScanRoots());
 			for (String scanRoot : minimalScanRoots(scanRoots)) {
-				Path root = scanRoot.isEmpty() ? request.serverRoot() : request.serverRoot().resolve(scanRoot);
+				Path root = (scanRoot.isEmpty() ? request.serverRoot() : request.serverRoot().resolve(scanRoot)).normalize();
+				if (!root.startsWith(request.serverRoot())) throw new CandidateBuildException("Synchronized scan root escapes server root: " + scanRoot);
 				for (var file : walk(root, request.serverRoot()).entrySet()) {
 					for (var entry : declarations.entrySet()) {
 						String groupId = entry.getKey();
@@ -273,6 +274,7 @@ public final class ModpackCandidateScanner {
 		if (root == null || !Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return files;
 		Path normalizedRoot = root.toAbsolutePath().normalize();
 		Path normalizedLogicalRoot = logicalRoot.toAbsolutePath().normalize();
+		if (!normalizedRoot.startsWith(normalizedLogicalRoot)) throw new CandidateBuildException("Source root escapes logical root: " + normalizedRoot);
 		try {
 			Files.walkFileTree(normalizedRoot, EnumSet.noneOf(FileVisitOption.class), Integer.MAX_VALUE, new SimpleFileVisitor<>() {
 				@Override
