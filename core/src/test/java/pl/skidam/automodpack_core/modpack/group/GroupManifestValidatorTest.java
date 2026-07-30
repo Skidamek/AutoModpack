@@ -14,9 +14,7 @@ class GroupManifestValidatorTest {
 	void acceptsIdenticalSharedFileAndCanonicalizesOrder() {
 		var fields = catalogue();
 		fields.groups = linkedGroups("visuals", group(file("a")), "main", group(file("a")));
-
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
-
 		assertEquals(List.of("main", "visuals"), new ArrayList<>(manifest.groups().keySet()));
 		assertEquals(ConfigTools.GSON.toJson(manifest.toFields()), ConfigTools.GSON.toJson(GroupManifestValidator.validate(manifest.toFields()).toFields()));
 	}
@@ -25,7 +23,6 @@ class GroupManifestValidatorTest {
 	void rejectsDifferentCoSelectableVariant() {
 		var fields = catalogue();
 		fields.groups = linkedGroups("main", group(file("a")), "visuals", group(file("b")));
-
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -36,7 +33,6 @@ class GroupManifestValidatorTest {
 		var second = group(file("b"));
 		first.breaksWith = Set.of("second");
 		fields.groups = linkedGroups("first", first, "second", second);
-
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
 	}
 
@@ -49,7 +45,6 @@ class GroupManifestValidatorTest {
 		second.recommended = true;
 		first.breaksWith = Set.of("second");
 		fields.groups = linkedGroups("first", first, "second", second);
-
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -61,7 +56,6 @@ class GroupManifestValidatorTest {
 		forced.required = true;
 		optional.breaksWith = Set.of("forced");
 		fields.groups = linkedGroups("forced", forced, "optional", optional);
-
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -71,7 +65,6 @@ class GroupManifestValidatorTest {
 		var group = group(file("a"));
 		group.files = Map.of("C:/escape.jar", file("a"));
 		fields.groups = Map.of("main", group);
-
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -81,7 +74,6 @@ class GroupManifestValidatorTest {
 		var group = group(file("a"));
 		group.files = Map.of("C:escape.jar", file("a"));
 		fields.groups = Map.of("main", group);
-
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -91,7 +83,6 @@ class GroupManifestValidatorTest {
 		var group = group(file("a"));
 		group.files = Map.of("AUTOMODPACK-CATALOGUE.JSON", file("a"));
 		fields.groups = Map.of("main", group);
-
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -102,8 +93,34 @@ class GroupManifestValidatorTest {
 		group.requires = Set.of("missing");
 		group.files = Map.of("../escape", file("a"));
 		fields.groups = Map.of("main", group);
-
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsWindowsIllegalAndReservedComponents() {
+		var fields = catalogue();
+		var group = group(file("a"));
+		group.compatiblePlatforms = Set.of("windows");
+		group.files = Map.of("mods/CON.txt", file("a"), "config/bad?.json", file("a"));
+		fields.groups = Map.of("main", group);
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsCaseAliasForWindowsButAllowsItForLinuxOnly() {
+		var windows = catalogue();
+		var windowsGroup = group(file("a"));
+		windowsGroup.compatiblePlatforms = Set.of("windows");
+		windowsGroup.files = Map.of("mods/A.jar", file("a"), "mods/a.jar", file("a"));
+		windows.groups = Map.of("main", windowsGroup);
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(windows));
+
+		var linux = catalogue();
+		var linuxGroup = group(file("a"));
+		linuxGroup.compatiblePlatforms = Set.of("linux");
+		linuxGroup.files = Map.of("mods/A.jar", file("a"), "mods/a.jar", file("a"));
+		linux.groups = Map.of("main", linuxGroup);
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(linux));
 	}
 
 	private static Jsons.CompleteModpackContentFields catalogue() {
