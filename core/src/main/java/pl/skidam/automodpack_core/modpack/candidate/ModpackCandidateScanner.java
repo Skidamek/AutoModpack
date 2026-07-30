@@ -142,6 +142,8 @@ public final class ModpackCandidateScanner {
 			}
 			fields.selectionTags = tags;
 			GroupManifest manifest = GroupManifestValidator.validate(fields);
+			if (manifest.groups().values().stream().allMatch(group -> group.files().isEmpty()))
+				throw new CandidateBuildException("Candidate contains no published files");
 			return new ModpackCandidate(manifest, new TreeMap<>(objects), new TreeMap<>(provenance), exclusions, shadows);
 		} catch (Exception e) {
 			cleanup(results, e);
