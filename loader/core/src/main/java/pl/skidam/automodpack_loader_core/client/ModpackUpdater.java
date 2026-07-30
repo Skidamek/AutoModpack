@@ -261,20 +261,16 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
-		if (modpackSecret == null || downloadClient == null) {
-			LOGGER.error("Cannot update modpack, transfer session is unavailable");
-			new ScreenManager().error("automodpack.error.critical", "Transfer session is unavailable", "automodpack.error.logs");
-			close();
-			return;
-		}
-
-		new ScreenManager().download(downloadManager, getModpackName());
 		long start = System.currentTimeMillis();
 
 		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 			// Don't download files which already exist
 			ModpackUtils.populateStoreFromCWD(filesToUpdate, cache);
 			var finalFilesToUpdate = ModpackUtils.identifyUncachedFiles(filesToUpdate);
+			if (!finalFilesToUpdate.isEmpty()) {
+				if (modpackSecret == null || downloadClient == null) throw new IOException("Transfer session is unavailable for uncached files");
+				new ScreenManager().download(downloadManager, getModpackName());
+			}
 
 			// FETCH
 			long startFetching = System.currentTimeMillis();
