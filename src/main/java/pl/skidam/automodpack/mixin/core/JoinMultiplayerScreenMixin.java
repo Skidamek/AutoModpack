@@ -23,7 +23,6 @@ import java.util.List;
 /*?}*/
 
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -33,12 +32,9 @@ import com.llamalad7.mixinextras.sugar.Local;
 
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.layouts.LinearLayout;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
-import net.minecraft.client.gui.screens.multiplayer.ServerSelectionList;
-import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.network.chat.Component;
 
 import pl.skidam.automodpack.client.ui.ModpackSelectionScreen;
@@ -58,9 +54,6 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
  */
 @Mixin(JoinMultiplayerScreen.class)
 public abstract class JoinMultiplayerScreenMixin extends Screen {
-
-	@Shadow
-	protected ServerSelectionList serverSelectionList;
 
 	@Unique
 	private LinearLayout automodpack$topRow;
@@ -83,10 +76,8 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 	private void automodpack$captureRow(CallbackInfo ci, @Local(ordinal = 1) LinearLayout topFooterButtons) {
 		automodpack$topRow = topFooterButtons;
 
-		automodpack$groupsButton = Button.builder(VersionedText.translatable("automodpack.selection.button"), press -> {
-			String address = automodpack$selectedServerAddress();
-			if (address != null) minecraft.gui.setScreen(ModpackSelectionScreen.forServerAddress(this, address));
-		}).width(100).build();
+		automodpack$groupsButton = Button.builder(VersionedText.translatable("automodpack.selection.button"), press ->
+				minecraft.gui.setScreen(ModpackSelectionScreen.forSelectedModpack(this))).width(100).build();
 
 		/*? if >=26.2 {*/
 		automodpack$vanillaRowButtons.clear();
@@ -109,8 +100,7 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 	private void automodpack$onSelectedChange(CallbackInfo ci) {
 		if (automodpack$topRow == null || automodpack$groupsButton == null) return;
 
-		String address = automodpack$selectedServerAddress();
-		boolean show = address != null && ModpackSelectionScreen.serverHasGroupsToConfigure(address);
+		boolean show = ModpackSelectionScreen.hasGroupsToConfigure();
 
 		/*? if >=26.2 {*/
 		if (show == automodpack$buttonInRow) return; // Row membership already correct; avoid needless relayout.
@@ -126,17 +116,6 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 		/*
 		automodpack$groupsButton.active = show;
 		*//*?}*/
-	}
-
-	@Unique
-	private String automodpack$selectedServerAddress() {
-		if (serverSelectionList == null) return null;
-		ObjectSelectionList.Entry<?> selected = serverSelectionList.getSelected();
-		if (selected instanceof ServerSelectionList.OnlineServerEntry onlineEntry) {
-			ServerData data = onlineEntry.getServerData();
-			if (data != null) return data.ip;
-		}
-		return null;
 	}
 }
 /*?}*/
