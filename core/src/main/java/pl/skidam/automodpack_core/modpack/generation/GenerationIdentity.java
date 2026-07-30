@@ -64,9 +64,9 @@ public final class GenerationIdentity {
 		return sha1(GenerationMetadata.validateNotes(notes).getBytes(StandardCharsets.UTF_8));
 	}
 
-	public static String deletionRequestId(String path, String sha1) {
+	public static String deletionRequestId(String path, String sha1, String parentGenerationId) {
 		CanonicalEncoder encoder = new CanonicalEncoder().string("automodpack-deletion-v1").string(path)
-				.string(sha1.toLowerCase(Locale.ROOT));
+				.string(sha1.toLowerCase(Locale.ROOT)).string(parentGenerationId == null ? "" : parentGenerationId);
 		return sha1(encoder.bytes());
 	}
 

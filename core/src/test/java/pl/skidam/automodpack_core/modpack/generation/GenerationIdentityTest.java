@@ -58,6 +58,16 @@ class GenerationIdentityTest {
 	}
 
 	@Test
+	void deletionRequestIdentityChangesWithParentGeneration() {
+		String path = "mods/old.jar";
+		String hash = "a".repeat(40);
+
+		assertEquals(GenerationIdentity.deletionRequestId(path, hash, ""), GenerationIdentity.deletionRequestId(path, hash, ""));
+		assertNotEquals(GenerationIdentity.deletionRequestId(path, hash, ""), GenerationIdentity.deletionRequestId(path, hash, "b".repeat(40)));
+		assertNotEquals(GenerationIdentity.deletionRequestId(path, hash, "a".repeat(40)), GenerationIdentity.deletionRequestId(path, hash, "b".repeat(40)));
+	}
+
+	@Test
 	void metadataChangeChangesStateDigest() {
 		GroupManifest first = GroupManifestValidator.validate(catalogue("main", "first"));
 		GroupManifest second = GroupManifestValidator.validate(catalogue("main", "second"));
