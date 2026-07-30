@@ -36,8 +36,12 @@ public record SelectedModpackTarget(
 	public static SelectedModpackTarget prepare(Jsons.CompleteModpackContentFields fields, ClientSelectionStore store, ClientPlatform platform) {
 		GenerationRecord record = GenerationRecord.fromFields(fields);
 		SelectionIntent existing = store.get(record.manifest().modpackId()).orElse(null);
-		SelectionIntent intent = existing == null ? GroupSelectionResolver.defaultIntent(record.manifest()) : existing;
-		return prepare(record, existing, intent, platform);
+		if (existing == null) return prepare(record, null, GroupSelectionResolver.defaultIntent(record.manifest()), platform);
+		try {
+			return prepare(record, existing, existing, platform);
+		} catch (SelectionResolutionException e) {
+			return prepare(record, existing, GroupSelectionResolver.defaultIntent(record.manifest()), platform);
+		}
 	}
 
 	public static SelectedModpackTarget prepare(Jsons.CompleteModpackContentFields fields, SelectionIntent expectedPriorIntent, SelectionIntent intent,
