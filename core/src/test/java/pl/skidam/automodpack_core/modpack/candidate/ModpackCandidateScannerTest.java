@@ -60,6 +60,21 @@ class ModpackCandidateScannerTest {
 	}
 
 	@Test
+	void synchronizedRulesCannotScanOutsideServerRoot() throws Exception {
+		Path server = tempDir.resolve("server");
+		Path groups = tempDir.resolve("groups");
+		Files.createDirectories(server);
+		Files.createDirectories(groups);
+		Files.createDirectories(tempDir.resolve("outside"));
+		Files.writeString(tempDir.resolve("outside/example.txt"), "outside");
+
+		CandidateBuildException failure = assertThrows(CandidateBuildException.class,
+				() -> scan(server, groups, Map.of("main", group("../outside/**")), false));
+
+		assertTrue(failure.getMessage().contains("escapes server root"));
+	}
+
+	@Test
 	void excludedGroupFileStillShadowsSyncedSource() throws Exception {
 		Path server = tempDir.resolve("server");
 		Path groups = tempDir.resolve("groups");
