@@ -79,6 +79,38 @@ public final class GroupSelectionResolver {
 		}
 	}
 
+	public static SelectionIntent prefer(GroupManifest manifest, SelectionIntent current, String clicked, ClientPlatform platform) {
+		Objects.requireNonNull(current);
+		Objects.requireNonNull(clicked);
+		Objects.requireNonNull(platform);
+		Set<String> requested = new TreeSet<>(current.requestedGroups());
+		if (!requested.add(clicked)) {
+			requested.remove(clicked);
+			return new SelectionIntent(requested);
+		}
+
+		Set<String> clickedClosure = resolvedGroups(manifest, clicked, platform);
+		for (String other : new TreeSet<>(requested)) {
+			if (other.equals(clicked)) continue;
+			Set<String> otherClosure = resolvedGroups(manifest, other, platform);
+			if (closuresConflict(manifest, clickedClosure, otherClosure)) requested.remove(other);
+		}
+		return new SelectionIntent(requested);
+	}
+
+	private static Set<String> resolvedGroups(GroupManifest manifest, String requested, ClientPlatform platform) {
+		try {
+			return resolve(manifest, new SelectionIntent(Set.of(requested)), platform).selectedGroups();
+		} catch (SelectionResolutionException e) {
+			return Set.of(requested);
+		}
+	}
+
+	private static boolean closuresConflict(GroupManifest manifest, Set<String> first, Set<String> second) {
+		for (String firstGroup : first) for (String secondGroup : second) if (conflicts(manifest, firstGroup, secondGroup)) return true;
+		return false;
+	}
+
 	public static boolean conflicts(GroupManifest manifest, String first, String second) {
 		if (Objects.equals(first, second)) return false;
 		GroupManifest.Group firstGroup = manifest.groups().get(first);

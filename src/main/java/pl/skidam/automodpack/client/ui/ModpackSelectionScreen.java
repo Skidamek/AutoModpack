@@ -22,6 +22,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
@@ -182,11 +183,20 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	 * a player expects from the click they just made. The resolver still has the final say.
 	 */
 	private void toggle(String groupId) {
-		if (!chosen.remove(groupId)) {
-			groups.keySet().stream().filter(other -> GroupSelectionResolver.conflicts(manifest, other, groupId)).forEach(chosen::remove);
-			chosen.add(groupId);
+		SelectionIntent previous = new SelectionIntent(chosen);
+		Set<String> previousResolved = resolved;
+		SelectionIntent next = GroupSelectionResolver.prefer(manifest, previous, groupId, ClientPlatform.current());
+		chosen.clear();
+		chosen.addAll(next.requestedGroups());
+		try {
+			reresolve();
+		} catch (SelectionResolutionException e) {
+			chosen.clear();
+			chosen.addAll(previous.requestedGroups());
+			resolved = previousResolved;
+			rebuild();
+			LOGGER.warn("Could not apply group preference for {}: {}", groupId, e.getMessage());
 		}
-		reresolve();
 	}
 
 	private void reresolve() {
