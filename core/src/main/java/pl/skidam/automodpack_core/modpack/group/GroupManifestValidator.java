@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.modpack.group;
 import static pl.skidam.automodpack_core.Constants.modpackCatalogueFileName;
 import static pl.skidam.automodpack_core.Constants.modpackContentFileName;
 
+import java.text.Normalizer;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -82,6 +83,8 @@ public final class GroupManifestValidator {
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
 				value(fields.loaderVersion), value(fields.mcVersion), new TreeMap<>(groups), new TreeMap<>(tags), deletions);
+		validatePlatformPaths(manifest, errors);
+		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		validateDefaultAndIndividualSelections(manifest);
 		validateObjectSizes(manifest);
 		validateOverlaps(manifest);
@@ -132,6 +135,53 @@ public final class GroupManifestValidator {
 		}
 		return true;
 	}
+
+	private static void validatePlatformPaths(GroupManifest manifest, List<String> errors) {
+		for (ClientPlatform platform : ClientPlatform.values()) {
+			Map<String, List<PathOwner>> aliases = new TreeMap<>();
+			for (var groupEntry : manifest.groups().entrySet()) {
+				String groupId = groupEntry.getKey();
+				GroupManifest.Group group = groupEntry.getValue();
+				if (!group.supports(platform)) continue;
+				for (String path : group.files().keySet()) {
+					if (platform == ClientPlatform.WINDOWS) validateWindowsPath(groupId, path, errors);
+					aliases.computeIfAbsent(platformPathKey(path, platform), ignored -> new ArrayList<>()).add(new PathOwner(groupId, path));
+				}
+			}
+			for (List<PathOwner> owners : aliases.values()) {
+				for (int i = 0; i < owners.size(); i++) for (int j = i + 1; j < owners.size(); j++) {
+					PathOwner first = owners.get(i);
+					PathOwner second = owners.get(j);
+					if (first.path().equals(second.path())) continue;
+					if (first.groupId().equals(second.groupId()) || coSelectable(manifest, first.groupId(), second.groupId()))
+						errors.add(platform.id() + ": paths '" + first.path() + "' (group '" + first.groupId() + "') and '" + second.path()
+								+ "' (group '" + second.groupId() + "') alias on this platform");
+				}
+			}
+		}
+	}
+
+	private static String platformPathKey(String path, ClientPlatform platform) {
+		if (platform != ClientPlatform.WINDOWS && platform != ClientPlatform.MACOS) return path;
+		return Normalizer.normalize(path, Normalizer.Form.NFD).toLowerCase(Locale.ROOT);
+	}
+
+	private static void validateWindowsPath(String groupId, String path, List<String> errors) {
+		for (String component : path.split("/")) {
+			String trimmed = component.stripTrailing();
+			if (trimmed.isEmpty() || !trimmed.equals(component) || component.endsWith(".") || component.matches(".*[<>:\"|?*\\\\\\p{Cntrl}].*"))
+				errors.add("windows: group '" + groupId + "' has illegal path component in '" + path + "'");
+			String device = trimmed;
+			int dot = device.indexOf('.');
+			if (dot >= 0) device = device.substring(0, dot);
+			String upper = device.toUpperCase(Locale.ROOT);
+			if (upper.equals("CON") || upper.equals("PRN") || upper.equals("AUX") || upper.equals("NUL")
+					|| upper.matches("(?:COM|LPT)[1-9]"))
+				errors.add("windows: group '" + groupId + "' uses reserved device name in '" + path + "'");
+		}
+	}
+
+	private record PathOwner(String groupId, String path) {}
 
 	private static void validateReferences(Map<String, GroupManifest.Group> groups, Map<String, GroupManifest.SelectionTag> tags, List<String> errors) {
 		for (var entry : groups.entrySet()) {
