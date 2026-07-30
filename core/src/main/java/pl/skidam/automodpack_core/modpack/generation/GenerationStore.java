@@ -3,10 +3,13 @@ package pl.skidam.automodpack_core.modpack.generation;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Clock;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 import pl.skidam.automodpack_core.Constants;
 import pl.skidam.automodpack_core.config.ConfigTools;
@@ -45,8 +48,10 @@ public final class GenerationStore {
 	}
 
 	private static final CommitHook NOOP_HOOK = () -> {};
+	private static final Map<Path, ReentrantLock> PUBLICATION_LOCKS = new ConcurrentHashMap<>();
 	private final Path root;
 	private final Path currentPath;
+	private final Path publicationLockPath;
 	private final Path recordsDirectory;
 	private final Path objectsDirectory;
 	private final Path stagingDirectory;
@@ -61,6 +66,7 @@ public final class GenerationStore {
 	GenerationStore(Path root, Clock clock, CommitHook commitHook) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
 		this.currentPath = this.root.resolve(Constants.hostGenerationCurrentFile.getFileName());
+		this.publicationLockPath = this.root.resolve(".publication.lock");
 		this.recordsDirectory = this.root.resolve(Constants.hostGenerationRecordsDir.getFileName());
 		this.objectsDirectory = this.root.resolve(Constants.hostGenerationObjectsDir.getFileName());
 		this.stagingDirectory = this.root.resolve(Constants.hostGenerationStagingDir.getFileName());
@@ -97,6 +103,13 @@ public final class GenerationStore {
 	}
 
 	public Publication publish(ModpackCandidate candidate, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			return publishLocked(candidate, expectedCurrent, patchNotes);
+		}
+	}
+
+	private Publication publishLocked(ModpackCandidate candidate, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
 		Objects.requireNonNull(candidate, "candidate");
 		Objects.requireNonNull(expectedCurrent, "expectedCurrent");
 		Optional<CurrentSnapshot> actualBefore = loadCurrent();
@@ -122,6 +135,25 @@ public final class GenerationStore {
 		ensureCurrentStillMatches(expectedCurrent);
 		ConfigTools.writeAtomic(currentPath, nextPointer);
 		return publication;
+	}
+
+	private PublicationGuard acquirePublicationGuard() throws IOException {
+		ReentrantLock jvmLock = PUBLICATION_LOCKS.computeIfAbsent(root, ignored -> new ReentrantLock());
+		jvmLock.lock();
+		FileChannel channel = null;
+		try {
+			channel = FileChannel.open(publicationLockPath, StandardOpenOption.CREATE, StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+			FileLock fileLock = channel.lock();
+			return new PublicationGuard(jvmLock, channel, fileLock);
+		} catch (IOException | RuntimeException e) {
+			if (channel != null) try {
+				channel.close();
+			} catch (IOException closeFailure) {
+				e.addSuppressed(closeFailure);
+			}
+			jvmLock.unlock();
+			throw e;
+		}
 	}
 
 	private Publication publication(PublicationStatus status, CurrentSnapshot snapshot) {
@@ -258,6 +290,31 @@ public final class GenerationStore {
 
 	private static boolean isDigest(String value) {
 		return value != null && value.matches("[0-9a-f]{40}");
+	}
+
+	private static final class PublicationGuard implements AutoCloseable {
+		private final ReentrantLock jvmLock;
+		private final FileChannel channel;
+		private final FileLock fileLock;
+
+		private PublicationGuard(ReentrantLock jvmLock, FileChannel channel, FileLock fileLock) {
+			this.jvmLock = jvmLock;
+			this.channel = channel;
+			this.fileLock = fileLock;
+		}
+
+		@Override
+		public void close() throws IOException {
+			try {
+				fileLock.release();
+			} finally {
+				try {
+					channel.close();
+				} finally {
+					jvmLock.unlock();
+				}
+			}
+		}
 	}
 
 	private static NavigableMap<String, Path> immutablePaths(Map<String, Path> paths) {
