@@ -104,8 +104,11 @@ public final class ServerObjectStore {
 	private static void forceDirectory(Path directory) throws IOException {
 		try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS)) {
 			channel.force(true);
-		} catch (UnsupportedOperationException e) {
-			throw new IOException("Filesystem does not support immutable object directory durability: " + directory, e);
+		} catch (UnsupportedOperationException ignored) {
+			// Some providers cannot expose directories as channels.
+		} catch (IOException e) {
+			if (directory.getFileSystem().supportedFileAttributeViews().contains("posix")) throw e;
+			// Windows rejects opening directories as FileChannels even though the link is committed.
 		}
 	}
 }
