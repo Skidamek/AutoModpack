@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.server.packs.repository.Pack;
 import net.minecraft.server.packs.repository.PackRepository;
 
 import pl.skidam.automodpack_core.config.Jsons;
@@ -87,7 +88,19 @@ public class ResourcePackAutoApplier {
 		// same set already active (e.g. reconnecting to the same server with no file changes).
 		if (!selected.equals(currentlySelected)) {
 			repository.setSelected(selected);
-			client.options.updateResourcePacks(repository);
+
+			// Inlined equivalent of Options#updateResourcePacks(PackRepository), which only exists on
+			// newer versions - resourcePacks/incompatibleResourcePacks and the Pack accessors used here
+			// have been stable since 1.18.2, so this works across every supported target without a
+			// Stonecutter guard.
+			client.options.resourcePacks.clear();
+			client.options.incompatibleResourcePacks.clear();
+			for (Pack pack : repository.getSelectedPacks()) {
+				if (pack.isFixedPosition()) continue;
+				client.options.resourcePacks.add(pack.getId());
+				if (!pack.getCompatibility().isCompatible()) client.options.incompatibleResourcePacks.add(pack.getId());
+			}
+
 			client.options.save();
 			client.reloadResourcePacks().exceptionally(e -> {
 				LOGGER.error("Failed to reload resource packs after auto-apply", e);
