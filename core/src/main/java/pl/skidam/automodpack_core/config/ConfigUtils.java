@@ -45,6 +45,7 @@ public class ConfigUtils {
 				group.overwriteEditableFiles = normalizePathRules(group.overwriteEditableFiles, "overwriteEditableFiles", pattern);
 				group.forceCopyFilesToStandardLocation = normalizePathRules(group.forceCopyFilesToStandardLocation, "forceCopyFilesToStandardLocation",
 						pattern);
+				if (group.autoApplyResourcePacks == null) group.autoApplyResourcePacks = new LinkedHashSet<>();
 			}
 		}
 

@@ -47,6 +47,7 @@ public class Constants {
 	public static Path hashCacheDBFile = cacheDir.resolve("hash-cache.db");
 	public static Path modCacheDBFile = cacheDir.resolve("mod-cache.db");
 	public static Path clientSelectionFile = automodpackDir.resolve("automodpack-client-selection.json");
+	public static Path clientResourcePackStateFile = automodpackDir.resolve("automodpack-client-resourcepacks.json");
 	public static Path clientDummyFilesFile = automodpackDir.resolve("automodpack-dummy-files.json");
 	public static Path clientDeletionTimeStamps = automodpackDir.resolve("automodpack-deletion-timestamps-files.json");
 	public static Path serverCoreConfigFile = automodpackDir.resolve("automodpack-core.json");
