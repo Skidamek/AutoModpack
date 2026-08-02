@@ -35,6 +35,7 @@ class UpdatePlannerTest {
 				&& OLD_HASH.equals(operation.expectedExistingHash())));
 		assertTrue(plan.restartReasons().contains(RestartReason.APPLIED_SERVER_DELETIONS));
 		assertEquals(List.of(new Preservation(Root.MODS_DIR, "old.jar", OLD_HASH, 8)), plan.preservations());
+		assertEquals(List.of(new BaselineCapture(Root.MODS_DIR, "old.jar", OLD_HASH, 8, false)), plan.baselineCaptures());
 	}
 
 	@Test

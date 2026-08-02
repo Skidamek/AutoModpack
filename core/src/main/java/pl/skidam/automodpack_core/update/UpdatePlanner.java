@@ -73,6 +73,7 @@ public final class UpdatePlanner {
 		Map<FileKey, Operation> operations = new HashMap<>();
 		EnumSet<RestartReason> restartReasons = EnumSet.noneOf(RestartReason.class);
 		List<Preservation> preservations = new ArrayList<>();
+		List<BaselineCapture> baselineCaptures = new ArrayList<>();
 
 		for (var entry : installedItems.entrySet()) {
 			if (targetItems.containsKey(entry.getKey())) continue;
@@ -131,6 +132,7 @@ public final class UpdatePlanner {
 			}
 		}
 
+		planBaselineCaptures(input.files(), operations, baselineCaptures);
 		List<Operation> ordered = operations.values().stream().sorted(OPERATION_ORDER).toList();
 		projectedScope.addAll(operations.keySet());
 		List<ProjectedFile> finalState = projectedScope.stream().sorted(FILE_KEY_ORDER).map(key -> {
@@ -140,7 +142,27 @@ public final class UpdatePlanner {
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
 		return new UpdatePlan(target.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
-				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList());
+				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(),
+				baselineCaptures.stream().sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal()).thenComparing(BaselineCapture::relativePath)).toList());
+	}
+
+	private static void planBaselineCaptures(Map<FileKey, FileState> original, Map<FileKey, Operation> operations,
+			List<BaselineCapture> captures) {
+		Map<FileKey, BaselineCapture> planned = new HashMap<>();
+		for (Operation operation : operations.values()) {
+			if ((operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE)
+					|| (operation.root() != Root.GAME_DIR && operation.root() != Root.MODS_DIR))
+				continue;
+			FileKey key = new FileKey(operation.root(), normalize(operation.relativePath()));
+			FileState previous = original.get(key);
+			if (previous != null && (!previous.regularFile() || previous.sha1() == null || previous.size() < 0))
+				throw new IllegalArgumentException("Cannot capture a safe baseline for live path: " + key.relativePath());
+			BaselineCapture capture = previous == null
+					? new BaselineCapture(key.root(), key.relativePath(), "", -1, true)
+					: new BaselineCapture(key.root(), key.relativePath(), previous.sha1().toLowerCase(Locale.ROOT), previous.size(), false);
+			planned.putIfAbsent(key, capture);
+		}
+		captures.addAll(planned.values());
 	}
 
 	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> targetPaths, Map<FileKey, FileState> projected,
