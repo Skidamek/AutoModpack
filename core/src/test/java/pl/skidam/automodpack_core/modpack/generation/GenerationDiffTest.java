@@ -33,6 +33,8 @@ class GenerationDiffTest {
 		assertEquals(List.of("tag"), diff.selectionTagMetadata().modified());
 		assertEquals(new GenerationDiff.Summary(1, 1, 1, 1, 3), diff.summary());
 		assertEquals(List.of("modpackName"), diff.packMetadata().modified());
+		assertEquals(List.of("Changed pack metadata 'modpackName'", "Changed group 'main'", "Changed tag 'tag'", "Added file 'main/a-added'",
+				"Changed metadata for file 'main/a-metadata'", "Changed file 'main/b-modified'", "Removed file 'main/z-removed'"), diff.humanReadableChanges());
 	}
 
 	@Test
