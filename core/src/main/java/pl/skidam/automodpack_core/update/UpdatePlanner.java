@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -71,6 +72,7 @@ public final class UpdatePlanner {
 		Set<FileKey> projectedScope = new HashSet<>(input.files().keySet());
 		Map<FileKey, Operation> operations = new HashMap<>();
 		EnumSet<RestartReason> restartReasons = EnumSet.noneOf(RestartReason.class);
+		List<Preservation> preservations = new ArrayList<>();
 
 		for (var entry : installedItems.entrySet()) {
 			if (targetItems.containsKey(entry.getKey())) continue;
@@ -84,7 +86,7 @@ public final class UpdatePlanner {
 			}
 		}
 
-		planLedgerCleanup(ledger, targetItems.keySet(), projected, operations, restartReasons);
+		planLedgerCleanup(ledger, targetItems.keySet(), projected, operations, preservations, restartReasons);
 		if (input.installedManifest() != null && !Objects.equals(input.installedManifest().selectedGroups, target.selectedGroups))
 			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
 		if (isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
@@ -137,11 +139,12 @@ public final class UpdatePlanner {
 					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
 					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
 		}).toList();
-		return new UpdatePlan(target.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons);
+		return new UpdatePlan(target.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
+				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList());
 	}
 
 	private static void planLedgerCleanup(OwnershipLedger ledger, Set<String> targetPaths, Map<FileKey, FileState> projected,
-			Map<FileKey, Operation> operations, EnumSet<RestartReason> restartReasons) {
+			Map<FileKey, Operation> operations, List<Preservation> preservations, EnumSet<RestartReason> restartReasons) {
 		for (OwnershipLedger.Entry entry : ledger.entries().values()) {
 			if (targetPaths.contains(entry.logicalPath())) continue;
 			Optional<FileKey> candidateKey = managedCleanupKey(entry.logicalPath());
@@ -151,6 +154,7 @@ public final class UpdatePlanner {
 			if (state == null || !state.regularFile() || state.sha1() == null) continue;
 			OwnershipLedger.Content content = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
 			if (!entry.historicalHashes().contains(content)) continue;
+			preservations.add(new Preservation(key.root(), key.relativePath(), state.sha1().toLowerCase(Locale.ROOT), state.size()));
 			delete(operations, projected, key, state.sha1());
 			restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
 		}

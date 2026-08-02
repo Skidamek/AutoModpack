@@ -15,13 +15,20 @@ public record UpdatePlan(
 		List<Operation> operations,
 		List<ProjectedFile> projectedFinalState,
 		Jsons.ClientConfigFieldsV3 plannedClientConfig,
-		Set<RestartReason> restartReasons) {
+		Set<RestartReason> restartReasons,
+		List<Preservation> preservations) {
 
 	public UpdatePlan {
 		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
 		operations = List.copyOf(operations);
 		projectedFinalState = List.copyOf(projectedFinalState);
 		restartReasons = stableSet(restartReasons);
+		preservations = List.copyOf(preservations);
+	}
+
+	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
+			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons) {
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, List.of());
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
@@ -54,6 +61,8 @@ public record UpdatePlan(
 		CHANGED_GROUP_SELECTION,
 		SELECTED_MODPACK
 	}
+
+	public record Preservation(Root root, String relativePath, String expectedHash, long expectedSize) {}
 
 	public record Operation(
 			Root root,

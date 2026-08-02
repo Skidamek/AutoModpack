@@ -34,6 +34,7 @@ class UpdatePlannerTest {
 				&& operation.relativePath().equals("old.jar") && operation.operation() == OperationType.DELETE
 				&& OLD_HASH.equals(operation.expectedExistingHash())));
 		assertTrue(plan.restartReasons().contains(RestartReason.APPLIED_SERVER_DELETIONS));
+		assertEquals(List.of(new Preservation(Root.MODS_DIR, "old.jar", OLD_HASH, 8)), plan.preservations());
 	}
 
 	@Test

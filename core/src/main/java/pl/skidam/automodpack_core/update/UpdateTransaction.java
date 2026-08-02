@@ -17,6 +17,7 @@ import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
+import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
 import pl.skidam.automodpack_core.update.UpdatePlan.ProjectedFile;
 import pl.skidam.automodpack_core.update.UpdatePlan.RestartReason;
 import pl.skidam.automodpack_core.update.UpdatePlan.Root;
@@ -43,6 +44,7 @@ public final class UpdateTransaction {
 	public List<ProjectedFile> projectedFinalState;
 	public Jsons.ClientConfigFieldsV3 plannedClientConfig;
 	public List<RestartReason> restartReasons;
+	public List<Preservation> plannedPreservations;
 
 	public UpdateTransaction() {}
 
@@ -70,6 +72,7 @@ public final class UpdateTransaction {
 		transaction.projectedFinalState = List.copyOf(plan.projectedFinalState());
 		transaction.plannedClientConfig = plan.plannedClientConfig();
 		transaction.restartReasons = new ArrayList<>(new LinkedHashSet<>(plan.restartReasons()));
+		transaction.plannedPreservations = List.copyOf(plan.preservations());
 		return transaction;
 	}
 
@@ -109,6 +112,7 @@ public final class UpdateTransaction {
 		transaction.schemaVersion = CURRENT_SCHEMA_VERSION;
 		transaction.transactionId = UUID.randomUUID().toString();
 		transaction.purpose = purpose;
+		transaction.plannedPreservations = new ArrayList<>();
 		return transaction;
 	}
 
