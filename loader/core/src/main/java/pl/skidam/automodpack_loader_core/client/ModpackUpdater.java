@@ -562,7 +562,9 @@ public class ModpackUpdater implements AutoCloseable {
 			try (Stream<Path> stream = Files.walk(modpackDir)) {
 				Path installedManifest = modpackDir.resolve(modpackContentFileName);
 				Path completeCatalogue = modpackDir.resolve(modpackCatalogueFileName);
-				for (Path path : stream.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).filter(path -> !path.equals(installedManifest) && !path.equals(completeCatalogue)).toList())
+				Path baselineManifest = modpackDir.resolve(modpackBaselineFileName);
+				for (Path path : stream.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+						.filter(path -> !path.equals(installedManifest) && !path.equals(completeCatalogue) && !path.equals(baselineManifest)).toList())
 					putFileState(files, UpdatePlan.Root.MODPACK_DIR, modpackDir, path, cache);
 			}
 		}
@@ -596,7 +598,13 @@ public class ModpackUpdater implements AutoCloseable {
 			FileMetadataCache cache) throws IOException {
 		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return;
 		String relative = UpdatePlanner.normalize(rootPath.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString());
-		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(cache.getHashOrNull(path), Files.size(path), true, FileInspection.isMod(path)));
+		String hash = cache.getHashOrNull(path);
+		if (hash == null) {
+			hash = HashUtils.getHash(path);
+			if (hash == null) throw new IOException("Failed to hash live file: " + path);
+			cache.overwriteCache(path, hash);
+		}
+		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(hash, Files.size(path), true, FileInspection.isMod(path)));
 	}
 
 	private List<UpdatePlan.ModInfo> inspectTargetMods(Jsons.ModpackContentFields target, FileMetadataCache cache) {

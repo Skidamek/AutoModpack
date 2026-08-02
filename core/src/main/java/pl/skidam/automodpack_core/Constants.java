@@ -48,6 +48,7 @@ public class Constants {
 	public static final Path hostContentModpackDir = hostModpackDir.resolve("main");
 	public static final Path modpackContentFileName = Path.of("automodpack-content.json");
 	public static final Path modpackCatalogueFileName = Path.of("automodpack-catalogue.json");
+	public static final Path modpackBaselineFileName = Path.of("automodpack-baseline.json");
 	public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");
 	public static Path clientLocalMetadataFile = automodpackDir.resolve("automodpack-client-metadata.json");
 	public static Path cacheDir = automodpackDir.resolve("cache");

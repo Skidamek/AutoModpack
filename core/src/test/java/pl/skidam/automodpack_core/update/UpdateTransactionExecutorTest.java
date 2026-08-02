@@ -106,13 +106,18 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, targetHash, targetBytes.length),
 						new ProjectedFile(Root.GAME_DIR, "config/old.txt", false, null, -1)),
 				clientConfig(target.manifest().modpackId()), Set.of(RestartReason.APPLIED_SERVER_DELETIONS),
-				List.of(new Preservation(Root.GAME_DIR, "config/old.txt", oldHash, oldBytes.length)));
+				List.of(new Preservation(Root.GAME_DIR, "config/old.txt", oldHash, oldBytes.length)),
+				List.of(new BaselineCapture(Root.GAME_DIR, "config/old.txt", oldHash, oldBytes.length, false)));
 
 		UpdateTransactionExecutor.Execution result = executor(paths, null).commit(plan, target);
 
 		assertTrue(result.success());
 		assertFalse(Files.exists(oldFile));
 		assertArrayEquals(oldBytes, Files.readAllBytes(paths.store().resolve(oldHash)));
+		Jsons.ClientBaselineFields baseline = ConfigTools.read(paths.modpack().resolve("automodpack-baseline.json"), Jsons.ClientBaselineFields.class).orElseThrow();
+		assertEquals("abc1234", baseline.modpackId);
+		assertEquals("config/old.txt", baseline.entries.get(0).logicalPath);
+		assertEquals(oldHash, baseline.entries.get(0).objectHash);
 	}
 
 	@Test
