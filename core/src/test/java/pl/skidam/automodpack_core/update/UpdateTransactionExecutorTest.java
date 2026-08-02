@@ -71,6 +71,51 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void preservesLedgerOwnedFileBeforeDeletion() throws Exception {
+		Paths paths = paths();
+		Files.createDirectories(paths.store());
+		Files.createDirectories(paths.game().resolve("config"));
+		byte[] oldBytes = "old-managed-file".getBytes(StandardCharsets.UTF_8);
+		Path oldFile = Files.write(paths.game().resolve("config/old.txt"), oldBytes);
+		String oldHash = HashUtils.getHash(oldFile);
+		byte[] targetBytes = "target-object".getBytes(StandardCharsets.UTF_8);
+		String targetHash = store(paths, targetBytes);
+
+		Jsons.CompleteModpackContentFields oldFields = new Jsons.CompleteModpackContentFields();
+		oldFields.modpackId = "abc1234";
+		oldFields.selectionTags = Map.of();
+		var oldGroup = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		oldGroup.files = Map.of("config/old.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(oldBytes.length), "config", false, false, false,
+				oldHash, null));
+		oldFields.groups = Map.of("main", oldGroup);
+		GenerationRecord oldRecord = GenerationRecord.create(GroupManifestValidator.validate(oldFields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
+
+		Jsons.CompleteModpackContentFields targetFields = new Jsons.CompleteModpackContentFields();
+		targetFields.modpackId = "abc1234";
+		targetFields.selectionTags = Map.of();
+		var targetGroup = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		targetGroup.files = Map.of("mods/new.jar", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(targetBytes.length), "mod", false, false, false,
+				targetHash, null));
+		targetFields.groups = Map.of("main", targetGroup);
+		GenerationRecord targetRecord = GenerationRecord.create(GroupManifestValidator.validate(targetFields), oldRecord, Instant.parse("2026-01-02T00:00:00Z"), "");
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(targetRecord.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+
+		UpdatePlan plan = new UpdatePlan(target.manifest().modpackId(), target.generationTarget(),
+				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, targetHash, targetBytes.length, null),
+						new Operation(Root.GAME_DIR, "config/old.txt", OperationType.DELETE, null, -1, oldHash)),
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, targetHash, targetBytes.length),
+						new ProjectedFile(Root.GAME_DIR, "config/old.txt", false, null, -1)),
+				clientConfig(target.manifest().modpackId()), Set.of(RestartReason.APPLIED_SERVER_DELETIONS),
+				List.of(new Preservation(Root.GAME_DIR, "config/old.txt", oldHash, oldBytes.length)));
+
+		UpdateTransactionExecutor.Execution result = executor(paths, null).commit(plan, target);
+
+		assertTrue(result.success());
+		assertFalse(Files.exists(oldFile));
+		assertArrayEquals(oldBytes, Files.readAllBytes(paths.store().resolve(oldHash)));
+	}
+
+	@Test
 	void rejectsGenerationIdentityMismatchesBeforeFileMutation() throws Exception {
 		Paths paths = paths();
 		Files.createDirectories(paths.store());
