@@ -84,6 +84,24 @@ public class ModpackUpdater implements AutoCloseable {
 	private volatile ScheduledFuture<?> confirmationExpiry;
 	private Path modpackDir;
 	private Path modpackContentFile;
+	private static final Comparator<RecoveryFile> RECOVERY_FILE_ORDER = Comparator.comparing(RecoveryFile::logicalPath).thenComparing(RecoveryFile::sha1)
+			.thenComparingLong(RecoveryFile::size);
+
+	public record RecoveryFile(String logicalPath, String sha1, long size) {
+		public RecoveryFile {
+			logicalPath = UpdatePlanner.normalize(logicalPath);
+			if (sha1 == null || !sha1.matches("[0-9a-fA-F]{40}")) throw new IllegalArgumentException("Recovery file SHA-1 is invalid");
+			sha1 = sha1.toLowerCase(Locale.ROOT);
+			if (size < 0) throw new IllegalArgumentException("Recovery file size is invalid");
+		}
+	}
+
+	public record RecoverySnapshot(List<RecoveryFile> archived, List<RecoveryFile> available) {
+		public RecoverySnapshot {
+			archived = List.copyOf(archived);
+			available = List.copyOf(available);
+		}
+	}
 
 	public String getModpackName() {
 		return serverModpackContent.modpackName;
@@ -254,6 +272,36 @@ public class ModpackUpdater implements AutoCloseable {
 		if (entry == null || normalizedHash == null || !entry.historicalHashes().contains(new OwnershipLedger.Content(normalizedHash, size)))
 			throw new IOException("Recovery object is not owned by the installed modpack ledger");
 		return RecoveryArchive.archive(SmartFileUtils.CWD.resolve(storeDir), SmartFileUtils.CWD.resolve(recoveryDir), normalizedPath, normalizedHash, size);
+	}
+
+	public RecoverySnapshot recoverySnapshot() throws IOException {
+		Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackDir.resolve(modpackContentFileName));
+		if (installed == null) throw new IOException("Installed modpack content is missing");
+		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(SmartFileUtils.CWD.resolve(recoveryDir));
+		List<RecoveryFile> archived = new ArrayList<>();
+		for (var entry : archive.entries) archived.add(new RecoveryFile(entry.logicalPath, entry.sha1, entry.size));
+		archived.sort(RECOVERY_FILE_ORDER);
+		Set<String> archivedKeys = archived.stream().map(ModpackUpdater::recoveryKey).collect(Collectors.toSet());
+		Set<String> targetPaths = new HashSet<>();
+		if (installed.list != null) for (var item : installed.list) targetPaths.add(UpdatePlanner.normalize(item.file));
+		OwnershipLedger ledger = OwnershipLedger.fromFields(installed.ownershipLedger);
+		List<RecoveryFile> available = new ArrayList<>();
+		Path storeRoot = SmartFileUtils.CWD.resolve(storeDir);
+		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
+			if (targetPaths.contains(ledgerEntry.logicalPath()) || UpdatePlanner.managedCleanupKey(ledgerEntry.logicalPath()).isEmpty()) continue;
+			for (OwnershipLedger.Content content : ledgerEntry.historicalHashes()) {
+				String hash = content.sha1().toLowerCase(Locale.ROOT);
+				if (!SmartFileUtils.isValidFile(storeRoot.resolve(hash), content.size(), hash)) continue;
+				RecoveryFile file = new RecoveryFile(ledgerEntry.logicalPath(), hash, content.size());
+				if (!archivedKeys.contains(recoveryKey(file))) available.add(file);
+			}
+		}
+		available.sort(RECOVERY_FILE_ORDER);
+		return new RecoverySnapshot(archived, available);
+	}
+
+	private static String recoveryKey(RecoveryFile file) {
+		return file.logicalPath() + "|" + file.sha1() + "|" + file.size();
 	}
 
 	// Load the already-installed modpack without contacting the server or

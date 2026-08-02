@@ -37,6 +37,11 @@ public class ScreenManager implements ScreenService {
 	}
 
 	@Override
+	public void recovery(Object... args) {
+		INSTANCE.recovery(args);
+	}
+
+	@Override
 	public void error(String... args) {
 		INSTANCE.error(args);
 	}
