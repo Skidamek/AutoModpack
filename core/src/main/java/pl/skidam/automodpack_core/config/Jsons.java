@@ -282,6 +282,17 @@ public class Jsons {
 		}
 	}
 
+	public static class ClientRecoveryArchiveFields {
+		public int schemaVersion = 1;
+		public List<EntryFields> entries = List.of();
+
+		public static class EntryFields {
+			public String logicalPath = "";
+			public String sha1 = "";
+			public long size = -1;
+		}
+	}
+
 	public static class CompleteModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
