@@ -34,6 +34,7 @@ import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
@@ -219,7 +220,25 @@ public class ModpackUpdater implements AutoCloseable {
 	// reconciling local files against it. Used when update-on-launch is disabled
 	// so the user can freely add/remove mods (e.g. a binary search) without
 	// AutoModpack restoring or deleting them.
+	public Path recoverDeletedFile(String logicalPath, String sha1, long size) throws IOException {
+		Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackDir.resolve(modpackContentFileName));
+		if (installed == null) throw new IOException("Installed modpack content is missing");
+		String normalizedPath = UpdatePlanner.normalize(logicalPath);
+		if (UpdatePlanner.managedCleanupKey(normalizedPath).isEmpty()) throw new IOException("Recovery path is not managed: " + normalizedPath);
+		OwnershipLedger ledger = OwnershipLedger.fromFields(installed.ownershipLedger);
+		OwnershipLedger.Entry entry = ledger.entries().get(normalizedPath);
+		String normalizedHash = sha1 == null ? null : sha1.toLowerCase(Locale.ROOT);
+		if (entry == null || normalizedHash == null || !entry.historicalHashes().contains(new OwnershipLedger.Content(normalizedHash, size)))
+			throw new IOException("Recovery object is not owned by the installed modpack ledger");
+		return RecoveryArchive.archive(SmartFileUtils.CWD.resolve(storeDir), SmartFileUtils.CWD.resolve(recoveryDir), normalizedPath, normalizedHash, size);
+	}
+
+	// Load the already-installed modpack without contacting the server or
+	// reconciling local files against it. Used when update-on-launch is disabled
+	// so the user can freely add/remove mods (e.g. a binary search) without
+	// AutoModpack restoring or deleting them.
 	public void loadModpack() throws Exception {
+
 		if (!Files.exists(modpackDir)) return;
 		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 			loadModpackMods(cache);
