@@ -42,6 +42,35 @@ public final class GenerationStore {
 		}
 	}
 
+	/** A deterministic receipt for the regular files in the generation store. */
+	public record StorageReport(long recordCount, long recordBytes, long immutableObjectCount, long immutableObjectBytes,
+			long stagingFileCount, long stagingBytes, long referencedObjectCount, long referencedObjectBytes, long objectReferenceCount) {
+		public StorageReport {
+			if (recordCount < 0 || recordBytes < 0 || immutableObjectCount < 0 || immutableObjectBytes < 0 || stagingFileCount < 0 || stagingBytes < 0
+					|| referencedObjectCount < 0 || referencedObjectBytes < 0 || objectReferenceCount < 0)
+				throw new IllegalArgumentException("Storage report values cannot be negative");
+		}
+
+		/** The ratio of unique referenced object hashes to all logical record references. */
+		public OptionalDouble uniqueObjectReferenceRatio() {
+			return objectReferenceCount == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) referencedObjectCount / objectReferenceCount);
+		}
+
+		/** The ratio of unique referenced object hashes to measured immutable object files. */
+		public OptionalDouble referencedObjectRatio() {
+			return immutableObjectCount == 0 ? OptionalDouble.empty() : OptionalDouble.of((double) referencedObjectCount / immutableObjectCount);
+		}
+	}
+
+	/** The result of one explicitly requested object collection pass. */
+	public record CollectionResult(long beforeObjectBytes, long afterObjectBytes, long beforeObjectCount, long afterObjectCount,
+			long deletedObjectCount, long deletedObjectBytes) {
+		public CollectionResult {
+			if (beforeObjectBytes < 0 || afterObjectBytes < 0 || beforeObjectCount < 0 || afterObjectCount < 0 || deletedObjectCount < 0 || deletedObjectBytes < 0)
+				throw new IllegalArgumentException("Collection result values cannot be negative");
+		}
+	}
+
 	@FunctionalInterface
 	interface CommitHook {
 		void beforeCurrentPointerReplacement() throws IOException;
@@ -77,6 +106,31 @@ public final class GenerationStore {
 
 	public Path objectRoot() {
 		return objectsDirectory;
+	}
+
+	/** Measures the current generation store without publishing or deleting managed state. */
+	public StorageReport measureStorage() throws IOException {
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			return measureStorageLocked();
+		}
+	}
+
+	/** Collects only explicitly unreferenced immutable objects; this method is never called automatically. */
+	public CollectionResult collectUnreachableObjects(Set<String> retainedGenerationIds, Set<String> pinnedObjectHashes) throws IOException {
+		Objects.requireNonNull(retainedGenerationIds, "retainedGenerationIds");
+		Objects.requireNonNull(pinnedObjectHashes, "pinnedObjectHashes");
+		NavigableSet<String> generationPins = canonicalPins(retainedGenerationIds, "generation");
+		NavigableSet<String> objectPins = canonicalPins(pinnedObjectHashes, "object");
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			return collectUnreachableObjectsLocked(generationPins, objectPins);
+		}
+	}
+
+	/** Short alias for callers that treat collection as the store's explicit maintenance operation. */
+	public CollectionResult collect(Set<String> retainedGenerationIds, Set<String> pinnedObjectHashes) throws IOException {
+		return collectUnreachableObjects(retainedGenerationIds, pinnedObjectHashes);
 	}
 
 	public Optional<CurrentSnapshot> loadCurrent() throws IOException {
@@ -232,6 +286,161 @@ public final class GenerationStore {
 		ensureDirectory(stagingDirectory, "generation staging");
 	}
 
+	private StorageReport measureStorageLocked() throws IOException {
+		loadCurrent();
+		NavigableMap<String, StoredRecord> records = readStoredRecords();
+		Map<String, Long> expectedSizes = new TreeMap<>();
+		long objectReferences = 0;
+		for (StoredRecord stored : records.values()) objectReferences = addExact(objectReferences, addReferences(stored.record(), expectedSizes), "object reference count");
+		long referencedObjectBytes = verifyObjectReferences(expectedSizes);
+		FileTotals recordFiles = recordFiles(records);
+		FileTotals objectFiles = fileTotals(regularFiles(objectsDirectory, "immutable objects"));
+		FileTotals stagingFiles = fileTotals(regularFiles(stagingDirectory, "generation staging"));
+		return new StorageReport(records.size(), recordFiles.bytes(), objectFiles.count(), objectFiles.bytes(), stagingFiles.count(), stagingFiles.bytes(),
+				expectedSizes.size(), referencedObjectBytes, objectReferences);
+	}
+
+	private CollectionResult collectUnreachableObjectsLocked(Set<String> generationPins, Set<String> objectPins) throws IOException {
+		Optional<CurrentSnapshot> current = loadCurrent();
+		if (current.isEmpty()) throw new IOException("Cannot collect without a valid current generation");
+		NavigableMap<String, StoredRecord> records = readStoredRecords();
+		String currentModpackId = current.orElseThrow().record().manifest().modpackId();
+		NavigableSet<String> retained = new TreeSet<>(generationPins);
+		current.map(snapshot -> snapshot.record().metadata().generationId()).ifPresent(retained::add);
+		Map<String, Long> expectedSizes = new TreeMap<>();
+		for (String generationId : retained) {
+			StoredRecord stored = records.get(generationId);
+			if (stored == null) throw new IOException("Retained generation record is missing: " + generationId);
+			if (!currentModpackId.equals(stored.record().manifest().modpackId()))
+				throw new IOException("Retained generation belongs to a different modpack lineage: " + generationId);
+			validateParentChain(stored.record());
+			addReferences(stored.record(), expectedSizes);
+		}
+		verifyObjectReferences(expectedSizes);
+		Set<String> reachable = new HashSet<>(expectedSizes.keySet());
+		for (String objectHash : objectPins) {
+			if (!reachable.contains(objectHash)) verifyPinnedObject(objectHash);
+			reachable.add(objectHash);
+		}
+		List<Path> beforeFiles = regularFiles(objectsDirectory, "immutable objects");
+		FileTotals before = fileTotals(beforeFiles);
+		long deletedCount = 0;
+		long deletedBytes = 0;
+		for (Path object : beforeFiles) {
+			String name = object.getFileName().toString();
+			if (!isDigest(name) || reachable.contains(name) || !isValidCanonicalObject(object, name)) continue;
+			long size = Files.size(object);
+			if (Files.deleteIfExists(object)) {
+				deletedCount = addExact(deletedCount, 1, "deleted object count");
+				deletedBytes = addExact(deletedBytes, size, "deleted object bytes");
+			}
+		}
+		if (deletedCount > 0) forceDirectory(objectsDirectory);
+		FileTotals after = fileTotals(regularFiles(objectsDirectory, "immutable objects"));
+		return new CollectionResult(before.bytes(), after.bytes(), before.count(), after.count(), deletedCount, deletedBytes);
+	}
+
+	private NavigableMap<String, StoredRecord> readStoredRecords() throws IOException {
+		TreeMap<String, StoredRecord> records = new TreeMap<>();
+		if (!Files.exists(recordsDirectory, LinkOption.NOFOLLOW_LINKS)) return records;
+		requireDirectory(recordsDirectory, "generation records");
+		try (var paths = Files.list(recordsDirectory)) {
+			for (Path path : paths.sorted(Comparator.comparing(value -> value.getFileName().toString())).toList()) {
+				ensureRegular(path, "generation record");
+				String filename = path.getFileName().toString();
+				if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation record filename: " + path);
+				String generationId = filename.substring(0, 40);
+				if (!isDigest(generationId)) throw new IOException("Invalid generation record filename: " + path);
+				GenerationRecord record = readRecord(path);
+				if (!generationId.equals(record.metadata().generationId())) throw new IOException("Generation record filename does not match its identity: " + path);
+				if (records.put(generationId, new StoredRecord(record, path)) != null) throw new IOException("Duplicate generation record: " + generationId);
+			}
+		}
+		return records;
+	}
+
+	private FileTotals recordFiles(NavigableMap<String, StoredRecord> records) throws IOException {
+		List<Path> paths = records.values().stream().map(StoredRecord::path).toList();
+		return fileTotals(paths);
+	}
+
+	private List<Path> regularFiles(Path directory, String description) throws IOException {
+		if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) return List.of();
+		requireDirectory(directory, description);
+		try (var paths = Files.list(directory)) {
+			return paths.filter(path -> !Files.isSymbolicLink(path) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+					.sorted(Comparator.comparing(value -> value.getFileName().toString())).toList();
+		}
+	}
+
+	private FileTotals fileTotals(List<Path> paths) throws IOException {
+		long bytes = 0;
+		long count = 0;
+		for (Path path : paths) {
+			if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) continue;
+			count = addExact(count, 1, "file count");
+			bytes = addExact(bytes, Files.size(path), "file bytes");
+		}
+		return new FileTotals(count, bytes);
+	}
+
+	private long addReferences(GenerationRecord record, Map<String, Long> expectedSizes) throws IOException {
+		long count = 0;
+		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) {
+			addExpectedSize(expectedSizes, file.sha1().toLowerCase(Locale.ROOT), file.size());
+			count = addExact(count, 1, "object reference count");
+		}
+		for (var entry : record.ownershipLedger().entries().values()) for (var content : entry.historicalHashes()) {
+			addExpectedSize(expectedSizes, content.sha1(), content.size());
+			count = addExact(count, 1, "object reference count");
+		}
+		return count;
+	}
+
+	private static void addExpectedSize(Map<String, Long> expectedSizes, String sha1, long expectedSize) throws IOException {
+		if (!isDigest(sha1) || expectedSize < 0) throw new IOException("Invalid immutable object reference: " + sha1);
+		Long previousSize = expectedSizes.putIfAbsent(sha1, expectedSize);
+		if (previousSize != null && previousSize.longValue() != expectedSize)
+			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
+	}
+
+	private long verifyObjectReferences(Map<String, Long> expectedSizes) throws IOException {
+		Set<String> verified = new HashSet<>();
+		long bytes = 0;
+		for (var entry : expectedSizes.entrySet()) {
+			verifyObject(entry.getKey(), entry.getValue(), expectedSizes, verified);
+			bytes = addExact(bytes, entry.getValue(), "referenced object bytes");
+		}
+		return bytes;
+	}
+
+	private void verifyPinnedObject(String sha1) throws IOException {
+		Path object = objectPath(sha1);
+		ensureRegular(object, "pinned immutable object " + sha1);
+		if (!sha1.equals(HashUtils.getHash(object))) throw new IOException("Pinned immutable object failed SHA-1 verification: " + object);
+	}
+
+	private static NavigableSet<String> canonicalPins(Set<String> pins, String description) throws IOException {
+		TreeSet<String> result = new TreeSet<>();
+		for (String pin : pins) {
+			if (!isDigest(pin)) throw new IOException("Invalid pinned " + description + " hash: " + pin);
+			result.add(pin);
+		}
+		return result;
+	}
+
+	private static long addExact(long first, long second, String description) throws IOException {
+		try {
+			return Math.addExact(first, second);
+		} catch (ArithmeticException e) {
+			throw new IOException("Overflow while measuring " + description, e);
+		}
+	}
+
+	private boolean isValidCanonicalObject(Path object, String name) {
+		return !Files.isSymbolicLink(object) && Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && name.equals(HashUtils.getHash(object));
+	}
+
 	private GenerationRecord readRecord(Path path) throws IOException {
 		ensureRegular(path, "generation record");
 		try {
@@ -266,24 +475,16 @@ public final class GenerationStore {
 	}
 
 	private NavigableMap<String, Path> verifyCurrentObjects(GenerationRecord record) throws IOException {
-		requireDirectory(objectsDirectory, "immutable objects");
+		TreeMap<String, Long> expectedSizes = new TreeMap<>();
+		addReferences(record, expectedSizes);
+		verifyObjectReferences(expectedSizes);
 		TreeMap<String, Path> hosting = new TreeMap<>();
-		Map<String, Long> expectedSizes = new HashMap<>();
-		Set<String> verified = new HashSet<>();
-		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) {
-			String sha1 = file.sha1().toLowerCase(Locale.ROOT);
-			verifyObject(sha1, file.size(), expectedSizes, verified);
-			hosting.put(sha1, objectsDirectory.resolve(sha1));
-		}
-		for (var entry : record.ownershipLedger().entries().values())
-			for (var content : entry.historicalHashes())
-				verifyObject(content.sha1(), content.size(), expectedSizes, verified);
+		for (String sha1 : expectedSizes.keySet()) hosting.put(sha1, objectPath(sha1));
 		return hosting;
 	}
 
 	private void verifyObject(String sha1, long expectedSize, Map<String, Long> expectedSizes, Set<String> verified) throws IOException {
-		Path object = objectsDirectory.resolve(sha1).normalize();
-		if (!object.startsWith(objectsDirectory)) throw new IOException("Object path escapes immutable object store: " + sha1);
+		Path object = objectPath(sha1);
 		Long previousSize = expectedSizes.putIfAbsent(sha1, expectedSize);
 		if (previousSize != null && previousSize.longValue() != expectedSize)
 			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
@@ -291,6 +492,14 @@ public final class GenerationStore {
 		ensureRegular(object, "immutable object " + sha1);
 		if (Files.size(object) != expectedSize || !sha1.equals(HashUtils.getHash(object)))
 			throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
+	}
+
+	private Path objectPath(String sha1) throws IOException {
+		if (!isDigest(sha1)) throw new IOException("Invalid immutable object SHA-1: " + sha1);
+		Path object = objectsDirectory.resolve(sha1).normalize();
+		if (!object.startsWith(objectsDirectory) || !objectsDirectory.equals(object.getParent()))
+			throw new IOException("Object path escapes immutable object store: " + sha1);
+		return object;
 	}
 
 	private Path recordPath(String generationId) throws IOException {
@@ -360,6 +569,10 @@ public final class GenerationStore {
 	private static boolean isDigest(String value) {
 		return value != null && value.matches("[0-9a-f]{40}");
 	}
+
+	private record StoredRecord(GenerationRecord record, Path path) {}
+
+	private record FileTotals(long count, long bytes) {}
 
 	private static final class PublicationGuard implements AutoCloseable {
 		private final ReentrantLock jvmLock;
