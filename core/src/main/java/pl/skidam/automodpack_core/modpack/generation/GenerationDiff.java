@@ -65,6 +65,30 @@ public record GenerationDiff(
 				+ selectionTagMetadata.changedCount());
 	}
 
+	/** Returns deterministic text for an operator-facing generation change summary. */
+	public List<String> humanReadableChanges() {
+		List<String> changes = new ArrayList<>();
+		appendMetadataChanges(changes, "pack metadata", packMetadata);
+		appendMetadataChanges(changes, "group", groupMetadata);
+		appendMetadataChanges(changes, "tag", selectionTagMetadata);
+		for (FileChange change : files) {
+			String action = switch (change.classification()) {
+				case ADDED -> "Added";
+				case MODIFIED -> "Changed";
+				case REMOVED -> "Removed";
+				case METADATA_ONLY -> "Changed metadata for";
+			};
+			changes.add(action + " file '" + change.groupId() + "/" + change.logicalPath() + "'");
+		}
+		return changes.isEmpty() ? List.of("No catalogue changes.") : List.copyOf(changes);
+	}
+
+	private static void appendMetadataChanges(List<String> changes, String kind, MetadataSummary summary) {
+		for (String value : summary.added()) changes.add("Added " + kind + " '" + value + "'");
+		for (String value : summary.modified()) changes.add("Changed " + kind + " '" + value + "'");
+		for (String value : summary.removed()) changes.add("Removed " + kind + " '" + value + "'");
+	}
+
 	public enum FileClassification {
 		ADDED, MODIFIED, REMOVED, METADATA_ONLY
 	}
