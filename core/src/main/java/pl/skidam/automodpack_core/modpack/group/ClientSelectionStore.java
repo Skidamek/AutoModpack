@@ -21,7 +21,7 @@ public final class ClientSelectionStore {
 			ModpackId.requireValid(modpackId);
 			Jsons.ClientSelectionStoreFields fields = read();
 			Jsons.ClientSelectionStoreFields.ModpackSelection selection = fields.selections.get(modpackId);
-			return selection == null ? Optional.empty() : Optional.of(new SelectionIntent(selection.requestedGroups));
+			return selection == null ? Optional.empty() : Optional.of(intent(selection));
 		}
 	}
 
@@ -31,10 +31,11 @@ public final class ClientSelectionStore {
 			Objects.requireNonNull(target);
 			Jsons.ClientSelectionStoreFields fields = read();
 			Jsons.ClientSelectionStoreFields.ModpackSelection currentFields = fields.selections.get(modpackId);
-			SelectionIntent current = currentFields == null ? null : new SelectionIntent(currentFields.requestedGroups);
+			SelectionIntent current = currentFields == null ? null : intent(currentFields);
 			if (!Objects.equals(current, expected) && !Objects.equals(current, target))
 				throw new IOException("Group selection changed after planning for modpack " + modpackId);
-			fields.selections.put(modpackId, new Jsons.ClientSelectionStoreFields.ModpackSelection(new LinkedHashSet<>(target.requestedGroups())));
+			fields.selections.put(modpackId, new Jsons.ClientSelectionStoreFields.ModpackSelection(new LinkedHashSet<>(target.requestedTags()),
+					new LinkedHashSet<>(target.requestedGroups()), new LinkedHashSet<>(target.excludedGroups())));
 			fields.selections = new LinkedHashMap<>(new TreeMap<>(fields.selections));
 			ConfigTools.writeAtomic(path, fields);
 		}
@@ -45,7 +46,7 @@ public final class ClientSelectionStore {
 			ModpackId.requireValid(modpackId);
 			Jsons.ClientSelectionStoreFields fields = read();
 			Jsons.ClientSelectionStoreFields.ModpackSelection currentFields = fields.selections.get(modpackId);
-			SelectionIntent current = currentFields == null ? null : new SelectionIntent(currentFields.requestedGroups);
+			SelectionIntent current = currentFields == null ? null : intent(currentFields);
 			if (current != null && !Objects.equals(current, expected))
 				throw new IOException("Group selection changed after removal planning for modpack " + modpackId);
 			if (current == null) return;
@@ -53,6 +54,10 @@ public final class ClientSelectionStore {
 			fields.selections = new LinkedHashMap<>(new TreeMap<>(fields.selections));
 			ConfigTools.writeAtomic(path, fields);
 		}
+	}
+
+	private static SelectionIntent intent(Jsons.ClientSelectionStoreFields.ModpackSelection selection) {
+		return new SelectionIntent(selection.requestedTags, selection.requestedGroups, selection.excludedGroups);
 	}
 
 	private Jsons.ClientSelectionStoreFields read() {

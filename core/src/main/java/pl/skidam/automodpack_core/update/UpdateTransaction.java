@@ -38,8 +38,12 @@ public final class UpdateTransaction {
 	public String targetManifestJson;
 	public String targetPlatform;
 	public boolean expectedPriorSelectionPresent;
+	public List<String> expectedPriorRequestedTags;
 	public List<String> expectedPriorRequestedGroups;
+	public List<String> expectedPriorExcludedGroups;
+	public List<String> requestedTags;
 	public List<String> requestedGroups;
+	public List<String> excludedGroups;
 	public String canonicalModpackDirectory;
 	public List<Operation> operations;
 	public List<ProjectedFile> projectedFinalState;
@@ -67,8 +71,12 @@ public final class UpdateTransaction {
 		transaction.targetManifestJson = ConfigTools.GSON.toJson(target.flatTarget());
 		transaction.targetPlatform = target.platform().id();
 		transaction.expectedPriorSelectionPresent = target.expectedPriorIntent() != null;
+		transaction.expectedPriorRequestedTags = target.expectedPriorIntent() == null ? List.of() : new ArrayList<>(target.expectedPriorIntent().requestedTags());
 		transaction.expectedPriorRequestedGroups = target.expectedPriorIntent() == null ? List.of() : new ArrayList<>(target.expectedPriorIntent().requestedGroups());
+		transaction.expectedPriorExcludedGroups = target.expectedPriorIntent() == null ? List.of() : new ArrayList<>(target.expectedPriorIntent().excludedGroups());
+		transaction.requestedTags = new ArrayList<>(target.selection().intent().requestedTags());
 		transaction.requestedGroups = new ArrayList<>(target.selection().intent().requestedGroups());
+		transaction.excludedGroups = new ArrayList<>(target.selection().intent().excludedGroups());
 		transaction.canonicalModpackDirectory = modpackDirectory.toAbsolutePath().normalize().toString();
 		transaction.operations = List.copyOf(plan.operations());
 		transaction.projectedFinalState = List.copyOf(plan.projectedFinalState());
@@ -105,8 +113,12 @@ public final class UpdateTransaction {
 		transaction.targetManifestJson = ConfigTools.GSON.toJson(installedManifest);
 		transaction.targetPlatform = platform.id();
 		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
+		transaction.expectedPriorRequestedTags = expectedPriorIntent == null ? List.of() : new ArrayList<>(expectedPriorIntent.requestedTags());
 		transaction.expectedPriorRequestedGroups = expectedPriorIntent == null ? List.of() : new ArrayList<>(expectedPriorIntent.requestedGroups());
+		transaction.expectedPriorExcludedGroups = expectedPriorIntent == null ? List.of() : new ArrayList<>(expectedPriorIntent.excludedGroups());
+		transaction.requestedTags = List.of();
 		transaction.requestedGroups = List.of();
+		transaction.excludedGroups = List.of();
 		transaction.canonicalModpackDirectory = modpackDirectory.toAbsolutePath().normalize().toString();
 		transaction.operations = List.copyOf(plan.operations());
 		transaction.projectedFinalState = List.copyOf(plan.projectedFinalState());
@@ -175,11 +187,11 @@ public final class UpdateTransaction {
 	}
 
 	public SelectionIntent expectedPriorIntent() {
-		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedGroups) : null;
+		return expectedPriorSelectionPresent ? new SelectionIntent(expectedPriorRequestedTags, expectedPriorRequestedGroups, expectedPriorExcludedGroups) : null;
 	}
 
 	public SelectionIntent targetIntent() {
-		return new SelectionIntent(requestedGroups);
+		return new SelectionIntent(requestedTags, requestedGroups, excludedGroups);
 	}
 
 	public record LegacyDummyTarget(Root root, String relativePath) {}

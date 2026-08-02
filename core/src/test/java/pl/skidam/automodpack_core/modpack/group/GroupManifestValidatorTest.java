@@ -158,6 +158,49 @@ class GroupManifestValidatorTest {
 		assertDoesNotThrow(() -> GroupManifestValidator.validate(linux));
 	}
 
+	@Test
+	void rejectsConflictingGroupsInsideOneTagBundle() {
+		var fields = catalogue();
+		var first = group(file("a"));
+		first.tag = "bundle";
+		first.breaksWith = Set.of("second");
+		var second = group(file("a"));
+		second.tag = "bundle";
+		fields.selectionTags = Map.of("bundle", new Jsons.CompleteModpackContentFields.SelectionTagFields());
+		fields.groups = linkedGroups("first", first, "second", second);
+
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsDifferentSamePathContentInsideOneTagBundle() {
+		var fields = catalogue();
+		var first = group(file("a"));
+		first.tag = "bundle";
+		var second = group(file("b"));
+		second.tag = "bundle";
+		fields.selectionTags = Map.of("bundle", new Jsons.CompleteModpackContentFields.SelectionTagFields());
+		fields.groups = linkedGroups("first", first, "second", second);
+
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsTagWhoseDependencyClosureConflicts() {
+		var fields = catalogue();
+		var dependency = group(file("a"));
+		var first = group(file("a"));
+		first.tag = "bundle";
+		first.requires = Set.of("dependency");
+		var second = group(file("a"));
+		second.tag = "bundle";
+		second.breaksWith = Set.of("dependency");
+		fields.selectionTags = Map.of("bundle", new Jsons.CompleteModpackContentFields.SelectionTagFields());
+		fields.groups = linkedGroups("dependency", dependency, "first", first, "second", second);
+
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
 	private static Jsons.CompleteModpackContentFields catalogue() {
 		var fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
