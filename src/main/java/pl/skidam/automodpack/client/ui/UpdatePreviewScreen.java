@@ -18,6 +18,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private final Screen parent;
 	private final UpdatePreview preview;
 	private final String modpackName;
+	private final boolean removal;
 	private final Runnable continueAction;
 	private final Runnable cancelAction;
 	private Button previousButton;
@@ -26,10 +27,15 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private boolean finished;
 
 	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, Runnable continueAction, Runnable cancelAction) {
-		super(VersionedText.literal("UpdatePreviewScreen"));
+		this(parent, preview, modpackName, false, continueAction, cancelAction);
+	}
+
+	public UpdatePreviewScreen(Screen parent, UpdatePreview preview, String modpackName, boolean removal, Runnable continueAction, Runnable cancelAction) {
+		super(VersionedText.literal(removal ? "ModpackRemovalScreen" : "UpdatePreviewScreen"));
 		this.parent = parent;
 		this.preview = preview;
 		this.modpackName = modpackName == null ? "" : modpackName;
+		this.removal = removal;
 		this.continueAction = continueAction;
 		this.cancelAction = cancelAction;
 	}
@@ -48,7 +54,7 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		this.addRenderableWidget(this.nextButton);
 		this.addRenderableWidget(buttonWidget(left + 80, navigationY, 75, 20, VersionedText.literal("Cancel"), button -> cancel()));
 		this.addRenderableWidget(buttonWidget(left + 165, navigationY, 75, 20,
-				VersionedText.literal("Continue").withStyle(ChatFormatting.BOLD), button -> continueUpdate()));
+				VersionedText.literal(removal ? "Remove" : "Continue").withStyle(ChatFormatting.BOLD), button -> continueUpdate()));
 	}
 
 	private int pageCount() {
@@ -77,12 +83,14 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
-		String title = modpackName.isBlank() ? "Update preview" : modpackName + " update preview";
+		String title = removal
+				? (modpackName.isBlank() ? "Remove modpack" : "Remove " + modpackName)
+				: (modpackName.isBlank() ? "Update preview" : modpackName + " update preview");
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
 
 		UpdatePlan plan = preview.plan();
 		String digest = plan.generationTarget().stateDigest();
-		String targetText = "Target content: " + digest.substring(0, Math.min(12, digest.length()));
+		String targetText = (removal ? "Restoring instance from " : "Target content: ") + digest.substring(0, Math.min(12, digest.length()));
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(targetText).withStyle(ChatFormatting.GRAY), this.width / 2, 29, TextColors.WHITE);
 
 		String groupText = "Groups: " + preview.groupConsequences().explicitGroups().size() + " explicit, "

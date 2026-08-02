@@ -17,13 +17,19 @@ import net.minecraft.network.chat.MutableComponent;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
+import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.auth.SecretsStore;
+import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
+import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
+import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.client.ModpackUtils;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
@@ -168,6 +174,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			}));
 		}
 
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 80, 310, 20, VersionedText.literal("Remove modpack and restore instance"), press -> requestRemoval()));
+
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.reset"),
 				press -> {
 					chosen.clear();
@@ -219,6 +227,53 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private void inspect(String groupId) {
 		this.minecraft.gui.setScreen(new GroupInspectorScreen(this, manifest, groupId));
+	}
+
+	private void requestRemoval() {
+		if (clientConfig == null || clientConfig.modpackConnections == null) {
+			new ScreenManager().error("automodpack.error.critical", "The modpack connection is unavailable", "automodpack.error.logs");
+			return;
+		}
+		Jsons.ConnectionInfo connection = clientConfig.modpackConnections.get(modpackId);
+		if (connection == null || !connection.isComplete()) {
+			new ScreenManager().error("automodpack.error.critical", "The modpack connection is unavailable", "automodpack.error.logs");
+			return;
+		}
+		Secrets.Secret secret = SecretsStore.getClientSecret(connection.origin);
+		if (secret == null) secret = Secrets.anonymousSecret();
+		ModpackUpdater updater;
+		try {
+			updater = new ModpackUpdater(connection, secret, ModpackUtils.getModpackPath(modpackId));
+		} catch (RuntimeException e) {
+			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			return;
+		}
+		ModpackUpdater removalUpdater = updater;
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			try {
+				UpdatePreview preview = removalUpdater.previewRemoval();
+				new ScreenManager().preview(preview, modpackName,
+						(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> executeRemoval(removalUpdater)),
+						(Runnable) removalUpdater::close, true);
+			} catch (Exception e) {
+				removalUpdater.close();
+				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			}
+		});
+	}
+
+	private void executeRemoval(ModpackUpdater updater) {
+		try {
+			if (updater.removeModpack().success()) {
+				new ScreenManager().title();
+			} else {
+				new ScreenManager().error("automodpack.error.critical", "The modpack removal did not complete", "automodpack.error.logs");
+			}
+		} catch (Exception e) {
+			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+		} finally {
+			updater.close();
+		}
 	}
 
 	private void save() {

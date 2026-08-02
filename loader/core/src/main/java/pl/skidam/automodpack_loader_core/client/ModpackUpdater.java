@@ -31,6 +31,7 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
+import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
@@ -178,8 +179,32 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
+	// Build the removal plan without changing the installed files.
+	public UpdatePreview previewRemoval() throws Exception {
+		RemovalPreparation preparation = prepareRemoval();
+		return UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation), true, preparation.baseline());
+	}
+
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
 	public UpdateTransactionExecutor.Execution removeModpack() throws Exception {
+		RemovalPreparation preparation = prepareRemoval();
+		UpdateTransaction transaction = UpdateTransaction.createRemoval(preparation.plan(), preparation.completeFields(), preparation.installed(), modpackDir,
+				ClientPlatform.current(), preparation.expectedPriorIntent());
+		UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
+		if (execution.success()) clientConfig = preparation.plannedConfig();
+		return execution;
+	}
+
+	private static ResolvedSelection removalSelection(RemovalPreparation preparation) {
+		SelectionIntent intent = preparation.expectedPriorIntent();
+		if (intent == null) return null;
+		Set<String> selected = preparation.installed().selectedGroups == null ? Set.of() : preparation.installed().selectedGroups;
+		Set<String> stale = new TreeSet<>(intent.requestedGroups());
+		stale.removeAll(selected);
+		return new ResolvedSelection(intent, new TreeSet<>(selected), new TreeSet<>(stale));
+	}
+
+	private RemovalPreparation prepareRemoval() throws Exception {
 		modpackContentFile = modpackDir.resolve(modpackContentFileName);
 		Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackContentFile);
 		if (installed == null) throw new IOException("Installed modpack content is missing");
@@ -210,10 +235,7 @@ public class ModpackUpdater implements AutoCloseable {
 			}
 			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaselineObjects, plannedConfig));
 			SelectionIntent expectedPriorIntent = new ClientSelectionStore(SmartFileUtils.CWD.resolve(clientSelectionFile)).get(installed.modpackId).orElse(null);
-			UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, completeFields, installed, modpackDir, ClientPlatform.current(), expectedPriorIntent);
-			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
-			if (execution.success()) clientConfig = plannedConfig;
-			return execution;
+			return new RemovalPreparation(plan, completeFields, installed, baseline, expectedPriorIntent, plannedConfig, files);
 		}
 	}
 
@@ -846,6 +868,14 @@ public class ModpackUpdater implements AutoCloseable {
 	private record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles) {
 		private PreparedPlan {
 			originalFiles = Map.copyOf(originalFiles);
+		}
+	}
+
+	private record RemovalPreparation(UpdatePlan plan, Jsons.CompleteModpackContentFields completeFields, Jsons.ModpackContentFields installed,
+			Jsons.ClientBaselineFields baseline, SelectionIntent expectedPriorIntent, Jsons.ClientConfigFieldsV3 plannedConfig,
+			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files) {
+		private RemovalPreparation {
+			files = Map.copyOf(files);
 		}
 	}
 
