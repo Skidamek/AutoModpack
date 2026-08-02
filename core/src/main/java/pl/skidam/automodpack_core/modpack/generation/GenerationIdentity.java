@@ -22,11 +22,10 @@ public final class GenerationIdentity {
 		encoder.integer(manifest.groups().size());
 		for (var groupEntry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = groupEntry.getValue();
-			encoder.string(groupEntry.getKey()).string(group.displayName()).string(group.description()).string(group.category()).string(group.projectUrl()).string(group.sourceUrl())
+			encoder.string(groupEntry.getKey()).string(group.displayName()).string(group.description()).string(group.tag())
 					.bool(group.required()).bool(group.recommended());
 			writeStrings(encoder, group.breaksWith());
 			writeStrings(encoder, group.requires());
-			writeStrings(encoder, group.tags());
 			encoder.integer(group.compatiblePlatforms().size());
 			group.compatiblePlatforms().stream().map(platform -> platform.id()).sorted().forEach(encoder::string);
 			encoder.integer(group.files().size());

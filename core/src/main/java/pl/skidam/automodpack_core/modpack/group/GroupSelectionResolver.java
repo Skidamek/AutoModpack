@@ -11,7 +11,7 @@ public final class GroupSelectionResolver {
 		for (var entry : manifest.selectionTags().entrySet()) if (entry.getValue().defaultSelected()) defaultTags.add(entry.getKey());
 		for (var entry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = entry.getValue();
-			if (group.recommended() || group.tags().stream().anyMatch(defaultTags::contains)) requested.add(entry.getKey());
+			if (group.recommended() || defaultTags.contains(group.tag())) requested.add(entry.getKey());
 		}
 		return new SelectionIntent(requested);
 	}
@@ -27,7 +27,7 @@ public final class GroupSelectionResolver {
 		Set<String> forced = new TreeSet<>();
 		for (var entry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = entry.getValue();
-			if (group.required() || group.tags().stream().anyMatch(tag -> manifest.selectionTags().get(tag).serverForced())) forced.add(entry.getKey());
+			if (group.required() || (!group.tag().isEmpty() && manifest.selectionTags().get(group.tag()).serverForced())) forced.add(entry.getKey());
 		}
 		for (String groupId : forced) addClosure(manifest, groupId, platform, true, selected, errors, new HashSet<>());
 
