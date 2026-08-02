@@ -59,7 +59,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	// dependencies and conflicts are applied.
 	private final Set<String> chosen = new LinkedHashSet<>();
 	private Set<String> resolved;
-	private final List<String> rows = new ArrayList<>();
+	private final List<Row> rows = new ArrayList<>();
 
 	private int page = 0;
 	private int rowsPerPage = 1;
@@ -77,7 +77,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		SelectionIntent initial = expectedSelection == null ? GroupSelectionResolver.defaultIntent(manifest) : expectedSelection;
 		this.chosen.addAll(initial.requestedGroups());
 		this.resolved = GroupSelectionResolver.resolve(manifest, initial, ClientPlatform.current()).selectedGroups();
-		this.rows.addAll(this.groups.keySet());
+		rebuildRows();
 	}
 
 	/**
@@ -142,10 +142,17 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		int start = page * rowsPerPage;
 
 		for (int i = start; i < Math.min(rows.size(), start + rowsPerPage); i++) {
-			String groupId = rows.get(i);
-			var group = groups.get(groupId);
+			Row row = rows.get(i);
 			int y = listTop + (i - start) * ROW_HEIGHT;
+			if (row.groupId() == null) {
+				Button section = buttonWidget(x, y, ROW_WIDTH, 20, VersionedText.literal(row.section()).withStyle(ChatFormatting.BOLD), press -> {});
+				section.active = false;
+				this.addRenderableWidget(section);
+				continue;
+			}
 
+			String groupId = row.groupId();
+			var group = groups.get(groupId);
 			Button button = buttonWidget(x, y, ROW_WIDTH - 68, 20, rowLabel(groupId, group), press -> toggle(groupId));
 			// Required groups are shown so the player can see what they are getting, but not togglable.
 			button.active = group != null && !isMandatory(manifest, group) && group.supports(ClientPlatform.current());
@@ -316,17 +323,35 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 	}
 
+	private void rebuildRows() {
+		rows.clear();
+		rows.add(new Row("General", null));
+		for (var entry : groups.entrySet()) if (entry.getValue().tag().isEmpty()) rows.add(new Row("", entry.getKey()));
+		for (var tagEntry : manifest.selectionTags().entrySet()) {
+			GroupManifest.SelectionTag tag = tagEntry.getValue();
+			String title = tag.displayName().isBlank() ? tagEntry.getKey() : tag.displayName();
+			rows.add(new Row(title, null));
+			for (var entry : groups.entrySet()) if (tagEntry.getKey().equals(entry.getValue().tag())) rows.add(new Row("", entry.getKey()));
+		}
+	}
+
 	/** The group's metadata, shown on hover. */
 	private MutableComponent rowTooltip(GroupManifest.Group group) {
 		if (group == null) return null;
 		StringBuilder tooltip = new StringBuilder();
 		if (!group.description().isBlank()) tooltip.append(group.description());
-		if (!group.tags().isEmpty()) appendTooltipLine(tooltip, "Tags: " + String.join(", ", group.tags()));
+		appendTooltipLine(tooltip, "Tag: " + tagLabel(group));
 		if (!group.requires().isEmpty()) appendTooltipLine(tooltip, "Requires: " + String.join(", ", group.requires()));
 		if (!group.breaksWith().isEmpty()) appendTooltipLine(tooltip, "Conflicts: " + String.join(", ", group.breaksWith()));
 		appendTooltipLine(tooltip, "Files: " + group.files().size());
 		appendTooltipLine(tooltip, group.supports(ClientPlatform.current()) ? "Available on this platform" : "Not available on this platform");
 		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
+	}
+
+	private String tagLabel(GroupManifest.Group group) {
+		if (group.tag().isEmpty()) return "General";
+		GroupManifest.SelectionTag tag = manifest.selectionTags().get(group.tag());
+		return tag == null || tag.displayName().isBlank() ? group.tag() : tag.displayName();
 	}
 
 	private static void appendTooltipLine(StringBuilder tooltip, String line) {
@@ -348,8 +373,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private static boolean isMandatory(GroupManifest manifest, GroupManifest.Group group) {
-		return group.required() || group.tags().stream().map(manifest.selectionTags()::get).filter(Objects::nonNull)
-				.anyMatch(GroupManifest.SelectionTag::serverForced);
+		return group.required() || (!group.tag().isEmpty() && Optional.ofNullable(manifest.selectionTags().get(group.tag()))
+				.map(GroupManifest.SelectionTag::serverForced).orElse(false));
 	}
 
 	@Override
@@ -377,4 +402,6 @@ public class ModpackSelectionScreen extends VersionedScreen {
 					this.width / 2, 32, TextColors.WHITE);
 		}
 	}
+
+	private record Row(String section, String groupId) {}
 }

@@ -28,15 +28,14 @@ class ModpackCandidateScannerTest {
 		Files.writeString(server.resolve("config/example.txt"), "synced");
 		Files.writeString(groups.resolve("main/config/example.txt"), "explicit");
 		Jsons.GroupDeclaration main = group("/config/**");
-		main.category = "performance";
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
 
 		assertEquals(1, candidate.shadows().size());
 		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, candidate.shadows().get(0).selected().kind());
 		assertEquals("config/example.txt", candidate.manifest().groups().get("main").files().firstKey());
-		assertEquals("performance", candidate.manifest().groups().get("main").category());
-		assertEquals("performance", candidate.manifest().toFields().groups.get("main").category);
+		assertEquals("", candidate.manifest().groups().get("main").tag());
+		assertEquals("", candidate.manifest().toFields().groups.get("main").tag);
 	}
 
 	@Test

@@ -175,18 +175,15 @@ public class Jsons {
 		// UI metadata. The map key is the group id; displayName is what the player sees.
 		public String displayName = "";
 		public String description = "";
-		public String category = "";
-		public String projectUrl = "";
-		public String sourceUrl = "";
+		public String tag = "";
 
 		// If required, the client cannot uncheck it. recommended is ignored when required.
 		public boolean required = false;
 		public boolean recommended = false;
 
-		// Group ids this one conflicts with / depends on and selection tags it belongs to.
+		// Group ids this one conflicts with / depends on and its optional selection tag.
 		public Set<String> breaksWith = Set.of();
 		public Set<String> requires = Set.of();
-		public Set<String> tags = Set.of();
 		public Set<String> compatiblePlatforms = Set.of();
 
 		// Per-group equivalents of the V2 flat file rules.
@@ -338,14 +335,11 @@ public class Jsons {
 		public static class ModpackGroupFields {
 			public String displayName = "";
 			public String description = "";
-			public String category = "";
-			public String projectUrl = "";
-			public String sourceUrl = "";
+			public String tag = "";
 			public boolean required;
 			public boolean recommended;
 			public Set<String> breaksWith = Set.of();
 			public Set<String> requires = Set.of();
-			public Set<String> tags = Set.of();
 			public Set<String> compatiblePlatforms = Set.of();
 			public Map<String, GroupFileFields> files = Map.of();
 		}

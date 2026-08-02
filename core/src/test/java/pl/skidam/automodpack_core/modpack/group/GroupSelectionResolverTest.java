@@ -24,7 +24,7 @@ class GroupSelectionResolverTest {
 	@Test
 	void rejectsConflictingExplicitIntentInsteadOfChoosingByOrder() {
 		var first = group(false, false, Set.of());
-		var second = new GroupManifest.Group("", "", "", false, false, new TreeSet<>(Set.of("first")), new TreeSet<>(), new TreeSet<>(), Set.of(),
+		var second = new GroupManifest.Group("", "", "", false, false, new TreeSet<>(Set.of("first")), new TreeSet<>(), Set.of(),
 				new TreeMap<>());
 		GroupManifest manifest = manifest(Map.of("first", first, "second", second));
 
@@ -34,7 +34,7 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void clickedGroupWinsWhenConflictComesThroughDependencyClosure() {
-		var dependency = new GroupManifest.Group("", "", "", false, false, new TreeSet<>(Set.of("conflicting")), new TreeSet<>(), new TreeSet<>(), Set.of(),
+		var dependency = new GroupManifest.Group("", "", "", false, false, new TreeSet<>(Set.of("conflicting")), new TreeSet<>(), Set.of(),
 				new TreeMap<>());
 		var clicked = group(false, false, Set.of("dependency"));
 		var conflicting = group(false, false, Set.of());
@@ -48,8 +48,7 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void defaultsUseRecommendedAndDefaultTagsOnlyForNewIntent() {
-		var tagged = new GroupManifest.Group("", "", "", false, false, new TreeSet<>(), new TreeSet<>(), new TreeSet<>(Set.of("recommended")), Set.of(),
-				new TreeMap<>());
+		var tagged = new GroupManifest.Group("", "", "recommended", false, false, new TreeSet<>(), new TreeSet<>(), Set.of(), new TreeMap<>());
 		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("tagged", tagged)),
 				new TreeMap<>(Map.of("recommended", new GroupManifest.SelectionTag("", "", true, false))));
 
@@ -59,7 +58,7 @@ class GroupSelectionResolverTest {
 
 	@Test
 	void filtersUnavailableOptionalGroupsWithoutDiscardingIntent() {
-		var windowsOnly = new GroupManifest.Group("", "", "", false, true, new TreeSet<>(), new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.WINDOWS),
+		var windowsOnly = new GroupManifest.Group("", "", "", false, true, new TreeSet<>(), new TreeSet<>(), Set.of(ClientPlatform.WINDOWS),
 				new TreeMap<>());
 		GroupManifest manifest = manifest(Map.of("windows", windowsOnly));
 		SelectionIntent intent = GroupSelectionResolver.defaultIntent(manifest);
@@ -84,6 +83,6 @@ class GroupSelectionResolverTest {
 	}
 
 	private static GroupManifest.Group group(boolean required, boolean recommended, Set<String> requires) {
-		return new GroupManifest.Group("", "", "", required, recommended, new TreeSet<>(), new TreeSet<>(requires), new TreeSet<>(), Set.of(), new TreeMap<>());
+		return new GroupManifest.Group("", "", "", required, recommended, new TreeSet<>(), new TreeSet<>(requires), Set.of(), new TreeMap<>());
 	}
 }

@@ -37,8 +37,6 @@ class GenerationIdentityTest {
 	@Test
 	void completeRecordReadPreservesGenerationMetadata() throws Exception {
 		var fields = catalogue("main", "stored");
-		fields.groups.get("main").projectUrl = "https://example.com/project";
-		fields.groups.get("main").sourceUrl = "https://github.com/example/project";
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-03T00:00:00Z"), "notes\n");
 		Path path = temporaryDirectory.resolve("automodpack-catalogue.json");
@@ -68,11 +66,14 @@ class GenerationIdentityTest {
 	}
 
 	@Test
-	void linkMetadataChangesStateDigest() {
+	void groupTagChangesStateDigest() {
 		var firstFields = catalogue("main", "same");
 		var secondFields = catalogue("main", "same");
-		firstFields.groups.get("main").projectUrl = "https://example.com/old";
-		secondFields.groups.get("main").projectUrl = "https://example.com/new";
+		firstFields.groups.get("main").tag = "first-tag";
+		secondFields.groups.get("main").tag = "second-tag";
+		firstFields.selectionTags = Map.of("first-tag", new Jsons.CompleteModpackContentFields.SelectionTagFields(),
+				"second-tag", new Jsons.CompleteModpackContentFields.SelectionTagFields());
+		secondFields.selectionTags = firstFields.selectionTags;
 
 		GroupManifest first = GroupManifestValidator.validate(firstFields);
 		GroupManifest second = GroupManifestValidator.validate(secondFields);

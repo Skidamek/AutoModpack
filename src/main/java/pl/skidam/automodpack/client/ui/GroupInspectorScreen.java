@@ -19,6 +19,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 
 	private final Screen parent;
 	private final String groupId;
+	private final GroupManifest manifest;
 	private final GroupManifest.Group group;
 	private final List<Map.Entry<String, GroupManifest.GroupFile>> files;
 	private Button previousButton;
@@ -29,6 +30,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		super(VersionedText.literal("GroupInspectorScreen"));
 		this.parent = parent;
 		this.groupId = groupId;
+		this.manifest = manifest;
 		this.group = manifest.groups().get(groupId);
 		if (this.group == null) throw new IllegalArgumentException("Unknown group: " + groupId);
 		this.files = new ArrayList<>(this.group.files().entrySet());
@@ -61,22 +63,12 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(description()).withStyle(ChatFormatting.WHITE), this.width / 2, 40, TextColors.WHITE);
 
 		int metadataY = 56;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Tags: " + join(group.tags())).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Tag: " + tagLabel()).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY,
 				TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Requires: " + join(group.requires()) + "  Conflicts: " + join(group.breaksWith())).withStyle(ChatFormatting.GRAY),
 				this.width / 2, metadataY + 13, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Platforms: " + platforms()).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY + 26, TextColors.WHITE);
 		int nextMetadataY = metadataY + 39;
-		if (!group.projectUrl().isBlank()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Project: " + shortPath(group.projectUrl())).withStyle(ChatFormatting.GRAY), this.width / 2, nextMetadataY,
-					TextColors.WHITE);
-			nextMetadataY += 13;
-		}
-		if (!group.sourceUrl().isBlank()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Source: " + shortPath(group.sourceUrl())).withStyle(ChatFormatting.GRAY), this.width / 2, nextMetadataY,
-					TextColors.WHITE);
-			nextMetadataY += 13;
-		}
 		String status = (group.required() ? "Required" : group.recommended() ? "Recommended" : "Optional") + "  |  " + files.size() + " files";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(status).withStyle(ChatFormatting.YELLOW), this.width / 2, nextMetadataY, TextColors.WHITE);
 
@@ -109,14 +101,17 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	}
 
 	private int rowsPerPage() {
-		int links = 0;
-		if (!group.projectUrl().isBlank()) links++;
-		if (!group.sourceUrl().isBlank()) links++;
-		return Math.max(1, ROWS_PER_PAGE - links * 2);
+		return ROWS_PER_PAGE;
 	}
 
 	private String description() {
 		return group.description().isBlank() ? "No description published." : shortPath(group.description());
+	}
+
+	private String tagLabel() {
+		if (group.tag().isEmpty()) return "General";
+		GroupManifest.SelectionTag tag = manifest.selectionTags().get(group.tag());
+		return tag == null || tag.displayName().isBlank() ? group.tag() : tag.displayName();
 	}
 
 	private String platforms() {
