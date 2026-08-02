@@ -66,16 +66,29 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Requires: " + join(group.requires()) + "  Conflicts: " + join(group.breaksWith())).withStyle(ChatFormatting.GRAY),
 				this.width / 2, metadataY + 13, TextColors.WHITE);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Platforms: " + platforms()).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY + 26, TextColors.WHITE);
+		int nextMetadataY = metadataY + 39;
+		if (!group.projectUrl().isBlank()) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Project: " + shortPath(group.projectUrl())).withStyle(ChatFormatting.GRAY), this.width / 2, nextMetadataY,
+					TextColors.WHITE);
+			nextMetadataY += 13;
+		}
+		if (!group.sourceUrl().isBlank()) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Source: " + shortPath(group.sourceUrl())).withStyle(ChatFormatting.GRAY), this.width / 2, nextMetadataY,
+					TextColors.WHITE);
+			nextMetadataY += 13;
+		}
 		String status = (group.required() ? "Required" : group.recommended() ? "Recommended" : "Optional") + "  |  " + files.size() + " files";
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(status).withStyle(ChatFormatting.YELLOW), this.width / 2, metadataY + 39, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(status).withStyle(ChatFormatting.YELLOW), this.width / 2, nextMetadataY, TextColors.WHITE);
 
-		int start = page * ROWS_PER_PAGE;
-		int end = Math.min(files.size(), start + ROWS_PER_PAGE);
+		int pageSize = rowsPerPage();
+		int start = page * pageSize;
+		int end = Math.min(files.size(), start + pageSize);
+		int filesY = nextMetadataY + 15;
 		for (int index = start; index < end; index++) {
 			Map.Entry<String, GroupManifest.GroupFile> entry = files.get(index);
 			GroupManifest.GroupFile file = entry.getValue();
 			String line = shortPath(entry.getKey()) + "  " + file.type() + "  " + formatSize(file.size()) + fileFlags(file);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line), this.width / 2, 110 + (index - start) * 16, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line), this.width / 2, filesY + (index - start) * 16, TextColors.WHITE);
 		}
 
 		int pageCount = pageCount();
@@ -91,7 +104,15 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	}
 
 	private int pageCount() {
-		return Math.max(1, (files.size() + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE);
+		int pageSize = rowsPerPage();
+		return Math.max(1, (files.size() + pageSize - 1) / pageSize);
+	}
+
+	private int rowsPerPage() {
+		int links = 0;
+		if (!group.projectUrl().isBlank()) links++;
+		if (!group.sourceUrl().isBlank()) links++;
+		return Math.max(1, ROWS_PER_PAGE - links * 2);
 	}
 
 	private String description() {
