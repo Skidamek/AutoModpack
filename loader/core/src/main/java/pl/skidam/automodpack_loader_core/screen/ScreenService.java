@@ -18,6 +18,8 @@ public interface ScreenService {
 
 	void recovery(Object... args);
 
+	void history(Object... args);
+
 	void error(String... args);
 
 	void menu(Object... args);

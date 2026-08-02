@@ -29,6 +29,9 @@ public class PreloadScreenImpl implements ScreenService {
 	public void recovery(Object... args) {}
 
 	@Override
+	public void history(Object... args) {}
+
+	@Override
 	public void error(String... args) {}
 
 	@Override

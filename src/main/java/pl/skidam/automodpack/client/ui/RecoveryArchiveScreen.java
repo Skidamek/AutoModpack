@@ -15,6 +15,8 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public final class RecoveryArchiveScreen extends VersionedScreen {
 	private static final int ROWS_PER_PAGE = 7;
+	private static final int ARCHIVED_ROWS_PER_PAGE = 3;
+	private static final int ARCHIVED_ROW_HEIGHT = 42;
 
 	private final Screen parent;
 	private final ModpackUpdater updater;
@@ -54,8 +56,9 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 	private void addFileButtons() {
 		if (!showAvailable) return;
 		List<ModpackUpdater.RecoveryFile> files = files();
-		int start = page * ROWS_PER_PAGE;
-		int end = Math.min(files.size(), start + ROWS_PER_PAGE);
+		int pageSize = rowsPerPage();
+		int start = page * pageSize;
+		int end = Math.min(files.size(), start + pageSize);
 		for (int index = start; index < end; index++) {
 			ModpackUpdater.RecoveryFile file = files.get(index);
 			int y = 72 + (index - start) * 22;
@@ -86,8 +89,13 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 		return showAvailable ? snapshot.available() : snapshot.archived();
 	}
 
+	private int rowsPerPage() {
+		return showAvailable ? ROWS_PER_PAGE : ARCHIVED_ROWS_PER_PAGE;
+	}
+
 	private int pageCount() {
-		return Math.max(1, (files().size() + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE);
+		int pageSize = rowsPerPage();
+		return Math.max(1, (files().size() + pageSize - 1) / pageSize);
 	}
 
 	private void updateNavigation() {
@@ -149,14 +157,21 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(counts).withStyle(ChatFormatting.YELLOW), this.width / 2, 42, TextColors.WHITE);
 
 		List<ModpackUpdater.RecoveryFile> files = files();
-		int start = page * ROWS_PER_PAGE;
-		int end = Math.min(files.size(), start + ROWS_PER_PAGE);
+		int pageSize = rowsPerPage();
+		int start = page * pageSize;
+		int end = Math.min(files.size(), start + pageSize);
 		if (!showAvailable) for (int index = start; index < end; index++) {
 			ModpackUpdater.RecoveryFile file = files.get(index);
-			int y = 82 + (index - start) * 22;
+			int y = 76 + (index - start) * ARCHIVED_ROW_HEIGHT;
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Path: " + shortPath(file.logicalPath())).withStyle(ChatFormatting.WHITE), this.width / 2, y,
+					TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal(shortPath(file.logicalPath()) + "  " + shortHash(file.sha1()) + "  (" + formatSize(file.size()) + ")").withStyle(ChatFormatting.GREEN),
-					this.width / 2, y, TextColors.WHITE);
+					VersionedText.literal("SHA-1: " + shortHash(file.sha1()) + "  Size: " + formatSize(file.size()) + "  State: Archived").withStyle(ChatFormatting.GREEN), this.width / 2, y + 10,
+					TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font,
+					VersionedText.literal("Source generation: " + displayGeneration(file.sourceGenerationId())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 20, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font,
+					VersionedText.literal("Preserved at: " + displayPreservedAt(file.preservedAt())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 30, TextColors.WHITE);
 		}
 
 		if (files.isEmpty()) {
@@ -174,6 +189,14 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 
 	private static String shortHash(String hash) {
 		return hash.length() <= 12 ? hash : hash.substring(0, 12);
+	}
+
+	private static String displayGeneration(String generationId) {
+		return generationId == null || generationId.isEmpty() ? "Unknown" : shortHash(generationId);
+	}
+
+	private static String displayPreservedAt(String preservedAt) {
+		return preservedAt == null || preservedAt.isEmpty() ? "Unknown" : preservedAt;
 	}
 
 	private static String formatSize(long bytes) {

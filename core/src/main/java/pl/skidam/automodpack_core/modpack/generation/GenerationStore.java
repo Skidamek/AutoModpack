@@ -109,6 +109,54 @@ public final class GenerationStore {
 		}
 	}
 
+	public Publication publishRevert(String targetGenerationId, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
+		if (!isDigest(targetGenerationId)) throw new IOException("Invalid rollback target generation ID: " + targetGenerationId);
+		Objects.requireNonNull(expectedCurrent, "expectedCurrent");
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			Optional<CurrentSnapshot> actualBefore = loadCurrent();
+			ensureExpected(expectedCurrent, actualBefore);
+			GenerationRecord previous = actualBefore.map(CurrentSnapshot::record).orElseThrow(() -> new IOException("Cannot revert before the root generation is published"));
+			GenerationRecord target = findAncestor(previous, targetGenerationId);
+			if (target == null) throw new IOException("Rollback target is not in the current generation history: " + targetGenerationId);
+			ensureStoreDirectories();
+			GenerationRecord record = GenerationRecord.create(target.manifest(), previous, clock.instant(), patchNotes, targetGenerationId);
+			Path recordPath = recordPath(record.metadata().generationId());
+			writeRecordNoClobber(recordPath, record);
+			NavigableMap<String, Path> hosting = verifyCurrentObjects(record);
+			hosting.put("", recordPath);
+			commitHook.beforeCurrentPointerReplacement();
+			ensureCurrentStillMatches(expectedCurrent);
+			ConfigTools.writeAtomic(currentPath, pointer(record));
+			return new Publication(PublicationStatus.PUBLISHED, record, recordPath, hosting);
+		}
+	}
+
+	public List<GenerationRecord> currentHistory() throws IOException {
+		Optional<CurrentSnapshot> current = loadCurrent();
+		if (current.isEmpty()) return List.of();
+		List<GenerationRecord> reverse = new ArrayList<>();
+		GenerationRecord record = current.orElseThrow().record();
+		while (true) {
+			reverse.add(record);
+			String parent = record.metadata().parentGenerationId();
+			if (parent.isEmpty()) break;
+			record = readRecord(recordPath(parent));
+		}
+		Collections.reverse(reverse);
+		return List.copyOf(reverse);
+	}
+
+	private GenerationRecord findAncestor(GenerationRecord current, String targetGenerationId) throws IOException {
+		GenerationRecord record = current;
+		while (true) {
+			if (record.metadata().generationId().equals(targetGenerationId)) return record;
+			String parent = record.metadata().parentGenerationId();
+			if (parent.isEmpty()) return null;
+			record = readRecord(recordPath(parent));
+		}
+	}
+
 	private Publication publishLocked(ModpackCandidate candidate, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
 		Objects.requireNonNull(candidate, "candidate");
 		Objects.requireNonNull(expectedCurrent, "expectedCurrent");

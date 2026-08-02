@@ -42,6 +42,11 @@ public class ScreenManager implements ScreenService {
 	}
 
 	@Override
+	public void history(Object... args) {
+		INSTANCE.history(args);
+	}
+
+	@Override
 	public void error(String... args) {
 		INSTANCE.error(args);
 	}

@@ -49,6 +49,7 @@ public class Constants {
 	public static final Path modpackContentFileName = Path.of("automodpack-content.json");
 	public static final Path modpackCatalogueFileName = Path.of("automodpack-catalogue.json");
 	public static final Path modpackBaselineFileName = Path.of("automodpack-baseline.json");
+	public static final Path modpackHistoryFileName = Path.of("automodpack-history.json");
 	public static final Path recoveryDir = automodpackDir.resolve("recovery");
 	public static final Path recoveryManifestFile = recoveryDir.resolve("manifest.json");
 	public static Path serverConfigFile = automodpackDir.resolve("automodpack-server.json");

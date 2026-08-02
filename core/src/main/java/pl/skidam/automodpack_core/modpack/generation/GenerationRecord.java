@@ -24,20 +24,25 @@ public record GenerationRecord(GroupManifest manifest, GenerationMetadata metada
 	}
 
 	public static GenerationRecord create(GroupManifest manifest, GenerationRecord parent, Instant createdAt, String patchNotes) {
+		return create(manifest, parent, createdAt, patchNotes, GenerationMetadata.NO_ROLLBACK_TARGET);
+	}
+
+	public static GenerationRecord create(GroupManifest manifest, GenerationRecord parent, Instant createdAt, String patchNotes, String rollbackTargetGenerationId) {
 		Objects.requireNonNull(manifest, "manifest");
 		Objects.requireNonNull(createdAt, "createdAt");
 		String parentGenerationId = parent == null ? GenerationMetadata.ROOT_PARENT : parent.metadata().generationId();
 		OwnershipLedger base = parent == null ? OwnershipLedger.empty(manifest.modpackId()) : parent.ownershipLedger();
 		if (!base.modpackId().equals(manifest.modpackId())) throw new IllegalArgumentException("Parent and catalogue modpack IDs disagree");
 		String normalizedNotes = GenerationMetadata.validateNotes(patchNotes);
+		String normalizedRollbackTarget = rollbackTargetGenerationId == null ? GenerationMetadata.NO_ROLLBACK_TARGET : rollbackTargetGenerationId;
 		String stateDigest = GenerationIdentity.stateDigest(manifest);
 		String notesDigest = GenerationIdentity.patchNotesDigest(normalizedNotes);
 		OwnershipLedger provisionalLedger = OwnershipLedger.materializeWithoutGeneration(base, manifest);
 		String generationId = GenerationIdentity.generationId(GenerationMetadata.CURRENT_SCHEMA_VERSION, manifest.modpackId(), parentGenerationId,
-				createdAt.toString(), stateDigest, provisionalLedger.digest(), notesDigest, "");
+				createdAt.toString(), stateDigest, provisionalLedger.digest(), notesDigest, normalizedRollbackTarget);
 		OwnershipLedger ledger = OwnershipLedger.materialize(base, manifest, generationId);
 		GenerationMetadata metadata = new GenerationMetadata(GenerationMetadata.CURRENT_SCHEMA_VERSION, generationId, parentGenerationId, createdAt, stateDigest,
-				ledger.digest(), normalizedNotes, notesDigest, "");
+				ledger.digest(), normalizedNotes, notesDigest, normalizedRollbackTarget);
 		return new GenerationRecord(manifest, metadata, ledger);
 	}
 

@@ -290,6 +290,22 @@ public class Jsons {
 			public String logicalPath = "";
 			public String sha1 = "";
 			public long size = -1;
+			public String sourceGenerationId = "";
+			public String preservedAt = "";
+		}
+	}
+
+	public static class ClientContentHistoryFields {
+		public int schemaVersion = 1;
+		public String modpackId = "";
+		public List<EntryFields> entries = List.of();
+
+		public static class EntryFields {
+			public String generationId = "";
+			public String stateDigest = "";
+			public String modpackName = "";
+			public String recordedAt = "";
+			public Set<String> selectedGroups = Set.of();
 		}
 	}
 
