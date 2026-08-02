@@ -65,7 +65,6 @@ automodpack:
       - "/config/**"
     overwriteEditableFiles: []
     forceCopyFilesToStandardLocation: []
-    nonModpackFilesToDelete: {}
     autoExcludeServerSideMods: true
     autoExcludeUnnecessaryFiles: true
     requireAutoModpackOnClient: true
