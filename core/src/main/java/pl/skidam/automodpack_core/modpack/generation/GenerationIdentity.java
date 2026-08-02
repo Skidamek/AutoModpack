@@ -22,7 +22,7 @@ public final class GenerationIdentity {
 		encoder.integer(manifest.groups().size());
 		for (var groupEntry : manifest.groups().entrySet()) {
 			GroupManifest.Group group = groupEntry.getValue();
-			encoder.string(groupEntry.getKey()).string(group.displayName()).string(group.description()).string(group.category())
+			encoder.string(groupEntry.getKey()).string(group.displayName()).string(group.description()).string(group.category()).string(group.projectUrl()).string(group.sourceUrl())
 					.bool(group.required()).bool(group.recommended());
 			writeStrings(encoder, group.breaksWith());
 			writeStrings(encoder, group.requires());

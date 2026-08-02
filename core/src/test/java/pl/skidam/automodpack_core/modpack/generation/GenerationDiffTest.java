@@ -34,6 +34,17 @@ class GenerationDiffTest {
 	}
 
 	@Test
+	void reportsGroupLinkMetadataChanges() {
+		GroupManifest parent = linkedManifest("https://example.com/old");
+		GroupManifest child = linkedManifest("https://example.com/new");
+
+		GenerationDiff diff = GenerationDiff.between(parent, child);
+
+		assertEquals(List.of("main"), diff.groupMetadata().modified());
+		assertFalse(diff.isEmpty());
+	}
+
+	@Test
 	void groupMoveIsRemoveAndAddAndEqualManifestIsEmpty() {
 		GroupManifest parent = manifest("same", Map.of("moved.txt", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null)), "", "", "");
 		GroupManifest moved = manifestWithGroups("same", Map.of("main", Map.of(), "optional", Map.of("moved.txt", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null))));
@@ -42,6 +53,17 @@ class GenerationDiffTest {
 		assertTrue(diff.files().stream().allMatch(change -> change.classification() == GenerationDiff.FileClassification.ADDED
 				|| change.classification() == GenerationDiff.FileClassification.REMOVED));
 		assertTrue(GenerationDiff.between(parent, parent).isEmpty());
+	}
+
+	private static GroupManifest linkedManifest(String projectUrl) {
+		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		fields.selectionTags = Map.of();
+		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.projectUrl = projectUrl;
+		group.files = Map.of();
+		fields.groups = Map.of("main", group);
+		return GroupManifestValidator.validate(fields);
 	}
 
 	private static GroupManifest manifest(String id, Map<String, Jsons.CompleteModpackContentFields.GroupFileFields> files, String description, String tag,

@@ -3,6 +3,7 @@ package pl.skidam.automodpack_core.modpack.group;
 import static pl.skidam.automodpack_core.Constants.modpackCatalogueFileName;
 import static pl.skidam.automodpack_core.Constants.modpackContentFileName;
 
+import java.net.URI;
 import java.text.Normalizer;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -55,8 +56,10 @@ public final class GroupManifestValidator {
 			Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
 			Set<String> groupTags = validateIds("Group '" + id + "' tags", group.tags, errors);
 			Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
+			String projectUrl = validateUrl(id, "project", group.projectUrl, errors);
+			String sourceUrl = validateUrl(id, "source", group.sourceUrl, errors);
 			Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-			groups.put(id, new GroupManifest.Group(group.displayName, group.description, group.category, group.required, group.recommended,
+			groups.put(id, new GroupManifest.Group(group.displayName, group.description, group.category, projectUrl, sourceUrl, group.required, group.recommended,
 					new TreeSet<>(breaksWith), new TreeSet<>(requires), new TreeSet<>(groupTags), platforms, new TreeMap<>(files)));
 		}
 
@@ -307,6 +310,21 @@ public final class GroupManifestValidator {
 		} catch (IllegalArgumentException e) {
 			errors.add("Invalid " + description + " ID: " + id);
 		}
+	}
+
+	private static String validateUrl(String groupId, String name, String input, List<String> errors) {
+		String value = value(input);
+		if (value.isEmpty()) return value;
+		try {
+			URI uri = URI.create(value);
+			String scheme = uri.getScheme();
+			boolean valid = uri.isAbsolute() && !uri.isOpaque() && uri.getHost() != null && uri.getUserInfo() == null
+					&& ("http".equals(scheme) || "https".equals(scheme)) && uri.normalize().toString().equals(value);
+			if (!valid) errors.add("Group '" + groupId + "' has invalid " + name + " URL");
+		} catch (IllegalArgumentException e) {
+			errors.add("Group '" + groupId + "' has invalid " + name + " URL");
+		}
+		return value;
 	}
 
 	private static String value(String value) {

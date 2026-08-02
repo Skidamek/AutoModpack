@@ -34,6 +34,8 @@ public record GroupManifest(
 			serialized.displayName = group.displayName();
 			serialized.description = group.description();
 			serialized.category = group.category();
+			serialized.projectUrl = group.projectUrl();
+			serialized.sourceUrl = group.sourceUrl();
 			serialized.required = group.required();
 			serialized.recommended = group.recommended();
 			serialized.breaksWith = new LinkedHashSet<>(group.breaksWith());
@@ -88,6 +90,8 @@ public record GroupManifest(
 			String displayName,
 			String description,
 			String category,
+			String projectUrl,
+			String sourceUrl,
 			boolean required,
 			boolean recommended,
 			NavigableSet<String> breaksWith,
@@ -99,11 +103,19 @@ public record GroupManifest(
 			displayName = displayName == null ? "" : displayName;
 			description = description == null ? "" : description;
 			category = category == null ? "" : category;
+			projectUrl = projectUrl == null ? "" : projectUrl;
+			sourceUrl = sourceUrl == null ? "" : sourceUrl;
 			breaksWith = immutableSet(breaksWith);
 			requires = immutableSet(requires);
 			tags = immutableSet(tags);
 			compatiblePlatforms = immutablePlatforms(compatiblePlatforms);
 			files = immutableMap(files);
+		}
+
+		public Group(String displayName, String description, String category, boolean required, boolean recommended,
+				NavigableSet<String> breaksWith, NavigableSet<String> requires, NavigableSet<String> tags, Set<ClientPlatform> compatiblePlatforms,
+				NavigableMap<String, GroupFile> files) {
+			this(displayName, description, category, "", "", required, recommended, breaksWith, requires, tags, compatiblePlatforms, files);
 		}
 
 		public boolean supports(ClientPlatform platform) {
