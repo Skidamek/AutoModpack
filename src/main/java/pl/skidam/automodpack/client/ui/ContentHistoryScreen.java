@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
@@ -12,7 +13,7 @@ import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.update.ClientContentHistory;
 
 public final class ContentHistoryScreen extends VersionedScreen {
-	private static final int ROWS_PER_PAGE = 8;
+	private static final int ROWS_PER_PAGE = 3;
 
 	private final Screen parent;
 	private final ClientContentHistory.History history;
@@ -59,20 +60,26 @@ public final class ContentHistoryScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String title = modpackName.isBlank() ? "Content history" : modpackName + " content history";
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Equal content states are collapsed.").withStyle(ChatFormatting.GRAY), this.width / 2, 30, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Internal server operations are not shown here.").withStyle(ChatFormatting.GRAY), this.width / 2, 43, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Equal content states are collapsed.").withStyle(ChatFormatting.GRAY), this.width / 2, 25, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("This history describes content choices, not server operations.").withStyle(ChatFormatting.GRAY), this.width / 2, 38, TextColors.WHITE);
 
 		List<ClientContentHistory.Entry> entries = history.entries();
 		int start = page * ROWS_PER_PAGE;
 		int end = Math.min(entries.size(), start + ROWS_PER_PAGE);
 		for (int index = start; index < end; index++) {
 			ClientContentHistory.Entry entry = entries.get(index);
-			String current = index == entries.size() - 1 ? "  Current content" : "";
-			String groups = entry.selectedGroups().isEmpty() ? "none" : entry.selectedGroups().size() + " groups";
-			String line = "State " + (index + 1) + "  " + entry.recordedAt() + "  " + groups + current;
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(index == entries.size() - 1 ? ChatFormatting.GREEN : ChatFormatting.WHITE), this.width / 2,
-					76 + (index - start) * 18, TextColors.WHITE);
+			int y = 58 + (index - start) * 58;
+			boolean current = index == entries.size() - 1;
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("State " + (index + 1) + "  " + entry.recordedAt() + (current ? "  Current content" : ""))
+					.withStyle(current ? ChatFormatting.GREEN : ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Content state: " + shortDigest(entry.stateDigest())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 13,
+					TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(entry.fileSummary()).withStyle(ChatFormatting.WHITE), this.width / 2, y + 26, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Tags: " + join(entry.selectedTags()) + "  Groups: " + join(entry.selectedGroups())).withStyle(ChatFormatting.WHITE),
+					this.width / 2, y + 39, TextColors.WHITE);
+			String notes = entry.patchNotes().isBlank() ? "No patch notes" : firstLine(entry.patchNotes());
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Notes: " + notes).withStyle(ChatFormatting.YELLOW), this.width / 2, y + 52, TextColors.WHITE);
 		}
 		if (entries.isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("No content history is available.").withStyle(ChatFormatting.GRAY), this.width / 2, 82,
@@ -80,6 +87,23 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		if (pageCount() > 1)
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal((page + 1) + " / " + pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 42,
 					TextColors.WHITE);
+	}
+
+	private static String shortDigest(String digest) {
+		return digest.length() <= 12 ? digest : digest.substring(0, 12);
+	}
+
+	private static String join(Iterable<String> values) {
+		List<String> result = new ArrayList<>();
+		for (String value : values) result.add(value);
+		if (result.isEmpty()) return "none";
+		String text = String.join(", ", result);
+		return text.length() <= 65 ? text : text.substring(0, 62) + "...";
+	}
+
+	private static String firstLine(String notes) {
+		String line = notes.split("\\R", -1)[0];
+		return line.length() <= 70 ? line : line.substring(0, 67) + "...";
 	}
 
 	@Override

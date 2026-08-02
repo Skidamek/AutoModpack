@@ -7,9 +7,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
@@ -22,11 +24,17 @@ import pl.skidam.automodpack_core.update.UpdatePlan.Root;
 public record UpdatePreview(
 		UpdatePlan plan,
 		List<Entry> entries,
-		GroupConsequences groupConsequences) {
+		GroupConsequences groupConsequences,
+		String patchNotes) {
 	public UpdatePreview {
 		plan = Objects.requireNonNull(plan, "plan");
 		entries = List.copyOf(entries);
 		groupConsequences = Objects.requireNonNull(groupConsequences, "groupConsequences");
+		patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
+	}
+
+	public UpdatePreview(UpdatePlan plan, List<Entry> entries, GroupConsequences groupConsequences) {
+		this(plan, entries, groupConsequences, "");
 	}
 
 	public long addedBytes() {
@@ -52,11 +60,21 @@ public record UpdatePreview(
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal) {
-		return create(plan, originalFiles, target, selection, removal, null);
+		return create(plan, originalFiles, target, selection, removal, null, "");
+	}
+
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
+			ResolvedSelection selection, boolean removal, String patchNotes) {
+		return create(plan, originalFiles, target, selection, removal, null, patchNotes);
 	}
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline) {
+		return create(plan, originalFiles, target, selection, removal, baseline, "");
+	}
+
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
+			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline, String patchNotes) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(originalFiles, "originalFiles");
 		Objects.requireNonNull(target, "target");
@@ -109,10 +127,15 @@ public record UpdatePreview(
 		}
 
 		entries.sort(Comparator.comparing((Entry entry) -> entry.kind.ordinal()).thenComparing(entry -> entry.root.ordinal()).thenComparing(Entry::relativePath));
-		GroupConsequences consequences = selection == null
-				? new GroupConsequences(Set.of(), Set.of(), Set.of())
-				: new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups());
-		return new UpdatePreview(plan, entries, consequences);
+		GroupConsequences consequences = selection == null ? new GroupConsequences(Set.of(), Set.of(), Set.of()) : consequences(selection);
+		return new UpdatePreview(plan, entries, consequences, patchNotes);
+	}
+
+	private static GroupConsequences consequences(ResolvedSelection selection) {
+		Map<String, String> explanations = new TreeMap<>();
+		selection.explanations().forEach((groupId, resolution) -> explanations.put(groupId, resolution.explanation()));
+		return new GroupConsequences(selection.intent().requestedTags(), selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedTags(),
+				selection.staleRequestedGroups(), explanations);
 	}
 
 	private static Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries(Jsons.ClientBaselineFields baseline) {
@@ -138,15 +161,27 @@ public record UpdatePreview(
 		}
 	}
 
-	public record GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups) {
+	public record GroupConsequences(Set<String> explicitTags, Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleTags,
+			Set<String> staleGroups, Map<String, String> explanations) {
+		public GroupConsequences(Set<String> explicitGroups, Set<String> resolvedGroups, Set<String> staleGroups) {
+			this(Set.of(), explicitGroups, resolvedGroups, Set.of(), staleGroups, Map.of());
+		}
+
 		public GroupConsequences {
+			explicitTags = immutable(explicitTags);
 			explicitGroups = immutable(explicitGroups);
 			resolvedGroups = immutable(resolvedGroups);
+			staleTags = immutable(staleTags);
 			staleGroups = immutable(staleGroups);
+			explanations = immutableMap(explanations);
 		}
 
 		private static Set<String> immutable(Set<String> values) {
 			return Set.copyOf(new TreeSet<>(values == null ? Set.of() : values));
+		}
+
+		private static Map<String, String> immutableMap(Map<String, String> values) {
+			return Map.copyOf(new TreeMap<>(values == null ? Map.of() : values));
 		}
 	}
 

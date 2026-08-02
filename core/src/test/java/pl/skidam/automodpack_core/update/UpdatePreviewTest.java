@@ -128,8 +128,10 @@ class UpdatePreviewTest {
 		ResolvedSelection selection = new ResolvedSelection(new SelectionIntent(java.util.Set.of("optional")), new java.util.TreeSet<>(java.util.Set.of("main", "optional")),
 				new java.util.TreeSet<>(java.util.Set.of("stale")));
 
-		UpdatePreview preview = UpdatePreview.create(plan, files, target, selection, false);
+		UpdatePreview preview = UpdatePreview.create(plan, files, target, selection, false, "Patch notes");
 
+		assertEquals("Patch notes", preview.patchNotes());
+		assertEquals(java.util.Set.of(), preview.groupConsequences().explicitTags());
 		assertEquals(java.util.Set.of("optional"), preview.groupConsequences().explicitGroups());
 		assertEquals(java.util.Set.of("main", "optional"), preview.groupConsequences().resolvedGroups());
 		assertEquals(java.util.Set.of("stale"), preview.groupConsequences().staleGroups());

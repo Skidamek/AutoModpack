@@ -20,6 +20,16 @@
   "automodpack.selection.reset": "Recommended",
   "automodpack.selection.button": "Modpack settings",
   "automodpack.selection.noGroups": "This modpack has no optional parts.",
+  "automodpack.selection.preview": "Preview target",
+
+  "automodpack.firstConnect.title": "Set up this modpack",
+  "automodpack.firstConnect.description": "Review the recommended content before any files are downloaded.",
+  "automodpack.firstConnect.patchNotes": "Patch notes",
+  "automodpack.firstConnect.noPatchNotes": "No patch notes were published for this content.",
+  "automodpack.firstConnect.bundleExplanation": "Groups are bundles of files and features. You can customize them before downloading.",
+  "automodpack.firstConnect.continue": "Continue with defaults",
+  "automodpack.firstConnect.customize": "Customize groups",
+  "automodpack.firstConnect.cancel": "Do not download",
 
   "automodpack.danger": "This server provides an external modpack!",
   "automodpack.danger.description": "Do you want to download it?",
