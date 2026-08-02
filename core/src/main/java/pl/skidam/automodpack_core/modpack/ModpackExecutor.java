@@ -130,6 +130,10 @@ public class ModpackExecutor {
 		return generationStore.currentHistory();
 	}
 
+	public GenerationStore.StorageReport storageReport() throws IOException {
+		return generationStore.measureStorage();
+	}
+
 	private PublishResult publishInternal(String expectedStateDigest, String inlineNotes) {
 		if (!acquire(true)) return new PublishBusy("Another modpack operation is already in progress");
 		GenerationStore.Publication publication = null;
