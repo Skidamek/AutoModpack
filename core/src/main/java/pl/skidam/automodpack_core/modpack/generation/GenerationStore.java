@@ -119,8 +119,15 @@ public final class GenerationStore {
 			throw new IOException("Modpack ID cannot change within a generation lineage");
 
 		String stateDigest = GenerationIdentity.stateDigest(candidate.manifest());
-		if (previous != null && previous.metadata().stateDigest().equals(stateDigest))
-			return publication(PublicationStatus.NO_CHANGES, actualBefore.orElseThrow());
+		if (previous != null && previous.metadata().stateDigest().equals(stateDigest)) {
+			OwnershipLedger candidateLedger;
+			try {
+				candidateLedger = OwnershipLedger.materializeWithoutGeneration(previous.ownershipLedger(), candidate.manifest());
+			} catch (RuntimeException e) {
+				throw new IOException("Candidate ownership ledger is invalid", e);
+			}
+			if (previous.metadata().ledgerDigest().equals(candidateLedger.digest())) return publication(PublicationStatus.NO_CHANGES, actualBefore.orElseThrow());
+		}
 
 		ensureStoreDirectories();
 		GenerationRecord record = GenerationRecord.create(candidate.manifest(), previous, clock.instant(), patchNotes);
@@ -188,17 +195,25 @@ public final class GenerationStore {
 
 	private void validateParentChain(GenerationRecord current) throws IOException {
 		Set<String> visited = new HashSet<>();
+		List<GenerationRecord> reverseChain = new ArrayList<>();
 		GenerationRecord record = current;
 		while (true) {
 			String id = record.metadata().generationId();
 			if (!visited.add(id)) throw new IOException("Generation parent cycle detected at " + id);
+			reverseChain.add(record);
 			String parent = record.metadata().parentGenerationId();
-			if (parent.isEmpty()) return;
+			if (parent.isEmpty()) break;
 			Path parentPath = recordPath(parent);
 			record = readRecord(parentPath);
 			if (!record.metadata().generationId().equals(parent)) throw new IOException("Generation parent filename does not match its identity: " + parentPath);
 			if (!record.manifest().modpackId().equals(current.manifest().modpackId()))
 				throw new IOException("Generation parent modpack ID does not match current lineage: " + parent);
+		}
+		Collections.reverse(reverseChain);
+		try {
+			OwnershipLedger.rebuild(reverseChain);
+		} catch (RuntimeException e) {
+			throw new IOException("Generation ownership ledger does not match its parent chain", e);
 		}
 	}
 
@@ -209,19 +224,25 @@ public final class GenerationStore {
 		Set<String> verified = new HashSet<>();
 		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) {
 			String sha1 = file.sha1().toLowerCase(Locale.ROOT);
-			Path object = objectsDirectory.resolve(sha1).normalize();
-			if (!object.startsWith(objectsDirectory)) throw new IOException("Object path escapes immutable object store: " + sha1);
-			Long previousSize = expectedSizes.putIfAbsent(sha1, file.size());
-			if (previousSize != null && previousSize.longValue() != file.size())
-				throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
-			if (verified.add(sha1)) {
-				ensureRegular(object, "immutable object " + sha1);
-				if (Files.size(object) != file.size() || !sha1.equals(HashUtils.getHash(object)))
-					throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
-			}
-			hosting.put(sha1, object);
+			verifyObject(sha1, file.size(), expectedSizes, verified);
+			hosting.put(sha1, objectsDirectory.resolve(sha1));
 		}
+		for (var entry : record.ownershipLedger().entries().values())
+			for (var content : entry.historicalHashes())
+				verifyObject(content.sha1(), content.size(), expectedSizes, verified);
 		return hosting;
+	}
+
+	private void verifyObject(String sha1, long expectedSize, Map<String, Long> expectedSizes, Set<String> verified) throws IOException {
+		Path object = objectsDirectory.resolve(sha1).normalize();
+		if (!object.startsWith(objectsDirectory)) throw new IOException("Object path escapes immutable object store: " + sha1);
+		Long previousSize = expectedSizes.putIfAbsent(sha1, expectedSize);
+		if (previousSize != null && previousSize.longValue() != expectedSize)
+			throw new IOException("Immutable object has conflicting advertised sizes: " + sha1);
+		if (!verified.add(sha1)) return;
+		ensureRegular(object, "immutable object " + sha1);
+		if (Files.size(object) != expectedSize || !sha1.equals(HashUtils.getHash(object)))
+			throw new IOException("Immutable object failed size/SHA-1 verification: " + object);
 	}
 
 	private Path recordPath(String generationId) throws IOException {
