@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import org.junit.jupiter.api.Test;
 
@@ -30,25 +29,8 @@ class GenerationDiffTest {
 				GenerationDiff.FileClassification.MODIFIED, GenerationDiff.FileClassification.REMOVED), diff.files().stream().map(GenerationDiff.FileChange::classification).toList());
 		assertEquals(List.of("main"), diff.groupMetadata().modified());
 		assertEquals(List.of("tag"), diff.selectionTagMetadata().modified());
-		assertEquals(List.of(), diff.deletionMetadata().modified());
-		assertEquals(1, diff.deletionMetadata().added().size());
-		assertEquals(1, diff.deletionMetadata().removed().size());
-		assertEquals(new GenerationDiff.Summary(1, 1, 1, 1, 5), diff.summary());
+		assertEquals(new GenerationDiff.Summary(1, 1, 1, 1, 3), diff.summary());
 		assertEquals(List.of("modpackName"), diff.packMetadata().modified());
-	}
-
-	@Test
-	void duplicateDeletionDirectivesRemainVisibleInTheDiff() {
-		GroupManifest base = manifest("same", Map.of(), "", "", "");
-		GroupManifest.DeletionRequest deletion = new GroupManifest.DeletionRequest("delete.txt", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "1");
-		GroupManifest duplicate = new GroupManifest(base.modpackId(), base.modpackName(), base.automodpackVersion(), base.loader(), base.loaderVersion(), base.mcVersion(),
-				base.groups(), base.selectionTags(), List.of(deletion, deletion));
-		GroupManifest single = new GroupManifest(base.modpackId(), base.modpackName(), base.automodpackVersion(), base.loader(), base.loaderVersion(), base.mcVersion(),
-				base.groups(), base.selectionTags(), List.of(deletion));
-
-		GenerationDiff diff = GenerationDiff.between(duplicate, single);
-
-		assertEquals(1, diff.deletionMetadata().removed().size());
 	}
 
 	@Test
@@ -77,7 +59,6 @@ class GenerationDiffTest {
 		fields.modpackId = "abc1234";
 		fields.modpackName = id;
 		fields.selectionTags = tag.isEmpty() ? Map.of() : Map.of("tag", tag(tag));
-		fields.nonModpackFilesToDelete = deletion.isEmpty() ? Set.of() : Set.of(new Jsons.ModpackContentFields.FileToDelete("delete.txt", deletion, "1"));
 		Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> declarations = new LinkedHashMap<>();
 		for (var entry : groups.entrySet()) {
 			var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();

@@ -12,12 +12,10 @@ public record GroupManifest(
 		String loaderVersion,
 		String mcVersion,
 		NavigableMap<String, Group> groups,
-		NavigableMap<String, SelectionTag> selectionTags,
-		List<DeletionRequest> nonModpackFilesToDelete) {
+		NavigableMap<String, SelectionTag> selectionTags) {
 	public GroupManifest {
 		groups = immutableMap(groups);
 		selectionTags = immutableMap(selectionTags);
-		nonModpackFilesToDelete = nonModpackFilesToDelete == null ? List.of() : nonModpackFilesToDelete.stream().sorted().toList();
 	}
 
 	public Jsons.CompleteModpackContentFields toFields() {
@@ -66,10 +64,6 @@ public record GroupManifest(
 		}
 		fields.selectionTags = serializedTags;
 
-		Set<Jsons.ModpackContentFields.FileToDelete> deletions = new LinkedHashSet<>();
-		for (DeletionRequest deletion : nonModpackFilesToDelete)
-			deletions.add(new Jsons.ModpackContentFields.FileToDelete(deletion.file(), deletion.sha1(), deletion.timestamp()));
-		fields.nonModpackFilesToDelete = deletions;
 		return fields;
 	}
 
@@ -128,16 +122,6 @@ public record GroupManifest(
 		public boolean sameEffectiveState(GroupFile other) {
 			return other != null && size == other.size && editable == other.editable && overwriteEditable == other.overwriteEditable
 					&& forceCopy == other.forceCopy && Objects.equals(type, other.type) && sha1.equalsIgnoreCase(other.sha1);
-		}
-	}
-
-	public record DeletionRequest(String file, String sha1, String timestamp) implements Comparable<DeletionRequest> {
-		@Override
-		public int compareTo(DeletionRequest other) {
-			int timestampOrder = Objects.toString(timestamp, "").compareTo(Objects.toString(other.timestamp, ""));
-			if (timestampOrder != 0) return timestampOrder;
-			int fileOrder = Objects.toString(file, "").compareTo(Objects.toString(other.file, ""));
-			return fileOrder != 0 ? fileOrder : Objects.toString(sha1, "").compareTo(Objects.toString(other.sha1, ""));
 		}
 	}
 }

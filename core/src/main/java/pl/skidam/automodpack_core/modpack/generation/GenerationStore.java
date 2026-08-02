@@ -123,7 +123,7 @@ public final class GenerationStore {
 			return publication(PublicationStatus.NO_CHANGES, actualBefore.orElseThrow());
 
 		ensureStoreDirectories();
-		GenerationRecord record = GenerationRecord.create(candidate.manifest(), previous == null ? "" : previous.metadata().generationId(), clock.instant(), patchNotes);
+		GenerationRecord record = GenerationRecord.create(candidate.manifest(), previous, clock.instant(), patchNotes);
 		objectStore.promoteAll(candidate.objects());
 		Path recordPath = recordPath(record.metadata().generationId());
 		writeRecordNoClobber(recordPath, record);

@@ -28,7 +28,6 @@ public class Jsons {
 		public boolean syncAutoModpackVersion = true;
 		public boolean syncLoaderVersion = true;
 		public boolean playMusic = true;
-		public boolean allowRemoteNonModpackDeletions = true;
 
 		public ClientConfigFieldsV3() {}
 
@@ -40,7 +39,6 @@ public class Jsons {
 			this.syncAutoModpackVersion = source.syncAutoModpackVersion;
 			this.syncLoaderVersion = source.syncLoaderVersion;
 			this.playMusic = source.playMusic;
-			this.allowRemoteNonModpackDeletions = source.allowRemoteNonModpackDeletions;
 		}
 	}
 
@@ -104,7 +102,6 @@ public class Jsons {
 		public Set<String> allowEditsInFiles = Set.of("/options.txt", "/config/**");
 		public Set<String> overwriteEditableFiles = Set.of();
 		public Set<String> forceCopyFilesToStandardLocation = Set.of();
-		public Map<String, String> nonModpackFilesToDelete = Map.of();
 		public boolean autoExcludeServerSideMods = true;
 		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireAutoModpackOnClient = true;
@@ -127,15 +124,6 @@ public class Jsons {
 		public boolean selfUpdater = false;
 		public Set<String> acceptedLoaders = new HashSet<>();
 
-		public static class FileToDelete { // Same as in ModpackContentFields.FileToDelete but without timestamp
-			public final String file;
-			public final String sha1;
-
-			public FileToDelete(String file, String sha1) {
-				this.file = file;
-				this.sha1 = sha1;
-			}
-		}
 	}
 
 	public static class ServerConfigFieldsV3 {
@@ -147,7 +135,6 @@ public class Jsons {
 		// Key is the group id referenced by requires/breaksWith and by the client's saved selection.
 		public Map<String, GroupDeclaration> groups = Map.of("main", mainGroupDeclaration());
 		public Map<String, SelectionTagDeclaration> selectionTags = Map.of();
-		public Map<String, String> nonModpackFilesToDelete = Map.of();
 		public boolean autoExcludeServerSideMods = true;
 		public boolean autoExcludeUnnecessaryFiles = true;
 		public boolean requireAutoModpackOnClient = true;
@@ -254,6 +241,33 @@ public class Jsons {
 		public String generationId = "";
 	}
 
+	public static class OwnershipLedgerFields {
+		public String modpackId = "";
+		public List<EntryFields> entries = List.of();
+		public String digest = "";
+
+		public static class EntryFields {
+			public String logicalPath = "";
+			public List<ContentFields> historicalHashes = List.of();
+			public Set<String> historicalGroupIds = Set.of();
+			public String firstPublishedGenerationId = "";
+			public String lastPublishedGenerationId = "";
+			public String currentStatus = "";
+		}
+
+		public static class ContentFields {
+			public String sha1 = "";
+			public long size;
+
+			public ContentFields() {}
+
+			public ContentFields(String sha1, long size) {
+				this.sha1 = sha1;
+				this.size = size;
+			}
+		}
+	}
+
 	public static class CompleteModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";
@@ -263,7 +277,7 @@ public class Jsons {
 		public String mcVersion = "";
 		public Map<String, ModpackGroupFields> groups = Map.of();
 		public Map<String, SelectionTagFields> selectionTags = Map.of();
-		public Set<ModpackContentFields.FileToDelete> nonModpackFilesToDelete = Set.of();
+		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
 		public GenerationFields generation;
 
 		public static class GenerationFields {
@@ -272,6 +286,7 @@ public class Jsons {
 			public String parentGenerationId = "";
 			public String createdAt = "";
 			public String stateDigest = "";
+			public String ledgerDigest = "";
 			public String patchNotes = "";
 			public String patchNotesDigest = "";
 			public String rollbackTargetGenerationId = "";
@@ -329,7 +344,7 @@ public class Jsons {
 		public String mcVersion = "";
 		public Set<ModpackContentItem> list;
 		public Set<String> selectedGroups = Set.of();
-		public Set<FileToDelete> nonModpackFilesToDelete = Set.of();
+		public OwnershipLedgerFields ownershipLedger = new OwnershipLedgerFields();
 		public String targetGenerationId = "";
 		public String parentGenerationId = "";
 		public String stateDigest = "";
@@ -385,17 +400,6 @@ public class Jsons {
 			}
 		}
 
-		public static class FileToDelete {
-			public final String file;
-			public final String sha1;
-			public final String timestamp;
-
-			public FileToDelete(String file, String sha1, String timestamp) {
-				this.file = file;
-				this.sha1 = sha1;
-				this.timestamp = timestamp;
-			}
-		}
 	}
 
 	// seems kinda too verbose and it may take too much space for large modpack but lets keep it for now
@@ -419,11 +423,6 @@ public class Jsons {
 	public static class ClientDummyFiles {
 		// Set of absolute file paths to delete when we can
 		public Set<String> files = ConcurrentHashMap.newKeySet();
-	}
-
-	public static class ClientDeletedNonModpackFilesTimestamps {
-		// Set of timestamps of the files to delete
-		public Set<String> timestamps = ConcurrentHashMap.newKeySet();
 	}
 
 	// Per-modpack record of which groups the player picked, so the selection screen is shown

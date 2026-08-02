@@ -15,17 +15,13 @@ public record UpdatePlan(
 		List<Operation> operations,
 		List<ProjectedFile> projectedFinalState,
 		Jsons.ClientConfigFieldsV3 plannedClientConfig,
-		Set<String> plannedDeletionTimestamps,
-		Set<RestartReason> restartReasons,
-		List<Warning> warnings) {
+		Set<RestartReason> restartReasons) {
 
 	public UpdatePlan {
 		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
 		operations = List.copyOf(operations);
 		projectedFinalState = List.copyOf(projectedFinalState);
-		plannedDeletionTimestamps = stableSet(plannedDeletionTimestamps);
 		restartReasons = stableSet(restartReasons);
-		warnings = List.copyOf(warnings);
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
@@ -58,13 +54,6 @@ public record UpdatePlan(
 		CHANGED_GROUP_SELECTION,
 		SELECTED_MODPACK
 	}
-
-	public enum WarningType {
-		REMOTE_DELETION_DISABLED,
-		REMOTE_DELETION_HASH_MISMATCH
-	}
-
-	public record Warning(WarningType type, String timestamp, String requestedPath, String expectedHash, String actualPath, String actualHash) {}
 
 	public record Operation(
 			Root root,

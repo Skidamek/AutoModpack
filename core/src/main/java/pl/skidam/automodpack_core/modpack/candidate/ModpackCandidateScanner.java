@@ -126,7 +126,6 @@ public final class ModpackCandidateScanner {
 			fields.loader = request.loader();
 			fields.loaderVersion = request.loaderVersion();
 			fields.mcVersion = request.mcVersion();
-			fields.nonModpackFilesToDelete = request.nonModpackFilesToDelete();
 			Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> groups = new LinkedHashMap<>();
 			for (var entry : declarations.entrySet()) {
 				Jsons.GroupDeclaration declaration = entry.getValue();
@@ -338,7 +337,6 @@ public final class ModpackCandidateScanner {
 			Path groupRoot,
 			Map<String, Jsons.GroupDeclaration> groups,
 			Map<String, Jsons.SelectionTagDeclaration> selectionTags,
-			Set<Jsons.ModpackContentFields.FileToDelete> nonModpackFilesToDelete,
 			boolean autoExcludeUnnecessaryFiles,
 			boolean autoExcludeServerSideMods,
 			Path stagingDirectory,

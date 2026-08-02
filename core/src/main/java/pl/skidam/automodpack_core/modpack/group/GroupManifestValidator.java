@@ -23,7 +23,6 @@ public final class GroupManifestValidator {
 		if (!ModpackId.isValid(fields.modpackId)) errors.add("Invalid modpack ID");
 		if (fields.groups == null || fields.groups.isEmpty()) errors.add("Group catalogue is empty");
 		if (fields.selectionTags == null) errors.add("Selection tags are missing");
-		if (fields.nonModpackFilesToDelete == null) errors.add("Deletion metadata is missing");
 
 		Map<String, GroupManifest.SelectionTag> tags = new TreeMap<>();
 		if (fields.selectionTags != null) for (var entry : fields.selectionTags.entrySet()) {
@@ -64,25 +63,9 @@ public final class GroupManifestValidator {
 		validateReferences(groups, tags, errors);
 		validateCycles(groups, errors);
 
-		List<GroupManifest.DeletionRequest> deletions = new ArrayList<>();
-		if (fields.nonModpackFilesToDelete != null) for (var deletion : fields.nonModpackFilesToDelete) {
-			if (deletion == null) {
-				errors.add("Deletion metadata contains a null entry");
-				continue;
-			}
-			try {
-				LogicalPath.requireCanonical(deletion.file);
-			} catch (IllegalArgumentException e) {
-				errors.add(e.getMessage());
-			}
-			if (deletion.sha1 == null || !SHA1.matcher(deletion.sha1).matches()) errors.add("Invalid deletion SHA-1 for '" + deletion.file + "'");
-			if (deletion.timestamp == null || deletion.timestamp.isBlank()) errors.add("Missing deletion timestamp for '" + deletion.file + "'");
-			deletions.add(new GroupManifest.DeletionRequest(deletion.file, value(deletion.sha1).toLowerCase(Locale.ROOT), deletion.timestamp));
-		}
-
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		GroupManifest manifest = new GroupManifest(fields.modpackId, value(fields.modpackName), value(fields.automodpackVersion), value(fields.loader),
-				value(fields.loaderVersion), value(fields.mcVersion), new TreeMap<>(groups), new TreeMap<>(tags), deletions);
+				value(fields.loaderVersion), value(fields.mcVersion), new TreeMap<>(groups), new TreeMap<>(tags));
 		validatePlatformPaths(manifest, errors);
 		if (!errors.isEmpty()) throw new GroupValidationException(errors.stream().distinct().sorted().toList());
 		validateDefaultAndIndividualSelections(manifest);

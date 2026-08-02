@@ -48,7 +48,7 @@ class UpdateTransactionExecutorTest {
 						new Operation(Root.GAME_DIR, "old.txt", OperationType.DELETE, null, -1, oldHash)),
 				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length),
 						new ProjectedFile(Root.GAME_DIR, "old.txt", false, null, -1)),
-				clientConfig(manifest.modpackId), Set.of("timestamp-1"), Set.of(RestartReason.REMOVED_NON_MODPACK_FILES), List.of());
+				clientConfig(manifest.modpackId), Set.of(RestartReason.REMOVED_NON_MODPACK_FILES));
 
 		UpdateTransactionExecutor.Execution result = executor(paths, transaction -> {
 			assertFalse(Files.exists(paths.catalogue()));
@@ -68,7 +68,6 @@ class UpdateTransactionExecutorTest {
 		assertEquals(target.generationRecord(), ModpackContentTools.readGenerationRecord(paths.catalogue()));
 		assertEquals(Set.of("main"), new ClientSelectionStore(paths.selection()).get(manifest.modpackId).orElseThrow().requestedGroups());
 		assertEquals(manifest.modpackId, ConfigTools.read(paths.clientConfig(), Jsons.ClientConfigFieldsV3.class).orElseThrow().selectedModpackId);
-		assertTrue(ConfigTools.read(paths.timestamps(), Jsons.ClientDeletedNonModpackFilesTimestamps.class).orElseThrow().timestamps.contains("timestamp-1"));
 	}
 
 	@Test
@@ -81,7 +80,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget target = selectedTarget(manifest);
 		UpdatePlan plan = new UpdatePlan(manifest.modpackId, target.generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of(), Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 
 		List<UpdateTransaction> mismatches = new ArrayList<>();
 		UpdateTransaction tamperedTargetId = UpdateTransaction.create(plan, target, paths.modpack());
@@ -135,7 +134,7 @@ class UpdateTransactionExecutorTest {
 						new Operation(Root.MODPACK_DIR, "mods/old.jar", OperationType.DELETE, null, -1, oldHash)),
 				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, newHash, newBytes.length),
 						new ProjectedFile(Root.MODPACK_DIR, "mods/old.jar", false, null, -1)),
-				clientConfig(newManifest.modpackId), Set.of(), Set.of(), List.of());
+				clientConfig(newManifest.modpackId), Set.of());
 
 		UpdateTransactionExecutor.Execution result = executor(paths, null).commit(plan, newTarget);
 
@@ -155,7 +154,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget target = selectedTarget(manifest);
 		UpdatePlan plan = new UpdatePlan(manifest.modpackId, target.generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of(), Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 		UpdateTransactionExecutor executor = executor(paths,
 				transaction -> {
 					if (!Files.exists(paths.catalogue(), LinkOption.NOFOLLOW_LINKS)) Files.createDirectory(paths.manifest());
@@ -196,7 +195,7 @@ class UpdateTransactionExecutorTest {
 		SelectedModpackTarget target = selectedTarget(targetManifest, otherTarget.generationTarget().targetGenerationId(), "2026-01-03T00:00:00Z");
 		UpdatePlan plan = new UpdatePlan(targetManifest.modpackId, target.generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, targetHash, targetBytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, targetHash, targetBytes.length)), clientConfig(targetManifest.modpackId), Set.of(), Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, targetHash, targetBytes.length)), clientConfig(targetManifest.modpackId), Set.of());
 
 		assertThrows(IOException.class, () -> executor(paths, null).commit(plan, target));
 		assertFalse(Files.exists(paths.transaction()));
@@ -214,7 +213,7 @@ class UpdateTransactionExecutorTest {
 		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of(), Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 		UpdateTransactionExecutor executor = executor(paths, null);
 		UpdateTransactionExecutor.Execution committed = executor.commit(plan, selectedTarget(manifest));
 		ConfigTools.writeAtomic(paths.transaction(), committed.transaction());
@@ -234,8 +233,7 @@ class UpdateTransactionExecutorTest {
 		String hash = HashUtils.getHash(unchanged);
 		Jsons.ModpackContentFields manifest = editableManifest(hash, Files.size(unchanged));
 		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(), List.of(),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "config/settings.json", true, hash, Files.size(unchanged))), clientConfig(manifest.modpackId), Set.of(),
-				Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "config/settings.json", true, hash, Files.size(unchanged))), clientConfig(manifest.modpackId), Set.of());
 
 		assertThrows(Exception.class, () -> executor(paths, ignored -> Files.writeString(unchanged, "changed during commit")).commit(plan, selectedTarget(manifest)));
 		assertTrue(Files.exists(paths.transaction()));
@@ -251,12 +249,12 @@ class UpdateTransactionExecutorTest {
 		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
 		UpdatePlan traversal = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "../escape.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of(), Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 		assertThrows(Exception.class, () -> executor(paths, null).commit(traversal, selectedTarget(manifest)));
 
 		UpdatePlan valid = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of(), Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 		UpdateTransaction tampered = UpdateTransaction.create(valid, selectedTarget(manifest), paths.modpack());
 		tampered.projectedFinalState = List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, "f".repeat(40), bytes.length));
 		assertThrows(Exception.class, () -> executor(paths, null).recover(tampered));
@@ -294,7 +292,7 @@ class UpdateTransactionExecutorTest {
 		manifest.modpackId = "abc1234";
 		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "linked/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "linked/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of(), Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "linked/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 
 		assertThrows(IOException.class, () -> executor(paths, null).commit(plan, selectedTarget(manifest)));
 		assertFalse(Files.exists(outside.resolve("new.jar")));
@@ -310,7 +308,7 @@ class UpdateTransactionExecutorTest {
 		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of(), Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 		new ClientSelectionStore(paths.selection()).compareAndSet(manifest.modpackId, null, new SelectionIntent(Set.of("visuals")));
 
 		assertThrows(IOException.class, () -> executor(paths, null).commit(plan, selectedTarget(manifest)));
@@ -327,7 +325,7 @@ class UpdateTransactionExecutorTest {
 		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
 		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
-				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of(), Set.of(), List.of());
+				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 		Files.createDirectories(paths.automodpack());
 		Files.writeString(paths.automodpack().resolve(".private"), "blocked");
 
@@ -362,7 +360,7 @@ class UpdateTransactionExecutorTest {
 
 	private UpdateTransactionExecutor executor(Paths paths, UpdateTransactionExecutor.CommitAction action) {
 		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(paths.game(), paths.modpack(), paths.mods(), paths.store(), paths.automodpack(),
-				paths.transaction(), paths.result(), paths.clientConfig(), paths.timestamps(), paths.manifest(), paths.catalogue(), paths.selection(), action));
+				paths.transaction(), paths.result(), paths.clientConfig(), paths.manifest(), paths.catalogue(), paths.selection(), action));
 	}
 
 	private Paths paths() {
@@ -371,7 +369,7 @@ class UpdateTransactionExecutorTest {
 		Path modpack = automodpack.resolve("modpacks/abc1234");
 		return new Paths(game, modpack, game.resolve("mods"), automodpack.resolve("store"), automodpack,
 				automodpack.resolve(".private/update-transaction.json"), automodpack.resolve(".private/update-transaction-result.json"),
-				automodpack.resolve("automodpack-client.json"), automodpack.resolve("automodpack-deletion-timestamps-files.json"),
+				automodpack.resolve("automodpack-client.json"),
 				modpack.resolve("automodpack-content.json"), modpack.resolve("automodpack-catalogue.json"),
 				automodpack.resolve("automodpack-client-selection.json"));
 	}
@@ -419,7 +417,6 @@ class UpdateTransactionExecutorTest {
 		fields.loader = manifest.loader;
 		fields.loaderVersion = manifest.loaderVersion;
 		fields.mcVersion = manifest.mcVersion;
-		fields.nonModpackFilesToDelete = manifest.nonModpackFilesToDelete;
 		Jsons.CompleteModpackContentFields.ModpackGroupFields group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		Map<String, Jsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
 		for (var item : manifest.list)
@@ -427,7 +424,7 @@ class UpdateTransactionExecutorTest {
 					item.type, item.editable, item.overwriteEditable, item.forceCopy, item.sha1, item.murmur));
 		group.files = files;
 		fields.groups = Map.of("main", group);
-		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), parentGenerationId, Instant.parse(createdAt), "");
+		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse(createdAt), "");
 		manifest.targetGenerationId = record.metadata().generationId();
 		manifest.parentGenerationId = record.metadata().parentGenerationId();
 		manifest.stateDigest = record.metadata().stateDigest();
@@ -435,5 +432,5 @@ class UpdateTransactionExecutorTest {
 	}
 
 	private record Paths(Path game, Path modpack, Path mods, Path store, Path automodpack, Path transaction, Path result, Path clientConfig,
-			Path timestamps, Path manifest, Path catalogue, Path selection) {}
+			Path manifest, Path catalogue, Path selection) {}
 }

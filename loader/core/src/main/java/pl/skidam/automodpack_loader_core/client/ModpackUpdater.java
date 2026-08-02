@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -26,6 +27,7 @@ import org.jetbrains.annotations.Nullable;
 import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
@@ -37,7 +39,6 @@ import pl.skidam.automodpack_core.utils.DownloadSource;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.HashUtils;
-import pl.skidam.automodpack_core.utils.LegacyClientCacheUtils;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 import pl.skidam.automodpack_core.utils.UpdateLoopDetector;
@@ -510,29 +511,13 @@ public class ModpackUpdater implements AutoCloseable {
 		List<UpdatePlan.NestedCopy> nestedCopies = inspectNestedCopies(target, cache);
 		Jsons.ClientConfigFieldsV3 plannedConfig = ModpackUtils.planModpackSelection(target.modpackId, modpackDir, connectionInfo);
 
-		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, clientConfig.allowRemoteNonModpackDeletions,
-				LegacyClientCacheUtils.getEvaluatedDeletionTimestamps(), forceCopyServices, targetMods, standardMods, nestedCopies, selection, plannedConfig));
-		reportPlanWarnings(plan.warnings());
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, forceCopyServices, targetMods, standardMods, nestedCopies, selection, plannedConfig));
 		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(target.loader, target.loaderVersion)) return plan;
 		Set<UpdatePlan.RestartReason> restartReasons = EnumSet.noneOf(UpdatePlan.RestartReason.class);
 		restartReasons.addAll(plan.restartReasons());
 		restartReasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
 		return new UpdatePlan(plan.modpackId(), plan.generationTarget(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(),
-				plan.plannedDeletionTimestamps(), restartReasons, plan.warnings());
-	}
-
-	private void reportPlanWarnings(List<UpdatePlan.Warning> warnings) {
-		for (UpdatePlan.Warning warning : warnings) {
-			switch (warning.type()) {
-				case REMOTE_DELETION_DISABLED -> LOGGER.warn(
-						"Server requested deletion of {} (sha1: {}), but remote non-modpack deletions are disabled; leaving it untouched",
-						warning.requestedPath(), warning.expectedHash());
-				case REMOTE_DELETION_HASH_MISMATCH -> LOGGER.warn(
-						"Server-requested deletion of {} was not applied because {} has hash {} instead of {}; leaving it untouched",
-						warning.requestedPath(), warning.actualPath() == null ? "no matching file" : warning.actualPath(),
-						warning.actualHash() == null ? "none" : warning.actualHash(), warning.expectedHash());
-			}
-		}
+				restartReasons);
 	}
 
 	private UpdatePlanner.SelectionContext selectionContext(String targetModpackId) {
@@ -577,13 +562,13 @@ public class ModpackUpdater implements AutoCloseable {
 			try (Stream<Path> stream = Files.walk(modpackDir)) {
 				Path installedManifest = modpackDir.resolve(modpackContentFileName);
 				Path completeCatalogue = modpackDir.resolve(modpackCatalogueFileName);
-				for (Path path : stream.filter(Files::isRegularFile).filter(path -> !path.equals(installedManifest) && !path.equals(completeCatalogue)).toList())
+				for (Path path : stream.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).filter(path -> !path.equals(installedManifest) && !path.equals(completeCatalogue)).toList())
 					putFileState(files, UpdatePlan.Root.MODPACK_DIR, modpackDir, path, cache);
 			}
 		}
 		if (Files.isDirectory(MODS_DIR)) {
 			try (Stream<Path> stream = Files.list(MODS_DIR)) {
-				for (Path path : stream.filter(Files::isRegularFile).toList()) putFileState(files, UpdatePlan.Root.MODS_DIR, MODS_DIR, path, cache);
+				for (Path path : stream.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)).toList()) putFileState(files, UpdatePlan.Root.MODS_DIR, MODS_DIR, path, cache);
 			}
 		}
 		Set<String> gamePaths = new HashSet<>();
@@ -593,26 +578,23 @@ public class ModpackUpdater implements AutoCloseable {
 			selection.previousManifest().list.stream().filter(item -> !"mod".equals(item.type)).forEach(item -> gamePaths.add(item.file));
 		for (String gamePath : gamePaths) {
 			Path path = SmartFileUtils.getPathFromCWD(gamePath);
-			if (Files.isRegularFile(path)) putFileState(files, UpdatePlan.Root.GAME_DIR, SmartFileUtils.CWD, path, cache);
+			if (Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, UpdatePlan.Root.GAME_DIR, SmartFileUtils.CWD, path, cache);
 		}
-		if (target.nonModpackFilesToDelete != null) for (var request : target.nonModpackFilesToDelete) {
-			Path requested = SmartFileUtils.getPathFromCWD(request.file);
-			Path parent = Files.isDirectory(requested) ? requested : requested.getParent();
-			if (parent == null || !Files.isDirectory(parent)) continue;
-			try (Stream<Path> stream = Files.list(parent)) {
-				for (Path path : stream.filter(Files::isRegularFile).toList()) {
-					if (path.toAbsolutePath().normalize().startsWith(MODS_DIR.toAbsolutePath().normalize()))
-						putFileState(files, UpdatePlan.Root.MODS_DIR, MODS_DIR, path, cache);
-					else
-						putFileState(files, UpdatePlan.Root.GAME_DIR, SmartFileUtils.CWD, path, cache);
-				}
-			}
+		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
+		for (String logicalPath : ledger.entries().keySet()) {
+			Optional<UpdatePlan.FileKey> cleanupKey = UpdatePlanner.managedCleanupKey(logicalPath);
+			if (cleanupKey.isEmpty()) continue;
+			UpdatePlan.FileKey key = cleanupKey.get();
+			Path root = key.root() == UpdatePlan.Root.MODS_DIR ? MODS_DIR : SmartFileUtils.CWD;
+			Path path = root.resolve(key.relativePath()).normalize();
+			if (path.startsWith(root) && Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) putFileState(files, key.root(), root, path, cache);
 		}
 		return files;
 	}
 
 	private void putFileState(Map<UpdatePlan.FileKey, UpdatePlan.FileState> files, UpdatePlan.Root root, Path rootPath, Path path,
 			FileMetadataCache cache) throws IOException {
+		if (!Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) return;
 		String relative = UpdatePlanner.normalize(rootPath.toAbsolutePath().normalize().relativize(path.toAbsolutePath().normalize()).toString());
 		files.put(new UpdatePlan.FileKey(root, relative), new UpdatePlan.FileState(cache.getHashOrNull(path), Files.size(path), true, FileInspection.isMod(path)));
 	}
