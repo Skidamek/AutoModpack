@@ -19,6 +19,7 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackExecutor;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
+import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
 import pl.skidam.automodpack_core.protocol.ModpackConnectionMode;
 import pl.skidam.automodpack_core.utils.AddressHelpers;
 
@@ -63,6 +64,7 @@ public class Commands {
 									.then(literal("notes")
 											.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::revertGeneration))))
 					.then(literal("history").executes(Commands::generationHistory))
+						.then(literal("storage").executes(Commands::generationStorage))
 						)))
 						.then(literal("host")
 								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
@@ -401,6 +403,8 @@ public class Commands {
 		send(context, "/automodpack generate [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate preview [notes <text...>]", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack generate if-state <digest> [notes <text...>]", ChatFormatting.YELLOW, false);
+			send(context, "/automodpack generate revert <generation-id> [notes <text...>]", ChatFormatting.YELLOW, false);
+			send(context, "/automodpack generate history/storage", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack host start/stop/restart/connections/fingerprint/bootstrap", ChatFormatting.YELLOW, false);
 		send(context, "/automodpack config reload", ChatFormatting.YELLOW, false);
 		return Command.SINGLE_SUCCESS;
@@ -510,7 +514,23 @@ public class Commands {
 		}
 	}
 
-	private static String optionalArgument(CommandContext<CommandSourceStack> context, String name) {
+	private static int generationStorage(CommandContext<CommandSourceStack> context) {
+			try {
+				GenerationStore.StorageReport report = modpackExecutor.storageReport();
+				send(context, "Generation storage", ChatFormatting.GREEN, false);
+				send(context, "Records", ChatFormatting.WHITE, report.recordCount() + " files, " + report.recordBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Immutable objects", ChatFormatting.WHITE, report.immutableObjectCount() + " files, " + report.immutableObjectBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Staging", ChatFormatting.WHITE, report.stagingFileCount() + " files, " + report.stagingBytes() + " bytes", ChatFormatting.YELLOW, false);
+				send(context, "Referenced objects", ChatFormatting.WHITE, report.referencedObjectCount() + " unique, " + report.referencedObjectBytes() + " bytes", ChatFormatting.YELLOW, false);
+				report.uniqueObjectReferenceRatio().ifPresent(ratio -> send(context, String.format(Locale.ROOT, "Unique/reference ratio: %.4f", ratio), ChatFormatting.WHITE, false));
+				return Command.SINGLE_SUCCESS;
+			} catch (IOException e) {
+				send(context, "Failed to measure generation storage: " + e.getMessage(), ChatFormatting.RED, false);
+				return 0;
+			}
+		}
+
+		private static String optionalArgument(CommandContext<CommandSourceStack> context, String name) {
 		try {
 			return StringArgumentType.getString(context, name);
 		} catch (IllegalArgumentException e) {
