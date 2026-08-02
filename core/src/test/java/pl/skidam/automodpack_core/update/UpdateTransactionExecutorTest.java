@@ -121,6 +121,125 @@ class UpdateTransactionExecutorTest {
 	}
 
 	@Test
+	void removalRestoresBaselineAndPreservesServerDeletedBytes() throws Exception {
+		Paths paths = paths();
+		Files.createDirectories(paths.store());
+		Files.createDirectories(paths.modpack().resolve("config"));
+		Files.createDirectories(paths.game().resolve("config"));
+
+		byte[] removedBytes = "server-deleted".getBytes(StandardCharsets.UTF_8);
+		String removedHash = store(paths, removedBytes);
+		byte[] packBytes = "pack-file".getBytes(StandardCharsets.UTF_8);
+		String packHash = store(paths, packBytes);
+		byte[] baselineBytes = "player-file".getBytes(StandardCharsets.UTF_8);
+		String baselineHash = store(paths, baselineBytes);
+
+		Jsons.CompleteModpackContentFields oldFields = new Jsons.CompleteModpackContentFields();
+		oldFields.modpackId = "abc1234";
+		oldFields.selectionTags = Map.of();
+		var oldGroup = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		oldGroup.files = Map.of("config/removed.cfg", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(removedBytes.length), "config", false, false,
+				false, removedHash, null));
+		oldFields.groups = Map.of("main", oldGroup);
+		GenerationRecord oldRecord = GenerationRecord.create(GroupManifestValidator.validate(oldFields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
+
+		Jsons.CompleteModpackContentFields targetFields = new Jsons.CompleteModpackContentFields();
+		targetFields.modpackId = "abc1234";
+		targetFields.selectionTags = Map.of();
+		var targetGroup = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		targetGroup.files = Map.of("config/pack.cfg", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(packBytes.length), "config", false, false,
+				false, packHash, null));
+		targetFields.groups = Map.of("main", targetGroup);
+		GenerationRecord targetRecord = GenerationRecord.create(GroupManifestValidator.validate(targetFields), oldRecord, Instant.parse("2026-01-02T00:00:00Z"), "");
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(targetRecord.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+
+		Files.write(paths.modpack().resolve("config/pack.cfg"), packBytes);
+		Files.write(paths.game().resolve("config/pack.cfg"), packBytes);
+		Files.write(paths.game().resolve("config/removed.cfg"), removedBytes);
+		ConfigTools.writeAtomic(paths.catalogue(), targetRecord.toFields());
+		ModpackContentTools.write(paths.manifest(), target.flatTarget());
+
+		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		baseline.modpackId = "abc1234";
+		Jsons.ClientBaselineFields.EntryFields restored = new Jsons.ClientBaselineFields.EntryFields();
+		restored.logicalPath = "config/pack.cfg";
+		restored.objectHash = baselineHash;
+		restored.size = baselineBytes.length;
+		Jsons.ClientBaselineFields.EntryFields absent = new Jsons.ClientBaselineFields.EntryFields();
+		absent.logicalPath = "config/removed.cfg";
+		absent.absent = true;
+		baseline.entries = List.of(restored, absent);
+		ConfigTools.writeAtomic(paths.modpack().resolve("automodpack-baseline.json"), baseline);
+
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.MODPACK_DIR, "config/pack.cfg"), new FileState(packHash, packBytes.length, true, false),
+				new FileKey(Root.GAME_DIR, "config/pack.cfg"), new FileState(packHash, packBytes.length, true, false),
+				new FileKey(Root.GAME_DIR, "config/removed.cfg"), new FileState(removedHash, removedBytes.length, true, false));
+		Jsons.ClientConfigFieldsV3 plannedConfig = new Jsons.ClientConfigFieldsV3();
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(baselineHash), plannedConfig));
+		SelectionIntent expectedSelection = new SelectionIntent(Set.of("main"));
+		new ClientSelectionStore(paths.selection()).compareAndSet("abc1234", null, expectedSelection);
+		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, targetRecord.toFields(), target.flatTarget(), paths.modpack(), ClientPlatform.LINUX,
+				expectedSelection);
+
+		UpdateTransactionExecutor.Execution execution = executor(paths, null).commit(transaction);
+
+		assertTrue(execution.success());
+		assertArrayEquals(baselineBytes, Files.readAllBytes(paths.game().resolve("config/pack.cfg")));
+		assertFalse(Files.exists(paths.game().resolve("config/removed.cfg")));
+		assertFalse(Files.exists(paths.modpack().resolve("config/pack.cfg")));
+		assertFalse(Files.exists(paths.manifest()));
+		assertFalse(Files.exists(paths.catalogue()));
+		assertFalse(Files.exists(paths.modpack().resolve("automodpack-baseline.json")));
+		assertArrayEquals(removedBytes, Files.readAllBytes(paths.store().resolve(removedHash)));
+		assertTrue(new ClientSelectionStore(paths.selection()).get("abc1234").isEmpty());
+		assertFalse(Files.exists(paths.transaction()));
+	}
+
+	@Test
+	void removalRejectsLiveRestoreTargetChangedAfterPlanning() throws Exception {
+		Paths paths = paths();
+		Files.createDirectories(paths.store());
+		Files.createDirectories(paths.modpack().resolve("config"));
+		Files.createDirectories(paths.game().resolve("config"));
+		byte[] packBytes = "pack-file".getBytes(StandardCharsets.UTF_8);
+		String packHash = store(paths, packBytes);
+		byte[] baselineBytes = "player-file".getBytes(StandardCharsets.UTF_8);
+		String baselineHash = store(paths, baselineBytes);
+
+		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
+		fields.modpackId = "abc1234";
+		fields.selectionTags = Map.of();
+		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
+		group.files = Map.of("config/pack.cfg", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(packBytes.length), "config", false, false, false, packHash, null));
+		fields.groups = Map.of("main", group);
+		GenerationRecord record = GenerationRecord.create(GroupManifestValidator.validate(fields), null, Instant.parse("2026-01-01T00:00:00Z"), "");
+		SelectedModpackTarget target = SelectedModpackTarget.prepare(record.toFields(), null, new SelectionIntent(Set.of("main")), ClientPlatform.LINUX);
+		Files.write(paths.modpack().resolve("config/pack.cfg"), packBytes);
+		Path live = Files.write(paths.game().resolve("config/pack.cfg"), packBytes);
+		ConfigTools.writeAtomic(paths.catalogue(), record.toFields());
+		ModpackContentTools.write(paths.manifest(), target.flatTarget());
+		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		baseline.modpackId = "abc1234";
+		Jsons.ClientBaselineFields.EntryFields entry = new Jsons.ClientBaselineFields.EntryFields();
+		entry.logicalPath = "config/pack.cfg";
+		entry.objectHash = baselineHash;
+		entry.size = baselineBytes.length;
+		baseline.entries = List.of(entry);
+		Jsons.ClientConfigFieldsV3 plannedConfig = new Jsons.ClientConfigFieldsV3();
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.MODPACK_DIR, "config/pack.cfg"), new FileState(packHash, packBytes.length, true, false),
+				new FileKey(Root.GAME_DIR, "config/pack.cfg"), new FileState(packHash, packBytes.length, true, false));
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(baselineHash), plannedConfig));
+		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, record.toFields(), target.flatTarget(), paths.modpack(), ClientPlatform.LINUX);
+		Files.writeString(live, "changed-after-planning");
+
+		assertThrows(UpdateExecutionException.class, () -> executor(paths, null).commit(transaction));
+		assertTrue(Files.exists(paths.manifest()));
+		assertTrue(Files.exists(paths.catalogue()));
+		assertEquals("changed-after-planning", Files.readString(live));
+	}
+
+	@Test
 	void rejectsGenerationIdentityMismatchesBeforeFileMutation() throws Exception {
 		Paths paths = paths();
 		Files.createDirectories(paths.store());

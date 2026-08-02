@@ -22,7 +22,8 @@ public final class UpdateTransactionSupport {
 		Path installedManifest = null;
 		Path completeCatalogue = null;
 		UpdateTransactionExecutor.CommitAction beforeManifest = null;
-		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE
+				|| transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
 			try {
 				modpackDirectory = Path.of(transaction.canonicalModpackDirectory).toAbsolutePath().normalize();
 			} catch (RuntimeException e) {
