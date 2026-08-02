@@ -128,7 +128,8 @@ public final class UpdateTransactionExecutor {
 				|| !context.transactionFile().toAbsolutePath().normalize().equals(automodpackDirectory.resolve(".private/update-transaction.json"))
 				|| !context.transactionResultFile().toAbsolutePath().normalize().equals(automodpackDirectory.resolve(".private/update-transaction-result.json")))
 			throw new IOException("Transaction roots do not match the game-directory layout");
-		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.restartReasons == null)
+		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.restartReasons == null
+				|| transaction.plannedPreservations == null)
 			throw new IOException("Transaction fields are incomplete");
 
 		Jsons.ModpackContentFields manifest = null;
@@ -181,6 +182,7 @@ public final class UpdateTransactionExecutor {
 				case CREATE_DIRECTORY, REMOVE_EMPTY_DIRECTORY -> validateDirectoryOperation(operation);
 			}
 		}
+		validatePreservations(transaction, finalState, manifest);
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !operationKeys.equals(finalState.keySet()))
 			throw new IOException("Special-purpose transaction operations and projected final state must match exactly");
 		if (manifest != null) validateManifestProjection(manifest, finalState);
@@ -214,7 +216,7 @@ public final class UpdateTransactionExecutor {
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
 				|| transaction.canonicalModpackDirectory != null
-				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty())
+				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
 		long installs = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT).count();
 		long deletions = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.DELETE).count();
@@ -227,7 +229,7 @@ public final class UpdateTransactionExecutor {
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
 				|| transaction.canonicalModpackDirectory != null
-				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty())
+				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty())
 			throw new IOException("Legacy dummy cleanup transaction contains modpack metadata");
 		if (transaction.operations.isEmpty()) throw new IOException("Legacy dummy cleanup transaction has no targets");
 	}
@@ -469,6 +471,61 @@ public final class UpdateTransactionExecutor {
 		return finalState;
 	}
 
+	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState,
+			Jsons.ModpackContentFields manifest) throws IOException {
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
+			if (!transaction.plannedPreservations.isEmpty()) throw new IOException("Only modpack updates can preserve deleted files");
+			return;
+		}
+		if (manifest == null) throw new IOException("Preservation validation has no target manifest");
+		OwnershipLedger ledger;
+		try {
+			ledger = OwnershipLedger.fromFields(manifest.ownershipLedger);
+		} catch (RuntimeException e) {
+			throw new IOException("Preservation validation has an invalid ownership ledger", e);
+		}
+		Set<String> targetPaths = new HashSet<>();
+		for (var item : manifest.list) targetPaths.add(normalizeManifestPath(item.file));
+		List<Preservation> sorted = transaction.plannedPreservations.stream()
+				.sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList();
+		if (!transaction.plannedPreservations.equals(sorted)) throw new IOException("Preservation entries are not deterministically ordered");
+		Set<FileKey> seen = new HashSet<>();
+		for (Preservation preservation : transaction.plannedPreservations) {
+			if (preservation == null || preservation.root() == null) throw new IOException("Incomplete preservation entry");
+			if (preservation.root() != Root.GAME_DIR && preservation.root() != Root.MODS_DIR)
+				throw new IOException("Preservation root is outside managed live files");
+			String relative;
+			try {
+				relative = normalizeOperationPath(preservation.relativePath());
+			} catch (RuntimeException e) {
+				throw new IOException("Invalid preservation path", e);
+			}
+			FileKey key = new FileKey(preservation.root(), relative);
+			if (!seen.add(key)) throw new IOException("Duplicate preservation target");
+			validateRootAndPath(preservation.root(), relative, transaction.modpackId, transaction.purpose);
+			validateHash(preservation.expectedHash(), "preservation SHA-1");
+			if (preservation.expectedSize() < 0) throw new IOException("Invalid preservation size");
+			String logicalPath = preservation.root() == Root.MODS_DIR ? "mods/" + relative : relative;
+			if (targetPaths.contains(logicalPath)) throw new IOException("Preservation target remains in the selected target");
+			OwnershipLedger.Entry ledgerEntry = ledger.entries().get(logicalPath);
+			if (ledgerEntry == null || !ledgerEntry.historicalHashes().contains(new OwnershipLedger.Content(preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize())))
+				throw new IOException("Preservation target is not owned by the target ledger");
+			ProjectedFile projected = finalState.get(key);
+			if (projected == null || projected.present()) throw new IOException("Preservation target is not absent from projected final state");
+			Operation deletion = null;
+			for (Operation operation : transaction.operations) {
+				if (operation.operation() != OperationType.DELETE || operation.root() != preservation.root()) continue;
+				if (normalizeOperationPath(operation.relativePath()).equals(relative)) {
+					deletion = operation;
+					break;
+				}
+			}
+			if (deletion == null || deletion.expectedExistingHash() == null
+					|| !deletion.expectedExistingHash().equalsIgnoreCase(preservation.expectedHash()))
+				throw new IOException("Preservation target has no matching guarded deletion");
+		}
+	}
+
 	private void validateInstall(Operation operation, ProjectedFile projected) throws IOException {
 		if (operation.root() == Root.STORE_DIR || operation.expectedExistingHash() != null) throw new IOException("Invalid install operation root/metadata");
 		validateHash(operation.expectedObjectHash(), "install SHA-1");
@@ -536,6 +593,11 @@ public final class UpdateTransactionExecutor {
 				if (!SmartFileUtils.isValidFile(resolve(operation), operation.expectedSize(), operation.expectedObjectHash()))
 					throw new IOException("Installed file failed verification: " + resolve(operation));
 			}
+			for (Preservation preservation : transaction.plannedPreservations) {
+				blockedPath = resolve(preservation.root(), preservation.relativePath());
+				preserveObject(preservation);
+				blockedPath = null;
+			}
 			for (Operation operation : transaction.operations) {
 				if (operation.operation() != OperationType.DELETE) continue;
 				current = operation;
@@ -588,6 +650,24 @@ public final class UpdateTransactionExecutor {
 			}
 			throw new UpdateExecutionException(current == null ? null : current.operation().name(), blockedPath, e);
 		}
+	}
+
+	private void preserveObject(Preservation preservation) throws IOException {
+		Path source = resolve(preservation.root(), preservation.relativePath());
+		Path object = context.storeDirectory().resolve(preservation.expectedHash()).toAbsolutePath().normalize();
+		Path storeRoot = context.storeDirectory().toAbsolutePath().normalize();
+		if (!object.startsWith(storeRoot)) throw new IOException("Preservation object escapes the client CAS");
+		validateNoSymbolicLinkDescendants(storeRoot, object);
+		boolean objectValid = SmartFileUtils.isValidFile(object, preservation.expectedSize(), preservation.expectedHash());
+		boolean sourcePresent = Files.exists(source, LinkOption.NOFOLLOW_LINKS);
+		if (sourcePresent && !SmartFileUtils.isValidFile(source, preservation.expectedSize(), preservation.expectedHash()))
+			throw new IOException("Preservation source changed after planning: " + source);
+		if (!objectValid) {
+			if (!sourcePresent) throw new IOException("Preservation source is missing: " + source);
+			SmartFileUtils.copyVerifiedAtomic(source, object, preservation.expectedSize(), preservation.expectedHash());
+		}
+		if (!SmartFileUtils.isValidFile(object, preservation.expectedSize(), preservation.expectedHash()))
+			throw new IOException("Preserved CAS object failed verification: " + object);
 	}
 
 	private void verifyFinalState(List<ProjectedFile> finalState, UpdateTransaction.Purpose purpose) throws IOException {
