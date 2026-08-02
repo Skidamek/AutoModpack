@@ -239,10 +239,13 @@ public final class UpdateTransactionExecutor {
 		} catch (RuntimeException e) {
 			throw new IOException("Removal platform is invalid", e);
 		}
-		if (transaction.expectedPriorRequestedGroups == null || (!transaction.expectedPriorSelectionPresent && !transaction.expectedPriorRequestedGroups.isEmpty()))
+		if (transaction.expectedPriorRequestedTags == null || transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorExcludedGroups == null
+				|| (!transaction.expectedPriorSelectionPresent && (!transaction.expectedPriorRequestedTags.isEmpty() || !transaction.expectedPriorRequestedGroups.isEmpty()
+						|| !transaction.expectedPriorExcludedGroups.isEmpty())))
 			throw new IOException("Removal selection metadata is inconsistent");
-		if (!transaction.expectedPriorRequestedGroups.equals(transaction.expectedPriorRequestedGroups.stream().distinct().sorted().toList())
-				|| transaction.requestedGroups == null || !transaction.requestedGroups.isEmpty())
+		if (!isCanonicalIntentList(transaction.expectedPriorRequestedTags) || !isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
+				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups) || transaction.requestedTags == null || !transaction.requestedTags.isEmpty()
+				|| transaction.requestedGroups == null || !transaction.requestedGroups.isEmpty() || transaction.excludedGroups == null || !transaction.excludedGroups.isEmpty())
 			throw new IOException("Removal selection metadata is invalid");
 		if (transaction.plannedClientConfig == null) throw new IOException("Removal client config is missing");
 		validateRemovalClientConfig(transaction);
@@ -265,7 +268,8 @@ public final class UpdateTransactionExecutor {
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
 		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
-				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
+				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedTags != null || transaction.expectedPriorRequestedGroups != null
+				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedTags != null || transaction.requestedGroups != null || transaction.excludedGroups != null
 				|| transaction.canonicalModpackDirectory != null
 				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty() || !transaction.plannedBaselineCaptures.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
@@ -278,7 +282,8 @@ public final class UpdateTransactionExecutor {
 	private static void validateLegacyDummyCleanupMetadata(UpdateTransaction transaction) throws IOException {
 		if (transaction.modpackId != null || transaction.targetGenerationId != null || transaction.parentGenerationId != null || transaction.stateDigest != null
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
-				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
+				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedTags != null || transaction.expectedPriorRequestedGroups != null
+				|| transaction.expectedPriorExcludedGroups != null || transaction.requestedTags != null || transaction.requestedGroups != null || transaction.excludedGroups != null
 				|| transaction.canonicalModpackDirectory != null
 				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty() || !transaction.plannedBaselineCaptures.isEmpty())
 			throw new IOException("Legacy dummy cleanup transaction contains modpack metadata");
@@ -352,11 +357,13 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateGroupTarget(UpdateTransaction transaction, GenerationRecord completeRecord, Jsons.ModpackContentFields manifest) throws IOException {
-		if (transaction.completeManifestJson == null || transaction.targetPlatform == null || transaction.expectedPriorRequestedGroups == null
-				|| transaction.requestedGroups == null)
+		if (transaction.completeManifestJson == null || transaction.targetPlatform == null || transaction.expectedPriorRequestedTags == null
+				|| transaction.expectedPriorRequestedGroups == null || transaction.expectedPriorExcludedGroups == null || transaction.requestedTags == null
+				|| transaction.requestedGroups == null || transaction.excludedGroups == null)
 			throw new IOException("Group transaction metadata is incomplete");
-		if (!transaction.expectedPriorRequestedGroups.equals(transaction.expectedPriorRequestedGroups.stream().distinct().sorted().toList())
-				|| !transaction.requestedGroups.equals(transaction.requestedGroups.stream().distinct().sorted().toList()))
+		if (!isCanonicalIntentList(transaction.expectedPriorRequestedTags) || !isCanonicalIntentList(transaction.expectedPriorRequestedGroups)
+				|| !isCanonicalIntentList(transaction.expectedPriorExcludedGroups) || !isCanonicalIntentList(transaction.requestedTags)
+				|| !isCanonicalIntentList(transaction.requestedGroups) || !isCanonicalIntentList(transaction.excludedGroups))
 			throw new IOException("Group selection intent is not uniquely ordered");
 		try {
 			ClientPlatform platform = transaction.platform();
@@ -447,6 +454,10 @@ public final class UpdateTransactionExecutor {
 		} catch (RuntimeException e) {
 			throw new IOException("Stored selected manifest selection is invalid", e);
 		}
+	}
+
+	private static boolean isCanonicalIntentList(List<String> values) {
+		return values != null && values.equals(values.stream().distinct().sorted().toList());
 	}
 
 	private static List<String> flatManifestState(Jsons.ModpackContentFields manifest) {
