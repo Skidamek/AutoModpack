@@ -21,6 +21,11 @@ public class PreloadScreenImpl implements ScreenService {
 	public void danger(Object... args) {}
 
 	@Override
+	public boolean preview(Object... args) {
+		return false;
+	}
+
+	@Override
 	public void error(String... args) {}
 
 	@Override
