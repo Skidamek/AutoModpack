@@ -11,6 +11,7 @@ import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 
 public class ModpackContentTools {
 	public static Jsons.ModpackContentFields read(Path path) {
@@ -37,10 +38,11 @@ public class ModpackContentTools {
 	}
 
 	private static boolean isValid(Jsons.ModpackContentFields content) {
-		if (content == null || content.list == null || content.selectedGroups == null || content.nonModpackFilesToDelete == null) return false;
+		if (content == null || content.list == null || content.selectedGroups == null || content.ownershipLedger == null) return false;
 		try {
 			GenerationTarget.fromFlat(content);
-			return true;
+			OwnershipLedger ledger = OwnershipLedger.fromFields(content.ownershipLedger);
+			return content.modpackId.equals(ledger.modpackId());
 		} catch (RuntimeException e) {
 			return false;
 		}

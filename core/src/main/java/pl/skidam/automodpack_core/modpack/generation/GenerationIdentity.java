@@ -3,9 +3,7 @@ package pl.skidam.automodpack_core.modpack.generation;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Comparator;
 import java.util.HexFormat;
-import java.util.Locale;
 import java.util.Objects;
 
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
@@ -43,20 +41,14 @@ public final class GenerationIdentity {
 			GroupManifest.SelectionTag tag = tagEntry.getValue();
 			encoder.string(tagEntry.getKey()).string(tag.displayName()).string(tag.description()).bool(tag.defaultSelected()).bool(tag.serverForced());
 		}
-		encoder.integer(manifest.nonModpackFilesToDelete().size());
-		manifest.nonModpackFilesToDelete().stream().sorted(Comparator.comparing(GroupManifest.DeletionRequest::file, Comparator.nullsFirst(String::compareTo))
-				.thenComparing(GroupManifest.DeletionRequest::sha1, Comparator.nullsFirst(String::compareTo))
-				.thenComparing(GroupManifest.DeletionRequest::timestamp, Comparator.nullsFirst(String::compareTo))).forEach(
-						deletion -> encoder.string(deletion.file())
-								.string(deletion.sha1()).nullableString(deletion.timestamp()));
 		return sha1(encoder.bytes());
 	}
 
 	public static String generationId(int schemaVersion, String modpackId, String parentGenerationId, String createdAt, String stateDigest,
-			String patchNotesDigest, String rollbackTargetGenerationId) {
+			String ledgerDigest, String patchNotesDigest, String rollbackTargetGenerationId) {
 		CanonicalEncoder encoder = new CanonicalEncoder().string(GENERATION_DOMAIN).integer(schemaVersion).string(modpackId)
-				.string(parentGenerationId == null ? "" : parentGenerationId).string(createdAt).string(stateDigest).string(patchNotesDigest)
-				.string(rollbackTargetGenerationId == null ? "" : rollbackTargetGenerationId);
+				.string(parentGenerationId == null ? "" : parentGenerationId).string(createdAt).string(stateDigest).string(ledgerDigest)
+				.string(patchNotesDigest).string(rollbackTargetGenerationId == null ? "" : rollbackTargetGenerationId);
 		return sha1(encoder.bytes());
 	}
 
@@ -64,17 +56,15 @@ public final class GenerationIdentity {
 		return sha1(GenerationMetadata.validateNotes(notes).getBytes(StandardCharsets.UTF_8));
 	}
 
-	public static String deletionRequestId(String path, String sha1, String parentGenerationId) {
-		CanonicalEncoder encoder = new CanonicalEncoder().string("automodpack-deletion-v1").string(path)
-				.string(sha1.toLowerCase(Locale.ROOT)).string(parentGenerationId == null ? "" : parentGenerationId);
-		return sha1(encoder.bytes());
-	}
-
 	private static void writeStrings(CanonicalEncoder encoder, Iterable<String> values) {
 		int count = 0;
 		for (String ignored : values) count++;
 		encoder.integer(count);
 		for (String value : values) encoder.string(value);
+	}
+
+	static String sha1Bytes(byte[] bytes) {
+		return sha1(bytes);
 	}
 
 	private static String sha1(byte[] bytes) {

@@ -128,7 +128,6 @@ class GroupManifestValidatorTest {
 		fields.modpackId = "abc1234";
 		fields.groups = Map.of();
 		fields.selectionTags = Map.of();
-		fields.nonModpackFilesToDelete = Set.of();
 		return fields;
 	}
 

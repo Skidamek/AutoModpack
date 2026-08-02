@@ -10,8 +10,7 @@ public record GenerationDiff(
 		List<FileChange> files,
 		MetadataSummary packMetadata,
 		MetadataSummary groupMetadata,
-		MetadataSummary selectionTagMetadata,
-		MetadataSummary deletionMetadata) {
+		MetadataSummary selectionTagMetadata) {
 	public GenerationDiff {
 		files = files == null
 				? List.of()
@@ -21,7 +20,6 @@ public record GenerationDiff(
 		packMetadata = Objects.requireNonNull(packMetadata);
 		groupMetadata = Objects.requireNonNull(groupMetadata);
 		selectionTagMetadata = Objects.requireNonNull(selectionTagMetadata);
-		deletionMetadata = Objects.requireNonNull(deletionMetadata);
 	}
 
 	public static GenerationDiff between(GroupManifest parent, GroupManifest child) {
@@ -43,11 +41,11 @@ public record GenerationDiff(
 			else continue;
 			changes.add(new FileChange(key.groupId(), key.logicalPath(), classification, oldFile, newFile));
 		}
-		return new GenerationDiff(changes, packSummary(parent, child), groupSummary(parent, child), tagSummary(parent, child), deletionSummary(parent, child));
+		return new GenerationDiff(changes, packSummary(parent, child), groupSummary(parent, child), tagSummary(parent, child));
 	}
 
 	public boolean isEmpty() {
-		return files.isEmpty() && packMetadata.isEmpty() && groupMetadata.isEmpty() && selectionTagMetadata.isEmpty() && deletionMetadata.isEmpty();
+		return files.isEmpty() && packMetadata.isEmpty() && groupMetadata.isEmpty() && selectionTagMetadata.isEmpty();
 	}
 
 	public Summary summary() {
@@ -64,7 +62,7 @@ public record GenerationDiff(
 			}
 		}
 		return new Summary(added, modified, removed, metadataOnly, packMetadata.changedCount() + groupMetadata.changedCount()
-				+ selectionTagMetadata.changedCount() + deletionMetadata.changedCount());
+				+ selectionTagMetadata.changedCount());
 	}
 
 	public enum FileClassification {
@@ -129,36 +127,6 @@ public record GenerationDiff(
 	private static MetadataSummary tagSummary(GroupManifest parent, GroupManifest child) {
 		Map<String, GroupManifest.SelectionTag> before = parent == null ? Map.of() : parent.selectionTags();
 		return compareKeys(before, child.selectionTags(), Objects::equals);
-	}
-
-	private static MetadataSummary deletionSummary(GroupManifest parent, GroupManifest child) {
-		List<String> before = deletionIdentities(parent);
-		List<String> after = deletionIdentities(child);
-		TreeMap<String, Integer> beforeCounts = counts(before);
-		TreeMap<String, Integer> afterCounts = counts(after);
-		TreeSet<String> keys = new TreeSet<>();
-		keys.addAll(beforeCounts.keySet());
-		keys.addAll(afterCounts.keySet());
-		List<String> added = new ArrayList<>();
-		List<String> removed = new ArrayList<>();
-		for (String key : keys) {
-			int delta = afterCounts.getOrDefault(key, 0) - beforeCounts.getOrDefault(key, 0);
-			if (delta > 0) for (int i = 0; i < delta; i++) added.add(key);
-			if (delta < 0) for (int i = 0; i < -delta; i++) removed.add(key);
-		}
-		return new MetadataSummary(added, List.of(), removed);
-	}
-
-	private static List<String> deletionIdentities(GroupManifest manifest) {
-		if (manifest == null) return List.of();
-		return manifest.nonModpackFilesToDelete().stream().map(deletion -> String.join("\0", Objects.toString(deletion.file(), ""),
-				Objects.toString(deletion.sha1(), ""), Objects.toString(deletion.timestamp(), ""))).sorted().toList();
-	}
-
-	private static TreeMap<String, Integer> counts(Collection<String> values) {
-		TreeMap<String, Integer> counts = new TreeMap<>();
-		for (String value : values) counts.merge(value, 1, Integer::sum);
-		return counts;
 	}
 
 	private static <T> MetadataSummary compareKeys(Map<String, T> before, Map<String, T> after, BiPredicate<T, T> equal) {

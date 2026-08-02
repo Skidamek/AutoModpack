@@ -51,7 +51,7 @@ class LegacyDummyFilesTest {
 		UpdateTransaction transaction = UpdateTransaction.createLegacyDummyCleanup(List.of(new LegacyDummyTarget(Root.MODS_DIR, "legacy.jar")));
 		UpdateTransactionExecutor executor = new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(game, null, mods, store, automodpack,
 				privateDirectory.resolve("update-transaction.json"), privateDirectory.resolve("update-transaction-result.json"),
-				automodpack.resolve("automodpack-client.json"), automodpack.resolve("automodpack-deletion-timestamps-files.json"), null, null, null, null));
+				automodpack.resolve("automodpack-client.json"), null, null, null, null));
 
 		assertTrue(executor.commit(transaction).success());
 		assertFalse(Files.exists(dummy));

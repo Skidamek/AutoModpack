@@ -53,6 +53,7 @@ public record SelectedModpackTarget(
 		GroupManifest manifest = record.manifest();
 		ResolvedSelection resolved = GroupSelectionResolver.resolve(manifest, intent, platform);
 		Jsons.ModpackContentFields flatTarget = SelectedTreeComposer.compose(manifest, resolved, GenerationTarget.from(record.metadata()));
+		flatTarget.ownershipLedger = record.ownershipLedger().toFields();
 		return new SelectedModpackTarget(record, expectedPriorIntent, resolved, platform, flatTarget);
 	}
 }

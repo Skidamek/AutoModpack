@@ -44,10 +44,6 @@ public final class SelectedTreeComposer {
 			target.parentGenerationId = generationTarget.parentGenerationId();
 			target.stateDigest = generationTarget.stateDigest();
 		}
-		Set<Jsons.ModpackContentFields.FileToDelete> deletions = new LinkedHashSet<>();
-		for (GroupManifest.DeletionRequest deletion : manifest.nonModpackFilesToDelete())
-			deletions.add(new Jsons.ModpackContentFields.FileToDelete(deletion.file(), deletion.sha1(), deletion.timestamp()));
-		target.nonModpackFilesToDelete = deletions;
 		return target;
 	}
 }

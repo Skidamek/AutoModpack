@@ -14,6 +14,7 @@ import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
@@ -48,7 +49,6 @@ public final class UpdateTransactionExecutor {
 			Path transactionFile,
 			Path transactionResultFile,
 			Path clientConfigFile,
-			Path deletionTimestampsFile,
 			Path installedManifestFile,
 			Path completeCatalogueFile,
 			Path selectionFile,
@@ -128,8 +128,7 @@ public final class UpdateTransactionExecutor {
 				|| !context.transactionFile().toAbsolutePath().normalize().equals(automodpackDirectory.resolve(".private/update-transaction.json"))
 				|| !context.transactionResultFile().toAbsolutePath().normalize().equals(automodpackDirectory.resolve(".private/update-transaction-result.json")))
 			throw new IOException("Transaction roots do not match the game-directory layout");
-		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.plannedDeletionTimestamps == null
-				|| transaction.restartReasons == null)
+		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.restartReasons == null)
 			throw new IOException("Transaction fields are incomplete");
 
 		Jsons.ModpackContentFields manifest = null;
@@ -215,7 +214,7 @@ public final class UpdateTransactionExecutor {
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
 				|| transaction.canonicalModpackDirectory != null
-				|| transaction.plannedClientConfig != null || !transaction.plannedDeletionTimestamps.isEmpty() || !transaction.restartReasons.isEmpty())
+				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
 		long installs = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT).count();
 		long deletions = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.DELETE).count();
@@ -228,7 +227,7 @@ public final class UpdateTransactionExecutor {
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
 				|| transaction.canonicalModpackDirectory != null
-				|| transaction.plannedClientConfig != null || !transaction.plannedDeletionTimestamps.isEmpty() || !transaction.restartReasons.isEmpty())
+				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty())
 			throw new IOException("Legacy dummy cleanup transaction contains modpack metadata");
 		if (transaction.operations.isEmpty()) throw new IOException("Legacy dummy cleanup transaction has no targets");
 	}
@@ -252,6 +251,12 @@ public final class UpdateTransactionExecutor {
 			throw new IOException("Transaction, complete catalogue, and selected target generation identities disagree");
 		if (!transaction.modpackId.equals(completeRecord.manifest().modpackId()))
 			throw new IOException("Complete catalogue modpack ID does not match transaction");
+		try {
+			OwnershipLedger targetLedger = OwnershipLedger.fromFields(manifest.ownershipLedger);
+			if (!targetLedger.equals(completeRecord.ownershipLedger())) throw new IOException("Selected target ledger does not match complete catalogue");
+		} catch (RuntimeException e) {
+			throw new IOException("Selected target ledger is invalid", e);
+		}
 	}
 
 	private static void validatePurposeOperation(UpdateTransaction.Purpose purpose, Operation operation) throws IOException {
@@ -281,13 +286,11 @@ public final class UpdateTransactionExecutor {
 			parseNonnegativeSize(item.size);
 			validateHash(item.sha1, "manifest SHA-1");
 		}
-		if (manifest.nonModpackFilesToDelete == null) throw new IOException("Manifest deletion list is missing");
-		Set<String> deletionKeys = new HashSet<>();
-		for (var deletion : manifest.nonModpackFilesToDelete) {
-			if (deletion == null || deletion.timestamp == null || deletion.timestamp.isBlank()) throw new IOException("Manifest deletion metadata is incomplete");
-			String relative = normalizeManifestPath(deletion.file);
-			validateHash(deletion.sha1, "deletion SHA-1");
-			if (!deletionKeys.add(deletion.timestamp + "\0" + relative)) throw new IOException("Manifest contains duplicate deletion metadata");
+		try {
+			OwnershipLedger ledger = OwnershipLedger.fromFields(manifest.ownershipLedger);
+			if (!modpackId.equals(ledger.modpackId())) throw new IOException("Manifest ledger identity is invalid");
+		} catch (RuntimeException e) {
+			throw new IOException("Manifest ownership ledger is invalid", e);
 		}
 	}
 
@@ -304,6 +307,7 @@ public final class UpdateTransactionExecutor {
 			ResolvedSelection resolved = GroupSelectionResolver.resolve(completeRecord.manifest(), transaction.targetIntent(), platform);
 			Jsons.ModpackContentFields recomposed = SelectedTreeComposer.compose(completeRecord.manifest(), resolved,
 					GenerationTarget.from(completeRecord.metadata()));
+			recomposed.ownershipLedger = completeRecord.ownershipLedger().toFields();
 			if (!flatManifestState(recomposed).equals(flatManifestState(manifest)))
 				throw new IOException("Embedded selected manifest does not match the complete catalogue and selection intent");
 		} catch (IOException e) {
@@ -378,6 +382,7 @@ public final class UpdateTransactionExecutor {
 			ResolvedSelection storedSelection = GroupSelectionResolver.resolve(storedCatalogue.manifest(),
 					new SelectionIntent(storedTarget.selectedGroups), platform);
 			Jsons.ModpackContentFields recomposed = SelectedTreeComposer.compose(storedCatalogue.manifest(), storedSelection, storedCatalogueTarget);
+			recomposed.ownershipLedger = storedCatalogue.ownershipLedger().toFields();
 			if (!flatManifestState(recomposed).equals(flatManifestState(storedTarget)))
 				throw new IOException("Stored selected manifest does not compose from the stored catalogue");
 		} catch (IOException e) {
@@ -403,12 +408,7 @@ public final class UpdateTransactionExecutor {
 			manifest.list.stream().sorted(Comparator.comparing(item -> normalizeUnchecked(item.file))).forEach(item -> state.add(String.join("\0",
 					"file", normalizeUnchecked(item.file), Objects.toString(item.size, ""), Objects.toString(item.type, ""), Boolean.toString(item.editable),
 					Boolean.toString(item.overwriteEditable), Boolean.toString(item.forceCopy), Objects.toString(item.sha1, ""), Objects.toString(item.murmur, ""))));
-		if (manifest.nonModpackFilesToDelete != null)
-			manifest.nonModpackFilesToDelete.stream()
-					.sorted(Comparator.comparing((Jsons.ModpackContentFields.FileToDelete deletion) -> Objects.toString(deletion.timestamp, ""))
-							.thenComparing(deletion -> normalizeUnchecked(deletion.file)).thenComparing(deletion -> Objects.toString(deletion.sha1, "")))
-					.forEach(deletion -> state.add(String.join("\0", "delete", normalizeUnchecked(deletion.file), Objects.toString(deletion.sha1, ""),
-							Objects.toString(deletion.timestamp, ""))));
+		state.add("ledgerDigest=" + Objects.toString(manifest.ownershipLedger == null ? null : manifest.ownershipLedger.digest, ""));
 		return state;
 	}
 
@@ -429,11 +429,6 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateOrderedMetadata(UpdateTransaction transaction) throws IOException {
-		if (transaction.plannedDeletionTimestamps.stream().anyMatch(value -> value == null || value.isBlank())
-				|| new LinkedHashSet<>(transaction.plannedDeletionTimestamps).size() != transaction.plannedDeletionTimestamps.size())
-			throw new IOException("Invalid planned deletion timestamps");
-		if (!transaction.plannedDeletionTimestamps.equals(transaction.plannedDeletionTimestamps.stream().sorted().toList()))
-			throw new IOException("Planned deletion timestamps are not ordered");
 		if (transaction.restartReasons.stream().anyMatch(Objects::isNull)
 				|| new LinkedHashSet<>(transaction.restartReasons).size() != transaction.restartReasons.size())
 			throw new IOException("Invalid restart reasons");
@@ -566,7 +561,6 @@ public final class UpdateTransactionExecutor {
 			verifyFinalState(transaction.projectedFinalState, transaction.purpose);
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) {
 				ConfigTools.writeAtomic(context.clientConfigFile(), transaction.plannedClientConfig);
-				persistDeletionTimestamps(transaction.plannedDeletionTimestamps);
 				if (context.beforeManifestAction() != null) context.beforeManifestAction().run(transaction);
 				blockedPath = context.completeCatalogueFile();
 				GenerationRecord complete = transaction.completeGenerationRecord();
@@ -645,16 +639,6 @@ public final class UpdateTransactionExecutor {
 		} catch (RuntimeException e) {
 			return null;
 		}
-	}
-
-	private void persistDeletionTimestamps(Collection<String> additions) throws IOException {
-		if (additions.isEmpty()) return;
-		Jsons.ClientDeletedNonModpackFilesTimestamps timestamps = ConfigTools
-				.read(context.deletionTimestampsFile(), Jsons.ClientDeletedNonModpackFilesTimestamps.class)
-				.orElseGet(Jsons.ClientDeletedNonModpackFilesTimestamps::new);
-		if (timestamps.timestamps == null) timestamps.timestamps = new LinkedHashSet<>();
-		timestamps.timestamps.addAll(additions);
-		ConfigTools.writeAtomic(context.deletionTimestampsFile(), timestamps);
 	}
 
 	private Path resolve(Operation operation) throws IOException {

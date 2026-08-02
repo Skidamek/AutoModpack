@@ -124,7 +124,7 @@ class GenerationStoreImmutableObjectTest {
 		Jsons.GroupDeclaration main = new Jsons.GroupDeclaration();
 		main.syncedFiles = Set.of();
 		var request = new ModpackCandidateScanner.Request("abc1234", "Test", "1", "fabric", "1", "1", tempDir.resolve("server"),
-				tempDir.resolve("groups"), Map.of("main", main), Map.of(), Set.of(), false, false, tempDir.resolve("host-generations/staging"), direct);
+				tempDir.resolve("groups"), Map.of("main", main), Map.of(), false, false, tempDir.resolve("host-generations/staging"), direct);
 		return new ModpackCandidateScanner().scan(request);
 	}
 

@@ -157,7 +157,6 @@ class GenerationStoreTest {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.selectionTags = Map.of();
-		fields.nonModpackFilesToDelete = java.util.Set.of();
 		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		group.description = description;
 		group.files = Map.of("config/example.txt", new Jsons.CompleteModpackContentFields.GroupFileFields(String.valueOf(size), "other", false, false, false, hash, null));
