@@ -94,27 +94,25 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 		Path contentFile = ModpackUtils.getModpackPath(modpackId).resolve(modpackCatalogueFileName);
 		GroupManifest manifest = Optional.ofNullable(ModpackContentTools.readGenerationRecord(contentFile)).map(record -> record.manifest()).orElse(null);
-		if (manifest == null || manifest.groups().isEmpty()) {
-			LOGGER.info("Modpack {} declares no groups", modpackId);
+		if (manifest == null) {
+			LOGGER.info("Modpack {} catalogue is unavailable", modpackId);
 			return parent;
 		}
 
 		return new ModpackSelectionScreen(parent, manifest);
 	}
 
-	public static boolean hasGroupsToConfigure() {
-		return modpackHasOptionalGroups(clientConfig == null ? null : clientConfig.selectedModpackId);
+	public static boolean hasModpackManagement() {
+		return modpackHasCatalogue(clientConfig == null ? null : clientConfig.selectedModpackId);
 	}
 
 
-	private static boolean modpackHasOptionalGroups(String modpackId) {
+	private static boolean modpackHasCatalogue(String modpackId) {
 		if (modpackId == null || modpackId.isBlank()) return false;
 
 		GroupManifest manifest = Optional.ofNullable(ModpackContentTools.readGenerationRecord(ModpackUtils.getModpackPath(modpackId).resolve(modpackCatalogueFileName)))
 				.map(record -> record.manifest()).orElse(null);
-		if (manifest == null) return false;
-		// Nothing worth showing a button for when every available group is mandatory.
-		return manifest.groups().values().stream().anyMatch(group -> !isMandatory(manifest, group) && group.supports(ClientPlatform.current()));
+		return manifest != null;
 	}
 
 	@Override
@@ -174,7 +172,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			}));
 		}
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 80, 310, 20, VersionedText.literal("Remove modpack and restore instance"), press -> requestRemoval()));
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 80, 150, 20, VersionedText.literal("Remove modpack"), press -> requestRemoval()));
+		this.addRenderableWidget(buttonWidget(this.width / 2 + 5, this.height - 80, 150, 20, VersionedText.literal("Recovery archive"), press -> requestRecovery()));
 
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.reset"),
 				press -> {
@@ -229,26 +228,29 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		this.minecraft.gui.setScreen(new GroupInspectorScreen(this, manifest, groupId));
 	}
 
-	private void requestRemoval() {
+	private ModpackUpdater createUpdater() {
 		if (clientConfig == null || clientConfig.modpackConnections == null) {
 			new ScreenManager().error("automodpack.error.critical", "The modpack connection is unavailable", "automodpack.error.logs");
-			return;
+			return null;
 		}
 		Jsons.ConnectionInfo connection = clientConfig.modpackConnections.get(modpackId);
 		if (connection == null || !connection.isComplete()) {
 			new ScreenManager().error("automodpack.error.critical", "The modpack connection is unavailable", "automodpack.error.logs");
-			return;
+			return null;
 		}
 		Secrets.Secret secret = SecretsStore.getClientSecret(connection.origin);
 		if (secret == null) secret = Secrets.anonymousSecret();
-		ModpackUpdater updater;
 		try {
-			updater = new ModpackUpdater(connection, secret, ModpackUtils.getModpackPath(modpackId));
+			return new ModpackUpdater(connection, secret, ModpackUtils.getModpackPath(modpackId));
 		} catch (RuntimeException e) {
 			new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
-			return;
+			return null;
 		}
-		ModpackUpdater removalUpdater = updater;
+	}
+
+	private void requestRemoval() {
+		ModpackUpdater removalUpdater = createUpdater();
+		if (removalUpdater == null) return;
 		DownloadClient.NET_EXECUTOR.execute(() -> {
 			try {
 				UpdatePreview preview = removalUpdater.previewRemoval();
@@ -257,6 +259,19 @@ public class ModpackSelectionScreen extends VersionedScreen {
 						(Runnable) removalUpdater::close, true);
 			} catch (Exception e) {
 				removalUpdater.close();
+				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			}
+		});
+	}
+
+	private void requestRecovery() {
+		ModpackUpdater recoveryUpdater = createUpdater();
+		if (recoveryUpdater == null) return;
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			try {
+				new ScreenManager().recovery(recoveryUpdater, recoveryUpdater.recoverySnapshot(), modpackName);
+			} catch (Exception e) {
+				recoveryUpdater.close();
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});
