@@ -52,6 +52,11 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
+	public void recovery(Object... args) {
+		executeOnClient(() -> Screens.recovery(args));
+	}
+
+	@Override
 	public void error(String... args) {
 		executeOnClient(() -> Screens.error(args));
 	}
@@ -128,6 +133,11 @@ public class ScreenImpl implements ScreenService {
 			Screen parent = Screens.getScreen();
 			boolean removal = args.length > 4 && Boolean.TRUE.equals(args[4]);
 			Screens.setScreen(new UpdatePreviewScreen(parent, (pl.skidam.automodpack_core.update.UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3]));
+		}
+
+		public static void recovery(Object... args) {
+			Screen parent = Screens.getScreen();
+			Screens.setScreen(new RecoveryArchiveScreen(parent, (ModpackUpdater) args[0], (ModpackUpdater.RecoverySnapshot) args[1], (String) args[2]));
 		}
 
 		public static void error(String... errors) {

@@ -16,6 +16,8 @@ public interface ScreenService {
 
 	boolean preview(Object... args);
 
+	void recovery(Object... args);
+
 	void error(String... args);
 
 	void menu(Object... args);
