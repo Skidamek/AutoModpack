@@ -25,10 +25,14 @@ import java.util.stream.Stream;
 import org.jetbrains.annotations.Nullable;
 
 import pl.skidam.automodpack_core.auth.Secrets;
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
+import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -169,6 +173,45 @@ public class ModpackUpdater implements AutoCloseable {
 			return result.restartReasons().contains(RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : UpdateType.UPDATE;
 		} finally {
 			close();
+		}
+	}
+
+	// Remove the installed modpack and restore baseline files before metadata cleanup.
+	public UpdateTransactionExecutor.Execution removeModpack() throws Exception {
+		modpackContentFile = modpackDir.resolve(modpackContentFileName);
+		Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackContentFile);
+		if (installed == null) throw new IOException("Installed modpack content is missing");
+		Path completeCataloguePath = modpackDir.resolve(modpackCatalogueFileName);
+		Jsons.CompleteModpackContentFields completeFields = ModpackContentTools.readCompleteFields(completeCataloguePath);
+		if (completeFields == null) throw new IOException("Complete modpack catalogue is missing");
+		Jsons.ClientBaselineFields baseline = ConfigTools.read(modpackDir.resolve(modpackBaselineFileName), Jsons.ClientBaselineFields.class)
+				.orElseGet(() -> {
+					Jsons.ClientBaselineFields empty = new Jsons.ClientBaselineFields();
+					empty.modpackId = installed.modpackId;
+					return empty;
+				});
+		Jsons.ClientConfigFieldsV3 currentConfig = ConfigTools.read(SmartFileUtils.CWD.resolve(clientConfigFile), Jsons.ClientConfigFieldsV3.class)
+				.orElseGet(Jsons.ClientConfigFieldsV3::new);
+		if (currentConfig.modpackConnections == null) currentConfig.modpackConnections = new HashMap<>();
+		Jsons.ClientConfigFieldsV3 plannedConfig = new Jsons.ClientConfigFieldsV3(currentConfig);
+		plannedConfig.modpackConnections.remove(installed.modpackId);
+		if (installed.modpackId.equals(plannedConfig.selectedModpackId)) plannedConfig.selectedModpackId = "";
+		clientConfig = currentConfig;
+
+		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+			Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(installed, installed, null, cache);
+			Set<String> availableBaselineObjects = new HashSet<>();
+			if (baseline.entries != null) for (var entry : baseline.entries) {
+				if (entry == null || entry.absent || entry.objectHash == null || entry.size < 0) continue;
+				String hash = entry.objectHash.toLowerCase(Locale.ROOT);
+				if (SmartFileUtils.isValidFile(storeDir.resolve(hash), entry.size, hash)) availableBaselineObjects.add(hash);
+			}
+			UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, availableBaselineObjects, plannedConfig));
+			SelectionIntent expectedPriorIntent = new ClientSelectionStore(SmartFileUtils.CWD.resolve(clientSelectionFile)).get(installed.modpackId).orElse(null);
+			UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, completeFields, installed, modpackDir, ClientPlatform.current(), expectedPriorIntent);
+			UpdateTransactionExecutor.Execution execution = UpdateTransactionSupport.executor(transaction).commit(transaction);
+			if (execution.success()) clientConfig = plannedConfig;
+			return execution;
 		}
 	}
 

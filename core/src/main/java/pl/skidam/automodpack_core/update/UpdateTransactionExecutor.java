@@ -94,8 +94,13 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void claimSelection(UpdateTransaction transaction) throws IOException {
-		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) return;
-		new ClientSelectionStore(context.selectionFile()).compareAndSet(transaction.modpackId, transaction.expectedPriorIntent(), transaction.targetIntent());
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && transaction.purpose != UpdateTransaction.Purpose.MODPACK_REMOVAL) return;
+		ClientSelectionStore selections = new ClientSelectionStore(context.selectionFile());
+		if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE)
+			selections.compareAndSet(transaction.modpackId, transaction.expectedPriorIntent(), transaction.targetIntent());
+		else
+			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL)
+				selections.remove(transaction.modpackId, transaction.expectedPriorIntent());
 	}
 
 	public UpdateTransaction readPersisted() {
@@ -157,6 +162,7 @@ public final class UpdateTransactionExecutor {
 				validatePlannedClientConfig(transaction);
 				validateOrderedMetadata(transaction);
 			}
+			case MODPACK_REMOVAL -> manifest = validateRemovalMetadata(transaction);
 			case SELF_UPDATE -> validateSelfUpdateMetadata(transaction);
 			case LEGACY_DUMMY_CLEANUP -> validateLegacyDummyCleanupMetadata(transaction);
 		}
@@ -185,9 +191,10 @@ public final class UpdateTransactionExecutor {
 		}
 		validateBaselineCaptures(transaction);
 		validatePreservations(transaction, finalState, manifest);
-		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !operationKeys.equals(finalState.keySet()))
+		if ((transaction.purpose == UpdateTransaction.Purpose.SELF_UPDATE || transaction.purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP)
+				&& !operationKeys.equals(finalState.keySet()))
 			throw new IOException("Special-purpose transaction operations and projected final state must match exactly");
-		if (manifest != null) validateManifestProjection(manifest, finalState);
+		if (manifest != null && transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) validateManifestProjection(manifest, finalState);
 	}
 
 	private void validateModpackIdentity(UpdateTransaction transaction) throws IOException {
@@ -211,6 +218,48 @@ public final class UpdateTransactionExecutor {
 		if (context.selectionFile() == null || !context.selectionFile().toAbsolutePath().normalize()
 				.equals(context.gameDirectory().resolve(clientSelectionFile).toAbsolutePath().normalize()))
 			throw new IOException("Selection store path does not match AutoModpack storage");
+	}
+
+	private Jsons.ModpackContentFields validateRemovalMetadata(UpdateTransaction transaction) throws IOException {
+		ModpackId.requireValid(transaction.modpackId);
+		validateModpackIdentity(transaction);
+		Jsons.ModpackContentFields manifest;
+		GenerationRecord completeRecord;
+		try {
+			manifest = transaction.targetManifest();
+			completeRecord = transaction.completeGenerationRecord();
+		} catch (RuntimeException e) {
+			throw new IOException("Removal catalogue metadata is invalid", e);
+		}
+		validateManifest(manifest, transaction.modpackId);
+		validateGenerationIdentity(transaction, completeRecord, manifest);
+		if (transaction.targetPlatform == null) throw new IOException("Removal platform is missing");
+		try {
+			transaction.platform();
+		} catch (RuntimeException e) {
+			throw new IOException("Removal platform is invalid", e);
+		}
+		if (transaction.expectedPriorRequestedGroups == null || (!transaction.expectedPriorSelectionPresent && !transaction.expectedPriorRequestedGroups.isEmpty()))
+			throw new IOException("Removal selection metadata is inconsistent");
+		if (!transaction.expectedPriorRequestedGroups.equals(transaction.expectedPriorRequestedGroups.stream().distinct().sorted().toList())
+				|| transaction.requestedGroups == null || !transaction.requestedGroups.isEmpty())
+			throw new IOException("Removal selection metadata is invalid");
+		if (transaction.plannedClientConfig == null) throw new IOException("Removal client config is missing");
+		validateRemovalClientConfig(transaction);
+		validateOrderedMetadata(transaction);
+		GenerationRecord storedCatalogue = ModpackContentTools.readGenerationRecord(context.completeCatalogueFile());
+		if (storedCatalogue != null && !storedCatalogue.equals(completeRecord)) throw new IOException("Stored complete catalogue does not match removal target");
+		Jsons.ModpackContentFields storedManifest = ModpackContentTools.read(context.installedManifestFile());
+		if (storedManifest != null && !flatManifestState(storedManifest).equals(flatManifestState(manifest)))
+			throw new IOException("Stored selected manifest does not match removal target");
+		return manifest;
+	}
+
+	private void validateRemovalClientConfig(UpdateTransaction transaction) throws IOException {
+		Jsons.ClientConfigFieldsV3 config = transaction.plannedClientConfig;
+		if (config.modpackConnections == null || transaction.modpackId.equals(config.selectedModpackId)
+				|| config.modpackConnections.containsKey(transaction.modpackId))
+			throw new IOException("Removal client config still selects the removed modpack");
 	}
 
 	private static void validateSelfUpdateMetadata(UpdateTransaction transaction) throws IOException {
@@ -270,6 +319,10 @@ public final class UpdateTransactionExecutor {
 			Path relative = Path.of(operation.relativePath());
 			if (relative.getNameCount() != 1 || !relative.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
 				throw new IOException("Self-update target must be a direct JAR child of the mods directory");
+		} else if (purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
+			if ((operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE)
+					|| (operation.root() != Root.MODPACK_DIR && operation.root() != Root.GAME_DIR && operation.root() != Root.MODS_DIR))
+				throw new IOException("Modpack removal operations are restricted to managed files");
 		} else if (purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP) {
 			if (operation.operation() != OperationType.DELETE
 					|| (operation.root() != Root.GAME_DIR && operation.root() != Root.MODS_DIR && operation.root() != Root.AUTOMODPACK_DIR)
@@ -512,8 +565,9 @@ public final class UpdateTransactionExecutor {
 
 	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState,
 			Jsons.ModpackContentFields manifest) throws IOException {
-		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
-			if (!transaction.plannedPreservations.isEmpty()) throw new IOException("Only modpack updates can preserve deleted files");
+		boolean removal = transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL;
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !removal) {
+			if (!transaction.plannedPreservations.isEmpty()) throw new IOException("Only modpack transactions can preserve deleted files");
 			return;
 		}
 		if (manifest == null) throw new IOException("Preservation validation has no target manifest");
@@ -545,7 +599,7 @@ public final class UpdateTransactionExecutor {
 			validateHash(preservation.expectedHash(), "preservation SHA-1");
 			if (preservation.expectedSize() < 0) throw new IOException("Invalid preservation size");
 			String logicalPath = preservation.root() == Root.MODS_DIR ? "mods/" + relative : relative;
-			if (targetPaths.contains(logicalPath)) throw new IOException("Preservation target remains in the selected target");
+			if (!removal && targetPaths.contains(logicalPath)) throw new IOException("Preservation target remains in the selected target");
 			OwnershipLedger.Entry ledgerEntry = ledger.entries().get(logicalPath);
 			if (ledgerEntry == null || !ledgerEntry.historicalHashes().contains(new OwnershipLedger.Content(preservation.expectedHash().toLowerCase(Locale.ROOT), preservation.expectedSize())))
 				throw new IOException("Preservation target is not owned by the target ledger");
@@ -566,8 +620,9 @@ public final class UpdateTransactionExecutor {
 	}
 
 	private void validateInstall(Operation operation, ProjectedFile projected) throws IOException {
-		if (operation.root() == Root.STORE_DIR || operation.expectedExistingHash() != null) throw new IOException("Invalid install operation root/metadata");
+		if (operation.root() == Root.STORE_DIR) throw new IOException("Invalid install operation root/metadata");
 		validateHash(operation.expectedObjectHash(), "install SHA-1");
+		if (operation.expectedExistingHash() != null) validateHash(operation.expectedExistingHash(), "install expected SHA-1");
 		if (operation.expectedSize() < 0 || !projected.present() || operation.expectedSize() != projected.expectedSize()
 				|| !operation.expectedObjectHash().equalsIgnoreCase(projected.expectedHash()))
 			throw new IOException("Install operation does not match projected final state");
@@ -608,6 +663,13 @@ public final class UpdateTransactionExecutor {
 				}
 			}
 			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) captureBaselines(transaction);
+			for (Operation operation : transaction.operations) {
+				if (operation.operation() != OperationType.INSTALL_OBJECT || operation.expectedExistingHash() == null) continue;
+				Path target = resolve(operation);
+				long targetSize = Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS) ? Files.size(target) : -1;
+				if (!SmartFileUtils.isValidFile(target, targetSize, operation.expectedExistingHash()))
+					throw new IOException("Restore target changed after planning: " + target);
+			}
 			List<SmartFileUtils.CopyRequest> copies = new ArrayList<>();
 			for (Operation operation : transaction.operations) {
 				if (operation.operation() != OperationType.INSTALL_OBJECT) continue;
@@ -670,6 +732,10 @@ public final class UpdateTransactionExecutor {
 				blockedPath = null;
 				verifyFinalState(transaction.projectedFinalState, transaction.purpose);
 				ModpackContentTools.write(context.installedManifestFile(), transaction.targetManifest());
+			} else if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_REMOVAL) {
+				ConfigTools.writeAtomic(context.clientConfigFile(), transaction.plannedClientConfig);
+				current = null;
+				removeModpackMetadata();
 			} else if (transaction.purpose == UpdateTransaction.Purpose.LEGACY_DUMMY_CLEANUP) {
 				current = null;
 				blockedPath = context.automodpackDirectory().resolve("automodpack-dummy-files.json");
@@ -689,6 +755,16 @@ public final class UpdateTransactionExecutor {
 						e.getMessage());
 			}
 			throw new UpdateExecutionException(current == null ? null : current.operation().name(), blockedPath, e);
+		}
+	}
+
+	private void removeModpackMetadata() throws IOException {
+		Path baseline = context.modpackDirectory().resolve(modpackBaselineFileName).toAbsolutePath().normalize();
+		Path installedManifest = context.installedManifestFile().toAbsolutePath().normalize();
+		Path completeCatalogue = context.completeCatalogueFile().toAbsolutePath().normalize();
+		for (Path metadata : List.of(baseline, installedManifest, completeCatalogue)) {
+			validateNoSymbolicLinkDescendants(context.automodpackDirectory(), metadata);
+			Files.deleteIfExists(metadata);
 		}
 	}
 

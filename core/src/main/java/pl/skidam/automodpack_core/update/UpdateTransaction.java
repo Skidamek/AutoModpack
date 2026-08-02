@@ -79,6 +79,44 @@ public final class UpdateTransaction {
 		return transaction;
 	}
 
+	public static UpdateTransaction createRemoval(UpdatePlan plan, Jsons.CompleteModpackContentFields completeFields,
+			Jsons.ModpackContentFields installedManifest, Path modpackDirectory, ClientPlatform platform) {
+		return createRemoval(plan, completeFields, installedManifest, modpackDirectory, platform, null);
+	}
+
+	public static UpdateTransaction createRemoval(UpdatePlan plan, Jsons.CompleteModpackContentFields completeFields,
+			Jsons.ModpackContentFields installedManifest, Path modpackDirectory, ClientPlatform platform, SelectionIntent expectedPriorIntent) {
+		Objects.requireNonNull(plan, "plan");
+		Objects.requireNonNull(completeFields, "completeFields");
+		Objects.requireNonNull(installedManifest, "installedManifest");
+		Objects.requireNonNull(platform, "platform");
+		GenerationRecord completeRecord = GenerationRecord.fromFields(completeFields);
+		if (!plan.modpackId().equals(installedManifest.modpackId) || !plan.modpackId().equals(completeRecord.manifest().modpackId()))
+			throw new IllegalArgumentException("Removal records belong to different modpack lineages");
+		if (!plan.generationTarget().equals(GenerationTarget.fromFlat(installedManifest))
+				|| !plan.generationTarget().equals(GenerationTarget.from(completeRecord.metadata())))
+			throw new IllegalArgumentException("Removal generation identities disagree");
+		UpdateTransaction transaction = base(Purpose.MODPACK_REMOVAL);
+		transaction.modpackId = plan.modpackId();
+		transaction.targetGenerationId = plan.generationTarget().targetGenerationId();
+		transaction.parentGenerationId = plan.generationTarget().parentGenerationId();
+		transaction.stateDigest = plan.generationTarget().stateDigest();
+		transaction.completeManifestJson = ConfigTools.GSON.toJson(completeFields);
+		transaction.targetManifestJson = ConfigTools.GSON.toJson(installedManifest);
+		transaction.targetPlatform = platform.id();
+		transaction.expectedPriorSelectionPresent = expectedPriorIntent != null;
+		transaction.expectedPriorRequestedGroups = expectedPriorIntent == null ? List.of() : new ArrayList<>(expectedPriorIntent.requestedGroups());
+		transaction.requestedGroups = List.of();
+		transaction.canonicalModpackDirectory = modpackDirectory.toAbsolutePath().normalize().toString();
+		transaction.operations = List.copyOf(plan.operations());
+		transaction.projectedFinalState = List.copyOf(plan.projectedFinalState());
+		transaction.plannedClientConfig = plan.plannedClientConfig();
+		transaction.restartReasons = new ArrayList<>(new LinkedHashSet<>(plan.restartReasons()));
+		transaction.plannedPreservations = List.copyOf(plan.preservations());
+		transaction.plannedBaselineCaptures = List.copyOf(plan.baselineCaptures());
+		return transaction;
+	}
+
 	public static UpdateTransaction createSelfUpdate(String currentJar, String targetJar, String targetHash, long targetSize, String currentHash) {
 		UpdateTransaction transaction = base(Purpose.SELF_UPDATE);
 		List<Operation> operations = new ArrayList<>();
@@ -148,6 +186,7 @@ public final class UpdateTransaction {
 
 	public enum Purpose {
 		MODPACK_UPDATE,
+		MODPACK_REMOVAL,
 		SELF_UPDATE,
 		LEGACY_DUMMY_CLEANUP
 	}
