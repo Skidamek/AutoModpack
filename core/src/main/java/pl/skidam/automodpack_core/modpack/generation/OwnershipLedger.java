@@ -144,7 +144,7 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 			}
 			Set<Content> hashes = new TreeSet<>(CONTENT_ORDER);
 			if (old != null) hashes.addAll(old.historicalHashes());
-			hashes.add(now.content());
+			hashes.addAll(now.contents());
 			Set<String> groups = new TreeSet<>();
 			if (old != null) groups.addAll(old.historicalGroupIds());
 			groups.addAll(now.groupIds());
@@ -199,10 +199,13 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		for (var groupEntry : manifest.groups().entrySet()) for (var fileEntry : groupEntry.getValue().files().entrySet()) {
 			String path = LogicalPath.normalize(fileEntry.getKey());
 			GroupManifest.GroupFile file = fileEntry.getValue();
-			CurrentPath next = new CurrentPath(new Content(file.sha1().toLowerCase(Locale.ROOT), file.size()), Set.of(groupEntry.getKey()));
-			CurrentPath previous = result.putIfAbsent(path, next);
-			if (previous != null && !previous.content().equals(next.content())) throw new IllegalArgumentException("Conflicting current ownership for path: " + path);
-			if (previous != null) result.put(path, new CurrentPath(previous.content(), union(previous.groupIds(), next.groupIds())));
+			Content content = new Content(file.sha1().toLowerCase(Locale.ROOT), file.size());
+			CurrentPath previous = result.get(path);
+			TreeSet<Content> contents = new TreeSet<>(CONTENT_ORDER);
+			if (previous != null) contents.addAll(previous.contents());
+			contents.add(content);
+			result.put(path, new CurrentPath(Collections.unmodifiableNavigableSet(contents),
+					union(previous == null ? Set.of() : previous.groupIds(), Set.of(groupEntry.getKey()))));
 		}
 		return result;
 	}
@@ -230,5 +233,5 @@ public record OwnershipLedger(String modpackId, NavigableMap<String, Entry> entr
 		return value;
 	}
 
-	private record CurrentPath(Content content, Set<String> groupIds) {}
+	private record CurrentPath(NavigableSet<Content> contents, Set<String> groupIds) {}
 }
