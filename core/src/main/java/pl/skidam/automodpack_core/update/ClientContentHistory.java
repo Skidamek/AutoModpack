@@ -14,19 +14,24 @@ import java.util.TreeSet;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
+import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 
 public final class ClientContentHistory {
 	public static final int SCHEMA_VERSION = 1;
 
 	private ClientContentHistory() {}
 
-	public record Entry(String generationId, String stateDigest, String modpackName, String recordedAt, Set<String> selectedGroups) {
+	public record Entry(String stateDigest, String modpackName, String patchNotes, String recordedAt, Set<String> selectedTags, Set<String> selectedGroups,
+			String fileSummary) {
 		public Entry {
-			if (generationId == null || !generationId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid history generation ID");
 			if (stateDigest == null || !stateDigest.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid history state digest");
 			modpackName = modpackName == null ? "" : modpackName;
+			patchNotes = GenerationMetadata.validateNotes(patchNotes == null ? "" : patchNotes);
 			recordedAt = requireInstant(recordedAt);
+			selectedTags = Set.copyOf(new TreeSet<>(selectedTags == null ? Set.of() : selectedTags));
 			selectedGroups = Set.copyOf(new TreeSet<>(selectedGroups == null ? Set.of() : selectedGroups));
+			fileSummary = fileSummary == null ? "" : fileSummary;
 		}
 	}
 
@@ -58,7 +63,7 @@ public final class ClientContentHistory {
 			if (field == null) throw new IOException("Client content history entry is incomplete");
 			Entry entry;
 			try {
-				entry = new Entry(field.generationId, field.stateDigest, field.modpackName, field.recordedAt, field.selectedGroups);
+				entry = new Entry(field.stateDigest, field.modpackName, field.patchNotes, field.recordedAt, field.selectedTags, field.selectedGroups, field.fileSummary);
 			} catch (RuntimeException e) {
 				throw new IOException("Client content history entry is invalid", e);
 			}
@@ -68,14 +73,16 @@ public final class ClientContentHistory {
 		return new History(fields.modpackId, entries);
 	}
 
-	public static void record(Path historyFile, Jsons.ModpackContentFields target) throws IOException {
+	public static void record(Path historyFile, Jsons.ModpackContentFields target, ResolvedSelection selection, String patchNotes) throws IOException {
+		Objects.requireNonNull(historyFile, "historyFile");
 		Objects.requireNonNull(target, "target");
 		ModpackId.requireValid(target.modpackId);
-		if (target.targetGenerationId == null || !target.targetGenerationId.matches("[0-9a-f]{40}")) throw new IOException("Target generation ID is invalid");
 		if (target.stateDigest == null || !target.stateDigest.matches("[0-9a-f]{40}")) throw new IOException("Target state digest is invalid");
 		History history = read(historyFile);
 		if (!history.modpackId().isEmpty() && !history.modpackId().equals(target.modpackId)) throw new IOException("Client content history modpack ID changed");
-		Entry next = new Entry(target.targetGenerationId, target.stateDigest, target.modpackName, Instant.now().toString(), target.selectedGroups);
+		Set<String> selectedTags = selection == null ? Set.of() : selection.intent().requestedTags();
+		Set<String> selectedGroups = selection == null ? target.selectedGroups : selection.selectedGroups();
+		Entry next = new Entry(target.stateDigest, target.modpackName, patchNotes, Instant.now().toString(), selectedTags, selectedGroups, fileSummary(target));
 		List<Entry> entries = new ArrayList<>(history.entries());
 		int existing = -1;
 		for (int index = 0; index < entries.size(); index++) if (entries.get(index).stateDigest().equals(next.stateDigest())) {
@@ -93,14 +100,39 @@ public final class ClientContentHistory {
 		fields.entries = new ArrayList<>();
 		for (Entry entry : entries) {
 			Jsons.ClientContentHistoryFields.EntryFields field = new Jsons.ClientContentHistoryFields.EntryFields();
-			field.generationId = entry.generationId();
 			field.stateDigest = entry.stateDigest();
 			field.modpackName = entry.modpackName();
+			field.patchNotes = entry.patchNotes();
 			field.recordedAt = entry.recordedAt();
+			field.selectedTags = entry.selectedTags();
 			field.selectedGroups = entry.selectedGroups();
+			field.fileSummary = entry.fileSummary();
 			fields.entries.add(field);
 		}
 		ConfigTools.writeAtomic(historyFile, fields);
+	}
+
+	private static String fileSummary(Jsons.ModpackContentFields target) throws IOException {
+		if (target.list == null) throw new IOException("Target file list is missing");
+		long totalBytes = 0;
+		for (var item : target.list) {
+			if (item == null || item.file == null || item.file.isBlank()) throw new IOException("Target file entry is incomplete");
+			try {
+				long size = Long.parseLong(item.size);
+				if (size < 0) throw new NumberFormatException("negative size");
+				totalBytes = Math.addExact(totalBytes, size);
+			} catch (NumberFormatException | ArithmeticException e) {
+				throw new IOException("Target file size is invalid", e);
+			}
+		}
+		return target.list.size() + " files, " + formatBytes(totalBytes);
+	}
+
+	private static String formatBytes(long bytes) {
+		if (bytes < 1024) return bytes + " B";
+		if (bytes < 1024 * 1024) return (bytes / 1024) + " KiB";
+		if (bytes < 1024L * 1024L * 1024L) return (bytes / (1024 * 1024)) + " MiB";
+		return (bytes / (1024L * 1024L * 1024L)) + " GiB";
 	}
 
 	private static String requireInstant(String value) {

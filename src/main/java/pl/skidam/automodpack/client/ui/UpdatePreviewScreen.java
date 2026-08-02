@@ -1,5 +1,6 @@
 package pl.skidam.automodpack.client.ui;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
@@ -13,7 +14,7 @@ import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 
 public final class UpdatePreviewScreen extends VersionedScreen {
-	private static final int ROWS_PER_PAGE = 7;
+	private static final int ROWS_PER_PAGE = 5;
 
 	private final Screen parent;
 	private final UpdatePreview preview;
@@ -77,8 +78,8 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 	private void cancel() {
 		if (finished) return;
 		finished = true;
-		cancelAction.run();
 		this.minecraft.gui.setScreen(parent);
+		cancelAction.run();
 	}
 
 	@Override
@@ -86,30 +87,41 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 		String title = removal
 				? (modpackName.isBlank() ? "Remove modpack" : "Remove " + modpackName)
 				: (modpackName.isBlank() ? "Update preview" : modpackName + " update preview");
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), this.width / 2, 10, TextColors.WHITE);
 
-		UpdatePlan plan = preview.plan();
-		String digest = plan.generationTarget().stateDigest();
-		String targetText = (removal ? "Restoring instance from " : "Target content: ") + digest.substring(0, Math.min(12, digest.length()));
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(targetText).withStyle(ChatFormatting.GRAY), this.width / 2, 29, TextColors.WHITE);
+		int headerY = 24;
+		List<String> notes = preview.patchNotes().isBlank() ? List.of("No patch notes published.") : limitedLines(preview.patchNotes(), 2);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Patch notes:").withStyle(ChatFormatting.YELLOW), this.width / 2, headerY, TextColors.WHITE);
+		for (String note : notes) {
+			headerY += 12;
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(note).withStyle(ChatFormatting.WHITE), this.width / 2, headerY, TextColors.WHITE);
+		}
 
-		String groupText = "Groups: " + preview.groupConsequences().explicitGroups().size() + " explicit, "
-				+ preview.groupConsequences().resolvedGroups().size() + " active, "
-				+ preview.groupConsequences().staleGroups().size() + " stale";
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(groupText).withStyle(ChatFormatting.GRAY), this.width / 2, 42, TextColors.WHITE);
+		UpdatePreview.GroupConsequences groups = preview.groupConsequences();
+		headerY += 15;
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Tags: " + join(groups.explicitTags())).withStyle(ChatFormatting.GRAY), this.width / 2, headerY, TextColors.WHITE);
+		headerY += 12;
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Groups: " + join(groups.resolvedGroups())).withStyle(ChatFormatting.GRAY), this.width / 2, headerY, TextColors.WHITE);
+		headerY += 12;
+		String stale = groups.staleTags().isEmpty() && groups.staleGroups().isEmpty()
+				? "none"
+				: "tags=" + join(groups.staleTags()) + " groups=" + join(groups.staleGroups());
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Stale choices: " + stale).withStyle(groups.staleTags().isEmpty() && groups.staleGroups().isEmpty()
+				? ChatFormatting.GRAY
+				: ChatFormatting.RED), this.width / 2, headerY, TextColors.WHITE);
 
 		List<UpdatePreview.Entry> entries = preview.entries();
 		int start = page * ROWS_PER_PAGE;
 		int end = Math.min(entries.size(), start + ROWS_PER_PAGE);
 		for (int index = start; index < end; index++) {
 			UpdatePreview.Entry entry = entries.get(index);
-			int y = 62 + (index - start) * 18;
+			int y = 100 + (index - start) * 18;
 			String line = kindText(entry.kind()) + "  " + rootText(entry.root()) + ":/" + shortPath(entry.relativePath()) + "  (" + formatSize(entry.size()) + ")";
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(color(entry.kind())), this.width / 2, y, TextColors.WHITE);
 		}
 
 		if (entries.isEmpty()) {
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("No file changes are required.").withStyle(ChatFormatting.GREEN), this.width / 2, 78,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("No file changes are required.").withStyle(ChatFormatting.GREEN), this.width / 2, 100,
 					TextColors.WHITE);
 		}
 		String summary = "Added " + formatSize(preview.addedBytes()) + "  Changed " + formatSize(preview.changedBytes()) + "  Removed "
@@ -119,6 +131,27 @@ public final class UpdatePreviewScreen extends VersionedScreen {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal((page + 1) + " / " + pageCount()).withStyle(ChatFormatting.GRAY), this.width / 2, this.height - 27,
 					TextColors.WHITE);
 		}
+	}
+
+	private static List<String> limitedLines(String text, int limit) {
+		List<String> lines = new ArrayList<>();
+		for (String line : text.split("\\R", -1)) {
+			if (lines.size() == limit) break;
+			String trimmed = line.strip();
+			if (trimmed.length() > 100) trimmed = trimmed.substring(0, 97) + "...";
+			lines.add(trimmed);
+		}
+		return lines;
+	}
+
+	private static String join(Iterable<String> values) {
+		StringBuilder joined = new StringBuilder();
+		for (String value : values) {
+			if (joined.length() > 0) joined.append(", ");
+			joined.append(value);
+		}
+		String result = joined.length() == 0 ? "none" : joined.toString();
+		return result.length() <= 100 ? result : result.substring(0, 97) + "...";
 	}
 
 	private static String rootText(UpdatePlan.Root root) {

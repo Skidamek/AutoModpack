@@ -300,11 +300,13 @@ public class Jsons {
 		public List<EntryFields> entries = List.of();
 
 		public static class EntryFields {
-			public String generationId = "";
+			public String patchNotes = "";
 			public String stateDigest = "";
 			public String modpackName = "";
 			public String recordedAt = "";
+			public Set<String> selectedTags = Set.of();
 			public Set<String> selectedGroups = Set.of();
+			public String fileSummary = "";
 		}
 	}
 

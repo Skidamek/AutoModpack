@@ -47,6 +47,11 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
+	public void welcome(Object... args) {
+		executeOnClient(() -> Screens.welcome(args[0]));
+	}
+
+	@Override
 	public boolean preview(Object... args) {
 		executeOnClient(() -> Screens.preview(args));
 		return true;
@@ -133,6 +138,10 @@ public class ScreenImpl implements ScreenService {
 
 		public static void danger(Object modpackUpdaterInstance) {
 			Screens.setScreen(new DangerScreen((ModpackUpdater) modpackUpdaterInstance));
+		}
+
+		public static void welcome(Object modpackUpdaterInstance) {
+			Screens.setScreen(new FirstConnectScreen((ModpackUpdater) modpackUpdaterInstance));
 		}
 
 		public static void preview(Object... args) {
