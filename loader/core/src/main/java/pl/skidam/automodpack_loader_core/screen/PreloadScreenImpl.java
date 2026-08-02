@@ -21,6 +21,9 @@ public class PreloadScreenImpl implements ScreenService {
 	public void danger(Object... args) {}
 
 	@Override
+	public void welcome(Object... args) {}
+
+	@Override
 	public boolean preview(Object... args) {
 		return false;
 	}

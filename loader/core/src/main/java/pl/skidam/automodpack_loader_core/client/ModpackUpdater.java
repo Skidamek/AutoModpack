@@ -73,6 +73,7 @@ public class ModpackUpdater implements AutoCloseable {
 	public DownloadManager downloadManager;
 	public long totalBytesToDownload = 0;
 	public boolean fullDownload = false;
+	private boolean firstConnection;
 	private SelectedModpackTarget selectedTarget;
 	private Jsons.ModpackContentFields serverModpackContent;
 	public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
@@ -117,8 +118,24 @@ public class ModpackUpdater implements AutoCloseable {
 		return serverModpackContent.modpackName;
 	}
 
+	public SelectedModpackTarget getSelectedTarget() {
+		return Objects.requireNonNull(selectedTarget, "Selected modpack target is unavailable");
+	}
+
+	public String getPatchNotes() {
+		return getSelectedTarget().generationRecord().metadata().patchNotes();
+	}
+
 	public Set<Jsons.ModpackContentFields.ModpackContentItem> getModpackFileList() {
 		return serverModpackContent.list;
+	}
+
+	public void selectTarget(SelectionIntent intent) {
+		Objects.requireNonNull(intent, "intent");
+		SelectedModpackTarget current = getSelectedTarget();
+		SelectedModpackTarget replacement = SelectedModpackTarget.prepare(current.completeFields(), current.expectedPriorIntent(), intent, current.platform());
+		selectedTarget = replacement;
+		serverModpackContent = replacement.flatTarget();
 	}
 
 	public ConfirmationState getConfirmationState() {
@@ -168,9 +185,10 @@ public class ModpackUpdater implements AutoCloseable {
 				if (preload) {
 					startUpdate(serverModpackContent.list);
 				} else {
+					firstConnection = true;
 					fullDownload = true;
 					if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
-					new ScreenManager().danger(this);
+					new ScreenManager().welcome(this);
 				}
 			} else {
 				// Handle existing modpack
@@ -210,7 +228,8 @@ public class ModpackUpdater implements AutoCloseable {
 	// Build the removal plan without changing the installed files.
 	public UpdatePreview previewRemoval() throws Exception {
 		RemovalPreparation preparation = prepareRemoval();
-		return UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation), true, preparation.baseline());
+		return UpdatePreview.create(preparation.plan(), preparation.files(), preparation.installed(), removalSelection(preparation), true, preparation.baseline(),
+				preparation.completeFields().generation == null ? "" : preparation.completeFields().generation.patchNotes);
 	}
 
 	// Remove the installed modpack and restore baseline files before metadata cleanup.
@@ -686,9 +705,12 @@ public class ModpackUpdater implements AutoCloseable {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
 		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 			PreparedPlan prepared = buildPlan(cache, selectedTarget.flatTarget(), false);
-			UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false);
+			UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, getPatchNotes());
 			return new ScreenManager().preview(preview, getModpackName(),
-					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> startUpdateAfterPreview(filesToUpdate)), (Runnable) this::close);
+					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> startUpdateAfterPreview(filesToUpdate)), (Runnable) () -> {
+						close();
+						if (firstConnection) new ScreenManager().title();
+					});
 		}
 	}
 
@@ -844,7 +866,7 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 		clientConfig = plan.plannedClientConfig();
 		try {
-			ClientContentHistory.record(modpackDir.resolve(modpackHistoryFileName), target.flatTarget());
+			ClientContentHistory.record(modpackDir.resolve(modpackHistoryFileName), target.flatTarget(), target.selection(), getPatchNotes());
 		} catch (IOException e) {
 			LOGGER.warn("Modpack update succeeded, but client content history could not be written", e);
 		}

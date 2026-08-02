@@ -14,6 +14,8 @@ public interface ScreenService {
 
 	void danger(Object... args);
 
+	void welcome(Object... args);
+
 	boolean preview(Object... args);
 
 	void recovery(Object... args);

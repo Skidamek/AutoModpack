@@ -32,6 +32,11 @@ public class ScreenManager implements ScreenService {
 	}
 
 	@Override
+	public void welcome(Object... args) {
+		INSTANCE.welcome(args);
+	}
+
+	@Override
 	public boolean preview(Object... args) {
 		return INSTANCE.preview(args);
 	}
