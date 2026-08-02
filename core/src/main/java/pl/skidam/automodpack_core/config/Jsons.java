@@ -176,6 +176,8 @@ public class Jsons {
 		public String displayName = "";
 		public String description = "";
 		public String category = "";
+		public String projectUrl = "";
+		public String sourceUrl = "";
 
 		// If required, the client cannot uncheck it. recommended is ignored when required.
 		public boolean required = false;
@@ -337,6 +339,8 @@ public class Jsons {
 			public String displayName = "";
 			public String description = "";
 			public String category = "";
+			public String projectUrl = "";
+			public String sourceUrl = "";
 			public boolean required;
 			public boolean recommended;
 			public Set<String> breaksWith = Set.of();

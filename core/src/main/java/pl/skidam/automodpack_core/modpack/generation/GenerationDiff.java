@@ -146,7 +146,8 @@ public record GenerationDiff(
 
 	private static boolean sameGroupMetadata(GroupManifest.Group before, GroupManifest.Group after) {
 		return Objects.equals(before.displayName(), after.displayName()) && Objects.equals(before.description(), after.description())
-				&& Objects.equals(before.category(), after.category()) && before.required() == after.required() && before.recommended() == after.recommended()
+				&& Objects.equals(before.category(), after.category()) && Objects.equals(before.projectUrl(), after.projectUrl())
+				&& Objects.equals(before.sourceUrl(), after.sourceUrl()) && before.required() == after.required() && before.recommended() == after.recommended()
 				&& Objects.equals(before.breaksWith(), after.breaksWith()) && Objects.equals(before.requires(), after.requires())
 				&& Objects.equals(before.tags(), after.tags()) && Objects.equals(before.compatiblePlatforms(), after.compatiblePlatforms());
 	}

@@ -133,6 +133,8 @@ public final class ModpackCandidateScanner {
 				group.displayName = declaration.displayName;
 				group.description = declaration.description;
 				group.category = declaration.category;
+				group.projectUrl = declaration.projectUrl;
+				group.sourceUrl = declaration.sourceUrl;
 				group.required = declaration.required;
 				group.recommended = declaration.recommended;
 				group.breaksWith = sortedSet(declaration.breaksWith);

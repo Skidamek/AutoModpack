@@ -20,6 +20,32 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
+	void validatesAndRoundTripsGroupLinks() {
+		var fields = catalogue();
+		var group = group(file("a"));
+		group.projectUrl = "https://example.com/project";
+		group.sourceUrl = "http://github.com/example/project";
+		fields.groups = Map.of("main", group);
+
+		GroupManifest manifest = GroupManifestValidator.validate(fields);
+
+		assertEquals(group.projectUrl, manifest.groups().get("main").projectUrl());
+		assertEquals(group.sourceUrl, manifest.groups().get("main").sourceUrl());
+		assertEquals(ConfigTools.GSON.toJson(manifest.toFields()), ConfigTools.GSON.toJson(GroupManifestValidator.validate(manifest.toFields()).toFields()));
+	}
+
+	@Test
+	void rejectsNonCanonicalOrNonHttpGroupLinks() {
+		for (String value : List.of("https://example.com/a/../b", "ftp://example.com/project", "example.com/project", "https://user@example.com/project")) {
+			var fields = catalogue();
+			var group = group(file("a"));
+			group.projectUrl = value;
+			fields.groups = Map.of("main", group);
+			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), value);
+		}
+	}
+
+	@Test
 	void rejectsDifferentCoSelectableVariant() {
 		var fields = catalogue();
 		fields.groups = linkedGroups("main", group(file("a")), "visuals", group(file("b")));
