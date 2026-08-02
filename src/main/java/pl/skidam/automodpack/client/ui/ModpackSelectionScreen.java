@@ -36,8 +36,8 @@ import pl.skidam.automodpack_loader_core.screen.ScreenManager;
  */
 public class ModpackSelectionScreen extends VersionedScreen {
 
-	private static final int ROW_HEIGHT = 22;
-	private static final int ROW_WIDTH = 280;
+	private static final int ROW_HEIGHT = 24;
+	private static final int ROW_WIDTH = 320;
 
 	private final Screen parent;
 	private final GroupManifest manifest;
@@ -140,13 +140,17 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			var group = groups.get(groupId);
 			int y = listTop + (i - start) * ROW_HEIGHT;
 
-			Button button = buttonWidget(x, y, ROW_WIDTH, 20, rowLabel(groupId, group), press -> toggle(groupId));
+			Button button = buttonWidget(x, y, ROW_WIDTH - 68, 20, rowLabel(groupId, group), press -> toggle(groupId));
 			// Required groups are shown so the player can see what they are getting, but not togglable.
 			button.active = group != null && !isMandatory(manifest, group) && group.supports(ClientPlatform.current());
 			MutableComponent tooltip = rowTooltip(group);
 			// A disabled button still shows its tooltip, so required groups keep their description on hover.
 			if (tooltip != null) setTooltip(button, tooltip);
 			this.addRenderableWidget(button);
+			Button inspect = buttonWidget(x + ROW_WIDTH - 64, y, 64, 20, VersionedText.literal("Info"), press -> inspect(groupId));
+			inspect.active = group != null;
+			if (tooltip != null) setTooltip(inspect, tooltip);
+			this.addRenderableWidget(inspect);
 		}
 
 		if (pageCount > 1) {
@@ -213,6 +217,10 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		*//*?}*/
 	}
 
+	private void inspect(String groupId) {
+		this.minecraft.gui.setScreen(new GroupInspectorScreen(this, manifest, groupId));
+	}
+
 	private void save() {
 		try {
 			selectionStore.compareAndSet(modpackId, expectedSelection, new SelectionIntent(chosen));
@@ -224,10 +232,22 @@ public class ModpackSelectionScreen extends VersionedScreen {
 		}
 	}
 
-	/** The group's description, shown on hover. Null when the server set none, so no tooltip appears. */
+	/** The group's metadata, shown on hover. */
 	private MutableComponent rowTooltip(GroupManifest.Group group) {
-		if (group == null || group.description().isBlank()) return null;
-		return VersionedText.literal(group.description()).withStyle(ChatFormatting.GRAY);
+		if (group == null) return null;
+		StringBuilder tooltip = new StringBuilder();
+		if (!group.description().isBlank()) tooltip.append(group.description());
+		if (!group.tags().isEmpty()) appendTooltipLine(tooltip, "Tags: " + String.join(", ", group.tags()));
+		if (!group.requires().isEmpty()) appendTooltipLine(tooltip, "Requires: " + String.join(", ", group.requires()));
+		if (!group.breaksWith().isEmpty()) appendTooltipLine(tooltip, "Conflicts: " + String.join(", ", group.breaksWith()));
+		appendTooltipLine(tooltip, "Files: " + group.files().size());
+		appendTooltipLine(tooltip, group.supports(ClientPlatform.current()) ? "Available on this platform" : "Not available on this platform");
+		return VersionedText.literal(tooltip.toString()).withStyle(ChatFormatting.GRAY);
+	}
+
+	private static void appendTooltipLine(StringBuilder tooltip, String line) {
+		if (tooltip.length() > 0) tooltip.append('\n');
+		tooltip.append(line);
 	}
 
 	private MutableComponent rowLabel(String groupId, GroupManifest.Group group) {
@@ -235,9 +255,11 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 		String name = group.displayName().isBlank() ? groupId : group.displayName();
 		boolean on = resolved.contains(groupId);
+		boolean explicit = chosen.contains(groupId);
 
 		if (isMandatory(manifest, group)) return VersionedText.literal("[#] " + name + " (required)").withStyle(ChatFormatting.GRAY);
-		if (on) return VersionedText.literal("[x] " + name).withStyle(ChatFormatting.GREEN);
+		if (on && !explicit) return VersionedText.literal("[+] " + name + " (required by selection)").withStyle(ChatFormatting.AQUA);
+		if (explicit) return VersionedText.literal("[x] " + name).withStyle(ChatFormatting.GREEN);
 		return VersionedText.literal("[ ] " + name).withStyle(ChatFormatting.GRAY);
 	}
 

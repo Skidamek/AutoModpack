@@ -38,6 +38,7 @@ import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
 import pl.skidam.automodpack_core.update.UpdatePlanner;
+import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.update.UpdateTransaction;
 import pl.skidam.automodpack_core.update.UpdateTransactionExecutor;
 import pl.skidam.automodpack_core.utils.DownloadSource;
@@ -324,6 +325,18 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
+		try {
+			if (requestUpdatePreview(filesToUpdate)) return;
+		} catch (Exception e) {
+			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
+			LOGGER.error("Failed to prepare the modpack update preview", e);
+			close();
+			return;
+		}
+		startUpdateAfterPreview(filesToUpdate);
+	}
+
+	private void startUpdateAfterPreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
 		long start = System.currentTimeMillis();
 
 		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
@@ -552,8 +565,9 @@ public class ModpackUpdater implements AutoCloseable {
 	// this is run every time we modpack is updated
 	private ApplyResult applyModpack(FileMetadataCache cache, SelectedModpackTarget target) throws Exception {
 		if (target == null) throw new IllegalStateException("Selected modpack target is unavailable");
-		UpdatePlan plan = buildPlan(cache, target.flatTarget());
-		executePlan(plan, target);
+		PreparedPlan prepared = buildPlan(cache, target.flatTarget());
+		executePlan(prepared.plan(), target);
+		UpdatePlan plan = prepared.plan();
 
 		EnumSet<RestartReason> restartReasons = plan.restartReasons().stream().map(reason -> RestartReason.valueOf(reason.name()))
 				.collect(Collectors.toCollection(() -> EnumSet.noneOf(RestartReason.class)));
@@ -562,24 +576,39 @@ public class ModpackUpdater implements AutoCloseable {
 		return result;
 	}
 
-	private UpdatePlan buildPlan(FileMetadataCache cache, Jsons.ModpackContentFields target) throws Exception {
+	private PreparedPlan buildPlan(FileMetadataCache cache, Jsons.ModpackContentFields target) throws Exception {
+		return buildPlan(cache, target, true);
+	}
+
+	private PreparedPlan buildPlan(FileMetadataCache cache, Jsons.ModpackContentFields target, boolean prepareObjects) throws Exception {
 		Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackContentFile);
 		UpdatePlanner.SelectionContext selection = selectionContext(target.modpackId);
 		Map<UpdatePlan.FileKey, UpdatePlan.FileState> files = inspectFiles(target, installed, selection, cache);
-		populateSelectionObjects(selection, target, files);
+		if (prepareObjects) populateSelectionObjects(selection, target, files);
 		Set<String> forceCopyServices = getForceCopyMods(target).stream().map(UpdatePlanner::normalize).collect(Collectors.toSet());
 		List<UpdatePlan.ModInfo> targetMods = inspectTargetMods(target, cache);
 		List<UpdatePlan.ModInfo> standardMods = inspectStandardMods(cache);
-		List<UpdatePlan.NestedCopy> nestedCopies = inspectNestedCopies(target, cache);
+		List<UpdatePlan.NestedCopy> nestedCopies = prepareObjects ? inspectNestedCopies(target, cache) : List.of();
 		Jsons.ClientConfigFieldsV3 plannedConfig = ModpackUtils.planModpackSelection(target.modpackId, modpackDir, connectionInfo);
 
 		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(installed, target, files, forceCopyServices, targetMods, standardMods, nestedCopies, selection, plannedConfig));
-		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(target.loader, target.loaderVersion)) return plan;
+		if (!LauncherVersionSwapper.requiresLoaderVersionSwap(target.loader, target.loaderVersion)) return new PreparedPlan(plan, files);
 		Set<UpdatePlan.RestartReason> restartReasons = EnumSet.noneOf(UpdatePlan.RestartReason.class);
 		restartReasons.addAll(plan.restartReasons());
 		restartReasons.add(UpdatePlan.RestartReason.CHANGED_LOADER_VERSION);
-		return new UpdatePlan(plan.modpackId(), plan.generationTarget(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(),
-				restartReasons);
+		UpdatePlan withLoaderRestart = new UpdatePlan(plan.modpackId(), plan.generationTarget(), plan.operations(), plan.projectedFinalState(), plan.plannedClientConfig(),
+				restartReasons, plan.preservations(), plan.baselineCaptures());
+		return new PreparedPlan(withLoaderRestart, files);
+	}
+
+	private boolean requestUpdatePreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) throws Exception {
+		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
+		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+			PreparedPlan prepared = buildPlan(cache, selectedTarget.flatTarget(), false);
+			UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false);
+			return new ScreenManager().preview(preview, getModpackName(),
+					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> startUpdateAfterPreview(filesToUpdate)), (Runnable) this::close);
+		}
 	}
 
 	private UpdatePlanner.SelectionContext selectionContext(String targetModpackId) {
@@ -672,10 +701,12 @@ public class ModpackUpdater implements AutoCloseable {
 	private List<UpdatePlan.ModInfo> inspectTargetMods(Jsons.ModpackContentFields target, FileMetadataCache cache) {
 		List<UpdatePlan.ModInfo> mods = new ArrayList<>();
 		for (var item : target.list.stream().filter(value -> "mod".equals(value.type)).sorted(Comparator.comparing(value -> value.file)).toList()) {
+			long size = Long.parseLong(item.size);
 			Path source = storeDir.resolve(item.sha1);
-			if (!SmartFileUtils.isValidFile(source, Long.parseLong(item.size), item.sha1)) source = SmartFileUtils.getPath(modpackDir, item.file);
+			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) source = SmartFileUtils.getPath(modpackDir, item.file);
+			if (!SmartFileUtils.isValidFile(source, size, item.sha1)) continue;
 			FileInspection.Mod mod = FileInspection.getMod(source, cache);
-			if (mod != null) mods.add(new UpdatePlan.ModInfo(UpdatePlanner.normalize(item.file), item.sha1, Long.parseLong(item.size), mod.IDs(), mod.deps()));
+			if (mod != null) mods.add(new UpdatePlan.ModInfo(UpdatePlanner.normalize(item.file), item.sha1, size, mod.IDs(), mod.deps()));
 		}
 		return mods;
 	}
@@ -812,6 +843,12 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
+	private record PreparedPlan(UpdatePlan plan, Map<UpdatePlan.FileKey, UpdatePlan.FileState> originalFiles) {
+		private PreparedPlan {
+			originalFiles = Map.copyOf(originalFiles);
+		}
+	}
+
 	private record ApplyResult(EnumSet<RestartReason> restartReasons) {
 		private boolean requiresRestart() {
 			return !restartReasons.isEmpty();
@@ -837,8 +874,10 @@ public class ModpackUpdater implements AutoCloseable {
 		for (Jsons.ModpackContentFields.ModpackContentItem item : modpackContentFields.list) {
 			if (!item.type.equals("mod")) continue;
 
+			long size = Long.parseLong(item.size);
 			Path modPath = storeDir.resolve(item.sha1);
-			if (!SmartFileUtils.isValidFile(modPath, Long.parseLong(item.size), item.sha1)) modPath = SmartFileUtils.getPath(modpackDir, item.file);
+			if (!SmartFileUtils.isValidFile(modPath, size, item.sha1)) modPath = SmartFileUtils.getPath(modpackDir, item.file);
+			if (!SmartFileUtils.isValidFile(modPath, size, item.sha1)) continue;
 			try (FileSystem fs = FileSystems.newFileSystem(modPath)) {
 				if (!FileInspection.getServices(fs, forceCopyServices).isEmpty()) forceCopyMods.add(item.file);
 			}

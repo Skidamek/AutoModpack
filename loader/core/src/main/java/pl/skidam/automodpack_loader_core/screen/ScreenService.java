@@ -14,6 +14,8 @@ public interface ScreenService {
 
 	void danger(Object... args);
 
+	boolean preview(Object... args);
+
 	void error(String... args);
 
 	void menu(Object... args);
