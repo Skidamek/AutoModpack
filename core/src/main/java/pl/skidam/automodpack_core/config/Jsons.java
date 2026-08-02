@@ -268,6 +268,20 @@ public class Jsons {
 		}
 	}
 
+	public static class ClientBaselineFields {
+		public int schemaVersion = 1;
+		public String modpackId = "";
+		public List<EntryFields> entries = List.of();
+
+		public static class EntryFields {
+			public String logicalPath = "";
+			public String objectHash = "";
+			public long size = -1;
+			public boolean absent;
+			public String baselineGenerationId = "";
+		}
+	}
+
 	public static class CompleteModpackContentFields {
 		public String modpackId = "";
 		public String modpackName = "";

@@ -15,6 +15,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.update.UpdatePlan.BaselineCapture;
 import pl.skidam.automodpack_core.update.UpdatePlan.Operation;
 import pl.skidam.automodpack_core.update.UpdatePlan.OperationType;
 import pl.skidam.automodpack_core.update.UpdatePlan.Preservation;
@@ -45,6 +46,7 @@ public final class UpdateTransaction {
 	public Jsons.ClientConfigFieldsV3 plannedClientConfig;
 	public List<RestartReason> restartReasons;
 	public List<Preservation> plannedPreservations;
+	public List<BaselineCapture> plannedBaselineCaptures;
 
 	public UpdateTransaction() {}
 
@@ -73,6 +75,7 @@ public final class UpdateTransaction {
 		transaction.plannedClientConfig = plan.plannedClientConfig();
 		transaction.restartReasons = new ArrayList<>(new LinkedHashSet<>(plan.restartReasons()));
 		transaction.plannedPreservations = List.copyOf(plan.preservations());
+		transaction.plannedBaselineCaptures = List.copyOf(plan.baselineCaptures());
 		return transaction;
 	}
 
@@ -113,6 +116,7 @@ public final class UpdateTransaction {
 		transaction.transactionId = UUID.randomUUID().toString();
 		transaction.purpose = purpose;
 		transaction.plannedPreservations = new ArrayList<>();
+		transaction.plannedBaselineCaptures = new ArrayList<>();
 		return transaction;
 	}
 

@@ -16,7 +16,8 @@ public record UpdatePlan(
 		List<ProjectedFile> projectedFinalState,
 		Jsons.ClientConfigFieldsV3 plannedClientConfig,
 		Set<RestartReason> restartReasons,
-		List<Preservation> preservations) {
+		List<Preservation> preservations,
+		List<BaselineCapture> baselineCaptures) {
 
 	public UpdatePlan {
 		generationTarget = Objects.requireNonNull(generationTarget, "generationTarget");
@@ -24,11 +25,17 @@ public record UpdatePlan(
 		projectedFinalState = List.copyOf(projectedFinalState);
 		restartReasons = stableSet(restartReasons);
 		preservations = List.copyOf(preservations);
+		baselineCaptures = List.copyOf(baselineCaptures);
 	}
 
 	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
 			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons) {
-		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, List.of());
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, List.of(), List.of());
+	}
+
+	public UpdatePlan(String modpackId, GenerationTarget generationTarget, List<Operation> operations, List<ProjectedFile> projectedFinalState,
+			Jsons.ClientConfigFieldsV3 plannedClientConfig, Set<RestartReason> restartReasons, List<Preservation> preservations) {
+		this(modpackId, generationTarget, operations, projectedFinalState, plannedClientConfig, restartReasons, preservations, List.of());
 	}
 
 	private static <T> Set<T> stableSet(Set<T> values) {
@@ -63,6 +70,8 @@ public record UpdatePlan(
 	}
 
 	public record Preservation(Root root, String relativePath, String expectedHash, long expectedSize) {}
+
+	public record BaselineCapture(Root root, String relativePath, String expectedHash, long expectedSize, boolean absent) {}
 
 	public record Operation(
 			Root root,

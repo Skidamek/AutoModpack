@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
 import static pl.skidam.automodpack_core.Constants.clientSelectionFile;
+import static pl.skidam.automodpack_core.Constants.modpackBaselineFileName;
 import static pl.skidam.automodpack_core.Constants.modpackCatalogueFileName;
 import static pl.skidam.automodpack_core.Constants.modpackContentFileName;
 
@@ -129,7 +130,7 @@ public final class UpdateTransactionExecutor {
 				|| !context.transactionResultFile().toAbsolutePath().normalize().equals(automodpackDirectory.resolve(".private/update-transaction-result.json")))
 			throw new IOException("Transaction roots do not match the game-directory layout");
 		if (transaction.operations == null || transaction.projectedFinalState == null || transaction.restartReasons == null
-				|| transaction.plannedPreservations == null)
+				|| transaction.plannedPreservations == null || transaction.plannedBaselineCaptures == null)
 			throw new IOException("Transaction fields are incomplete");
 
 		Jsons.ModpackContentFields manifest = null;
@@ -182,6 +183,7 @@ public final class UpdateTransactionExecutor {
 				case CREATE_DIRECTORY, REMOVE_EMPTY_DIRECTORY -> validateDirectoryOperation(operation);
 			}
 		}
+		validateBaselineCaptures(transaction);
 		validatePreservations(transaction, finalState, manifest);
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE && !operationKeys.equals(finalState.keySet()))
 			throw new IOException("Special-purpose transaction operations and projected final state must match exactly");
@@ -216,7 +218,7 @@ public final class UpdateTransactionExecutor {
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
 				|| transaction.canonicalModpackDirectory != null
-				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty())
+				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty() || !transaction.plannedBaselineCaptures.isEmpty())
 			throw new IOException("Self-update transaction contains modpack metadata");
 		long installs = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.INSTALL_OBJECT).count();
 		long deletions = transaction.operations.stream().filter(operation -> operation.operation() == OperationType.DELETE).count();
@@ -229,7 +231,7 @@ public final class UpdateTransactionExecutor {
 				|| transaction.completeManifestJson != null || transaction.targetManifestJson != null || transaction.targetPlatform != null
 				|| transaction.expectedPriorSelectionPresent || transaction.expectedPriorRequestedGroups != null || transaction.requestedGroups != null
 				|| transaction.canonicalModpackDirectory != null
-				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty())
+				|| transaction.plannedClientConfig != null || !transaction.restartReasons.isEmpty() || !transaction.plannedPreservations.isEmpty() || !transaction.plannedBaselineCaptures.isEmpty())
 			throw new IOException("Legacy dummy cleanup transaction contains modpack metadata");
 		if (transaction.operations.isEmpty()) throw new IOException("Legacy dummy cleanup transaction has no targets");
 	}
@@ -471,6 +473,43 @@ public final class UpdateTransactionExecutor {
 		return finalState;
 	}
 
+	private void validateBaselineCaptures(UpdateTransaction transaction) throws IOException {
+		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
+			if (!transaction.plannedBaselineCaptures.isEmpty()) throw new IOException("Only modpack updates can capture baselines");
+			return;
+		}
+		List<BaselineCapture> sorted = transaction.plannedBaselineCaptures.stream()
+				.sorted(Comparator.comparing((BaselineCapture capture) -> capture.root().ordinal()).thenComparing(BaselineCapture::relativePath)).toList();
+		if (!transaction.plannedBaselineCaptures.equals(sorted)) throw new IOException("Baseline captures are not deterministically ordered");
+		Set<FileKey> seen = new HashSet<>();
+		for (BaselineCapture capture : transaction.plannedBaselineCaptures) {
+			if (capture == null || capture.root() == null) throw new IOException("Incomplete baseline capture");
+			if (capture.root() != Root.GAME_DIR && capture.root() != Root.MODS_DIR)
+				throw new IOException("Baseline root is outside managed live files");
+			String relative = normalizeOperationPath(capture.relativePath());
+			FileKey key = new FileKey(capture.root(), relative);
+			if (!seen.add(key)) throw new IOException("Duplicate baseline capture target");
+			validateRootAndPath(capture.root(), relative, transaction.modpackId, transaction.purpose);
+			if (capture.absent()) {
+				if (!capture.expectedHash().isEmpty() || capture.expectedSize() != -1) throw new IOException("Absent baseline contains file metadata");
+			} else {
+				validateHash(capture.expectedHash(), "baseline SHA-1");
+				if (capture.expectedSize() < 0) throw new IOException("Invalid baseline size");
+			}
+			boolean hasMutation = false;
+			for (Operation operation : transaction.operations) {
+				if ((operation.operation() != OperationType.INSTALL_OBJECT && operation.operation() != OperationType.DELETE)
+						|| operation.root() != capture.root())
+					continue;
+				if (normalizeOperationPath(operation.relativePath()).equals(relative)) {
+					hasMutation = true;
+					break;
+				}
+			}
+			if (!hasMutation) throw new IOException("Baseline capture has no matching live mutation");
+		}
+	}
+
 	private void validatePreservations(UpdateTransaction transaction, Map<FileKey, ProjectedFile> finalState,
 			Jsons.ModpackContentFields manifest) throws IOException {
 		if (transaction.purpose != UpdateTransaction.Purpose.MODPACK_UPDATE) {
@@ -568,6 +607,7 @@ public final class UpdateTransactionExecutor {
 					Files.createDirectories(resolve(operation));
 				}
 			}
+			if (transaction.purpose == UpdateTransaction.Purpose.MODPACK_UPDATE) captureBaselines(transaction);
 			List<SmartFileUtils.CopyRequest> copies = new ArrayList<>();
 			for (Operation operation : transaction.operations) {
 				if (operation.operation() != OperationType.INSTALL_OBJECT) continue;
@@ -650,6 +690,86 @@ public final class UpdateTransactionExecutor {
 			}
 			throw new UpdateExecutionException(current == null ? null : current.operation().name(), blockedPath, e);
 		}
+	}
+
+	private void captureBaselines(UpdateTransaction transaction) throws IOException {
+		if (transaction.plannedBaselineCaptures.isEmpty()) return;
+		Path baselinePath = context.modpackDirectory().resolve(modpackBaselineFileName).toAbsolutePath().normalize();
+		validateNoSymbolicLinkDescendants(context.automodpackDirectory(), baselinePath);
+		Jsons.ClientBaselineFields baseline = readBaseline(baselinePath, transaction.modpackId);
+		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new TreeMap<>();
+		for (Jsons.ClientBaselineFields.EntryFields entry : baseline.entries) entries.put(entry.logicalPath, entry);
+		String sourceGenerationId = "";
+		Jsons.ModpackContentFields installed = ConfigTools.read(context.installedManifestFile(), Jsons.ModpackContentFields.class).orElse(null);
+		if (installed != null && installed.targetGenerationId != null && !installed.targetGenerationId.isEmpty()) sourceGenerationId = installed.targetGenerationId;
+		boolean changed = false;
+		for (BaselineCapture capture : transaction.plannedBaselineCaptures) {
+			String logicalPath = capture.root() == Root.MODS_DIR ? "mods/" + capture.relativePath() : capture.relativePath();
+			if (entries.containsKey(logicalPath)) continue;
+			Path source = resolve(capture.root(), capture.relativePath());
+			Jsons.ClientBaselineFields.EntryFields entry = new Jsons.ClientBaselineFields.EntryFields();
+			entry.logicalPath = logicalPath;
+			entry.baselineGenerationId = sourceGenerationId;
+			if (capture.absent()) {
+				if (Files.exists(source, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Baseline path was expected to be absent: " + source);
+				entry.absent = true;
+				entry.objectHash = "";
+				entry.size = -1;
+			} else {
+				if (!SmartFileUtils.isValidFile(source, capture.expectedSize(), capture.expectedHash()))
+					throw new IOException("Baseline source failed size/SHA-1 verification: " + source);
+				Path object = context.storeDirectory().resolve(capture.expectedHash()).toAbsolutePath().normalize();
+				Path storeRoot = context.storeDirectory().toAbsolutePath().normalize();
+				if (!object.startsWith(storeRoot)) throw new IOException("Baseline object escapes the client CAS");
+				validateNoSymbolicLinkDescendants(storeRoot, object);
+				SmartFileUtils.copyVerifiedAtomic(source, object, capture.expectedSize(), capture.expectedHash());
+				if (!SmartFileUtils.isValidFile(object, capture.expectedSize(), capture.expectedHash()))
+					throw new IOException("Baseline CAS object failed verification: " + object);
+				entry.absent = false;
+				entry.objectHash = capture.expectedHash().toLowerCase(Locale.ROOT);
+				entry.size = capture.expectedSize();
+			}
+			entries.put(logicalPath, entry);
+			changed = true;
+		}
+		if (!changed) return;
+		baseline.entries = new ArrayList<>(entries.values());
+		Files.createDirectories(baselinePath.getParent());
+		ConfigTools.writeAtomic(baselinePath, baseline);
+	}
+
+	private Jsons.ClientBaselineFields readBaseline(Path path, String modpackId) throws IOException {
+		if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
+			Jsons.ClientBaselineFields empty = new Jsons.ClientBaselineFields();
+			empty.modpackId = modpackId;
+			return empty;
+		}
+		if (Files.isSymbolicLink(path) || !Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS)) throw new IOException("Baseline manifest is not a regular file");
+		Jsons.ClientBaselineFields baseline;
+		try {
+			baseline = ConfigTools.read(path, Jsons.ClientBaselineFields.class).orElseThrow(() -> new IOException("Baseline manifest is empty"));
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Baseline manifest is invalid", e);
+		}
+		if (baseline.schemaVersion != 1 || !modpackId.equals(baseline.modpackId) || baseline.entries == null)
+			throw new IOException("Baseline manifest identity is invalid");
+		Set<String> paths = new HashSet<>();
+		for (Jsons.ClientBaselineFields.EntryFields entry : baseline.entries) {
+			if (entry == null || entry.logicalPath == null || !paths.add(entry.logicalPath)) throw new IOException("Baseline manifest has duplicate or incomplete entries");
+			String normalized = UpdatePlanner.normalize(entry.logicalPath);
+			if (!normalized.equals(entry.logicalPath)) throw new IOException("Baseline manifest path is not normalized");
+			if (entry.absent) {
+				if (!entry.objectHash.isEmpty() || entry.size != -1) throw new IOException("Absent baseline entry contains file metadata");
+			} else {
+				validateHash(entry.objectHash, "baseline SHA-1");
+				if (entry.size < 0) throw new IOException("Baseline entry has invalid size");
+			}
+			if (!entry.baselineGenerationId.isEmpty() && !SHA1.matcher(entry.baselineGenerationId).matches())
+				throw new IOException("Baseline entry has invalid source generation ID");
+		}
+		return baseline;
 	}
 
 	private void preserveObject(Preservation preservation) throws IOException {
