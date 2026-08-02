@@ -46,6 +46,12 @@ public class ScreenImpl implements ScreenService {
 	}
 
 	@Override
+	public boolean preview(Object... args) {
+		executeOnClient(() -> Screens.preview(args));
+		return true;
+	}
+
+	@Override
 	public void error(String... args) {
 		executeOnClient(() -> Screens.error(args));
 	}
@@ -116,6 +122,11 @@ public class ScreenImpl implements ScreenService {
 
 		public static void danger(Object modpackUpdaterInstance) {
 			Screens.setScreen(new DangerScreen((ModpackUpdater) modpackUpdaterInstance));
+		}
+
+		public static void preview(Object... args) {
+			Screen parent = Screens.getScreen();
+			Screens.setScreen(new UpdatePreviewScreen(parent, (pl.skidam.automodpack_core.update.UpdatePreview) args[0], (String) args[1], (Runnable) args[2], (Runnable) args[3]));
 		}
 
 		public static void error(String... errors) {

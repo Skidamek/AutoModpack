@@ -1,0 +1,112 @@
+package pl.skidam.automodpack_core.update;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.TreeMap;
+
+import org.junit.jupiter.api.Test;
+
+import pl.skidam.automodpack_core.config.Jsons;
+import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
+import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
+import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
+import pl.skidam.automodpack_core.update.UpdatePlan.FileKey;
+import pl.skidam.automodpack_core.update.UpdatePlan.FileState;
+import pl.skidam.automodpack_core.update.UpdatePlan.Root;
+
+class UpdatePreviewTest {
+	private static final String TARGET_HASH = "1111111111111111111111111111111111111111";
+	private static final String OLD_HASH = "2222222222222222222222222222222222222222";
+	private static final String OTHER_HASH = "3333333333333333333333333333333333333333";
+
+	@Test
+	void reportsAddsChangesRemovalsAndCasPreservation() {
+		Jsons.ModpackContentFields target = manifest(
+				new Jsons.ModpackContentFields.ModpackContentItem("config/new.json", "4", "config", false, false, false, TARGET_HASH, "0"),
+				new Jsons.ModpackContentFields.ModpackContentItem("config/changed.json", "8", "config", false, false, false, TARGET_HASH, "0"),
+				entry("config/new.json", TARGET_HASH, 4, OwnershipLedger.Status.PRESENT),
+				entry("config/changed.json", TARGET_HASH, 8, OwnershipLedger.Status.PRESENT),
+				entry("config/old.json", OLD_HASH, 7, OwnershipLedger.Status.TOMBSTONE));
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.GAME_DIR, "config/changed.json"), new FileState(OTHER_HASH, 8, true, false),
+				new FileKey(Root.GAME_DIR, "config/old.json"), new FileState(OLD_HASH, 7, true, false));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, java.util.Set.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(), null,
+				new Jsons.ClientConfigFieldsV3()));
+		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
+
+		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.ADDED && entry.relativePath().equals("config/new.json")));
+		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.CHANGED && entry.relativePath().equals("config/changed.json")));
+		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.REMOVED && entry.relativePath().equals("config/old.json")));
+		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.PRESERVED_CAS && entry.relativePath().equals("config/old.json")));
+	}
+
+	@Test
+	void normalizesTargetPathsBeforeLedgerComparison() {
+		Jsons.ModpackContentFields target = manifest(
+				new Jsons.ModpackContentFields.ModpackContentItem("/config/kept.json", "8", "config", false, false, false, OLD_HASH, "0"),
+				entry("config/kept.json", OLD_HASH, 8, OwnershipLedger.Status.PRESENT));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 8, true, false));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, java.util.Set.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(), null,
+				new Jsons.ClientConfigFieldsV3()));
+		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
+
+		assertTrue(preview.entries().stream().noneMatch(entry -> entry.relativePath().equals("config/kept.json")
+				&& (entry.kind() == UpdatePreview.Kind.PRESERVED_CHANGED || entry.kind() == UpdatePreview.Kind.PRESERVED_OUTSIDE
+						|| entry.kind() == UpdatePreview.Kind.PRESERVED_UNAVAILABLE)));
+	}
+
+	@Test
+	void reportsUnavailableHashWithoutThrowing() {
+		Jsons.ModpackContentFields target = manifest(entry("config/unknown.json", OLD_HASH, 12, OwnershipLedger.Status.TOMBSTONE));
+		Map<FileKey, FileState> files = Map.of(new FileKey(Root.GAME_DIR, "config/unknown.json"), new FileState(null, 12, true, false));
+
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, java.util.Set.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(), null,
+				new Jsons.ClientConfigFieldsV3()));
+		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
+
+		assertEquals(UpdatePreview.Kind.PRESERVED_UNAVAILABLE, assertSingle(preview, "config/unknown.json").kind());
+	}
+
+	@Test
+	void includesExplicitResolvedAndStaleGroupConsequences() {
+		Jsons.ModpackContentFields target = manifest();
+		Map<FileKey, FileState> files = Map.of();
+		UpdatePlan plan = UpdatePlanner.plan(new UpdatePlanner.Input(null, target, files, java.util.Set.of(), java.util.List.of(), java.util.List.of(), java.util.List.of(), null,
+				new Jsons.ClientConfigFieldsV3()));
+		ResolvedSelection selection = new ResolvedSelection(new SelectionIntent(java.util.Set.of("optional")), new java.util.TreeSet<>(java.util.Set.of("main", "optional")),
+				new java.util.TreeSet<>(java.util.Set.of("stale")));
+
+		UpdatePreview preview = UpdatePreview.create(plan, files, target, selection, false);
+
+		assertEquals(java.util.Set.of("optional"), preview.groupConsequences().explicitGroups());
+		assertEquals(java.util.Set.of("main", "optional"), preview.groupConsequences().resolvedGroups());
+		assertEquals(java.util.Set.of("stale"), preview.groupConsequences().staleGroups());
+	}
+
+	private static UpdatePreview.Entry assertSingle(UpdatePreview preview, String path) {
+		return preview.entries().stream().filter(entry -> entry.relativePath().equals(path)).findFirst().orElseThrow();
+	}
+
+	private static Jsons.ModpackContentFields manifest(Object... values) {
+		Jsons.ModpackContentFields target = new Jsons.ModpackContentFields(new LinkedHashSet<>());
+		Map<String, OwnershipLedger.Entry> ledgerEntries = new TreeMap<>();
+		for (Object value : values) {
+			if (value instanceof Jsons.ModpackContentFields.ModpackContentItem item) target.list.add(item);
+			if (value instanceof OwnershipLedger.Entry entry) ledgerEntries.put(entry.logicalPath(), entry);
+		}
+		target.modpackId = "abc1234";
+		target.targetGenerationId = "1".repeat(40);
+		target.parentGenerationId = "";
+		target.stateDigest = "2".repeat(40);
+		target.ownershipLedger = new OwnershipLedger("abc1234", ledgerEntries).toFields();
+		return target;
+	}
+
+	private static OwnershipLedger.Entry entry(String path, String hash, long size, OwnershipLedger.Status status) {
+		return new OwnershipLedger.Entry(path, java.util.Set.of(new OwnershipLedger.Content(hash, size)), java.util.Set.of("main"), "a".repeat(40), "b".repeat(40), status);
+	}
+}
