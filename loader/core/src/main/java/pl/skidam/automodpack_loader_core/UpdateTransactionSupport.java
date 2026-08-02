@@ -34,7 +34,7 @@ public final class UpdateTransactionSupport {
 		}
 		return new UpdateTransactionExecutor(new UpdateTransactionExecutor.Context(gameDirectory, modpackDirectory, gameDirectory.resolve("mods"),
 				gameDirectory.resolve(storeDir), gameDirectory.resolve(automodpackDir), gameDirectory.resolve(transactionFile), gameDirectory.resolve(transactionResultFile),
-				gameDirectory.resolve(clientConfigFile), gameDirectory.resolve(clientDeletionTimeStamps), installedManifest, completeCatalogue,
+				gameDirectory.resolve(clientConfigFile), installedManifest, completeCatalogue,
 				gameDirectory.resolve(clientSelectionFile), beforeManifest));
 	}
 

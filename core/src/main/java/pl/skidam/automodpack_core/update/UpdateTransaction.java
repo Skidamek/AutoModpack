@@ -42,7 +42,6 @@ public final class UpdateTransaction {
 	public List<Operation> operations;
 	public List<ProjectedFile> projectedFinalState;
 	public Jsons.ClientConfigFieldsV3 plannedClientConfig;
-	public List<String> plannedDeletionTimestamps;
 	public List<RestartReason> restartReasons;
 
 	public UpdateTransaction() {}
@@ -70,7 +69,6 @@ public final class UpdateTransaction {
 		transaction.operations = List.copyOf(plan.operations());
 		transaction.projectedFinalState = List.copyOf(plan.projectedFinalState());
 		transaction.plannedClientConfig = plan.plannedClientConfig();
-		transaction.plannedDeletionTimestamps = new ArrayList<>(plan.plannedDeletionTimestamps());
 		transaction.restartReasons = new ArrayList<>(new LinkedHashSet<>(plan.restartReasons()));
 		return transaction;
 	}
@@ -90,7 +88,6 @@ public final class UpdateTransaction {
 		finalState.sort(Comparator.comparing((ProjectedFile projected) -> projected.root().ordinal()).thenComparing(ProjectedFile::relativePath));
 		transaction.operations = List.copyOf(operations);
 		transaction.projectedFinalState = List.copyOf(finalState);
-		transaction.plannedDeletionTimestamps = List.of();
 		transaction.restartReasons = List.of();
 		return transaction;
 	}
@@ -103,7 +100,6 @@ public final class UpdateTransaction {
 				.toList();
 		transaction.projectedFinalState = targets.stream().map(target -> new ProjectedFile(target.root(), target.relativePath(), false, null, -1))
 				.sorted(Comparator.comparing((ProjectedFile projected) -> projected.root().ordinal()).thenComparing(ProjectedFile::relativePath)).toList();
-		transaction.plannedDeletionTimestamps = List.of();
 		transaction.restartReasons = List.of();
 		return transaction;
 	}

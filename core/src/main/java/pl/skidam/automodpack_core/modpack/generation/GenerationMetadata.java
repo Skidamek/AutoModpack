@@ -18,6 +18,7 @@ public record GenerationMetadata(
 		String parentGenerationId,
 		Instant createdAt,
 		String stateDigest,
+		String ledgerDigest,
 		String patchNotes,
 		String patchNotesDigest,
 		String rollbackTargetGenerationId) {
@@ -33,6 +34,7 @@ public record GenerationMetadata(
 		parentGenerationId = requireOptionalDigest(parentGenerationId, "parent generation ID");
 		createdAt = Objects.requireNonNull(createdAt, "createdAt");
 		stateDigest = requireDigest(stateDigest, "state digest");
+		ledgerDigest = requireDigest(ledgerDigest, "ledger digest");
 		patchNotes = requireNormalizedNotes(patchNotes);
 		patchNotesDigest = requireDigest(patchNotesDigest, "patch notes digest");
 		rollbackTargetGenerationId = requireOptionalDigest(rollbackTargetGenerationId, "rollback target generation ID");
@@ -73,6 +75,7 @@ public record GenerationMetadata(
 		fields.parentGenerationId = parentGenerationId;
 		fields.createdAt = createdAt.toString();
 		fields.stateDigest = stateDigest;
+		fields.ledgerDigest = ledgerDigest;
 		fields.patchNotes = patchNotes;
 		fields.patchNotesDigest = patchNotesDigest;
 		fields.rollbackTargetGenerationId = rollbackTargetGenerationId;
@@ -89,7 +92,7 @@ public record GenerationMetadata(
 			throw new IllegalArgumentException("Invalid generation creation timestamp", e);
 		}
 		if (!createdAt.toString().equals(createdAtText)) throw new IllegalArgumentException("Generation creation timestamp is not canonical");
-		return new GenerationMetadata(fields.schemaVersion, fields.generationId, fields.parentGenerationId, createdAt, fields.stateDigest,
+		return new GenerationMetadata(fields.schemaVersion, fields.generationId, fields.parentGenerationId, createdAt, fields.stateDigest, fields.ledgerDigest,
 				fields.patchNotes, fields.patchNotesDigest, fields.rollbackTargetGenerationId);
 	}
 

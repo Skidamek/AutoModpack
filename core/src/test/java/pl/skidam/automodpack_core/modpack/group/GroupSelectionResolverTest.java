@@ -51,7 +51,7 @@ class GroupSelectionResolverTest {
 		var tagged = new GroupManifest.Group("", "", "", false, false, new TreeSet<>(), new TreeSet<>(), new TreeSet<>(Set.of("recommended")), Set.of(),
 				new TreeMap<>());
 		GroupManifest manifest = new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(Map.of("tagged", tagged)),
-				new TreeMap<>(Map.of("recommended", new GroupManifest.SelectionTag("", "", true, false))), List.of());
+				new TreeMap<>(Map.of("recommended", new GroupManifest.SelectionTag("", "", true, false))));
 
 		assertEquals(Set.of("tagged"), GroupSelectionResolver.defaultIntent(manifest).requestedGroups());
 		assertEquals(Set.of(), GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of()), ClientPlatform.LINUX).intent().requestedGroups());
@@ -80,7 +80,7 @@ class GroupSelectionResolverTest {
 	}
 
 	private static GroupManifest manifest(Map<String, GroupManifest.Group> groups) {
-		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups), new TreeMap<>(), List.of());
+		return new GroupManifest("abc1234", "", "", "", "", "", new TreeMap<>(groups), new TreeMap<>());
 	}
 
 	private static GroupManifest.Group group(boolean required, boolean recommended, Set<String> requires) {

@@ -19,10 +19,7 @@ import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNotes;
 import pl.skidam.automodpack_core.modpack.generation.GenerationRecord;
 import pl.skidam.automodpack_core.modpack.generation.GenerationStore;
-import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 import pl.skidam.automodpack_core.modpack.group.GroupManifestValidator;
-import pl.skidam.automodpack_core.modpack.group.LogicalPath;
-import pl.skidam.automodpack_core.protocol.netty.NettyServer;
 import pl.skidam.automodpack_core.utils.CustomThreadFactoryBuilder;
 import pl.skidam.automodpack_core.utils.SmartFileUtils;
 
@@ -210,11 +207,8 @@ public class ModpackExecutor {
 		validateConfiguration();
 		prepareDirectories();
 		String modpackId = previous.map(snapshot -> ModpackId.requireValid(snapshot.record().manifest().modpackId())).orElseGet(ModpackId::generate);
-		GroupManifest previousManifest = previous.map(snapshot -> snapshot.record().manifest()).orElse(null);
-		String parentGenerationId = previous.map(snapshot -> snapshot.record().metadata().generationId()).orElse("");
-		Set<Jsons.ModpackContentFields.FileToDelete> deletions = deletionMetadata(previousManifest, parentGenerationId);
 		ModpackCandidateScanner.Request request = new ModpackCandidateScanner.Request(modpackId, serverConfig.modpackName, AM_VERSION, LOADER,
-				LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups, serverConfig.selectionTags, deletions,
+				LOADER_VERSION, MC_VERSION, serverRoot, groupRoot, serverConfig.groups, serverConfig.selectionTags,
 				serverConfig.autoExcludeUnnecessaryFiles, serverConfig.autoExcludeServerSideMods, generationRoot.resolve(hostGenerationStagingDir.getFileName()), creationExecutor);
 		return candidateScan.scan(request);
 	}
@@ -251,23 +245,6 @@ public class ModpackExecutor {
 			}
 			if (entry.getValue() == null) throw new CandidateBuildException("Group '" + entry.getKey() + "' has no declaration");
 		}
-	}
-
-	private Set<Jsons.ModpackContentFields.FileToDelete> deletionMetadata(GroupManifest previous, String parentGenerationId) {
-		Map<String, Jsons.ModpackContentFields.FileToDelete> previousByPath = new HashMap<>();
-		if (previous != null)
-			for (GroupManifest.DeletionRequest deletion : previous.nonModpackFilesToDelete())
-				previousByPath.put(deletion.file(), new Jsons.ModpackContentFields.FileToDelete(deletion.file(), deletion.sha1(), deletion.timestamp()));
-		Set<Jsons.ModpackContentFields.FileToDelete> result = new LinkedHashSet<>();
-		if (serverConfig.nonModpackFilesToDelete == null) return result;
-		for (var entry : new TreeMap<>(serverConfig.nonModpackFilesToDelete).entrySet()) {
-			String path = LogicalPath.normalize(entry.getKey());
-			String sha1 = entry.getValue().toLowerCase(Locale.ROOT);
-			Jsons.ModpackContentFields.FileToDelete old = previousByPath.get(path);
-			String timestamp = old != null && old.sha1.equalsIgnoreCase(sha1) ? old.timestamp : GenerationIdentity.deletionRequestId(path, sha1, parentGenerationId);
-			result.add(new Jsons.ModpackContentFields.FileToDelete(path, sha1, timestamp));
-		}
-		return result;
 	}
 
 	private void prepareDirectories() throws IOException, CandidateBuildException {

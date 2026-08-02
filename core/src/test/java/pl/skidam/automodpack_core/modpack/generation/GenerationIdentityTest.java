@@ -37,7 +37,7 @@ class GenerationIdentityTest {
 	@Test
 	void completeRecordReadPreservesGenerationMetadata() throws Exception {
 		GroupManifest manifest = GroupManifestValidator.validate(catalogue("main", "stored"));
-		GenerationRecord record = GenerationRecord.create(manifest, "0".repeat(40), Instant.parse("2026-01-03T00:00:00Z"), "notes\n");
+		GenerationRecord record = GenerationRecord.create(manifest, null, Instant.parse("2026-01-03T00:00:00Z"), "notes\n");
 		Path path = temporaryDirectory.resolve("automodpack-catalogue.json");
 		ConfigTools.writeAtomic(path, record.toFields());
 
@@ -52,19 +52,9 @@ class GenerationIdentityTest {
 	@Test
 	void generationRecordsRejectInvalidOrOversizedPatchNotes() {
 		GroupManifest manifest = GroupManifestValidator.validate(catalogue("main", "notes"));
-		assertThrows(IllegalArgumentException.class, () -> GenerationRecord.create(manifest, "", Instant.parse("2026-01-01T00:00:00Z"), String.valueOf((char) 0xD800)));
+		assertThrows(IllegalArgumentException.class, () -> GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), String.valueOf((char) 0xD800)));
 		assertThrows(IllegalArgumentException.class,
-				() -> GenerationRecord.create(manifest, "", Instant.parse("2026-01-01T00:00:00Z"), "x".repeat(GenerationMetadata.MAX_PATCH_NOTES_UTF8_BYTES + 1)));
-	}
-
-	@Test
-	void deletionRequestIdentityChangesWithParentGeneration() {
-		String path = "mods/old.jar";
-		String hash = "a".repeat(40);
-
-		assertEquals(GenerationIdentity.deletionRequestId(path, hash, ""), GenerationIdentity.deletionRequestId(path, hash, ""));
-		assertNotEquals(GenerationIdentity.deletionRequestId(path, hash, ""), GenerationIdentity.deletionRequestId(path, hash, "b".repeat(40)));
-		assertNotEquals(GenerationIdentity.deletionRequestId(path, hash, "a".repeat(40)), GenerationIdentity.deletionRequestId(path, hash, "b".repeat(40)));
+				() -> GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "x".repeat(GenerationMetadata.MAX_PATCH_NOTES_UTF8_BYTES + 1)));
 	}
 
 	@Test
@@ -77,8 +67,8 @@ class GenerationIdentityTest {
 	@Test
 	void publicationMetadataChangesGenerationIdButNotStateDigest() {
 		GroupManifest manifest = GroupManifestValidator.validate(catalogue("main", "same"));
-		GenerationRecord first = GenerationRecord.create(manifest, "", Instant.parse("2026-01-01T00:00:00Z"), "");
-		GenerationRecord second = GenerationRecord.create(manifest, "0".repeat(40), Instant.parse("2026-01-02T00:00:00Z"), "note\n");
+		GenerationRecord first = GenerationRecord.create(manifest, null, Instant.parse("2026-01-01T00:00:00Z"), "");
+		GenerationRecord second = GenerationRecord.create(manifest, first, Instant.parse("2026-01-02T00:00:00Z"), "note\n");
 		assertEquals(first.metadata().stateDigest(), second.metadata().stateDigest());
 		assertNotEquals(first.metadata().generationId(), second.metadata().generationId());
 		assertEquals(GenerationIdentity.patchNotesDigest("note\n"), second.metadata().patchNotesDigest());
@@ -88,7 +78,6 @@ class GenerationIdentityTest {
 		var fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
 		fields.selectionTags = Map.of();
-		fields.nonModpackFilesToDelete = java.util.Set.of();
 		var main = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 		main.description = description;
 		main.files = Map.of();

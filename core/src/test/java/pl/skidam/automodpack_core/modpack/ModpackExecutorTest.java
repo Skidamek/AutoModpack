@@ -77,30 +77,6 @@ class ModpackExecutorTest {
 	}
 
 	@Test
-	void deletionDirectivePreviewDigestCanGuardPublication() throws Exception {
-		Path groups = tempDir.resolve("host-modpack");
-		Files.createDirectories(groups.resolve("main/config"));
-		Files.writeString(groups.resolve("main/config/example.txt"), "content", StandardCharsets.UTF_8);
-		ConstantsSnapshot snapshot = new ConstantsSnapshot();
-		Constants.serverConfig = config();
-		Constants.AM_VERSION = "test";
-		Constants.LOADER = "test";
-		Constants.LOADER_VERSION = "test";
-		Constants.MC_VERSION = "test";
-		ModpackExecutor executor = new ModpackExecutor(tempDir.resolve("server"), groups, tempDir.resolve("host-generations"));
-		try {
-			assertInstanceOf(ModpackExecutor.Published.class, executor.publish());
-			Constants.serverConfig.nonModpackFilesToDelete = Map.of("/config/deletion.txt", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
-			String digest = assertInstanceOf(ModpackExecutor.PreviewReady.class, executor.preview()).state().candidateStateDigest();
-			ModpackExecutor.Published published = assertInstanceOf(ModpackExecutor.Published.class, executor.publishIfState(digest));
-			assertEquals(digest, published.state().candidateStateDigest());
-		} finally {
-			executor.stop();
-			snapshot.restore();
-		}
-	}
-
-	@Test
 	void previewAndPublishAdmissionDoesNotQueue() throws Exception {
 		Path groups = tempDir.resolve("host-modpack");
 		Files.createDirectories(groups.resolve("main/config"));
@@ -149,7 +125,6 @@ class ModpackExecutorTest {
 		main.syncedFiles = Set.of();
 		config.groups = Map.of("main", main);
 		config.selectionTags = Map.of();
-		config.nonModpackFilesToDelete = Map.of();
 		config.autoExcludeUnnecessaryFiles = false;
 		config.autoExcludeServerSideMods = false;
 		return config;
