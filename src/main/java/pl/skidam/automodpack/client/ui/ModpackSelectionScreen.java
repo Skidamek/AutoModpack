@@ -58,6 +58,8 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	// What the player has actually ticked; resolved is what that implies once required groups,
 	// dependencies and conflicts are applied.
 	private final Set<String> chosen = new LinkedHashSet<>();
+	private final Set<String> chosenTags = new LinkedHashSet<>();
+	private final Set<String> excluded = new LinkedHashSet<>();
 	private Set<String> resolved;
 	private final List<Row> rows = new ArrayList<>();
 
@@ -75,7 +77,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 		this.expectedSelection = selectionStore.get(modpackId).orElse(null);
 		SelectionIntent initial = expectedSelection == null ? GroupSelectionResolver.defaultIntent(manifest) : expectedSelection;
+		this.chosenTags.addAll(initial.requestedTags());
 		this.chosen.addAll(initial.requestedGroups());
+		this.excluded.addAll(initial.excludedGroups());
 		this.resolved = GroupSelectionResolver.resolve(manifest, initial, ClientPlatform.current()).selectedGroups();
 		rebuildRows();
 	}
@@ -187,8 +191,12 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.reset"),
 				press -> {
+					SelectionIntent defaults = GroupSelectionResolver.defaultIntent(manifest);
+					chosenTags.clear();
+					chosenTags.addAll(defaults.requestedTags());
 					chosen.clear();
-					chosen.addAll(GroupSelectionResolver.defaultIntent(manifest).requestedGroups());
+					chosen.addAll(defaults.requestedGroups());
+					excluded.clear();
 					reresolve();
 				}));
 
@@ -204,16 +212,24 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	 * a player expects from the click they just made. The resolver still has the final say.
 	 */
 	private void toggle(String groupId) {
-		SelectionIntent previous = new SelectionIntent(chosen);
+		SelectionIntent previous = new SelectionIntent(chosenTags, chosen, excluded);
 		Set<String> previousResolved = resolved;
 		SelectionIntent next = GroupSelectionResolver.prefer(manifest, previous, groupId, ClientPlatform.current());
+		chosenTags.clear();
+		chosenTags.addAll(next.requestedTags());
 		chosen.clear();
 		chosen.addAll(next.requestedGroups());
+		excluded.clear();
+		excluded.addAll(next.excludedGroups());
 		try {
 			reresolve();
 		} catch (SelectionResolutionException e) {
+			chosenTags.clear();
+			chosenTags.addAll(previous.requestedTags());
 			chosen.clear();
 			chosen.addAll(previous.requestedGroups());
+			excluded.clear();
+			excluded.addAll(previous.excludedGroups());
 			resolved = previousResolved;
 			rebuild();
 			LOGGER.warn("Could not apply group preference for {}: {}", groupId, e.getMessage());
@@ -221,7 +237,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 	}
 
 	private void reresolve() {
-		resolved = GroupSelectionResolver.resolve(manifest, new SelectionIntent(chosen), ClientPlatform.current()).selectedGroups();
+		resolved = GroupSelectionResolver.resolve(manifest, new SelectionIntent(chosenTags, chosen, excluded), ClientPlatform.current()).selectedGroups();
 		rebuild();
 	}
 
@@ -314,7 +330,7 @@ public class ModpackSelectionScreen extends VersionedScreen {
 
 	private void save() {
 		try {
-			selectionStore.compareAndSet(modpackId, expectedSelection, new SelectionIntent(chosen));
+			selectionStore.compareAndSet(modpackId, expectedSelection, new SelectionIntent(chosenTags, chosen, excluded));
 			saved = true;
 			rebuild();
 		} catch (IOException e) {

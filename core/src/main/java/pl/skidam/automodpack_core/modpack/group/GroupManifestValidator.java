@@ -205,10 +205,22 @@ public final class GroupManifestValidator {
 			} catch (SelectionResolutionException e) {
 				for (String error : e.errors()) errors.add(platform.id() + ": " + error);
 			}
+			for (var tagEntry : manifest.selectionTags().entrySet()) {
+				try {
+					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(tagEntry.getKey()), Set.of()), platform);
+					for (var groupEntry : manifest.groups().entrySet()) {
+						if (tagEntry.getKey().equals(groupEntry.getValue().tag()) && groupEntry.getValue().supports(platform)
+								&& !selection.selectedGroups().contains(groupEntry.getKey()))
+							errors.add(platform.id() + ": Selection tag '" + tagEntry.getKey() + "' cannot select group '" + groupEntry.getKey() + "'");
+					}
+				} catch (SelectionResolutionException e) {
+					for (String error : e.errors()) errors.add(platform.id() + ": " + error);
+				}
+			}
 			for (var entry : manifest.groups().entrySet()) {
 				if (!entry.getValue().supports(platform)) continue;
 				try {
-					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(entry.getKey())), platform);
+					ResolvedSelection selection = GroupSelectionResolver.resolve(manifest, new SelectionIntent(Set.of(), Set.of(entry.getKey())), platform);
 					if (!selection.selectedGroups().contains(entry.getKey()))
 						errors.add(platform.id() + ": Group '" + entry.getKey() + "' cannot be selected on this platform");
 				} catch (SelectionResolutionException e) {
