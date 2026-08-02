@@ -111,6 +111,18 @@ class GenerationStoreTest {
 	}
 
 	@Test
+	void startupRejectsMissingHistoricalObject() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+		store.publish(candidate("second"), Optional.of(current), "");
+		String historicalHash = first.record().manifest().groups().get("main").files().values().iterator().next().sha1();
+		Files.delete(tempDir.resolve("objects").resolve(historicalHash));
+
+		assertThrows(java.io.IOException.class, store::loadCurrent);
+	}
+
+	@Test
 	void startupRejectsTamperedCurrentRecordIdentity() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
