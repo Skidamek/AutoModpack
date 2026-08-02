@@ -38,7 +38,6 @@ public record GenerationMetadata(
 		patchNotes = requireNormalizedNotes(patchNotes);
 		patchNotesDigest = requireDigest(patchNotesDigest, "patch notes digest");
 		rollbackTargetGenerationId = requireOptionalDigest(rollbackTargetGenerationId, "rollback target generation ID");
-		if (!rollbackTargetGenerationId.isEmpty()) throw new IllegalArgumentException("Rollback targets are not supported yet");
 	}
 
 	public static String normalizeNotes(String notes) {

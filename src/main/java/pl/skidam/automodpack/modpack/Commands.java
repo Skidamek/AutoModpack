@@ -58,7 +58,12 @@ public class Commands {
 										.then(argument("state-digest", StringArgumentType.word()).executes(Commands::guardedGenerateModpack)
 												.then(literal("notes")
 														.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::guardedGenerateModpack))))
-						))
+					.then(literal("revert")
+							.then(argument("generation-id", StringArgumentType.word()).executes(Commands::revertGeneration)
+									.then(literal("notes")
+											.then(argument("notes", StringArgumentType.greedyString()).executes(Commands::revertGeneration))))
+					.then(literal("history").executes(Commands::generationHistory))
+						)))
 						.then(literal("host")
 								.requires((source) -> source.permissions().hasPermission(new Permission.HasCommandLevel(PermissionLevel.byId(3))))
 								.executes(Commands::modpackHostAbout)
@@ -457,6 +462,52 @@ public class Commands {
 			}
 		});
 		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int revertGeneration(CommandContext<CommandSourceStack> context) {
+		String targetGenerationId = StringArgumentType.getString(context, "generation-id");
+		String notes = optionalArgument(context, "notes");
+		Util.backgroundExecutor().execute(() -> {
+			send(context, "Reverting modpack to generation " + targetGenerationId + "...", ChatFormatting.YELLOW, true);
+			ModpackExecutor.RevertResult result = modpackExecutor.revert(targetGenerationId, notes);
+			if (result instanceof ModpackExecutor.Reverted reverted) {
+				send(context, "REVERTED", ChatFormatting.GREEN, true);
+				send(context, "New generation", ChatFormatting.WHITE, copyable(reverted.current().metadata().generationId()), ChatFormatting.YELLOW, true);
+				send(context, "Rollback target", ChatFormatting.WHITE, copyable(reverted.targetGenerationId()), ChatFormatting.YELLOW, true);
+				reverted.warnings().forEach(warning -> send(context, "WARNING: " + warning, ChatFormatting.YELLOW, false));
+			} else if (result instanceof ModpackExecutor.RevertBusy busy) {
+				send(context, "FAILED: " + busy.detail(), ChatFormatting.RED, true);
+			} else if (result instanceof ModpackExecutor.RevertInvalidTarget invalid) {
+				send(context, "FAILED: " + invalid.detail(), ChatFormatting.RED, true);
+			} else if (result instanceof ModpackExecutor.RevertFailed failed) {
+				send(context, "FAILED: " + failed.failure().getClass().getSimpleName(), ChatFormatting.RED, true);
+			}
+		});
+		return Command.SINGLE_SUCCESS;
+	}
+
+	private static int generationHistory(CommandContext<CommandSourceStack> context) {
+		try {
+			var history = modpackExecutor.technicalHistory();
+			if (history.isEmpty()) {
+				send(context, "No published generations.", ChatFormatting.YELLOW, false);
+				return Command.SINGLE_SUCCESS;
+			}
+			for (GenerationRecord record : history) {
+				String operation = record.metadata().rollbackTargetGenerationId().isEmpty() ? "PUBLISH" : "REVERT";
+				send(context, operation + " " + record.metadata().createdAt(), ChatFormatting.WHITE, false);
+				send(context, "Generation", ChatFormatting.WHITE, copyable(record.metadata().generationId()), ChatFormatting.YELLOW, false);
+				send(context, "Parent", ChatFormatting.WHITE, copyable(record.metadata().parentGenerationId()), ChatFormatting.YELLOW, false);
+				send(context, "Content state", ChatFormatting.WHITE, copyable(record.metadata().stateDigest()), ChatFormatting.YELLOW, false);
+				if (!record.metadata().rollbackTargetGenerationId().isEmpty())
+					send(context, "Rollback target", ChatFormatting.WHITE, copyable(record.metadata().rollbackTargetGenerationId()), ChatFormatting.YELLOW, false);
+				if (!record.metadata().patchNotes().isBlank()) send(context, "Patch notes: " + record.metadata().patchNotes(), ChatFormatting.GRAY, false);
+			}
+			return Command.SINGLE_SUCCESS;
+		} catch (IOException e) {
+			send(context, "Failed to read generation history: " + e.getMessage(), ChatFormatting.RED, false);
+			return 0;
+		}
 	}
 
 	private static String optionalArgument(CommandContext<CommandSourceStack> context, String name) {

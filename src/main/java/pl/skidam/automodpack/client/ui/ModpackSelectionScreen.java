@@ -4,6 +4,7 @@ import static pl.skidam.automodpack_core.Constants.LOGGER;
 import static pl.skidam.automodpack_core.Constants.clientConfig;
 import static pl.skidam.automodpack_core.Constants.clientSelectionFile;
 import static pl.skidam.automodpack_core.Constants.modpackCatalogueFileName;
+import static pl.skidam.automodpack_core.Constants.modpackHistoryFileName;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -27,6 +28,7 @@ import pl.skidam.automodpack_core.modpack.group.GroupSelectionResolver;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.modpack.group.SelectionResolutionException;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.ClientContentHistory;
 import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.ModpackContentTools;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -172,8 +174,9 @@ public class ModpackSelectionScreen extends VersionedScreen {
 			}));
 		}
 
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 80, 150, 20, VersionedText.literal("Remove modpack"), press -> requestRemoval()));
-		this.addRenderableWidget(buttonWidget(this.width / 2 + 5, this.height - 80, 150, 20, VersionedText.literal("Recovery archive"), press -> requestRecovery()));
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 80, 100, 20, VersionedText.literal("Remove"), press -> requestRemoval()));
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 50, this.height - 80, 100, 20, VersionedText.literal("Recovery"), press -> requestRecovery()));
+		this.addRenderableWidget(buttonWidget(this.width / 2 + 55, this.height - 80, 100, 20, VersionedText.literal("History"), press -> requestHistory()));
 
 		this.addRenderableWidget(buttonWidget(this.width / 2 - 155, this.height - 28, 100, 20, VersionedText.translatable("automodpack.selection.reset"),
 				press -> {
@@ -272,6 +275,17 @@ public class ModpackSelectionScreen extends VersionedScreen {
 				new ScreenManager().recovery(recoveryUpdater, recoveryUpdater.recoverySnapshot(), modpackName);
 			} catch (Exception e) {
 				recoveryUpdater.close();
+				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
+			}
+		});
+	}
+
+	private void requestHistory() {
+		DownloadClient.NET_EXECUTOR.execute(() -> {
+			try {
+				ClientContentHistory.History history = ClientContentHistory.read(ModpackUtils.getModpackPath(modpackId).resolve(modpackHistoryFileName));
+				new ScreenManager().history(history, modpackName);
+			} catch (Exception e) {
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		});

@@ -1,6 +1,7 @@
 package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.client.ui.*;
+import pl.skidam.automodpack_core.update.ClientContentHistory;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -54,6 +55,11 @@ public class ScreenImpl implements ScreenService {
 	@Override
 	public void recovery(Object... args) {
 		executeOnClient(() -> Screens.recovery(args));
+	}
+
+	@Override
+	public void history(Object... args) {
+		executeOnClient(() -> Screens.history(args));
 	}
 
 	@Override
@@ -138,6 +144,11 @@ public class ScreenImpl implements ScreenService {
 		public static void recovery(Object... args) {
 			Screen parent = Screens.getScreen();
 			Screens.setScreen(new RecoveryArchiveScreen(parent, (ModpackUpdater) args[0], (ModpackUpdater.RecoverySnapshot) args[1], (String) args[2]));
+		}
+
+		public static void history(Object... args) {
+			Screen parent = Screens.getScreen();
+			Screens.setScreen(new ContentHistoryScreen(parent, (ClientContentHistory.History) args[0], (String) args[1]));
 		}
 
 		public static void error(String... errors) {

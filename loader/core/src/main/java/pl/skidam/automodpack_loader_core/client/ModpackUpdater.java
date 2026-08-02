@@ -11,6 +11,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -35,6 +36,7 @@ import pl.skidam.automodpack_core.modpack.group.ResolvedSelection;
 import pl.skidam.automodpack_core.modpack.group.SelectedModpackTarget;
 import pl.skidam.automodpack_core.modpack.group.SelectionIntent;
 import pl.skidam.automodpack_core.protocol.DownloadClient;
+import pl.skidam.automodpack_core.update.ClientContentHistory;
 import pl.skidam.automodpack_core.update.RecoveryArchive;
 import pl.skidam.automodpack_core.update.UpdateDeferredException;
 import pl.skidam.automodpack_core.update.UpdatePlan;
@@ -87,12 +89,20 @@ public class ModpackUpdater implements AutoCloseable {
 	private static final Comparator<RecoveryFile> RECOVERY_FILE_ORDER = Comparator.comparing(RecoveryFile::logicalPath).thenComparing(RecoveryFile::sha1)
 			.thenComparingLong(RecoveryFile::size);
 
-	public record RecoveryFile(String logicalPath, String sha1, long size) {
+	public record RecoveryFile(String logicalPath, String sha1, long size, String sourceGenerationId, String preservedAt) {
+		public RecoveryFile(String logicalPath, String sha1, long size) {
+			this(logicalPath, sha1, size, "", "");
+		}
+
 		public RecoveryFile {
 			logicalPath = UpdatePlanner.normalize(logicalPath);
 			if (sha1 == null || !sha1.matches("[0-9a-fA-F]{40}")) throw new IllegalArgumentException("Recovery file SHA-1 is invalid");
 			sha1 = sha1.toLowerCase(Locale.ROOT);
 			if (size < 0) throw new IllegalArgumentException("Recovery file size is invalid");
+			sourceGenerationId = sourceGenerationId == null ? "" : sourceGenerationId;
+			if (!sourceGenerationId.isEmpty() && !sourceGenerationId.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Recovery source generation ID is invalid");
+			preservedAt = preservedAt == null ? "" : preservedAt;
+			if (!preservedAt.isEmpty()) Instant.parse(preservedAt);
 		}
 	}
 
@@ -271,7 +281,8 @@ public class ModpackUpdater implements AutoCloseable {
 		String normalizedHash = sha1 == null ? null : sha1.toLowerCase(Locale.ROOT);
 		if (entry == null || normalizedHash == null || !entry.historicalHashes().contains(new OwnershipLedger.Content(normalizedHash, size)))
 			throw new IOException("Recovery object is not owned by the installed modpack ledger");
-		return RecoveryArchive.archive(SmartFileUtils.CWD.resolve(storeDir), SmartFileUtils.CWD.resolve(recoveryDir), normalizedPath, normalizedHash, size);
+		return RecoveryArchive.archive(SmartFileUtils.CWD.resolve(storeDir), SmartFileUtils.CWD.resolve(recoveryDir), normalizedPath, normalizedHash, size,
+				entry.lastPublishedGenerationId(), Instant.now().toString());
 	}
 
 	public RecoverySnapshot recoverySnapshot() throws IOException {
@@ -279,7 +290,7 @@ public class ModpackUpdater implements AutoCloseable {
 		if (installed == null) throw new IOException("Installed modpack content is missing");
 		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(SmartFileUtils.CWD.resolve(recoveryDir));
 		List<RecoveryFile> archived = new ArrayList<>();
-		for (var entry : archive.entries) archived.add(new RecoveryFile(entry.logicalPath, entry.sha1, entry.size));
+		for (var entry : archive.entries) archived.add(new RecoveryFile(entry.logicalPath, entry.sha1, entry.size, entry.sourceGenerationId, entry.preservedAt));
 		archived.sort(RECOVERY_FILE_ORDER);
 		Set<String> archivedKeys = archived.stream().map(ModpackUpdater::recoveryKey).collect(Collectors.toSet());
 		Set<String> targetPaths = new HashSet<>();
@@ -292,7 +303,7 @@ public class ModpackUpdater implements AutoCloseable {
 			for (OwnershipLedger.Content content : ledgerEntry.historicalHashes()) {
 				String hash = content.sha1().toLowerCase(Locale.ROOT);
 				if (!SmartFileUtils.isValidFile(storeRoot.resolve(hash), content.size(), hash)) continue;
-				RecoveryFile file = new RecoveryFile(ledgerEntry.logicalPath(), hash, content.size());
+				RecoveryFile file = new RecoveryFile(ledgerEntry.logicalPath(), hash, content.size(), ledgerEntry.lastPublishedGenerationId(), "");
 				if (!archivedKeys.contains(recoveryKey(file))) available.add(file);
 			}
 		}
@@ -832,6 +843,11 @@ public class ModpackUpdater implements AutoCloseable {
 			throw new UpdateDeferredException(transaction.transactionId, execution.blockedPath(), execution.message());
 		}
 		clientConfig = plan.plannedClientConfig();
+		try {
+			ClientContentHistory.record(modpackDir.resolve(modpackHistoryFileName), target.flatTarget());
+		} catch (IOException e) {
+			LOGGER.warn("Modpack update succeeded, but client content history could not be written", e);
+		}
 	}
 
 	private void populateStoreFromModpack(Collection<Jsons.ModpackContentFields.ModpackContentItem> items, FileMetadataCache cache) {
