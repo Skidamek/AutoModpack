@@ -40,6 +40,21 @@ public final class ClientSelectionStore {
 		}
 	}
 
+	public void remove(String modpackId, SelectionIntent expected) throws IOException {
+		synchronized (LOCK) {
+			ModpackId.requireValid(modpackId);
+			Jsons.ClientSelectionStoreFields fields = read();
+			Jsons.ClientSelectionStoreFields.ModpackSelection currentFields = fields.selections.get(modpackId);
+			SelectionIntent current = currentFields == null ? null : new SelectionIntent(currentFields.requestedGroups);
+			if (current != null && !Objects.equals(current, expected))
+				throw new IOException("Group selection changed after removal planning for modpack " + modpackId);
+			if (current == null) return;
+			fields.selections.remove(modpackId);
+			fields.selections = new LinkedHashMap<>(new TreeMap<>(fields.selections));
+			ConfigTools.writeAtomic(path, fields);
+		}
+	}
+
 	private Jsons.ClientSelectionStoreFields read() {
 		Jsons.ClientSelectionStoreFields fields = ConfigTools.read(path, Jsons.ClientSelectionStoreFields.class)
 				.orElseGet(Jsons.ClientSelectionStoreFields::new);

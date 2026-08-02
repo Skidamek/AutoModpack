@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -54,6 +55,91 @@ public final class UpdatePlanner {
 	}
 
 	public record SelectionContext(String previousModpackId, Jsons.ModpackContentFields previousManifest) {}
+
+	public record RemovalInput(Jsons.ModpackContentFields installedManifest, Jsons.ClientBaselineFields baseline,
+			Map<FileKey, FileState> files, Set<String> availableBaselineObjects, Jsons.ClientConfigFieldsV3 plannedClientConfig) {
+		public RemovalInput {
+			files = Collections.unmodifiableMap(new LinkedHashMap<>(files));
+			Set<String> normalizedObjects = new LinkedHashSet<>();
+			for (String value : availableBaselineObjects) if (value != null) normalizedObjects.add(value.toLowerCase(Locale.ROOT));
+			availableBaselineObjects = Collections.unmodifiableSet(normalizedObjects);
+		}
+	}
+
+	public static UpdatePlan planRemoval(RemovalInput input) {
+		Objects.requireNonNull(input);
+		Jsons.ModpackContentFields installed = Objects.requireNonNull(input.installedManifest());
+		ModpackId.requireValid(installed.modpackId);
+		GenerationTarget generationTarget = GenerationTarget.fromFlat(installed);
+		OwnershipLedger ledger = OwnershipLedger.fromFields(installed.ownershipLedger);
+		if (!installed.modpackId.equals(ledger.modpackId())) throw new IllegalArgumentException("Removal ledger modpack ID does not match installed modpack");
+		if (input.baseline() == null || !installed.modpackId.equals(input.baseline().modpackId) || input.baseline().entries == null)
+			throw new IllegalArgumentException("Removal baseline identity is invalid");
+		if (input.plannedClientConfig() == null) throw new IllegalArgumentException("Removal client config is missing");
+
+		Map<String, Jsons.ClientBaselineFields.EntryFields> baselines = new TreeMap<>();
+		for (var entry : input.baseline().entries) {
+			if (entry == null || entry.logicalPath == null || !normalize(entry.logicalPath).equals(entry.logicalPath)
+					|| baselines.put(entry.logicalPath, entry) != null)
+				throw new IllegalArgumentException("Removal baseline contains duplicate or incomplete entries");
+			if (entry.absent) {
+				if (entry.objectHash == null || !entry.objectHash.isEmpty() || entry.size != -1)
+					throw new IllegalArgumentException("Absent removal baseline contains file metadata");
+			} else if (entry.objectHash == null || !entry.objectHash.matches("[0-9a-fA-F]{40}") || entry.size < 0) {
+				throw new IllegalArgumentException("Removal baseline file metadata is invalid");
+			}
+		}
+		Map<FileKey, FileState> projected = new HashMap<>(input.files());
+		Set<FileKey> projectedScope = new HashSet<>(input.files().keySet());
+		Map<FileKey, Operation> operations = new HashMap<>();
+		List<Preservation> preservations = new ArrayList<>();
+		EnumSet<RestartReason> restartReasons = EnumSet.noneOf(RestartReason.class);
+
+		if (installed.list != null) for (var item : installed.list) {
+			FileKey key = new FileKey(Root.MODPACK_DIR, normalize(item.file));
+			FileState state = projected.get(key);
+			if (state != null && state.regularFile() && hashesEqual(state.sha1(), item.sha1)) {
+				delete(operations, projected, key, item.sha1);
+				restartReasons.add(RestartReason.REMOVED_NON_MODPACK_FILES);
+			}
+		}
+
+		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
+			Optional<FileKey> candidateKey = managedCleanupKey(ledgerEntry.logicalPath());
+			if (candidateKey.isEmpty()) continue;
+			FileKey key = candidateKey.get();
+			FileState state = projected.get(key);
+			if (state == null || !state.regularFile() || state.sha1() == null) continue;
+			OwnershipLedger.Content current = new OwnershipLedger.Content(state.sha1().toLowerCase(Locale.ROOT), state.size());
+			if (!ledgerEntry.historicalHashes().contains(current)) continue;
+			Jsons.ClientBaselineFields.EntryFields baseline = baselines.get(ledgerEntry.logicalPath());
+			if (baseline == null) continue;
+			if (baseline.absent) {
+				preservations.add(new Preservation(key.root(), key.relativePath(), current.sha1(), current.size()));
+				delete(operations, projected, key, current.sha1());
+				restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
+				continue;
+			}
+			if (baseline.objectHash == null || !baseline.objectHash.matches("[0-9a-fA-F]{40}") || baseline.size < 0) continue;
+			String baselineHash = baseline.objectHash.toLowerCase(Locale.ROOT);
+			if (!input.availableBaselineObjects().contains(baselineHash)) continue;
+			if (matches(state, baselineHash, baseline.size)) continue;
+			operations.put(key, new Operation(key.root(), key.relativePath(), OperationType.INSTALL_OBJECT, baselineHash, baseline.size, current.sha1()));
+			projected.put(key, new FileState(baselineHash, baseline.size, true, state.mod()));
+			restartReasons.add(RestartReason.APPLIED_SERVER_DELETIONS);
+		}
+
+		List<Operation> ordered = operations.values().stream().sorted(OPERATION_ORDER).toList();
+		projectedScope.addAll(operations.keySet());
+		List<ProjectedFile> finalState = projectedScope.stream().sorted(FILE_KEY_ORDER).map(key -> {
+			FileState state = projected.get(key);
+			return state == null
+					? new ProjectedFile(key.root(), key.relativePath(), false, null, -1)
+					: new ProjectedFile(key.root(), key.relativePath(), true, state.sha1(), state.size());
+		}).toList();
+		return new UpdatePlan(installed.modpackId, generationTarget, ordered, finalState, input.plannedClientConfig(), restartReasons,
+				preservations.stream().sorted(Comparator.comparing((Preservation preservation) -> preservation.root().ordinal()).thenComparing(Preservation::relativePath)).toList(), List.of());
+	}
 
 	public static UpdatePlan plan(Input input) {
 		Objects.requireNonNull(input);
