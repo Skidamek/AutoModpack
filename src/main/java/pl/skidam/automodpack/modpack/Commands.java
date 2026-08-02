@@ -471,6 +471,22 @@ public class Commands {
 	private static int revertGeneration(CommandContext<CommandSourceStack> context) {
 		String targetGenerationId = StringArgumentType.getString(context, "generation-id");
 		String notes = optionalArgument(context, "notes");
+		try {
+			GenerationRecord target = modpackExecutor.technicalHistory().stream()
+					.filter(record -> record.metadata().generationId().equals(targetGenerationId)).findFirst().orElse(null);
+			if (target == null) {
+				send(context, "FAILED: generation target was not found", ChatFormatting.RED, true);
+				return 0;
+			}
+			send(context, "Revert target", ChatFormatting.YELLOW, target.metadata().createdAt().toString(), ChatFormatting.WHITE, true);
+			send(context, "Target content", ChatFormatting.WHITE, copyable(target.metadata().stateDigest()), ChatFormatting.YELLOW, false);
+			int targetFiles = target.manifest().groups().values().stream().mapToInt(group -> group.files().size()).sum();
+			send(context, "Target catalogue", ChatFormatting.WHITE, target.manifest().groups().size() + " groups, " + targetFiles + " files", ChatFormatting.YELLOW, false);
+			if (!target.metadata().patchNotes().isBlank()) send(context, "Target patch notes: " + target.metadata().patchNotes(), ChatFormatting.GRAY, false);
+		} catch (IOException e) {
+			send(context, "FAILED: could not read generation history: " + e.getMessage(), ChatFormatting.RED, true);
+			return 0;
+		}
 		Util.backgroundExecutor().execute(() -> {
 			send(context, "Reverting modpack to generation " + targetGenerationId + "...", ChatFormatting.YELLOW, true);
 			ModpackExecutor.RevertResult result = modpackExecutor.revert(targetGenerationId, notes);
