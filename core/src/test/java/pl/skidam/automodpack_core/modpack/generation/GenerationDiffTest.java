@@ -17,10 +17,12 @@ class GenerationDiffTest {
 	void reportsAllFileClassesMetadataAndCanonicalOrder() {
 		GroupManifest parent = manifest("parent", Map.of("z-removed", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
 				"b-modified", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", null),
-				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "old")), "old description", "old-tag", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "old")), "old description", "old-tag",
+				"86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
 		GroupManifest child = manifest("child", Map.of("a-added", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
 				"b-modified", file("1", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98", null),
-				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "new")), "new description", "new-tag", "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98");
+				"a-metadata", file("1", "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8", "new")), "new description", "new-tag",
+				"e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98");
 
 		GenerationDiff diff = GenerationDiff.between(parent, child);
 
@@ -34,9 +36,9 @@ class GenerationDiffTest {
 	}
 
 	@Test
-	void reportsGroupLinkMetadataChanges() {
-		GroupManifest parent = linkedManifest("https://example.com/old");
-		GroupManifest child = linkedManifest("https://example.com/new");
+	void reportsGroupTagMetadataChanges() {
+		GroupManifest parent = taggedManifest("old-tag");
+		GroupManifest child = taggedManifest("new-tag");
 
 		GenerationDiff diff = GenerationDiff.between(parent, child);
 
@@ -55,12 +57,12 @@ class GenerationDiffTest {
 		assertTrue(GenerationDiff.between(parent, parent).isEmpty());
 	}
 
-	private static GroupManifest linkedManifest(String projectUrl) {
+	private static GroupManifest taggedManifest(String tag) {
 		Jsons.CompleteModpackContentFields fields = new Jsons.CompleteModpackContentFields();
 		fields.modpackId = "abc1234";
-		fields.selectionTags = Map.of();
+		fields.selectionTags = Map.of(tag, tag(tag));
 		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.projectUrl = projectUrl;
+		group.tag = tag;
 		group.files = Map.of();
 		fields.groups = Map.of("main", group);
 		return GroupManifestValidator.validate(fields);

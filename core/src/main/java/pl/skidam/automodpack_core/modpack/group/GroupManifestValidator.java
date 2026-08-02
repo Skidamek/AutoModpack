@@ -3,7 +3,6 @@ package pl.skidam.automodpack_core.modpack.group;
 import static pl.skidam.automodpack_core.Constants.modpackCatalogueFileName;
 import static pl.skidam.automodpack_core.Constants.modpackContentFileName;
 
-import java.net.URI;
 import java.text.Normalizer;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -54,13 +53,11 @@ public final class GroupManifestValidator {
 			}
 			Set<String> breaksWith = validateIds("Group '" + id + "' breaksWith", group.breaksWith, errors);
 			Set<String> requires = validateIds("Group '" + id + "' requires", group.requires, errors);
-			Set<String> groupTags = validateIds("Group '" + id + "' tags", group.tags, errors);
+			String tag = validateOptionalTag(id, group.tag, errors);
 			Set<ClientPlatform> platforms = validatePlatforms(id, group.compatiblePlatforms, errors);
-			String projectUrl = validateUrl(id, "project", group.projectUrl, errors);
-			String sourceUrl = validateUrl(id, "source", group.sourceUrl, errors);
 			Map<String, GroupManifest.GroupFile> files = validateFiles(id, group.files, errors);
-			groups.put(id, new GroupManifest.Group(group.displayName, group.description, group.category, projectUrl, sourceUrl, group.required, group.recommended,
-					new TreeSet<>(breaksWith), new TreeSet<>(requires), new TreeSet<>(groupTags), platforms, new TreeMap<>(files)));
+			groups.put(id, new GroupManifest.Group(group.displayName, group.description, tag, group.required, group.recommended,
+					new TreeSet<>(breaksWith), new TreeSet<>(requires), platforms, new TreeMap<>(files)));
 		}
 
 		validateReferences(groups, tags, errors);
@@ -177,7 +174,7 @@ public final class GroupManifestValidator {
 			if (group.breaksWith().contains(id)) errors.add("Group '" + id + "' cannot conflict with itself");
 			for (String dependency : group.requires()) if (!groups.containsKey(dependency)) errors.add("Group '" + id + "' requires missing group '" + dependency + "'");
 			for (String conflict : group.breaksWith()) if (!groups.containsKey(conflict)) errors.add("Group '" + id + "' conflicts with missing group '" + conflict + "'");
-			for (String tag : group.tags()) if (!tags.containsKey(tag)) errors.add("Group '" + id + "' uses missing selection tag '" + tag + "'");
+			if (!group.tag().isEmpty() && !tags.containsKey(group.tag())) errors.add("Group '" + id + "' uses missing selection tag '" + group.tag() + "'");
 		}
 	}
 
@@ -312,19 +309,10 @@ public final class GroupManifestValidator {
 		}
 	}
 
-	private static String validateUrl(String groupId, String name, String input, List<String> errors) {
-		String value = value(input);
-		if (value.isEmpty()) return value;
-		try {
-			URI uri = URI.create(value);
-			String scheme = uri.getScheme();
-			boolean valid = uri.isAbsolute() && !uri.isOpaque() && uri.getHost() != null && uri.getUserInfo() == null
-					&& ("http".equals(scheme) || "https".equals(scheme)) && uri.normalize().toString().equals(value);
-			if (!valid) errors.add("Group '" + groupId + "' has invalid " + name + " URL");
-		} catch (IllegalArgumentException e) {
-			errors.add("Group '" + groupId + "' has invalid " + name + " URL");
-		}
-		return value;
+	private static String validateOptionalTag(String groupId, String input, List<String> errors) {
+		if (input == null || input.isEmpty()) return "";
+		if (!isValidIdentifier(input)) errors.add("Invalid Group '" + groupId + "' selection tag ID: " + input);
+		return input;
 	}
 
 	private static String value(String value) {

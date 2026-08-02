@@ -20,26 +20,35 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
-	void validatesAndRoundTripsGroupLinks() {
+	void validatesOptionalTagAndRoundTrips() {
 		var fields = catalogue();
 		var group = group(file("a"));
-		group.projectUrl = "https://example.com/project";
-		group.sourceUrl = "http://github.com/example/project";
+		group.tag = "visuals";
+		fields.selectionTags = Map.of("visuals", new Jsons.CompleteModpackContentFields.SelectionTagFields());
 		fields.groups = Map.of("main", group);
 
 		GroupManifest manifest = GroupManifestValidator.validate(fields);
 
-		assertEquals(group.projectUrl, manifest.groups().get("main").projectUrl());
-		assertEquals(group.sourceUrl, manifest.groups().get("main").sourceUrl());
+		assertEquals("visuals", manifest.groups().get("main").tag());
 		assertEquals(ConfigTools.GSON.toJson(manifest.toFields()), ConfigTools.GSON.toJson(GroupManifestValidator.validate(manifest.toFields()).toFields()));
 	}
 
 	@Test
-	void rejectsNonCanonicalOrNonHttpGroupLinks() {
-		for (String value : List.of("https://example.com/a/../b", "ftp://example.com/project", "example.com/project", "https://user@example.com/project")) {
+	void keepsUntaggedGroupsInTheGeneralSection() {
+		var fields = catalogue();
+		fields.groups = Map.of("main", group(file("a")));
+
+		GroupManifest manifest = GroupManifestValidator.validate(fields);
+
+		assertEquals("", manifest.groups().get("main").tag());
+	}
+
+	@Test
+	void rejectsUnsafeOptionalTagValues() {
+		for (String value : List.of("Visuals", "tag name", "../tag")) {
 			var fields = catalogue();
 			var group = group(file("a"));
-			group.projectUrl = value;
+			group.tag = value;
 			fields.groups = Map.of("main", group);
 			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), value);
 		}

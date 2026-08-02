@@ -33,14 +33,11 @@ public record GroupManifest(
 			Jsons.CompleteModpackContentFields.ModpackGroupFields serialized = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
 			serialized.displayName = group.displayName();
 			serialized.description = group.description();
-			serialized.category = group.category();
-			serialized.projectUrl = group.projectUrl();
-			serialized.sourceUrl = group.sourceUrl();
+			serialized.tag = group.tag();
 			serialized.required = group.required();
 			serialized.recommended = group.recommended();
 			serialized.breaksWith = new LinkedHashSet<>(group.breaksWith());
 			serialized.requires = new LinkedHashSet<>(group.requires());
-			serialized.tags = new LinkedHashSet<>(group.tags());
 			serialized.compatiblePlatforms = group.compatiblePlatforms().stream().map(ClientPlatform::id)
 					.collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
 			Map<String, Jsons.CompleteModpackContentFields.GroupFileFields> files = new LinkedHashMap<>();
@@ -89,33 +86,21 @@ public record GroupManifest(
 	public record Group(
 			String displayName,
 			String description,
-			String category,
-			String projectUrl,
-			String sourceUrl,
+			String tag,
 			boolean required,
 			boolean recommended,
 			NavigableSet<String> breaksWith,
 			NavigableSet<String> requires,
-			NavigableSet<String> tags,
 			Set<ClientPlatform> compatiblePlatforms,
 			NavigableMap<String, GroupFile> files) {
 		public Group {
 			displayName = displayName == null ? "" : displayName;
 			description = description == null ? "" : description;
-			category = category == null ? "" : category;
-			projectUrl = projectUrl == null ? "" : projectUrl;
-			sourceUrl = sourceUrl == null ? "" : sourceUrl;
+			tag = tag == null ? "" : tag;
 			breaksWith = immutableSet(breaksWith);
 			requires = immutableSet(requires);
-			tags = immutableSet(tags);
 			compatiblePlatforms = immutablePlatforms(compatiblePlatforms);
 			files = immutableMap(files);
-		}
-
-		public Group(String displayName, String description, String category, boolean required, boolean recommended,
-				NavigableSet<String> breaksWith, NavigableSet<String> requires, NavigableSet<String> tags, Set<ClientPlatform> compatiblePlatforms,
-				NavigableMap<String, GroupFile> files) {
-			this(displayName, description, category, "", "", required, recommended, breaksWith, requires, tags, compatiblePlatforms, files);
 		}
 
 		public boolean supports(ClientPlatform platform) {
