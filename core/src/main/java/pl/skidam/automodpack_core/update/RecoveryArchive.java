@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -28,10 +29,16 @@ public final class RecoveryArchive {
 	private RecoveryArchive() {}
 
 	public static Path archive(Path storeDirectory, Path recoveryDirectory, String logicalPath, String sha1, long size) throws IOException {
+		return archive(storeDirectory, recoveryDirectory, logicalPath, sha1, size, "", Instant.now().toString());
+	}
+
+	public static Path archive(Path storeDirectory, Path recoveryDirectory, String logicalPath, String sha1, long size, String sourceGenerationId, String preservedAt) throws IOException {
 		Objects.requireNonNull(storeDirectory, "storeDirectory");
 		Objects.requireNonNull(recoveryDirectory, "recoveryDirectory");
 		String normalizedPath = requirePath(logicalPath);
 		String normalizedHash = requireHash(sha1);
+		String normalizedSourceGenerationId = requireOptionalGeneration(sourceGenerationId);
+		String normalizedPreservedAt = requireInstant(preservedAt);
 		if (size < 0) throw new IOException("Recovery object size is invalid");
 
 		Path storeRoot = storeDirectory.toAbsolutePath().normalize();
@@ -63,6 +70,8 @@ public final class RecoveryArchive {
 			entry.logicalPath = normalizedPath;
 			entry.sha1 = normalizedHash;
 			entry.size = size;
+			entry.sourceGenerationId = normalizedSourceGenerationId;
+			entry.preservedAt = normalizedPreservedAt;
 			List<Jsons.ClientRecoveryArchiveFields.EntryFields> entries = new ArrayList<>(archive.entries);
 			entries.add(entry);
 			entries.sort(ENTRY_ORDER);
@@ -100,6 +109,8 @@ public final class RecoveryArchive {
 			if (entry == null || entry.logicalPath == null || !requirePath(entry.logicalPath).equals(entry.logicalPath))
 				throw new IOException("Recovery archive entry path is invalid");
 			String hash = requireHash(entry.sha1);
+			requireOptionalGeneration(entry.sourceGenerationId);
+			requireInstant(entry.preservedAt);
 			if (entry.size < 0 || !unique.add(entry.logicalPath + "\0" + hash + "\0" + entry.size))
 				throw new IOException("Recovery archive entry metadata is invalid");
 			Path object = archiveRoot.resolve(OBJECTS_DIRECTORY).resolve(hash);
@@ -111,6 +122,23 @@ public final class RecoveryArchive {
 		List<String> expectedOrder = sorted.stream().map(entry -> entry.logicalPath + "\0" + entry.sha1.toLowerCase(Locale.ROOT) + "\0" + entry.size).toList();
 		if (!actualOrder.equals(expectedOrder)) throw new IOException("Recovery archive entries are not ordered");
 		return archive;
+	}
+
+	private static String requireOptionalGeneration(String value) throws IOException {
+		if (value == null || value.isEmpty()) return "";
+		if (!SHA1.matcher(value).matches() || !value.equals(value.toLowerCase(Locale.ROOT))) throw new IOException("Recovery source generation ID is invalid");
+		return value;
+	}
+
+	private static String requireInstant(String value) throws IOException {
+		if (value == null || value.isEmpty()) return "";
+		try {
+			Instant parsed = Instant.parse(value);
+			if (!parsed.toString().equals(value)) throw new IOException("Recovery preservation timestamp is not canonical");
+			return value;
+		} catch (RuntimeException e) {
+			throw new IOException("Recovery preservation timestamp is invalid", e);
+		}
 	}
 
 	private static String requirePath(String path) throws IOException {

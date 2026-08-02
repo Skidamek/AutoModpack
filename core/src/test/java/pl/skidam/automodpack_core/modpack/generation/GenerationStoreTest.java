@@ -144,6 +144,24 @@ class GenerationStoreTest {
 		assertThrows(java.io.IOException.class, store::loadCurrent);
 	}
 
+	@Test
+	void revertCreatesTechnicalChildWithCumulativeLedger() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "");
+		GenerationStore.CurrentSnapshot secondCurrent = store.loadCurrent().orElseThrow();
+
+		GenerationStore.Publication reverted = store.publishRevert(first.record().metadata().generationId(), Optional.of(secondCurrent), "revert notes");
+
+		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, reverted.status());
+		assertEquals(second.record().metadata().generationId(), reverted.record().metadata().parentGenerationId());
+		assertEquals(first.record().metadata().generationId(), reverted.record().metadata().rollbackTargetGenerationId());
+		assertEquals(first.record().manifest(), reverted.record().manifest());
+		assertEquals(3, store.currentHistory().size());
+		assertTrue(reverted.record().ownershipLedger().entries().get("config/example.txt").historicalHashes().size() >= 2);
+	}
+
 	private long countRecords() throws Exception {
 		try (var records = Files.list(tempDir.resolve("records"))) {
 			return records.count();

@@ -38,6 +38,24 @@ class RecoveryArchiveTest {
 	}
 
 	@Test
+	void recordsRecoveryProvenance() throws Exception {
+		Path store = temporaryDirectory.resolve("store");
+		Path recovery = temporaryDirectory.resolve("recovery");
+		Files.createDirectories(store);
+		Path source = Files.writeString(store.resolve("source.tmp"), "deleted bytes", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(source);
+		Path object = Files.move(source, store.resolve(hash));
+		String generationId = "a".repeat(40);
+		String preservedAt = "2026-08-02T12:34:56Z";
+
+		RecoveryArchive.archive(store, recovery, "config/old.json", hash, Files.size(object), generationId, preservedAt);
+
+		Jsons.ClientRecoveryArchiveFields.EntryFields entry = RecoveryArchive.read(recovery).entries.get(0);
+		assertEquals(generationId, entry.sourceGenerationId);
+		assertEquals(preservedAt, entry.preservedAt);
+	}
+
+	@Test
 	void rejectsUnsafePathsAndCorruptCasObjects() throws Exception {
 		Path store = temporaryDirectory.resolve("store");
 		Files.createDirectories(store);
