@@ -11,6 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientHandshakePacketListenerImpl;
 import net.minecraft.network.FriendlyByteBuf;
 
+import pl.skidam.automodpack.client.resourcepack.ResourcePackAutoApplier;
 import pl.skidam.automodpack.mixin.core.ClientLoginNetworkHandlerAccessor;
 import pl.skidam.automodpack.networking.ModPackets;
 import pl.skidam.automodpack.networking.client.ClientLoginDisconnect;
@@ -127,7 +128,10 @@ public class DataC2SPacket {
 				}
 
 				UpdateType restartType = updater.reconcileReceivedManifest();
-				if (restartType == null) return buildResponse(false);
+				if (restartType == null) {
+					client.execute(() -> ResourcePackAutoApplier.apply(client, serverModpackContent));
+					return buildResponse(false);
+				}
 
 				new ScreenManager().waiting();
 				disconnectImmediately(handler);
