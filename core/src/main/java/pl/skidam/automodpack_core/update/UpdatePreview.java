@@ -52,6 +52,11 @@ public record UpdatePreview(
 
 	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
 			ResolvedSelection selection, boolean removal) {
+		return create(plan, originalFiles, target, selection, removal, null);
+	}
+
+	public static UpdatePreview create(UpdatePlan plan, Map<FileKey, FileState> originalFiles, Jsons.ModpackContentFields target,
+			ResolvedSelection selection, boolean removal, Jsons.ClientBaselineFields baseline) {
 		Objects.requireNonNull(plan, "plan");
 		Objects.requireNonNull(originalFiles, "originalFiles");
 		Objects.requireNonNull(target, "target");
@@ -59,6 +64,7 @@ public record UpdatePreview(
 				.collect(java.util.stream.Collectors.toMap(operation -> new FileKey(operation.root(), operation.relativePath()), operation -> operation));
 		Set<FileKey> preserved = new java.util.HashSet<>();
 		for (Preservation preservation : plan.preservations()) preserved.add(new FileKey(preservation.root(), preservation.relativePath()));
+		Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries = baselineEntries(baseline);
 		List<Entry> entries = new ArrayList<>();
 		for (Operation operation : plan.operations()) {
 			FileKey key = new FileKey(operation.root(), operation.relativePath());
@@ -76,7 +82,7 @@ public record UpdatePreview(
 		}
 
 		Set<String> targetPaths = new TreeSet<>();
-		if (target.list != null) for (var item : target.list) targetPaths.add(UpdatePlanner.normalize(item.file));
+		if (!removal && target.list != null) for (var item : target.list) targetPaths.add(UpdatePlanner.normalize(item.file));
 		OwnershipLedger ledger = OwnershipLedger.fromFields(target.ownershipLedger);
 		for (OwnershipLedger.Entry ledgerEntry : ledger.entries().values()) {
 			if (targetPaths.contains(ledgerEntry.logicalPath())) continue;
@@ -85,6 +91,7 @@ public record UpdatePreview(
 			FileKey key = optionalKey.get();
 			FileState current = originalFiles.get(key);
 			if (current == null || operations.containsKey(key)) continue;
+			if (removal && baselineMatches(current, baselineEntries.get(ledgerEntry.logicalPath()))) continue;
 			if (!current.regularFile()) {
 				entries.add(new Entry(Kind.UNSAFE, key.root(), key.relativePath(), Math.max(0, current.size())));
 				continue;
@@ -106,6 +113,20 @@ public record UpdatePreview(
 				? new GroupConsequences(Set.of(), Set.of(), Set.of())
 				: new GroupConsequences(selection.intent().requestedGroups(), selection.selectedGroups(), selection.staleRequestedGroups());
 		return new UpdatePreview(plan, entries, consequences);
+	}
+
+	private static Map<String, Jsons.ClientBaselineFields.EntryFields> baselineEntries(Jsons.ClientBaselineFields baseline) {
+		if (baseline == null || baseline.entries == null) return Map.of();
+		Map<String, Jsons.ClientBaselineFields.EntryFields> entries = new java.util.HashMap<>();
+		for (var entry : baseline.entries) {
+			if (entry != null && entry.logicalPath != null) entries.put(UpdatePlanner.normalize(entry.logicalPath), entry);
+		}
+		return entries;
+	}
+
+	private static boolean baselineMatches(FileState current, Jsons.ClientBaselineFields.EntryFields baseline) {
+		return baseline != null && !baseline.absent && baseline.objectHash != null && baseline.objectHash.matches("[0-9a-fA-F]{40}")
+				&& baseline.size >= 0 && current.regularFile() && baseline.size == current.size() && baseline.objectHash.equalsIgnoreCase(current.sha1());
 	}
 
 	public record Entry(Kind kind, Root root, String relativePath, long size) {

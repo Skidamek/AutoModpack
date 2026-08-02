@@ -2,7 +2,9 @@ package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -69,6 +71,52 @@ class UpdatePreviewTest {
 		UpdatePreview preview = UpdatePreview.create(plan, files, target, null, false);
 
 		assertEquals(UpdatePreview.Kind.PRESERVED_UNAVAILABLE, assertSingle(preview, "config/unknown.json").kind());
+	}
+
+	@Test
+	void removalPreviewShowsDeletionAndCasPreservation() {
+		Jsons.ModpackContentFields installed = manifest(
+				new Jsons.ModpackContentFields.ModpackContentItem("config/removed.json", "7", "config", false, false, false, OLD_HASH, "0"),
+				entry("config/removed.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
+		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		baseline.modpackId = installed.modpackId;
+		Jsons.ClientBaselineFields.EntryFields baselineEntry = new Jsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = "config/removed.json";
+		baselineEntry.objectHash = "";
+		baselineEntry.size = -1;
+		baselineEntry.absent = true;
+		baseline.entries = new ArrayList<>(List.of(baselineEntry));
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.MODPACK_DIR, "config/removed.json"), new FileState(OLD_HASH, 7, true, false),
+				new FileKey(Root.GAME_DIR, "config/removed.json"), new FileState(OLD_HASH, 7, true, false));
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, java.util.Set.of(), new Jsons.ClientConfigFieldsV3()));
+
+		UpdatePreview preview = UpdatePreview.create(plan, files, installed, null, true);
+
+		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.REMOVED && entry.relativePath().equals("config/removed.json")));
+		assertTrue(preview.entries().stream().anyMatch(entry -> entry.kind() == UpdatePreview.Kind.PRESERVED_CAS && entry.relativePath().equals("config/removed.json")));
+	}
+
+	@Test
+	void removalPreviewHidesFilesAlreadyMatchingBaseline() {
+		Jsons.ModpackContentFields installed = manifest(
+				new Jsons.ModpackContentFields.ModpackContentItem("config/kept.json", "7", "config", false, false, false, OLD_HASH, "0"),
+				entry("config/kept.json", OLD_HASH, 7, OwnershipLedger.Status.PRESENT));
+		Jsons.ClientBaselineFields baseline = new Jsons.ClientBaselineFields();
+		baseline.modpackId = installed.modpackId;
+		Jsons.ClientBaselineFields.EntryFields baselineEntry = new Jsons.ClientBaselineFields.EntryFields();
+		baselineEntry.logicalPath = "config/kept.json";
+		baselineEntry.objectHash = OLD_HASH;
+		baselineEntry.size = 7;
+		baseline.entries = List.of(baselineEntry);
+		Map<FileKey, FileState> files = Map.of(
+				new FileKey(Root.MODPACK_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true, false),
+				new FileKey(Root.GAME_DIR, "config/kept.json"), new FileState(OLD_HASH, 7, true, false));
+		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(installed, baseline, files, java.util.Set.of(OLD_HASH), new Jsons.ClientConfigFieldsV3()));
+
+		UpdatePreview preview = UpdatePreview.create(plan, files, installed, null, true, baseline);
+
+		assertTrue(preview.entries().stream().noneMatch(entry -> entry.root() == Root.GAME_DIR && entry.relativePath().equals("config/kept.json")));
 	}
 
 	@Test
