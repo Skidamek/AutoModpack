@@ -50,6 +50,11 @@ public record GenerationCommit(
 				metadata.stateDigest(), metadata.ledgerDigest(), delta.digest(), metadata.patchNotes(), metadata.patchNotesDigest(), metadata.rollbackTargetGenerationId());
 	}
 
+	public GenerationMetadata metadata() {
+		return new GenerationMetadata(schemaVersion, generationId, parentGenerationId, createdAt, stateDigest, ledgerDigest, patchNotes, patchNotesDigest,
+				rollbackTargetGenerationId);
+	}
+
 	public Jsons.GenerationCommitFields toFields() {
 		Jsons.GenerationCommitFields fields = new Jsons.GenerationCommitFields();
 		fields.schemaVersion = schemaVersion;
