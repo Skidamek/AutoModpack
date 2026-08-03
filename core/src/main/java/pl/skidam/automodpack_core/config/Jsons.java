@@ -308,6 +308,25 @@ public class Jsons {
 		}
 	}
 
+	public static class CatalogueSnapshotFields {
+		public String stateDigest = "";
+		public CompleteModpackContentFields catalogue = new CompleteModpackContentFields();
+	}
+
+	public static class GenerationCommitFields {
+		public int schemaVersion;
+		public String generationId = "";
+		public String parentGenerationId = "";
+		public String modpackId = "";
+		public String createdAt = "";
+		public String stateDigest = "";
+		public String ledgerDigest = "";
+		public String ownershipDeltaDigest = "";
+		public String patchNotes = "";
+		public String patchNotesDigest = "";
+		public String rollbackTargetGenerationId = "";
+	}
+
 	public static class ClientContentHistoryFields {
 		public int schemaVersion = 1;
 		public String modpackId = "";

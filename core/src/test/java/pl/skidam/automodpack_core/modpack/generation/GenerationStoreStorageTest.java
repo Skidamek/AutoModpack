@@ -41,11 +41,20 @@ class GenerationStoreStorageTest {
 
 		GenerationStore.StorageReport report = store.measureStorage();
 		long recordBytes = Files.size(first.recordPath()) + Files.size(second.recordPath());
+		long catalogueBytes = directoryBytes(tempDir.resolve("catalogues"));
+		long commitBytes = directoryBytes(tempDir.resolve("commits"));
+		long deltaBytes = directoryBytes(tempDir.resolve("deltas"));
 		long objectBytes = Files.size(store.objectRoot().resolve(first.record().manifest().groups().get("main").files().get("config/example.txt").sha1()))
 				+ Files.size(store.objectRoot().resolve(second.record().manifest().groups().get("main").files().get("config/example.txt").sha1()));
 
 		assertEquals(2, report.recordCount());
 		assertEquals(recordBytes, report.recordBytes());
+		assertEquals(2, report.catalogueCount());
+		assertEquals(catalogueBytes, report.catalogueBytes());
+		assertEquals(2, report.commitCount());
+		assertEquals(commitBytes, report.commitBytes());
+		assertEquals(2, report.deltaCount());
+		assertEquals(deltaBytes, report.deltaBytes());
 		assertEquals(2, report.immutableObjectCount());
 		assertEquals(objectBytes, report.immutableObjectBytes());
 		assertEquals(1, report.stagingFileCount());
@@ -99,8 +108,12 @@ class GenerationStoreStorageTest {
 		Path detachedPath = tempDir.resolve("records").resolve(detached.metadata().generationId() + ".json");
 		Files.writeString(detachedPath, ConfigTools.GSON.toJson(detached.toFields()), StandardCharsets.UTF_8);
 		Path detachedDeltaPath = tempDir.resolve("deltas").resolve(detached.metadata().generationId() + ".json");
-		Files.writeString(detachedDeltaPath, ConfigTools.GSON.toJson(OwnershipDelta.between(OwnershipLedger.empty("abc1234"), detached.manifest()).toFields()),
-				StandardCharsets.UTF_8);
+		OwnershipDelta detachedDelta = OwnershipDelta.between(OwnershipLedger.empty("abc1234"), detached.manifest());
+		Files.writeString(detachedDeltaPath, ConfigTools.GSON.toJson(detachedDelta.toFields()), StandardCharsets.UTF_8);
+		Path detachedCataloguePath = tempDir.resolve("catalogues").resolve(detached.metadata().stateDigest() + ".json");
+		Files.writeString(detachedCataloguePath, ConfigTools.GSON.toJson(CatalogueSnapshot.from(detached.manifest()).toFields()), StandardCharsets.UTF_8);
+		Path detachedCommitPath = tempDir.resolve("commits").resolve(detached.metadata().generationId() + ".json");
+		Files.writeString(detachedCommitPath, ConfigTools.GSON.toJson(GenerationCommit.from(detached, detachedDelta).toFields()), StandardCharsets.UTF_8);
 		String pinnedHash = createObject("explicit-object-pin");
 
 		GenerationStore.CollectionResult pinned = store.collect(Set.of(detached.metadata().generationId()), Set.of(pinnedHash));
@@ -138,6 +151,20 @@ class GenerationStoreStorageTest {
 		Files.copy(source, tempDir.resolve("objects").resolve(hash));
 		Files.delete(source);
 		return hash;
+	}
+
+	private long directoryBytes(Path directory) throws IOException {
+		try (var files = Files.list(directory)) {
+			return files.mapToLong(this::fileSize).sum();
+		}
+	}
+
+	private long fileSize(Path path) {
+		try {
+			return Files.size(path);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	private ModpackCandidate candidate(String description) throws Exception {

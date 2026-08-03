@@ -43,11 +43,13 @@ public final class GenerationStore {
 	}
 
 	/** A deterministic receipt for the regular files in the generation store. */
-	public record StorageReport(long recordCount, long recordBytes, long immutableObjectCount, long immutableObjectBytes,
-			long stagingFileCount, long stagingBytes, long referencedObjectCount, long referencedObjectBytes, long objectReferenceCount) {
+	public record StorageReport(long recordCount, long recordBytes, long catalogueCount, long catalogueBytes, long commitCount, long commitBytes,
+			long deltaCount, long deltaBytes, long immutableObjectCount, long immutableObjectBytes, long stagingFileCount, long stagingBytes,
+			long referencedObjectCount, long referencedObjectBytes, long objectReferenceCount) {
 		public StorageReport {
-			if (recordCount < 0 || recordBytes < 0 || immutableObjectCount < 0 || immutableObjectBytes < 0 || stagingFileCount < 0 || stagingBytes < 0
-					|| referencedObjectCount < 0 || referencedObjectBytes < 0 || objectReferenceCount < 0)
+			if (recordCount < 0 || recordBytes < 0 || catalogueCount < 0 || catalogueBytes < 0 || commitCount < 0 || commitBytes < 0 || deltaCount < 0
+					|| deltaBytes < 0 || immutableObjectCount < 0 || immutableObjectBytes < 0 || stagingFileCount < 0 || stagingBytes < 0 || referencedObjectCount < 0
+					|| referencedObjectBytes < 0 || objectReferenceCount < 0)
 				throw new IllegalArgumentException("Storage report values cannot be negative");
 		}
 
@@ -88,6 +90,8 @@ public final class GenerationStore {
 	private final Path currentProjectionPath;
 	private final Path publicationLockPath;
 	private final Path recordsDirectory;
+	private final Path cataloguesDirectory;
+	private final Path commitsDirectory;
 	private final Path deltasDirectory;
 	private final Path objectsDirectory;
 	private final Path stagingDirectory;
@@ -105,6 +109,8 @@ public final class GenerationStore {
 		this.currentProjectionPath = this.root.resolve(Constants.hostGenerationCurrentProjectionFile.getFileName());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
 		this.recordsDirectory = this.root.resolve(Constants.hostGenerationRecordsDir.getFileName());
+		this.cataloguesDirectory = this.root.resolve(Constants.hostGenerationCataloguesDir.getFileName());
+		this.commitsDirectory = this.root.resolve(Constants.hostGenerationCommitsDir.getFileName());
 		this.deltasDirectory = this.root.resolve(Constants.hostGenerationDeltasDir.getFileName());
 		this.objectsDirectory = this.root.resolve(Constants.hostGenerationObjectsDir.getFileName());
 		this.stagingDirectory = this.root.resolve(Constants.hostGenerationStagingDir.getFileName());
@@ -213,7 +219,9 @@ public final class GenerationStore {
 			GenerationRecord record = GenerationRecord.create(target.manifest(), previous, clock.instant(), patchNotes, targetGenerationId);
 			Path recordPath = recordPath(record.metadata().generationId());
 			writeRecordNoClobber(recordPath, record);
-			writeDeltaNoClobber(record, previous);
+			OwnershipDelta delta = writeDeltaNoClobber(record, previous);
+			writeCatalogueNoClobber(record);
+			writeCommitNoClobber(record, delta);
 			NavigableMap<String, Path> hosting = verifyActiveTargetObjects(record);
 			writeCurrentProjection(record);
 			hosting.put("", currentProjectionPath);
@@ -274,7 +282,9 @@ public final class GenerationStore {
 		objectStore.promoteAll(candidate.objects());
 		Path recordPath = recordPath(record.metadata().generationId());
 		writeRecordNoClobber(recordPath, record);
-		writeDeltaNoClobber(record, previous);
+		OwnershipDelta delta = writeDeltaNoClobber(record, previous);
+		writeCatalogueNoClobber(record);
+		writeCommitNoClobber(record, delta);
 		NavigableMap<String, Path> hosting = verifyActiveTargetObjects(record);
 		writeCurrentProjection(record);
 		hosting.put("", currentProjectionPath);
@@ -322,6 +332,8 @@ public final class GenerationStore {
 	private void ensureStoreDirectories() throws IOException {
 		ensureDirectory(root, "generation store");
 		ensureDirectory(recordsDirectory, "generation records");
+		ensureDirectory(cataloguesDirectory, "generation catalogues");
+		ensureDirectory(commitsDirectory, "generation commits");
 		ensureDirectory(deltasDirectory, "generation deltas");
 		ensureDirectory(objectsDirectory, "immutable objects");
 		ensureDirectory(stagingDirectory, "generation staging");
@@ -335,10 +347,14 @@ public final class GenerationStore {
 		for (StoredRecord stored : records.values()) objectReferences = addExact(objectReferences, addReferences(stored.record(), expectedSizes), "object reference count");
 		long referencedObjectBytes = verifyObjectReferences(expectedSizes);
 		FileTotals recordFiles = recordFiles(records);
+		FileTotals catalogueFiles = fileTotals(regularFiles(cataloguesDirectory, "generation catalogues"));
+		FileTotals commitFiles = fileTotals(regularFiles(commitsDirectory, "generation commits"));
+		FileTotals deltaFiles = fileTotals(regularFiles(deltasDirectory, "generation deltas"));
 		FileTotals objectFiles = fileTotals(regularFiles(objectsDirectory, "immutable objects"));
 		FileTotals stagingFiles = fileTotals(regularFiles(stagingDirectory, "generation staging"));
-		return new StorageReport(records.size(), recordFiles.bytes(), objectFiles.count(), objectFiles.bytes(), stagingFiles.count(), stagingFiles.bytes(),
-				expectedSizes.size(), referencedObjectBytes, objectReferences);
+		return new StorageReport(records.size(), recordFiles.bytes(), catalogueFiles.count(), catalogueFiles.bytes(), commitFiles.count(), commitFiles.bytes(),
+				deltaFiles.count(), deltaFiles.bytes(), objectFiles.count(), objectFiles.bytes(), stagingFiles.count(), stagingFiles.bytes(), expectedSizes.size(),
+				referencedObjectBytes, objectReferences);
 	}
 
 	private CollectionResult collectUnreachableObjectsLocked(Set<String> generationPins, Set<String> objectPins) throws IOException {
@@ -549,6 +565,40 @@ public final class GenerationStore {
 		}
 	}
 
+	private CatalogueSnapshot readCatalogue(String stateDigest) throws IOException {
+		return readCatalogue(cataloguePath(stateDigest));
+	}
+
+	private CatalogueSnapshot readCatalogue(Path path) throws IOException {
+		ensureRegular(path, "generation catalogue snapshot");
+		try {
+			CatalogueSnapshot snapshot = CatalogueSnapshot.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.CatalogueSnapshotFields.class));
+			if (!snapshot.stateDigest().equals(catalogueStateDigest(path))) throw new IOException("Catalogue snapshot filename does not match its identity: " + path);
+			return snapshot;
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid generation catalogue snapshot: " + path, e);
+		}
+	}
+
+	private GenerationCommit readCommit(String generationId) throws IOException {
+		return readCommit(commitPath(generationId));
+	}
+
+	private GenerationCommit readCommit(Path path) throws IOException {
+		ensureRegular(path, "generation commit");
+		try {
+			GenerationCommit commit = GenerationCommit.fromFields(ConfigTools.parse(Files.readString(path, StandardCharsets.UTF_8), Jsons.GenerationCommitFields.class));
+			if (!commit.generationId().equals(commitGenerationId(path))) throw new IOException("Generation commit filename does not match its identity: " + path);
+			return commit;
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid generation commit: " + path, e);
+		}
+	}
+
 	private void validateParentChain(GenerationRecord current) throws IOException {
 		Set<String> visited = new HashSet<>();
 		List<GenerationRecord> reverseChain = new ArrayList<>();
@@ -566,13 +616,21 @@ public final class GenerationStore {
 				throw new IOException("Generation parent modpack ID does not match current lineage: " + parent);
 		}
 		Collections.reverse(reverseChain);
+		requireDirectory(cataloguesDirectory, "generation catalogues");
+		requireDirectory(commitsDirectory, "generation commits");
 		requireDirectory(deltasDirectory, "generation deltas");
 		OwnershipLedger ledger = OwnershipLedger.empty(current.manifest().modpackId());
 		for (GenerationRecord chainRecord : reverseChain) {
+			CatalogueSnapshot snapshot = readCatalogue(chainRecord.metadata().stateDigest());
+			if (!snapshot.manifest().equals(chainRecord.manifest()))
+				throw new IOException("Generation catalogue does not match its immutable record: " + chainRecord.metadata().generationId());
 			OwnershipDelta actualDelta = readDelta(chainRecord.metadata().generationId());
 			OwnershipDelta expectedDelta = OwnershipDelta.between(ledger, chainRecord.manifest());
 			if (!expectedDelta.equals(actualDelta))
 				throw new IOException("Generation ownership delta does not match its parent and catalogue: " + chainRecord.metadata().generationId());
+			GenerationCommit actualCommit = readCommit(chainRecord.metadata().generationId());
+			if (!GenerationCommit.from(chainRecord, actualDelta).equals(actualCommit))
+				throw new IOException("Generation commit does not match its record and ownership delta: " + chainRecord.metadata().generationId());
 			try {
 				ledger = OwnershipLedger.materialize(ledger, chainRecord.manifest(), chainRecord.metadata().generationId(), actualDelta);
 			} catch (RuntimeException e) {
@@ -637,6 +695,32 @@ public final class GenerationStore {
 		return deltasDirectory.resolve(generationId + ".json");
 	}
 
+	private Path cataloguePath(String stateDigest) throws IOException {
+		if (!isDigest(stateDigest)) throw new IOException("Invalid catalogue state digest: " + stateDigest);
+		return cataloguesDirectory.resolve(stateDigest + ".json");
+	}
+
+	private Path commitPath(String generationId) throws IOException {
+		if (!isDigest(generationId)) throw new IOException("Invalid generation ID: " + generationId);
+		return commitsDirectory.resolve(generationId + ".json");
+	}
+
+	private String catalogueStateDigest(Path path) throws IOException {
+		String filename = path.getFileName().toString();
+		if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation catalogue path: " + path);
+		String stateDigest = filename.substring(0, 40);
+		if (!isDigest(stateDigest)) throw new IOException("Invalid generation catalogue filename: " + path);
+		return stateDigest;
+	}
+
+	private String commitGenerationId(Path path) throws IOException {
+		String filename = path.getFileName().toString();
+		if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation commit path: " + path);
+		String generationId = filename.substring(0, 40);
+		if (!isDigest(generationId)) throw new IOException("Invalid generation commit filename: " + path);
+		return generationId;
+	}
+
 	private static Jsons.GenerationPointerFields pointer(GenerationRecord record) {
 		Jsons.GenerationPointerFields pointer = new Jsons.GenerationPointerFields();
 		pointer.schemaVersion = CURRENT_POINTER_SCHEMA_VERSION;
@@ -652,11 +736,24 @@ public final class GenerationStore {
 		writeImmutableJsonNoClobber(path, recordsDirectory, ".record-", record.toFields(), record, this::readRecord, "generation record");
 	}
 
-	private void writeDeltaNoClobber(GenerationRecord record, GenerationRecord parent) throws IOException {
+	private OwnershipDelta writeDeltaNoClobber(GenerationRecord record, GenerationRecord parent) throws IOException {
 		OwnershipLedger base = parent == null ? OwnershipLedger.empty(record.manifest().modpackId()) : parent.ownershipLedger();
 		OwnershipDelta delta = OwnershipDelta.between(base, record.manifest());
 		Path path = deltaPath(record.metadata().generationId());
 		writeImmutableJsonNoClobber(path, deltasDirectory, ".delta-", delta.toFields(), delta, this::readDelta, "generation ownership delta");
+		return delta;
+	}
+
+	private void writeCatalogueNoClobber(GenerationRecord record) throws IOException {
+		CatalogueSnapshot snapshot = CatalogueSnapshot.from(record.manifest());
+		Path path = cataloguePath(snapshot.stateDigest());
+		writeImmutableJsonNoClobber(path, cataloguesDirectory, ".catalogue-", snapshot.toFields(), snapshot, this::readCatalogue, "generation catalogue snapshot");
+	}
+
+	private void writeCommitNoClobber(GenerationRecord record, OwnershipDelta delta) throws IOException {
+		GenerationCommit commit = GenerationCommit.from(record, delta);
+		Path path = commitPath(commit.generationId());
+		writeImmutableJsonNoClobber(path, commitsDirectory, ".commit-", commit.toFields(), commit, this::readCommit, "generation commit");
 	}
 
 	private <T> void writeImmutableJsonNoClobber(Path path, Path directory, String temporaryPrefix, Object value, T expected,

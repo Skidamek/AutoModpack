@@ -38,6 +38,8 @@ class GenerationStoreTest {
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "ignored");
 		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, first.status());
 		assertEquals("", first.record().metadata().parentGenerationId());
+		assertTrue(Files.exists(tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json")));
+		assertTrue(Files.exists(tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json")));
 		String pointer = Files.readString(tempDir.resolve("current.json"), StandardCharsets.UTF_8);
 		long records = countRecords();
 
@@ -168,6 +170,16 @@ class GenerationStoreTest {
 	}
 
 	@Test
+	void deepVerificationRejectsMissingCompactCatalogue() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
+		Files.delete(tempDir.resolve("catalogues").resolve(publication.record().metadata().stateDigest() + ".json"));
+
+		assertDoesNotThrow(() -> store.loadCurrent().orElseThrow());
+		assertThrows(IOException.class, store::loadCurrentDeep);
+	}
+
+	@Test
 	void deepVerificationRejectsTamperedCurrentRecordIdentity() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
@@ -206,6 +218,9 @@ class GenerationStoreTest {
 		assertEquals(first.record().metadata().generationId(), reverted.record().metadata().rollbackTargetGenerationId());
 		assertEquals(first.record().manifest(), reverted.record().manifest());
 		assertEquals(3, store.currentHistory().size());
+		try (var catalogues = Files.list(tempDir.resolve("catalogues"))) {
+			assertEquals(2, catalogues.count());
+		}
 		assertTrue(reverted.record().ownershipLedger().entries().get("config/example.txt").historicalHashes().size() >= 2);
 	}
 
