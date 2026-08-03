@@ -7,26 +7,34 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
 import pl.skidam.automodpack_core.update.ClientContentHistory;
 
 public final class ContentHistoryScreen extends VersionedScreen {
-	private static final int ROWS_PER_PAGE = 3;
+	private static final int ENTRY_TOP = 58;
+	private static final int ENTRY_HEIGHT = 58;
 
 	private final Screen parent;
 	private final ClientContentHistory.History history;
 	private final String modpackName;
+	private final Runnable closedCallback;
 	private Button previousButton;
 	private Button nextButton;
 	private int page;
 
 	public ContentHistoryScreen(Screen parent, ClientContentHistory.History history, String modpackName) {
+		this(parent, history, modpackName, () -> {});
+	}
+
+	public ContentHistoryScreen(Screen parent, ClientContentHistory.History history, String modpackName, Runnable closedCallback) {
 		super(VersionedText.literal("ContentHistoryScreen"));
 		this.parent = parent;
 		this.history = history;
 		this.modpackName = modpackName == null ? "" : modpackName;
+		this.closedCallback = closedCallback;
 	}
 
 	@Override
@@ -39,11 +47,16 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		updateNavigation();
 		this.addRenderableWidget(this.previousButton);
 		this.addRenderableWidget(this.nextButton);
-		this.addRenderableWidget(buttonWidget(left + 80, y, 75, 20, VersionedText.literal("Back"), button -> this.minecraft.gui.setScreen(parent)));
+		this.addRenderableWidget(buttonWidget(left + 80, y, 75, 20, VersionedText.translatable("automodpack.back"), button -> back()));
 	}
 
 	private int pageCount() {
-		return Math.max(1, (history.entries().size() + ROWS_PER_PAGE - 1) / ROWS_PER_PAGE);
+		int pageSize = rowsPerPage();
+		return Math.max(1, (history.entries().size() + pageSize - 1) / pageSize);
+	}
+
+	private int rowsPerPage() {
+		return Math.max(1, (this.height - 56 - ENTRY_TOP) / ENTRY_HEIGHT);
 	}
 
 	private void updateNavigation() {
@@ -57,6 +70,11 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		updateNavigation();
 	}
 
+	private void back() {
+		closedCallback.run();
+		ScreenImpl.setScreen(parent);
+	}
+
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String title = modpackName.isBlank() ? "Content history" : modpackName + " content history";
@@ -65,21 +83,26 @@ public final class ContentHistoryScreen extends VersionedScreen {
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("This history describes content choices, not server operations.").withStyle(ChatFormatting.GRAY), this.width / 2, 38, TextColors.WHITE);
 
 		List<ClientContentHistory.Entry> entries = history.entries();
-		int start = page * ROWS_PER_PAGE;
-		int end = Math.min(entries.size(), start + ROWS_PER_PAGE);
+		int pageSize = rowsPerPage();
+		int start = page * pageSize;
+		int end = Math.min(entries.size(), start + pageSize);
 		for (int index = start; index < end; index++) {
 			ClientContentHistory.Entry entry = entries.get(index);
-			int y = 58 + (index - start) * 58;
+			int y = ENTRY_TOP + (index - start) * ENTRY_HEIGHT;
 			boolean current = index == entries.size() - 1;
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("State " + (index + 1) + "  " + entry.recordedAt() + (current ? "  Current content" : ""))
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "State " + (index + 1) + "  " + entry.recordedAt() + (current ? "  Current content" : ""), this.width - 20))
 					.withStyle(current ? ChatFormatting.GREEN : ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Content state: " + shortDigest(entry.stateDigest())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 13,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Content state: " + shortDigest(entry.stateDigest()), this.width - 20)).withStyle(ChatFormatting.GRAY),
+					this.width / 2, y + 13,
 					TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(entry.fileSummary()).withStyle(ChatFormatting.WHITE), this.width / 2, y + 26, TextColors.WHITE);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Tags: " + join(entry.selectedTags()) + "  Groups: " + join(entry.selectedGroups())).withStyle(ChatFormatting.WHITE),
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, entry.fileSummary(), this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y + 26,
+					TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font,
+					VersionedText.literal(truncateToWidth(this.font, "Tags: " + join(entry.selectedTags()) + "  Groups: " + join(entry.selectedGroups()), this.width - 20)).withStyle(ChatFormatting.WHITE),
 					this.width / 2, y + 39, TextColors.WHITE);
 			String notes = entry.patchNotes().isBlank() ? "No patch notes" : firstLine(entry.patchNotes());
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Notes: " + notes).withStyle(ChatFormatting.YELLOW), this.width / 2, y + 52, TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Notes: " + notes, this.width - 20)).withStyle(ChatFormatting.YELLOW), this.width / 2, y + 52,
+					TextColors.WHITE);
 		}
 		if (entries.isEmpty())
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("No content history is available.").withStyle(ChatFormatting.GRAY), this.width / 2, 82,
@@ -89,26 +112,26 @@ public final class ContentHistoryScreen extends VersionedScreen {
 					TextColors.WHITE);
 	}
 
-	private static String shortDigest(String digest) {
-		return digest.length() <= 12 ? digest : digest.substring(0, 12);
+	private String shortDigest(String digest) {
+		return truncateToWidth(this.font, digest, Math.max(1, this.width - 20));
 	}
 
-	private static String join(Iterable<String> values) {
+	private String join(Iterable<String> values) {
 		List<String> result = new ArrayList<>();
 		for (String value : values) result.add(value);
 		if (result.isEmpty()) return "none";
 		String text = String.join(", ", result);
-		return text.length() <= 65 ? text : text.substring(0, 62) + "...";
+		return truncateToWidth(this.font, text, Math.max(1, this.width - 20));
 	}
 
-	private static String firstLine(String notes) {
+	private String firstLine(String notes) {
 		String line = notes.split("\\R", -1)[0];
-		return line.length() <= 70 ? line : line.substring(0, 67) + "...";
+		return truncateToWidth(this.font, line, Math.max(1, this.width - 20));
 	}
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		this.minecraft.gui.setScreen(parent);
+		back();
 		return false;
 	}
 }

@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.screens.Screen;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -49,7 +50,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		}
 		finished = true;
 		updater.startConfirmedUpdate();
-		this.minecraft.gui.setScreen(new PreparingScreen());
+		new ScreenManager().waiting();
 	}
 
 	private void customize() {
@@ -59,13 +60,13 @@ public final class FirstConnectScreen extends VersionedScreen {
 				if (updater.getConfirmationState() != ModpackUpdater.ConfirmationState.WAITING) throw new IllegalStateException("Modpack confirmation expired");
 				updater.selectTarget(intent);
 				updater.startConfirmedUpdate();
-				this.minecraft.gui.setScreen(new PreparingScreen());
+				new ScreenManager().waiting();
 			} catch (RuntimeException e) {
 				finished = false;
 				new ScreenManager().error("automodpack.error.critical", String.valueOf(e.getMessage()), "automodpack.error.logs");
 			}
 		};
-		this.minecraft.gui.setScreen(new ModpackSelectionScreen(this, updater, action));
+		ScreenImpl.setScreen(new ModpackSelectionScreen(this, updater, action));
 	}
 
 	private void cancel() {
@@ -97,7 +98,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		if (!updater.getPatchNotes().isBlank()) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.patchNotes").withStyle(ChatFormatting.YELLOW), this.width / 2, y,
 					TextColors.WHITE);
-			for (String line : limitedLines(updater.getPatchNotes(), 3)) {
+			for (String line : wrapToWidth(this.font, updater.getPatchNotes(), Math.max(1, this.width - 20), Math.min(3, Math.max(1, (this.height - 208) / 13)))) {
 				y += 13;
 				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line).withStyle(ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
 			}
@@ -108,25 +109,29 @@ public final class FirstConnectScreen extends VersionedScreen {
 
 		y += 22;
 		long bytes = target.flatTarget().list.stream().mapToLong(item -> Long.parseLong(item.size)).sum();
-		String summary = "Selected groups: " + selection.selectedGroups().size() + "  Files: " + target.flatTarget().list.size() + "  Download: " + formatSize(bytes);
+		String summary = truncateToWidth(this.font, "Selected groups: " + selection.selectedGroups().size() + "  Files: " + target.flatTarget().list.size() + "  Download: " + formatSize(bytes), this.width - 20);
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(summary).withStyle(ChatFormatting.GREEN), this.width / 2, y, TextColors.WHITE);
 		y += 14;
 		String compatibility = "Compatibility: " + ClientPlatform.current().id() + "  " + (selection.unavailableGroups().isEmpty()
 				? "all selected choices available"
 				: selection.unavailableGroups().size() + " choices unavailable");
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(compatibility).withStyle(ChatFormatting.GRAY), this.width / 2, y, TextColors.WHITE);
+		String stale = "Stale choices: tags=" + names(target.manifest().selectionTags(), selection.staleRequestedTags()) + " groups="
+				+ names(target.manifest().groups(), selection.staleRequestedGroups());
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, stale + "  " + compatibility, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y,
+				TextColors.WHITE);
 		y += 14;
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.translatable("automodpack.firstConnect.bundleExplanation").withStyle(ChatFormatting.GRAY), this.width / 2, y,
 				TextColors.WHITE);
 		y += 17;
 		String tags = names(target.manifest().selectionTags(), selection.intent().requestedTags());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Default tags: " + tags).withStyle(ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Default tags: " + tags, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
 		y += 14;
 		String groups = names(target.manifest().groups(), selection.selectedGroups());
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Default groups: " + groups).withStyle(ChatFormatting.WHITE), this.width / 2, y, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Default groups: " + groups, this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
+				TextColors.WHITE);
 	}
 
-	private static String names(Map<String, ?> values, Iterable<String> ids) {
+	private String names(Map<String, ?> values, Iterable<String> ids) {
 		List<String> names = new ArrayList<>();
 		for (String id : ids) {
 			Object value = values.get(id);
@@ -138,18 +143,7 @@ public final class FirstConnectScreen extends VersionedScreen {
 		}
 		if (names.isEmpty()) return "none";
 		String joined = String.join(", ", names);
-		return joined.length() <= 100 ? joined : joined.substring(0, 97) + "...";
-	}
-
-	private static List<String> limitedLines(String text, int limit) {
-		List<String> lines = new ArrayList<>();
-		for (String line : text.split("\\R", -1)) {
-			if (lines.size() == limit) break;
-			String trimmed = line.strip();
-			if (trimmed.length() > 100) trimmed = trimmed.substring(0, 97) + "...";
-			lines.add(trimmed);
-		}
-		return lines;
+		return truncateToWidth(this.font, joined, Math.max(1, this.width - 20));
 	}
 
 	private static String formatSize(long bytes) {

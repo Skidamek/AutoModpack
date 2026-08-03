@@ -1,6 +1,7 @@
 package pl.skidam.automodpack_core.update;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.IOException;
@@ -30,7 +31,8 @@ class ClientContentHistoryTest {
 		ClientContentHistory.record(historyFile, target, selection, "Added visual improvements");
 
 		ClientContentHistory.Entry entry = ClientContentHistory.read(historyFile).entries().get(0);
-		assertEquals("a".repeat(40), entry.stateDigest());
+		assertNotEquals(target.stateDigest, entry.stateDigest());
+		assertEquals(40, entry.stateDigest().length());
 		assertEquals("Added visual improvements", entry.patchNotes());
 		assertEquals(Set.of("visuals"), entry.selectedTags());
 		assertEquals(Set.of("main"), entry.selectedGroups());
@@ -52,8 +54,30 @@ class ClientContentHistoryTest {
 
 		ClientContentHistory.History history = ClientContentHistory.read(historyFile);
 		assertEquals(2, history.entries().size());
-		assertEquals("b".repeat(40), history.entries().get(1).stateDigest());
+		assertNotEquals(history.entries().get(0).stateDigest(), history.entries().get(1).stateDigest());
 		assertEquals("returned", history.entries().get(1).patchNotes());
+	}
+
+	@Test
+	void ignoresCompleteCatalogueChangesWhenSelectedFlatContentIsUnchanged() throws Exception {
+		Path historyFile = temporaryDirectory.resolve("history.json");
+		ClientContentHistory.record(historyFile, target("a", Set.of("main")), null, "first");
+		ClientContentHistory.record(historyFile, target("b", Set.of("main")), null, "second");
+
+		ClientContentHistory.History history = ClientContentHistory.read(historyFile);
+		assertEquals(1, history.entries().size());
+		assertEquals("second", history.entries().get(0).patchNotes());
+	}
+
+	@Test
+	void keepsDifferentSelectedFlatContentStatesSeparateWithinOneCatalogue() throws Exception {
+		Path historyFile = temporaryDirectory.resolve("history.json");
+		ClientContentHistory.record(historyFile, target("a", Set.of("main")), null, "main");
+		ClientContentHistory.record(historyFile, target("a", Set.of("optional")), null, "optional");
+
+		ClientContentHistory.History history = ClientContentHistory.read(historyFile);
+		assertEquals(2, history.entries().size());
+		assertNotEquals(history.entries().get(0).stateDigest(), history.entries().get(1).stateDigest());
 	}
 
 	@Test

@@ -34,6 +34,7 @@ public final class UpdateTransaction {
 	public String targetGenerationId;
 	public String parentGenerationId;
 	public String stateDigest;
+	public String ledgerDigest;
 	public String completeManifestJson;
 	public String targetManifestJson;
 	public String targetPlatform;
@@ -67,6 +68,7 @@ public final class UpdateTransaction {
 		transaction.targetGenerationId = plan.generationTarget().targetGenerationId();
 		transaction.parentGenerationId = plan.generationTarget().parentGenerationId();
 		transaction.stateDigest = plan.generationTarget().stateDigest();
+		transaction.ledgerDigest = plan.generationTarget().ledgerDigest();
 		transaction.completeManifestJson = ConfigTools.GSON.toJson(target.completeFields());
 		transaction.targetManifestJson = ConfigTools.GSON.toJson(target.flatTarget());
 		transaction.targetPlatform = target.platform().id();
@@ -102,13 +104,14 @@ public final class UpdateTransaction {
 		if (!plan.modpackId().equals(installedManifest.modpackId) || !plan.modpackId().equals(completeRecord.manifest().modpackId()))
 			throw new IllegalArgumentException("Removal records belong to different modpack lineages");
 		if (!plan.generationTarget().equals(GenerationTarget.fromFlat(installedManifest))
-				|| !plan.generationTarget().equals(GenerationTarget.from(completeRecord.metadata())))
+				|| !plan.generationTarget().equals(GenerationTarget.from(completeRecord)))
 			throw new IllegalArgumentException("Removal generation identities disagree");
 		UpdateTransaction transaction = base(Purpose.MODPACK_REMOVAL);
 		transaction.modpackId = plan.modpackId();
 		transaction.targetGenerationId = plan.generationTarget().targetGenerationId();
 		transaction.parentGenerationId = plan.generationTarget().parentGenerationId();
 		transaction.stateDigest = plan.generationTarget().stateDigest();
+		transaction.ledgerDigest = plan.generationTarget().ledgerDigest();
 		transaction.completeManifestJson = ConfigTools.GSON.toJson(completeFields);
 		transaction.targetManifestJson = ConfigTools.GSON.toJson(installedManifest);
 		transaction.targetPlatform = platform.id();
@@ -179,7 +182,7 @@ public final class UpdateTransaction {
 	}
 
 	public GenerationTarget generationTarget() {
-		return new GenerationTarget(targetGenerationId, parentGenerationId, stateDigest);
+		return new GenerationTarget(modpackId, targetGenerationId, parentGenerationId, stateDigest, ledgerDigest);
 	}
 
 	public ClientPlatform platform() {

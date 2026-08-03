@@ -3,6 +3,7 @@ package pl.skidam.automodpack.client.ui;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -32,7 +33,7 @@ public class ErrorScreen extends VersionedScreen {
 	private void initWidgets() {
 		backButton = buttonWidget(this.width / 2 - 100, this.height / 2 + 50, 200, 20, VersionedText.translatable("automodpack.back"), button -> {
 			assert minecraft != null;
-			minecraft.gui.setScreen(null);
+			ScreenImpl.setScreen(null);
 		});
 	}
 

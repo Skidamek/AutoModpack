@@ -10,6 +10,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
 import net.minecraft.network.chat.Component;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.ModpackSelectionScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -28,7 +29,7 @@ public abstract class JoinMultiplayerScreenMixin extends Screen {
 		if (!ModpackSelectionScreen.hasModpackManagement()) return;
 
 		Button groupsButton = VersionedScreen.buttonWidget(Math.max(5, width - 105), 6, 100, 20,
-				VersionedText.translatable("automodpack.selection.button"), press -> minecraft.gui.setScreen(ModpackSelectionScreen.forSelectedModpack(this)));
+				VersionedText.translatable("automodpack.selection.button"), press -> ScreenImpl.setScreen(ModpackSelectionScreen.forSelectedModpack(this)));
 		addRenderableWidget(groupsButton);
 	}
 }

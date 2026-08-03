@@ -25,14 +25,21 @@ class ModpackCandidateScannerTest {
 		Path groups = tempDir.resolve("groups");
 		Files.createDirectories(server.resolve("config"));
 		Files.createDirectories(groups.resolve("main/config"));
-		Files.writeString(server.resolve("config/example.txt"), "synced");
-		Files.writeString(groups.resolve("main/config/example.txt"), "explicit");
+		Files.writeString(server.resolve("config/example.txt"), "synced", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/example.txt"), "explicit", StandardCharsets.UTF_8);
 		Jsons.GroupDeclaration main = group("/config/**");
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", main), false);
 
 		assertEquals(1, candidate.shadows().size());
-		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, candidate.shadows().get(0).selected().kind());
+		ShadowedCandidate shadow = candidate.shadows().get(0);
+		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, shadow.selected().kind());
+		assertEquals(CandidateSource.SourceKind.SYNCED_ROOT, shadow.shadowed().kind());
+		assertEquals(ShadowedCandidate.Relationship.NOT_COMPARED, shadow.relationship());
+		CandidateProvenance provenance = candidate.provenance().get(ModpackCandidate.provenanceKey("main", "config/example.txt"));
+		assertNotNull(provenance);
+		assertEquals(CandidateSource.SourceKind.GROUP_DIRECTORY, provenance.selectedSource().kind());
+		assertEquals("config/example.txt", provenance.selectedSource().logicalPath());
 		assertEquals("config/example.txt", candidate.manifest().groups().get("main").files().firstKey());
 		assertEquals("", candidate.manifest().groups().get("main").tag());
 		assertEquals("", candidate.manifest().toFields().groups.get("main").tag);
@@ -45,8 +52,8 @@ class ModpackCandidateScannerTest {
 		Files.createDirectories(server.resolve("config"));
 		Files.createDirectories(server.resolve("unrelated/deep"));
 		Files.createDirectories(groups);
-		Files.writeString(server.resolve("config/example.txt"), "shared");
-		Files.writeString(server.resolve("unrelated/deep/example.txt"), "ignored");
+		Files.writeString(server.resolve("config/example.txt"), "shared", StandardCharsets.UTF_8);
+		Files.writeString(server.resolve("unrelated/deep/example.txt"), "ignored", StandardCharsets.UTF_8);
 		Map<String, Jsons.GroupDeclaration> declarations = new LinkedHashMap<>();
 		declarations.put("visuals", group("/config/**"));
 		declarations.put("main", group("/config/**"));
@@ -65,7 +72,7 @@ class ModpackCandidateScannerTest {
 		Files.createDirectories(server);
 		Files.createDirectories(groups);
 		Files.createDirectories(tempDir.resolve("outside"));
-		Files.writeString(tempDir.resolve("outside/example.txt"), "outside");
+		Files.writeString(tempDir.resolve("outside/example.txt"), "outside", StandardCharsets.UTF_8);
 
 		CandidateBuildException failure = assertThrows(CandidateBuildException.class,
 				() -> scan(server, groups, Map.of("main", group("../outside/**")), false));
@@ -79,14 +86,17 @@ class ModpackCandidateScannerTest {
 		Path groups = tempDir.resolve("groups");
 		Files.createDirectories(server.resolve("config"));
 		Files.createDirectories(groups.resolve("main/config"));
-		Files.writeString(server.resolve("config/example.disabled"), "synced");
-		Files.writeString(server.resolve("config/kept.txt"), "kept");
-		Files.writeString(groups.resolve("main/config/example.disabled"), "explicit");
+		Files.writeString(server.resolve("config/example.disabled"), "synced", StandardCharsets.UTF_8);
+		Files.writeString(server.resolve("config/kept.txt"), "kept", StandardCharsets.UTF_8);
+		Files.writeString(groups.resolve("main/config/example.disabled"), "explicit", StandardCharsets.UTF_8);
 
 		ModpackCandidate candidate = scan(server, groups, Map.of("main", group("/config/**")), true);
 
 		assertTrue(candidate.manifest().groups().get("main").files().containsKey("config/kept.txt"));
-		assertEquals(ExcludedCandidate.Reason.DISABLED_FILE, candidate.exclusions().get(0).reason());
+		ExcludedCandidate exclusion = candidate.exclusions().get(0);
+		assertEquals(ExcludedCandidate.Reason.DISABLED_FILE, exclusion.reason());
+		assertEquals("config/example.disabled", exclusion.source().logicalPath());
+		assertFalse(exclusion.message().isBlank());
 		assertEquals(1, candidate.shadows().size());
 	}
 
@@ -114,7 +124,7 @@ class ModpackCandidateScannerTest {
 		Path groups = tempDir.resolve("groups");
 		Files.createDirectories(server.resolve("config"));
 		Files.createDirectories(groups);
-		Files.writeString(server.resolve("config/example.txt"), "shared");
+		Files.writeString(server.resolve("config/example.txt"), "shared", StandardCharsets.UTF_8);
 		Map<String, Jsons.GroupDeclaration> first = new LinkedHashMap<>();
 		first.put("visuals", group("/config/**"));
 		first.put("main", group("/config/**"));

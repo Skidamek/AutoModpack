@@ -79,7 +79,6 @@ public class ModpackUpdater implements AutoCloseable {
 	public Map<Jsons.ModpackContentFields.ModpackContentItem, List<String>> failedDownloads = new HashMap<>();
 	private final Map<Jsons.ModpackContentFields.ModpackContentItem, DownloadManager.FailureCategory> failedDownloadCategories = new HashMap<>();
 	private final Jsons.ConnectionInfo connectionInfo;
-	private final Secrets.Secret modpackSecret;
 	private final DownloadClient downloadClient;
 	private final AtomicBoolean closed = new AtomicBoolean();
 	private final AtomicReference<ConfirmationState> confirmationState = new AtomicReference<>(ConfirmationState.INACTIVE);
@@ -167,60 +166,46 @@ public class ModpackUpdater implements AutoCloseable {
 		this.selectedTarget = selectedTarget;
 		this.serverModpackContent = selectedTarget == null ? null : selectedTarget.flatTarget();
 		this.connectionInfo = connectionInfo;
-		this.modpackSecret = secret;
 		this.modpackDir = modpackPath;
 		this.downloadClient = downloadClient;
 
-		if (this.connectionInfo == null || !this.connectionInfo.isComplete()) throw new IllegalArgumentException("connectionInfo is null or empty");
+		if (this.modpackDir == null) throw new IllegalArgumentException("modpackPath is null");
 	}
 
 	public void processModpackUpdate(ModpackUtils.UpdateCheckResult result) {
 		try {
 			modpackContentFile = modpackDir.resolve(modpackContentFileName);
+			if (preload) {
+				// Preload has no player-facing screen. Keep the installed tree untouched and let the
+				// first normal connection present the same preview that all other updates use.
+				loadModpack();
+				close();
+				return;
+			}
+			requireLiveConnection();
 
 			if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
 
 			// Handle new modpack
 			if (!Files.exists(modpackContentFile)) {
-				if (preload) {
-					startUpdate(serverModpackContent.list);
-				} else {
-					firstConnection = true;
-					fullDownload = true;
-					if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
-					new ScreenManager().welcome(this);
-				}
+				firstConnection = true;
+				fullDownload = true;
+				if (!beginConfirmation()) throw new IllegalStateException("Modpack confirmation is already active");
+				new ScreenManager().welcome(this);
 			} else {
 				// Handle existing modpack
 				if (result == null) result = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
 
-				// Update or load the modpack
-				if (result.requiresUpdate()) {
-					startUpdate(result.filesToUpdate());
-				} else {
-					try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-						checkAndLoadSelectedTarget(cache);
-						close();
-					}
-				}
+				// Always show the preview. A zero-file result can still require metadata, selection,
+				// ledger, or restart work.
+				startUpdate(result.filesToUpdate());
 			}
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(modpackDir, UpdateType.UPDATE, changelogs).restart(true);
+			new ReLauncher(modpackDir, UpdateType.UPDATE, changelogs).restart(preload);
 			close();
 		} catch (Exception e) {
 			LOGGER.error("Error while initializing modpack updater", e);
-			close();
-		}
-	}
-
-	public UpdateType reconcileReceivedManifest() throws Exception {
-		modpackContentFile = modpackDir.resolve(modpackContentFileName);
-		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
-			ApplyResult result = applyModpack(cache, selectedTarget);
-			if (!result.requiresRestart()) return null;
-			return result.restartReasons().contains(RestartReason.SELECTED_MODPACK) ? UpdateType.SELECT : UpdateType.UPDATE;
-		} finally {
 			close();
 		}
 	}
@@ -300,14 +285,15 @@ public class ModpackUpdater implements AutoCloseable {
 		String normalizedHash = sha1 == null ? null : sha1.toLowerCase(Locale.ROOT);
 		if (entry == null || normalizedHash == null || !entry.historicalHashes().contains(new OwnershipLedger.Content(normalizedHash, size)))
 			throw new IOException("Recovery object is not owned by the installed modpack ledger");
-		return RecoveryArchive.archive(SmartFileUtils.CWD.resolve(storeDir), SmartFileUtils.CWD.resolve(recoveryDir), normalizedPath, normalizedHash, size,
+		Path archiveDirectory = recoveryDirectory(installed.modpackId);
+		return RecoveryArchive.archive(SmartFileUtils.CWD.resolve(storeDir), archiveDirectory, normalizedPath, normalizedHash, size,
 				entry.lastPublishedGenerationId(), Instant.now().toString());
 	}
 
 	public RecoverySnapshot recoverySnapshot() throws IOException {
 		Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackDir.resolve(modpackContentFileName));
 		if (installed == null) throw new IOException("Installed modpack content is missing");
-		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(SmartFileUtils.CWD.resolve(recoveryDir));
+		Jsons.ClientRecoveryArchiveFields archive = RecoveryArchive.read(recoveryDirectory(installed.modpackId));
 		List<RecoveryFile> archived = new ArrayList<>();
 		for (var entry : archive.entries) archived.add(new RecoveryFile(entry.logicalPath, entry.sha1, entry.size, entry.sourceGenerationId, entry.preservedAt));
 		archived.sort(RECOVERY_FILE_ORDER);
@@ -334,6 +320,18 @@ public class ModpackUpdater implements AutoCloseable {
 		return file.logicalPath() + "|" + file.sha1() + "|" + file.size();
 	}
 
+	private static Path recoveryDirectory(String modpackId) throws IOException {
+		try {
+			Path recoveryRoot = SmartFileUtils.CWD.resolve(recoveryDir).toAbsolutePath().normalize();
+			if (Files.isSymbolicLink(recoveryRoot)) throw new IOException("Recovery archive root may not be a symbolic link");
+			Path archiveDirectory = recoveryRoot.resolve(ModpackId.requireValid(modpackId)).normalize();
+			if (Files.isSymbolicLink(archiveDirectory)) throw new IOException("Recovery archive modpack directory may not be a symbolic link");
+			return archiveDirectory;
+		} catch (IllegalArgumentException e) {
+			throw new IOException("Recovery modpack ID is invalid", e);
+		}
+	}
+
 	// Load the already-installed modpack without contacting the server or
 	// reconciling local files against it. Used when update-on-launch is disabled
 	// so the user can freely add/remove mods (e.g. a binary search) without
@@ -346,33 +344,23 @@ public class ModpackUpdater implements AutoCloseable {
 		}
 	}
 
-	private void checkAndLoadSelectedTarget(FileMetadataCache cache) throws Exception {
-		if (!Files.exists(modpackDir)) return;
-		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
-		ApplyResult applyResult = applyModpack(cache, selectedTarget);
-		finishApplyingModpack(cache, applyResult);
-	}
-
-	private void finishApplyingModpack(FileMetadataCache cache, ApplyResult applyResult) throws Exception {
-		if (applyResult.requiresRestart()) {
-			String fingerprint = updateStateFingerprint(applyResult);
-			if (updateLoopDetector.evaluateAndRecord(fingerprint) == UpdateLoopDetector.Decision.SUPPRESS) {
-				LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
-				LOGGER.error("Corrections were applied during this launch but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
-				LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
-				return;
-			}
-
-			LOGGER.info("Modpack is not loaded");
-			UpdateType updateType = applyResult.restartReasons().contains(RestartReason.SELECTED_MODPACK)
-					? UpdateType.SELECT
-					: fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
-			new ReLauncher(modpackDir, updateType, changelogs).restart(true);
+	private void restartAfterApply(ApplyResult applyResult) {
+		if (!applyResult.requiresRestart()) {
+			updateLoopDetector.clear();
+			return;
+		}
+		String fingerprint = updateStateFingerprint(applyResult);
+		if (updateLoopDetector.evaluateAndRecord(fingerprint) == UpdateLoopDetector.Decision.SUPPRESS) {
+			LOGGER.error("Automatic restart loop detected. AutoModpack already requested two rapid restarts for the same correction state.");
+			LOGGER.error("Corrections were applied but still require a restart: {}", String.join(", ", applyResult.reasonDescriptions()));
+			LOGGER.error("Another automatic restart was suppressed. The modpack may not be fully active; inspect the surrounding logs and report recurring issues at https://github.com/Skidamek/AutoModpack/issues");
 			return;
 		}
 
-		updateLoopDetector.clear();
-		loadModpackMods(cache);
+		UpdateType updateType = applyResult.restartReasons().contains(RestartReason.SELECTED_MODPACK)
+				? UpdateType.SELECT
+				: fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
+		new ReLauncher(modpackDir, updateType, changelogs).restart(false);
 	}
 
 	private String updateStateFingerprint(ApplyResult applyResult) {
@@ -426,27 +414,31 @@ public class ModpackUpdater implements AutoCloseable {
 
 	public void startUpdate(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
 		try {
+			if (preload) {
+				LOGGER.info("Deferring modpack update until the client has a player-facing screen");
+				close();
+				return;
+			}
+			requireLiveConnection();
 			if (requestUpdatePreview(filesToUpdate)) return;
+			LOGGER.warn("Update preview was not shown; leaving the installed modpack unchanged");
+			close();
 		} catch (Exception e) {
 			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
 			LOGGER.error("Failed to prepare the modpack update preview", e);
 			close();
 			return;
 		}
-		startUpdateAfterPreview(filesToUpdate);
 	}
 
-	private void startUpdateAfterPreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate) {
+	private void startUpdateAfterPreview(Set<Jsons.ModpackContentFields.ModpackContentItem> filesToUpdate, PreparedPlan previewPlan) {
 		long start = System.currentTimeMillis();
 
 		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+			requireLiveConnection();
 			// Don't download files which already exist
 			ModpackUtils.populateStoreFromCWD(filesToUpdate, cache);
 			var finalFilesToUpdate = ModpackUtils.identifyUncachedFiles(filesToUpdate);
-			if (!finalFilesToUpdate.isEmpty()) {
-				if (modpackSecret == null || downloadClient == null) throw new IOException("Transfer session is unavailable for uncached files");
-				new ScreenManager().download(downloadManager, getModpackName());
-			}
 
 			// FETCH
 			long startFetching = System.currentTimeMillis();
@@ -483,24 +475,28 @@ public class ModpackUpdater implements AutoCloseable {
 				throw e;
 			}
 
-			ApplyResult applyResult = applyModpack(cache, selectedTarget);
-
-			if (preload) {
-				LOGGER.info("Update completed! Took: {}ms", System.currentTimeMillis() - start);
-				finishApplyingModpack(cache, applyResult);
-			} else {
-				boolean requiredRestart = applyResult.requiresRestart();
-				LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);
-				UpdateType updateType = applyResult.restartReasons().contains(RestartReason.SELECTED_MODPACK)
-						? UpdateType.SELECT
-						: fullDownload ? UpdateType.FULL : UpdateType.UPDATE;
-				new ReLauncher(modpackDir, updateType, changelogs).restart(false);
+			PreparedPlan finalPlan = buildPlan(cache, selectedTarget.flatTarget());
+			if (!previewPlan.equals(finalPlan)) {
+				if (!requestPreparedPlanPreview(finalPlan, () -> executePreparedPlanAfterDownload(finalPlan), () -> {
+					close();
+					if (firstConnection) new ScreenManager().title();
+				})) {
+					throw new IOException("The update preview screen is unavailable");
+				}
+				return;
 			}
+
+			ApplyResult applyResult = applyPreparedPlan(finalPlan, selectedTarget);
+
+			boolean requiredRestart = applyResult.requiresRestart();
+			LOGGER.info("Update completed! Required restart: {} Took: {}ms", requiredRestart, System.currentTimeMillis() - start);
+			restartAfterApply(applyResult);
 		} catch (UpdateDeferredException e) {
 			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
-			new ReLauncher(modpackDir, UpdateType.UPDATE, changelogs).restart(true);
+			new ReLauncher(modpackDir, UpdateType.UPDATE, changelogs).restart(preload);
 		} catch (SocketTimeoutException | ConnectException e) {
-			LOGGER.error("{} is not responding", "Modpack host of " + connectionInfo.endpoint.getHostString(), e);
+			String host = connectionInfo == null || connectionInfo.endpoint == null ? "modpack host" : "Modpack host of " + connectionInfo.endpoint.getHostString();
+			LOGGER.error("{} is not responding", host, e);
 		} catch (InterruptedException e) {
 			LOGGER.info("Interrupted the download");
 		} catch (Exception e) {
@@ -509,6 +505,26 @@ public class ModpackUpdater implements AutoCloseable {
 		} finally {
 			close();
 		}
+	}
+
+	private void executePreparedPlanAfterDownload(PreparedPlan prepared) {
+		try {
+			ApplyResult applyResult = applyPreparedPlan(prepared, selectedTarget);
+			restartAfterApply(applyResult);
+		} catch (UpdateDeferredException e) {
+			LOGGER.warn("Update transaction {} is waiting for the detached helper to release {}", e.getTransactionId(), e.getBlockedPath());
+			new ReLauncher(modpackDir, UpdateType.UPDATE, changelogs).restart(preload);
+		} catch (Exception e) {
+			new ScreenManager().error("automodpack.error.critical", "\"" + e.getMessage() + "\"", "automodpack.error.logs");
+			LOGGER.error("Critical error while applying the final modpack update plan", e);
+		} finally {
+			close();
+		}
+	}
+
+	private void requireLiveConnection() throws IOException {
+		if (connectionInfo == null || !connectionInfo.isComplete()) throw new IOException("Modpack connection is unavailable");
+		if (downloadClient == null) throw new IOException("Modpack transfer session is unavailable");
 	}
 
 	private boolean downloadModpack(Set<Jsons.ModpackContentFields.ModpackContentItem> finalFilesToUpdate, long startFetching, @Nullable FetchManager fetchManager,
@@ -663,9 +679,7 @@ public class ModpackUpdater implements AutoCloseable {
 	}
 
 	// this is run every time we modpack is updated
-	private ApplyResult applyModpack(FileMetadataCache cache, SelectedModpackTarget target) throws Exception {
-		if (target == null) throw new IllegalStateException("Selected modpack target is unavailable");
-		PreparedPlan prepared = buildPlan(cache, target.flatTarget());
+	private ApplyResult applyPreparedPlan(PreparedPlan prepared, SelectedModpackTarget target) throws Exception {
 		executePlan(prepared.plan(), target);
 		UpdatePlan plan = prepared.plan();
 
@@ -705,13 +719,17 @@ public class ModpackUpdater implements AutoCloseable {
 		if (selectedTarget == null) throw new IllegalStateException("Selected modpack target is unavailable");
 		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
 			PreparedPlan prepared = buildPlan(cache, selectedTarget.flatTarget(), false);
-			UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, getPatchNotes());
-			return new ScreenManager().preview(preview, getModpackName(),
-					(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(() -> startUpdateAfterPreview(filesToUpdate)), (Runnable) () -> {
-						close();
-						if (firstConnection) new ScreenManager().title();
-					});
+			return requestPreparedPlanPreview(prepared, () -> startUpdateAfterPreview(filesToUpdate, prepared), () -> {
+				close();
+				if (firstConnection) new ScreenManager().title();
+			});
 		}
+	}
+
+	private boolean requestPreparedPlanPreview(PreparedPlan prepared, Runnable continueAction, Runnable cancelAction) throws IOException {
+		UpdatePreview preview = UpdatePreview.create(prepared.plan(), prepared.originalFiles(), selectedTarget.flatTarget(), selectedTarget.selection(), false, getPatchNotes());
+		return new ScreenManager().preview(preview, getModpackName(),
+				(Runnable) () -> DownloadClient.NET_EXECUTOR.execute(continueAction), cancelAction);
 	}
 
 	private UpdatePlanner.SelectionContext selectionContext(String targetModpackId) {

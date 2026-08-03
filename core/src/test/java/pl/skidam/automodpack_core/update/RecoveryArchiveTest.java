@@ -56,6 +56,26 @@ class RecoveryArchiveTest {
 	}
 
 	@Test
+	void keepsArchivesInSeparateRecoveryRoots() throws Exception {
+		Path store = temporaryDirectory.resolve("store");
+		Path recoveryRoot = temporaryDirectory.resolve("recovery");
+		Files.createDirectories(store);
+		Path source = Files.writeString(store.resolve("source.tmp"), "deleted bytes", StandardCharsets.UTF_8);
+		String hash = HashUtils.getHash(source);
+		Path object = Files.move(source, store.resolve(hash));
+		long size = Files.size(object);
+
+		Path firstArchived = RecoveryArchive.archive(store, recoveryRoot.resolve("first"), "config/one.json", hash, size);
+		Path secondArchived = RecoveryArchive.archive(store, recoveryRoot.resolve("second"), "config/two.json", hash, size);
+
+		assertNotEquals(firstArchived, secondArchived);
+		assertEquals(1, RecoveryArchive.read(recoveryRoot.resolve("first")).entries.size());
+		assertEquals(1, RecoveryArchive.read(recoveryRoot.resolve("second")).entries.size());
+		assertEquals("config/one.json", RecoveryArchive.read(recoveryRoot.resolve("first")).entries.get(0).logicalPath);
+		assertEquals("config/two.json", RecoveryArchive.read(recoveryRoot.resolve("second")).entries.get(0).logicalPath);
+	}
+
+	@Test
 	void rejectsUnsafePathsAndCorruptCasObjects() throws Exception {
 		Path store = temporaryDirectory.resolve("store");
 		Files.createDirectories(store);

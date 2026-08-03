@@ -95,6 +95,42 @@ class GroupManifestValidatorTest {
 	}
 
 	@Test
+	void acceptsOptionalGroupBlockedByUnavailableDependency() {
+		var fields = catalogue();
+		var dependency = group(file("a"));
+		dependency.compatiblePlatforms = Set.of("windows");
+		var optional = group(file("a"));
+		optional.requires = Set.of("dependency");
+		fields.groups = linkedGroups("dependency", dependency, "optional", optional);
+
+		assertDoesNotThrow(() -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsRequiredOrForcedGroupBlockedByUnavailableDependency() {
+		var requiredFields = catalogue();
+		var requiredDependency = group(file("a"));
+		requiredDependency.compatiblePlatforms = Set.of("windows");
+		var required = group(file("a"));
+		required.required = true;
+		required.requires = Set.of("dependency");
+		requiredFields.groups = linkedGroups("dependency", requiredDependency, "required", required);
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(requiredFields));
+
+		var forcedFields = catalogue();
+		var forcedDependency = group(file("a"));
+		forcedDependency.compatiblePlatforms = Set.of("windows");
+		var forced = group(file("a"));
+		forced.tag = "forced";
+		forced.requires = Set.of("dependency");
+		var forcedTag = new Jsons.CompleteModpackContentFields.SelectionTagFields();
+		forcedTag.serverForced = true;
+		forcedFields.selectionTags = Map.of("forced", forcedTag);
+		forcedFields.groups = linkedGroups("dependency", forcedDependency, "forced", forced);
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(forcedFields));
+	}
+
+	@Test
 	void rejectsPlatformIndependentAbsolutePath() {
 		var fields = catalogue();
 		var group = group(file("a"));
@@ -128,6 +164,33 @@ class GroupManifestValidatorTest {
 		group.requires = Set.of("missing");
 		group.files = Map.of("../escape", file("a"));
 		fields.groups = Map.of("main", group);
+		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
+	}
+
+	@Test
+	void rejectsPlayerLocalRootsAndInvalidTypePathCombinations() {
+		for (var invalid : List.of(
+				Map.entry("saves/world.dat", "other"),
+				Map.entry("logs/latest.log", "other"),
+				Map.entry("screenshots/image.png", "other"),
+				Map.entry("server-resource-packs/pack.zip", "other"),
+				Map.entry("mods/readme.txt", "other"),
+				Map.entry("config/settings.json", "other"),
+				Map.entry("shaderpacks/shader.zip", "other"),
+				Map.entry("resourcepacks/pack.zip", "other"),
+				Map.entry("options.txt", "other"),
+				Map.entry("outside/example.jar", "mod"))) {
+			var fields = catalogue();
+			fields.groups = Map.of("main", groupAt(invalid.getKey(), fileOfType(invalid.getValue())));
+			assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields), invalid.getKey());
+		}
+	}
+
+	@Test
+	void rejectsCoSelectableModsThatShareALiveBasename() {
+		var fields = catalogue();
+		fields.groups = linkedGroups("main", groupAt("mods/main.jar", fileOfType("mod")), "visuals", groupAt("mods/nested/main.jar", fileOfType("mod")));
+
 		assertThrows(GroupValidationException.class, () -> GroupManifestValidator.validate(fields));
 	}
 
@@ -210,14 +273,26 @@ class GroupManifestValidatorTest {
 	}
 
 	private static Jsons.CompleteModpackContentFields.ModpackGroupFields group(Jsons.CompleteModpackContentFields.GroupFileFields file) {
+		return groupAt("mods/example.jar", file);
+	}
+
+	private static Jsons.CompleteModpackContentFields.ModpackGroupFields groupAt(String path, Jsons.CompleteModpackContentFields.GroupFileFields file) {
 		var group = new Jsons.CompleteModpackContentFields.ModpackGroupFields();
-		group.files = Map.of("mods/example.jar", file);
+		group.files = Map.of(path, file);
 		return group;
 	}
 
 	private static Jsons.CompleteModpackContentFields.GroupFileFields file(String content) {
 		String hash = content.equals("a") ? "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8" : "e9d71f5ee7c92d6dc9e92ffdad17b8bd49418f98";
-		return new Jsons.CompleteModpackContentFields.GroupFileFields("1", "mod", false, false, false, hash, null);
+		return fileOfType("mod", hash);
+	}
+
+	private static Jsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type) {
+		return fileOfType(type, "86f7e437faa5a7fce15d1ddcb9eaeaea377667b8");
+	}
+
+	private static Jsons.CompleteModpackContentFields.GroupFileFields fileOfType(String type, String hash) {
+		return new Jsons.CompleteModpackContentFields.GroupFileFields("1", type, false, false, false, hash, null);
 	}
 
 	private static Map<String, Jsons.CompleteModpackContentFields.ModpackGroupFields> linkedGroups(Object... values) {
