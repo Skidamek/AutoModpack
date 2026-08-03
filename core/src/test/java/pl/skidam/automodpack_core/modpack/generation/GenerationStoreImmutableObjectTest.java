@@ -80,7 +80,7 @@ class GenerationStoreImmutableObjectTest {
 	}
 
 	@Test
-	void pointerFailureLeavesPromotedObjectAndRecordUnreachable() throws Exception {
+	void pointerFailureLeavesPromotedObjectAndCompactStateUnreachable() throws Exception {
 		Path root = tempDir.resolve("host-generations");
 		GenerationStore store = new GenerationStore(root, Clock.systemUTC(), () -> {
 			throw new IOException("pointer failure");
@@ -93,9 +93,10 @@ class GenerationStoreImmutableObjectTest {
 			Path promoted = root.resolve("objects").resolve(staged.sha1());
 			assertTrue(Files.isRegularFile(promoted, LinkOption.NOFOLLOW_LINKS));
 			assertEquals(staged.sha1(), HashUtils.getHash(promoted));
-			try (var records = Files.list(root.resolve("records"))) {
-				assertEquals(1, records.count());
+			try (var commits = Files.list(root.resolve("commits"))) {
+				assertEquals(1, commits.count());
 			}
+			assertFalse(Files.exists(root.resolve("records")));
 			assertTrue(store.loadCurrent().isEmpty());
 		}
 	}
