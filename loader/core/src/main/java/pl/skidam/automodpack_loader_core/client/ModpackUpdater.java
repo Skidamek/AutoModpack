@@ -29,6 +29,7 @@ import pl.skidam.automodpack_core.auth.Secrets;
 import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.ModpackId;
+import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.ClientSelectionStore;
@@ -207,6 +208,21 @@ public class ModpackUpdater implements AutoCloseable {
 		} catch (Exception e) {
 			LOGGER.error("Error while initializing modpack updater", e);
 			close();
+		}
+	}
+
+	public boolean requiresUpdateBeforeLogin(ModpackUtils.UpdateCheckResult result) throws Exception {
+		if (result == null || result.requiresUpdate()) return true;
+		modpackContentFile = modpackDir.resolve(modpackContentFileName);
+		if (!Files.exists(modpackContentFile)) return true;
+		if (selectedTarget == null || serverModpackContent == null) throw new IllegalStateException("Selected modpack target is unavailable");
+
+		try (var cache = FileMetadataCache.open(hashCacheDBFile)) {
+			PreparedPlan prepared = buildPlan(cache, selectedTarget.flatTarget(), false);
+			Jsons.ModpackContentFields installed = ModpackContentTools.read(modpackContentFile);
+			if (installed == null || !GenerationTarget.fromFlat(installed).equals(prepared.plan().generationTarget())) return true;
+			if (!prepared.plan().operations().isEmpty() || !prepared.plan().restartReasons().isEmpty()) return true;
+			return !ConfigTools.GSON.toJson(prepared.plan().plannedClientConfig()).equals(ConfigTools.GSON.toJson(clientConfig));
 		}
 	}
 

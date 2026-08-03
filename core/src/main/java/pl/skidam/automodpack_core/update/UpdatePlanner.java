@@ -176,7 +176,7 @@ public final class UpdatePlanner {
 		planLedgerCleanup(ledger, targetItems.keySet(), projected, operations, preservations, restartReasons);
 		if (input.installedManifest() != null && !Objects.equals(input.installedManifest().selectedGroups, target.selectedGroups))
 			restartReasons.add(RestartReason.CHANGED_GROUP_SELECTION);
-		if (isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
+		if (input.installedManifest() == null || isSelectionChange(input.selection(), target.modpackId)) restartReasons.add(RestartReason.SELECTED_MODPACK);
 		planPreviousEditablePreservation(input.selection(), target.modpackId, projected, operations);
 
 		Set<String> forceCopyPaths = new HashSet<>(input.forceCopyServicePaths());

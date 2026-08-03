@@ -16,6 +16,14 @@ class UpdatePlannerTest {
 	private static final String OTHER_HASH = "3333333333333333333333333333333333333333";
 
 	@Test
+	void initialInstallRequiresRestart() {
+		UpdatePlan plan = UpdatePlanner.plan(input(manifest(Map.of("mods/new.jar", item("mods/new.jar", TARGET_HASH, 9, "mod")),
+				ledger(entry("mods/new.jar", TARGET_HASH, 9, OwnershipLedger.Status.PRESENT))), Map.of()));
+
+		assertTrue(plan.restartReasons().contains(RestartReason.SELECTED_MODPACK));
+	}
+
+	@Test
 	void cleanupUsesHistoricalHashAndSizeForManagedFiles() {
 		Jsons.ModpackContentFields target = manifest(Map.of(
 				"mods/new.jar", item("mods/new.jar", TARGET_HASH, 9, "mod"),
