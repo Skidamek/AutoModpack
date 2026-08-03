@@ -180,6 +180,52 @@ class GenerationStoreTest {
 	}
 
 	@Test
+	void deepHistoryRebuildsWhenCompleteRecordsAreMissing() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "");
+		Files.delete(first.recordPath());
+		Files.delete(second.recordPath());
+
+		assertEquals(second.record(), store.loadCurrent().orElseThrow().record());
+		assertEquals(second.record(), store.loadCurrentDeep().orElseThrow().record());
+		assertEquals(List.of(first.record(), second.record()), store.currentHistory());
+	}
+
+	@Test
+	void repairRebuildsProjectionFromCompactMetadataWhenCompleteRecordsAreMissing() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "");
+		Files.delete(first.recordPath());
+		Files.delete(second.recordPath());
+		Files.delete(tempDir.resolve("current-projection.json"));
+
+		GenerationStore.CurrentSnapshot repaired = store.loadCurrentAndRepair().orElseThrow();
+		assertEquals(second.record(), repaired.record());
+		assertEquals(tempDir.resolve("current-projection.json"), repaired.hostingPaths().get(""));
+		assertTrue(Files.isRegularFile(tempDir.resolve("current-projection.json")));
+	}
+
+	@Test
+	void revertFindsTargetFromCompactHistoryWhenCompleteRecordsAreMissing() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "");
+		Files.delete(first.recordPath());
+		Files.delete(second.recordPath());
+
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication reverted = store.publishRevert(first.record().metadata().generationId(), Optional.of(current), "");
+
+		assertEquals(second.record().metadata().generationId(), reverted.record().metadata().parentGenerationId());
+		assertEquals(first.record().manifest(), reverted.record().manifest());
+	}
+
+	@Test
 	void deepVerificationRejectsTamperedCurrentRecordIdentity() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");

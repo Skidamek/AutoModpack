@@ -170,23 +170,27 @@ public final class GenerationStore {
 		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) requireDirectory(root, "generation store");
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
 		Jsons.GenerationPointerFields pointer = readCurrentPointer();
-		requireDirectory(recordsDirectory, "generation records");
 		Path recordPath = recordPath(pointer.generationId);
-		ensureRegular(recordPath, "current generation record");
 		GenerationRecord record;
-		Path materializedPath = recordPath;
+		Path materializedPath = Files.exists(currentProjectionPath, LinkOption.NOFOLLOW_LINKS) ? currentProjectionPath : recordPath;
 		LoadedRecord loaded = null;
+		List<GenerationRecord> compactChain = null;
 		if (deepVerification) {
-			record = readRecord(recordPath);
+			compactChain = readCompactChain(pointer.generationId);
+			record = compactChain.get(compactChain.size() - 1);
+			if (Files.exists(recordPath, LinkOption.NOFOLLOW_LINKS)) {
+				GenerationRecord persisted = readRecord(recordPath);
+				if (!persisted.equals(record)) throw new IOException("Complete generation record does not match compact generation metadata: " + recordPath);
+			}
 		} else {
-			loaded = readProjectionOrRecord(recordPath);
+			loaded = readProjectionOrRecord(recordPath, repairProjection);
 			record = loaded.record();
 			materializedPath = loaded.path();
 		}
 		if (!record.metadata().generationId().equals(pointer.generationId))
 			throw new IOException("Current pointer does not match current generation identity: " + recordPath);
 		if (deepVerification) {
-			validateParentChain(record);
+			validateParentChain(record, compactChain);
 			verifyAllReferencedObjects(record);
 		}
 		NavigableMap<String, Path> hosting = deepVerification ? activeTargetPaths(record) : verifyActiveTargetObjects(record);
@@ -235,26 +239,13 @@ public final class GenerationStore {
 	public List<GenerationRecord> currentHistory() throws IOException {
 		Optional<CurrentSnapshot> current = loadCurrentDeep();
 		if (current.isEmpty()) return List.of();
-		List<GenerationRecord> reverse = new ArrayList<>();
-		GenerationRecord record = current.orElseThrow().record();
-		while (true) {
-			reverse.add(record);
-			String parent = record.metadata().parentGenerationId();
-			if (parent.isEmpty()) break;
-			record = readRecord(recordPath(parent));
-		}
-		Collections.reverse(reverse);
-		return List.copyOf(reverse);
+		return readCompactChain(current.orElseThrow().record().metadata().generationId());
 	}
 
 	private GenerationRecord findAncestor(GenerationRecord current, String targetGenerationId) throws IOException {
-		GenerationRecord record = current;
-		while (true) {
+		for (GenerationRecord record : readCompactChain(current.metadata().generationId()))
 			if (record.metadata().generationId().equals(targetGenerationId)) return record;
-			String parent = record.metadata().parentGenerationId();
-			if (parent.isEmpty()) return null;
-			record = readRecord(recordPath(parent));
-		}
+		return null;
 	}
 
 	private Publication publishLocked(ModpackCandidate candidate, Optional<CurrentSnapshot> expectedCurrent, String patchNotes) throws IOException {
@@ -326,7 +317,10 @@ public final class GenerationStore {
 	}
 
 	private void ensureCurrentStillMatches(Optional<CurrentSnapshot> expected) throws IOException {
-		ensureExpected(expected, loadCurrent());
+		Optional<String> actualGenerationId = Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS) ? Optional.of(readCurrentPointer().generationId) : Optional.empty();
+		if (expected.isPresent() != actualGenerationId.isPresent()) throw new IOException("Current generation changed before publication");
+		if (expected.isPresent() && !expected.orElseThrow().record().metadata().generationId().equals(actualGenerationId.orElseThrow()))
+			throw new IOException("Current generation changed before publication");
 	}
 
 	private void ensureStoreDirectories() throws IOException {
@@ -517,7 +511,7 @@ public final class GenerationStore {
 		}
 	}
 
-	private LoadedRecord readProjectionOrRecord(Path recordPath) throws IOException {
+	private LoadedRecord readProjectionOrRecord(Path recordPath, boolean repairProjection) throws IOException {
 		IOException projectionFailure = null;
 		if (Files.exists(currentProjectionPath, LinkOption.NOFOLLOW_LINKS)) {
 			try {
@@ -529,11 +523,22 @@ public final class GenerationStore {
 				projectionFailure = e;
 			}
 		}
-		GenerationRecord record = readRecord(recordPath);
+		GenerationRecord record;
+		if (Files.exists(recordPath, LinkOption.NOFOLLOW_LINKS)) record = readRecord(recordPath);
+		else {
+			if (!repairProjection) {
+				ensureRegular(recordPath, "current generation record");
+				throw new IOException("Current generation record is missing: " + recordPath);
+			}
+			record = readCompactRecord(recordGenerationId(recordPath));
+		}
 		if (projectionFailure != null)
-			Constants.LOGGER.warn("Current generation projection is invalid; using the immutable record until it is repaired: {}", currentProjectionPath, projectionFailure);
+			Constants.LOGGER.warn("Current generation projection is invalid; using durable generation state until it is repaired: {}", currentProjectionPath, projectionFailure);
 		else
-			Constants.LOGGER.debug("Current generation projection is missing; using the immutable record until it is repaired: {}", currentProjectionPath);
+			if (Files.exists(recordPath, LinkOption.NOFOLLOW_LINKS))
+				Constants.LOGGER.debug("Current generation projection is missing; using the immutable record until it is repaired: {}", currentProjectionPath);
+			else
+				Constants.LOGGER.warn("Current generation projection and immutable record are missing; rebuilding from compact metadata: {}", currentProjectionPath);
 		return new LoadedRecord(record, recordPath, true);
 	}
 
@@ -599,46 +604,68 @@ public final class GenerationStore {
 		}
 	}
 
-	private void validateParentChain(GenerationRecord current) throws IOException {
-		Set<String> visited = new HashSet<>();
-		List<GenerationRecord> reverseChain = new ArrayList<>();
-		GenerationRecord record = current;
-		while (true) {
-			String id = record.metadata().generationId();
-			if (!visited.add(id)) throw new IOException("Generation parent cycle detected at " + id);
-			reverseChain.add(record);
-			String parent = record.metadata().parentGenerationId();
-			if (parent.isEmpty()) break;
-			Path parentPath = recordPath(parent);
-			record = readRecord(parentPath);
-			if (!record.metadata().generationId().equals(parent)) throw new IOException("Generation parent filename does not match its identity: " + parentPath);
-			if (!record.manifest().modpackId().equals(current.manifest().modpackId()))
-				throw new IOException("Generation parent modpack ID does not match current lineage: " + parent);
-		}
-		Collections.reverse(reverseChain);
+	private GenerationRecord readCompactRecord(String generationId) throws IOException {
+		List<GenerationRecord> chain = readCompactChain(generationId);
+		return chain.get(chain.size() - 1);
+	}
+
+	private List<GenerationRecord> readCompactChain(String generationId) throws IOException {
 		requireDirectory(cataloguesDirectory, "generation catalogues");
 		requireDirectory(commitsDirectory, "generation commits");
 		requireDirectory(deltasDirectory, "generation deltas");
-		OwnershipLedger ledger = OwnershipLedger.empty(current.manifest().modpackId());
-		for (GenerationRecord chainRecord : reverseChain) {
-			CatalogueSnapshot snapshot = readCatalogue(chainRecord.metadata().stateDigest());
-			if (!snapshot.manifest().equals(chainRecord.manifest()))
-				throw new IOException("Generation catalogue does not match its immutable record: " + chainRecord.metadata().generationId());
-			OwnershipDelta actualDelta = readDelta(chainRecord.metadata().generationId());
-			OwnershipDelta expectedDelta = OwnershipDelta.between(ledger, chainRecord.manifest());
-			if (!expectedDelta.equals(actualDelta))
-				throw new IOException("Generation ownership delta does not match its parent and catalogue: " + chainRecord.metadata().generationId());
-			GenerationCommit actualCommit = readCommit(chainRecord.metadata().generationId());
-			if (!GenerationCommit.from(chainRecord, actualDelta).equals(actualCommit))
-				throw new IOException("Generation commit does not match its record and ownership delta: " + chainRecord.metadata().generationId());
-			try {
-				ledger = OwnershipLedger.materialize(ledger, chainRecord.manifest(), chainRecord.metadata().generationId(), actualDelta);
-			} catch (RuntimeException e) {
-				throw new IOException("Generation ownership ledger does not match its parent chain", e);
-			}
-			if (!ledger.equals(chainRecord.ownershipLedger()))
-				throw new IOException("Generation ownership ledger does not match its persisted ownership delta: " + chainRecord.metadata().generationId());
+		Set<String> visited = new HashSet<>();
+		List<CompactGeneration> reverse = new ArrayList<>();
+		String currentId = generationId;
+		while (true) {
+			if (!visited.add(currentId)) throw new IOException("Generation parent cycle detected at " + currentId);
+			GenerationCommit commit = readCommit(currentId);
+			CatalogueSnapshot snapshot = readCatalogue(commit.stateDigest());
+			if (!commit.modpackId().equals(snapshot.manifest().modpackId()) || !commit.stateDigest().equals(snapshot.stateDigest()))
+				throw new IOException("Generation commit does not match its catalogue snapshot: " + currentId);
+			OwnershipDelta delta = readDelta(currentId);
+			if (!commit.ownershipDeltaDigest().equals(delta.digest()) || !commit.modpackId().equals(delta.modpackId()))
+				throw new IOException("Generation commit does not match its ownership delta: " + currentId);
+			reverse.add(new CompactGeneration(commit, snapshot, delta));
+			String parent = commit.parentGenerationId();
+			if (parent.isEmpty()) break;
+			currentId = parent;
 		}
+		Collections.reverse(reverse);
+		OwnershipLedger ledger = OwnershipLedger.empty(reverse.get(0).commit().modpackId());
+		List<GenerationRecord> chain = new ArrayList<>();
+		for (CompactGeneration compact : reverse) {
+			GenerationCommit commit = compact.commit();
+			if (!ledger.modpackId().equals(commit.modpackId())) throw new IOException("Generation chain changes modpack ID");
+			OwnershipDelta expectedDelta = OwnershipDelta.between(ledger, compact.snapshot().manifest());
+			if (!expectedDelta.equals(compact.delta()))
+				throw new IOException("Generation ownership delta does not match its compact parent and catalogue: " + commit.generationId());
+			try {
+				ledger = OwnershipLedger.materialize(ledger, compact.snapshot().manifest(), commit.generationId(), compact.delta());
+			} catch (RuntimeException e) {
+				throw new IOException("Generation ownership ledger cannot be reconstructed from compact metadata", e);
+			}
+			GenerationRecord record;
+			try {
+				record = new GenerationRecord(compact.snapshot().manifest(), commit.metadata(), ledger);
+			} catch (RuntimeException e) {
+				throw new IOException("Generation compact metadata does not form a valid record: " + commit.generationId(), e);
+			}
+			if (!GenerationCommit.from(record, compact.delta()).equals(commit))
+				throw new IOException("Generation compact commit does not match reconstructed record: " + commit.generationId());
+			chain.add(record);
+		}
+		return List.copyOf(chain);
+	}
+
+	private void validateParentChain(GenerationRecord current) throws IOException {
+		validateParentChain(current, readCompactChain(current.metadata().generationId()));
+	}
+
+	private void validateParentChain(GenerationRecord current, List<GenerationRecord> chain) throws IOException {
+		if (chain == null || chain.isEmpty()) throw new IOException("Generation compact parent chain is empty");
+		GenerationRecord compactCurrent = chain.get(chain.size() - 1);
+		if (!compactCurrent.equals(current))
+			throw new IOException("Current generation does not match the compact parent chain: " + current.metadata().generationId());
 	}
 
 	private NavigableMap<String, Path> verifyActiveTargetObjects(GenerationRecord record) throws IOException {
@@ -814,6 +841,8 @@ public final class GenerationStore {
 	}
 
 	private record StoredRecord(GenerationRecord record, Path path) {}
+
+	private record CompactGeneration(GenerationCommit commit, CatalogueSnapshot snapshot, OwnershipDelta delta) {}
 
 	private record LoadedRecord(GenerationRecord record, Path path, boolean needsRepair) {}
 
