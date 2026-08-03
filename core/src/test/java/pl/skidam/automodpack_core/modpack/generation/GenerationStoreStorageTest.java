@@ -18,7 +18,6 @@ import java.util.TreeMap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
@@ -31,7 +30,7 @@ class GenerationStoreStorageTest {
 	Path tempDir;
 
 	@Test
-	void measuresRecordsObjectsStagingAndReferences() throws Exception {
+	void measuresCompactObjectsStagingAndReferences() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
@@ -40,15 +39,12 @@ class GenerationStoreStorageTest {
 		Files.writeString(stagingFile, "unfinished", StandardCharsets.UTF_8);
 
 		GenerationStore.StorageReport report = store.measureStorage();
-		long recordBytes = Files.size(first.recordPath()) + Files.size(second.recordPath());
 		long catalogueBytes = directoryBytes(tempDir.resolve("catalogues"));
 		long commitBytes = directoryBytes(tempDir.resolve("commits"));
 		long deltaBytes = directoryBytes(tempDir.resolve("deltas"));
 		long objectBytes = Files.size(store.objectRoot().resolve(first.record().manifest().groups().get("main").files().get("config/example.txt").sha1()))
 				+ Files.size(store.objectRoot().resolve(second.record().manifest().groups().get("main").files().get("config/example.txt").sha1()));
 
-		assertEquals(2, report.recordCount());
-		assertEquals(recordBytes, report.recordBytes());
 		assertEquals(2, report.catalogueCount());
 		assertEquals(catalogueBytes, report.catalogueBytes());
 		assertEquals(2, report.commitCount());
@@ -61,8 +57,8 @@ class GenerationStoreStorageTest {
 		assertEquals(Files.size(stagingFile), report.stagingBytes());
 		assertEquals(2, report.referencedObjectCount());
 		assertEquals(objectBytes, report.referencedObjectBytes());
-		assertEquals(5, report.objectReferenceCount());
-		assertEquals(2d / 5d, report.uniqueObjectReferenceRatio().orElseThrow());
+		assertEquals(3, report.objectReferenceCount());
+		assertEquals(2d / 3d, report.uniqueObjectReferenceRatio().orElseThrow());
 	}
 
 	@Test
@@ -101,33 +97,21 @@ class GenerationStoreStorageTest {
 	@Test
 	void collectorHonorsExplicitObjectAndGenerationPins() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
-		store.publish(candidate("current"), Optional.empty(), "");
-		String detachedHash = createObject("detached-generation");
-		GenerationRecord detached = GenerationRecord.create(manifest("detached", detachedHash, Files.size(store.objectRoot().resolve(detachedHash)), "abc1234"), null,
-				Instant.parse("2025-12-31T00:00:00Z"), "");
-		Path detachedPath = tempDir.resolve("records").resolve(detached.metadata().generationId() + ".json");
-		Files.writeString(detachedPath, ConfigTools.GSON.toJson(detached.toFields()), StandardCharsets.UTF_8);
-		Path detachedDeltaPath = tempDir.resolve("deltas").resolve(detached.metadata().generationId() + ".json");
-		OwnershipDelta detachedDelta = OwnershipDelta.between(OwnershipLedger.empty("abc1234"), detached.manifest());
-		Files.writeString(detachedDeltaPath, ConfigTools.GSON.toJson(detachedDelta.toFields()), StandardCharsets.UTF_8);
-		Path detachedCataloguePath = tempDir.resolve("catalogues").resolve(detached.metadata().stateDigest() + ".json");
-		Files.writeString(detachedCataloguePath, ConfigTools.GSON.toJson(CatalogueSnapshot.from(detached.manifest()).toFields()), StandardCharsets.UTF_8);
-		Path detachedCommitPath = tempDir.resolve("commits").resolve(detached.metadata().generationId() + ".json");
-		Files.writeString(detachedCommitPath, ConfigTools.GSON.toJson(GenerationCommit.from(detached, detachedDelta).toFields()), StandardCharsets.UTF_8);
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
+		store.publish(candidate("current"), Optional.of(current), "");
 		String pinnedHash = createObject("explicit-object-pin");
 
-		GenerationStore.CollectionResult pinned = store.collect(Set.of(detached.metadata().generationId()), Set.of(pinnedHash));
+		GenerationStore.CollectionResult pinned = store.collect(Set.of(first.record().metadata().generationId()), Set.of(pinnedHash));
 		assertEquals(3, pinned.beforeObjectCount());
 		assertEquals(3, pinned.afterObjectCount());
 		assertEquals(0, pinned.deletedObjectCount());
-		assertTrue(Files.exists(store.objectRoot().resolve(detachedHash)));
 		assertTrue(Files.exists(store.objectRoot().resolve(pinnedHash)));
 
 		GenerationStore.CollectionResult unpinnedGeneration = store.collect(Set.of(), Set.of(pinnedHash));
-		assertEquals(1, unpinnedGeneration.deletedObjectCount());
-		assertFalse(Files.exists(store.objectRoot().resolve(detachedHash)));
+		assertEquals(0, unpinnedGeneration.deletedObjectCount());
 		assertTrue(Files.exists(store.objectRoot().resolve(pinnedHash)));
-		assertTrue(Files.exists(detachedPath));
+		assertTrue(Files.exists(store.objectRoot().resolve(first.record().manifest().groups().get("main").files().get("config/example.txt").sha1())));
 	}
 
 	@Test

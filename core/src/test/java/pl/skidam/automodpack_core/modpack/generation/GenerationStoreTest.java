@@ -40,14 +40,14 @@ class GenerationStoreTest {
 		assertEquals("", first.record().metadata().parentGenerationId());
 		assertTrue(Files.exists(tempDir.resolve("catalogues").resolve(first.record().metadata().stateDigest() + ".json")));
 		assertTrue(Files.exists(tempDir.resolve("commits").resolve(first.record().metadata().generationId() + ".json")));
+		assertFalse(Files.exists(tempDir.resolve("records")));
 		String pointer = Files.readString(tempDir.resolve("current.json"), StandardCharsets.UTF_8);
-		long records = countRecords();
 
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication unchanged = store.publish(candidate("first"), Optional.of(current), "different notes");
 		assertEquals(GenerationStore.PublicationStatus.NO_CHANGES, unchanged.status());
 		assertEquals(pointer, Files.readString(tempDir.resolve("current.json"), StandardCharsets.UTF_8));
-		assertEquals(records, countRecords());
+		assertFalse(Files.exists(tempDir.resolve("records")));
 
 		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(current), "");
 		assertEquals(GenerationStore.PublicationStatus.PUBLISHED, second.status());
@@ -94,7 +94,7 @@ class GenerationStoreTest {
 		assertThrows(IOException.class, () -> failing.publish(candidate("second"), Optional.of(current), ""));
 		assertArrayEquals(oldPointer, Files.readAllBytes(tempDir.resolve("current.json")));
 		assertEquals(first.record(), failing.loadCurrent().orElseThrow().record());
-		assertTrue(countRecords() > 1);
+		assertFalse(Files.exists(tempDir.resolve("records")));
 	}
 
 	@Test
@@ -103,11 +103,11 @@ class GenerationStoreTest {
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
 		Files.delete(tempDir.resolve("current.json"));
 		assertTrue(store.loadCurrent().isEmpty());
-		assertTrue(Files.exists(publication.recordPath()));
+		assertTrue(Files.exists(publication.projectionPath()));
 	}
 
 	@Test
-	void currentLoadFallsBackToImmutableRecordWhenProjectionIsMissing() throws Exception {
+	void currentLoadRebuildsFromCompactHistoryWhenProjectionIsMissing() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
 		Path projection = tempDir.resolve("current-projection.json");
@@ -117,7 +117,8 @@ class GenerationStoreTest {
 
 		GenerationStore.CurrentSnapshot fallback = store.loadCurrent().orElseThrow();
 		assertEquals(publication.record(), fallback.record());
-		assertEquals(publication.recordPath(), fallback.hostingPaths().get(""));
+		assertEquals(projection, fallback.projectionPath());
+		assertFalse(fallback.hostingPaths().containsKey(""));
 
 		GenerationStore.CurrentSnapshot repaired = store.loadCurrentAndRepair().orElseThrow();
 		assertEquals(publication.record(), repaired.record());
@@ -180,27 +181,25 @@ class GenerationStoreTest {
 	}
 
 	@Test
-	void deepHistoryRebuildsWhenCompleteRecordsAreMissing() throws Exception {
+	void deepHistoryRebuildsWhenProjectionIsMissing() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "");
-		Files.delete(first.recordPath());
-		Files.delete(second.recordPath());
+		Files.delete(tempDir.resolve("current-projection.json"));
 
 		assertEquals(second.record(), store.loadCurrent().orElseThrow().record());
 		assertEquals(second.record(), store.loadCurrentDeep().orElseThrow().record());
-		assertEquals(List.of(first.record(), second.record()), store.currentHistory());
+		assertEquals(List.of(new GenerationHistoryEntry(first.record().manifest(), first.record().metadata()),
+				new GenerationHistoryEntry(second.record().manifest(), second.record().metadata())), store.currentHistory());
 	}
 
 	@Test
-	void repairRebuildsProjectionFromCompactMetadataWhenCompleteRecordsAreMissing() throws Exception {
+	void repairRebuildsProjectionFromCompactMetadataWhenProjectionIsMissing() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "");
-		Files.delete(first.recordPath());
-		Files.delete(second.recordPath());
 		Files.delete(tempDir.resolve("current-projection.json"));
 
 		GenerationStore.CurrentSnapshot repaired = store.loadCurrentAndRepair().orElseThrow();
@@ -210,13 +209,12 @@ class GenerationStoreTest {
 	}
 
 	@Test
-	void revertFindsTargetFromCompactHistoryWhenCompleteRecordsAreMissing() throws Exception {
+	void revertFindsTargetFromCompactHistoryWhenProjectionIsMissing() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "");
-		Files.delete(first.recordPath());
-		Files.delete(second.recordPath());
+		Files.delete(tempDir.resolve("current-projection.json"));
 
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
 		GenerationStore.Publication reverted = store.publishRevert(first.record().metadata().generationId(), Optional.of(current), "");
@@ -231,9 +229,9 @@ class GenerationStoreTest {
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
 		String originalId = publication.record().metadata().generationId();
 		String tamperedId = originalId.equals("0".repeat(40)) ? "1".repeat(40) : "0".repeat(40);
-		Path recordPath = publication.recordPath();
-		String record = Files.readString(recordPath, StandardCharsets.UTF_8).replace(originalId, tamperedId);
-		Files.writeString(recordPath, record, StandardCharsets.UTF_8);
+		Path projectionPath = publication.projectionPath();
+		String projection = Files.readString(projectionPath, StandardCharsets.UTF_8).replace(originalId, tamperedId);
+		Files.writeString(projectionPath, projection, StandardCharsets.UTF_8);
 
 		GenerationStore.CurrentSnapshot current = assertDoesNotThrow(() -> store.loadCurrent().orElseThrow());
 		assertEquals(tempDir.resolve("current-projection.json"), current.hostingPaths().get(""));
@@ -268,12 +266,6 @@ class GenerationStoreTest {
 			assertEquals(2, catalogues.count());
 		}
 		assertTrue(reverted.record().ownershipLedger().entries().get("config/example.txt").historicalHashes().size() >= 2);
-	}
-
-	private long countRecords() throws Exception {
-		try (var records = Files.list(tempDir.resolve("records"))) {
-			return records.count();
-		}
 	}
 
 	private GenerationStore store(Instant instant) {

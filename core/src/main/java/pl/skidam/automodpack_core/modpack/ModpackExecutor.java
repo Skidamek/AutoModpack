@@ -14,6 +14,7 @@ import pl.skidam.automodpack_core.modpack.candidate.CandidateBuildException;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidateScanner;
 import pl.skidam.automodpack_core.modpack.generation.GenerationDiff;
+import pl.skidam.automodpack_core.modpack.generation.GenerationHistoryEntry;
 import pl.skidam.automodpack_core.modpack.generation.GenerationIdentity;
 import pl.skidam.automodpack_core.modpack.generation.GenerationMetadata;
 import pl.skidam.automodpack_core.modpack.generation.GenerationPatchNotes;
@@ -126,7 +127,7 @@ public class ModpackExecutor {
 		}
 	}
 
-	public List<GenerationRecord> technicalHistory() throws IOException {
+	public List<GenerationHistoryEntry> technicalHistory() throws IOException {
 		return generationStore.currentHistory();
 	}
 
