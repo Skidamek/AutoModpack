@@ -20,6 +20,7 @@ import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import pl.skidam.automodpack_core.config.ConfigTools;
 import pl.skidam.automodpack_core.config.Jsons;
 import pl.skidam.automodpack_core.modpack.candidate.ModpackCandidate;
 import pl.skidam.automodpack_core.modpack.candidate.StagedObject;
@@ -104,6 +105,37 @@ class GenerationStoreTest {
 	}
 
 	@Test
+	void currentLoadFallsBackToImmutableRecordWhenProjectionIsMissing() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
+		Path projection = tempDir.resolve("current-projection.json");
+
+		assertTrue(Files.isRegularFile(projection));
+		Files.delete(projection);
+
+		GenerationStore.CurrentSnapshot fallback = store.loadCurrent().orElseThrow();
+		assertEquals(publication.record(), fallback.record());
+		assertEquals(publication.recordPath(), fallback.hostingPaths().get(""));
+
+		GenerationStore.CurrentSnapshot repaired = store.loadCurrentAndRepair().orElseThrow();
+		assertEquals(publication.record(), repaired.record());
+		assertEquals(projection, repaired.hostingPaths().get(""));
+		assertTrue(Files.isRegularFile(projection));
+	}
+
+	@Test
+	void currentLoadFallsBackWhenProjectionBelongsToAnotherGeneration() throws Exception {
+		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
+		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
+		GenerationStore.CurrentSnapshot firstCurrent = store.loadCurrent().orElseThrow();
+		GenerationStore.Publication second = store.publish(candidate("second"), Optional.of(firstCurrent), "");
+
+		Files.writeString(tempDir.resolve("current-projection.json"), ConfigTools.GSON.toJson(first.record().toFields()), StandardCharsets.UTF_8);
+
+		assertEquals(second.record(), store.loadCurrent().orElseThrow().record());
+	}
+
+	@Test
 	void startupRejectsMissingCurrentObject() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
@@ -113,7 +145,7 @@ class GenerationStoreTest {
 	}
 
 	@Test
-	void startupRejectsMissingHistoricalObject() throws Exception {
+	void deepVerificationRejectsMissingHistoricalObject() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication first = store.publish(candidate("first"), Optional.empty(), "");
 		GenerationStore.CurrentSnapshot current = store.loadCurrent().orElseThrow();
@@ -121,11 +153,12 @@ class GenerationStoreTest {
 		String historicalHash = first.record().manifest().groups().get("main").files().values().iterator().next().sha1();
 		Files.delete(tempDir.resolve("objects").resolve(historicalHash));
 
-		assertThrows(IOException.class, store::loadCurrent);
+		assertDoesNotThrow(() -> store.loadCurrent().orElseThrow());
+		assertThrows(IOException.class, store::loadCurrentDeep);
 	}
 
 	@Test
-	void startupRejectsTamperedCurrentRecordIdentity() throws Exception {
+	void deepVerificationRejectsTamperedCurrentRecordIdentity() throws Exception {
 		GenerationStore store = store(Instant.parse("2026-01-01T00:00:00Z"));
 		GenerationStore.Publication publication = store.publish(candidate("first"), Optional.empty(), "");
 		String originalId = publication.record().metadata().generationId();
@@ -134,7 +167,9 @@ class GenerationStoreTest {
 		String record = Files.readString(recordPath, StandardCharsets.UTF_8).replace(originalId, tamperedId);
 		Files.writeString(recordPath, record, StandardCharsets.UTF_8);
 
-		assertThrows(IOException.class, store::loadCurrent);
+		GenerationStore.CurrentSnapshot current = assertDoesNotThrow(() -> store.loadCurrent().orElseThrow());
+		assertEquals(tempDir.resolve("current-projection.json"), current.hostingPaths().get(""));
+		assertThrows(IOException.class, store::loadCurrentDeep);
 	}
 
 	@Test

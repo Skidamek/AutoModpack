@@ -211,7 +211,7 @@ public class ModpackExecutor {
 	public LoadResult loadLast() {
 		if (!acquire(false)) return new LoadBusy("Another modpack operation is already in progress");
 		try {
-			GenerationStore.CurrentSnapshot current = generationStore.loadCurrent().orElseThrow(() -> new IOException("No current generation pointer exists"));
+			GenerationStore.CurrentSnapshot current = generationStore.loadCurrentAndRepair().orElseThrow(() -> new IOException("No current generation pointer exists"));
 			try {
 				replaceHosting(current.hostingPaths());
 				cleanupLegacyCatalogue();
@@ -258,7 +258,6 @@ public class ModpackExecutor {
 
 	private void replaceHosting(Map<String, Path> paths) {
 		if (hostServer != null) {
-			hostServer.setObjectRoot(generationStore.objectRoot());
 			hostServer.replacePaths(paths);
 		}
 	}

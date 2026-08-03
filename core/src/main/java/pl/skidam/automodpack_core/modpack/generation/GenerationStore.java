@@ -80,6 +80,7 @@ public final class GenerationStore {
 	private static final Map<Path, ReentrantLock> PUBLICATION_LOCKS = new ConcurrentHashMap<>();
 	private final Path root;
 	private final Path currentPath;
+	private final Path currentProjectionPath;
 	private final Path publicationLockPath;
 	private final Path recordsDirectory;
 	private final Path objectsDirectory;
@@ -95,6 +96,7 @@ public final class GenerationStore {
 	GenerationStore(Path root, Clock clock, CommitHook commitHook) {
 		this.root = Objects.requireNonNull(root).toAbsolutePath().normalize();
 		this.currentPath = this.root.resolve(Constants.hostGenerationCurrentFile.getFileName());
+		this.currentProjectionPath = this.root.resolve(Constants.hostGenerationCurrentProjectionFile.getFileName());
 		this.publicationLockPath = this.root.resolve(".publication.lock");
 		this.recordsDirectory = this.root.resolve(Constants.hostGenerationRecordsDir.getFileName());
 		this.objectsDirectory = this.root.resolve(Constants.hostGenerationObjectsDir.getFileName());
@@ -133,26 +135,53 @@ public final class GenerationStore {
 		return collectUnreachableObjects(retainedGenerationIds, pinnedObjectHashes);
 	}
 
+	/** Loads the current materialized projection and verifies only the active target objects. */
 	public Optional<CurrentSnapshot> loadCurrent() throws IOException {
+		return loadCurrent(false, false);
+	}
+
+	/** Performs an explicit ancestry and historical-object verification pass. */
+	public Optional<CurrentSnapshot> loadCurrentDeep() throws IOException {
+		return loadCurrent(true, false);
+	}
+
+	/** Repairs a missing or invalid projection under the publication lock before returning the active hosting map. */
+	public Optional<CurrentSnapshot> loadCurrentAndRepair() throws IOException {
+		ensureDirectory(root, "generation store");
+		try (PublicationGuard ignored = acquirePublicationGuard()) {
+			return loadCurrent(false, true);
+		}
+	}
+
+	private Optional<CurrentSnapshot> loadCurrent(boolean deepVerification, boolean repairProjection) throws IOException {
 		if (Files.exists(root, LinkOption.NOFOLLOW_LINKS)) requireDirectory(root, "generation store");
 		if (!Files.exists(currentPath, LinkOption.NOFOLLOW_LINKS)) return Optional.empty();
-		ensureRegular(currentPath, "current generation pointer");
-		Jsons.GenerationPointerFields pointer;
-		try {
-			pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), Jsons.GenerationPointerFields.class);
-		} catch (RuntimeException e) {
-			throw new IOException("Invalid current generation pointer: " + currentPath, e);
-		}
-		if (pointer == null || pointer.schemaVersion != CURRENT_POINTER_SCHEMA_VERSION || !isDigest(pointer.generationId))
-			throw new IOException("Invalid current generation pointer metadata: " + currentPath);
+		Jsons.GenerationPointerFields pointer = readCurrentPointer();
 		requireDirectory(recordsDirectory, "generation records");
 		Path recordPath = recordPath(pointer.generationId);
-		GenerationRecord record = readRecord(recordPath);
+		ensureRegular(recordPath, "current generation record");
+		GenerationRecord record;
+		Path materializedPath = recordPath;
+		LoadedRecord loaded = null;
+		if (deepVerification) {
+			record = readRecord(recordPath);
+		} else {
+			loaded = readProjectionOrRecord(recordPath);
+			record = loaded.record();
+			materializedPath = loaded.path();
+		}
 		if (!record.metadata().generationId().equals(pointer.generationId))
-			throw new IOException("Current pointer does not match generation record identity: " + recordPath);
-		validateParentChain(record);
-		NavigableMap<String, Path> hosting = verifyCurrentObjects(record);
-		hosting.put("", recordPath);
+			throw new IOException("Current pointer does not match current generation identity: " + recordPath);
+		if (deepVerification) {
+			validateParentChain(record);
+			verifyAllReferencedObjects(record);
+		}
+		NavigableMap<String, Path> hosting = deepVerification ? activeTargetPaths(record) : verifyActiveTargetObjects(record);
+		if (repairProjection && loaded != null && loaded.needsRepair()) {
+			writeCurrentProjection(record);
+			materializedPath = currentProjectionPath;
+		}
+		hosting.put("", materializedPath);
 		return Optional.of(new CurrentSnapshot(record, recordPath, hosting));
 	}
 
@@ -177,8 +206,9 @@ public final class GenerationStore {
 			GenerationRecord record = GenerationRecord.create(target.manifest(), previous, clock.instant(), patchNotes, targetGenerationId);
 			Path recordPath = recordPath(record.metadata().generationId());
 			writeRecordNoClobber(recordPath, record);
-			NavigableMap<String, Path> hosting = verifyCurrentObjects(record);
-			hosting.put("", recordPath);
+			NavigableMap<String, Path> hosting = verifyActiveTargetObjects(record);
+			writeCurrentProjection(record);
+			hosting.put("", currentProjectionPath);
 			commitHook.beforeCurrentPointerReplacement();
 			ensureCurrentStillMatches(expectedCurrent);
 			ConfigTools.writeAtomic(currentPath, pointer(record));
@@ -187,7 +217,7 @@ public final class GenerationStore {
 	}
 
 	public List<GenerationRecord> currentHistory() throws IOException {
-		Optional<CurrentSnapshot> current = loadCurrent();
+		Optional<CurrentSnapshot> current = loadCurrentDeep();
 		if (current.isEmpty()) return List.of();
 		List<GenerationRecord> reverse = new ArrayList<>();
 		GenerationRecord record = current.orElseThrow().record();
@@ -236,8 +266,9 @@ public final class GenerationStore {
 		objectStore.promoteAll(candidate.objects());
 		Path recordPath = recordPath(record.metadata().generationId());
 		writeRecordNoClobber(recordPath, record);
-		NavigableMap<String, Path> hosting = verifyCurrentObjects(record);
-		hosting.put("", recordPath);
+		NavigableMap<String, Path> hosting = verifyActiveTargetObjects(record);
+		writeCurrentProjection(record);
+		hosting.put("", currentProjectionPath);
 		Publication publication = new Publication(PublicationStatus.PUBLISHED, record, recordPath, hosting);
 		Jsons.GenerationPointerFields nextPointer = pointer(record);
 		commitHook.beforeCurrentPointerReplacement();
@@ -287,7 +318,7 @@ public final class GenerationStore {
 	}
 
 	private StorageReport measureStorageLocked() throws IOException {
-		loadCurrent();
+		loadCurrentDeep();
 		NavigableMap<String, StoredRecord> records = readStoredRecords();
 		Map<String, Long> expectedSizes = new TreeMap<>();
 		long objectReferences = 0;
@@ -301,7 +332,7 @@ public final class GenerationStore {
 	}
 
 	private CollectionResult collectUnreachableObjectsLocked(Set<String> generationPins, Set<String> objectPins) throws IOException {
-		Optional<CurrentSnapshot> current = loadCurrent();
+		Optional<CurrentSnapshot> current = loadCurrentDeep();
 		if (current.isEmpty()) throw new IOException("Cannot collect without a valid current generation");
 		NavigableMap<String, StoredRecord> records = readStoredRecords();
 		String currentModpackId = current.orElseThrow().record().manifest().modpackId();
@@ -384,12 +415,17 @@ public final class GenerationStore {
 		return new FileTotals(count, bytes);
 	}
 
-	private long addReferences(GenerationRecord record, Map<String, Long> expectedSizes) throws IOException {
+	private long addManifestReferences(GenerationRecord record, Map<String, Long> expectedSizes) throws IOException {
 		long count = 0;
 		for (var group : record.manifest().groups().values()) for (var file : group.files().values()) {
 			addExpectedSize(expectedSizes, file.sha1().toLowerCase(Locale.ROOT), file.size());
 			count = addExact(count, 1, "object reference count");
 		}
+		return count;
+	}
+
+	private long addReferences(GenerationRecord record, Map<String, Long> expectedSizes) throws IOException {
+		long count = addManifestReferences(record, expectedSizes);
 		for (var entry : record.ownershipLedger().entries().values()) for (var content : entry.historicalHashes()) {
 			addExpectedSize(expectedSizes, content.sha1(), content.size());
 			count = addExact(count, 1, "object reference count");
@@ -441,6 +477,46 @@ public final class GenerationStore {
 		return !Files.isSymbolicLink(object) && Files.isRegularFile(object, LinkOption.NOFOLLOW_LINKS) && name.equals(HashUtils.getHash(object));
 	}
 
+	private Jsons.GenerationPointerFields readCurrentPointer() throws IOException {
+		ensureRegular(currentPath, "current generation pointer");
+		try {
+			Jsons.GenerationPointerFields pointer = ConfigTools.parse(Files.readString(currentPath, StandardCharsets.UTF_8), Jsons.GenerationPointerFields.class);
+			if (pointer.schemaVersion != CURRENT_POINTER_SCHEMA_VERSION || !isDigest(pointer.generationId))
+				throw new IOException("Invalid current generation pointer metadata: " + currentPath);
+			return pointer;
+		} catch (IOException e) {
+			throw e;
+		} catch (RuntimeException e) {
+			throw new IOException("Invalid current generation pointer: " + currentPath, e);
+		}
+	}
+
+	private LoadedRecord readProjectionOrRecord(Path recordPath) throws IOException {
+		IOException projectionFailure = null;
+		if (Files.exists(currentProjectionPath, LinkOption.NOFOLLOW_LINKS)) {
+			try {
+				GenerationRecord projection = readRecord(currentProjectionPath);
+				if (!projection.metadata().generationId().equals(recordGenerationId(recordPath)))
+					throw new IOException("Current projection does not match the current generation identity: " + currentProjectionPath);
+				return new LoadedRecord(projection, currentProjectionPath, false);
+			} catch (IOException e) {
+				projectionFailure = e;
+			}
+		}
+		GenerationRecord record = readRecord(recordPath);
+		if (projectionFailure != null)
+			Constants.LOGGER.warn("Current generation projection is invalid; using the immutable record until it is repaired: {}", currentProjectionPath, projectionFailure);
+		else
+			Constants.LOGGER.debug("Current generation projection is missing; using the immutable record until it is repaired: {}", currentProjectionPath);
+		return new LoadedRecord(record, recordPath, true);
+	}
+
+	private String recordGenerationId(Path path) throws IOException {
+		String filename = path.getFileName().toString();
+		if (filename.length() != 45 || !filename.endsWith(".json")) throw new IOException("Invalid generation record path: " + path);
+		return filename.substring(0, 40);
+	}
+
 	private GenerationRecord readRecord(Path path) throws IOException {
 		ensureRegular(path, "generation record");
 		try {
@@ -474,13 +550,29 @@ public final class GenerationStore {
 		}
 	}
 
-	private NavigableMap<String, Path> verifyCurrentObjects(GenerationRecord record) throws IOException {
+	private NavigableMap<String, Path> verifyActiveTargetObjects(GenerationRecord record) throws IOException {
 		TreeMap<String, Long> expectedSizes = new TreeMap<>();
-		addReferences(record, expectedSizes);
+		addManifestReferences(record, expectedSizes);
 		verifyObjectReferences(expectedSizes);
+		return activeTargetPaths(expectedSizes);
+	}
+
+	private NavigableMap<String, Path> activeTargetPaths(GenerationRecord record) throws IOException {
+		TreeMap<String, Long> expectedSizes = new TreeMap<>();
+		addManifestReferences(record, expectedSizes);
+		return activeTargetPaths(expectedSizes);
+	}
+
+	private NavigableMap<String, Path> activeTargetPaths(Map<String, Long> expectedSizes) throws IOException {
 		TreeMap<String, Path> hosting = new TreeMap<>();
 		for (String sha1 : expectedSizes.keySet()) hosting.put(sha1, objectPath(sha1));
 		return hosting;
+	}
+
+	private void verifyAllReferencedObjects(GenerationRecord record) throws IOException {
+		TreeMap<String, Long> expectedSizes = new TreeMap<>();
+		addReferences(record, expectedSizes);
+		verifyObjectReferences(expectedSizes);
 	}
 
 	private void verifyObject(String sha1, long expectedSize, Map<String, Long> expectedSizes, Set<String> verified) throws IOException {
@@ -512,6 +604,10 @@ public final class GenerationStore {
 		pointer.schemaVersion = CURRENT_POINTER_SCHEMA_VERSION;
 		pointer.generationId = record.metadata().generationId();
 		return pointer;
+	}
+
+	private void writeCurrentProjection(GenerationRecord record) throws IOException {
+		ConfigTools.writeAtomic(currentProjectionPath, record.toFields());
 	}
 
 	private void writeRecordNoClobber(Path path, GenerationRecord record) throws IOException {
@@ -571,6 +667,8 @@ public final class GenerationStore {
 	}
 
 	private record StoredRecord(GenerationRecord record, Path path) {}
+
+	private record LoadedRecord(GenerationRecord record, Path path, boolean needsRepair) {}
 
 	private record FileTotals(long count, long bytes) {}
 
