@@ -37,6 +37,7 @@ public class Constants {
 	public static final Path hostModpackDir = automodpackDir.resolve("host-modpack");
 	public static final Path hostGenerationsDir = automodpackDir.resolve("host-generations");
 	public static final Path hostGenerationCurrentFile = hostGenerationsDir.resolve("current.json");
+	public static final Path hostGenerationCurrentProjectionFile = hostGenerationsDir.resolve("current-projection.json");
 	public static final Path hostGenerationRecordsDir = hostGenerationsDir.resolve("records");
 	public static final Path hostGenerationObjectsDir = hostGenerationsDir.resolve("objects");
 	public static final Path hostGenerationStagingDir = hostGenerationsDir.resolve("staging");
