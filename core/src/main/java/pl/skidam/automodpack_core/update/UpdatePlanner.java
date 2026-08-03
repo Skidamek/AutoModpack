@@ -25,10 +25,10 @@ import pl.skidam.automodpack_core.modpack.ModpackId;
 import pl.skidam.automodpack_core.modpack.generation.GenerationTarget;
 import pl.skidam.automodpack_core.modpack.generation.OwnershipLedger;
 import pl.skidam.automodpack_core.modpack.group.LogicalPath;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.update.UpdatePlan.*;
 
 public final class UpdatePlanner {
-	private static final Set<String> PLAYER_LOCAL_ROOTS = Set.of("automodpack", "logs", "player-local", "saves", "screenshots", "server-resource-packs");
 	private static final Comparator<Operation> OPERATION_ORDER = Comparator.comparing((Operation operation) -> operation.operation().ordinal())
 			.thenComparing(operation -> operation.root().ordinal()).thenComparing(Operation::relativePath);
 	private static final Comparator<FileKey> FILE_KEY_ORDER = Comparator.comparing((FileKey key) -> key.root().ordinal()).thenComparing(FileKey::relativePath);
@@ -275,12 +275,10 @@ public final class UpdatePlanner {
 		} catch (RuntimeException e) {
 			return Optional.empty();
 		}
-		String firstComponent = normalized.indexOf('/') < 0 ? normalized : normalized.substring(0, normalized.indexOf('/'));
-		if (PLAYER_LOCAL_ROOTS.contains(firstComponent)) return Optional.empty();
+		if (ModpackPathPolicy.isPlayerLocal(normalized)) return Optional.empty();
 		if (normalized.equals("mods")) return Optional.empty();
-		if (normalized.startsWith("mods/")) {
+		if (ModpackPathPolicy.isModPath(normalized)) {
 			Path path = Path.of(normalized);
-			if (path.getNameCount() != 2) return Optional.empty();
 			return Optional.of(new FileKey(Root.MODS_DIR, path.getFileName().toString()));
 		}
 		return Optional.of(new FileKey(Root.GAME_DIR, normalized));
@@ -379,10 +377,18 @@ public final class UpdatePlanner {
 	}
 
 	private static Map<String, Jsons.ModpackContentFields.ModpackContentItem> sortedItems(Set<Jsons.ModpackContentFields.ModpackContentItem> items) {
-		return items.stream().sorted(Comparator.comparing(item -> normalize(item.file))).collect(Collectors.toMap(item -> normalize(item.file), Function.identity(),
+		return items.stream().sorted(Comparator.comparing(UpdatePlanner::normalizedManifestPath)).collect(Collectors.toMap(UpdatePlanner::normalizedManifestPath, Function.identity(),
 				(first, second) -> {
 					throw new IllegalArgumentException("Duplicate normalized manifest path: " + first.file);
 				}, LinkedHashMap::new));
+	}
+
+	private static String normalizedManifestPath(Jsons.ModpackContentFields.ModpackContentItem item) {
+		if (item == null) throw new IllegalArgumentException("Manifest item is incomplete");
+		String normalized = normalize(item.file);
+		if (!ModpackPathPolicy.isValidTypeAndPath(normalized, item.type))
+			throw new IllegalArgumentException("Invalid manifest type/path combination: " + item.type + " " + item.file);
+		return normalized;
 	}
 
 	private static FileKey liveKey(Jsons.ModpackContentFields.ModpackContentItem item) {

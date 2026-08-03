@@ -11,6 +11,7 @@ import java.util.Objects;
 
 import pl.skidam.automodpack_core.loader.LoaderManagerService;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
+import pl.skidam.automodpack_core.modpack.group.ModpackPathPolicy;
 import pl.skidam.automodpack_core.utils.FileInspection;
 import pl.skidam.automodpack_core.utils.HashUtils;
 
@@ -110,11 +111,7 @@ public final class StableSourceSnapshotter {
 
 	private static String fileType(Path staged, String logicalPath) {
 		if (FileInspection.isMod(staged)) return "mod";
-		if (logicalPath.startsWith("config/")) return "config";
-		if (logicalPath.startsWith("shaderpacks/")) return "shader";
-		if (logicalPath.startsWith("resourcepacks/")) return "resourcepack";
-		if (logicalPath.equals("options.txt")) return "mc_options";
-		return "other";
+		return ModpackPathPolicy.typeForPath(logicalPath);
 	}
 
 	private static String stagingSuffix(Path source) {

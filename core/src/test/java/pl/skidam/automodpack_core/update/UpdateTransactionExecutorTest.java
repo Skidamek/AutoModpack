@@ -38,7 +38,7 @@ class UpdateTransactionExecutorTest {
 		byte[] bytes = "target-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(paths, bytes);
 		Files.createDirectories(paths.game());
-		Path oldFile = Files.writeString(paths.game().resolve("old.txt"), "old");
+		Path oldFile = Files.writeString(paths.game().resolve("old.txt"), "old", StandardCharsets.UTF_8);
 		String oldHash = HashUtils.getHash(oldFile);
 
 		Jsons.ModpackContentFields manifest = manifest(hash, bytes.length);
@@ -231,12 +231,12 @@ class UpdateTransactionExecutorTest {
 				new FileKey(Root.GAME_DIR, "config/pack.cfg"), new FileState(packHash, packBytes.length, true, false));
 		UpdatePlan plan = UpdatePlanner.planRemoval(new UpdatePlanner.RemovalInput(target.flatTarget(), baseline, files, Set.of(baselineHash), plannedConfig));
 		UpdateTransaction transaction = UpdateTransaction.createRemoval(plan, record.toFields(), target.flatTarget(), paths.modpack(), ClientPlatform.LINUX);
-		Files.writeString(live, "changed-after-planning");
+		Files.writeString(live, "changed-after-planning", StandardCharsets.UTF_8);
 
 		assertThrows(UpdateExecutionException.class, () -> executor(paths, null).commit(transaction));
 		assertTrue(Files.exists(paths.manifest()));
 		assertTrue(Files.exists(paths.catalogue()));
-		assertEquals("changed-after-planning", Files.readString(live));
+		assertEquals("changed-after-planning", Files.readString(live, StandardCharsets.UTF_8));
 	}
 
 	@Test
@@ -261,6 +261,12 @@ class UpdateTransactionExecutorTest {
 		UpdateTransaction tamperedStateDigest = UpdateTransaction.create(plan, target, paths.modpack());
 		tamperedStateDigest.stateDigest = "d".repeat(40);
 		mismatches.add(tamperedStateDigest);
+		UpdateTransaction tamperedLedgerDigest = UpdateTransaction.create(plan, target, paths.modpack());
+		tamperedLedgerDigest.ledgerDigest = "a".repeat(40);
+		mismatches.add(tamperedLedgerDigest);
+		UpdateTransaction tamperedModpackId = UpdateTransaction.create(plan, target, paths.modpack());
+		tamperedModpackId.modpackId = "def5678";
+		mismatches.add(tamperedModpackId);
 		UpdateTransaction tamperedFlat = UpdateTransaction.create(plan, target, paths.modpack());
 		Jsons.ModpackContentFields flat = tamperedFlat.targetManifest();
 		flat.targetGenerationId = "c".repeat(40);
@@ -326,6 +332,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 		UpdateTransactionExecutor executor = executor(paths,
 				transaction -> {
+					assertTrue(new ClientSelectionStore(paths.selection()).get(manifest.modpackId).isEmpty());
 					if (!Files.exists(paths.catalogue(), LinkOption.NOFOLLOW_LINKS)) Files.createDirectory(paths.manifest());
 				});
 
@@ -342,6 +349,7 @@ class UpdateTransactionExecutorTest {
 		assertFalse(Files.exists(paths.transaction()));
 		assertEquals(target.generationRecord(), ModpackContentTools.readGenerationRecord(paths.catalogue()));
 		assertEquals(target.generationTarget(), GenerationTarget.fromFlat(ModpackContentTools.read(paths.manifest())));
+		assertEquals(target.selection().intent(), new ClientSelectionStore(paths.selection()).get(manifest.modpackId).orElseThrow());
 	}
 
 	@Test
@@ -398,13 +406,13 @@ class UpdateTransactionExecutorTest {
 	void completeFinalStateDetectsAFileChangedDuringCommitAndKeepsTransaction() throws Exception {
 		Paths paths = paths();
 		Files.createDirectories(paths.modpack().resolve("config"));
-		Path unchanged = Files.writeString(paths.modpack().resolve("config/settings.json"), "planned");
+		Path unchanged = Files.writeString(paths.modpack().resolve("config/settings.json"), "planned", StandardCharsets.UTF_8);
 		String hash = HashUtils.getHash(unchanged);
 		Jsons.ModpackContentFields manifest = editableManifest(hash, Files.size(unchanged));
 		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(), List.of(),
 				List.of(new ProjectedFile(Root.MODPACK_DIR, "config/settings.json", true, hash, Files.size(unchanged))), clientConfig(manifest.modpackId), Set.of());
 
-		assertThrows(Exception.class, () -> executor(paths, ignored -> Files.writeString(unchanged, "changed during commit")).commit(plan, selectedTarget(manifest)));
+		assertThrows(Exception.class, () -> executor(paths, ignored -> Files.writeString(unchanged, "changed during commit", StandardCharsets.UTF_8)).commit(plan, selectedTarget(manifest)));
 		assertTrue(Files.exists(paths.transaction()));
 		assertFalse(Files.exists(paths.manifest()));
 	}
@@ -457,7 +465,7 @@ class UpdateTransactionExecutorTest {
 		byte[] bytes = "escaped-object".getBytes(StandardCharsets.UTF_8);
 		String hash = store(paths, bytes);
 		Jsons.ModpackContentFields manifest = new Jsons.ModpackContentFields(Set.of(
-				new Jsons.ModpackContentFields.ModpackContentItem("/linked/new.jar", String.valueOf(bytes.length), "mod", false, false, false, hash, "0")));
+				new Jsons.ModpackContentFields.ModpackContentItem("/linked/new.jar", String.valueOf(bytes.length), "other", false, false, false, hash, "0")));
 		manifest.modpackId = "abc1234";
 		UpdatePlan plan = new UpdatePlan(manifest.modpackId, selectedTarget(manifest).generationTarget(),
 				List.of(new Operation(Root.MODPACK_DIR, "linked/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
@@ -496,7 +504,7 @@ class UpdateTransactionExecutorTest {
 				List.of(new Operation(Root.MODPACK_DIR, "mods/new.jar", OperationType.INSTALL_OBJECT, hash, bytes.length, null)),
 				List.of(new ProjectedFile(Root.MODPACK_DIR, "mods/new.jar", true, hash, bytes.length)), clientConfig(manifest.modpackId), Set.of());
 		Files.createDirectories(paths.automodpack());
-		Files.writeString(paths.automodpack().resolve(".private"), "blocked");
+		Files.writeString(paths.automodpack().resolve(".private"), "blocked", StandardCharsets.UTF_8);
 
 		assertThrows(IOException.class, () -> executor(paths, null).commit(plan, selectedTarget(manifest)));
 		assertTrue(new ClientSelectionStore(paths.selection()).get(manifest.modpackId).isEmpty());
@@ -507,7 +515,7 @@ class UpdateTransactionExecutorTest {
 		Paths paths = paths();
 		Files.createDirectories(paths.store());
 		Files.createDirectories(paths.mods());
-		Path currentJar = Files.writeString(paths.mods().resolve("automodpack-old.jar"), "old");
+		Path currentJar = Files.writeString(paths.mods().resolve("automodpack-old.jar"), "old", StandardCharsets.UTF_8);
 		String currentHash = HashUtils.getHash(currentJar);
 		byte[] replacement = "official-update".getBytes(StandardCharsets.UTF_8);
 		String replacementHash = store(paths, replacement);

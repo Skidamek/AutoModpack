@@ -6,6 +6,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -14,13 +15,12 @@ import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
 import pl.skidam.automodpack_loader_core.screen.ScreenManager;
 
 public final class RecoveryArchiveScreen extends VersionedScreen {
-	private static final int ROWS_PER_PAGE = 7;
-	private static final int ARCHIVED_ROWS_PER_PAGE = 3;
 	private static final int ARCHIVED_ROW_HEIGHT = 42;
 
 	private final Screen parent;
 	private final ModpackUpdater updater;
 	private final String modpackName;
+	private final Runnable closedCallback;
 	private ModpackUpdater.RecoverySnapshot snapshot;
 	private boolean showAvailable = true;
 	private boolean busy;
@@ -30,11 +30,16 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 	private Button nextButton;
 
 	public RecoveryArchiveScreen(Screen parent, ModpackUpdater updater, ModpackUpdater.RecoverySnapshot snapshot, String modpackName) {
+		this(parent, updater, snapshot, modpackName, () -> {});
+	}
+
+	public RecoveryArchiveScreen(Screen parent, ModpackUpdater updater, ModpackUpdater.RecoverySnapshot snapshot, String modpackName, Runnable closedCallback) {
 		super(VersionedText.literal("RecoveryArchiveScreen"));
 		this.parent = parent;
 		this.updater = updater;
 		this.snapshot = snapshot;
 		this.modpackName = modpackName == null ? "" : modpackName;
+		this.closedCallback = closedCallback;
 	}
 
 	@Override
@@ -49,7 +54,7 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 		updateNavigation();
 		this.addRenderableWidget(this.previousButton);
 		this.addRenderableWidget(this.nextButton);
-		this.addRenderableWidget(buttonWidget(left + 80, navigationY, 75, 20, VersionedText.literal("Back"), button -> back()));
+		this.addRenderableWidget(buttonWidget(left + 80, navigationY, 75, 20, VersionedText.translatable("automodpack.back"), button -> back()));
 		addFileButtons();
 	}
 
@@ -63,7 +68,7 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 			ModpackUpdater.RecoveryFile file = files.get(index);
 			int y = 72 + (index - start) * 22;
 			Button button = buttonWidget(this.width / 2 - 155, y, 310, 20,
-					VersionedText.literal("Archive " + shortPath(file.logicalPath()) + " (" + formatSize(file.size()) + ")"), press -> archive(file));
+					VersionedText.literal(truncateToWidth(this.font, "Archive " + file.logicalPath() + " (" + formatSize(file.size()) + ")", 290)), press -> archive(file));
 			button.active = !busy;
 			this.addRenderableWidget(button);
 		}
@@ -90,7 +95,9 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 	}
 
 	private int rowsPerPage() {
-		return showAvailable ? ROWS_PER_PAGE : ARCHIVED_ROWS_PER_PAGE;
+		return showAvailable
+				? Math.max(1, (this.height - 28 - 72) / 22)
+				: Math.max(1, (this.height - 64 - 76) / ARCHIVED_ROW_HEIGHT);
 	}
 
 	private int pageCount() {
@@ -135,7 +142,8 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 		if (closed) return;
 		closed = true;
 		updater.close();
-		this.minecraft.gui.setScreen(parent);
+		closedCallback.run();
+		ScreenImpl.setScreen(parent);
 	}
 
 	private void rebuild() {
@@ -150,8 +158,8 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String title = modpackName.isBlank() ? "Recovery archive" : modpackName + " recovery archive";
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(title).withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Deleted files stay outside the managed modpack tree.").withStyle(ChatFormatting.GRAY), this.width / 2, 30,
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, title, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 14, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Deleted files stay outside the managed modpack tree.", this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 30,
 				TextColors.WHITE);
 		String counts = "Recoverable: " + snapshot.available().size() + "  Archived: " + snapshot.archived().size();
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(counts).withStyle(ChatFormatting.YELLOW), this.width / 2, 42, TextColors.WHITE);
@@ -163,15 +171,15 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 		if (!showAvailable) for (int index = start; index < end; index++) {
 			ModpackUpdater.RecoveryFile file = files.get(index);
 			int y = 76 + (index - start) * ARCHIVED_ROW_HEIGHT;
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Path: " + shortPath(file.logicalPath())).withStyle(ChatFormatting.WHITE), this.width / 2, y,
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Path: " + file.logicalPath(), this.width - 20)).withStyle(ChatFormatting.WHITE), this.width / 2, y,
 					TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal("SHA-1: " + shortHash(file.sha1()) + "  Size: " + formatSize(file.size()) + "  State: Archived").withStyle(ChatFormatting.GREEN), this.width / 2, y + 10,
+				VersionedText.literal(truncateToWidth(this.font, "SHA-1: " + shortHash(file.sha1()) + "  Size: " + formatSize(file.size()) + "  State: Archived", this.width - 20)).withStyle(ChatFormatting.GREEN), this.width / 2, y + 10,
 					TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal("Source generation: " + displayGeneration(file.sourceGenerationId())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 20, TextColors.WHITE);
+				VersionedText.literal(truncateToWidth(this.font, "Source generation: " + displayGeneration(file.sourceGenerationId()), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 20, TextColors.WHITE);
 			drawCenteredTextWithShadow(matrices, this.font,
-					VersionedText.literal("Preserved at: " + displayPreservedAt(file.preservedAt())).withStyle(ChatFormatting.GRAY), this.width / 2, y + 30, TextColors.WHITE);
+				VersionedText.literal(truncateToWidth(this.font, "Preserved at: " + displayPreservedAt(file.preservedAt()), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, y + 30, TextColors.WHITE);
 		}
 
 		if (files.isEmpty()) {
@@ -183,20 +191,16 @@ public final class RecoveryArchiveScreen extends VersionedScreen {
 				TextColors.WHITE);
 	}
 
-	private static String shortPath(String path) {
-		return path.length() <= 42 ? path : "..." + path.substring(path.length() - 39);
+	private String shortHash(String hash) {
+		return truncateToWidth(this.font, hash, Math.max(1, this.width - 20));
 	}
 
-	private static String shortHash(String hash) {
-		return hash.length() <= 12 ? hash : hash.substring(0, 12);
-	}
-
-	private static String displayGeneration(String generationId) {
+	private String displayGeneration(String generationId) {
 		return generationId == null || generationId.isEmpty() ? "Unknown" : shortHash(generationId);
 	}
 
-	private static String displayPreservedAt(String preservedAt) {
-		return preservedAt == null || preservedAt.isEmpty() ? "Unknown" : preservedAt;
+	private String displayPreservedAt(String preservedAt) {
+		return preservedAt == null || preservedAt.isEmpty() ? "Unknown" : truncateToWidth(this.font, preservedAt, Math.max(1, this.width - 20));
 	}
 
 	private static String formatSize(long bytes) {

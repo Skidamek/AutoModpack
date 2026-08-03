@@ -124,6 +124,18 @@ public class DownloadScreen extends VersionedScreen {
 				: VersionedText.translatable("automodpack.download.eta", cachedETA);
 	}
 
+	private Component getAcquisitionSummary() {
+		int acquired = 0;
+		int failed = 0;
+		if (downloadManager != null) {
+			for (DownloadManager.AcquisitionResult result : downloadManager.getAcquisitionResults().values()) {
+				if (result.success()) acquired++;
+				else failed++;
+			}
+		}
+		return VersionedText.literal("Acquired: " + acquired + "  Failed: " + failed);
+	}
+
 	private float getDownloadScale() {
 		return (float) (Math.max(0.0, Math.min(100.0, cachedPercentage)) * 0.01);
 	}
@@ -190,6 +202,8 @@ public class DownloadScreen extends VersionedScreen {
 
 			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getTotalDownloadSpeed(), this.width / 2, this.height / 2 + 36 + lineHeight * 2,
 					TextColors.WHITE);
+			drawCenteredTextWithShadow(matrices, this.font, (MutableComponent) getAcquisitionSummary(), this.width / 2, this.height / 2 + 36 + lineHeight * 3,
+					TextColors.GRAY);
 			cancelButton.active = true;
 		} else {
 			cancelButton.active = false;

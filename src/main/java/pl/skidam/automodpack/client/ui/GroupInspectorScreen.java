@@ -8,6 +8,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
 import pl.skidam.automodpack.client.ui.versioned.VersionedText;
@@ -15,8 +16,6 @@ import pl.skidam.automodpack_core.modpack.group.ClientPlatform;
 import pl.skidam.automodpack_core.modpack.group.GroupManifest;
 
 public final class GroupInspectorScreen extends VersionedScreen {
-	private static final int ROWS_PER_PAGE = 8;
-
 	private final Screen parent;
 	private final String groupId;
 	private final GroupManifest manifest;
@@ -46,7 +45,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		this.nextButton.active = page + 1 < pageCount();
 		this.addRenderableWidget(this.previousButton);
 		this.addRenderableWidget(this.nextButton);
-		this.addRenderableWidget(buttonWidget(this.width / 2 - 40, y, 80, 20, VersionedText.literal("Back"), button -> this.minecraft.gui.setScreen(parent)));
+		this.addRenderableWidget(buttonWidget(this.width / 2 - 40, y, 80, 20, VersionedText.translatable("automodpack.back"), button -> ScreenImpl.setScreen(parent)));
 	}
 
 	private void changePage(int amount) {
@@ -58,16 +57,21 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	@Override
 	public void versionedRender(VersionedMatrices matrices, int mouseX, int mouseY, float delta) {
 		String name = group.displayName().isBlank() ? groupId : group.displayName();
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(name).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Group " + groupId).withStyle(ChatFormatting.GRAY), this.width / 2, 26, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(description()).withStyle(ChatFormatting.WHITE), this.width / 2, 40, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, name, this.width - 20)).withStyle(ChatFormatting.BOLD), this.width / 2, 12, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Group " + groupId, this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, 26, TextColors.WHITE);
+		List<String> descriptionLines = descriptionLines();
+		for (int index = 0; index < descriptionLines.size(); index++) {
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(descriptionLines.get(index)).withStyle(ChatFormatting.WHITE), this.width / 2, 40 + index * 12, TextColors.WHITE);
+		}
 
-		int metadataY = 56;
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Tag: " + tagLabel()).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY,
+		int metadataY = 56 + (descriptionLines.size() - 1) * 12;
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Tag: " + tagLabel(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY,
 				TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Requires: " + join(group.requires()) + "  Conflicts: " + join(group.breaksWith())).withStyle(ChatFormatting.GRAY),
+		drawCenteredTextWithShadow(matrices, this.font,
+				VersionedText.literal(truncateToWidth(this.font, "Requires: " + join(group.requires()) + "  Conflicts: " + join(group.breaksWith()), this.width - 20)).withStyle(ChatFormatting.GRAY),
 				this.width / 2, metadataY + 13, TextColors.WHITE);
-		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Platforms: " + platforms()).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY + 26, TextColors.WHITE);
+		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, "Platforms: " + platforms(), this.width - 20)).withStyle(ChatFormatting.GRAY), this.width / 2, metadataY + 26,
+				TextColors.WHITE);
 		int nextMetadataY = metadataY + 39;
 		String status = (group.required() ? "Required" : group.recommended() ? "Recommended" : "Optional") + "  |  " + files.size() + " files";
 		drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(status).withStyle(ChatFormatting.YELLOW), this.width / 2, nextMetadataY, TextColors.WHITE);
@@ -79,8 +83,8 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		for (int index = start; index < end; index++) {
 			Map.Entry<String, GroupManifest.GroupFile> entry = files.get(index);
 			GroupManifest.GroupFile file = entry.getValue();
-			String line = shortPath(entry.getKey()) + "  " + file.type() + "  " + formatSize(file.size()) + fileFlags(file);
-			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(line), this.width / 2, filesY + (index - start) * 16, TextColors.WHITE);
+			String line = entry.getKey() + "  " + file.type() + "  " + formatSize(file.size()) + fileFlags(file);
+			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal(truncateToWidth(this.font, line, this.width - 20)), this.width / 2, filesY + (index - start) * 16, TextColors.WHITE);
 		}
 
 		int pageCount = pageCount();
@@ -88,10 +92,6 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		if (pageCount > 1) {
 			drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Page " + (page + 1) + " / " + pageCount).withStyle(ChatFormatting.GRAY), this.width / 2, y - 12,
 					TextColors.WHITE);
-			if (page > 0) {
-				drawCenteredTextWithShadow(matrices, this.font, VersionedText.literal("Use the mouse wheel to inspect earlier files").withStyle(ChatFormatting.GRAY), this.width / 2, y,
-						TextColors.WHITE);
-			}
 		}
 	}
 
@@ -101,11 +101,16 @@ public final class GroupInspectorScreen extends VersionedScreen {
 	}
 
 	private int rowsPerPage() {
-		return ROWS_PER_PAGE;
+		return Math.max(1, (this.height - 64 - filesY()) / 16);
 	}
 
-	private String description() {
-		return group.description().isBlank() ? "No description published." : shortPath(group.description());
+	private int filesY() {
+		return 56 + (descriptionLines().size() - 1) * 12 + 39 + 15;
+	}
+
+	private List<String> descriptionLines() {
+		String description = group.description().isBlank() ? "No description published." : group.description();
+		return wrapToWidth(this.font, description, Math.max(1, this.width - 20), 2);
 	}
 
 	private String tagLabel() {
@@ -118,13 +123,13 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		return group.compatiblePlatforms().isEmpty() ? "All supported platforms" : group.compatiblePlatforms().stream().map(ClientPlatform::id).sorted().reduce((first, second) -> first + ", " + second).orElse("");
 	}
 
-	private static String join(Iterable<String> values) {
+	private String join(Iterable<String> values) {
 		StringBuilder result = new StringBuilder();
 		for (String value : values) {
 			if (result.length() > 0) result.append(", ");
 			result.append(value);
 		}
-		return result.length() == 0 ? "none" : result.toString();
+		return result.length() == 0 ? "none" : truncateToWidth(this.font, result.toString(), Math.max(1, this.width - 20));
 	}
 
 	private static String fileFlags(GroupManifest.GroupFile file) {
@@ -132,10 +137,6 @@ public final class GroupInspectorScreen extends VersionedScreen {
 		if (file.editable()) flags.append(" editable");
 		if (file.forceCopy()) flags.append(" copied");
 		return flags.toString();
-	}
-
-	private static String shortPath(String value) {
-		return value.length() <= 70 ? value : "..." + value.substring(value.length() - 67);
 	}
 
 	private static String formatSize(long bytes) {
@@ -146,7 +147,7 @@ public final class GroupInspectorScreen extends VersionedScreen {
 
 	@Override
 	public boolean shouldCloseOnEsc() {
-		this.minecraft.gui.setScreen(parent);
+		ScreenImpl.setScreen(parent);
 		return false;
 	}
 }

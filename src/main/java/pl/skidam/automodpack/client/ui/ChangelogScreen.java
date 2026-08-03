@@ -7,6 +7,7 @@ import net.minecraft.util.Util;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import pl.skidam.automodpack.client.ScreenImpl;
 import pl.skidam.automodpack.client.audio.AudioManager;
 import pl.skidam.automodpack.client.ui.versioned.VersionedMatrices;
 import pl.skidam.automodpack.client.ui.versioned.VersionedScreen;
@@ -83,7 +84,7 @@ public class ChangelogScreen extends VersionedScreen {
 			140,
 			20,
 			VersionedText.translatable("automodpack.back"),
-			button -> this.minecraft.gui.setScreen(this.parent)
+			button -> ScreenImpl.setScreen(this.parent)
 		);
 
 		this.openMainPageButton = buttonWidget(
@@ -193,7 +194,7 @@ public class ChangelogScreen extends VersionedScreen {
 	@Override
 	public boolean shouldCloseOnEsc() {
 		assert this.minecraft != null;
-		this.minecraft.gui.setScreen(this.parent);
+		ScreenImpl.setScreen(this.parent);
 		return false;
 	}
 }

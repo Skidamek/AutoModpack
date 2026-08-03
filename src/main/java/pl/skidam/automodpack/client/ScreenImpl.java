@@ -2,6 +2,7 @@ package pl.skidam.automodpack.client;
 
 import pl.skidam.automodpack.client.ui.*;
 import pl.skidam.automodpack_core.update.ClientContentHistory;
+import pl.skidam.automodpack_core.update.UpdatePreview;
 import pl.skidam.automodpack_core.utils.FetchManager;
 import pl.skidam.automodpack_loader_core.client.Changelogs;
 import pl.skidam.automodpack_loader_core.client.ModpackUpdater;
@@ -103,7 +104,13 @@ public class ScreenImpl implements ScreenService {
 		return Optional.ofNullable(Screens.getScreen());
 	}
 
+	public static void setScreen(Screen screen) {
+		Screens.setScreen(screen);
+	}
+
 	private static class Screens {
+		private static Screen parentBeforePreparing;
+
 		private static Screen getScreen() {
 			/*? if >=26.2 {*/
 			return Minecraft.getInstance().gui.screen();
@@ -113,6 +120,12 @@ public class ScreenImpl implements ScreenService {
 		}
 
 		public static void setScreen(Screen screen) {
+			Screen current = Screens.getScreen();
+			if (screen instanceof PreparingScreen) {
+				if (!(current instanceof PreparingScreen)) parentBeforePreparing = current;
+			} else {
+				parentBeforePreparing = null;
+			}
 			/*? if >=26.2 {*/
 			Minecraft.getInstance().gui.setScreen(screen);
 			/*?} else {*/
@@ -146,18 +159,22 @@ public class ScreenImpl implements ScreenService {
 
 		public static void preview(Object... args) {
 			Screen parent = Screens.getScreen();
+			if (parent instanceof PreparingScreen) parent = parentBeforePreparing;
+			parentBeforePreparing = null;
 			boolean removal = args.length > 4 && Boolean.TRUE.equals(args[4]);
-			Screens.setScreen(new UpdatePreviewScreen(parent, (pl.skidam.automodpack_core.update.UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3]));
+			Screens.setScreen(new UpdatePreviewScreen(parent, (UpdatePreview) args[0], (String) args[1], removal, (Runnable) args[2], (Runnable) args[3]));
 		}
 
 		public static void recovery(Object... args) {
 			Screen parent = Screens.getScreen();
-			Screens.setScreen(new RecoveryArchiveScreen(parent, (ModpackUpdater) args[0], (ModpackUpdater.RecoverySnapshot) args[1], (String) args[2]));
+			Runnable closed = args.length > 3 && args[3] instanceof Runnable callback ? callback : () -> {};
+			Screens.setScreen(new RecoveryArchiveScreen(parent, (ModpackUpdater) args[0], (ModpackUpdater.RecoverySnapshot) args[1], (String) args[2], closed));
 		}
 
 		public static void history(Object... args) {
 			Screen parent = Screens.getScreen();
-			Screens.setScreen(new ContentHistoryScreen(parent, (ClientContentHistory.History) args[0], (String) args[1]));
+			Runnable closed = args.length > 2 && args[2] instanceof Runnable callback ? callback : () -> {};
+			Screens.setScreen(new ContentHistoryScreen(parent, (ClientContentHistory.History) args[0], (String) args[1], closed));
 		}
 
 		public static void error(String... errors) {
