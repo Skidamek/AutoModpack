@@ -98,6 +98,9 @@ class GenerationStoreStorageTest {
 				Instant.parse("2025-12-31T00:00:00Z"), "");
 		Path detachedPath = tempDir.resolve("records").resolve(detached.metadata().generationId() + ".json");
 		Files.writeString(detachedPath, ConfigTools.GSON.toJson(detached.toFields()), StandardCharsets.UTF_8);
+		Path detachedDeltaPath = tempDir.resolve("deltas").resolve(detached.metadata().generationId() + ".json");
+		Files.writeString(detachedDeltaPath, ConfigTools.GSON.toJson(OwnershipDelta.between(OwnershipLedger.empty("abc1234"), detached.manifest()).toFields()),
+				StandardCharsets.UTF_8);
 		String pinnedHash = createObject("explicit-object-pin");
 
 		GenerationStore.CollectionResult pinned = store.collect(Set.of(detached.metadata().generationId()), Set.of(pinnedHash));
