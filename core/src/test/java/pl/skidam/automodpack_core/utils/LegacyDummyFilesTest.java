@@ -38,7 +38,7 @@ class LegacyDummyFilesTest {
 		Path game = temporaryDirectory.resolve("game");
 		Path automodpack = game.resolve("automodpack");
 		Path mods = game.resolve("mods");
-		Path store = automodpack.resolve("store");
+		Path store = automodpack.resolve("client-generations/objects");
 		Path privateDirectory = automodpack.resolve(".private");
 		Files.createDirectories(mods);
 		Files.createDirectories(store);
