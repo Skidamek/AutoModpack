@@ -126,6 +126,10 @@ public class DataC2SPacket {
 			ModpackUpdater updater = new ModpackUpdater(selectedTarget, connectionInfo, secret, modpackDir, downloadClient);
 			try {
 				ModpackUtils.UpdateCheckResult updateCheckResult = ModpackUtils.isUpdate(serverModpackContent, modpackDir);
+				if (!updater.requiresUpdateBeforeLogin(updateCheckResult)) {
+					updater.close();
+					return buildResponse(false);
+				}
 				disconnectImmediately(handler);
 				updater.processModpackUpdate(updateCheckResult);
 				return buildResponse(true);
